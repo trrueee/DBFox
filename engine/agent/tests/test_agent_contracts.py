@@ -16,44 +16,71 @@ from engine.agent.response import (
 from engine.agent.turn import TurnStreamAssembler, TurnStreamError, TurnStreamItem, TurnStreamKind
 
 
-def test_turn_stream_assembler_merges_text_and_fragmented_tool_call() -> None:
+def test_turn_stream_assembler_merges_reasoning_summary_and_fragmented_tool_call() -> None:
     result = TurnStreamAssembler().consume(
         [
-            TurnStreamItem(kind=TurnStreamKind.TEXT_DELTA, channel="text", offset=0, content="分析"),
-            TurnStreamItem(kind=TurnStreamKind.TEXT_DELTA, channel="text", offset=1, content="中"),
+            TurnStreamItem(
+                kind=TurnStreamKind.REASONING_SUMMARY_START,
+                item_id="reasoning",
+                revision=1,
+            ),
+            TurnStreamItem(
+                kind=TurnStreamKind.REASONING_SUMMARY_DELTA,
+                item_id="reasoning",
+                revision=2,
+                content="分析中",
+            ),
+            TurnStreamItem(
+                kind=TurnStreamKind.REASONING_SUMMARY_END,
+                item_id="reasoning",
+                revision=3,
+            ),
             TurnStreamItem(
                 kind=TurnStreamKind.TOOL_CALL_START,
-                channel="tool:0",
-                offset=0,
+                item_id="tool:0",
+                revision=1,
                 tool_call_index=0,
                 tool_call_id="call_1",
-                tool_name="sql.execute_readonly",
+                tool_name="sql_execute_readonly",
             ),
             TurnStreamItem(
                 kind=TurnStreamKind.TOOL_CALL_DELTA,
-                channel="tool:0",
-                offset=1,
+                item_id="tool:0",
+                revision=2,
                 tool_call_index=0,
                 arguments_delta='{"sql":"SELECT ',
             ),
             TurnStreamItem(
                 kind=TurnStreamKind.TOOL_CALL_END,
-                channel="tool:0",
-                offset=2,
+                item_id="tool:0",
+                revision=3,
                 tool_call_index=0,
                 arguments_delta='1"}',
             ),
             TurnStreamItem(
+                kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
+                item_id="tool:0",
+                revision=4,
+                output_index=0,
+                model_output_item={
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "sql_execute_readonly",
+                    "arguments": '{"sql":"SELECT 1"}',
+                },
+            ),
+            TurnStreamItem(
                 kind=TurnStreamKind.FINISH,
-                channel="meta",
-                offset=0,
+                item_id="finish",
+                revision=1,
                 finish_signal="tool_calls",
             ),
         ]
     )
 
-    assert result.text == "分析中"
-    assert result.tool_calls[0].name == "sql.execute_readonly"
+    assert result.text == ""
+    assert result.reasoning_summary == "分析中"
+    assert result.tool_calls[0].name == "sql_execute_readonly"
     assert result.tool_calls[0].arguments == {"sql": "SELECT 1"}
     assert result.finish_signal == "tool_calls"
 
@@ -61,7 +88,11 @@ def test_turn_stream_assembler_merges_text_and_fragmented_tool_call() -> None:
 def test_turn_stream_assembler_rejects_gaps_and_bad_tool_json() -> None:
     with pytest.raises(TurnStreamError, match="stream gap"):
         TurnStreamAssembler().consume(
-            [TurnStreamItem(kind=TurnStreamKind.TEXT_DELTA, channel="text", offset=1, content="x")]
+            [TurnStreamItem(
+                kind=TurnStreamKind.ANSWER_START,
+                item_id="answer",
+                revision=2,
+            )]
         )
 
     with pytest.raises(TurnStreamError, match="invalid JSON"):
@@ -69,13 +100,19 @@ def test_turn_stream_assembler_rejects_gaps_and_bad_tool_json() -> None:
             [
                 TurnStreamItem(
                     kind=TurnStreamKind.TOOL_CALL_START,
-                    channel="tool:0",
-                    offset=0,
+                    item_id="tool:0",
+                    revision=1,
                     tool_call_index=0,
                     tool_call_id="call_1",
-                    tool_name="sql.validate",
+                    tool_name="sql_validate",
                     arguments_delta="{",
-                )
+                ),
+                TurnStreamItem(
+                    kind=TurnStreamKind.TOOL_CALL_END,
+                    item_id="tool:0",
+                    revision=2,
+                    tool_call_index=0,
+                ),
             ]
         )
 
@@ -87,6 +124,17 @@ def _artifact(artifact_id: str = "artifact_result_1") -> Artifact:
         run_id="run_1",
         type=ArtifactType.RESULT_VIEW,
         title="查询结果",
+        payload={
+            "sourceSqlArtifactId": "artifact_sql_1",
+            "queryFingerprint": "fingerprint_1",
+            "datasourceGeneration": 1,
+            "columns": [{"name": "count", "type": "integer"}],
+            "rowCount": 1,
+            "returnedRows": 1,
+            "latencyMs": 1,
+            "executedAt": datetime.now(UTC).isoformat(),
+            "truncated": False,
+        },
     )
 
 

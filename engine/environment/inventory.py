@@ -20,6 +20,7 @@ class ForeignKeyInventory(BaseModel):
     column_name: str
     referenced_table: str
     referenced_column: str
+    referenced_schema: str | None = None
 
 
 class TableInventory(BaseModel):
@@ -29,8 +30,65 @@ class TableInventory(BaseModel):
     comment: str | None = None
     columns: list[ColumnInventory] = Field(default_factory=list)
     foreign_keys: list[ForeignKeyInventory] = Field(default_factory=list)
-    sample_rows: list[dict[str, Any]] = Field(default_factory=list)
     row_count_estimate: int | None = None
+
+
+class ForeignKeyReference(BaseModel):
+    schema_name: str | None = None
+    table: str
+    column: str
+
+
+class InspectedColumn(BaseModel):
+    name: str
+    type: str
+    nullable: bool
+    default: str | None = None
+    primary_key: bool = False
+    foreign_key: ForeignKeyReference | None = None
+    comment: str | None = None
+
+
+class OutgoingForeignKey(BaseModel):
+    column: str
+    references: ForeignKeyReference
+
+
+class IncomingForeignKey(BaseModel):
+    schema_name: str | None = None
+    table: str
+    column: str
+    references: ForeignKeyReference
+
+
+class InspectedIndex(BaseModel):
+    name: str
+    columns: list[str] = Field(default_factory=list)
+    unique: bool = False
+
+
+class InspectedTable(BaseModel):
+    object_type: Literal["table"] = "table"
+    name: str
+    schema_name: str | None = None
+    type: Literal["table", "view"]
+    dialect: str
+    comment: str | None = None
+    row_estimate: int | None = None
+    columns: list[InspectedColumn] = Field(default_factory=list)
+    primary_key: list[str] = Field(default_factory=list)
+    foreign_keys_out: list[OutgoingForeignKey] = Field(default_factory=list)
+    foreign_keys_in: list[IncomingForeignKey] = Field(default_factory=list)
+    indexes: list[InspectedIndex] = Field(default_factory=list)
+    source: Literal["live"] = "live"
+
+
+class InspectedColumnObject(InspectedColumn):
+    object_type: Literal["column"] = "column"
+    table: str
+    schema_name: str | None = None
+    dialect: str
+    source: Literal["live"] = "live"
 
 
 class SchemaInventory(BaseModel):

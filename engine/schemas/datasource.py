@@ -1,9 +1,13 @@
-import json
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from engine.json_codec import JsonCodecError, loads
 from engine.schemas import _to_iso
+
+DbType = Literal["mysql", "postgresql", "sqlite"]
+DatasourceEnv = Literal["dev", "test", "prod"]
+ConnectionMode = Literal["direct"]
 
 
 def _json_list_or_empty(raw: Any) -> list[str]:
@@ -13,20 +17,20 @@ def _json_list_or_empty(raw: Any) -> list[str]:
         return [str(item) for item in raw]
     if isinstance(raw, str):
         try:
-            parsed = json.loads(raw)
+            parsed = loads(raw)
             return [str(item) for item in parsed] if isinstance(parsed, list) else []
-        except (json.JSONDecodeError, TypeError):
+        except JsonCodecError:
             return []
     return []
 
 
 class DataSourceResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
     id: str
     project_id: str | None = None
     environment_id: str | None = None
     name: str
-    db_type: str | None = None
+    db_type: DbType
     host: str | None = None
     port: int | None = None
     database_name: str | None = None
@@ -35,7 +39,7 @@ class DataSourceResponse(BaseModel):
     connection_generation: int = 1
     connection_mode: str | None = None
     is_read_only: bool = False
-    env: str | None = None
+    env: DatasourceEnv = "dev"
     status: str | None = None
 
     ssh_enabled: bool = False
@@ -59,7 +63,7 @@ class DataSourceResponse(BaseModel):
     last_test_readonly: bool | None = None
     last_test_server_version: str | None = None
     last_test_tables_count: int | None = None
-    last_test_warnings: list[str] = []
+    last_test_warnings: list[str] = Field(default_factory=list)
 
     last_sync_at: str | None = None
     last_sync_status: str | None = None
@@ -72,15 +76,15 @@ class DataSourceResponse(BaseModel):
     def parse_test_warnings(cls, v: Any) -> list[str]:
         return _json_list_or_empty(v)
 
+    @field_validator("env", mode="before")
+    @classmethod
+    def _default_environment(cls, value: Any) -> DatasourceEnv:
+        return value or "dev"
+
     @field_validator("last_test_at", "last_sync_at", "created_at", mode="before")
     @classmethod
     def _iso_dates(cls, v: Any) -> str | None:
         return _to_iso(v)
-
-
-DbType = Literal["mysql", "postgresql", "sqlite"]
-DatasourceEnv = Literal["dev", "test", "prod"]
-ConnectionMode = Literal["direct"]
 
 
 class _DatasourceRequestStringNormalizer(BaseModel):
@@ -190,3 +194,164 @@ class DataSourceUpdateRequest(_DatasourceRequestStringNormalizer):
     ssl_cert_path: str | None = Field(default=None, max_length=1024)
     ssl_key_path: str | None = Field(default=None, max_length=1024)
     ssl_verify_identity: bool = True
+
+
+class DataSourceTestResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    success: bool
+    message: str
+    serverVersion: str | None = None
+    readonly: bool | None = None
+    tablesCount: int | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class DataSourceHealthResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    status: Literal["success", "failed"]
+    checkedAt: str | None = None
+    latencyMs: int
+    serverVersion: str | None = None
+    readonly: bool | None = None
+    tablesCount: int | None = None
+    warnings: list[str] = Field(default_factory=list)
+    code: str | None = None
+    message: str
+    datasource: DataSourceResponse
+
+
+class OperationMessageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    success: Literal[True] = True
+    message: str
+
+
+class ConfirmationRequiredResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    success: Literal[False] = False
+    requires_confirmation: Literal[True] = True
+    confirm_token: str
+    impact_summary: str
+    expected_confirm_text: str
+
+
+class SchemaAiEnrichResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ai_enriched: bool
+    enriched_count: int
+    reason: str | None = None
+    errors: list[str] = Field(default_factory=list)
+    capped: bool | None = None
+    total_changed: int | None = None
+    max_tables_per_run: int | None = None
+
+
+class SchemaSyncResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    tablesSynced: int
+    tablesDropped: int
+    columnsCreated: int
+    columnsUpdated: int
+    columnsRemoved: int
+    message: str
+    aiEnrich: SchemaAiEnrichResponse | None = None
+
+
+class SchemaTableResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    table_schema: str
+    table_name: str
+    table_comment: str
+    table_type: str | None = None
+    row_count_estimate: int | None = None
+    columns_count: int
+    module_tag: str | None = None
+    ai_description: str
+    semantic_tags: str
+    business_terms: str
+    ai_confidence: float | None = None
+    subject_area: str
+
+
+class SchemaColumnResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    column_name: str
+    data_type: str | None = None
+    column_type: str | None = None
+    is_nullable: bool
+    column_default: str
+    column_comment: str
+    is_primary_key: bool
+    is_foreign_key: bool
+    foreign_table_id: str | None = None
+    foreign_column_id: str | None = None
+    ai_description: str
+    semantic_tags: str
+    business_terms: str
+    ai_confidence: float | None = None
+
+
+class SchemaTableUpdateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    success: Literal[True] = True
+    table: SchemaTableResponse
+
+
+class SchemaColumnUpdateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    success: Literal[True] = True
+    column: SchemaColumnResponse
+
+
+class ERFieldResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    type: str
+    is_pk: bool
+    is_fk: bool
+    comment: str | None = None
+
+
+class ERNodeResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    label: str
+    fields: list[ERFieldResponse]
+    comment: str
+    row_count_estimate: int | None = None
+    module_tag: str | None = None
+
+
+class EREdgeResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    source: str
+    target: str
+    sourceHandle: str | None = None
+    targetHandle: str | None = None
+    edge_type: Literal["real", "inferred"] | None = None
+    label: str | None = None
+
+
+class ERDiagramResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    nodes: list[ERNodeResponse]
+    edges: list[EREdgeResponse]

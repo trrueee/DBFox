@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
+from engine.json_codec import dumps
 from engine.sql.semantics.contract import QueryContract
 from engine.sql.semantics.verifier import SemanticViolation
 from engine.sql.compiler import SQLProjectionConstraintVerifier
@@ -98,11 +98,11 @@ def semantic_retry_prompt(
         f"Original question:\n{question}\n"
         f"{schema_block}\n"
         "SQL_CONTRACT:\n"
-        f"{json.dumps(contract.to_dict(), ensure_ascii=False, indent=2)}\n\n"
+        f"{dumps(contract.to_dict(), indent=2)}\n\n"
         "Previous SQL:\n"
         f"{previous_sql}\n\n"
         "Violations:\n"
-        f"{json.dumps(semantic_violation_payload(violations), ensure_ascii=False, indent=2)}\n\n"
+        f"{dumps(semantic_violation_payload(violations), indent=2)}\n\n"
         f"{guidance_block}"
         "Regenerate one MySQL SELECT query that satisfies the contract. Return SQL only."
     )

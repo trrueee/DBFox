@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import NotRequired, TypedDict
+from typing import Literal, TypedDict
 
 import logging
 import re
@@ -15,19 +15,17 @@ from engine.app.safe_errors import (
     log_sensitive_diagnostic,
     log_unexpected_exception,
 )
-from engine.errors import GuardrailValidationError
-
 logger = logging.getLogger("dbfox.guardrail")
 
 
 class GuardrailCheck(TypedDict):
     rule: str
-    level: str
+    level: Literal["warn", "reject"]
     message: str
 
 
 class GuardrailResult(TypedDict):
-    result: str  # "pass" | "warn" | "reject"
+    result: Literal["pass", "warn", "reject"]
     originalSql: str
     safeSql: str
     checks: list[GuardrailCheck]
@@ -96,11 +94,7 @@ def guardrail_check_with_ast(
     sql_str: str,
     dialect: str = "mysql",
 ) -> tuple[GuardrailResult, exp.Expression | None]:
-    result = guardrail_check(sql_str, dialect=dialect)
-    parsed_ast = None
-    if result["result"] != "reject":
-        parsed_ast = guardrail_parsed_ast(sql_str, dialect=dialect)
-    return result, parsed_ast
+    return _evaluate_guardrail(sql_str, dialect=dialect)
 
 
 def count_statement_delimiters(sql: str) -> int:
@@ -219,48 +213,47 @@ def _outer_limit_can_exceed_row_count(limit: exp.Expression | None) -> bool:
         return False
     return bool(options.args.get("percent") or options.args.get("with_ties"))
 
-def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
-    """
-    Analyzes SQL using sqlglot AST parsing to enforce V1 security guidelines.
-    Checks:
-    - Syntactic validity
-    - Single statement restriction (no multi-statements)
-    - SELECT query ONLY (blocks DDL/DML/DCL/dangerous commands)
-    - Blocks access to system databases (mysql, information_schema, etc.)
-    - Blocks dangerous built-in functions (sleep, benchmark, load_file, etc.)
-    - Blocks SELECT INTO OUTFILE / DUMPFILE
-    - Automatically injects LIMIT 1000 if not provided
-    - Appends warnings for SELECT *
-    
-    Returns:
-        dict (GuardrailResult): {
-            "result": "pass" | "warn" | "reject",
-            "originalSql": str,
-            "safeSql": str,
-            "checks": list of dicts,
-            "message": str,
-        }
-    """
-    sql_str = sql_str.strip()
-    if not sql_str:
-        return {
-            "result": "reject",
-            "originalSql": sql_str,
-            "safeSql": "",
-            "checks": [{"rule": "empty_sql", "level": "reject", "message": "SQL 语句不能为空"}],
-            "message": "拒绝执行：SQL 语句为空"
-        }
 
-    # Block MySQL executable comments (/*!<digits> ... */) upfront.
-    # These can hide dangerous SQL (e.g. /*!50001 DROP TABLE t;*/) from both
-    # the delimiter counter and the AST walker because sqlglot treats them as
-    # inert comment nodes while MySQL WILL execute their contents.
+_BROKEN_GENERATED_TOKENS = (
+    "ORDER BY ARRAY(",
+    "ORDER BY STRUCT(",
+    "ORDER BY []",
+    "ARRAY(",
+    "STRUCT(",
+)
+
+
+def _reject(
+    original_sql: str,
+    *,
+    checks: list[GuardrailCheck],
+    message: str,
+) -> GuardrailResult:
+    return {
+        "result": "reject",
+        "originalSql": original_sql,
+        "safeSql": "",
+        "checks": checks,
+        "message": message,
+    }
+
+
+def _preflight_rejection(sql_str: str) -> GuardrailResult | None:
+    if not sql_str:
+        return _reject(
+            sql_str,
+            checks=[{
+                "rule": "empty_sql",
+                "level": "reject",
+                "message": "SQL 语句不能为空",
+            }],
+            message="拒绝执行：SQL 语句为空",
+        )
+
     if _MYSQL_EXEC_COMMENT_START.search(sql_str):
-        return {
-            "result": "reject",
-            "originalSql": sql_str,
-            "safeSql": "",
-            "checks": [{
+        return _reject(
+            sql_str,
+            checks=[{
                 "rule": "mysql_executable_comment",
                 "level": "reject",
                 "message": (
@@ -268,199 +261,212 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
                     "此类注释可以隐藏高危 SQL 指令，存在绕过安全审计的风险。"
                 ),
             }],
-            "message": "拒绝执行：检测到 MySQL 可执行注释，该语法可能被用于绕过安全审计。",
-        }
+            message=(
+                "拒绝执行：检测到 MySQL 可执行注释，"
+                "该语法可能被用于绕过安全审计。"
+            ),
+        )
 
-    # Enforce safe length limit
-    if len(sql_str) > 20000:
-        return {
-            "result": "reject",
-            "originalSql": sql_str[:100] + "...",
-            "safeSql": "",
-            "checks": [{"rule": "sql_too_long", "level": "reject", "message": "SQL 语句长度不能超过 20000 字符"}],
-            "message": "拒绝执行：SQL 语句过长"
-        }
+    if len(sql_str) > 20_000:
+        return _reject(
+            sql_str[:100] + "...",
+            checks=[{
+                "rule": "sql_too_long",
+                "level": "reject",
+                "message": "SQL 语句长度不能超过 20000 字符",
+            }],
+            message="拒绝执行：SQL 语句过长",
+        )
 
-    # Pre-parse multi-statement check using our custom delimiter counter
     semicolons = count_statement_delimiters(sql_str)
-    if semicolons > 1 or (semicolons == 1 and not sql_str.strip().endswith(";")):
-        return {
-            "result": "reject",
-            "originalSql": sql_str,
-            "safeSql": "",
-            "checks": [{
+    has_multiple_statements = (
+        semicolons > 1
+        or (semicolons == 1 and not sql_str.endswith(";"))
+    )
+    if has_multiple_statements:
+        return _reject(
+            sql_str,
+            checks=[{
                 "rule": "multi_statement",
                 "level": "reject",
-                "message": "检测到多条 SQL 语句。出于安全策略，每次仅允许执行单条 SELECT 语句。"
+                "message": (
+                    "检测到多条 SQL 语句。出于安全策略，"
+                    "每次仅允许执行单条 SELECT 语句。"
+                ),
             }],
-            "message": "拒绝执行：检测到多语句注入"
-        }
+            message="拒绝执行：检测到多语句注入",
+        )
+    return None
 
-    # Map input dialect to standard sqlglot dialect name
-    sqlglot_dialect = _sqlglot_dialect(dialect)
 
+def _parse_guarded_expression(
+    sql_str: str,
+    dialect: str,
+) -> tuple[
+    exp.Expression | None,
+    list[GuardrailCheck],
+    GuardrailResult | None,
+]:
     checks: list[GuardrailCheck] = []
-    has_errors = False
-
-    # 1. Parse and check multiple statements
     try:
-        # sqlglot.parse parses multi-statement strings separated by semicolon
         expressions = parse_sql(sql_str, dialect)
         if len(expressions) > 1:
             checks.append({
                 "rule": "multi_statement",
                 "level": "reject",
-                "message": "检测到多条 SQL 语句。出于安全策略，每次仅允许执行单条 SELECT 语句。"
+                "message": (
+                    "检测到多条 SQL 语句。出于安全策略，"
+                    "每次仅允许执行单条 SELECT 语句。"
+                ),
             })
-            has_errors = True
-
         if not expressions or not expressions[0]:
             raise ValueError("SQL parsing yielded empty AST")
-
-        expression: exp.Expression = expressions[0]  # type: ignore[assignment]
-    except Exception as e:
+        return expressions[0], checks, None  # type: ignore[return-value]
+    except Exception as exc:
         log_unexpected_exception(
             logger,
             operation=SafeLogOperation.SQL_GUARDRAIL_PARSE,
-            exc=e,
-            fingerprint_subject=f"{sql_str}\x00{type(e).__name__}\x00{e}",
+            exc=exc,
+            fingerprint_subject=f"{sql_str}\x00{type(exc).__name__}\x00{exc}",
             level="warning",
         )
-        return {
-            "result": "reject",
-            "originalSql": sql_str,
-            "safeSql": "",
-            "checks": [{
+        return None, checks, _reject(
+            sql_str,
+            checks=[{
                 "rule": "syntax_error",
                 "level": "reject",
                 "message": "SQL could not be parsed safely.",
             }],
-            "message": "拒绝执行：语法解析失败"
-        }
+            message="拒绝执行：语法解析失败",
+        )
 
-    # 2. Enforce SELECT only — delegated to module-level helper for testability
-    if not isinstance(expression, (exp.Select, exp.Union, exp.Intersect, exp.Except, exp.Subquery, exp.With)) \
-       or not _is_select_node(expression):
+
+def _ast_rejection_checks(expression: exp.Expression) -> list[GuardrailCheck]:
+    checks: list[GuardrailCheck] = []
+    if (
+        not isinstance(
+            expression,
+            (exp.Select, exp.Union, exp.Intersect, exp.Except, exp.Subquery, exp.With),
+        )
+        or not _is_select_node(expression)
+    ):
         checks.append({
             "rule": "select_only",
             "level": "reject",
-            "message": "出于安全性考量，目前仅支持执行 SELECT 数据查询语句。禁止执行写入、删除、更新或定义操作。"
+            "message": (
+                "出于安全性考量，目前仅支持执行 SELECT 数据查询语句。"
+                "禁止执行写入、删除、更新或定义操作。"
+            ),
         })
-        has_errors = True
 
-    # 3. Walk the AST to detect nested hazards (subqueries, tables, functions)
     for node in expression.walk():
-        # Check forbidden command types nested
         if isinstance(node, BLOCKED_COMMAND_TYPES):
             checks.append({
                 "rule": "blocked_command_type",
                 "level": "reject",
-                "message": f"禁止执行 SQL 指令类型: {type(node).__name__}"
+                "message": f"禁止执行 SQL 指令类型: {type(node).__name__}",
             })
-            has_errors = True
-
-        # Check recursive CTE / WITH clause
         elif isinstance(node, exp.With) and node.args.get("recursive"):
             checks.append({
                 "rule": "recursive_cte_blocked",
                 "level": "reject",
-                "message": "由于安全性与性能考量，禁止执行包含 RECURSIVE (递归) 的 CTE 语句。"
+                "message": (
+                    "由于安全性与性能考量，"
+                    "禁止执行包含 RECURSIVE (递归) 的 CTE 语句。"
+                ),
             })
-            has_errors = True
-
-        # Check SELECT ... FOR UPDATE / LOCK IN SHARE MODE
         elif isinstance(node, exp.Lock):
             checks.append({
                 "rule": "row_locking_blocked",
                 "level": "reject",
-                "message": "在只读/安全模式下，禁止执行包含 row-locking (FOR UPDATE / FOR SHARE) 的锁表或锁行操作。"
+                "message": (
+                    "在只读/安全模式下，禁止执行包含 row-locking "
+                    "(FOR UPDATE / FOR SHARE) 的锁表或锁行操作。"
+                ),
             })
-            has_errors = True
-
-        # Check for system catalog tables / schemas
         elif isinstance(node, exp.Table):
             table_name = node.name.lower() if node.name else ""
             db_name = node.db.lower() if node.db else ""
-            
             if db_name in BLOCKED_SCHEMAS or table_name in BLOCKED_SCHEMAS:
                 checks.append({
                     "rule": "system_catalog_blocked",
                     "level": "reject",
-                    "message": f"禁止访问系统内部表或系统架构库: '{db_name or table_name}'"
+                    "message": (
+                        "禁止访问系统内部表或系统架构库: "
+                        f"'{db_name or table_name}'"
+                    ),
                 })
-                has_errors = True
-
-        # Check normalized dangerous functions such as CURRENT_USER(),
-        # DATABASE()/SCHEMA(), and VERSION().
         elif isinstance(node, DANGEROUS_EXPRESSION_TYPES):
             checks.append({
                 "rule": "dangerous_function",
                 "level": "reject",
-                "message": f"Blocked dangerous system information function: {type(node).__name__}"
+                "message": (
+                    "Blocked dangerous system information function: "
+                    f"{type(node).__name__}"
+                ),
             })
-            has_errors = True
-
-        # Block MySQL system variables such as @@version.
         elif isinstance(node, exp.SessionParameter):
             checks.append({
                 "rule": "system_variable_blocked",
                 "level": "reject",
-                "message": f"Blocked access to MySQL system variable: {node.name}"
+                "message": (
+                    "Blocked access to MySQL system variable: "
+                    f"{node.name}"
+                ),
             })
-            has_errors = True
-
-        # Check for dangerous functions
         elif isinstance(node, (exp.Anonymous, exp.Func)):
             func_name = node.name.lower() if node.name else ""
             if func_name in DANGEROUS_FUNCTIONS:
                 checks.append({
                     "rule": "dangerous_function",
                     "level": "reject",
-                    "message": f"禁止使用高危或系统信息泄露函数: '{func_name}'"
+                    "message": (
+                        "禁止使用高危或系统信息泄露函数: "
+                        f"'{func_name}'"
+                    ),
                 })
-                has_errors = True
-                
-        # Check SELECT INTO OUTFILE / DUMPFILE
         elif isinstance(node, exp.Into):
             checks.append({
                 "rule": "into_outfile_blocked",
                 "level": "reject",
-                "message": "禁止执行文件写入/导出操作 (INTO OUTFILE / INTO DUMPFILE)"
+                "message": (
+                    "禁止执行文件写入/导出操作 "
+                    "(INTO OUTFILE / INTO DUMPFILE)"
+                ),
             })
-            has_errors = True
+    return checks
 
-    # If any blocker rule is violated, immediately reject
-    if has_errors:
-        return {
-            "result": "reject",
-            "originalSql": sql_str,
-            "safeSql": "",
-            "checks": checks,
-            "message": "拒绝执行：检测到高危 SQL 指令，已被 Guardrail 强制拦截。"
-        }
 
-    # 4. Check for SELECT * Warning while excluding safe aggregate COUNT(*).
+def _append_select_star_warning(
+    expression: exp.Expression,
+    checks: list[GuardrailCheck],
+) -> None:
     has_star = any(
         _projection_has_star(projection)
         for select in expression.find_all(exp.Select)
         for projection in select.expressions
     )
-            
     if has_star:
         checks.append({
             "rule": "select_star",
             "level": "warn",
-            "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+            "message": (
+                "建议不要在生产环境使用 SELECT *。显式指定所需字段"
+                "能显著优化查询性能并减少网卡开销。"
+            ),
         })
 
-    # 5. Enforce the result contract at the database server.  A client-side
-    # fetch cap alone still lets an explicit ``LIMIT 1000000`` consume server
-    # resources.  Only the outer query controls rows sent to the client; a
-    # nested LIMIT is intentionally not treated as that boundary.
+
+def _render_bounded_sql(
+    expression: exp.Expression,
+    *,
+    original_sql: str,
+    sqlglot_dialect: str,
+    checks: list[GuardrailCheck],
+) -> tuple[str | None, GuardrailResult | None]:
     outer_limit = expression.args.get("limit")
     outer_limit_value = _outer_limit_value(outer_limit)
     safe_expression = expression.copy()
-
     must_apply_hard_cap = (
         outer_limit is None
         or outer_limit_value is None
@@ -476,79 +482,166 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
                 logger,
                 operation=SafeLogOperation.SQL_GUARDRAIL_LIMIT_ENFORCEMENT,
                 exc=exc,
-                fingerprint_subject=f"{sql_str}\x00{type(exc).__name__}\x00{exc}",
+                fingerprint_subject=(
+                    f"{original_sql}\x00{type(exc).__name__}\x00{exc}"
+                ),
                 level="warning",
             )
-            return {
-                "result": "reject",
-                "originalSql": sql_str,
-                "safeSql": "",
-                "checks": [{
+            return None, _reject(
+                original_sql,
+                checks=[{
                     "rule": "result_limit_enforcement_failed",
                     "level": "reject",
                     "message": "无法为查询施加服务端结果集上限，已拒绝执行。",
                 }],
-                "message": "拒绝执行：无法施加服务端结果集上限。",
-            }
-
-        if outer_limit is None:
-            checks.append({
-                "rule": "auto_limit",
-                "level": "warn",
-                "message": f"未检测到外层 LIMIT，系统已追加 LIMIT {MAX_ROWS} 以约束服务端结果集。",
-            })
-        else:
-            checks.append({
-                "rule": "limit_hard_cap",
-                "level": "warn",
-                "message": f"查询的外层 LIMIT 已收敛为服务端上限 {MAX_ROWS}。",
-            })
-            
-    safe_sql = safe_expression.sql(dialect=sqlglot_dialect)
-
-    # 6. Post-generation syntax sanity — catch patterns that are valid in
-    #    sqlglot's AST but produce invalid MySQL (BigQuery/Spark-isms).
-    _SAFE_SQL_UPPER = safe_sql.upper()
-    _BROKEN_TOKENS = (
-        "ORDER BY ARRAY(", "ORDER BY STRUCT(", "ORDER BY []",
-        "ARRAY(", "STRUCT(",
-    )
-    for token in _BROKEN_TOKENS:
-        if token in _SAFE_SQL_UPPER:
-            log_sensitive_diagnostic(
-                logger,
-                operation=SafeLogOperation.SQL_GUARDRAIL_GENERATED_SYNTAX,
-                subject=safe_sql,
-                subject_type="sql",
+                message="拒绝执行：无法施加服务端结果集上限。",
             )
-            checks.append({
-                "rule": "mysql_syntax_invalid",
+        checks.append({
+            "rule": "auto_limit" if outer_limit is None else "limit_hard_cap",
+            "level": "warn",
+            "message": (
+                f"未检测到外层 LIMIT，系统已追加 LIMIT {MAX_ROWS} "
+                "以约束服务端结果集。"
+                if outer_limit is None
+                else f"查询的外层 LIMIT 已收敛为服务端上限 {MAX_ROWS}。"
+            ),
+        })
+
+    try:
+        return safe_expression.sql(dialect=sqlglot_dialect), None
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.SQL_GUARDRAIL_LIMIT_ENFORCEMENT,
+            exc=exc,
+            fingerprint_subject=(
+                f"{original_sql}\x00{type(exc).__name__}\x00{exc}"
+            ),
+            level="warning",
+        )
+        return None, _reject(
+            original_sql,
+            checks=[{
+                "rule": "safe_sql_render_failed",
                 "level": "reject",
-                "message": (
-                    "SQL contains a MySQL-unsupported generated ordering expression. "
-                    "请使用标准 MySQL ORDER BY column [ASC|DESC] 语法。"
-                ),
-            })
-            has_errors = True
+                "message": "安全 SQL 无法生成，已拒绝执行。",
+            }],
+            message="拒绝执行：安全 SQL 生成失败。",
+        )
 
-    if has_errors:
-        return {
-            "result": "reject",
-            "originalSql": sql_str,
-            "safeSql": "",
-            "checks": checks,
-            "message": "拒绝执行：检测到 MySQL 不支持的语法，已被 Guardrail 拦截。",
-        }
 
-    # If warnings exist, the overall result is "warn", otherwise "pass"
-    warn_count = sum(1 for c in checks if c["level"] == "warn")
-    result_status = "warn" if warn_count > 0 else "pass"
-    message_summary = "SQL 审核通过，但包含优化建议。" if result_status == "warn" else "SQL 安全审核通过！"
+def _generated_syntax_checks(safe_sql: str) -> list[GuardrailCheck]:
+    upper_sql = safe_sql.upper()
+    checks: list[GuardrailCheck] = []
+    for token in _BROKEN_GENERATED_TOKENS:
+        if token not in upper_sql:
+            continue
+        log_sensitive_diagnostic(
+            logger,
+            operation=SafeLogOperation.SQL_GUARDRAIL_GENERATED_SYNTAX,
+            subject=safe_sql,
+            subject_type="sql",
+        )
+        checks.append({
+            "rule": "mysql_syntax_invalid",
+            "level": "reject",
+            "message": (
+                "SQL contains a MySQL-unsupported generated ordering expression. "
+                "请使用标准 MySQL ORDER BY column [ASC|DESC] 语法。"
+            ),
+        })
+    return checks
 
-    return {
+def _evaluate_guardrail(
+    sql_str: str,
+    dialect: str = "mysql",
+) -> tuple[GuardrailResult, exp.Expression | None]:
+    sql_str = sql_str.strip()
+    preflight_rejection = _preflight_rejection(sql_str)
+    if preflight_rejection is not None:
+        return preflight_rejection, None
+
+    sqlglot_dialect = _sqlglot_dialect(dialect)
+    expression, checks, parse_rejection = _parse_guarded_expression(
+        sql_str,
+        dialect,
+    )
+    if parse_rejection is not None:
+        return parse_rejection, None
+    if expression is None:
+        checks.append({
+            "rule": "guardrail_internal_error",
+            "level": "reject",
+            "message": "SQL 解析未产生可验证的语法树，已拒绝执行。",
+        })
+        return _reject(
+            sql_str,
+            checks=checks,
+            message="拒绝执行：SQL 安全检查未能完成。",
+        ), None
+
+    checks.extend(_ast_rejection_checks(expression))
+    if any(check["level"] == "reject" for check in checks):
+        return _reject(
+            sql_str,
+            checks=checks,
+            message="拒绝执行：检测到高危 SQL 指令，已被 Guardrail 强制拦截。",
+        ), None
+
+    _append_select_star_warning(expression, checks)
+
+    safe_sql, render_rejection = _render_bounded_sql(
+        expression,
+        original_sql=sql_str,
+        sqlglot_dialect=sqlglot_dialect,
+        checks=checks,
+    )
+    if render_rejection is not None:
+        return render_rejection, None
+    if safe_sql is None:
+        checks.append({
+            "rule": "guardrail_internal_error",
+            "level": "reject",
+            "message": "安全 SQL 未生成，已拒绝执行。",
+        })
+        return _reject(
+            sql_str,
+            checks=checks,
+            message="拒绝执行：SQL 安全检查未能完成。",
+        ), None
+
+    checks.extend(_generated_syntax_checks(safe_sql))
+    if any(check["level"] == "reject" for check in checks):
+        return _reject(
+            sql_str,
+            checks=checks,
+            message=(
+                "拒绝执行：检测到 MySQL 不支持的语法，"
+                "已被 Guardrail 拦截。"
+            ),
+        ), None
+
+    result_status: Literal["pass", "warn"] = (
+        "warn"
+        if any(check["level"] == "warn" for check in checks)
+        else "pass"
+    )
+    result: GuardrailResult = {
         "result": result_status,
         "originalSql": sql_str,
         "safeSql": safe_sql,
         "checks": checks,
-        "message": message_summary,
+        "message": (
+            "SQL 审核通过，但包含优化建议。"
+            if result_status == "warn"
+            else "SQL 安全审核通过！"
+        ),
     }
+    return result, expression
+
+
+def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
+    """Return the fail-closed SQL safety decision."""
+
+    result, _parsed_ast = _evaluate_guardrail(sql_str, dialect=dialect)
+    return result

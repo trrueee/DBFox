@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import time
 import warnings
 from typing import Any
 
+from engine.json_codec import dumps, load_object
 from engine.llm.config import LlmConfig
 from engine.llm.factory import create_openai_compatible_client
 
@@ -85,6 +85,7 @@ def segment_for_fts(text: str) -> str:
 # ── Search text builders ─────────────────────────────────────────────────────────
 
 def build_table_search_text(
+    table_schema: str,
     table_name: str,
     ai_description: str | None,
     semantic_tags: list[str] | None,
@@ -99,7 +100,8 @@ def build_table_search_text(
     """Construct the FTS5 search_text for one table."""
     parts: list[str] = []
 
-    parts.append(f"表名: {table_name}")
+    qualified_name = f"{table_schema}.{table_name}" if table_schema else table_name
+    parts.append(f"表名: {qualified_name}")
     if ai_description:
         parts.append(f"业务描述: {ai_description}")
     if semantic_tags:
@@ -129,6 +131,7 @@ def build_table_search_text(
 
 def build_column_search_text(
     column_name: str,
+    table_schema: str,
     table_name: str,
     ai_description: str | None,
     semantic_tags: list[str] | None,
@@ -140,7 +143,8 @@ def build_column_search_text(
     parts: list[str] = []
 
     parts.append(f"字段名: {column_name}")
-    parts.append(f"所属表: {table_name}")
+    qualified_name = f"{table_schema}.{table_name}" if table_schema else table_name
+    parts.append(f"所属表: {qualified_name}")
     if ai_description:
         parts.append(f"字段描述: {ai_description}")
     if semantic_tags:
@@ -205,7 +209,9 @@ def enrich_tables_batch(
                 provider=provider,
                 llm_config=llm_config,
             )
-            parsed = json.loads(result) if isinstance(result, str) else result
+            parsed = load_object(result) if isinstance(result, str) else result
+            if not isinstance(parsed, dict):
+                raise ValueError("LLM enrichment output must be a JSON object")
             _validate_enrich_result(parsed, [t["name"] for t in tables_context])
             return parsed
         except Exception as exc:
@@ -222,8 +228,7 @@ def enrich_tables_batch(
 
 def _build_enrich_prompt(tables: list[dict[str, Any]]) -> str:
     """Build the structured prompt for schema enrichment."""
-    import json as _json
-    context = _json.dumps(tables, ensure_ascii=False, indent=2, default=str)
+    context = dumps(tables, indent=2)
     return f"""You are a database schema analyst. For each table below, generate business-meaningful metadata in Chinese.
 
 Output JSON only — no commentary. For each table:

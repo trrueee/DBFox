@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import Future, ThreadPoolExecutor
-from threading import Event, RLock, Thread
+from datetime import UTC, datetime
+from threading import Event, RLock, Thread, current_thread
 from typing import Callable
 from uuid import uuid4
 
@@ -12,11 +13,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.agent.loop import RunLoop
+from engine.agent.repositories.approval import ApprovalRepository
+from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
-from engine.agent.run import RunStatus
+from engine.agent.run import RunStatus, SessionLeaseConflict
 from engine.agent.session import SessionInputStatus, SessionLease
-from engine.models import AgentRun, AgentSessionInput
+from engine.models import (
+    AgentApproval,
+    AgentQuestionRequest,
+    AgentRun,
+    AgentSessionInput,
+)
 
 
 logger = logging.getLogger("dbfox.agent.coordinator")
@@ -40,6 +48,7 @@ class SessionCoordinator:
         self._active: dict[str, Future[None]] = {}
         self._lock = RLock()
         self._stopped = Event()
+        self._maintenance: Thread | None = None
 
     @property
     def available(self) -> bool:
@@ -50,6 +59,14 @@ class SessionCoordinator:
             raise RuntimeError("SessionCoordinator has stopped")
         for session_id in self._recoverable_sessions():
             self.wake(session_id)
+        with self._lock:
+            if self._maintenance is None or not self._maintenance.is_alive():
+                self._maintenance = Thread(
+                    target=self._maintenance_loop,
+                    name="dbfox-agent-maintenance",
+                    daemon=True,
+                )
+                self._maintenance.start()
 
     def wake(self, session_id: str) -> None:
         if self._stopped.is_set():
@@ -65,23 +82,36 @@ class SessionCoordinator:
     def stop(self, *, wait: bool = True) -> None:
         self._stopped.set()
         self._executor.shutdown(wait=wait, cancel_futures=False)
+        close_run_loop = getattr(self.run_loop, "close", None)
+        if callable(close_run_loop):
+            close_run_loop()
+        maintenance = self._maintenance
+        if maintenance is not None and maintenance is not current_thread():
+            maintenance.join(timeout=2)
 
     def _drain_session(self, session_id: str) -> None:
         owner = f"worker:{uuid4().hex}"
         while not self._stopped.is_set():
-            lease, run_id = self._claim_work(session_id, owner)
+            try:
+                lease, run_id = self._claim_work(session_id, owner)
+            except Exception:
+                logger.exception("Agent work claim failed session_id=%s", session_id)
+                if self._stopped.wait(1.0):
+                    return
+                continue
             if lease is None or run_id is None:
                 return
             heartbeat_stop = Event()
+            lease_lost = Event()
             heartbeat = Thread(
                 target=self._heartbeat,
-                args=(lease, heartbeat_stop),
+                args=(lease, heartbeat_stop, lease_lost),
                 name=f"dbfox-agent-heartbeat-{session_id[:12]}",
                 daemon=True,
             )
             heartbeat.start()
             try:
-                self.run_loop.execute(lease=lease, run_id=run_id)
+                self.run_loop.execute(lease=lease, run_id=run_id, lease_lost=lease_lost)
             except Exception:
                 logger.exception("Agent RunLoop failed run_id=%s", run_id)
                 try:
@@ -97,6 +127,7 @@ class SessionCoordinator:
             finally:
                 heartbeat_stop.set()
                 heartbeat.join(timeout=2)
+            self._delete_if_ready(session_id)
 
     def _claim_work(self, session_id: str, owner: str) -> tuple[SessionLease | None, str | None]:
         with self.session_factory() as db:
@@ -107,6 +138,8 @@ class SessionCoordinator:
             if lease is None:
                 db.rollback()
                 return None, None
+            ApprovalRepository(db).expire_pending(lease=lease)
+            QuestionRepository(db).expire_pending(lease=lease)
             waiting = db.execute(
                 select(AgentRun).where(
                     AgentRun.session_id == session_id,
@@ -137,20 +170,63 @@ class SessionCoordinator:
             db.commit()
             return (lease, run_id) if run_id else (None, None)
 
-    def _heartbeat(self, lease: SessionLease, stop: Event) -> None:
+    def _delete_if_ready(self, session_id: str) -> bool:
+        """Physically delete a soft-deleted Session after every Run is terminal."""
+        with self.session_factory() as db:
+            from engine.models import AgentSession
+
+            aggregate = db.get(AgentSession, session_id)
+            if aggregate is None or aggregate.deleted_at is None:
+                return False
+            active = db.execute(
+                select(AgentRun.id).where(
+                    AgentRun.session_id == session_id,
+                    AgentRun.status.not_in(
+                        [RunStatus.COMPLETED.value, RunStatus.FAILED.value, RunStatus.CANCELLED.value]
+                    ),
+                ).limit(1)
+            ).scalar_one_or_none()
+            if active is not None:
+                return False
+            db.delete(aggregate)
+            db.commit()
+            return True
+
+    def _heartbeat(self, lease: SessionLease, stop: Event, lease_lost: Event | None = None) -> None:
         interval = max(1.0, self.lease_ttl_seconds / 3)
-        while not stop.wait(interval):
+        delay = interval
+        failures = 0
+        while not stop.wait(delay):
             try:
                 with self.session_factory() as db:
                     SessionRepository(db).heartbeat(
                         lease=lease, ttl_seconds=self.lease_ttl_seconds
                     )
                     db.commit()
-            except Exception:
+                failures = 0
+                delay = interval
+            except SessionLeaseConflict:
+                if lease_lost is not None:
+                    lease_lost.set()
+                logger.warning(
+                    "Agent Session lease was lost session_id=%s owner=%s token=%s",
+                    lease.session_id,
+                    lease.owner,
+                    lease.token,
+                )
                 return
+            except Exception:
+                failures += 1
+                delay = min(interval, float(2 ** min(failures - 1, 5)))
+                logger.exception(
+                    "Agent Session heartbeat failed; retrying session_id=%s attempt=%s",
+                    lease.session_id,
+                    failures,
+                )
 
     def _recoverable_sessions(self) -> list[str]:
         with self.session_factory() as db:
+            now = datetime.now(UTC)
             input_sessions = db.execute(
                 select(AgentSessionInput.session_id).where(
                     AgentSessionInput.status == SessionInputStatus.ADMITTED.value
@@ -161,7 +237,46 @@ class SessionCoordinator:
                     AgentRun.status.in_([RunStatus.RUNNING.value, RunStatus.CANCELLING.value])
                 ).distinct()
             ).scalars()
-            return sorted({str(value) for value in [*input_sessions, *run_sessions]})
+            approval_sessions = db.execute(
+                select(AgentApproval.session_id).where(
+                    AgentApproval.status == "pending",
+                    AgentApproval.expires_at.is_not(None),
+                    AgentApproval.expires_at <= now,
+                ).distinct()
+            ).scalars()
+            question_sessions = db.execute(
+                select(AgentQuestionRequest.session_id).where(
+                    AgentQuestionRequest.status == "pending",
+                    AgentQuestionRequest.expires_at.is_not(None),
+                    AgentQuestionRequest.expires_at <= now,
+                ).distinct()
+            ).scalars()
+            return sorted({
+                str(value)
+                for value in [
+                    *input_sessions,
+                    *run_sessions,
+                    *approval_sessions,
+                    *question_sessions,
+                ]
+            })
+
+    def _maintenance_loop(self) -> None:
+        while not self._stopped.wait(5.0):
+            try:
+                recoverable = self._recoverable_sessions()
+            except Exception:
+                logger.exception("Agent maintenance scan failed")
+                continue
+            for session_id in recoverable:
+                if self._stopped.is_set():
+                    return
+                try:
+                    self.wake(session_id)
+                except RuntimeError:
+                    if self._stopped.is_set():
+                        return
+                    raise
 
     def _has_work(self, session_id: str) -> bool:
         with self.session_factory() as db:

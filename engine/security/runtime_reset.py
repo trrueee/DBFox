@@ -69,11 +69,6 @@ class ResetResult:
     runtime_version: str
 
 
-# Kept as a narrow source-compatible name for callers that adopted the first
-# draft before the public ResetResult contract was finalized.
-RuntimeResetResult = ResetResult
-
-
 @dataclass(frozen=True)
 class _CleanupPlan:
     runtime_root: Path
@@ -135,7 +130,6 @@ _RESET_DELETE_ORDER = (
     "agent_turns",
     "agent_runtime_events",
     "agent_trace_events",
-    "agent_eval_case_results",
     "workspace_table_scopes",
     "query_history_search_docs",
 
@@ -146,9 +140,6 @@ _RESET_DELETE_ORDER = (
     "agent_session_memories",
     "agent_messages",
     "agent_sessions",
-
-    "agent_eval_runs",
-    "agent_golden_tasks",
 
     # Schema/search state is reconstructed from the datasource after users
     # explicitly re-enrol credentials.

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import timedelta
 from typing import Any, Literal
 from uuid import uuid4
@@ -10,6 +9,7 @@ from uuid import uuid4
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from engine.json_codec import JsonCodecError, canonical_dumps, load_object
 from engine.models import SecurityAuditRecord, utcnow
 
 
@@ -56,7 +56,7 @@ class SecurityAuditService:
             session_id=session_id,
             run_id=run_id,
             correlation_id=correlation_id or f"audit_correlation_{uuid4().hex}",
-            details_json=json.dumps(sanitized, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
+            details_json=canonical_dumps(sanitized),
         )
         self.session.add(record)
         return record
@@ -144,8 +144,8 @@ def _sanitize(value: Any) -> Any:
 
 def _export_record(record: SecurityAuditRecord) -> dict[str, Any]:
     try:
-        details = json.loads(str(record.details_json or "{}"))
-    except json.JSONDecodeError:
+        details = load_object(str(record.details_json or "{}"))
+    except JsonCodecError:
         details = {}
     return {
         "id": str(record.id),

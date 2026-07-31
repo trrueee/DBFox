@@ -20,6 +20,7 @@ from engine.schemas import (
 from engine.schemas.semantic import (
     WorkspaceTableScopeResponse,
 )
+from engine.schemas.api_responses import TableScopeUpdateResponse
 
 logger = logging.getLogger("dbfox.api.semantic")
 router = APIRouter()
@@ -66,7 +67,10 @@ def _check_table_belongs(db: Session, table_id: str, datasource_id: str) -> Sche
 # Table Scope (workspace feature)
 # ---------------------------------------------------------------------------
 
-@router.get("/semantic/table-scope")
+@router.get(
+    "/semantic/table-scope",
+    response_model=list[WorkspaceTableScopeResponse],
+)
 def api_get_table_scope(
     project_id: str = Query(...),
     datasource_id: str = Query(...),
@@ -85,7 +89,10 @@ def api_get_table_scope(
     return [_scope_to_dict(s) for s in scopes]
 
 
-@router.post("/semantic/table-scope")
+@router.post(
+    "/semantic/table-scope",
+    response_model=TableScopeUpdateResponse,
+)
 def api_update_table_scope(req: WorkspaceTableScopeUpdateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     _check_project(db, req.project_id)
     _check_datasource(db, req.datasource_id)

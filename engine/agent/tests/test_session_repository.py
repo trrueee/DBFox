@@ -49,8 +49,8 @@ def test_admission_is_atomic_ordered_and_idempotent(db_session, test_datasource)
     assert db_session.query(AgentRun).count() == 1
     assert db_session.query(AgentMessage).count() == 2
     assert [event.event_type for event in repository.list_events("session_1")] == [
-        RuntimeEventType.SESSION_INPUT_ADMITTED,
-        RuntimeEventType.RUN_CREATED,
+        RuntimeEventType.RUN_STARTED,
+        RuntimeEventType.RUN_ITEM_COMPLETED,
     ]
 
 
@@ -165,6 +165,7 @@ def test_turn_snapshot_is_frozen_under_the_session_lease(db_session, test_dataso
     assert lease is not None
     assert repository.promote_next_input(lease=lease) == admission.run_id
 
+    events_before_turn = repository.list_events("session_1")
     turn = repository.start_turn(
         lease=lease,
         run_id=admission.run_id,
@@ -184,7 +185,7 @@ def test_turn_snapshot_is_frozen_under_the_session_lease(db_session, test_dataso
     assert stored.sequence == 1
     assert stored.context_hash == "context-hash"
     assert stored.tool_materialization_hash == "tools-hash"
-    assert repository.list_events("session_1")[-1].event_type is RuntimeEventType.TURN_STARTED
+    assert repository.list_events("session_1") == events_before_turn
 
 
 def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(

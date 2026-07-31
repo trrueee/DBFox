@@ -14,7 +14,7 @@ def test_factory_uses_the_provider_neutral_openai_compatible_boundary(monkeypatc
         captured.update(kwargs)
         return client
 
-    monkeypatch.setattr("engine.llm.factory.create_openai_compatible_api_client", create)
+    monkeypatch.setattr("engine.llm.factory.create_openai_responses_client", create)
     config = LlmConfig(
         api_key="secret", api_base="https://example.test/v1", model_name="model",
     )
@@ -41,9 +41,9 @@ def test_provider_disables_sdk_retries_and_owns_transport(monkeypatch):
         "engine.llm.providers.openai.get_llm_http_clients",
         lambda **_kwargs: (transport, object()),
     )
-    from engine.llm.providers.openai import create_openai_compatible_api_client
+    from engine.llm.providers.openai import create_openai_responses_client
 
-    create_openai_compatible_api_client(
+    create_openai_responses_client(
         api_key="secret", api_base="https://example.test/v1", timeout=12.0,
     )
     assert captured["max_retries"] == 0

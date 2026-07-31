@@ -1,10 +1,12 @@
-"""sql.validate and sql.execute_readonly tool handlers."""
+"""sql_validate and sql_execute_readonly tool handlers."""
 
 from __future__ import annotations
 
 import time
 from typing import Any
 from sqlalchemy.orm import Session
+
+from engine.policy.authority import ExecutionAuthority
 from engine.sql.dialect_context import DialectContext
 from engine.sql.executor import execute_query
 from engine.sql.safety.service import SqlSafetyService
@@ -35,21 +37,19 @@ def sql_validate(db: Session, datasource_id: str, sql: str, question: str = "") 
 def sql_execute_readonly(
     db: Session,
     datasource_id: str,
-    sql: str | None = None,
     question: str = "",
     safety: dict[str, Any] | None = None,
-    ignored_model_sql: str | None = None,
     execution_id: str | None = None,
     expected_connection_generation: int | None = None,
+    execution_authority: ExecutionAuthority | None = None,
 ) -> dict[str, Any]:
     """Execute a read-only SELECT SQL statement using the pre-validated safety decision."""
     start = time.perf_counter()
     if not safety:
-        raise RuntimeError("SQL execution requires a previous successful sql.validate result.")
+        raise RuntimeError("SQL execution requires a previous successful sql_validate result.")
 
     original_sql = str(safety.get("original_sql") or "").strip()
     safe_sql = str(safety.get("safe_sql") or "").strip()
-    ignored_sql = str(ignored_model_sql or sql or "").strip() or None
 
     blocked_reasons = list(safety.get("blocked_reasons") or [])
     hard_blockers = [r for r in blocked_reasons if r != "requires_confirmation"]
@@ -57,9 +57,17 @@ def sql_execute_readonly(
         raise RuntimeError(f"SQL execution is blocked by safety rules: {hard_blockers}")
 
     if not bool(safety.get("can_execute")) or not safe_sql:
-        raise RuntimeError("SQL execution requires a previous successful sql.validate result.")
+        raise RuntimeError("SQL execution requires a previous successful sql_validate result.")
 
-    if safety.get("requires_confirmation"):
+    approval_granted = bool(
+        execution_authority
+        and execution_authority.authorizes_safety(
+            tool_name="sql_execute_readonly",
+            safety=safety,
+            datasource_generation=expected_connection_generation,
+        )
+    )
+    if safety.get("requires_confirmation") and not approval_granted:
         raise RuntimeError("SQL execution requires manual approval.")
 
     result = execute_query(
@@ -94,8 +102,7 @@ def sql_execute_readonly(
             "limit_injected": original_sql != safe_sql and "LIMIT" in safe_sql.upper(),
             "guardrail_result": (result.get("guardrail") or {}).get("result"),
             "trust_gate": True,
-            "executed_sql_source": "state.safety.safe_sql",
-            "ignored_model_sql": ignored_sql,
+            "executed_sql_source": "validated_sql_artifact.safeSql",
             "history_id": result.get("historyId"),
             "execution_id": result.get("executionId"),
         },

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 from pydantic import ValidationError
 
 import engine.api.agent as agent_module
+import engine.agent.console as console_module
 from fastapi import HTTPException
 
 from engine.api.agent import ResultPageRequest
@@ -190,13 +191,13 @@ def test_legacy_agent_run_surface_is_removed() -> None:
 def test_llm_test_uses_product_config_and_factory(monkeypatch):
     captured: dict[str, object] = {}
 
-    class FakeCompletions:
+    class FakeResponses:
         def create(self, **kwargs):
-            captured["completion"] = kwargs
+            captured["response"] = kwargs
 
     def fake_create_client(**kwargs):
         captured["client_kwargs"] = kwargs
-        return SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+        return SimpleNamespace(responses=FakeResponses())
 
     def fake_resolve_product_config(**kwargs):
         captured["resolve_kwargs"] = kwargs
@@ -212,7 +213,7 @@ def test_llm_test_uses_product_config_and_factory(monkeypatch):
         "resolve_product_llm_config_from_credential",
         fake_resolve_product_config,
     )
-    monkeypatch.setattr(agent_module, "create_openai_compatible_api_client", fake_create_client)
+    monkeypatch.setattr(agent_module, "create_openai_responses_client", fake_create_client)
 
     response = agent_module.api_llm_test(
         agent_module.LlmTestRequest(
@@ -226,8 +227,11 @@ def test_llm_test_uses_product_config_and_factory(monkeypatch):
     assert response.ok is True
     assert response.model == "qwen-plus"
     assert response.api_base == "https://example.test/v1"
-    assert captured["completion"] == {
-        "model": "qwen-plus", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 1,
+    assert captured["response"] == {
+        "model": "qwen-plus",
+        "input": "ping",
+        "max_output_tokens": 16,
+        "store": False,
     }
     assert captured["client_kwargs"] == {
         "api_key": "test-secret", "api_base": "https://example.test/v1", "timeout": 10.0,
@@ -304,8 +308,12 @@ def test_console_execute_persists_sql_backed_artifact_chain(monkeypatch, db_sess
             "safetyDecision": safety_decision.model_dump(mode="json"),
         }
 
-    monkeypatch.setattr(agent_module.SqlSafetyService, "build_execution_decision", fake_build_execution_decision)
-    monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
+    monkeypatch.setattr(
+        console_module.SqlSafetyService,
+        "build_execution_decision",
+        fake_build_execution_decision,
+    )
+    monkeypatch.setattr(console_module, "execute_query", fake_execute_query)
 
     response = execute_api(
         request_model(
@@ -342,9 +350,11 @@ def test_console_execute_persists_sql_backed_artifact_chain(monkeypatch, db_sess
     assert "rows" not in result_payload
     assert "previewRows" not in result_payload
     assert result_payload["queryFingerprint"]
+    assert result_payload["evidenceKind"] == "query_result"
     assert set(result_payload) == {
         "sourceSqlArtifactId", "queryFingerprint", "datasourceGeneration", "columns",
         "rowCount", "returnedRows", "latencyMs", "executedAt", "truncated",
+        "evidenceKind",
     }
 
     run = db_session.get(AgentRun, response.runId)
@@ -843,7 +853,7 @@ def test_console_unexpected_error_never_leaks_exception_text(monkeypatch, db_ses
         raise RuntimeError(f"database password={sentinel}")
 
     monkeypatch.setattr(
-        agent_module.PolicyEngine,
+        console_module.PolicyEngine,
         "enforce_query_policy",
         staticmethod(fail_policy),
     )

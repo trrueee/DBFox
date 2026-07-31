@@ -1,5 +1,5 @@
 import pytest
-from engine.tools.db_tools import _build_preview_sql, _build_where_clause
+from engine.tools.db.preview import _build_preview_sql, _build_where_clause
 from engine.errors import ToolInputError
 from engine.sql.builder import build_where_clause
 

@@ -10,20 +10,13 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["engine.tests.*", "engine.tests.conftest"]
-disallow_untyped_defs = false
-check_untyped_defs = false
-
-[[tool.mypy.overrides]]
 module = [
     "engine.agent.repositories.*",
     "engine.api.*",
     "engine.environment.*",
-    "engine.memory.*",
     "engine.semantic.*",
     "engine.sql.*",
     "engine.tools.*",
-    "engine.evaluation.*",
     "engine.ai_enrich",
 ]
 ignore_errors = true

@@ -1,10 +1,13 @@
 import threading
 import time
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import sessionmaker
 
 from engine.agent.coordinator import SessionCoordinator
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.run import SessionLeaseConflict
+from engine.agent.session import SessionLease
 from engine.models import AgentRun, AgentSession, AgentSessionInput
 
 
@@ -17,7 +20,8 @@ class RecordingLoop:
         self.max_parallel = 0
         self.calls = []
 
-    def execute(self, *, lease, run_id):
+    def execute(self, *, lease, run_id, lease_lost=None):
+        assert lease_lost is not None
         with self.lock:
             if lease.session_id in self.active_sessions:
                 self.same_session_overlap = True
@@ -69,3 +73,102 @@ def test_coordinator_serializes_session_and_parallelizes_independent_sessions(db
     assert loop.same_session_overlap is False
     assert loop.max_parallel >= 2
     assert [session for session, _ in loop.calls].count("coordinator_a") == 2
+
+
+def test_heartbeat_retries_after_a_transient_storage_failure(monkeypatch):
+    attempts = 0
+
+    class ImmediateStop:
+        stopped = False
+
+        def wait(self, _delay):
+            return self.stopped
+
+        def set(self):
+            self.stopped = True
+
+    stop = ImmediateStop()
+
+    class FakeDb:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def commit(self):
+            return None
+
+    class FlakySessionRepository:
+        def __init__(self, _db):
+            pass
+
+        def heartbeat(self, *, lease, ttl_seconds):
+            nonlocal attempts
+            assert lease.session_id == "heartbeat_session"
+            assert ttl_seconds == 30
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("temporary database interruption")
+            stop.set()
+
+    monkeypatch.setattr("engine.agent.coordinator.SessionRepository", FlakySessionRepository)
+    coordinator = SessionCoordinator(
+        session_factory=FakeDb,
+        run_loop=object(),
+        max_workers=1,
+        lease_ttl_seconds=30,
+    )
+    lease = SessionLease(
+        session_id="heartbeat_session",
+        owner="worker",
+        token=1,
+        expires_at=datetime.now(UTC) + timedelta(seconds=30),
+    )
+
+    coordinator._heartbeat(lease, stop)
+
+    assert attempts == 2
+
+
+def test_heartbeat_signals_lease_loss(monkeypatch):
+    class SingleTickStop:
+        def __init__(self):
+            self.calls = 0
+
+        def wait(self, _delay):
+            self.calls += 1
+            return self.calls > 1
+
+    class FakeDb:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class ConflictedSessionRepository:
+        def __init__(self, _db):
+            pass
+
+        def heartbeat(self, *, lease, ttl_seconds):
+            raise SessionLeaseConflict("lease lost")
+
+    monkeypatch.setattr("engine.agent.coordinator.SessionRepository", ConflictedSessionRepository)
+    coordinator = SessionCoordinator(
+        session_factory=FakeDb,
+        run_loop=object(),
+        max_workers=1,
+        lease_ttl_seconds=30,
+    )
+    lease = SessionLease(
+        session_id="heartbeat_session",
+        owner="worker",
+        token=1,
+        expires_at=datetime.now(UTC) + timedelta(seconds=30),
+    )
+    lease_lost = threading.Event()
+
+    coordinator._heartbeat(lease, SingleTickStop(), lease_lost)
+
+    assert lease_lost.is_set()

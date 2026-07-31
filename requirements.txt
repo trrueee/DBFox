@@ -15,4 +15,4 @@ python-dotenv>=1.0.0
 python-multipart>=0.0.6
 PyYAML>=6.0.2
 jieba>=0.42.1
-openai>=1.0.0
+openai>=2.45.0,<3

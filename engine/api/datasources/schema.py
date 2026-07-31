@@ -9,10 +9,16 @@ from sqlalchemy.orm import Session
 
 from engine.api.datasources.common import schema_column_to_dict, schema_table_to_dict
 from engine.db import get_db
+from engine.environment.er_diagram import build_er_diagram
 from engine.environment.schema_catalog_sync import ensure_catalog as _sync_catalog
 from engine.errors import DBFoxError, NotFoundError
 from engine.models import SchemaTable
-from engine.schema_sync import build_er_diagram_data
+from engine.schemas.datasource import (
+    ERDiagramResponse,
+    SchemaColumnResponse,
+    SchemaSyncResponse,
+    SchemaTableResponse,
+)
 
 logger = logging.getLogger("dbfox.api.datasources.schema")
 router = APIRouter()
@@ -39,7 +45,11 @@ def load_schema_tables(db: Session, datasource_id: str) -> list[SchemaTable]:
     return db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).all()
 
 
-@router.post("/datasources/{id}/sync")
+@router.post(
+    "/datasources/{id}/sync",
+    response_model=SchemaSyncResponse,
+    response_model_exclude_none=True,
+)
 def api_sync_schema(
     id: str,
     req: SchemaSyncRequest | None = None,
@@ -86,7 +96,7 @@ def api_sync_schema(
         raise DBFoxError(code="SYNC_FAILED", message=SCHEMA_SYNC_FAILED_MESSAGE) from None
 
 
-@router.get("/schema/tables")
+@router.get("/schema/tables", response_model=list[SchemaTableResponse])
 def api_list_tables(
     datasource_id: str = Query(...),
     db: Session = Depends(get_db),
@@ -107,7 +117,10 @@ def api_list_tables(
     return [schema_table_to_dict(table) for table in tables]
 
 
-@router.get("/schema/tables/{table_id}/columns")
+@router.get(
+    "/schema/tables/{table_id}/columns",
+    response_model=list[SchemaColumnResponse],
+)
 def api_list_columns(table_id: str, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     table = db.query(SchemaTable).filter(SchemaTable.id == table_id).first()
     if not table:
@@ -116,13 +129,13 @@ def api_list_columns(table_id: str, db: Session = Depends(get_db)) -> list[dict[
     return [schema_column_to_dict(column) for column in table.columns]
 
 
-@router.get("/schema/er-diagram")
+@router.get("/schema/er-diagram", response_model=ERDiagramResponse)
 def api_get_er_diagram(
     datasource_id: str = Query(...),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     try:
-        return build_er_diagram_data(db, datasource_id)
+        return build_er_diagram(db, datasource_id)
     except Exception:
         logger.exception("ER diagram build failed")
         raise

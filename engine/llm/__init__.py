@@ -2,7 +2,7 @@
 
 Dependency rule:
     engine.llm has NO internal project dependencies.
-    It is consumed by agent, semantic, sql, and evaluation layers.
+    It is consumed by agent, semantic, and SQL layers.
 """
 
 from engine.llm.config import (
@@ -11,12 +11,10 @@ from engine.llm.config import (
     resolve_product_llm_config_from_credential,
 )
 from engine.llm.factory import create_openai_compatible_client
-from engine.llm.structured import with_structured_output
 
 __all__ = [
     "LlmConfig",
     "LlmConfigurationError",
     "create_openai_compatible_client",
     "resolve_product_llm_config_from_credential",
-    "with_structured_output",
 ]

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from engine.json_codec import JsonCodecError, canonical_dumps as _canonical, loads
 from engine.models import (
     AgentArtifactRecord,
     AgentObservationRecord,
@@ -19,14 +19,10 @@ from engine.models import (
 
 def _load(value: Any, fallback: Any) -> Any:
     try:
-        loaded = json.loads(str(value))
-    except (TypeError, ValueError, json.JSONDecodeError):
+        loaded = loads(str(value))
+    except JsonCodecError:
         return fallback
     return loaded
-
-
-def _canonical(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True, default=str)
 
 
 _VOLATILE_KEYS = {
@@ -68,7 +64,6 @@ class ProgressGuard:
         ).scalars().all()
         artifact_signatures = {
             _canonical({
-                "semantic_id": str(row.semantic_id or ""),
                 "type": str(row.type),
                 "title": str(row.title),
                 "status": str(row.status),
@@ -76,6 +71,8 @@ class ProgressGuard:
                 "payload": _meaningful(_load(row.payload_json, {})),
             })
             for row in artifacts
+            if str(_load(row.presentation_json, {}).get("visibility") or "primary")
+            == "primary"
         }
 
         observations = self.session.execute(
@@ -91,6 +88,7 @@ class ProgressGuard:
                 "error_code": str(observation.error_code or ""),
             })
             for observation, invocation in observations
+            if bool(observation.contributes_progress)
         }
 
         plan = self.session.execute(

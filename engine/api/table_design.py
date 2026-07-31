@@ -14,13 +14,18 @@ from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.models import DataSource
 from engine.schemas.table_design import TestDataGenerateRequest
+from engine.schemas.api_responses import TestDataGeneratedResponse
+from engine.schemas.datasource import ConfirmationRequiredResponse
 from engine.policy.engine import PolicyEngine
 
 logger = logging.getLogger("dbfox.api.table_design")
 router = APIRouter()
 
 
-@router.post("/schema/generate-test-data")
+@router.post(
+    "/schema/generate-test-data",
+    response_model=TestDataGeneratedResponse | ConfirmationRequiredResponse,
+)
 def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == req.datasource_id).first()
     if not datasource:

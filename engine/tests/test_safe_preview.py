@@ -2,30 +2,43 @@
 
 import pytest
 
-from engine.tools.dbfox_tools import PreviewInput
+from engine.tools.builtin.contracts import DataPreviewInput
 from engine.tools.db.preview import db_preview
 
 
 def test_preview_input_rejects_string_where() -> None:
-    """Pydantic rejects raw string WHERE — only dict | None accepted."""
+    """Pydantic rejects raw SQL; filters use the declared list contract."""
     with pytest.raises(Exception):  # ValidationError
-        PreviewInput(table="orders", where="1=1 UNION SELECT password FROM users")
+        DataPreviewInput(table="orders", where="1=1 UNION SELECT password FROM users")
 
 
 def test_preview_input_rejects_string_order_by() -> None:
-    """Pydantic rejects raw string ORDER BY — only dict | list[dict] | None accepted."""
+    """Pydantic rejects raw SQL; ordering uses the declared list contract."""
     with pytest.raises(Exception):  # ValidationError
-        PreviewInput(table="orders", order_by="id DESC; SELECT password FROM users")
+        DataPreviewInput(table="orders", order_by="id DESC; SELECT password FROM users")
 
 
 def test_preview_input_accepts_structured_where() -> None:
-    inp = PreviewInput(table="orders", where={"column": "status", "op": "=", "value": "active"})
-    assert inp.where == {"column": "status", "op": "=", "value": "active"}
+    inp = DataPreviewInput(
+        table="orders",
+        where={"column": "status", "op": "=", "value": "active"},
+    )
+    assert inp.where is not None
+    assert inp.where.model_dump(mode="json") == {
+        "column": "status",
+        "op": "=",
+        "value": "active",
+    }
 
 
 def test_preview_input_accepts_structured_order_by() -> None:
-    inp = PreviewInput(table="orders", order_by={"column": "id", "direction": "desc"})
-    assert inp.order_by == {"column": "id", "direction": "desc"}
+    inp = DataPreviewInput(
+        table="orders",
+        order_by=[{"column": "id", "direction": "DESC"}],
+    )
+    assert [item.model_dump(mode="json") for item in inp.order_by] == [
+        {"column": "id", "direction": "DESC"}
+    ]
 
 
 def test_safe_preview_wrapper_rejects_raw_where_before_db_access() -> None:

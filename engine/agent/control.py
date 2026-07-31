@@ -23,6 +23,13 @@ class RunCancellationRequested(RunControlError):
         super().__init__("AGENT_CANCELLED", "分析已取消。")
 
 
+class RunLeaseLost(RunControlError):
+    """The worker no longer owns the Session and must stop without terminalizing."""
+
+    def __init__(self) -> None:
+        super().__init__("AGENT_LEASE_LOST", "分析执行权已转移。")
+
+
 @dataclass(frozen=True)
 class ModelPricing:
     """USD prices per one million input/output tokens."""
@@ -54,6 +61,7 @@ class RunControl:
         run: AgentRun,
         limits: RunLimits,
         cancellation_probe: Callable[[], bool],
+        lease_lost_probe: Callable[[], bool] | None = None,
         probe_interval_seconds: float = 0.1,
     ) -> None:
         started_at = run.started_at or run.created_at or datetime.now(UTC)
@@ -67,17 +75,29 @@ class RunControl:
         self.provider_retry_count = int(run.provider_retry_count or 0)
         self.repair_attempt_count = int(run.repair_attempt_count or 0)
         self._cancellation_probe = cancellation_probe
+        self._lease_lost_probe = lease_lost_probe
         self._probe_interval = max(0.01, probe_interval_seconds)
         self._last_probe = 0.0
         self._cancelled = False
 
     def checkpoint(self) -> None:
+        if self.is_lease_lost():
+            raise RunLeaseLost()
         if time.monotonic() >= self.deadline:
             raise RunControlError("AGENT_DEADLINE_EXCEEDED", "分析已达到本次运行时限。")
         if self.is_cancel_requested():
             raise RunCancellationRequested()
 
+    def is_lease_lost(self) -> bool:
+        return bool(self._lease_lost_probe and self._lease_lost_probe())
+
     def is_cancel_requested(self) -> bool:
+        # External model/tool streams consume a boolean cancellation probe. Lease
+        # loss therefore participates in that probe even though checkpoint()
+        # raises a distinct exception so the old worker never terminalizes a Run
+        # now owned by another worker.
+        if self.is_lease_lost():
+            return True
         if self._cancelled:
             return True
         now = time.monotonic()
@@ -96,6 +116,21 @@ class RunControl:
         *,
         pricing: ModelPricing | None,
     ) -> UsageCharge:
+        usage_keys = {
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "input_tokens",
+            "output_tokens",
+        }
+        if (
+            self.limits.token_budget is not None
+            or self.limits.cost_budget_usd is not None
+        ) and not any(key in usage for key in usage_keys):
+            raise RunControlError(
+                "AGENT_USAGE_UNAVAILABLE",
+                "模型服务未返回可核验的 Token 用量，已停止本次分析以避免绕过预算。",
+            )
         input_tokens = max(0, int(usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0))
         output_tokens = max(0, int(usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0))
         total_tokens = max(0, int(usage.get("total_tokens", input_tokens + output_tokens) or 0))
@@ -124,3 +159,24 @@ class RunControl:
         self.repair_attempt_count += 1
         if self.repair_attempt_count > self.limits.max_repair_attempts:
             raise RunControlError("AGENT_REPAIR_BUDGET", "分析修复次数已达到上限。")
+
+
+class LeaseAwareRunControl(RunControl):
+    """Named execution boundary that makes Session ownership explicit."""
+
+    def __init__(
+        self,
+        *,
+        run: AgentRun,
+        limits: RunLimits,
+        cancellation_probe: Callable[[], bool],
+        lease_lost_probe: Callable[[], bool] | None,
+        probe_interval_seconds: float = 0.1,
+    ) -> None:
+        super().__init__(
+            run=run,
+            limits=limits,
+            cancellation_probe=cancellation_probe,
+            lease_lost_probe=lease_lost_probe,
+            probe_interval_seconds=probe_interval_seconds,
+        )

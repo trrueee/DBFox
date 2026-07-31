@@ -25,6 +25,8 @@ load_runtime_env()
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+
+from engine.json_codec import dumps
 from fastapi.responses import JSONResponse
 
 from engine.api import router
@@ -41,6 +43,19 @@ from engine.security.credential_vault import CredentialVaultUnavailableError
 
 # 创建当前模块的日志记录器
 logger = logging.getLogger("dbfox.main")
+
+
+def _emit_startup_stage(stage: str) -> None:
+    """Publish optional startup progress without making service health depend on it."""
+    try:
+        print(
+            f"DBFOX_ENGINE_STAGE {dumps({'stage': stage})}",
+            flush=True,
+        )
+    except OSError:
+        logger.warning("Unable to publish engine startup stage=%s", stage)
+
+
 DIAGNOSTIC_LOG_FILE = configure_diagnostic_logging()
 SAFE_DBFOX_ERROR_MESSAGE = "Request could not be completed."
 _SAFE_DBFOX_ERROR_CODES: tuple[tuple[type[DBFoxError], str], ...] = (
@@ -95,44 +110,53 @@ async def lifespan(application: FastAPI) -> Any:
         - `yield` 之前的代码会在 FastAPI 接收请求**启动前**执行（比如执行数据库初始化/迁移）。
         - `yield` 之后的代码会在 FastAPI 接收到关闭信号、退出**停机时**执行（比如清理释放资源）。
     """
-    # --- 【启动时任务】 ---
+    agent_coordinator: SessionCoordinator | None = None
+    startup_stage = "migrating"
+    try:
+        _emit_startup_stage(startup_stage)
+        initialize_metadata_database()
 
-    initialize_metadata_database()
+        # Security audit is local product data with an explicit bounded lifecycle.
+        # Prune before the coordinator starts so startup recovery cannot race it.
+        startup_stage = "maintaining"
+        _emit_startup_stage(startup_stage)
+        from engine.agent.repositories.write_transaction import begin_agent_write
+        from engine.security.audit import SecurityAuditService
+        with SessionLocal() as audit_session:
+            begin_agent_write(audit_session)
+            SecurityAuditService(audit_session).enforce_retention()
+            audit_session.commit()
 
-    # Security audit is local product data with an explicit bounded lifecycle.
-    # Prune before the coordinator starts so startup recovery cannot race it.
-    from engine.agent.repositories.write_transaction import begin_agent_write
-    from engine.security.audit import SecurityAuditService
-    with SessionLocal() as audit_session:
-        begin_agent_write(audit_session)
-        SecurityAuditService(audit_session).enforce_retention()
-        audit_session.commit()
-
-    # Agent execution is independent from HTTP/SSE connections. Session leases
-    # and the event log are database-owned; this coordinator only schedules work.
-    agent_coordinator = SessionCoordinator(
-        session_factory=SessionLocal,
-        run_loop=RunLoop(session_factory=SessionLocal),
-    )
-    agent_coordinator.start()
-    application.state.agent_coordinator = agent_coordinator
+        # Agent execution is independent from HTTP/SSE connections. Session leases
+        # and the event log are database-owned; this coordinator only schedules work.
+        startup_stage = "recovering"
+        _emit_startup_stage(startup_stage)
+        agent_coordinator = SessionCoordinator(
+            session_factory=SessionLocal,
+            run_loop=RunLoop(session_factory=SessionLocal),
+        )
+        agent_coordinator.start()
+        application.state.agent_coordinator = agent_coordinator
+        _emit_startup_stage("ready")
+    except Exception:
+        logger.exception("Engine startup failed during stage=%s", startup_stage)
+        if agent_coordinator is not None:
+            agent_coordinator.stop()
+        application.state.agent_coordinator = None
+        raise
 
     port = os.environ.get("DBFOX_ENGINE_PORT", "18625")
-    print("===========================================================")
-    print("DBFox Local Engine 成功初始化并启动。")
-    print(f"服务监听地址: http://127.0.0.1:{port}")
-    print(f"安全令牌路径: {TOKEN_FILE}")
-    print("===========================================================")
-    
-    yield  # 此时程序处于运行态，等待并处理前端的所有 API 请求
-    
-    # --- 【停机时任务】 ---
-    agent_coordinator.stop()
-    application.state.agent_coordinator = None
-    from engine.connectivity.lifecycle import close_all_managed_datasource_resources
-    from engine.llm.http_clients import close_llm_http_clients
-    close_all_managed_datasource_resources()
-    await close_llm_http_clients()
+    logger.info("DBFox Local Engine is ready on 127.0.0.1:%s", port)
+
+    try:
+        yield  # 此时程序处于运行态，等待并处理前端的所有 API 请求
+    finally:
+        agent_coordinator.stop()
+        application.state.agent_coordinator = None
+        from engine.connectivity.lifecycle import close_all_managed_datasource_resources
+        from engine.llm.http_clients import close_llm_http_clients
+        close_all_managed_datasource_resources()
+        await close_llm_http_clients()
 
 
 # 实例化 FastAPI 核心应用对象

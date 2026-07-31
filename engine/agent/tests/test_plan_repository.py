@@ -72,10 +72,12 @@ def test_task_plan_is_versioned_and_replayed_as_a_public_event(db_session, test_
     assert second.status.value == "completed"
     events = sessions.list_events("session-plan")
     assert [event.event_type for event in events[-2:]] == [
-        RuntimeEventType.PLAN_UPDATED,
-        RuntimeEventType.PLAN_UPDATED,
+        RuntimeEventType.RUN_ITEM_STARTED,
+        RuntimeEventType.RUN_ITEM_COMPLETED,
     ]
-    assert events[-1].payload["plan"]["steps"][0]["id"] == "trend"
+    assert events[-1].payload.item is not None
+    assert events[-1].payload.item.type == "plan"
+    assert events[-1].payload.item.payload.steps[0].id == "trend"
 
 
 def test_task_plan_rejects_artifacts_from_another_run_in_the_same_session(

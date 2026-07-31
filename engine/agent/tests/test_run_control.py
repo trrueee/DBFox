@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from engine.agent.control import ModelPricing, RunControl, RunControlError
+from engine.agent.control import ModelPricing, RunControl, RunControlError, RunLeaseLost
 from engine.agent.run import RunLimits
 from engine.models import AgentRun
 
@@ -76,3 +76,32 @@ def test_cost_budget_requires_explicit_model_pricing() -> None:
     with pytest.raises(RunControlError) as error:
         control.charge_usage({"total_tokens": 1}, pricing=None)
     assert error.value.code == "AGENT_COST_PRICING_UNAVAILABLE"
+
+
+def test_enabled_budget_fails_closed_when_provider_usage_is_missing() -> None:
+    control = RunControl(
+        run=_run(),
+        limits=RunLimits(token_budget=100),
+        cancellation_probe=lambda: False,
+    )
+
+    with pytest.raises(RunControlError) as error:
+        control.charge_usage({}, pricing=None)
+
+    assert error.value.code == "AGENT_USAGE_UNAVAILABLE"
+    assert control.consumed_tokens == 0
+
+
+def test_lease_loss_preempts_user_cancellation_and_stops_external_probes() -> None:
+    lost = False
+    control = RunControl(
+        run=_run(),
+        limits=RunLimits(),
+        cancellation_probe=lambda: False,
+        lease_lost_probe=lambda: lost,
+    )
+    assert control.is_cancel_requested() is False
+    lost = True
+    assert control.is_cancel_requested() is True
+    with pytest.raises(RunLeaseLost):
+        control.checkpoint()

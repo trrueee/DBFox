@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 from enum import StrEnum
-import json
-from threading import Lock
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from engine.json_codec import canonical_dumps
 
 
 class ObservationStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    CANCELLED = "cancelled"
     REJECTED = "rejected"
     UNKNOWN = "unknown"
 
@@ -29,53 +30,39 @@ class Observation(BaseModel):
     tool_version: str
     status: ObservationStatus
     model_visible_summary: str
+    model_output: str
     structured_result_ref: str | None = None
     artifact_ids: list[str] = Field(default_factory=list)
     facts: dict[str, Any] = Field(default_factory=dict)
+    capabilities: tuple[str, ...] = ()
+    contributes_progress: bool = True
     error_code: str | None = None
     error_message: str | None = None
     retryable: bool = False
     sequence: int = Field(ge=1)
 
 
-class TransientObservationBuffer:
-    """One-shot model-visible tool results that never enter durable Agent state."""
+def serialize_model_observation(
+    *,
+    status: str,
+    summary: str,
+    facts: dict[str, Any],
+    artifact_ids: list[str],
+    retryable: bool,
+    error_code: str | None = None,
+    error_message: str | None = None,
+) -> str:
+    """Build the single canonical function result shown to the model."""
 
-    def __init__(self) -> None:
-        self._lock = Lock()
-        self._by_run: dict[str, list[dict[str, Any]]] = {}
-
-    def publish(
-        self,
-        *,
-        run_id: str,
-        tool_name: str,
-        artifact_ids: list[str],
-        output: dict[str, Any],
-    ) -> None:
-        value = {
-            "toolName": tool_name,
-            "artifactIds": list(artifact_ids),
-            "result": _bounded_transient_result(output),
-        }
-        with self._lock:
-            self._by_run.setdefault(run_id, []).append(value)
-
-    def consume(self, run_id: str) -> list[dict[str, Any]]:
-        with self._lock:
-            return self._by_run.pop(run_id, [])
-
-    def clear(self, run_id: str) -> None:
-        with self._lock:
-            self._by_run.pop(run_id, None)
-
-
-def _bounded_transient_result(output: dict[str, Any]) -> dict[str, Any]:
-    value = dict(output)
-    for key, limit in (("rows", 50), ("results", 50), ("series", 100)):
-        if isinstance(value.get(key), list):
-            value[key] = value[key][:limit]
-    encoded = json.dumps(value, ensure_ascii=False, default=str)
-    if len(encoded.encode("utf-8")) <= 32_768:
-        return value
-    return {"truncated": True, "content": encoded[:16_000]}
+    value: dict[str, Any] = {
+        "status": status,
+        "summary": summary,
+        "facts": facts,
+        "artifact_ids": artifact_ids,
+        "retryable": retryable,
+    }
+    if error_code:
+        value["error_code"] = error_code
+    if error_message:
+        value["error_message"] = error_message
+    return canonical_dumps(value)

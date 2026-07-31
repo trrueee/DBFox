@@ -7,12 +7,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from engine.tools.materialization import ToolRecoveryPolicy
+from engine.tools.runtime.base import ToolRecoveryPolicy
 
 
 class ToolInvocationStatus(StrEnum):
     REQUESTED = "requested"
     WAITING_APPROVAL = "waiting_approval"
+    WAITING_INPUT = "waiting_input"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"

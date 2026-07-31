@@ -13,8 +13,10 @@ def test_snapshot_is_backend_owned_and_contains_cursor(db_session, test_datasour
     )
     db_session.commit()
     snapshot = conversation_snapshot(db_session, "session_projection")
-    assert snapshot["protocol_version"] == 1
-    assert snapshot["messages"][0]["content"] == "分析数据"
+    assert snapshot["protocol_version"] == 2
+    assert snapshot["items"][0]["type"] == "message"
+    assert snapshot["items"][0]["payload"]["role"] == "user"
+    assert snapshot["items"][0]["payload"]["content"] == "分析数据"
     assert snapshot["runs"][0]["id"] == admission.run_id
     assert snapshot["cursor"] == 2
     assert snapshot["session"]["selected_artifact_id"] is None

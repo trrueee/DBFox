@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import datetime
 import decimal
-import json
 import time
 from dataclasses import dataclass, replace
 from typing import Any
 
+from engine.json_codec import byte_size
 from engine.sql.result_limits import (
     MAX_CELL_CHARS,
     MAX_COLUMNS,
@@ -16,7 +16,7 @@ from engine.sql.result_limits import (
 )
 
 JSON_OVERHEAD_BYTES = 2  # Represents the brackets '[' and ']' of the JSON array wrapper
-JSON_ARRAY_ITEM_SEPARATOR_BYTES = len(", ".encode("utf-8"))
+JSON_ARRAY_ITEM_SEPARATOR_BYTES = 1
 TRUNCATION_SUFFIX = "..."
 TRUNCATION_LEN = len(TRUNCATION_SUFFIX)
 
@@ -193,9 +193,8 @@ def _process_rows(
                 truncation = replace(truncation, cells=True)
             row_dict[col] = _serialize_value(val)
 
-        row_bytes = len(json.dumps(row_dict, ensure_ascii=False, default=str).encode("utf-8"))
-        # This matches ``json.dumps([row1, row2], ensure_ascii=False)``: the
-        # default JSON array separator is ``, `` rather than just ``,``.
+        row_bytes = byte_size(row_dict)
+        # Compact JSON arrays contribute one comma between rows.
         separator_bytes = JSON_ARRAY_ITEM_SEPARATOR_BYTES if rows else 0
         if response_bytes + separator_bytes + row_bytes > max_response_bytes:
             truncation = replace(truncation, response_bytes=True)

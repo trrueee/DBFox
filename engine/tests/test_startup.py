@@ -44,6 +44,15 @@ def test_bind_engine_socket_returns_actual_ephemeral_port() -> None:
         sock.close()
 
 
+def test_optional_startup_stage_cannot_crash_engine(monkeypatch) -> None:
+    def broken_control_stream(*_args, **_kwargs) -> None:
+        raise OSError(22, "invalid control stream")
+
+    monkeypatch.setattr("builtins.print", broken_control_stream)
+
+    main_module._emit_startup_stage("migrating")
+
+
 def test_frozen_engine_allows_tauri_localhost_origins(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "is_frozen", True)
 

@@ -69,7 +69,7 @@ def test_create_client_delegates_to_openai_provider(monkeypatch) -> None:
         captured.update(kwargs)
         return object()
 
-    monkeypatch.setattr(factory, "create_openai_compatible_api_client", fake_create_openai_client)
+    monkeypatch.setattr(factory, "create_openai_responses_client", fake_create_openai_client)
 
     create_openai_compatible_client(config, timeout=9.0)
 

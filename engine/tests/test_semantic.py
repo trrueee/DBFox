@@ -1,4 +1,4 @@
-from engine.schema_sync import sync_schema
+from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
 from engine.semantic import SchemaContextBuilder, SchemaLinker, SemanticAliasResolver
 
 

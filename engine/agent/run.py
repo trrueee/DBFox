@@ -31,6 +31,7 @@ class RunLimits(BaseModel):
     max_provider_retries: int = Field(default=2, ge=0, le=10)
     max_stalled_turns: int = Field(default=2, ge=1, le=10)
     timeout_seconds: int = Field(default=900, ge=10, le=7200)
+    max_prompt_tokens: int = Field(default=32_768, ge=1_024, le=1_000_000)
     token_budget: int | None = Field(default=None, ge=1)
     cost_budget_usd: float | None = Field(default=None, gt=0)
 

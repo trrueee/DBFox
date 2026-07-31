@@ -50,7 +50,6 @@ class Project(Base):  # type: ignore[misc,valid-type]
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
     data_sources = relationship("DataSource", back_populates="project")
     environments = relationship("DatabaseEnvironment", back_populates="project", cascade="all, delete-orphan")
     backups = relationship("BackupRecord", back_populates="project", cascade="all, delete-orphan")
@@ -345,7 +344,12 @@ class SchemaSearchDoc(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "schema_search_docs"
     __table_args__ = (
         Index("ix_schema_search_docs_datasource", "datasource_id"),
-        Index("ix_schema_search_docs_table", "datasource_id", "table_name"),
+        Index(
+            "ix_schema_search_docs_table",
+            "datasource_id",
+            "table_schema",
+            "table_name",
+        ),
         Index("ix_schema_search_docs_entity", "entity_type", "entity_id"),
     )
 
@@ -353,6 +357,7 @@ class SchemaSearchDoc(Base):  # type: ignore[misc,valid-type]
     datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
     entity_type = Column(String, nullable=False)
     entity_id = Column(String, nullable=False)
+    table_schema = Column(String, nullable=False, default="")
     table_name = Column(String, nullable=False)
     column_name = Column(String, nullable=True)
     name = Column(String, nullable=False)
@@ -795,8 +800,10 @@ class AgentTurn(Base):  # type: ignore[misc,valid-type]
     provider = Column(String, nullable=False)
     model_name = Column(String, nullable=False)
     draft_text = Column(Text, nullable=False, default="")
+    message_phase = Column(String, nullable=True)
     reasoning_summary = Column(Text, nullable=False, default="")
     tool_calls_json = Column(Text, nullable=False, default="[]")
+    response_items_json = Column(Text, nullable=False, default="[]")
     usage_json = Column(Text, nullable=False, default="{}")
     finish_signal = Column(String, nullable=True)
     error_code = Column(String, nullable=True)
@@ -826,6 +833,7 @@ class AgentToolInvocation(Base):  # type: ignore[misc,valid-type]
     idempotency_key = Column(String, nullable=False)
     status = Column(String, nullable=False, default="requested")
     policy_json = Column(Text, nullable=False, default="{}")
+    presentation_json = Column(Text, nullable=False)
     approval_id = Column(String, ForeignKey("agent_approvals.id", ondelete="SET NULL"), nullable=True)
     recovery_policy = Column(String, nullable=False)
     attempt_count = Column(Integer, nullable=False, default=0)
@@ -853,9 +861,12 @@ class AgentObservationRecord(Base):  # type: ignore[misc,valid-type]
     sequence = Column(Integer, nullable=False)
     status = Column(String, nullable=False)
     model_visible_summary = Column(Text, nullable=False)
+    model_output_json = Column(Text, nullable=False)
     structured_result_ref = Column(String, nullable=True)
     artifact_ids_json = Column(Text, nullable=False, default="[]")
     facts_json = Column(Text, nullable=False, default="{}")
+    semantic_capabilities_json = Column(Text, nullable=False, default="[]")
+    contributes_progress = Column(Boolean, nullable=False, default=True)
     error_code = Column(String, nullable=True)
     error_message = Column(Text, nullable=True)
     retryable = Column(Boolean, nullable=False, default=False)
@@ -893,6 +904,12 @@ class AgentQuestionRequest(Base):  # type: ignore[misc,valid-type]
     session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
     run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
     turn_id = Column(String, ForeignKey("agent_turns.id", ondelete="CASCADE"), nullable=False)
+    tool_invocation_id = Column(
+        String,
+        ForeignKey("agent_tool_invocations.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
     status = Column(String, nullable=False, default="pending")
     version = Column(Integer, nullable=False, default=0)
     question = Column(Text, nullable=False)
@@ -923,6 +940,30 @@ class AgentEventRecord(Base):  # type: ignore[misc,valid-type]
     event_version = Column(Integer, nullable=False, default=1)
     payload_json = Column(Text, nullable=False, default="{}")
     created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class AgentRunItemRecord(Base):  # type: ignore[misc,valid-type]
+    """Canonical persisted read model shared by snapshots and RuntimeEvents."""
+
+    __tablename__ = "agent_run_items"
+    __table_args__ = (
+        UniqueConstraint("session_id", "sequence", name="uq_agent_run_items_session_sequence"),
+        Index("ix_agent_run_items_session", "session_id", "sequence"),
+        Index("ix_agent_run_items_run", "run_id", "sequence"),
+    )
+
+    id = Column(String, primary_key=True)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    turn_id = Column(String, ForeignKey("agent_turns.id", ondelete="SET NULL"), nullable=True)
+    sequence = Column(Integer, nullable=False)
+    item_type = Column(String, nullable=False)
+    revision = Column(Integer, nullable=False)
+    status = Column(String, nullable=False)
+    item_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    completed_at = Column(DateTime, nullable=True)
 
 
 class AgentTaskPlanRecord(Base):  # type: ignore[misc,valid-type]
@@ -1040,91 +1081,3 @@ class DomainTagRule(Base):  # type: ignore[misc,valid-type]
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
-
-# ─────────────────────────────────────────────
-# Agent Eval models
-# ─────────────────────────────────────────────
-
-class AgentGoldenTask(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "agent_golden_tasks"
-    __table_args__ = (
-        Index("ix_agent_golden_tasks_datasource", "datasource_id"),
-        Index("ix_agent_golden_tasks_project", "project_id"),
-        Index("ix_agent_golden_tasks_intent", "expected_intent"),
-        Index("ix_agent_golden_tasks_source", "source"),
-        Index("ix_agent_golden_tasks_source_case", "source_case_id"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    project_id = Column(String, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
-    name = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    question = Column(String, nullable=False)
-    workspace_context_json = Column(Text, nullable=False, default="{}")
-    expected_intent = Column(String, nullable=True)
-    expected_tools_json = Column(Text, nullable=False, default="[]")
-    forbidden_tools_json = Column(Text, nullable=False, default="[]")
-    expected_artifact_types_json = Column(Text, nullable=False, default="[]")
-    expected_final_contains_json = Column(Text, nullable=False, default="[]")
-    expected_approval_state = Column(String, nullable=True)
-    expected_sql_required = Column(Boolean, nullable=False, default=False)
-    tags_json = Column(Text, nullable=False, default="[]")
-    source = Column(String, nullable=False, default="internal")
-    source_case_id = Column(String, nullable=True)
-    difficulty = Column(String, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
-
-class AgentEvalRun(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "agent_eval_runs"
-    __table_args__ = (
-        Index("ix_agent_eval_runs_datasource", "datasource_id"),
-        Index("ix_agent_eval_runs_project", "project_id"),
-        Index("ix_agent_eval_runs_status", "status"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    project_id = Column(String, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
-    source_filter_json = Column(Text, nullable=False, default="{}")
-    status = Column(String, nullable=False, default="running")
-    total_cases = Column(Integer, nullable=False, default=0)
-    passed_cases = Column(Integer, nullable=False, default=0)
-    failed_cases = Column(Integer, nullable=False, default=0)
-    pass_rate = Column(Float, nullable=True)
-    avg_latency_ms = Column(Float, nullable=True)
-    summary_json = Column(Text, nullable=False, default="{}")
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    completed_at = Column(DateTime, nullable=True)
-
-    case_results = relationship("AgentEvalCaseResult", back_populates="eval_run", cascade="all, delete-orphan")
-
-
-class AgentEvalCaseResult(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "agent_eval_case_results"
-    __table_args__ = (
-        Index("ix_agent_eval_case_results_run", "eval_run_id"),
-        Index("ix_agent_eval_case_results_task", "task_id"),
-        Index("ix_agent_eval_case_results_status", "status"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    eval_run_id = Column(String, ForeignKey("agent_eval_runs.id", ondelete="CASCADE"), nullable=False)
-    task_id = Column(String, ForeignKey("agent_golden_tasks.id", ondelete="CASCADE"), nullable=False)
-    run_id = Column(String, nullable=True)
-    status = Column(String, nullable=False, default="pending")
-    score = Column(Float, nullable=False, default=0.0)
-    latency_ms = Column(Integer, nullable=True)
-    actual_intent = Column(String, nullable=True)
-    actual_tools_json = Column(Text, nullable=False, default="[]")
-    actual_artifact_types_json = Column(Text, nullable=False, default="[]")
-    actual_approval_state = Column(String, nullable=True)
-    actual_sql_json = Column(Text, nullable=False, default="[]")
-    failure_reasons_json = Column(Text, nullable=False, default="[]")
-    response_json = Column(Text, nullable=False, default="{}")
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-
-    eval_run = relationship("AgentEvalRun", back_populates="case_results")

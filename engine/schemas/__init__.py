@@ -25,7 +25,6 @@ from engine.schemas.table_design import (
 )
 from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateRequest, DataSourceUpdateRequest
 from engine.schemas.query import SQLValidateRequest, SQLCancelRequest, SQLExplainRequest
-from engine.schemas.ai import SQLGenerateRequest, SchemaAlterationRequest, GoldenSQLCreateRequest, BenchmarkRequest
 from engine.schemas.semantic import (
     WorkspaceTableScopeUpdateRequest,
 )
@@ -48,10 +47,6 @@ __all__ = [
     "SQLValidateRequest",
     "SQLCancelRequest",
     "SQLExplainRequest",
-    "SQLGenerateRequest",
-    "SchemaAlterationRequest",
-    "GoldenSQLCreateRequest",
-    "BenchmarkRequest",
     "WorkspaceTableScopeUpdateRequest",
     "CredentialEnrollmentRequest",
     "CredentialReference",

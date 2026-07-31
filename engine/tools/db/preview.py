@@ -1,4 +1,4 @@
-"""db.preview — safe live data preview from a single table."""
+"""db_preview — safe live data preview from a single table."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def db_preview(
             redact=True,
         )
     except Exception as exc:
-        raise RuntimeError(f"db.preview execution failed: {exc}") from exc
+        raise RuntimeError(f"db_preview execution failed: {exc}") from exc
 
     rows = result.get("rows") or []
     safe_sql = str((result.get("safetyDecision") or {}).get("safe_sql") or result.get("safe_sql") or sql)
@@ -117,7 +117,7 @@ def db_preview(
 
 
 # ===================================================================
-# db.preview helpers
+# db_preview helpers
 # ===================================================================
 
 

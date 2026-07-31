@@ -1,16 +1,23 @@
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from engine.json_codec import JsonCodecError, loads
+
 from engine.ai_index import tokenize_query
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
+from engine.errors import ToolInputError
 
-logger = logging.getLogger("dbfox.tools.db.search")
+logger = logging.getLogger("dbfox.tools.db_search")
+
+MAX_SEARCH_QUERY_CHARS = 512
+MAX_SEARCH_RESULTS = 50
+MAX_SEARCH_TOKENS = 32
+MAX_SEARCH_CANDIDATES = 150
 
 
 SEARCHED_FIELDS = [
@@ -47,14 +54,26 @@ REASON_FIELD_MAP = {
 
 def db_search(db: Session, datasource_id: str, query: str, limit: int = 20) -> dict[str, Any]:
     """FTS5 search + rule-based scoring against SchemaSearchDoc. Falls back to keyword if FTS unavailable."""
-    tokens = _tokenize_search_query(query)
+    normalized_query = query.strip()
+    if not normalized_query:
+        raise ToolInputError("Search query must not be blank.")
+    if len(normalized_query) > MAX_SEARCH_QUERY_CHARS:
+        raise ToolInputError(
+            f"Search query must contain at most {MAX_SEARCH_QUERY_CHARS} characters."
+        )
+    if not 1 <= limit <= MAX_SEARCH_RESULTS:
+        raise ToolInputError(
+            f"Search limit must be between 1 and {MAX_SEARCH_RESULTS}."
+        )
+
+    tokens = _tokenize_search_query(normalized_query)
     if not tokens:
-        return _search_response("empty", query, tokens, limit, [])
+        return _search_response("empty", normalized_query, tokens, limit, [])
 
     try:
         fts_results = _fts_search(db, datasource_id, tokens, limit)
         if fts_results:
-            return _search_response("fts5", query, tokens, limit, fts_results)
+            return _search_response("fts5", normalized_query, tokens, limit, fts_results)
     except Exception as exc:
         log_unexpected_exception(
             logger,
@@ -63,7 +82,7 @@ def db_search(db: Session, datasource_id: str, query: str, limit: int = 20) -> d
             level="warning",
         )
     fallback = _fallback_keyword_search(db, datasource_id, tokens, limit)
-    return _search_response("keyword_fallback", query, tokens, limit, fallback)
+    return _search_response("keyword_fallback", normalized_query, tokens, limit, fallback)
 
 
 def _tokenize_search_query(query: str) -> list[str]:
@@ -78,6 +97,8 @@ def _tokenize_search_query(query: str) -> list[str]:
             continue
         if clean_token not in valid_tokens:
             valid_tokens.append(clean_token)
+            if len(valid_tokens) == MAX_SEARCH_TOKENS:
+                break
     return valid_tokens
 
 
@@ -107,7 +128,13 @@ def _fts_search(db: Session, datasource_id: str, tokens: list[str], limit: int) 
     # MATCH query actually finds FTS5-indexed content.
     cjk_chars: list[str] = []
     for t in tokens:
-        cjk_chars.extend(re.findall(r"[一-鿿]", t))
+        for character in re.findall(r"[一-鿿]", t):
+            if character not in cjk_chars:
+                cjk_chars.append(character)
+                if len(cjk_chars) == MAX_SEARCH_TOKENS:
+                    break
+        if len(cjk_chars) == MAX_SEARCH_TOKENS:
+            break
     token_parts.extend(cjk_chars)
     fts_query = " OR ".join(exact_parts + token_parts)
 
@@ -146,15 +173,19 @@ def _fts_search(db: Session, datasource_id: str, tokens: list[str], limit: int) 
         rows = []
 
     results: list[dict[str, Any]] = []
-    seen_tables: set[str] = set()
+    seen_tables: set[tuple[str, str]] = set()
     for row in rows:
         item = _row_to_search_result(row, tokens)
         if item is None:
             continue
-        if item["type"] == "table" and item["table_name"] in seen_tables:
+        table_identity = (
+            str(item.get("schema_name") or ""),
+            str(item.get("table_name") or ""),
+        )
+        if item["type"] == "table" and table_identity in seen_tables:
             continue
         if item["type"] == "table":
-            seen_tables.add(item["table_name"])
+            seen_tables.add(table_identity)
         results.append(item)
 
     results.sort(key=lambda r: (-float(r["score"]), r["type"], r["name"]))
@@ -171,6 +202,7 @@ def _row_to_search_result(row, tokens: list[str]) -> dict[str, Any] | None:
     item: dict[str, Any] = {
         "type": entity_type,
         "name": str(getattr(row, "name", "")),
+        "schema_name": str(getattr(row, "table_schema", "") or ""),
         "table_name": str(getattr(row, "table_name", "")),
         "score": round(score, 3),
         "reasons": reasons,
@@ -181,8 +213,10 @@ def _row_to_search_result(row, tokens: list[str]) -> dict[str, Any] | None:
         item["ai_description"] = str(getattr(row, "ai_description", "") or "")
         item["table_role"] = str(getattr(row, "table_role", "") or "")
         try:
-            item["semantic_tags"] = json.loads(getattr(row, "semantic_tags", "[]") or "[]")
-        except (json.JSONDecodeError, TypeError):
+            item["semantic_tags"] = loads(
+                getattr(row, "semantic_tags", "[]") or "[]"
+            )
+        except JsonCodecError:
             item["semantic_tags"] = []
 
     if entity_type == "column":
@@ -300,12 +334,14 @@ def _fallback_keyword_search(db: Session, datasource_id: str, tokens: list[str],
             ]
         )
 
+    candidate_limit = min(limit * 3, MAX_SEARCH_CANDIDATES)
     doc_results: list[dict[str, Any]] = []
-    seen_docs: set[tuple[str, str, str]] = set()
+    seen_docs: set[tuple[str, str, str, str]] = set()
     if doc_filters:
         docs = (
             db.query(SD)
             .filter(SD.datasource_id == datasource_id, or_(*doc_filters))
+            .limit(candidate_limit)
             .all()
         )
         for doc in docs:
@@ -314,6 +350,7 @@ def _fallback_keyword_search(db: Session, datasource_id: str, tokens: list[str],
                 continue
             key = (
                 str(item.get("type") or ""),
+                str(item.get("schema_name") or ""),
                 str(item.get("table_name") or ""),
                 str(item.get("column_name") or ""),
             )
@@ -330,7 +367,12 @@ def _fallback_keyword_search(db: Session, datasource_id: str, tokens: list[str],
 
     table_results: list[dict[str, Any]] = []
     if table_filters:
-        tables = db.query(ST).filter(ST.data_source_id == datasource_id, or_(*table_filters)).all()
+        tables = (
+            db.query(ST)
+            .filter(ST.data_source_id == datasource_id, or_(*table_filters))
+            .limit(candidate_limit)
+            .all()
+        )
         for t in tables:
             name = str(t.table_name).lower()
             score = sum(3.0 for tok in tokens if tok.lower() in name)
@@ -340,6 +382,7 @@ def _fallback_keyword_search(db: Session, datasource_id: str, tokens: list[str],
                 table_results.append({
                     "type": "table",
                     "name": str(t.table_name),
+                    "schema_name": str(t.table_schema or ""),
                     "table_name": str(t.table_name),
                     "score": score,
                     "reasons": ["keyword_table_name"],
@@ -357,7 +400,7 @@ def _fallback_keyword_search(db: Session, datasource_id: str, tokens: list[str],
         columns = db.query(SC).join(ST, SC.table_id == ST.id).filter(
             ST.data_source_id == datasource_id,
             or_(*col_filters)
-        ).all()
+        ).limit(candidate_limit).all()
         for c in columns:
             col_name = str(c.column_name).lower()
             score = sum(2.0 for tok in tokens if tok.lower() in col_name)
@@ -365,9 +408,15 @@ def _fallback_keyword_search(db: Session, datasource_id: str, tokens: list[str],
                 score += 0.5
             if score > 0:
                 table_name = str(c.table.table_name) if c.table else ""
+                schema_name = str(c.table.table_schema or "") if c.table else ""
                 col_results.append({
                     "type": "column",
-                    "name": f"{table_name}.{c.column_name}",
+                    "name": ".".join(
+                        part
+                        for part in (schema_name, table_name, str(c.column_name))
+                        if part
+                    ),
+                    "schema_name": schema_name,
                     "table_name": table_name,
                     "column_name": str(c.column_name),
                     "score": score,

@@ -3,49 +3,52 @@
 from __future__ import annotations
 
 import hashlib
-import json
-from enum import StrEnum
 from typing import Any
 
+from openai import pydantic_function_tool
 from pydantic import BaseModel, ConfigDict, Field
 
+from engine.json_codec import canonical_dumps
+from engine.tools.runtime.base import BaseTool, ControlCommand, ToolRecoveryPolicy
 from engine.tools.runtime.registry import ToolRegistry
 
 
-class ToolRecoveryPolicy(StrEnum):
-    RETRY_SAFE = "retry_safe"
-    RECONCILE = "reconcile"
-    NEVER_RETRY = "never_retry"
-    PROVIDER_OWNED = "provider_owned"
+class ToolVersionMismatch(RuntimeError):
+    """A durable call no longer matches the installed tool contract."""
 
 
 class MaterializedTool(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: str
-    version: str
+    version: str = Field(
+        description="Content-addressed identifier of the complete executable tool contract."
+    )
     group: str
     description: str
     input_schema: dict[str, Any]
+    output_schema: dict[str, Any]
     policy: dict[str, Any]
     execution: dict[str, Any]
+    semantics: dict[str, Any]
+    presentation: dict[str, Any]
     recovery_policy: ToolRecoveryPolicy
+    kind: str
 
     def provider_schema(self) -> dict[str, Any]:
         return {
             "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.input_schema,
-            },
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.input_schema,
+            "strict": True,
         }
 
 
 class ToolMaterialization(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    tools: list[MaterializedTool] = Field(default_factory=list)
+    tools: tuple[MaterializedTool, ...] = ()
     hash: str
 
     def provider_schemas(self) -> list[dict[str, Any]]:
@@ -74,32 +77,118 @@ def materialize_tools(
         allowed_modes = set(spec.policy.allowed_execution_modes)
         if allowed_modes and execution_mode not in allowed_modes:
             continue
-        recovery = _recovery_policy(tool)
-        materialized.append(
-            MaterializedTool(
-                name=spec.name,
-                version=str(spec.metadata.get("version", "1") if spec.metadata else "1"),
-                group=spec.group,
-                description=spec.description,
-                input_schema=spec.input_schema,
-                policy=spec.policy.model_dump(mode="json"),
-                execution=spec.execution.model_dump(mode="json"),
-                recovery_policy=recovery,
-            )
-        )
+        materialized.append(_materialize_tool(tool))
 
     materialized.sort(key=lambda value: value.name)
     payload = [tool.model_dump(mode="json") for tool in materialized]
-    digest = hashlib.sha256(
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    ).hexdigest()
+    digest = _canonical_digest(payload)
     return ToolMaterialization(tools=materialized, hash=digest)
 
 
-def _recovery_policy(tool: Any) -> ToolRecoveryPolicy:
-    configured = (tool.spec.metadata or {}).get("recovery_policy")
-    if configured:
-        return ToolRecoveryPolicy(str(configured))
-    if tool.spec.policy.side_effect in {"none", "read"} and tool.spec.execution.idempotent:
-        return ToolRecoveryPolicy.RETRY_SAFE
-    return ToolRecoveryPolicy.NEVER_RETRY
+def require_current_tool(
+    registry: ToolRegistry,
+    materialization: ToolMaterialization,
+    *,
+    name: str,
+    version: str,
+) -> Any:
+    try:
+        frozen = materialization.require(name)
+        current = registry.require(name)
+    except KeyError as exc:
+        raise ToolVersionMismatch(
+            f"Tool {name} is not available in both the frozen and current registries"
+        ) from exc
+    current_contract = _materialize_tool(current)
+    if version != frozen.version or current_contract.version != frozen.version:
+        raise ToolVersionMismatch(
+            f"Tool {name} contract {version!r} cannot run against "
+            f"frozen={frozen.version!r}, current={current_contract.version!r}"
+        )
+    return current
+
+
+def require_reconciliation_tool(
+    registry: ToolRegistry,
+    materialization: ToolMaterialization,
+    *,
+    name: str,
+    version: str,
+) -> Any:
+    """Resolve only the read-only reconciler for an already-attempted call.
+
+    A current policy or presentation change must not hide the outcome of an
+    external action that may already have completed. This path never authorizes
+    replay: it only verifies that the original call used the frozen contract and
+    that both frozen and current tools retain the explicit reconciliation
+    contract.
+    """
+
+    try:
+        frozen = materialization.require(name)
+        current = registry.require(name)
+    except KeyError as exc:
+        raise ToolVersionMismatch(
+            f"Tool {name} is not available for reconciliation"
+        ) from exc
+    if (
+        version != frozen.version
+        or frozen.recovery_policy is not ToolRecoveryPolicy.RECONCILE
+        or current.execution.recovery is not ToolRecoveryPolicy.RECONCILE
+    ):
+        raise ToolVersionMismatch(
+            f"Tool {name} no longer satisfies its frozen reconciliation contract"
+        )
+    return current
+
+
+def _materialize_tool(
+    tool: BaseTool[Any, Any] | ControlCommand[Any, Any],
+) -> MaterializedTool:
+    spec = tool.spec
+    input_schema = _strict_input_schema(spec.input_model)
+    output_schema = spec.output_model.model_json_schema()
+    policy = spec.policy.model_dump(mode="json")
+    execution = spec.execution.model_dump(mode="json")
+    semantics = spec.semantics.model_dump(mode="json")
+    presentation = spec.presentation.model_dump(mode="json")
+    contract_payload = {
+        "name": spec.name,
+        "declared_version": spec.version,
+        "group": spec.group,
+        "description": spec.description,
+        "input_schema": input_schema,
+        "output_schema": output_schema,
+        "policy": policy,
+        "execution": execution,
+        "semantics": semantics,
+        "presentation": presentation,
+        "kind": spec.kind,
+    }
+    return MaterializedTool(
+        name=spec.name,
+        version=f"sha256:{_canonical_digest(contract_payload)}",
+        group=spec.group,
+        description=spec.description,
+        input_schema=input_schema,
+        output_schema=output_schema,
+        policy=policy,
+        execution=execution,
+        semantics=semantics,
+        presentation=presentation,
+        recovery_policy=spec.execution.recovery,
+        kind=spec.kind,
+    )
+
+
+def _canonical_digest(value: Any) -> str:
+    return hashlib.sha256(canonical_dumps(value).encode("utf-8")).hexdigest()
+
+
+def _strict_input_schema(model: type[BaseModel]) -> dict[str, Any]:
+    """Generate OpenAI strict JSON Schema through the SDK's public helper."""
+
+    parameters = pydantic_function_tool(model)["function"].get("parameters")
+    if not isinstance(parameters, dict):
+        raise TypeError("OpenAI SDK did not produce a function parameter schema")
+    return parameters

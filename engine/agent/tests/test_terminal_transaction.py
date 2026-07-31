@@ -4,7 +4,12 @@ import json
 
 import pytest
 
-from engine.agent.artifact import ArtifactSelectionSuggestion, ArtifactType
+from engine.agent.artifact import (
+    ArtifactRelation,
+    ArtifactRelationType,
+    ArtifactSelectionSuggestion,
+    ArtifactType,
+)
 from engine.agent.evidence import Evidence, EvidenceLocator
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.run import RunRepository
@@ -29,9 +34,35 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(db_session, t
         prompt_hash="prompt", context_snapshot={}, context_hash="context",
         tool_materialization={}, tool_materialization_hash="tools", provider="test", model_name="test",
     )
-    artifact = ArtifactRepository(db_session).create(
+    artifacts = ArtifactRepository(db_session)
+    sql_artifact = artifacts.create(
         lease=lease, run_id=admission.run_id, turn_id=str(turn.id),
-        artifact_type=ArtifactType.RESULT_VIEW, title="订单数", payload={"rowCount": 1},
+        artifact_type=ArtifactType.SQL, title="订单统计 SQL",
+        payload={
+            "sql": "SELECT COUNT(*) AS count FROM orders",
+            "safeSql": "SELECT COUNT(*) AS count FROM orders",
+            "dialect": "sqlite",
+            "queryFingerprint": "fingerprint_total",
+        },
+    )
+    artifact = artifacts.create(
+        lease=lease, run_id=admission.run_id, turn_id=str(turn.id),
+        artifact_type=ArtifactType.RESULT_VIEW, title="订单数",
+        payload={
+            "sourceSqlArtifactId": sql_artifact.id,
+            "queryFingerprint": "fingerprint_total",
+            "datasourceGeneration": 1,
+            "columns": [{"name": "count", "type": "integer"}],
+            "rowCount": 1,
+            "returnedRows": 1,
+            "latencyMs": 1,
+            "executedAt": datetime.now(UTC).isoformat(),
+            "truncated": False,
+        },
+        relations=[ArtifactRelation(
+            relation=ArtifactRelationType.DERIVED_FROM,
+            artifact_id=sql_artifact.id,
+        )],
     )
     evidence = Evidence(
         id=f"evidence_{uuid4().hex}", session_id="session_terminal", run_id=admission.run_id,
@@ -47,7 +78,37 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(db_session, t
             artifact_id=artifact.id, reason="首个主要查询结果"
         ),
     )
-    RunRepository(db_session).complete(lease=lease, response=response)
+    verified_claim = {
+        "claim_id": evidence.claim_id,
+        "claim": "共有 42 条订单",
+        "artifact_id": artifact.id,
+        "query_fingerprint": evidence.query_fingerprint,
+        "locator": evidence.locator.model_dump(mode="json"),
+        "observed_at": evidence.observed_at.isoformat(),
+        "run_id": admission.run_id,
+    }
+    db_session.add(AgentSessionMemory(
+        id="memory_from_old_generation",
+        session_id="session_terminal",
+        datasource_id=str(test_datasource.id),
+        memory_json=json.dumps({
+            "version": 1,
+            "datasource_id": str(test_datasource.id),
+            "datasource_generation": 0,
+            "recent_runs": [{
+                "run_id": "stale-run",
+                "datasource_id": str(test_datasource.id),
+                "datasource_generation": 0,
+            }],
+            "stable_context": {"database_name": "stale_database"},
+        }),
+    ))
+    db_session.flush()
+    RunRepository(db_session).complete(
+        lease=lease,
+        response=response,
+        memory_delta={"verified_claims": [verified_claim]},
+    )
     db_session.commit()
 
     assert db_session.get(AgentRun, admission.run_id).status == "completed"
@@ -57,6 +118,14 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(db_session, t
     memory = json.loads(memory_row.memory_json)
     assert memory["recent_runs"][0]["run_id"] == admission.run_id
     assert memory["working_set"]["referenced_artifact_ids"] == [artifact.id]
+    stored_claim = memory["stable_context"]["verified_claims"][0]
+    assert {
+        key: stored_claim[key]
+        for key in verified_claim
+    } == verified_claim
+    assert stored_claim["datasource_id"] == str(test_datasource.id)
+    assert stored_claim["datasource_generation"] == 1
+    assert "database_name" not in memory["stable_context"]
     assert "rows" not in memory_row.memory_json
     assert db_session.get(AgentSession, "session_terminal").selected_artifact_id == artifact.id
 
@@ -112,7 +181,12 @@ def test_interrupted_model_turn_is_closed_before_run_recovery(db_session, test_d
         tool_materialization={}, tool_materialization_hash="tools", provider="test", model_name="test",
     )
     runs = RunRepository(db_session)
-    runs.merge_answer_draft(lease=lease, run_id=admission.run_id, content="未完成的半截回答")
+    runs.merge_answer_draft(
+        lease=lease,
+        run_id=admission.run_id,
+        content="未完成的半截回答",
+        phase="final_answer",
+    )
     db_session.commit()
 
     assert runs.recover_interrupted_turns(lease=lease, run_id=admission.run_id) == 1

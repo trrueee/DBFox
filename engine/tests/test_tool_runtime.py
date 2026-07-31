@@ -1,75 +1,91 @@
 from __future__ import annotations
 
+import json
 import logging
+import threading
 import time
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from pydantic import BaseModel
-
-from engine.tools.runtime.base import ArtifactSpec, BaseTool, ToolExecutionSpec, ToolPolicy, ToolStateSpec
+from engine.tools.runtime.base import (
+    BaseTool,
+    ToolExecutionSpec,
+    ToolInputModel,
+    ToolOutputModel,
+    ToolPolicy,
+    ToolPresentation,
+    ToolRecoveryPolicy,
+)
 from engine.tools.runtime.context import ToolRunContext
 from engine.tools.runtime.executor import ToolExecutor
 from engine.tools.runtime.registry import ToolRegistry
-from engine.tools.runtime.result import ToolResult
+from engine.tools.runtime.result import ToolReconciliation, ToolResult
 from engine.tools.runtime.runtime import ToolRuntime
 
 
-class EchoInput(BaseModel):
+class EchoInput(ToolInputModel):
     value: str
 
 
-class EchoOutput(BaseModel):
+class EchoOutput(ToolOutputModel):
     value: str
     seen: dict[str, Any]
 
 
 class EchoTool(BaseTool[EchoInput, EchoOutput]):
-    name = "test.echo"
+    name = "test_echo"
     group = "test"
     description = "Echo a value."
     input_model = EchoInput
     output_model = EchoOutput
+    presentation = ToolPresentation(title="Echo", category="manage", visibility="developer")
     policy = ToolPolicy()
     execution = ToolExecutionSpec()
-    state = ToolStateSpec(consumes=("allowed",), produces=("echo",))
-    artifacts = ArtifactSpec()
 
     def run(self, tool_input: EchoInput, context: ToolRunContext) -> EchoOutput:
-        return EchoOutput(value=tool_input.value, seen=dict(context.state))
+        return EchoOutput(
+            value=tool_input.value,
+            seen={"thread_id": context.thread_id},
+        )
+
+
+def test_tool_id_must_be_provider_neutral_at_definition_time():
+    with pytest.raises(TypeError, match="same canonical Tool ID"):
+        class InvalidTool(EchoTool):
+            name = "schema.read"
 
 
 def test_registry_and_provider_neutral_tool_spec():
     registry = ToolRegistry()
     registry.register(EchoTool())
-    spec = registry.require("test.echo").spec
+    spec = registry.require("test_echo").spec
     assert spec.input_model is EchoInput
-    assert spec.state.consumes == ("allowed",)
+    assert spec.output_model is EchoOutput
     assert "langchain" not in type(registry).__module__
 
 
 def test_registry_denies_privileged_capabilities_without_an_isolated_backend():
     class ProcessTool(EchoTool):
-        name = "test.process"
+        name = "test_process"
         execution = ToolExecutionSpec(capabilities=("subprocess",))
 
     with pytest.raises(ValueError, match="require an isolated process"):
         ToolRegistry().register(ProcessTool())
 
 
-def test_registry_requires_a_declared_read_capability():
-    class UndeclaredReadTool(EchoTool):
-        name = "test.undeclared_read"
-        policy = ToolPolicy(side_effect="read")
+def test_registry_preserves_the_declared_capability_contract():
+    class ReadTool(EchoTool):
+        name = "test_read"
+        execution = ToolExecutionSpec(capabilities=("database_read",))
 
-    with pytest.raises(ValueError, match="must declare its read capability"):
-        ToolRegistry().register(UndeclaredReadTool())
+    registry = ToolRegistry().register(ReadTool())
+    assert registry.require("test_read").spec.execution.capabilities == ("database_read",)
 
 
 def test_registry_rejects_an_unavailable_execution_backend():
     class IsolatedTool(EchoTool):
-        name = "test.isolated"
+        name = "test_isolated"
         execution = ToolExecutionSpec(
             backend="isolated_process",
             capabilities=("subprocess",),
@@ -79,25 +95,82 @@ def test_registry_rejects_an_unavailable_execution_backend():
         ToolRegistry().register(IsolatedTool())
 
 
-def test_runtime_projects_only_declared_state_keys():
+def test_runtime_exposes_only_explicit_execution_context():
     registry = ToolRegistry()
     registry.register(EchoTool())
     result = ToolRuntime(registry).invoke(
-        tool_name="test.echo", raw_input={"value": "hello"},
-        state={"allowed": 1, "secret": 2}, request=None, db=None,
+        tool_name="test_echo", raw_input={"value": "hello"},
+        request=SimpleNamespace(session_id="session-1"), db=None,
+        idempotency_key="invocation-1",
     )
     assert result == ToolResult(
-        name="test.echo", status="success", input={"value": "hello"},
-        output={"value": "hello", "seen": {"allowed": 1}}, error=None,
+        name="test_echo", status="success", input={"value": "hello"},
+        output={"value": "hello", "seen": {"thread_id": "session-1"}}, error=None,
         latency_ms=result.latency_ms,
     )
 
 
+def test_runtime_reconciliation_receives_the_durable_idempotency_key():
+    seen: list[str] = []
+
+    class ReconcileTool(EchoTool):
+        name = "test_reconcile"
+        execution = ToolExecutionSpec(recovery=ToolRecoveryPolicy.RECONCILE)
+
+        def reconcile(
+            self,
+            tool_input: EchoInput,
+            context: ToolRunContext,
+        ) -> ToolReconciliation:
+            seen.append(context.idempotency_key)
+            return ToolReconciliation(
+                status="succeeded",
+                output={"value": tool_input.value, "seen": {"thread_id": context.thread_id}},
+            )
+
+    result = ToolRuntime(ToolRegistry().register(ReconcileTool())).reconcile(
+        tool_name="test_reconcile",
+        raw_input={"value": "hello"},
+        request=SimpleNamespace(session_id="session-1"),
+        db=None,
+        idempotency_key="stable-invocation-key",
+    )
+
+    assert result.status == "success"
+    assert result.output == {"value": "hello", "seen": {"thread_id": "session-1"}}
+    assert seen == ["stable-invocation-key"]
+
+
+def test_runtime_rejects_unknown_or_encoded_arguments_instead_of_coercing_them():
+    registry = ToolRegistry().register(EchoTool())
+    unknown = ToolRuntime(registry).invoke(
+        tool_name="test_echo",
+        raw_input={"value": "hello", "legacy_value": "ignored-before"},
+        request=None,
+        db=None,
+        idempotency_key="invocation-unknown",
+    )
+    encoded = ToolRuntime(registry).invoke(
+        tool_name="test_echo",
+        raw_input={"value": '{"not":"a string contract"}'},
+        request=None,
+        db=None,
+        idempotency_key="invocation-encoded",
+    )
+
+    assert unknown.error_code == "TOOL_INPUT_CONTRACT_FAILED"
+    assert encoded.status == "success"
+    assert encoded.output == {
+        "value": '{"not":"a string contract"}',
+        "seen": {"thread_id": ""},
+    }
+
+
 def test_runtime_validation_and_execution_failures_are_safe(monkeypatch, caplog):
     class FailingTool(EchoTool):
-        name = "test.failing"
+        name = "test_failing"
 
-        def run(self, _tool_input: EchoInput, _context: ToolRunContext) -> EchoOutput:
+        def run(self, _tool_input: EchoInput, _context: ToolRunContext) -> dict[str, Any]:
             raise RuntimeError("password=secret-sentinel")
 
     registry = ToolRegistry()
@@ -107,10 +180,12 @@ def test_runtime_validation_and_execution_failures_are_safe(monkeypatch, caplog)
     with monkeypatch.context() as patch:
         patch.setattr("engine.tools.runtime.runtime.logger", logger)
         invalid = ToolRuntime(registry).invoke(
-            tool_name="test.failing", raw_input={}, state={}, request=None, db=None,
+            tool_name="test_failing", raw_input={}, request=None, db=None,
+            idempotency_key="invocation-invalid",
         )
         failed = ToolRuntime(registry).invoke(
-            tool_name="test.failing", raw_input={"value": "x"}, state={}, request=None, db=None,
+            tool_name="test_failing", raw_input={"value": "x"}, request=None, db=None,
+            idempotency_key="invocation-failed",
         )
     assert invalid.status == "failed"
     assert "Input contract failed" in (invalid.error or "")
@@ -119,69 +194,106 @@ def test_runtime_validation_and_execution_failures_are_safe(monkeypatch, caplog)
     assert "secret-sentinel" not in caplog.text
 
 
+def test_validation_error_raised_inside_tool_is_an_execution_failure():
+    class InternalValidationTool(EchoTool):
+        name = "test_internal_validation"
+
+        def run(self, _tool_input: EchoInput, _context: ToolRunContext) -> dict[str, Any]:
+            return EchoOutput.model_validate({}).model_dump()
+
+    registry = ToolRegistry()
+    registry.register(InternalValidationTool())
+    result = ToolRuntime(registry).invoke(
+        tool_name="test_internal_validation",
+        raw_input={"value": "x"},
+        request=None,
+        db=None,
+        idempotency_key="invocation-internal-validation",
+    )
+
+    assert result.error_code == "TOOL_EXECUTION_FAILED"
+    assert result.error == "Tool execution failed."
+
+
+def test_runtime_rejects_non_json_tool_output() -> None:
+    class NonJsonOutputTool(EchoTool):
+        name = "test_non_json_output"
+
+        def run(self, _tool_input: EchoInput, _context: ToolRunContext) -> dict[str, Any]:
+            return {"value": object()}
+
+    result = ToolRuntime(ToolRegistry().register(NonJsonOutputTool())).invoke(
+        tool_name="test_non_json_output",
+        raw_input={"value": "x"},
+        request=None,
+        db=None,
+        idempotency_key="invocation-non-json",
+    )
+
+    assert result.error_code == "TOOL_OUTPUT_CONTRACT_FAILED"
+    assert result.error == "Output contract failed."
+
+
 def test_product_registry_contains_the_analysis_toolset():
-    from engine.tools.dbfox_tools import register_dbfox_tools
+    from engine.tools.builtin import register_dbfox_tools
 
     names = {tool.name for tool in register_dbfox_tools().list_tools()}
-    assert {"db.observe", "db.search", "db.inspect", "db.preview", "sql.validate", "sql.execute_readonly", "artifact.inspect", "chart.suggest", "question.request", "plan.update"} <= names
-    assert "db.query" not in names
-    assert not any(name.startswith("memory.") for name in names)
+    assert names == {
+        "catalog_overview",
+        "catalog_refresh",
+        "chart_create",
+        "data_preview",
+        "request_clarification",
+        "result_inspect",
+        "result_profile",
+        "schema_inspect",
+        "schema_list",
+        "schema_search",
+        "sql_execute_readonly",
+        "sql_validate",
+        "update_plan",
+    }
 
 
-def test_artifact_inspect_returns_only_a_transient_gateway_page(monkeypatch):
-    from engine.sql.result_view.models import ResultPage, VerifiedResultSource
-    from engine.tools.dbfox_tools import register_dbfox_tools
+def test_every_product_function_has_strict_input_and_output_contracts():
+    from engine.tools.builtin import register_dbfox_tools
 
-    db = SimpleNamespace(get=lambda _model, _id: SimpleNamespace(session_id="session-1"))
-    monkeypatch.setattr(
-        "engine.tools.dbfox_tools.ResultViewService.load_verified_source",
-        lambda _self, _ref: VerifiedResultSource(
-            datasource_id="ds-1", source_sql_artifact_id="sql-1", safe_sql="SELECT 1 AS total",
-            dialect="sqlite", columns=[], fingerprint="query-1", datasource_generation=1,
-        ),
-    )
-    monkeypatch.setattr(
-        "engine.tools.dbfox_tools.ResultViewService.page",
-        lambda _self, _query: ResultPage(
-            columns=["total"], rows=[{"total": 1}], page=1, page_size=50,
-            row_count=1, has_next_page=False, latency_ms=2,
-            consistency="live_reexecution", original_executed_at="2026-07-20T00:00:00Z",
-            view_executed_at="2026-07-20T00:00:01Z", view_execution_id="view-1",
-            datasource_generation=1, query_fingerprint="query-1",
-        ),
-    )
-
-    result = ToolRuntime(register_dbfox_tools()).invoke(
-        tool_name="artifact.inspect",
-        raw_input={"artifact_id": "artifact-result-1"},
-        state={}, request=SimpleNamespace(session_id="session-1"), db=db,
-    )
-
-    assert result.status == "success"
-    assert result.output["rows"] == [{"total": 1}]
-    assert result.output["artifact_id"] == "artifact-result-1"
-    assert result.output["queryFingerprint"] == "query-1"
+    for function in register_dbfox_tools().list_tools():
+        assert function.input_model.model_config.get("extra") == "forbid"
+        assert function.output_model.model_config.get("extra") == "forbid"
 
 
-def test_state_reducer_consumes_provider_neutral_results():
-    from engine.tools.runtime.state_reducer import apply_tool_observation_to_state
+def test_large_observation_keeps_small_context_instead_of_dropping_all_facts():
+    from engine.tools.runtime.observation import MAX_FACT_BYTES, safe_observation_facts
 
-    result = ToolResult(
-        name="sql.execute_readonly", status="success",
-        output={"status": "success", "returned_rows": 1, "safe_sql": "SELECT 1"},
-        latency_ms=1,
-    )
-    update = apply_tool_observation_to_state(
-        state={"error": "old"}, tool_name=result.name, observation=result,
-    )
-    assert update["error"] is None
-    assert update["execution"]["success"] is True
+    facts = safe_observation_facts({
+        "env": "dev",
+        "dialect": "mysql",
+        "database_map": {
+            "tables": [
+                {"name": f"table_{index}", "description": "x" * 1_000}
+                for index in range(100)
+            ],
+        },
+        "database_map_summary": {"tableCount": 100},
+    })
+
+    assert facts["truncated"] is True
+    assert facts["env"] == "dev"
+    assert facts["dialect"] == "mysql"
+    assert facts["database_map_summary"] == {"tableCount": 100}
+    assert facts["database_map"]["truncated"] is True
+    assert len(json.dumps(facts, ensure_ascii=False).encode("utf-8")) <= MAX_FACT_BYTES
 
 
-def test_tool_executor_retries_only_declared_idempotent_operations():
+def test_tool_executor_retries_only_retry_safe_operations():
     class RetryTool(EchoTool):
-        name = "test.retry"
-        execution = ToolExecutionSpec(idempotent=True, retryable=True, max_retries=2)
+        name = "test_retry"
+        execution = ToolExecutionSpec(
+            recovery=ToolRecoveryPolicy.RETRY_SAFE,
+            retryable=True,
+            max_retries=2,
+        )
 
     attempts: list[int] = []
 
@@ -189,10 +301,10 @@ def test_tool_executor_retries_only_declared_idempotent_operations():
         attempts.append(len(attempts) + 1)
         if len(attempts) < 3:
             return ToolResult(
-                name="test.retry", status="failed", error="temporary",
+                name="test_retry", status="failed", error="temporary",
                 error_code="TOOL_EXECUTION_FAILED", latency_ms=1,
             )
-        return ToolResult(name="test.retry", status="success", output={"ok": True}, latency_ms=1)
+        return ToolResult(name="test_retry", status="success", output={"ok": True}, latency_ms=1)
 
     result = ToolExecutor(max_workers=1).execute(
         tool=RetryTool(), scope_key="run-1", operation=operation,
@@ -203,13 +315,51 @@ def test_tool_executor_retries_only_declared_idempotent_operations():
     assert attempts == [1, 2, 3]
 
 
+def test_tool_executor_retries_share_one_absolute_deadline():
+    class RetryTool(EchoTool):
+        name = "test_retry_deadline"
+        execution = ToolExecutionSpec(
+            timeout_seconds=1,
+            recovery=ToolRecoveryPolicy.RETRY_SAFE,
+            retryable=True,
+            max_retries=5,
+        )
+
+    attempts = 0
+
+    def operation(_control):
+        nonlocal attempts
+        attempts += 1
+        time.sleep(0.02)
+        return ToolResult(
+            name="test_retry_deadline",
+            status="failed",
+            error="temporary",
+            error_code="TOOL_EXECUTION_FAILED",
+            latency_ms=20,
+        )
+
+    started = time.monotonic()
+    result = ToolExecutor(max_workers=1, poll_interval_seconds=0.005).execute(
+        tool=RetryTool(),
+        scope_key="run-retry-deadline",
+        operation=operation,
+        deadline=started + 0.055,
+    )
+
+    assert result.error_code == "TOOL_TIMEOUT"
+    assert result.attempts == attempts
+    assert 1 <= attempts < 6
+    assert time.monotonic() - started < 0.2
+
+
 def test_tool_executor_timeout_signals_the_leaf_and_never_returns_late_success():
     cancelled = False
 
     def operation(control):
         while not control.is_cancelled():
             time.sleep(0.005)
-        return ToolResult(name="test.echo", status="success", output={"late": True}, latency_ms=1)
+        return ToolResult(name="test_echo", status="success", output={"late": True}, latency_ms=1)
 
     def cancel_action():
         nonlocal cancelled
@@ -217,7 +367,8 @@ def test_tool_executor_timeout_signals_the_leaf_and_never_returns_late_success()
 
     result = ToolExecutor(max_workers=1, poll_interval_seconds=0.005).execute(
         tool=EchoTool(), scope_key="run-timeout", operation=operation,
-        cancel_action=cancel_action, timeout_seconds=0.03,
+        cancel_action=cancel_action,
+        deadline=time.monotonic() + 0.03,
     )
 
     assert result.status == "failed"
@@ -225,16 +376,93 @@ def test_tool_executor_timeout_signals_the_leaf_and_never_returns_late_success()
     assert cancelled is True
 
 
+def test_tool_executor_replaces_capacity_after_non_cooperative_timeouts():
+    release = threading.Event()
+    executor = ToolExecutor(
+        max_workers=1,
+        max_abandoned_workers=8,
+        poll_interval_seconds=0.005,
+    )
+
+    def stuck_operation(_control):
+        release.wait()
+        return ToolResult(
+            name="test_echo",
+            status="success",
+            output={"late": True},
+            latency_ms=1,
+        )
+
+    try:
+        for index in range(5):
+            result = executor.execute(
+                tool=EchoTool(),
+                scope_key=f"run-stuck-{index}",
+                operation=stuck_operation,
+                deadline=time.monotonic() + 0.02,
+            )
+            assert result.error_code == "TOOL_TIMEOUT"
+
+        healthy = executor.execute(
+            tool=EchoTool(),
+            scope_key="run-healthy",
+            operation=lambda _control: ToolResult(
+                name="test_echo",
+                status="success",
+                output={"ok": True},
+                latency_ms=1,
+            ),
+            deadline=time.monotonic() + 0.1,
+        )
+        assert healthy.status == "success"
+    finally:
+        release.set()
+        executor.close(wait=True)
+
+
+def test_tool_executor_fails_fast_at_the_abandoned_worker_limit():
+    release = threading.Event()
+    executor = ToolExecutor(
+        max_workers=1,
+        max_abandoned_workers=2,
+        poll_interval_seconds=0.005,
+    )
+
+    def stuck_operation(_control):
+        release.wait()
+        return ToolResult(name="test_echo", status="success", output={}, latency_ms=1)
+
+    try:
+        for index in range(2):
+            assert executor.execute(
+                tool=EchoTool(),
+                scope_key=f"run-limit-{index}",
+                operation=stuck_operation,
+                deadline=time.monotonic() + 0.02,
+            ).error_code == "TOOL_TIMEOUT"
+
+        saturated = executor.execute(
+            tool=EchoTool(),
+            scope_key="run-limit-saturated",
+            operation=stuck_operation,
+            deadline=time.monotonic() + 0.02,
+        )
+        assert saturated.error_code == "TOOL_EXECUTOR_SATURATED"
+    finally:
+        release.set()
+        executor.close(wait=True)
+
+
 def test_tool_executor_enforces_declared_output_bytes():
     class BoundedTool(EchoTool):
-        name = "test.bounded"
+        name = "test_bounded"
         execution = ToolExecutionSpec(max_output_bytes=1_024)
 
     result = ToolExecutor(max_workers=1).execute(
         tool=BoundedTool(),
         scope_key="run-output",
         operation=lambda _control: ToolResult(
-            name="test.bounded", status="success", output={"value": "x" * 2_000}, latency_ms=1,
+            name="test_bounded", status="success", output={"value": "x" * 2_000}, latency_ms=1,
         ),
     )
 

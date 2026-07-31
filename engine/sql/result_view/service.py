@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from datetime import UTC, datetime
 from collections.abc import Callable, Iterator
@@ -11,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
+from engine.json_codec import JsonCodecError, load_array, load_object
 from engine.models import AgentArtifactRecord, AgentRun, DataSource, SchemaColumn, SchemaTable
 from engine.sql.builder import catalog_identifier
 from engine.sql.dialect_context import DialectContext
@@ -475,19 +475,18 @@ class ResultViewService:
         )
 
 
-def _artifact_payload(record: AgentArtifactRecord) -> dict[str, object]:
+def _artifact_payload(record: AgentArtifactRecord) -> dict[str, Any]:
     try:
         payload_json = record.payload_json if isinstance(record.payload_json, str) else "{}"
-        payload = json.loads(payload_json or "{}")
-    except (TypeError, ValueError):
+        return load_object(payload_json or "{}")
+    except JsonCodecError:
         return {}
-    return payload if isinstance(payload, dict) else {}
 
 
 def _derived_from_id(record: AgentArtifactRecord, *, descriptor_id: str) -> str:
     try:
-        raw_relations = json.loads(str(record.relations_json or "[]"))
-    except (TypeError, ValueError, json.JSONDecodeError):
+        raw_relations = load_array(str(record.relations_json or "[]"))
+    except JsonCodecError:
         raw_relations = []
     source_ids = [
         str(item.get("artifact_id") or "").strip()

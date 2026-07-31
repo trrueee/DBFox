@@ -1,19 +1,43 @@
 from __future__ import annotations
 
 import sqlite3
+from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import event
 
-from engine.tools.db_tools import (
-    db_inspect,
-    db_observe,
-    db_preview,
-    db_search,
-    sql_execute_readonly,
-    sql_validate,
+from engine.errors import ToolInputError
+from engine.tools.builtin.catalog import (
+    CatalogRefreshTool,
+    SchemaListTool,
+    SchemaSearchTool,
 )
-from engine.models import DomainTagRule, QueryHistory, SchemaSearchDoc
-from engine.schema_sync import sync_schema
+from engine.tools.builtin.contracts import (
+    ChartCreateInput,
+    EmptyInput,
+    ResultProfileInput,
+    SchemaListInput,
+    SchemaSearchInput,
+)
+from engine.tools.builtin.results import (
+    _infer_chart_type,
+    _profile_rows,
+    _resolve_chart_suggestion,
+)
+from engine.tools.db.inspect import db_inspect
+from engine.tools.db.observe import _build_observation_context, db_observe
+from engine.tools.db.preview import db_preview
+from engine.tools.db.search import MAX_SEARCH_TOKENS, _tokenize_search_query, db_search
+from engine.tools.db.sql_execution import sql_execute_readonly, sql_validate
+from engine.tools.runtime import ToolRunContext
+from engine.models import DomainTagRule, QueryHistory, SchemaSearchDoc, SchemaTable
+from engine.environment.schema_catalog_sync import ensure_catalog
+
+
+def sync_schema(db_session, datasource_id: str):
+    result = ensure_catalog(db_session, datasource_id)
+    db_session.commit()
+    return result
 
 
 def _ensure_default_rules(db_session, datasource_id: str) -> None:
@@ -55,6 +79,289 @@ def test_db_observe_tables_mode_includes_connected_tables(db_session, test_datas
     assert orders["primary_key"] == ["id"]
 
 
+def test_db_observe_catalog_context_is_per_call_and_immutable(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
+    tables = list(test_datasource.tables)
+
+    first = _build_observation_context(db_session, test_datasource.id, tables)
+    second = _build_observation_context(db_session, test_datasource.id, tables)
+
+    assert first is not second
+    assert first.table_names == second.table_names
+    with pytest.raises(TypeError):
+        first.table_names["unexpected"] = "other"  # type: ignore[index]
+
+
+def test_db_observe_large_catalog_does_not_load_column_graph(
+    db_session,
+    test_datasource,
+) -> None:
+    sync_schema(db_session, test_datasource.id)
+    datasource_id = str(test_datasource.id)
+    existing = (
+        db_session.query(SchemaTable)
+        .filter(SchemaTable.data_source_id == datasource_id)
+        .count()
+    )
+    for index in range(max(0, 31 - existing)):
+        db_session.add(
+            SchemaTable(
+                data_source_id=datasource_id,
+                table_schema="main",
+                table_name=f"large_catalog_{index:02d}",
+                table_type="table",
+            )
+        )
+    db_session.commit()
+    statements: list[str] = []
+
+    def capture_select(_connection, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    bind = db_session.get_bind()
+    event.listen(bind, "before_cursor_execute", capture_select)
+    try:
+        result = db_observe(db_session, datasource_id)
+    finally:
+        event.remove(bind, "before_cursor_execute", capture_select)
+
+    assert result["mode"] == "summary"
+    assert result["table_count"] >= 31
+    assert all("tables" not in schema for schema in result["schemas"])
+    assert not any("schema_columns" in statement.lower() for statement in statements)
+
+
+def test_schema_list_queries_only_requested_cursor_page(
+    db_session,
+    test_datasource,
+) -> None:
+    sync_schema(db_session, test_datasource.id)
+    datasource_id = str(test_datasource.id)
+    statements: list[str] = []
+
+    def capture_select(_connection, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    bind = db_session.get_bind()
+    event.listen(bind, "before_cursor_execute", capture_select)
+    try:
+        result = SchemaListTool().run(
+            SchemaListInput(limit=5),
+            ToolRunContext.for_invocation(
+                request=SimpleNamespace(
+                    datasource_id=datasource_id,
+                    session_id="session_test",
+                ),
+                db=db_session,
+                idempotency_key="schema-list-test",
+            ),
+        )
+    finally:
+        event.remove(bind, "before_cursor_execute", capture_select)
+
+    assert result.returned_count == 5
+    assert result.has_more is True
+    assert result.next_cursor
+    assert len(statements) == 1
+    assert sum("schema_columns" in statement.lower() for statement in statements) == 1
+
+
+def test_schema_list_cursor_preserves_same_named_tables_across_schemas(
+    db_session,
+    test_datasource,
+) -> None:
+    for schema_name in ("analytics", "reporting"):
+        db_session.add(
+            SchemaTable(
+                data_source_id=test_datasource.id,
+                table_schema=schema_name,
+                table_name="shared_fact",
+                table_type="table",
+            )
+        )
+    db_session.commit()
+    context = ToolRunContext.for_invocation(
+        request=SimpleNamespace(
+            datasource_id=test_datasource.id,
+            session_id="session_schema_identity",
+        ),
+        db=db_session,
+        idempotency_key="schema-list-identity",
+    )
+
+    first = SchemaListTool().run(
+        SchemaListInput(limit=1, name_filter="shared_fact"),
+        context,
+    )
+    second = SchemaListTool().run(
+        SchemaListInput(
+            cursor=first.next_cursor,
+            limit=1,
+            name_filter="shared_fact",
+        ),
+        context,
+    )
+
+    assert first.has_more is True
+    assert first.next_cursor is not None
+    assert [first.tables[0].qualified_name, second.tables[0].qualified_name] == [
+        "analytics.shared_fact",
+        "reporting.shared_fact",
+    ]
+
+
+def test_schema_search_deduplicates_by_full_schema_identity(
+    db_session,
+    test_datasource,
+) -> None:
+    for index, schema_name in enumerate(("analytics", "reporting"), start=1):
+        db_session.add(
+            SchemaSearchDoc(
+                datasource_id=test_datasource.id,
+                entity_type="table",
+                entity_id=f"shared-{index}",
+                table_schema=schema_name,
+                table_name="shared_fact",
+                name="shared_fact",
+                search_text="shared_fact",
+            )
+        )
+    db_session.commit()
+    result = SchemaSearchTool().run(
+        SchemaSearchInput(queries=["shared_fact"], limit_per_query=10),
+        ToolRunContext.for_invocation(
+            request=SimpleNamespace(
+                datasource_id=test_datasource.id,
+                session_id="session_search_identity",
+            ),
+            db=db_session,
+            idempotency_key="schema-search-identity",
+        ),
+    )
+
+    identities = {
+        (item["schema_name"], item["table_name"])
+        for item in result.candidates
+        if item.get("table_name") == "shared_fact"
+    }
+    assert identities == {
+        ("analytics", "shared_fact"),
+        ("reporting", "shared_fact"),
+    }
+
+
+def test_catalog_refresh_leaves_commit_to_tool_runtime(
+    db_session,
+    test_datasource,
+) -> None:
+    original_sync_at = test_datasource.last_sync_at
+    result = CatalogRefreshTool().run(
+        EmptyInput(),
+        ToolRunContext.for_invocation(
+            request=SimpleNamespace(
+                datasource_id=test_datasource.id,
+                session_id="session_catalog_refresh",
+            ),
+            db=db_session,
+            idempotency_key="catalog-refresh",
+        ),
+    )
+
+    assert result.status == "ready"
+    assert result.table_count > 0
+    assert result.refreshed_at
+    db_session.rollback()
+    db_session.expire_all()
+    assert db_session.get(type(test_datasource), test_datasource.id).last_sync_at == original_sync_at
+
+
+def test_chart_intent_uses_verified_result_columns() -> None:
+    suggestion = _resolve_chart_suggestion(
+        ChartCreateInput(
+            result_artifact_id="result-1",
+            intent="Compare revenue by region",
+            chart_type="bar",
+            x="region",
+            y="revenue",
+        ),
+        columns=["region", "revenue"],
+        rows=[
+            {"region": "East", "revenue": 10},
+            {"region": "West", "revenue": 20},
+        ],
+    )
+
+    assert suggestion["chartable"] is True
+    assert suggestion["type"] == "bar"
+    assert suggestion["aggregation"] == "sum"
+    assert suggestion["x"] == "region"
+    assert suggestion["y"] == "revenue"
+
+
+def test_chart_intent_rejects_unverified_result_columns() -> None:
+    with pytest.raises(ToolInputError, match="not present"):
+        _resolve_chart_suggestion(
+            ChartCreateInput(
+                result_artifact_id="result-1",
+                x="region",
+                y="invented_metric",
+            ),
+            columns=["region", "revenue"],
+            rows=[{"region": "East", "revenue": 10}],
+        )
+
+
+def test_chart_auto_type_uses_values_instead_of_column_name_tokens() -> None:
+    assert _infer_chart_type(
+        "bucket",
+        [{"bucket": "2026-07-01"}, {"bucket": "2026-07-02"}],
+    ) == "line"
+    assert _infer_chart_type(
+        "month_name_but_categorical",
+        [{"month_name_but_categorical": "enterprise"}],
+    ) == "bar"
+    assert _infer_chart_type("axis", [{"axis": 1}, {"axis": 2}]) == "scatter"
+
+
+def test_result_profile_reports_quality_distribution_and_numeric_summary() -> None:
+    profiles = _profile_rows(
+        [
+            {"region": "East", "revenue": 10},
+            {"region": "East", "revenue": 20},
+            {"region": None, "revenue": 30},
+        ],
+        ["region", "revenue"],
+        top_k=2,
+    )
+
+    assert profiles[0] == {
+        "column": "region",
+        "kind": "string",
+        "sample_count": 3,
+        "non_null_count": 2,
+        "null_count": 1,
+        "distinct_count": 1,
+        "top_values": [{"value": "East", "count": 2, "share": 1.0}],
+    }
+    assert profiles[1]["kind"] == "number"
+    assert profiles[1]["numeric"] == {
+        "min": 10.0,
+        "max": 30.0,
+        "mean": 20.0,
+        "median": 20.0,
+    }
+
+
+def test_result_profile_contract_rejects_duplicate_columns() -> None:
+    with pytest.raises(ValueError, match="must not contain duplicates"):
+        ResultProfileInput(
+            result_artifact_id="result-1",
+            columns=["revenue", "revenue"],
+        )
+
+
 def test_db_search_fallback_keyword_matches_table_and_column_names(db_session, test_datasource) -> None:
     sync_schema(db_session, test_datasource.id)
     result = db_search(db_session, test_datasource.id, "users", 5)
@@ -69,6 +376,32 @@ def test_db_search_fallback_keyword_returns_empty_for_no_match(db_session, test_
     result = db_search(db_session, test_datasource.id, "xyznonexistent12345", 5)
     assert result["total_matches"] == 0
     assert result["results"] == []
+
+
+@pytest.mark.parametrize(
+    ("query", "limit"),
+    [
+        ("", 5),
+        (" " * 10, 5),
+        ("valid", 0),
+        ("valid", 51),
+        ("x" * 513, 5),
+    ],
+)
+def test_db_search_rejects_unbounded_input(
+    db_session,
+    test_datasource,
+    query: str,
+    limit: int,
+) -> None:
+    with pytest.raises(ToolInputError):
+        db_search(db_session, test_datasource.id, query, limit)
+
+
+def test_db_search_caps_model_generated_tokens() -> None:
+    query = " ".join(f"token{index}" for index in range(MAX_SEARCH_TOKENS + 10))
+
+    assert len(_tokenize_search_query(query)) == MAX_SEARCH_TOKENS
 
 
 def test_db_search_fallback_uses_schema_doc_ai_annotations(db_session, test_datasource) -> None:
@@ -146,84 +479,29 @@ def test_db_search_returns_trace_fields_for_schema_discovery(db_session, test_da
 
 def test_db_inspect_reads_live_sqlite_table_structure(db_session, test_datasource) -> None:
     sync_schema(db_session, test_datasource.id)
-    result = db_inspect(db_session, test_datasource.id, "orders")
-    assert result["object_type"] == "table"
-    assert result["name"] == "orders"
-    assert any(col["name"] == "user_id" and col["foreign_key"]["table"] == "users" for col in result["columns"])
-    assert any(fk["column"] == "user_id" for fk in result["foreign_keys_out"])
-    assert result["indexes"]
+    result = db_inspect(db_session, test_datasource.id, ["orders"])[0]
+    assert result.object_type == "table"
+    assert result.name == "orders"
+    assert any(
+        column.name == "user_id"
+        and column.foreign_key
+        and column.foreign_key.table == "users"
+        for column in result.columns
+    )
+    assert any(foreign_key.column == "user_id" for foreign_key in result.foreign_keys_out)
 
 
 def test_db_inspect_reads_live_sqlite_column(db_session, test_datasource) -> None:
     sync_schema(db_session, test_datasource.id)
-    result = db_inspect(db_session, test_datasource.id, "orders.user_id")
-    assert result == {
-        "object_type": "column", "table": "orders", "name": "user_id",
-        "type": "INTEGER", "nullable": False, "default": None,
-        "primary_key": False, "foreign_key": {"table": "users", "column": "id"}, "comment": "",
-    }
-
-
-def test_mysql_table_exists_uses_cursor_fetchone_after_execute() -> None:
-    from engine.tools.db_tools import _mysql_table_exists
-
-    executed_params: list[tuple] = []
-
-    class FakeCursor:
-        def execute(self, sql: str, params: tuple[str, str]) -> int:
-            executed_params.append((sql, params))
-            return 1
-        def fetchone(self) -> tuple[int]:
-            return (1,)
-
-    class FakeConnection:
-        def cursor(self): return FakeCursor()
-        @property
-        def cursor_obj(self): return self._c or FakeCursor()
-
-    conn = FakeConnection()
-    conn._c = FakeCursor()
-    assert _mysql_table_exists(conn, "app_db", "users") is True
-    assert len(executed_params) == 1
-    assert executed_params[0][1] == ("app_db", "users")
-
-
-def test_mysql_table_payload_accepts_dict_cursor_rows(db_session) -> None:
-    from engine.tools.db_tools import _mysql_table_payload
-
-    class FakeCursor:
-        def __init__(self) -> None:
-            self.rows: list[dict[str, object]] = []
-        def execute(self, sql: str, _params=None) -> int:
-            if "information_schema.COLUMNS" in sql:
-                self.rows = [
-                    {"COLUMN_NAME": "id", "DATA_TYPE": "bigint", "IS_NULLABLE": "NO", "COLUMN_DEFAULT": None, "COLUMN_COMMENT": "primary id", "is_pk": 1, "REFERENCED_TABLE_NAME": None, "REFERENCED_COLUMN_NAME": None},
-                    {"COLUMN_NAME": "tool_name", "DATA_TYPE": "varchar", "IS_NULLABLE": "NO", "COLUMN_DEFAULT": None, "COLUMN_COMMENT": "tool display name", "is_pk": 0, "REFERENCED_TABLE_NAME": None, "REFERENCED_COLUMN_NAME": None},
-                ]
-            elif "REFERENCED_TABLE_NAME = %s" in sql:
-                self.rows = []
-            elif sql.startswith("SHOW INDEX"):
-                self.rows = [{"Key_name": "PRIMARY", "Non_unique": 0, "Column_name": "id"}]
-            elif "TABLE_ROWS" in sql:
-                self.rows = [{"TABLE_ROWS": 19}]
-            elif "TABLE_COMMENT" in sql:
-                self.rows = [{"TABLE_COMMENT": "AI tools registry"}]
-            else:
-                self.rows = []
-            return len(self.rows)
-        def fetchall(self): return self.rows
-        def fetchone(self): return self.rows[0] if self.rows else None
-
-    class FakeConnection:
-        def cursor(self) -> FakeCursor: return FakeCursor()
-
-    payload = _mysql_table_payload(db_session, FakeConnection(), "ds-1", "app_db", "ai_tools")
-    assert payload["name"] == "ai_tools"
-    assert payload["row_estimate"] == 19
-    assert payload["comment"] == "AI tools registry"
-    assert payload["primary_key"] == ["id"]
-    assert payload["columns"][1]["name"] == "tool_name"
-    assert payload["indexes"] == [{"name": "PRIMARY", "columns": ["id"], "unique": True}]
+    result = db_inspect(db_session, test_datasource.id, ["orders.user_id"])[0]
+    assert result.object_type == "column"
+    assert result.table == "orders"
+    assert result.name == "user_id"
+    assert result.type == "INTEGER"
+    assert result.primary_key is False
+    assert result.foreign_key is not None
+    assert result.foreign_key.table == "users"
+    assert result.foreign_key.column == "id"
 
 
 def test_db_preview_limits_columns_rows_and_masks_sensitive_values(db_session, test_datasource) -> None:

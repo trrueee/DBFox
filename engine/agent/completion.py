@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from engine.agent.context import ContextSnapshot
 from engine.agent.evidence import citation_references
 from engine.agent.turn import ModelTurnResult
+from engine.tools.runtime.semantics import ToolSemanticCapability
 
 
 class CompletionKind(StrEnum):
@@ -20,19 +21,13 @@ class CompletionKind(StrEnum):
     FAIL = "fail"
 
 
-class TaskKind(StrEnum):
-    DIRECT = "direct"
-    SCHEMA = "schema"
-    LOOKUP = "lookup"
-    ANALYTICAL = "analytical"
-
-
 class CompletionDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     kind: CompletionKind
     reason: str
     missing: list[str] = Field(default_factory=list)
+    evidence_artifact_ids: list[str] = Field(default_factory=list)
 
 
 class CompletionPolicy:
@@ -43,7 +38,6 @@ class CompletionPolicy:
         *,
         context: ContextSnapshot,
         model_result: ModelTurnResult,
-        task_kind: TaskKind,
         turn_count: int,
         max_turns: int,
     ) -> CompletionDecision:
@@ -55,9 +49,9 @@ class CompletionPolicy:
 
         successes = [item for item in context.observations if item.status == "succeeded"]
         failures = [item for item in context.observations if item.status == "failed"]
-        database_task = task_kind in {TaskKind.LOOKUP, TaskKind.ANALYTICAL}
         result_observations = [
-            item for item in successes if item.tool_name == "sql.execute_readonly"
+            item for item in successes
+            if ToolSemanticCapability.QUERY_RESULT.value in item.capabilities
         ]
         result_artifact_ids = {
             artifact_id
@@ -67,65 +61,112 @@ class CompletionPolicy:
         cited_artifact_ids = {
             artifact_id for artifact_id, _, _ in citation_references(model_result.text)
         }
-        ready_reviews = [
-            item for item in successes
-            if item.tool_name == "analysis.review" and item.facts.get("ready") is True
-        ]
 
-        if turn_count >= max_turns:
-            if result_observations or successes or task_kind is TaskKind.DIRECT:
-                return CompletionDecision(
-                    kind=CompletionKind.PARTIAL,
-                    reason="The run reached its turn budget with usable verified work.",
-                )
-            return CompletionDecision(
-                kind=CompletionKind.FAIL,
-                reason="The run reached its turn budget without verified database evidence.",
-                missing=["verified_result"],
-            )
+        turn_budget_reached = turn_count >= max_turns
 
-        if failures and not model_result.text.strip():
+        if failures and not model_result.text.strip() and not turn_budget_reached:
             return CompletionDecision(
                 kind=CompletionKind.REPAIR,
                 reason="The latest failed tool call needs a model-visible repair turn.",
             )
 
-        if database_task and not result_observations:
+        if not model_result.text.strip():
             return CompletionDecision(
-                kind=CompletionKind.CONTINUE,
-                reason="A database answer requires a successful readonly result observation.",
-                missing=["verified_result", "evidence"],
+                kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
+                reason=(
+                    "The run reached its turn budget without an answer candidate."
+                    if turn_budget_reached
+                    else "The model has not produced an answer candidate."
+                ),
+                missing=["answer"],
+            )
+        if model_result.message_phase != "final_answer":
+            return CompletionDecision(
+                kind=(
+                    CompletionKind.FAIL
+                    if turn_budget_reached
+                    else CompletionKind.CONTINUE
+                ),
+                reason=(
+                    "The model produced commentary but did not emit a final_answer "
+                    "message for the active request."
+                ),
+                missing=["final_answer_phase"],
             )
 
-        if task_kind is TaskKind.SCHEMA and not successes:
+        observed_artifact_ids = {
+            artifact_id
+            for observation in successes
+            for artifact_id in observation.artifact_ids
+        }
+        if cited_artifact_ids - observed_artifact_ids:
             return CompletionDecision(
-                kind=CompletionKind.CONTINUE,
-                reason="A schema answer requires a successful metadata observation.",
-                missing=["verified_schema_observation"],
+                kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
+                reason="The answer cites an Artifact that is not present in the durable observations.",
+                missing=["valid_inline_evidence"],
             )
 
-        if task_kind is TaskKind.ANALYTICAL and not ready_reviews:
+        supported_citations = cited_artifact_ids & result_artifact_ids
+        if result_observations and not supported_citations and len(result_artifact_ids) != 1:
             return CompletionDecision(
-                kind=CompletionKind.CONTINUE,
-                reason="The analytical goal needs an evidence-linked coverage review before synthesis.",
-                missing=["analysis_coverage_review"],
-            )
-
-        if database_task and not (cited_artifact_ids & result_artifact_ids):
-            return CompletionDecision(
-                kind=CompletionKind.CONTINUE,
-                reason="Database claims must cite an observed result Artifact inline.",
+                kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
+                reason="An answer based on query results must cite an observed result Artifact inline.",
                 missing=["inline_evidence"],
             )
 
-        if not model_result.text.strip():
+        if turn_budget_reached:
             return CompletionDecision(
-                kind=CompletionKind.CONTINUE,
-                reason="The model has not produced an answer candidate.",
-                missing=["answer"],
+                kind=CompletionKind.PARTIAL,
+                reason="The run reached its turn budget with an answer candidate.",
+                evidence_artifact_ids=sorted(
+                    supported_citations or (
+                        result_artifact_ids if len(result_artifact_ids) == 1 else set()
+                    )
+                ),
             )
 
         return CompletionDecision(
             kind=CompletionKind.SYNTHESIZE,
             reason="The answer candidate is supported by the available durable observations.",
+            evidence_artifact_ids=sorted(
+                supported_citations or (
+                    result_artifact_ids if len(result_artifact_ids) == 1 else set()
+                )
+            ),
+        )
+
+
+class CompletionGate:
+    """Owns terminal eligibility independently from orchestration."""
+
+    def __init__(self, policy: CompletionPolicy | None = None) -> None:
+        self.policy = policy or CompletionPolicy()
+
+    def evaluate(
+        self,
+        *,
+        context: ContextSnapshot,
+        model_result: ModelTurnResult,
+        turn_count: int,
+        max_turns: int,
+    ) -> CompletionDecision:
+        return self.policy.evaluate(
+            context=context,
+            model_result=model_result,
+            turn_count=turn_count,
+            max_turns=max_turns,
+        )
+
+    @staticmethod
+    def has_usable_work(
+        *,
+        context: ContextSnapshot,
+        model_result: ModelTurnResult,
+    ) -> bool:
+        successes = [item for item in context.observations if item.status == "succeeded"]
+        return (
+            model_result.message_phase == "final_answer"
+            and bool(model_result.text.strip())
+        ) or any(
+            bool(item.artifact_ids) for item in successes
         )

@@ -71,8 +71,8 @@ def test_next_run_reads_durable_history_and_selected_artifact(db_session, test_d
     assert [message["content"] for message in snapshot.messages] == [
         "统计订单数量",
         "共有 42 条订单。",
-        "按地区拆分刚才结果",
     ]
+    assert snapshot.current_request == "按地区拆分刚才结果"
     assert snapshot.selected_artifacts[0].id == artifact.id
     assert snapshot.selected_artifacts[0].descriptor == {
         "sourceSqlArtifactId": "artifact_sql_42",
@@ -189,7 +189,8 @@ def test_context_includes_consumed_steer_without_leaking_queued_input(
 
     snapshot = ContextAssembler(db_session).build(active.run_id)
 
-    assert [message["content"] for message in snapshot.messages] == [
-        "分析所有地区的退款率",
-        "补充：只看华东区",
-    ]
+    assert snapshot.messages == []
+    assert snapshot.current_request == (
+        "分析所有地区的退款率\n\nIn-run user responses:\n补充：只看华东区"
+    )
+    assert "下一项任务：分析客单价" not in snapshot.current_request

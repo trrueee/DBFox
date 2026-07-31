@@ -17,6 +17,8 @@ import threading
 import traceback
 from pathlib import Path
 
+from engine.json_codec import dumps
+
 logger = logging.getLogger("dbfox.db")
 
 from sqlalchemy import Engine, create_engine
@@ -163,7 +165,6 @@ if os.environ.get("AGENT_DB_WRITE_TRACE", "").lower() == "true":
         stmt_type = statement.strip().upper().split()[0] if statement.strip() else "?"
         if stmt_type in ("INSERT", "UPDATE", "DELETE"):
             _open_trace()
-            import json as _json
             # Extract table name
             table = "?"
             for word in statement.strip().upper().split():
@@ -181,7 +182,7 @@ if os.environ.get("AGENT_DB_WRITE_TRACE", "").lower() == "true":
                 "stack": stacks[-6:],
             }
             with _trace_lock:
-                _trace_file.write(_json.dumps(rec, default=str) + "\n")
+                _trace_file.write(dumps(rec) + "\n")
                 _trace_file.flush()
 
     @_ev3.listens_for(engine, "handle_error")
@@ -189,7 +190,6 @@ if os.environ.get("AGENT_DB_WRITE_TRACE", "").lower() == "true":
         exc = context.original_exception
         if exc and "database is locked" in str(exc).lower():
             _open_trace()
-            import json as _json
             rec = {
                 "type": "ERROR", "table": "?",
                 "thread": threading.current_thread().name,
@@ -197,7 +197,7 @@ if os.environ.get("AGENT_DB_WRITE_TRACE", "").lower() == "true":
             }
             rec.update(_trace_error_diagnostic(exc))
             with _trace_lock:
-                _trace_file.write(_json.dumps(rec, default=str) + "\n")
+                _trace_file.write(dumps(rec) + "\n")
                 _trace_file.flush()
 
 # 创建本地数据库会话工厂 (Session Factory)

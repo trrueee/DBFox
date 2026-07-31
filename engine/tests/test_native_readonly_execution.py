@@ -198,7 +198,7 @@ def test_public_sqlite_executor_forces_read_only_connection(
     monkeypatch,
 ) -> None:
     import engine.sql.executor as executor
-    from engine.schema_sync import sync_schema
+    from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
 
     test_datasource.is_read_only = False
     db_session.commit()

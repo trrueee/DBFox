@@ -4,10 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import sha256
-import json
 from typing import Any, Mapping
 
 from engine.errors import DataSourceConnectionError
+from engine.json_codec import canonical_dumps
 
 
 class ConnectionPurpose(StrEnum):
@@ -290,13 +290,8 @@ class ConnectionProfile:
             "ssl_verify_identity": self.ssl_verify_identity,
             "is_managed": self.is_managed,
         }
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        canonical = canonical_dumps(payload)
         return f"conn_{sha256(canonical.encode('utf-8')).hexdigest()}"
-
-    @property
-    def fingerprint(self) -> str:
-        """Backward-compatible name for the secret-free profile fingerprint."""
-        return self.profile_fingerprint
 
     @property
     def managed_resource_key(self) -> ManagedDatasourceResourceKey | None:

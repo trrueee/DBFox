@@ -18,11 +18,16 @@ from engine.security.audit import (
     AUDIT_RETENTION_DAYS,
     SecurityAuditService,
 )
+from engine.schemas.api_responses import (
+    DiagnosticLogsClearedResponse,
+    DiagnosticLogsResponse,
+    SecurityAuditClearedResponse,
+)
 
 router = APIRouter()
 
 
-@router.get("/diagnostics/logs")
+@router.get("/diagnostics/logs", response_model=DiagnosticLogsResponse)
 def get_diagnostic_logs(
     max_lines: int = Query(DEFAULT_MAX_LINES, ge=1, le=1000),
     db: Session = Depends(get_db),
@@ -40,7 +45,10 @@ def get_diagnostic_logs(
     return result
 
 
-@router.post("/diagnostics/logs/clear")
+@router.post(
+    "/diagnostics/logs/clear",
+    response_model=DiagnosticLogsClearedResponse,
+)
 def clear_diagnostic_logs() -> dict[str, object]:
     cleared: list[str] = []
     for name, path in diagnostic_log_paths():
@@ -54,7 +62,10 @@ def clear_diagnostic_logs() -> dict[str, object]:
     return {"cleared": len(cleared) > 0, "sources_cleared": cleared}
 
 
-@router.post("/diagnostics/security-audit/clear")
+@router.post(
+    "/diagnostics/security-audit/clear",
+    response_model=SecurityAuditClearedResponse,
+)
 def clear_security_audit(
     confirm_text: str = Body(embed=True),
     db: Session = Depends(get_db),

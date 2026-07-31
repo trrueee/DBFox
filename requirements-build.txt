@@ -1,5 +1,4 @@
-# Build-only dependencies for the frozen desktop sidecar.
-# Runtime dependencies remain in requirements.txt; install this file in
-# .build_venv before invoking build_sidecar.py.
+# Source constraints for refreshing requirements-build.lock.
+# Production builds install the hashed lock file, not this floating input.
 -r requirements.txt
 pyinstaller>=6.0.0,<7.0.0

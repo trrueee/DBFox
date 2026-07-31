@@ -25,6 +25,7 @@ from engine.schemas.backup import (
     BackupRestoreRequest,
     RestoreOperationResponse,
 )
+from engine.schemas.api_responses import BackupPrecheckResponse
 
 # 创建一个 API 路由组 (APIRouter)
 # 在 FastAPI 中，我们将不同业务模块的接口拆分到各个路由文件中，然后使用 APIRouter 独立配置，最后统一挂载到主应用上。
@@ -42,7 +43,7 @@ def _backup_to_dict(record: BackupRecord) -> dict[str, Any]:
 # =========================================================================
 # 接口 1: 获取某个项目下的所有备份记录列表 (GET)
 # =========================================================================
-@router.get("/projects/{project_id}/backups")
+@router.get("/projects/{project_id}/backups", response_model=list[BackupResponse])
 def api_list_project_backups(
     project_id: str,
     datasource_id: str | None = Query(default=None),
@@ -82,7 +83,7 @@ def api_list_project_backups(
 # =========================================================================
 # 接口 2: 创建新的数据库备份 (POST)
 # =========================================================================
-@router.post("/backups")
+@router.post("/backups", response_model=BackupResponse)
 def api_create_backup(req: BackupCreateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     """
     创建数据库备份
@@ -109,7 +110,7 @@ def api_create_backup(req: BackupCreateRequest, db: Session = Depends(get_db)) -
 # =========================================================================
 # 接口 3: 根据备份 ID 获取单条备份记录详情 (GET)
 # =========================================================================
-@router.get("/backups/{backup_id}")
+@router.get("/backups/{backup_id}", response_model=BackupResponse)
 def api_get_backup(backup_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     """
     查询单条备份详情
@@ -126,7 +127,10 @@ def api_get_backup(backup_id: str, db: Session = Depends(get_db)) -> dict[str, A
 # =========================================================================
 # 接口 4: 执行备份恢复前的安全预检 (POST)
 # =========================================================================
-@router.post("/backups/{backup_id}/restore-precheck")
+@router.post(
+    "/backups/{backup_id}/restore-precheck",
+    response_model=BackupPrecheckResponse,
+)
 def api_restore_precheck(backup_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     """
     数据库恢复预检

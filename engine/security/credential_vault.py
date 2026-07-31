@@ -12,7 +12,6 @@ from engine.errors import DBFoxError
 
 class CredentialKind(StrEnum):
     LLM_API_KEY = "llm_api_key"
-    LANGSMITH_API_KEY = "langsmith_api_key"
     DATASOURCE_PASSWORD = "datasource_password"
     SSH_PASSWORD = "ssh_password"
     SSH_KEY_PASSPHRASE = "ssh_key_passphrase"

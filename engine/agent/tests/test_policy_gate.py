@@ -1,217 +1,150 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
-
 from engine.policy.gate import PolicyGate
-from engine.tools.runtime import BaseTool, ToolExecutionSpec, ToolPolicy, ToolRegistry
+from engine.tools.runtime import (
+    BaseTool,
+    ToolExecutionSpec,
+    ToolInputModel,
+    ToolOutputModel,
+    ToolPolicy,
+    ToolPresentation,
+    ToolRegistry,
+)
 
 
-class EmptyInput(BaseModel):
-    pass
+class PolicyInput(ToolInputModel):
+    value: int | None = None
+    validation_artifact_id: str | None = None
 
 
-class EmptyOutput(BaseModel):
-    ok: bool = True
+class PolicyOutput(ToolOutputModel):
+    ok: bool
 
 
-class PolicyTestTool(BaseTool[EmptyInput, EmptyOutput]):
-    name = "dummy.tool"
-    group = "dummy"
-    description = "dummy description"
-    input_model = EmptyInput
-    output_model = EmptyOutput
-
-    def __init__(self, name: str, policy: ToolPolicy) -> None:
-        self.name = name
-        self.group = name.split(".", 1)[0]
-        self.description = f"Test tool: {name}"
-        self.policy = policy
-        if policy.side_effect == "read":
-            self.execution = ToolExecutionSpec(capabilities=("database_read",))
-        elif policy.side_effect in {"write", "destructive"}:
-            self.execution = ToolExecutionSpec(
-                backend="isolated_process",
-                capabilities=("database_write",),
-            )
-        else:
-            self.execution = ToolExecutionSpec()
-
-    def run(self, tool_input, context):
-        return EmptyOutput()
-
-
-def _make_tool(
-    name: str,
-    risk_level: str = "safe",
-    side_effect: str = "none",
-    requires_approval: bool = False,
-    requires_validated_sql: bool = False,
-):
-    return PolicyTestTool(
-        name,
-        ToolPolicy(
-            risk_level=risk_level,
-            side_effect=side_effect,
-            requires_approval=requires_approval,
-            requires_validated_sql=requires_validated_sql,
-        ),
+class PolicyTestTool(BaseTool[PolicyInput, PolicyOutput]):
+    name = "policy_test"
+    group = "test"
+    description = "Exercise the generic policy boundary."
+    input_model = PolicyInput
+    output_model = PolicyOutput
+    presentation = ToolPresentation(
+        title="Policy test",
+        category="manage",
+        visibility="developer",
     )
 
+    def __init__(
+        self,
+        *,
+        name: str = "policy_test",
+        policy: ToolPolicy | None = None,
+        execution: ToolExecutionSpec | None = None,
+    ) -> None:
+        self.name = name
+        self.policy = policy or ToolPolicy()
+        self.execution = execution or ToolExecutionSpec()
 
-class TestPolicyGateBasics:
-    def test_unknown_tool_blocked(self):
-        registry = ToolRegistry()
-        gate = PolicyGate(registry)
-        decision = gate.check({}, "nonexistent.tool", {})
-        assert decision.status == "blocked"
-        assert "Unknown tool" in decision.reason
+    def run(self, tool_input, context):
+        return PolicyOutput(ok=True)
 
-    def test_safe_tool_allowed(self):
-        registry = ToolRegistry()
-        registry.register(_make_tool("schema.describe_table"))
-        gate = PolicyGate(registry)
-        decision = gate.check({}, "schema.describe_table", {})
-        assert decision.status == "allowed"
 
-    def test_write_tool_blocked(self):
-        registry = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
-        registry.register(_make_tool("dangerous.write", side_effect="write"))
-        gate = PolicyGate(registry)
-        decision = gate.check({}, "dangerous.write", {})
-        assert decision.status == "blocked"
+def _state(**overrides):
+    return {
+        "session_id": "session-1",
+        "run_id": "run-1",
+        "datasource_id": "datasource-1",
+        "datasource_generation": 1,
+        "environment_profile": {"env": "dev"},
+        "allowed_tool_groups": ["test"],
+        **overrides,
+    }
 
-    def test_destructive_tool_blocked(self):
-        registry = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
-        registry.register(_make_tool("dangerous.drop", side_effect="destructive"))
-        gate = PolicyGate(registry)
-        decision = gate.check({}, "dangerous.drop", {})
-        assert decision.status == "blocked"
 
-    def test_approval_required_tool(self):
-        registry = ToolRegistry()
-        registry.register(_make_tool("risky.tool", requires_approval=True, risk_level="warning"))
-        gate = PolicyGate(registry)
-        decision = gate.check({}, "risky.tool", {"arg": 1})
-        assert decision.status == "approval_required"
-        assert decision.risk_level == "warning"
+def test_unknown_function_is_blocked(db_session):
+    decision = PolicyGate(ToolRegistry(), db_session).check(
+        _state(),
+        "missing_function",
+        {},
+    )
+    assert decision.status == "blocked"
 
-    def test_escalate_tool_group_bypasses_group_check(self):
-        from engine.tools.dbfox_tools import register_dbfox_tools
 
-        registry = register_dbfox_tools()
-        gate = PolicyGate(registry)
-        state = {
-            "allowed_tool_groups": [
-                "environment",
-                "schema",
-                "db",
-                "semantic",
-                "result",
-                "chart",
-                "answer",
-            ]
-        }
+def test_safe_metadata_tool_is_allowed(db_session):
+    registry = ToolRegistry().register(PolicyTestTool())
+    decision = PolicyGate(registry, db_session).check(
+        _state(),
+        "policy_test",
+        {"value": 1},
+    )
+    assert decision.status == "allowed"
+    assert decision.safe_args == {"value": 1}
 
-        decision = gate.check(
-            state,
-            "escalate.tool_group",
-            {"group": "execution", "reason": "Need to execute validated SQL."},
+
+def test_input_contract_is_enforced_before_policy_rules(db_session):
+    registry = ToolRegistry().register(PolicyTestTool())
+    decision = PolicyGate(registry, db_session).check(
+        _state(),
+        "policy_test",
+        {"unexpected": True},
+    )
+    assert decision.status == "blocked"
+    assert "input contract" in decision.reason
+
+
+def test_disallowed_group_is_blocked(db_session):
+    registry = ToolRegistry().register(PolicyTestTool())
+    decision = PolicyGate(registry, db_session).check(
+        _state(allowed_tool_groups=["catalog"]),
+        "policy_test",
+        {},
+    )
+    assert decision.status == "blocked"
+
+
+def test_declared_approval_requirement_is_preserved(db_session):
+    registry = ToolRegistry().register(
+        PolicyTestTool(policy=ToolPolicy(requires_approval=True))
+    )
+    decision = PolicyGate(registry, db_session).check(
+        _state(),
+        "policy_test",
+        {},
+    )
+    assert decision.status == "approval_required"
+
+
+def test_autonomous_database_read_requires_approval_on_unknown_environment(
+    db_session,
+):
+    registry = ToolRegistry().register(
+        PolicyTestTool(
+            execution=ToolExecutionSpec(capabilities=("database_read",))
         )
+    )
+    decision = PolicyGate(registry, db_session).check(
+        _state(environment_profile={"env": "unknown"}),
+        "policy_test",
+        {},
+        "agent_autonomous_read",
+    )
+    assert decision.status == "approval_required"
 
-        assert decision.status == "allowed"
 
-
-class TestSqlExecutionPolicy:
-    def _registry_with_execute_tool(self):
-        registry = ToolRegistry()
-        registry.register(
-            _make_tool(
-                "sql.execute_readonly",
-                side_effect="read",
-                requires_validated_sql=True,
-                risk_level="warning",
-            )
+def test_sql_execution_requires_an_exact_persisted_validation_artifact(db_session):
+    registry = ToolRegistry().register(
+        PolicyTestTool(
+            name="sql_execute_readonly",
+            policy=ToolPolicy(requires_validated_sql=True),
+            execution=ToolExecutionSpec(
+                capabilities=("metadata_read", "database_read")
+            ),
         )
-        return registry
-
-    def test_execute_disabled_in_state(self):
-        gate = PolicyGate(self._registry_with_execute_tool())
-        state = {"execute": False}
-        decision = gate.check(state, "sql.execute_readonly", {})
-        assert decision.status == "blocked"
-        assert "not allowed" in decision.reason.lower()
-
-    def test_execute_without_validation_blocked(self):
-        gate = PolicyGate(self._registry_with_execute_tool())
-        state = {"execute": True}
-        decision = gate.check(state, "sql.execute_readonly", {})
-        assert decision.status == "blocked"
-
-    def test_execute_with_can_execute_false_blocked(self):
-        gate = PolicyGate(self._registry_with_execute_tool())
-        state = {
-            "execute": True,
-            "safety": {
-                "can_execute": False,
-                "safe_sql": "SELECT 1",
-                "original_sql": "SELECT 1",
-                "blocked_reasons": [],
-            },
-        }
-        decision = gate.check(state, "sql.execute_readonly", {})
-        assert decision.status == "blocked"
-
-    def test_execute_with_missing_safe_sql_blocked(self):
-        gate = PolicyGate(self._registry_with_execute_tool())
-        state = {
-            "execute": True,
-            "safety": {
-                "can_execute": True,
-                "original_sql": "SELECT 1",
-                "blocked_reasons": [],
-            },
-        }
-        decision = gate.check(state, "sql.execute_readonly", {})
-        assert decision.status == "blocked"
-
-    def test_execute_with_validated_sql_allowed(self):
-        gate = PolicyGate(self._registry_with_execute_tool())
-        state = {
-            "execute": True,
-            "safety": {
-                "can_execute": True,
-                "safe_sql": "SELECT 1",
-                "original_sql": "SELECT 1",
-            },
-        }
-        decision = gate.check(state, "sql.execute_readonly", {})
-        assert decision.status == "allowed"
-
-    def test_execute_with_requires_confirmation(self):
-        gate = PolicyGate(self._registry_with_execute_tool())
-        state = {
-            "execute": True,
-            "safety": {
-                "can_execute": True,
-                "safe_sql": "SELECT * FROM users",
-                "original_sql": "SELECT * FROM users",
-                "requires_confirmation": True,
-            },
-            "sql": "SELECT * FROM users",
-        }
-        decision = gate.check(state, "sql.execute_readonly", {})
-        assert decision.status == "approval_required"
-
-    def test_model_supplied_sql_is_ignored_not_blocked(self):
-        gate = PolicyGate(self._registry_with_execute_tool())
-        state = {
-            "execute": True,
-            "safety": {
-                "can_execute": True,
-                "safe_sql": "SELECT 1",
-                "original_sql": "SELECT 1",
-            },
-        }
-        decision = gate.check(state, "sql.execute_readonly", {"sql": "DROP TABLE users"})
-        assert decision.status == "allowed"
-        assert decision.safe_args == {"ignored_model_sql": "DROP TABLE users"}
+    )
+    decision = PolicyGate(registry, db_session).check(
+        _state(),
+        "sql_execute_readonly",
+        {"validation_artifact_id": "artifact_missing"},
+        "agent_autonomous_read",
+    )
+    assert decision.status == "blocked"
+    assert "current Run" in decision.reason

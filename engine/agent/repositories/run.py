@@ -2,21 +2,29 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from engine.agent.events import RuntimeEventProjector, RuntimeEventType
+from engine.agent.events import RuntimeEventType
 from engine.agent.repositories.evidence import EvidenceRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.response import ComposedResponse
 from engine.agent.run import RunStatus, SessionLeaseConflict, TERMINAL_RUN_STATUSES
+from engine.agent.run_item import (
+    ArtifactReference,
+    final_answer_item,
+    assistant_message_item,
+    dump_run_item,
+    evidence_reference,
+    project_run,
+)
 from engine.agent.session import SessionInputStatus, SessionLease
 from engine.agent.turn import ModelTurnResult
+from engine.json_codec import JsonCodecError, canonical_dumps as _json, loads
 from engine.models import (
     AgentMessage,
     AgentRun,
@@ -26,10 +34,6 @@ from engine.models import (
     AgentTurn,
 )
 from engine.security.audit import SecurityAuditService
-
-
-def _json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
 def _utcnow() -> datetime:
@@ -70,9 +74,9 @@ class RunRepository:
         run.updated_at = now
         self.sessions.append_user_command_event(
             session_id=str(run.session_id),
-            event_type=RuntimeEventType.RUN_CANCELLING,
+            event_type=RuntimeEventType.RUN_UPDATED,
             run_id=str(run.id),
-            payload={"run": {"id": str(run.id), "status": run.status, "version": run.version}},
+            payload={"run": project_run(run)},
         )
         SecurityAuditService(self.session).record(
             action="agent.run.cancel",
@@ -107,11 +111,19 @@ class RunRepository:
         if assistant is not None:
             assistant.status = "cancelled"
             assistant.updated_at = now
+            if str(assistant.content or ""):
+                self.sessions.append_event(
+                    lease=lease,
+                    event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
+                    run_id=str(run.id),
+                    turn_id=str(run.current_turn_id) if run.current_turn_id else None,
+                    payload={"item": dump_run_item(final_answer_item(assistant, run=run))},
+                )
         self.sessions.append_event(
             lease=lease,
             event_type=RuntimeEventType.RUN_CANCELLED,
             run_id=str(run.id),
-            payload={"run": {"id": str(run.id), "status": run.status, "version": run.version}},
+            payload={"run": project_run(run)},
         )
         self.session.flush()
 
@@ -139,8 +151,10 @@ class RunRepository:
         if turn.status != "running":
             raise ValueError(f"Turn cannot settle from status {turn.status}")
         turn.draft_text = "" if error_code else result.text
+        turn.message_phase = result.message_phase
         turn.reasoning_summary = result.reasoning_summary
         turn.tool_calls_json = _json([item.model_dump(mode="json") for item in result.tool_calls])
+        turn.response_items_json = _json(result.output_items)
         turn.usage_json = _json(result.usage)
         turn.finish_signal = result.finish_signal
         turn.error_code = error_code
@@ -153,31 +167,55 @@ class RunRepository:
         run.consumed_cost_usd = float(run.consumed_cost_usd or 0.0) + max(0.0, cost_usd)
         if error_code and error_code.startswith("MODEL_PROVIDER_"):
             run.provider_retry_count = int(run.provider_retry_count or 0) + 1
-        if error_code:
-            message = self.session.get(AgentMessage, run.assistant_message_id)
-            if message is not None:
-                message.content = ""
-                message.status = "created"
-                message.updated_at = _utcnow()
+        message = self.session.get(AgentMessage, run.assistant_message_id)
+        discard_answer = bool(error_code)
+        cancelled_answer: dict[str, Any] | None = None
+        if discard_answer and message is not None and message.status == "streaming":
+            message.status = "cancelled"
+            message.updated_at = _utcnow()
+            cancelled_answer = dump_run_item(final_answer_item(message, run=run))
+        commentary_message: dict[str, Any] | None = None
+        if (
+            not error_code
+            and result.tool_calls
+            and message is not None
+            and str(message.content or "").strip()
+        ):
+            message.status = "completed"
+            message.updated_at = _utcnow()
+            commentary_message = dump_run_item(
+                assistant_message_item(
+                    message,
+                    run=run,
+                    turn_id=str(turn.id),
+                    phase="commentary",
+                )
+            )
         run.version = int(run.version or 0) + 1
         run.updated_at = _utcnow()
         self.session.flush()
-        self.sessions.append_event(
-            lease=lease,
-            event_type=RuntimeEventType.TURN_COMPLETED,
-            run_id=str(run.id),
-            turn_id=str(turn.id),
-            payload={
-                "turn": {
-                    "id": str(turn.id),
-                    "sequence": int(turn.sequence),
-                    "status": str(turn.status),
-                    "reasoning_summary": str(turn.reasoning_summary or ""),
-                    "tool_call_count": len(result.tool_calls),
-                    "usage": result.usage,
-                }
-            },
-        )
+        if commentary_message is not None:
+            self.sessions.append_event(
+                lease=lease,
+                event_type=RuntimeEventType.RUN_ITEM_COMPLETED,
+                run_id=str(run.id),
+                turn_id=str(turn.id),
+                payload={"item": commentary_message},
+            )
+            message.content = ""
+            message.status = "created"
+            message.updated_at = _utcnow()
+        if cancelled_answer is not None:
+            self.sessions.append_event(
+                lease=lease,
+                event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
+                run_id=str(run.id),
+                turn_id=str(turn.id),
+                payload={"item": cancelled_answer},
+            )
+            message.content = ""
+            message.status = "created"
+            message.updated_at = _utcnow()
 
     def record_repair(
         self,
@@ -195,19 +233,6 @@ class RunRepository:
         run.repair_attempt_count = int(run.repair_attempt_count or 0) + 1
         run.version = int(run.version or 0) + 1
         run.updated_at = _utcnow()
-        self.sessions.append_event(
-            lease=lease,
-            event_type=RuntimeEventType.ACTIVITY_UPDATED,
-            run_id=run_id,
-            payload={"activity": {
-                "id": f"activity:{run_id}:repair:{run.repair_attempt_count}",
-                "kind": "analysis",
-                "title": "继续完善分析",
-                "summary": reason,
-                "status": "running",
-                "missing": missing,
-            }},
-        )
         self.session.flush()
 
     def recover_interrupted_turns(self, *, lease: SessionLease, run_id: str) -> int:
@@ -233,21 +258,6 @@ class RunRepository:
             turn.reasoning_summary = "上次模型响应未完整结算，已从持久状态重新继续。"
             turn.completed_at = now
             run.provider_retry_count = int(run.provider_retry_count or 0) + 1
-            self.sessions.append_event(
-                lease=lease,
-                event_type=RuntimeEventType.ACTIVITY_UPDATED,
-                run_id=run_id,
-                turn_id=str(turn.id),
-                payload={"activity": {
-                    "id": f"activity:{turn.id}:analysis",
-                    "kind": "recovery",
-                    "title": "已恢复中断的分析",
-                    "summary": "上次模型响应未完整结算，已从持久状态重新继续。",
-                    "status": "failed",
-                    "started_at": turn.created_at.isoformat() if turn.created_at else None,
-                    "completed_at": now.isoformat(),
-                }},
-            )
         message = self.session.get(AgentMessage, run.assistant_message_id)
         if message is not None and message.status == "streaming":
             message.content = ""
@@ -265,6 +275,7 @@ class RunRepository:
         lease: SessionLease,
         run_id: str,
         content: str,
+        phase: str,
     ) -> None:
         begin_agent_write(self.session)
         run = self.session.execute(
@@ -274,8 +285,54 @@ class RunRepository:
         message = self.session.get(AgentMessage, run.assistant_message_id)
         if message is None:
             raise RuntimeError("Run has no assistant message draft")
+        is_new_item = message.status != "streaming"
         message.content = content
         message.status = "streaming"
+        message.updated_at = _utcnow()
+        self.session.flush()
+        self.sessions.append_event(
+            lease=lease,
+            event_type=(
+                RuntimeEventType.RUN_ITEM_STARTED
+                if is_new_item
+                else RuntimeEventType.RUN_ITEM_UPDATED
+            ),
+            run_id=run_id,
+            turn_id=str(run.current_turn_id) if run.current_turn_id else None,
+            payload={
+                "item": dump_run_item(
+                    assistant_message_item(
+                        message,
+                        run=run,
+                        phase=phase,
+                    )
+                )
+            },
+        )
+
+    def discard_answer_draft(self, *, lease: SessionLease, run_id: str) -> None:
+        """Cancel a provisional answer that failed the completion gate."""
+
+        begin_agent_write(self.session)
+        run = self.session.execute(
+            select(AgentRun).where(AgentRun.id == run_id).with_for_update()
+        ).scalar_one()
+        self._require_lease(run, lease)
+        message = self.session.get(AgentMessage, run.assistant_message_id)
+        if message is None or message.status != "streaming":
+            return
+        message.status = "cancelled"
+        message.updated_at = _utcnow()
+        self.session.flush()
+        self.sessions.append_event(
+            lease=lease,
+            event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
+            run_id=run_id,
+            turn_id=str(run.current_turn_id) if run.current_turn_id else None,
+            payload={"item": dump_run_item(final_answer_item(message, run=run))},
+        )
+        message.content = ""
+        message.status = "created"
         message.updated_at = _utcnow()
         self.session.flush()
 
@@ -333,24 +390,13 @@ class RunRepository:
             select(AgentRun).where(AgentRun.id == run_id).with_for_update()
         ).scalar_one()
         self._require_lease(run, lease)
-        self.sessions.append_event(
-            lease=lease,
-            event_type=RuntimeEventType.ACTIVITY_UPDATED,
-            run_id=run_id,
-            payload={"activity": {
-                "id": f"activity:{run_id}:progress",
-                "kind": "analysis",
-                "title": "已停止重复尝试",
-                "summary": "连续多轮没有产生新的可验证结果，已基于当前证据结束本次分析。",
-                "status": "completed",
-            }},
-        )
+        self.session.flush()
 
     @staticmethod
     def _working_result(run: AgentRun) -> dict[str, Any]:
         try:
-            value = json.loads(str(run.result_json or "{}"))
-        except (TypeError, ValueError, json.JSONDecodeError):
+            value = loads(str(run.result_json or "{}"))
+        except JsonCodecError:
             return {}
         return value if isinstance(value, dict) else {}
 
@@ -401,22 +447,24 @@ class RunRepository:
         self.session.flush()
         self.sessions.append_event(
             lease=lease,
-            event_type=RuntimeEventType.ANSWER_COMPLETED,
+            event_type=RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=str(run.id),
             turn_id=str(run.current_turn_id) if run.current_turn_id else None,
-            payload=RuntimeEventProjector.entity("response", response),
+            payload={"item": dump_run_item(final_answer_item(
+                message,
+                run=run,
+                evidence=[evidence_reference(value) for value in response.answer.evidence],
+                artifact_refs=[
+                    ArtifactReference(artifact_id=artifact_id)
+                    for artifact_id in response.referenced_artifact_ids
+                ],
+            ))},
         )
         self.sessions.append_event(
             lease=lease,
             event_type=RuntimeEventType.RUN_COMPLETED,
             run_id=str(run.id),
-            payload={"run": {
-                "id": str(run.id),
-                "status": run.status,
-                "version": run.version,
-                "completion_disposition": response.completion_disposition.value,
-                "limitation_codes": [code.value for code in response.limitation_codes],
-            }},
+            payload={"run": project_run(run)},
         )
 
     def fail(self, *, lease: SessionLease, run_id: str, error_code: str, message: str) -> None:
@@ -437,18 +485,25 @@ class RunRepository:
         run.completed_at = now
         run.updated_at = now
         if assistant is not None:
-            assistant.status = "failed"
+            assistant.status = "cancelled" if str(assistant.content or "") else "failed"
             assistant.updated_at = now
         if admitted is not None:
             admitted.status = SessionInputStatus.CONSUMED.value
             admitted.consumed_at = now
         self.session.flush()
+        if assistant is not None and str(assistant.content or ""):
+            self.sessions.append_event(
+                lease=lease,
+                event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
+                run_id=run_id,
+                turn_id=str(run.current_turn_id) if run.current_turn_id else None,
+                payload={"item": dump_run_item(final_answer_item(assistant, run=run))},
+            )
         self.sessions.append_event(
             lease=lease,
             event_type=RuntimeEventType.RUN_FAILED,
             run_id=run_id,
-            payload={"run": {"id": run_id, "status": run.status, "version": run.version},
-                     "error": {"code": error_code, "message": message}},
+            payload={"run": project_run(run)},
         )
 
     def _write_memory(
@@ -464,22 +519,71 @@ class RunRepository:
         previous: dict[str, Any] = {}
         if row is not None:
             try:
-                loaded = json.loads(str(row.memory_json or "{}"))
+                loaded = loads(str(row.memory_json or "{}"))
                 previous = loaded if isinstance(loaded, dict) else {}
-            except (TypeError, ValueError, json.JSONDecodeError):
+            except JsonCodecError:
                 previous = {}
-        recent_runs = list(previous.get("recent_runs") or [])
+        current_datasource_id = str(run.datasource_id)
+        current_generation = int(run.datasource_generation)
+        same_generation = (
+            previous.get("datasource_id") == current_datasource_id
+            and previous.get("datasource_generation") == current_generation
+        )
+        recent_runs = [
+            item
+            for item in list(previous.get("recent_runs") or [])
+            if isinstance(item, dict)
+            and item.get("datasource_id") == current_datasource_id
+            and item.get("datasource_generation") == current_generation
+        ]
         recent_runs.append({
             "run_id": str(run.id),
             "question": str(run.question or "")[:1_000],
             "answer_summary": response.answer.text[:1_200],
             "referenced_artifact_ids": response.referenced_artifact_ids,
+            "datasource_id": current_datasource_id,
+            "datasource_generation": current_generation,
             "completed_at": _utcnow().isoformat(),
         })
+        recent_runs = recent_runs[-8:]
+        previous_stable = (
+            dict(previous.get("stable_context") or {})
+            if same_generation
+            else {}
+        )
+        previous_claims = [
+            item
+            for item in list(previous_stable.pop("verified_claims", []))
+            if isinstance(item, dict)
+            and item.get("claim_id")
+            and item.get("datasource_id") == current_datasource_id
+            and item.get("datasource_generation") == current_generation
+        ]
+        incoming_claims = [
+            {
+                **item,
+                "datasource_id": current_datasource_id,
+                "datasource_generation": current_generation,
+            }
+            for item in list(delta.get("verified_claims") or [])
+            if isinstance(item, dict) and item.get("claim_id")
+        ]
+        claims_by_id = {
+            str(item["claim_id"]): item
+            for item in [*previous_claims, *incoming_claims]
+        }
+        stable_delta = {
+            key: value
+            for key, value in delta.items()
+            if key != "verified_claims"
+        }
         memory = {
             "version": 1,
-            "recent_runs": recent_runs[-8:],
+            "datasource_id": current_datasource_id,
+            "recent_runs": recent_runs,
             "working_set": {
+                "datasource_id": current_datasource_id,
+                "datasource_generation": current_generation,
                 "selected_artifact_id": (
                     response.selection_suggestion.artifact_id
                     if response.selection_suggestion else aggregate.selected_artifact_id
@@ -488,17 +592,26 @@ class RunRepository:
                 "open_questions": response.answer.follow_up_questions[:5],
             },
             "stable_context": {
-                **dict(previous.get("stable_context") or {}),
-                **delta,
+                **previous_stable,
+                **stable_delta,
+                "verified_claims": list(claims_by_id.values())[-32:],
             },
+            "datasource_generation": current_generation,
         }
+        conversation_summary = "\n\n".join(
+            (
+                f"问题：{str(item.get('question') or '')[:300]}\n"
+                f"结论：{str(item.get('answer_summary') or '')[:700]}"
+            )
+            for item in recent_runs[-4:]
+        )[:4_000]
         if row is None:
             self.session.add(AgentSessionMemory(
                 session_id=str(aggregate.id), datasource_id=str(aggregate.datasource_id),
-                conversation_summary=response.answer.text[:2_000], memory_json=_json(memory),
+                conversation_summary=conversation_summary, memory_json=_json(memory),
             ))
         else:
-            row.conversation_summary = response.answer.text[:2_000]
+            row.conversation_summary = conversation_summary
             row.memory_json = _json(memory)
             row.updated_at = _utcnow()
         aggregate.context_epoch = int(aggregate.context_epoch or 0) + 1

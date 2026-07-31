@@ -9,6 +9,8 @@ import stat
 from typing import Any, Generator, Mapping
 
 import pymysql
+from sqlalchemy import Connection, create_engine
+from sqlalchemy.pool import StaticPool
 
 from engine.connectivity.lifecycle import (
     DatasourceResourceLifecycle,
@@ -309,6 +311,42 @@ class ConnectionFactory:
                     connection.close()
 
     @contextmanager
+    def sqlalchemy_connection_scope(
+        self,
+        profile: ConnectionProfile,
+        *,
+        purpose: ConnectionPurpose,
+        read_only: bool,
+        pooled: bool = True,
+    ) -> Generator[Connection, None, None]:
+        """Adapt the managed DBAPI connection to SQLAlchemy's public Core API.
+
+        Credential resolution, tunnels, TLS, pooling and the native read-only
+        transaction remain owned by :meth:`connection_scope`.  The temporary
+        SQLAlchemy engine only supplies the dialect and reflection protocol; it
+        never creates or owns a second physical connection.
+        """
+
+        with self.connection_scope(
+            profile,
+            purpose=purpose,
+            read_only=read_only,
+            pooled=pooled,
+        ) as dbapi_connection:
+            engine = create_engine(
+                self._sqlalchemy_url(profile),
+                creator=lambda: dbapi_connection,
+                poolclass=StaticPool,
+                pool_reset_on_return=None,
+            )
+            try:
+                with engine.connect() as connection:
+                    yield connection
+            finally:
+                # The outer connection_scope owns the DBAPI connection.
+                engine.dispose(close=False)
+
+    @contextmanager
     def mysql_client_scope(
         self,
         profile: ConnectionProfile,
@@ -427,6 +465,18 @@ class ConnectionFactory:
         except Exception as exc:
             raise DataSourceConnectionError("Database connection could not be opened.") from exc
         raise DataSourceConnectionError("Unsupported datasource dialect.")
+
+    @staticmethod
+    def _sqlalchemy_url(profile: ConnectionProfile) -> str:
+        urls = {
+            "sqlite": "sqlite://",
+            "mysql": "mysql+pymysql://",
+            "postgresql": "postgresql+psycopg2://",
+        }
+        try:
+            return urls[profile.dialect]
+        except KeyError as exc:
+            raise DataSourceConnectionError("Unsupported datasource dialect.") from exc
 
     def _pooled_connection(
         self,

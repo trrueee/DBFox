@@ -7,7 +7,6 @@ use the same Alembic-managed database contract as the operation it protects.
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import os
 import secrets
@@ -20,6 +19,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from engine.errors import DBFoxError
+from engine.json_codec import JsonCodecError, canonical_dumps
 from engine.models import ConfirmationToken
 
 
@@ -58,14 +58,8 @@ def _canonical_details_json(details: dict[str, Any]) -> str:
     if not isinstance(details, dict) or any(not isinstance(key, str) for key in details):
         raise ValueError("Confirmation details must be a mapping with string keys.")
     try:
-        return json.dumps(
-            details,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-    except (TypeError, ValueError) as exc:
+        return canonical_dumps(details)
+    except JsonCodecError as exc:
         raise ValueError("Confirmation details must be JSON serializable.") from exc
 
 

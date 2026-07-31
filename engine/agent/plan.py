@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -20,6 +21,9 @@ class PlanStatus(StrEnum):
     ACTIVE = "active"
     BLOCKED = "blocked"
     COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class PlanStep(BaseModel):
@@ -29,7 +33,9 @@ class PlanStep(BaseModel):
     title: str = Field(min_length=1, max_length=240)
     status: PlanStepStatus
     evidence_required: bool = False
-    artifact_ids: list[str] = Field(default_factory=list, max_length=12)
+    artifact_ids: list[
+        Annotated[str, Field(min_length=1, max_length=128)]
+    ] = Field(default_factory=list, max_length=12)
     note: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")

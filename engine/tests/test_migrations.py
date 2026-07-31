@@ -21,7 +21,7 @@ from engine.models import FoundationRuntimeState
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "e9f0a1b2c3d4"
+FOUNDATION_HEAD_REVISION = "0a1b2c3d4e6f"
 HISTORICAL_MODELS_REVISION = "918ea80d"
 _QUERY_HISTORY_FTS_TRIGGERS = {
     "query_history_search_docs_ai",
@@ -219,6 +219,7 @@ def _assert_final_contract(engine) -> None:
         "agent_events",
         "agent_task_plans",
     }.issubset(tables)
+    assert "model_output_json" in _column_names(engine, "agent_observations")
     assert {
         "input_sequence",
         "event_sequence",
@@ -235,6 +236,10 @@ def _assert_final_contract(engine) -> None:
     assert {
         "turn_id", "tool_invocation_id", "version", "consumed_at",
     }.issubset(_column_names(engine, "agent_approvals"))
+    assert "tool_invocation_id" in _column_names(
+        engine,
+        "agent_question_requests",
+    )
     artifact_columns = _column_names(engine, "agent_artifacts")
     assert {
         "turn_id", "version", "payload_ref", "provenance_json", "relations_json",
@@ -292,6 +297,12 @@ def _assert_final_contract(engine) -> None:
         for fk in inspector.get_foreign_keys("agent_approvals")
     )
     assert any(
+        fk["constrained_columns"] == ["tool_invocation_id"]
+        and fk["referred_table"] == "agent_tool_invocations"
+        and fk["options"].get("ondelete") == "CASCADE"
+        for fk in inspector.get_foreign_keys("agent_question_requests")
+    )
+    assert any(
         fk["constrained_columns"] == ["table_id"]
         and fk["referred_table"] == "schema_tables"
         and fk["options"].get("ondelete") == "CASCADE"
@@ -319,6 +330,93 @@ def test_fresh_upgrade_has_the_complete_foundation_v2_contract(monkeypatch, tmp_
             assert connection.execute(text("SELECT COUNT(*) FROM foundation_runtime_state")).scalar_one() == 0
         _assert_final_contract(engine)
         command.check(_alembic_config(database_url))
+    finally:
+        engine.dispose()
+
+
+def test_tool_presentation_migration_backfills_existing_invocations(
+    monkeypatch, tmp_path: Path
+) -> None:
+    database_path = tmp_path / "tool-presentation-upgrade.db"
+    database_url = _sqlite_url(database_path)
+    _upgrade(monkeypatch, database_url, "a1b2c3d4e5f6")
+
+    with sqlite3.connect(database_path) as connection:
+        connection.executescript(
+            """
+            INSERT INTO data_sources (
+                id, name, db_type, host, port, database_name, username,
+                ssh_enabled, ssh_port, ssl_enabled, ssl_verify_identity,
+                connection_mode, is_read_only, env, status, created_at, updated_at
+            ) VALUES (
+                'historical-source', 'Historical source', 'sqlite', 'localhost',
+                0, ':memory:', '', 0, 22, 0, 1, 'direct', 1, 'dev', 'active',
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            );
+            INSERT INTO agent_sessions (
+                id, datasource_id, created_at, updated_at
+            ) VALUES (
+                'historical-session', 'historical-source',
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            );
+            INSERT INTO agent_runs (
+                id, session_id, datasource_id, question, status,
+                created_at, updated_at
+            ) VALUES (
+                'historical-run', 'historical-session', 'historical-source',
+                'historical question', 'completed',
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            );
+            INSERT INTO agent_turns (
+                id, session_id, run_id, sequence, status,
+                agent_definition_version, prompt_version, prompt_hash,
+                context_hash, tool_materialization_hash, provider,
+                model_name, created_at
+            ) VALUES (
+                'historical-turn', 'historical-session', 'historical-run', 1,
+                'completed', 'v1', 'v1', 'prompt-hash', 'context-hash',
+                'tools-hash', 'test', 'test-model', CURRENT_TIMESTAMP
+            );
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO agent_tool_invocations (
+                id, session_id, run_id, turn_id, provider_call_id,
+                tool_name, tool_version, input_json, input_hash,
+                idempotency_key, status, policy_json, recovery_policy,
+                attempt_count, created_at
+            ) VALUES (
+                'historical-invocation', 'historical-session', 'historical-run',
+                'historical-turn', 'historical-call', 'db_observe', '1',
+                '{}', 'input-hash', 'historical-idempotency', 'succeeded',
+                '{}', 'resume', 1, CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    _upgrade(monkeypatch, database_url)
+
+    engine = create_engine(database_url)
+    try:
+        columns = {
+            column["name"]: column
+            for column in inspect(engine).get_columns("agent_tool_invocations")
+        }
+        with engine.connect() as connection:
+            presentation = connection.execute(
+                text(
+                    "SELECT presentation_json FROM agent_tool_invocations "
+                    "WHERE id = 'historical-invocation'"
+                )
+            ).scalar_one()
+
+        assert presentation == (
+            '{"category":"manage","progress":"none","title":"工具操作",'
+            '"visibility":"developer"}'
+        )
+        assert columns["presentation_json"]["nullable"] is False
+        assert columns["presentation_json"]["default"] is None
     finally:
         engine.dispose()
 

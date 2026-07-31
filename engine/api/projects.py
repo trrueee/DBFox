@@ -32,7 +32,7 @@ def _project_to_dict(project: Project, datasource_count: int = 0) -> dict[str, A
 from engine.projects.service import get_or_create_default_project
 
 
-@router.get("/projects")
+@router.get("/projects", response_model=list[ProjectResponse])
 def api_list_projects(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     try:
         _project, created = get_or_create_default_project(db)
@@ -56,7 +56,7 @@ def api_list_projects(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
         raise
 
 
-@router.post("/projects")
+@router.post("/projects", response_model=ProjectResponse)
 def api_create_project(req: ProjectCreateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     name = req.name.strip()
     if not name:

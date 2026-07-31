@@ -3,7 +3,7 @@
 Modules:
   datasource_resolver  — resolve datasource config into a uniform model
   dialect_resolver     — single source of truth for dialect
-  schema_introspector  — introspect real databases (SQLite, MySQL, ...)
+  catalog_introspector — reflect live database catalogs through one service
   schema_catalog_sync  — sync introspection results to SchemaTable / SchemaColumn
   inventory            — typed data models for introspection results
   models               — DataEnvironmentProfile, CatalogSnapshot, TableSnapshot

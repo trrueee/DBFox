@@ -1,8 +1,7 @@
-"""AI schema enrichment — called from schema.refresh_catalog with ai_enrich=True."""
+"""AI schema enrichment used by the datasource catalog refresh service."""
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -18,6 +17,7 @@ from engine.ai_index import (
     enrich_tables_batch,
 )
 from engine.llm.config import LlmConfig
+from engine.json_codec import dumps
 from engine.models import DomainTagRule, SchemaColumn, SchemaSearchDoc, SchemaTable
 
 logger = logging.getLogger("dbfox.ai_enrich")
@@ -78,8 +78,7 @@ def ai_enrich_catalog(
 
         # Context overflow guard — if a single batch exceeds the prompt budget,
         # shrink the batch size dynamically.
-        import json as _json
-        context_size = len(_json.dumps(context, ensure_ascii=False, default=str))
+        context_size = len(dumps(context))
         if context_size > AI_LLM_MAX_PROMPT_CHARS:
             logger.warning(
                 "AI enrich: batch context %d chars exceeds limit %d — "
@@ -88,7 +87,7 @@ def ai_enrich_catalog(
             )
             batch = batch[:1]
             context = _build_table_context(db, batch)
-            context_size = len(_json.dumps(context, ensure_ascii=False, default=str))
+            context_size = len(dumps(context))
             if context_size > AI_LLM_MAX_PROMPT_CHARS:
                 logger.error(
                     "AI enrich: single table '%s' context %d chars still exceeds limit — skipping",
@@ -198,9 +197,9 @@ def _write_ai_metadata(db: OrmSession, tables: list[SchemaTable], ai_result: dic
             continue
 
         table.ai_description = str(ai.get("ai_description") or "") or None
-        table.semantic_tags = json.dumps(ai.get("semantic_tags") or [], ensure_ascii=False)
-        table.business_terms = json.dumps(ai.get("business_terms") or [], ensure_ascii=False)
-        table.aliases = json.dumps(ai.get("aliases") or [], ensure_ascii=False)
+        table.semantic_tags = dumps(ai.get("semantic_tags") or [])
+        table.business_terms = dumps(ai.get("business_terms") or [])
+        table.aliases = dumps(ai.get("aliases") or [])
         table.table_role = str(ai.get("table_role") or "") or None
         table.grain = str(ai.get("grain") or "") or None
         table.subject_area = str(ai.get("subject_area") or "") or None
@@ -213,9 +212,9 @@ def _write_ai_metadata(db: OrmSession, tables: list[SchemaTable], ai_result: dic
             if not ac:
                 continue
             col.ai_description = str(ac.get("ai_description") or "") or None
-            col.semantic_tags = json.dumps(ac.get("semantic_tags") or [], ensure_ascii=False)
-            col.business_terms = json.dumps(ac.get("business_terms") or [], ensure_ascii=False)
-            col.aliases = json.dumps(ac.get("aliases") or [], ensure_ascii=False)
+            col.semantic_tags = dumps(ac.get("semantic_tags") or [])
+            col.business_terms = dumps(ac.get("business_terms") or [])
+            col.aliases = dumps(ac.get("aliases") or [])
             col.column_role = str(ac.get("column_role") or "") or None
             col.metric_type = str(ac.get("metric_type") or "") if ac.get("metric_type") else None
             col.is_pii = bool(col.is_pii or ac.get("is_pii", False))
@@ -227,7 +226,7 @@ def _write_ai_metadata(db: OrmSession, tables: list[SchemaTable], ai_result: dic
 
 def _sync_domain_tag_from_ai(db: OrmSession, table: SchemaTable, ai: dict[str, Any]) -> None:
     """Write LLM-assigned subject / semantic tags into DomainTagRule so that
-    db.observe and db.inspect can use them for domain grouping.
+    Catalog discovery and schema inspection can use them for domain grouping.
 
     Rules derived from AI enrichment get priority 20 (bootstrap defaults are 10,
     user-created rules are typically 10 as well).

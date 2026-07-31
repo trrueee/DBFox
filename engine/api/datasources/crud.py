@@ -26,10 +26,13 @@ from engine.db import get_db
 from engine.errors import DBFoxError, DataSourceConnectionError, NotFoundError
 from engine.models import DataSource
 from engine.schemas.datasource import (
+    ConfirmationRequiredResponse,
     DataSourceCreateRequest,
     DataSourceResponse,
+    DataSourceTestResponse,
     DataSourceTestRequest,
     DataSourceUpdateRequest,
+    OperationMessageResponse,
 )
 from engine.api.datasources.common import (
     datasource_to_dict,
@@ -240,7 +243,7 @@ def _validate_effective_credential_references(
     }
 
 
-@router.post("/datasources/test")
+@router.post("/datasources/test", response_model=DataSourceTestResponse)
 def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
     vault = get_credential_vault()
     lease_id = _claim_credential_lease(req, _request_credential_ids(req))
@@ -479,7 +482,10 @@ def api_update_datasource(
         raise
 
 
-@router.delete("/datasources/{id}")
+@router.delete(
+    "/datasources/{id}",
+    response_model=OperationMessageResponse | ConfirmationRequiredResponse,
+)
 def api_delete_datasource(
     id: str,
     confirm: DatasourceDeleteConfirmRequest | None = Body(default=None),
@@ -549,7 +555,7 @@ def api_delete_datasource(
         raise
 
 
-@router.post("/datasources/{id}/release")
+@router.post("/datasources/{id}/release", response_model=OperationMessageResponse)
 def api_release_datasource(id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
         get_datasource_resource_lifecycle().release_pools(id)

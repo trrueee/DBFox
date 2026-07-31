@@ -41,8 +41,6 @@ class FixedErrorCode(str, Enum):
     FILTER_OPERATOR_NOT_ALLOWED = "FILTER_OPERATOR_NOT_ALLOWED"
     AGENT_REQUEST_ERROR = "AGENT_REQUEST_ERROR"
     AGENT_RUNTIME_ERROR = "AGENT_RUNTIME_ERROR"
-    EVAL_RUN_ERROR = "EVAL_RUN_ERROR"
-    IMPORT_ERROR = "IMPORT_ERROR"
     SQL_EMPTY = "SQL_EMPTY"
     BACKUP_OPERATION_FAILED = "BACKUP_OPERATION_FAILED"
     BACKUP_CLIENT_NOT_FOUND = "BACKUP_CLIENT_NOT_FOUND"
@@ -85,8 +83,6 @@ _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
     FixedErrorCode.FILTER_OPERATOR_NOT_ALLOWED: "The requested filter operator is not allowed.",
     FixedErrorCode.AGENT_REQUEST_ERROR: "The agent request could not be completed.",
     FixedErrorCode.AGENT_RUNTIME_ERROR: "The agent run could not be completed.",
-    FixedErrorCode.EVAL_RUN_ERROR: "The evaluation run could not be completed.",
-    FixedErrorCode.IMPORT_ERROR: "Benchmark import could not be completed.",
     FixedErrorCode.SQL_EMPTY: "SQL cannot be empty.",
     FixedErrorCode.BACKUP_OPERATION_FAILED: "The backup operation could not be completed.",
     FixedErrorCode.BACKUP_CLIENT_NOT_FOUND: "The database backup client is unavailable.",
@@ -116,9 +112,6 @@ class SafeLogOperation(str, Enum):
     AGENT_TABLE_RESULT_PAGE = "agent_table_result_page"
     AGENT_TABLE_RESULT_EXPORT = "agent_table_result_export"
     AGENT_RESULT_EXPORT = "agent_result_export"
-    AGENT_EVAL_BENCHMARK_IMPORT = "agent_eval_benchmark_import"
-    AGENT_EVAL_RUN = "agent_eval_run"
-    AGENT_EVALUATION_CASE = "agent_evaluation_case"
     AGENT_OBSERVE_TOOL_OBSERVATION = "agent_observe_tool_observation"
     AGENT_OBSERVE_CONTEXT_PACK = "agent_observe_context_pack"
     AGENT_PERSISTENCE_START = "agent_persistence_start"

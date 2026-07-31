@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import logging
 import uuid
-import json
 from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
+
+from engine.json_codec import JsonCodecError, loads
 
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.environment.authoritative_inventory import (
@@ -25,7 +26,7 @@ from engine.environment.inventory import (
     SyncResult,
     TableInventory,
 )
-from engine.environment.schema_introspector import introspect_datasource
+from engine.environment.catalog_introspector import inspect_catalog
 
 logger = logging.getLogger("dbfox.environment.schema_catalog_sync")
 
@@ -41,8 +42,18 @@ def _ai_enrich_failure_result() -> dict[str, Any]:
     }
 
 
-def utcnow() -> datetime:
+def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _parse_string_list(value: str | None) -> list[str]:
+    if not value:
+        return []
+    try:
+        parsed = loads(value)
+    except JsonCodecError:
+        return []
+    return [str(item) for item in parsed] if isinstance(parsed, list) else []
 
 
 def _table_identity(table_schema: str | None, table_name: str) -> tuple[str, str]:
@@ -67,21 +78,9 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
     tables = db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).all()
 
     for table in tables:
-        # Load and parse lists from JSON strings safely
-        def _parse_list(s: str | None) -> list[str]:
-            if not s:
-                return []
-            try:
-                val = json.loads(s)
-                if isinstance(val, list):
-                    return [str(x) for x in val]
-            except Exception:
-                pass
-            return []
-
-        tags = _parse_list(table.semantic_tags)
-        terms = _parse_list(table.business_terms)
-        aliases = _parse_list(table.aliases)
+        tags = _parse_string_list(table.semantic_tags)
+        terms = _parse_string_list(table.business_terms)
+        aliases = _parse_string_list(table.aliases)
 
         cols = sorted(list(table.columns or []), key=lambda c: (c.ordinal_position or 0, str(c.column_name)))
         col_names = [str(c.column_name) for c in cols]
@@ -95,6 +94,7 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
             relation_text = ", ".join(sorted(str(t[0]) for t in targets)) or None
 
         search_text = build_table_search_text(
+            table_schema=str(table.table_schema or ""),
             table_name=str(table.table_name),
             ai_description=table.ai_description,
             semantic_tags=tags,
@@ -111,6 +111,7 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
             datasource_id=datasource_id,
             entity_type="table",
             entity_id=str(table.id),
+            table_schema=str(table.table_schema or ""),
             table_name=str(table.table_name),
             column_name=None,
             name=str(table.table_name),
@@ -125,15 +126,16 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
             relation_summary=relation_text,
             search_text=search_text,
             ai_confidence=table.ai_confidence,
-            updated_at=utcnow(),
+            updated_at=_utcnow(),
         ))
 
         for col in cols:
-            ctags = _parse_list(col.semantic_tags)
-            cterms = _parse_list(col.business_terms)
+            ctags = _parse_string_list(col.semantic_tags)
+            cterms = _parse_string_list(col.business_terms)
 
             col_search_text = build_column_search_text(
                 column_name=str(col.column_name),
+                table_schema=str(table.table_schema or ""),
                 table_name=str(table.table_name),
                 ai_description=col.ai_description,
                 semantic_tags=ctags,
@@ -146,6 +148,7 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
                 datasource_id=datasource_id,
                 entity_type="column",
                 entity_id=str(col.id),
+                table_schema=str(table.table_schema or ""),
                 table_name=str(table.table_name),
                 column_name=str(col.column_name),
                 name=str(col.column_name),
@@ -159,7 +162,7 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
                 relation_summary=None,
                 search_text=col_search_text,
                 ai_confidence=col.ai_confidence,
-                updated_at=utcnow(),
+                updated_at=_utcnow(),
             ))
 
     db.flush()
@@ -180,7 +183,7 @@ class SchemaCatalogSync:
     ) -> SyncResult:
         """Introspect and sync. Returns counts of created/updated/removed."""
         try:
-            inventory = introspect_datasource(db, datasource_id)
+            inventory = inspect_catalog(db, datasource_id)
             if inventory.datasource_id != datasource_id:
                 raise SchemaInspectionError(
                     datasource_id,
@@ -213,7 +216,7 @@ class SchemaCatalogSync:
             db.rollback()
             db.query(DataSource).filter(DataSource.id == datasource_id).update(
                 {
-                    "last_sync_at": utcnow(),
+                    "last_sync_at": _utcnow(),
                     "last_sync_status": "failed",
                     "last_sync_error": fixed_error_message(FixedErrorCode.SCHEMA_SYNC_FAILED),
                 }
@@ -290,8 +293,8 @@ class SchemaCatalogSync:
                     table_type=table_inv.table_type,
                     row_count_estimate=table_inv.row_count_estimate or 0,
                     engine_name=inventory.dialect,
-                    created_at=utcnow(),
-                    updated_at=utcnow(),
+                    created_at=_utcnow(),
+                    updated_at=_utcnow(),
                 )
                 db.add(schema_table)
                 result.tables_created += 1
@@ -302,7 +305,7 @@ class SchemaCatalogSync:
                 schema_table.table_type = table_inv.table_type
                 schema_table.row_count_estimate = table_inv.row_count_estimate or 0
                 schema_table.engine_name = inventory.dialect
-                schema_table.updated_at = utcnow()
+                schema_table.updated_at = _utcnow()
                 result.tables_updated += 1
 
             db.flush()  # populate schema_table.id for FK
@@ -371,7 +374,13 @@ class SchemaCatalogSync:
         # Rebuild schema search docs immediately
         rebuild_search_docs(db, datasource_id)
 
-        db.commit()
+        refreshed_at = _utcnow()
+        datasource = db.get(DataSource, datasource_id)
+        if datasource is not None:
+            datasource.last_sync_at = refreshed_at
+            datasource.last_sync_status = "ready"
+            datasource.last_sync_error = None
+        db.flush()
         result.synced = True
         logger.info(
             "SchemaCatalogSync %s: +%d ~%d -%d tables, +%d ~%d -%d columns",
@@ -421,20 +430,6 @@ class SchemaCatalogSync:
             result.ai_enrich_result = enrich_result
 
         return result
-
-    def sync_inventory(
-        self,
-        db: Session,
-        datasource_id: str,
-        inventory: object,
-        **_kwargs: Any,
-    ) -> SyncResult:
-        """Reject legacy snapshots so only completed inspections can mutate catalog state."""
-        del db, datasource_id, inventory
-        raise TypeError(
-            "SchemaCatalogSync.sync_inventory is no longer supported; "
-            "use sync_authoritative with AuthoritativeInventory."
-        )
 
     def _sync_columns(
         self,
@@ -495,12 +490,8 @@ def ensure_catalog(
     ai_api_base: str | None = None,
     ai_model_name: str | None = None,
 ) -> SyncResult:
-    """Introspect and sync if the catalog is empty for this datasource.
-
-    Safe to call before schema linking — if tables already exist
-    it will still refresh (upsert).
-    """
-    return SchemaCatalogSync().sync(
+    """Refresh and commit one complete application-level catalog transaction."""
+    result = SchemaCatalogSync().sync(
         db,
         datasource_id,
         ai_enrich=ai_enrich,
@@ -508,3 +499,5 @@ def ensure_catalog(
         ai_api_base=ai_api_base,
         ai_model_name=ai_model_name,
     )
+    db.commit()
+    return result

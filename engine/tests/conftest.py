@@ -18,19 +18,6 @@ from engine.models import DataSource
 from engine.tests.support.metadata import create_migrated_metadata_engine
 
 
-# ---------------------------------------------------------------------------
-# Spider SQLite database paths (from .agent_eval/spider/database/)
-# ---------------------------------------------------------------------------
-
-_SPIDER_DIR = Path(__file__).resolve().parent.parent.parent / ".agent_eval" / "spider" / "database"
-
-SPIDER_SQLITE_DBS = {
-    "concert_singer": str(_SPIDER_DIR / "concert_singer" / "concert_singer.sqlite"),
-    "pets_1": str(_SPIDER_DIR / "pets_1" / "pets_1.sqlite"),
-    "singer": str(_SPIDER_DIR / "singer" / "singer.sqlite"),
-}
-
-
 def _make_db_session(database_path: Path):
     """Create an isolated Alembic-upgraded SQLite metadata session."""
     engine = create_migrated_metadata_engine(database_path)
@@ -64,59 +51,6 @@ def db_session_module(tmp_path_factory: pytest.TempPathFactory):
     finally:
         session.close()
         engine.dispose()
-
-
-def _make_spider_ds(db_session, db_key: str):
-    """Create a DataSource row pointing at a Spider SQLite database."""
-    if db_key not in SPIDER_SQLITE_DBS:
-        raise KeyError(f"Invalid Spider DB key '{db_key}'. Available keys: {list(SPIDER_SQLITE_DBS.keys())}")
-    sqlite_path = SPIDER_SQLITE_DBS[db_key]
-    if not Path(sqlite_path).exists():
-        import pytest
-        pytest.skip(f"Spider SQLite DB file not found: {sqlite_path}")
-
-    ds_id = f"ds-spider-{db_key.replace('_', '-')}"
-    from engine.models import DataSource
-    existing = db_session.query(DataSource).filter(DataSource.id == ds_id).first()
-    if existing:
-        return existing
-    ds = DataSource(
-        id=ds_id,
-        name=f"Spider {db_key}",
-        host="localhost",
-        port=0,
-        database_name=sqlite_path,
-        username="",
-        db_type="sqlite",
-        status="active",
-    )
-    db_session.add(ds)
-    db_session.commit()
-    return ds
-
-
-@pytest.fixture
-def spider_concert_singer(db_session):
-    """Spider concert_singer: singer(8 rows), concert(9 rows), singer_in_concert."""
-    return _make_spider_ds(db_session, "concert_singer")
-
-
-@pytest.fixture
-def spider_pets_1(db_session):
-    """Spider pets_1: Students, Pets, Has_Pet."""
-    return _make_spider_ds(db_session, "pets_1")
-
-
-@pytest.fixture
-def spider_singer(db_session):
-    """Spider singer: singer(8), song(8)."""
-    return _make_spider_ds(db_session, "singer")
-
-
-@pytest.fixture
-def spider_datasource(db_session):
-    """Default Spider datasource (concert_singer)."""
-    return _make_spider_ds(db_session, "concert_singer")
 
 
 def _init_test_db(db_path: str) -> str:

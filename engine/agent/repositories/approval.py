@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -11,20 +10,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.agent.approval import Approval, ApprovalConflict, ApprovalStatus
-from engine.agent.events import RuntimeEventProjector, RuntimeEventType
+from engine.agent.events import RuntimeEventType
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.observation import ObservationStatus
 from engine.agent.run import RunStatus
+from engine.agent.run_item import approval_item, dump_run_item, project_run
 from engine.agent.session import SessionLease
 from engine.agent.tool import ToolInvocationStatus
+from engine.json_codec import canonical_dumps as _json, loads
 from engine.models import AgentApproval, AgentRun, AgentSessionInput, AgentToolInvocation
 from engine.security.audit import SecurityAuditService
-
-
-def _json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
 def _utcnow() -> datetime:
@@ -83,9 +80,14 @@ class ApprovalRepository:
         run.updated_at = now
         value = self._domain(row)
         self.sessions.append_event(
-            lease=lease, event_type=RuntimeEventType.APPROVAL_REQUESTED,
+            lease=lease, event_type=RuntimeEventType.RUN_UPDATED,
             run_id=str(run.id), turn_id=str(invocation.turn_id),
-            payload=RuntimeEventProjector.entity("approval", value),
+            payload={"run": project_run(run)},
+        )
+        self.sessions.append_event(
+            lease=lease, event_type=RuntimeEventType.RUN_ITEM_STARTED,
+            run_id=str(run.id), turn_id=str(invocation.turn_id),
+            payload={"item": dump_run_item(approval_item(row))},
         )
         SecurityAuditService(self.session).record(
             action="agent.approval.request",
@@ -140,6 +142,145 @@ class ApprovalRepository:
         ).scalar_one_or_none()
         return redirected is None
 
+    def expire_pending(
+        self,
+        *,
+        lease: SessionLease,
+        now: datetime | None = None,
+    ) -> list[Approval]:
+        """Settle every expired approval in the claimed Session.
+
+        Expiration is a durable authorization decision. It must release the Run
+        from ``waiting_approval`` and create the same model-visible observation
+        as an explicit rejection so the next Turn can choose a safe alternative.
+        """
+        begin_agent_write(self.session)
+        current_time = now or _utcnow()
+        rows = self.session.execute(
+            select(AgentApproval).where(
+                AgentApproval.session_id == lease.session_id,
+                AgentApproval.status == ApprovalStatus.PENDING.value,
+                AgentApproval.expires_at.is_not(None),
+                AgentApproval.expires_at <= current_time,
+            ).with_for_update()
+        ).scalars().all()
+        expired: list[Approval] = []
+        for row in rows:
+            invocation = self.session.execute(
+                select(AgentToolInvocation).where(
+                    AgentToolInvocation.id == row.tool_invocation_id
+                ).with_for_update()
+            ).scalar_one()
+            run = self.session.execute(
+                select(AgentRun).where(AgentRun.id == row.run_id).with_for_update()
+            ).scalar_one()
+            if run.status != RunStatus.WAITING_APPROVAL.value:
+                continue
+            run.lease_token = lease.token
+            row.status = ApprovalStatus.EXPIRED.value
+            row.version = int(row.version or 0) + 1
+            row.decided_at = current_time
+            row.consumed_at = current_time
+            row.decided_by = "system:expiry"
+            invocation.status = ToolInvocationStatus.REJECTED.value
+            run.status = RunStatus.RUNNING.value
+            run.version = int(run.version or 0) + 1
+            run.updated_at = current_time
+            self.session.flush()
+            ToolInvocationRepository(self.session).settle(
+                lease=lease,
+                invocation_id=str(invocation.id),
+                status=ObservationStatus.REJECTED,
+                model_visible_summary="The requested action expired before approval.",
+                error_code="APPROVAL_EXPIRED",
+                error_message="The requested action was not authorized.",
+            )
+            value = self._domain(row)
+            self.sessions.append_event(
+                lease=lease,
+                event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
+                run_id=str(run.id),
+                turn_id=str(invocation.turn_id),
+                payload={"item": dump_run_item(approval_item(row))},
+            )
+            self.sessions.append_event(
+                lease=lease,
+                event_type=RuntimeEventType.RUN_UPDATED,
+                run_id=str(run.id),
+                turn_id=str(invocation.turn_id),
+                payload={"run": project_run(run)},
+            )
+            SecurityAuditService(self.session).record(
+                action="agent.approval.resolve",
+                outcome="denied",
+                resource_type="tool_invocation",
+                resource_id=str(invocation.id),
+                session_id=str(run.session_id),
+                run_id=str(run.id),
+                actor_id="system:expiry",
+                correlation_id=str(row.id),
+                details={
+                    "tool_name": str(invocation.tool_name),
+                    "decision_status": ApprovalStatus.EXPIRED.value,
+                },
+            )
+            expired.append(value)
+        return expired
+
+    def cancel_pending_for_run(
+        self,
+        *,
+        lease: SessionLease,
+        run_id: str,
+    ) -> list[Approval]:
+        """Terminalize unresolved approvals without reviving the cancelled Run."""
+        begin_agent_write(self.session)
+        run = self.session.execute(
+            select(AgentRun).where(AgentRun.id == run_id).with_for_update()
+        ).scalar_one()
+        if str(run.session_id) != lease.session_id or int(run.lease_token or 0) != lease.token:
+            raise ApprovalConflict("Approval cancellation is fenced by another Session owner")
+        rows = self.session.execute(
+            select(AgentApproval).where(
+                AgentApproval.run_id == run_id,
+                AgentApproval.status == ApprovalStatus.PENDING.value,
+            ).with_for_update()
+        ).scalars().all()
+        now = _utcnow()
+        cancelled: list[Approval] = []
+        for row in rows:
+            row.status = ApprovalStatus.CANCELLED.value
+            row.version = int(row.version or 0) + 1
+            row.decided_at = now
+            row.consumed_at = now
+            row.decided_by = "system:run_cancel"
+            row.decision_note = "The Run was cancelled before this action was approved."
+            self.session.flush()
+            value = self._domain(row)
+            self.sessions.append_event(
+                lease=lease,
+                event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
+                run_id=run_id,
+                turn_id=str(row.turn_id),
+                payload={"item": dump_run_item(approval_item(row))},
+            )
+            SecurityAuditService(self.session).record(
+                action="agent.approval.resolve",
+                outcome="cancelled",
+                resource_type="tool_invocation",
+                resource_id=str(row.tool_invocation_id),
+                session_id=str(run.session_id),
+                run_id=run_id,
+                actor_id="system:run_cancel",
+                correlation_id=str(row.id),
+                details={
+                    "tool_name": str(row.tool_name),
+                    "decision_status": ApprovalStatus.CANCELLED.value,
+                },
+            )
+            cancelled.append(value)
+        return cancelled
+
     def resolve(
         self,
         *,
@@ -167,6 +308,8 @@ class ApprovalRepository:
         run = self.session.execute(
             select(AgentRun).where(AgentRun.id == row.run_id).with_for_update()
         ).scalar_one()
+        if run.status != RunStatus.WAITING_APPROVAL.value:
+            raise ApprovalConflict(f"Approval cannot be resolved while Run is {run.status}")
         lease = self.sessions.claim(session_id=str(run.session_id), owner=f"approval:{approval_id}")
         if lease is None:
             raise ApprovalConflict("Session is currently owned; retry approval resolution")
@@ -174,6 +317,7 @@ class ApprovalRepository:
         if expires_at is not None and expires_at <= now:
             row.status = ApprovalStatus.EXPIRED.value
             invocation.status = ToolInvocationStatus.REJECTED.value
+            run.status = RunStatus.RUNNING.value
         elif approved:
             row.status = ApprovalStatus.APPROVED.value
             invocation.status = ToolInvocationStatus.REQUESTED.value
@@ -208,9 +352,19 @@ class ApprovalRepository:
                 error_message="The requested action was not authorized.",
             )
         self.sessions.append_event(
-            lease=lease, event_type=RuntimeEventType.APPROVAL_RESOLVED,
+            lease=lease,
+            event_type=(
+                RuntimeEventType.RUN_ITEM_CANCELLED
+                if row.status == ApprovalStatus.EXPIRED.value
+                else RuntimeEventType.RUN_ITEM_COMPLETED
+            ),
             run_id=str(run.id), turn_id=str(invocation.turn_id),
-            payload=RuntimeEventProjector.entity("approval", self._domain(row)),
+            payload={"item": dump_run_item(approval_item(row))},
+        )
+        self.sessions.append_event(
+            lease=lease, event_type=RuntimeEventType.RUN_UPDATED,
+            run_id=str(run.id), turn_id=str(invocation.turn_id),
+            payload={"run": project_run(run)},
         )
         value = self._domain(row)
         SecurityAuditService(self.session).record(
@@ -235,8 +389,8 @@ class ApprovalRepository:
             tool_name=str(row.tool_name), status=ApprovalStatus(str(row.status)),
             version=int(row.version or 0), risk_level=str(row.risk_level),
             reason=str(row.reason or ""),
-            policy_decision=json.loads(str(row.policy_decision_json or "{}")),
-            requested_action=json.loads(str(row.requested_action_json or "{}")),
+            policy_decision=loads(str(row.policy_decision_json or "{}")),
+            requested_action=loads(str(row.requested_action_json or "{}")),
             created_at=row.created_at,
             expires_at=row.expires_at,
             decided_at=row.decided_at,

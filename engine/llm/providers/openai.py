@@ -1,4 +1,4 @@
-"""OpenAI-compatible provider (covers OpenAI / Qwen / DeepSeek / local)."""
+"""OpenAI client construction for the Responses API runtime."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from openai import OpenAI
 
 
-def create_openai_compatible_api_client(
+def create_openai_responses_client(
     *,
     api_key: str,
     api_base: str,

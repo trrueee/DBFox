@@ -18,9 +18,6 @@ from engine.db import build_metadata_engine
 from engine.models import (
     AgentApproval,
     AgentArtifactRecord,
-    AgentEvalCaseResult,
-    AgentEvalRun,
-    AgentGoldenTask,
     AgentMessage,
     AgentRun,
     AgentSession,
@@ -66,9 +63,6 @@ _PURGED_TABLES = (
     "agent_observations",
     "agent_tool_invocations",
     "agent_turns",
-    "agent_eval_case_results",
-    "agent_eval_runs",
-    "agent_golden_tasks",
     "agent_runs",
     "agent_session_inputs",
     "agent_session_memories",
@@ -168,10 +162,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
         secret="environment password",
     )
     llm_credential_id = vault.put(kind=CredentialKind.LLM_API_KEY, secret="do not remove")
-    langsmith_credential_id = vault.put(
-        kind=CredentialKind.LANGSMITH_API_KEY,
-        secret="do not remove either",
-    )
 
     engine = build_metadata_engine(metadata_url)
     try:
@@ -337,30 +327,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
                 )
             )
 
-            eval_task = AgentGoldenTask(
-                id="eval-task-1",
-                datasource_id=datasource.id,
-                project_id=project.id,
-                name="Sensitive eval task",
-                question="sensitive evaluation question",
-            )
-            eval_run = AgentEvalRun(
-                id="eval-run-1",
-                datasource_id=datasource.id,
-                project_id=project.id,
-            )
-            session.add_all((eval_task, eval_run))
-            session.flush()
-            session.add(
-                AgentEvalCaseResult(
-                    id="eval-result-1",
-                    eval_run_id=eval_run.id,
-                    task_id=eval_task.id,
-                    run_id=agent_run.id,
-                    response_json='{"sensitive": true}',
-                )
-            )
-
             session.add_all(
                 (
                     ConfirmationToken(
@@ -446,7 +412,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
         "ssh_passphrase_id": ssh_passphrase_id,
         "environment_password_id": environment_password_id,
         "llm_credential_id": llm_credential_id,
-        "langsmith_credential_id": langsmith_credential_id,
     }
 
 
@@ -573,7 +538,6 @@ def test_foundation_reset_preserves_only_non_secret_endpoint_metadata(tmp_path: 
         ("ssh_passphrase_id", "ssh passphrase"),
         ("environment_password_id", "environment password"),
         ("llm_credential_id", "do not remove"),
-        ("langsmith_credential_id", "do not remove either"),
     ):
         assert vault.get(credentials[credential_name]) == expected_secret
 
@@ -620,7 +584,6 @@ def test_foundation_reset_never_deletes_vault_values(tmp_path: Path, monkeypatch
         ("ssh_passphrase_id", "ssh passphrase"),
         ("environment_password_id", "environment password"),
         ("llm_credential_id", "do not remove"),
-        ("langsmith_credential_id", "do not remove either"),
     ):
         assert vault.get(credentials[credential_name]) == expected_secret
 

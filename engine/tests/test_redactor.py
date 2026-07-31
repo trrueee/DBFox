@@ -102,7 +102,7 @@ def test_schema_pii_flag_extends_datasource_sensitivity_policy(db_session, test_
 
 
 def test_executor_redacts_sensitive_queries(db_session, test_datasource) -> None:
-    from engine.sql.executor_guardrail_bypass_helper import execute_query_for_test
+    from engine.tests.support.executor import execute_query_for_test
     from engine.models import QueryHistory
 
     # Execute a query containing a sensitive email and password assignment

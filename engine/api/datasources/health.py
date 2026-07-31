@@ -24,13 +24,13 @@ from engine.datasource import test_connection
 from engine.db import get_db
 from engine.errors import DBFoxError, NotFoundError
 from engine.models import DataSource
-from engine.schemas.datasource import _json_list_or_empty
+from engine.schemas.datasource import DataSourceHealthResponse, _json_list_or_empty
 
 logger = logging.getLogger("dbfox.api.datasources.health")
 router = APIRouter()
 
 
-@router.post("/datasources/{id}/health")
+@router.post("/datasources/{id}/health", response_model=DataSourceHealthResponse)
 def api_check_datasource_health(id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == id).first()
     if not datasource:

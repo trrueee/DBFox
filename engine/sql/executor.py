@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
@@ -24,10 +23,12 @@ from engine.errors import (
     SQLQueryCancelledError,
     SQLQueryTimeoutError,
 )
+from engine.json_codec import dumps
 from engine.models import DataSource, QueryHistory
 from engine.policy.redactor import DataRedactor
 from engine.policy.sensitivity import _SENSITIVE_FALLBACK
 from engine.persistence.search_index import SearchIndexService
+from engine.sql.explain_validator import validate_explain_sql
 
 
 def _sql_execution_failure_message() -> str:
@@ -116,7 +117,7 @@ def _run_approved_query(
     """Execute safety-approved SQL on the target datasource and record history.
 
     This is the shared execution tail called by both ``execute_query`` (public,
-    bypass_guardrail=False) and ``execute_query_for_test`` (test-only,
+    bypass_guardrail=False) and ``engine.tests.support.executor`` (test-only,
     bypass_guardrail=True).  It assumes the caller has already resolved the
     safety decision and verified ``can_execute`` / ``safe_sql``.
     """
@@ -325,7 +326,7 @@ def execute_query(
     )
     guard_res = decision.guardrail
     guardrail_ms = int((time.perf_counter() - t_guard_start) * 1000)
-    guard_checks_json = json.dumps(_decision_checks_for_history(decision), ensure_ascii=False)
+    guard_checks_json = dumps(_decision_checks_for_history(decision))
 
     if not decision.can_execute or not str(decision.safe_sql or "").strip():
         redacted_sql = DataRedactor.redact_sql(sql_str)
@@ -383,16 +384,6 @@ def _assert_expected_connection_generation(
     if int(datasource.connection_generation) != int(expected_connection_generation):
         raise SQLExecutionError("Datasource connection profile changed.")
 
-def _validate_explain_sql(sql: str, dialect: str) -> None:
-    """Secondary safety check for EXPLAIN inputs — delegated to shared module.
-
-    Kept as a re-export alias for backward compatibility; prefer importing
-    ``validate_explain_sql`` directly from ``engine.sql.explain_validator``.
-    """
-    from engine.sql.explain_validator import validate_explain_sql as _impl
-    _impl(sql, dialect)
-
-
 def explain_sql(
     db: Session,
     datasource_id: str,
@@ -423,7 +414,7 @@ def explain_sql(
         )
     safe_sql = str(decision.safe_sql or "").strip()
     profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
-    _validate_explain_sql(safe_sql, profile.dialect)
+    validate_explain_sql(safe_sql, profile.dialect)
         
     warnings: list[str] = []
     records: list[dict[str, Any]] = []

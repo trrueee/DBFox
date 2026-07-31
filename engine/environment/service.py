@@ -7,12 +7,13 @@ profiles and snapshots.  No LLM involvement.
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
+
+from engine.json_codec import loads
 
 from engine.models import SchemaTable, SchemaColumn, DataSource
 from engine.environment.datasource_resolver import resolve_datasource
@@ -81,9 +82,9 @@ class EnvironmentService:
         # Gather warnings
         warnings: list[str] = []
         if catalog_status == "empty":
-            warnings.append("Catalog is empty. Run schema.refresh_catalog to introspect the datasource.")
+            warnings.append("Catalog is empty. Refresh the datasource catalog before analysis.")
         if catalog_status == "stale":
-            warnings.append("Catalog may be stale. Consider running schema.refresh_catalog.")
+            warnings.append("Catalog may be stale. Refresh the datasource catalog before analysis.")
         if env == "prod":
             warnings.append("This is a PRODUCTION datasource. Read-only operations only.")
 
@@ -320,7 +321,7 @@ def _string_list(value: Any) -> list[str]:
     if not text:
         return []
     try:
-        parsed = json.loads(text)
+        parsed = loads(text)
     except (TypeError, ValueError):
         parsed = None
     if isinstance(parsed, list):

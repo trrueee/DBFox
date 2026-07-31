@@ -34,11 +34,11 @@ def test_profile_is_immutable_and_fingerprint_is_deterministic() -> None:
         _network_config("cred_datasource_password_opaque")
     )
 
-    assert profile.fingerprint == ConnectionProfile.from_mapping(
+    assert profile.profile_fingerprint == ConnectionProfile.from_mapping(
         _network_config("cred_datasource_password_opaque")
-    ).fingerprint
-    assert profile.fingerprint.startswith("conn_")
-    assert "opaque" not in profile.fingerprint
+    ).profile_fingerprint
+    assert profile.profile_fingerprint.startswith("conn_")
+    assert "opaque" not in profile.profile_fingerprint
 
     with pytest.raises(FrozenInstanceError):
         profile.host = "other.internal.test"  # type: ignore[misc]

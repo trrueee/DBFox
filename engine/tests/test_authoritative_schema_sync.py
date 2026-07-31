@@ -11,9 +11,8 @@ from engine.environment.authoritative_inventory import (
 )
 from engine.environment.inventory import SchemaInventory
 from engine.environment.schema_catalog_sync import SchemaCatalogSync
-from engine.environment.schema_introspector import SchemaIntrospector
 from engine.models import SchemaTable
-from engine.schema_sync import sync_schema
+from engine.environment.schema_catalog_sync import ensure_catalog
 
 
 def _catalog_table_names(db_session, datasource_id: str) -> list[str]:
@@ -34,7 +33,8 @@ def test_failed_mysql_inspection_never_deletes_existing_catalog(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A connection failure must not be translated into an empty snapshot."""
-    sync_schema(db_session, test_datasource.id, ai_enrich=False)
+    ensure_catalog(db_session, test_datasource.id, ai_enrich=False)
+    db_session.commit()
     expected_catalog = _catalog_table_names(db_session, test_datasource.id)
     assert expected_catalog
 
@@ -65,7 +65,8 @@ def test_catalog_sync_rejects_non_authoritative_inventory_without_mutation(
     db_session,
     test_datasource,
 ) -> None:
-    sync_schema(db_session, test_datasource.id, ai_enrich=False)
+    ensure_catalog(db_session, test_datasource.id, ai_enrich=False)
+    db_session.commit()
     expected_catalog = _catalog_table_names(db_session, test_datasource.id)
 
     with pytest.raises(TypeError, match="AuthoritativeInventory"):
@@ -81,7 +82,8 @@ def test_successful_authoritative_empty_inventory_can_remove_obsolete_catalog(
     db_session,
     test_datasource,
 ) -> None:
-    sync_schema(db_session, test_datasource.id, ai_enrich=False)
+    ensure_catalog(db_session, test_datasource.id, ai_enrich=False)
+    db_session.commit()
     assert _catalog_table_names(db_session, test_datasource.id)
 
     empty_inventory = AuthoritativeInventory.from_completed_inventory(
@@ -99,7 +101,8 @@ def test_authoritative_catalog_failure_rolls_back_all_reconciliation_changes(
     test_datasource,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sync_schema(db_session, test_datasource.id, ai_enrich=False)
+    ensure_catalog(db_session, test_datasource.id, ai_enrich=False)
+    db_session.commit()
     expected_catalog = _catalog_table_names(db_session, test_datasource.id)
     empty_inventory = AuthoritativeInventory.from_completed_inventory(
         SchemaInventory(datasource_id=test_datasource.id, dialect="sqlite")

@@ -63,7 +63,7 @@ def test_progress_fingerprint_ignores_duplicate_record_identity_and_timing(db_se
             "executedAt": "2026-01-02T00:00:00Z",
             "latencyMs": 99,
         }),
-        **common,
+        **{**common, "semantic_id": "result:invocation-2"},
     ))
     db_session.commit()
     assert ProgressGuard(db_session).fingerprint(admission.run_id) == first
@@ -97,3 +97,37 @@ def test_progress_counter_survives_focus_updates(db_session, test_datasource):
     state = json.loads(db_session.get(AgentRun, admission.run_id).result_json)
     assert state["progress"]["stalled_turns"] == 1
     assert state["focus"]["missing"] == ["trend"]
+
+
+def test_progress_fingerprint_ignores_procedural_sql_and_safety_artifacts(db_session, test_datasource):
+    admission, _lease = _admit(db_session, test_datasource, "session_progress_procedure")
+    first = ProgressGuard(db_session).fingerprint(admission.run_id)
+    common = {
+        "run_id": admission.run_id,
+        "session_id": "session_progress_procedure",
+        "title": "SQL 过程状态",
+        "provenance_json": "{}",
+        "relations_json": "[]",
+        "status": "completed",
+    }
+    db_session.add_all([
+        AgentArtifactRecord(
+            id="artifact_progress_sql",
+            type="sql",
+            semantic_id="sql:one",
+            payload_json=json.dumps({"sql": "SELECT 1", "safeSql": "SELECT 1 LIMIT 500"}),
+            presentation_json=json.dumps({"visibility": "supporting"}),
+            **common,
+        ),
+        AgentArtifactRecord(
+            id="artifact_progress_safety",
+            type="safety",
+            semantic_id="safety:one",
+            payload_json=json.dumps({"canExecute": True}),
+            presentation_json=json.dumps({"visibility": "internal"}),
+            **common,
+        ),
+    ])
+    db_session.commit()
+
+    assert ProgressGuard(db_session).fingerprint(admission.run_id) == first

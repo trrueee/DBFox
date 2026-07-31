@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -19,12 +18,20 @@ from engine.agent.events import (
     validate_runtime_event_payload,
 )
 from engine.agent.run import RunStatus, SessionLeaseConflict, TERMINAL_RUN_STATUSES
+from engine.agent.run_item import (
+    final_answer_item,
+    dump_run_item,
+    project_run,
+    user_message_item,
+)
 from engine.agent.session import DeliveryMode, SessionInputStatus, SessionLease
 from engine.agent.repositories.write_transaction import begin_agent_write
+from engine.json_codec import canonical_dumps as _json, loads
 from engine.models import (
     AgentEventRecord,
     AgentMessage,
     AgentRun,
+    AgentRunItemRecord,
     AgentSession,
     AgentSessionInput,
     AgentTurn,
@@ -33,10 +40,6 @@ from engine.models import (
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
-
-
-def _json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
 def _aware(value: datetime | None) -> datetime | None:
@@ -208,35 +211,22 @@ class SessionRepository:
         # relationship to the aggregate. Flush the admitted entities first so
         # SQLAlchemy cannot schedule the event insert ahead of its Run.
         self.session.flush()
+        user_message = self.session.get(AgentMessage, user_message_id)
+        run = self.session.get(AgentRun, run_id)
+        if user_message is None or run is None:
+            raise RuntimeError("Admitted Run projection is incomplete")
         self._append_event(
             aggregate,
-            RuntimeEventType.SESSION_INPUT_ADMITTED,
+            RuntimeEventType.RUN_STARTED,
             run_id=run_id,
-            payload={
-                "session_input": {
-                    "id": input_id,
-                    "sequence": int(aggregate.input_sequence),
-                    "delivery_mode": delivery_mode.value,
-                    "selected_artifact_ids": selected_artifact_ids or [],
-                    "reply_to_request_id": reply_to_request_id,
-                },
-                "user_message_id": user_message_id,
-            },
+            payload={"run": project_run(run)},
             now=now,
         )
         self._append_event(
             aggregate,
-            RuntimeEventType.RUN_CREATED,
+            RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=run_id,
-            payload={
-                "run": {
-                    "id": run_id,
-                    "status": RunStatus.QUEUED.value,
-                    "version": 0,
-                    "input_id": input_id,
-                    "assistant_message_id": assistant_message_id,
-                }
-            },
+            payload={"item": dump_run_item(user_message_item(user_message, run_id=run_id))},
             now=now,
         )
         self.session.flush()
@@ -277,12 +267,9 @@ class SessionRepository:
         run.updated_at = now
         self._append_event(
             aggregate,
-            RuntimeEventType.SESSION_CONTEXT_UPDATED,
+            RuntimeEventType.RUN_UPDATED,
             run_id=run_id,
-            payload={
-                "reason": "steer_inputs_consumed",
-                "input_ids": [str(row.id) for row in rows],
-            },
+            payload={"run": project_run(run)},
             now=now,
         )
         self.session.flush()
@@ -384,16 +371,9 @@ class SessionRepository:
         run.updated_at = now
         self._append_event(
             aggregate,
-            RuntimeEventType.SESSION_INPUT_PROMOTED,
+            RuntimeEventType.RUN_UPDATED,
             run_id=str(run.id),
-            payload={"session_input_id": admitted.id},
-            now=now,
-        )
-        self._append_event(
-            aggregate,
-            RuntimeEventType.RUN_STARTED,
-            run_id=str(run.id),
-            payload={"run": {"id": run.id, "status": run.status, "version": run.version}},
+            payload={"run": project_run(run)},
             now=now,
         )
         self.session.flush()
@@ -450,14 +430,6 @@ class SessionRepository:
         run.version = int(run.version) + 1
         run.updated_at = now
         self.session.flush()
-        self._append_event(
-            aggregate,
-            RuntimeEventType.TURN_STARTED,
-            run_id=run_id,
-            turn_id=turn.id,
-            payload={"turn": {"id": turn.id, "sequence": sequence, "status": "running"}},
-            now=now,
-        )
         self.session.flush()
         return turn
 
@@ -490,7 +462,7 @@ class SessionRepository:
                 turn_id=str(record.turn_id) if record.turn_id else None,
                 sequence=int(record.sequence),
                 timestamp=_aware(record.created_at) or _utcnow(),
-                payload=json.loads(str(record.payload_json or "{}")),
+                payload=loads(str(record.payload_json or "{}")),
             )
             for record in records
         ]
@@ -604,6 +576,13 @@ class SessionRepository:
             )
         )
         self.session.flush()
+        self._append_event(
+            aggregate,
+            RuntimeEventType.RUN_ITEM_COMPLETED,
+            run_id=run_id,
+            payload={"item": dump_run_item(user_message_item(message, run_id=run_id))},
+            now=current_time,
+        )
         return message
 
     def select_artifact(self, *, session_id: str, artifact_id: str, selected_by: str) -> None:
@@ -614,17 +593,6 @@ class SessionRepository:
         if artifact is None or str(artifact.session_id) != session_id:
             raise ValueError("Artifact is outside the Session")
         aggregate.selected_artifact_id = artifact_id
-        self._append_event(
-            aggregate,
-            RuntimeEventType.ARTIFACT_SELECTED,
-            run_id=str(artifact.run_id),
-            turn_id=str(artifact.turn_id) if artifact.turn_id else None,
-            payload={"selection": {
-                "session_id": session_id, "artifact_id": artifact_id,
-                "selected_by": selected_by,
-            }},
-            now=_utcnow(),
-        )
         self.session.flush()
 
     def _append_event(
@@ -637,8 +605,72 @@ class SessionRepository:
         now: datetime,
         turn_id: str | None = None,
     ) -> None:
-        event_version = validate_runtime_event_payload(event_type, payload)
         aggregate.event_sequence = int(aggregate.event_sequence or 0) + 1
+        item = payload.get("item")
+        if isinstance(item, dict):
+            item_id = str(item.get("id") or "")
+            if not item_id:
+                raise ValueError("RunItem event payload is missing its id")
+            record = self.session.get(AgentRunItemRecord, item_id)
+            if record is None:
+                item["sequence"] = int(aggregate.event_sequence)
+                record = AgentRunItemRecord(
+                    id=item_id,
+                    session_id=str(aggregate.id),
+                    run_id=str(item.get("run_id") or run_id or ""),
+                    turn_id=str(item["turn_id"]) if item.get("turn_id") else None,
+                    sequence=int(item["sequence"]),
+                    item_type=str(item.get("type") or ""),
+                    revision=int(item.get("revision") or 1),
+                    status=str(item.get("status") or ""),
+                    item_json="{}",
+                    created_at=datetime.fromisoformat(
+                        str(item["created_at"]).replace("Z", "+00:00")
+                    ),
+                    updated_at=now,
+                    completed_at=(
+                        datetime.fromisoformat(
+                            str(item["completed_at"]).replace("Z", "+00:00")
+                        )
+                        if item.get("completed_at")
+                        else None
+                    ),
+                )
+                self.session.add(record)
+            else:
+                if str(record.session_id) != str(aggregate.id):
+                    raise ValueError("RunItem id is already owned by another Session")
+                item_run_id = str(item.get("run_id") or run_id or "")
+                if item_run_id != str(record.run_id):
+                    raise ValueError("RunItem run_id is immutable")
+                item_type = str(item.get("type") or "")
+                if item_type != str(record.item_type):
+                    raise ValueError("RunItem type is immutable")
+                next_revision = int(item.get("revision") or record.revision)
+                if next_revision < int(record.revision):
+                    raise ValueError("RunItem revision cannot regress")
+                terminal_statuses = {"completed", "failed", "cancelled"}
+                if (
+                    str(record.status) in terminal_statuses
+                    and str(item.get("status") or "") != str(record.status)
+                ):
+                    raise ValueError("Terminal RunItem status is immutable")
+                item["sequence"] = int(record.sequence)
+                record.turn_id = (
+                    str(item["turn_id"]) if item.get("turn_id") else record.turn_id
+                )
+                record.revision = next_revision
+                record.status = str(item.get("status") or record.status)
+                record.updated_at = now
+                record.completed_at = (
+                    datetime.fromisoformat(
+                        str(item["completed_at"]).replace("Z", "+00:00")
+                    )
+                    if item.get("completed_at")
+                    else None
+                )
+            record.item_json = _json(item)
+        event_version = validate_runtime_event_payload(event_type, payload)
         self.session.add(
             AgentEventRecord(
                 id=f"event_{uuid4().hex}",
@@ -716,17 +748,9 @@ class SessionRepository:
         self.session.flush()
         self._append_event(
             aggregate,
-            RuntimeEventType.SESSION_INPUT_ADMITTED,
+            RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=str(run.id),
-            payload={
-                "session_input": {
-                    "id": input_id,
-                    "sequence": int(aggregate.input_sequence),
-                    "delivery_mode": DeliveryMode.STEER.value,
-                    "selected_artifact_ids": selected_artifact_ids or [],
-                },
-                "user_message_id": message_id,
-            },
+            payload={"item": dump_run_item(user_message_item(message, run_id=str(run.id)))},
             now=now,
         )
         self.session.flush()
@@ -754,7 +778,7 @@ class SessionRepository:
             run.cancel_requested = True
             if run.status == RunStatus.RUNNING.value:
                 run.status = RunStatus.CANCELLING.value
-                event_type = RuntimeEventType.RUN_CANCELLING
+                event_type = RuntimeEventType.RUN_UPDATED
             else:
                 run.status = RunStatus.CANCELLED.value
                 run.completed_at = now
@@ -778,12 +802,18 @@ class SessionRepository:
                 aggregate,
                 event_type,
                 run_id=str(run.id),
-                payload={"run": {
-                    "id": str(run.id), "status": str(run.status), "version": int(run.version),
-                    "reason": "superseded_by_user_input",
-                }},
+                payload={"run": project_run(run)},
                 now=now,
             )
+            assistant = self.session.get(AgentMessage, run.assistant_message_id)
+            if assistant is not None and str(assistant.status) == "cancelled" and str(assistant.content):
+                self._append_event(
+                    aggregate,
+                    RuntimeEventType.RUN_ITEM_CANCELLED,
+                    run_id=str(run.id),
+                    payload={"item": dump_run_item(final_answer_item(assistant, run=run))},
+                    now=now,
+                )
 
     def _session_for_update(self, session_id: str) -> AgentSession:
         begin_agent_write(self.session)

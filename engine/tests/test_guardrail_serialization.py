@@ -83,6 +83,71 @@ def test_guardrail_check_with_ast_returns_ast_out_of_band() -> None:
     json.dumps(result)
 
 
+def test_guardrail_check_with_ast_uses_one_parse_result(monkeypatch) -> None:
+    parse_calls = 0
+    original_parse_sql = guardrail_module.parse_sql
+
+    def counting_parse_sql(sql: str, dialect: str):
+        nonlocal parse_calls
+        parse_calls += 1
+        return original_parse_sql(sql, dialect)
+
+    monkeypatch.setattr(guardrail_module, "parse_sql", counting_parse_sql)
+
+    result, parsed_ast = guardrail_module.guardrail_check_with_ast("SELECT 1")
+
+    assert result["result"] != "reject"
+    assert isinstance(parsed_ast, exp.Expression)
+    assert parse_calls == 1
+
+
+def test_guardrail_rejects_when_safe_sql_cannot_be_rendered(monkeypatch) -> None:
+    def fail_render(*_args: Any, **_kwargs: Any) -> str:
+        raise RuntimeError("render failed")
+
+    monkeypatch.setattr(exp.Expression, "sql", fail_render)
+
+    result = guardrail_module.guardrail_check("SELECT 1 LIMIT 1")
+
+    assert result["result"] == "reject"
+    assert result["safeSql"] == ""
+    assert [check["rule"] for check in result["checks"]] == [
+        "safe_sql_render_failed",
+    ]
+
+
+def test_guardrail_fails_closed_when_parser_contract_breaks(monkeypatch) -> None:
+    monkeypatch.setattr(
+        guardrail_module,
+        "_parse_guarded_expression",
+        lambda *_args, **_kwargs: (None, [], None),
+    )
+
+    result = guardrail_module.guardrail_check("SELECT 1")
+
+    assert result["result"] == "reject"
+    assert result["safeSql"] == ""
+    assert [check["rule"] for check in result["checks"]] == [
+        "guardrail_internal_error",
+    ]
+
+
+def test_guardrail_fails_closed_when_renderer_contract_breaks(monkeypatch) -> None:
+    monkeypatch.setattr(
+        guardrail_module,
+        "_render_bounded_sql",
+        lambda *_args, **_kwargs: (None, None),
+    )
+
+    result = guardrail_module.guardrail_check("SELECT 1 LIMIT 1")
+
+    assert result["result"] == "reject"
+    assert result["safeSql"] == ""
+    assert [check["rule"] for check in result["checks"]] == [
+        "guardrail_internal_error",
+    ]
+
+
 def test_trust_gate_public_result_does_not_expose_internal_ast() -> None:
     trust_gate = TrustGate(
         _DummyDb(),  # type: ignore[arg-type]

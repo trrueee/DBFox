@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from typing import Any
 
 from engine.datasource import datasource_connection_dict
+from engine.json_codec import dumps
 from engine.models import DEFAULT_PROJECT_ID, DataSource, SchemaColumn, SchemaTable
 from engine.schemas.datasource import DataSourceResponse
 from engine.app.safe_errors import FixedErrorCode
@@ -95,7 +95,7 @@ def persist_health_success(
     setattr(ds, "last_test_readonly", bool(result.get("readonly", False)))
     setattr(ds, "last_test_server_version", str(result.get("serverVersion") or ""))
     setattr(ds, "last_test_tables_count", int(result.get("tablesCount") or 0))
-    setattr(ds, "last_test_warnings", json.dumps(warnings, ensure_ascii=False))
+    setattr(ds, "last_test_warnings", dumps(warnings))
 
 
 def persist_health_failure(
@@ -111,7 +111,7 @@ def persist_health_failure(
     setattr(ds, "last_test_readonly", None)
     setattr(ds, "last_test_server_version", None)
     setattr(ds, "last_test_tables_count", None)
-    setattr(ds, "last_test_warnings", json.dumps([], ensure_ascii=False))
+    setattr(ds, "last_test_warnings", dumps([]))
 
 
 def set_model_attr(obj: object, attr: str, value: Any) -> None:

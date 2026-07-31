@@ -35,6 +35,12 @@ def _public_guardrail_result(result: dict[str, Any]) -> dict[str, Any]:
 
 
 from engine.schemas.query import QueryHistoryResponse
+from engine.schemas.api_responses import (
+    DeleteCountResponse,
+    GuardrailResponse,
+    QueryCancelResponse,
+    QueryExplainResponse,
+)
 
 
 _QUERY_HISTORY_PUBLIC_TEXT_FIELDS = (
@@ -61,7 +67,7 @@ def _query_history_to_dict(item: QueryHistory) -> dict[str, Any]:
     return payload
 
 
-@router.post("/query/validate")
+@router.post("/query/validate", response_model=GuardrailResponse)
 def api_validate_sql(req: SQLValidateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     ctx = DialectContext(datasource_id=req.datasource_id or "", dialect="mysql")
     if req.datasource_id:
@@ -73,7 +79,7 @@ def api_validate_sql(req: SQLValidateRequest, db: Session = Depends(get_db)) -> 
     return _public_guardrail_result(dict(result))
 
 
-@router.post("/query/explain")
+@router.post("/query/explain", response_model=QueryExplainResponse)
 def api_explain_sql(req: SQLExplainRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == req.datasource_id).first()
     if not datasource:
@@ -102,12 +108,12 @@ def api_explain_sql(req: SQLExplainRequest, db: Session = Depends(get_db)) -> di
         ) from None
 
 
-@router.post("/query/cancel")
+@router.post("/query/cancel", response_model=QueryCancelResponse)
 def api_cancel_sql(req: SQLCancelRequest) -> dict[str, Any]:
     return QUERY_REGISTRY.cancel(req.execution_id)
 
 
-@router.get("/query/history")
+@router.get("/query/history", response_model=list[QueryHistoryResponse])
 def api_query_history(
     datasource_id: str | None = Query(None),
     search: str | None = Query(None, max_length=200),
@@ -157,7 +163,7 @@ def api_query_history(
     return [_query_history_to_dict(item) for item in history]
 
 
-@router.delete("/query/history/{history_id}")
+@router.delete("/query/history/{history_id}", response_model=DeleteCountResponse)
 def api_delete_query_history(history_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     item = db.query(QueryHistory).filter(QueryHistory.id == history_id).first()
     if not item:
@@ -182,7 +188,7 @@ def api_delete_query_history(history_id: str, db: Session = Depends(get_db)) -> 
     return {"success": True, "deleted": 1}
 
 
-@router.delete("/query/history")
+@router.delete("/query/history", response_model=DeleteCountResponse)
 def api_clear_query_history(datasource_id: str = Query(...), db: Session = Depends(get_db)) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not datasource:

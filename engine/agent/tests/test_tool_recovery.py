@@ -1,0 +1,200 @@
+from __future__ import annotations
+
+import pytest
+from sqlalchemy.orm import sessionmaker
+
+from engine.agent.control import LeaseAwareRunControl
+from engine.agent.definition import AgentDefinition
+from engine.agent.repositories.session import SessionRepository
+from engine.agent.repositories.tool import ToolInvocationRepository
+from engine.agent.run import RunLimits
+from engine.agent.tool_dispatcher import ToolDispatcher
+from engine.models import (
+    AgentObservationRecord,
+    AgentRun,
+    AgentSession,
+    AgentToolInvocation,
+)
+from engine.tools.materialization import materialize_tools
+from engine.tools.runtime import (
+    BaseTool,
+    ToolExecutionSpec,
+    ToolExecutor,
+    ToolInputModel,
+    ToolOutputModel,
+    ToolPolicy,
+    ToolPresentation,
+    ToolReconciliation,
+    ToolRecoveryPolicy,
+    ToolRegistry,
+    ToolRunContext,
+)
+
+
+class _RecoveryInput(ToolInputModel):
+    value: str
+
+
+class _RecoveryOutput(ToolOutputModel):
+    value: str
+
+
+@pytest.mark.parametrize(
+    ("reconciliation_status", "expected_execution_count"),
+    [("succeeded", 0), ("not_applied", 1)],
+)
+def test_recovery_reconciles_by_invocation_key_before_repeating_an_action(
+    db_session,
+    test_datasource,
+    reconciliation_status,
+    expected_execution_count,
+) -> None:
+    reconciliation_keys: list[str] = []
+    execution_keys: list[str] = []
+
+    class _ExternalWriteTool(BaseTool[_RecoveryInput, _RecoveryOutput]):
+        name = "external_write"
+        group = "schema"
+        description = "Exercise the external-write recovery contract."
+        input_model = _RecoveryInput
+        output_model = _RecoveryOutput
+        presentation = ToolPresentation(title="External write", category="manage")
+        execution = ToolExecutionSpec(recovery=ToolRecoveryPolicy.RECONCILE)
+
+        def run(
+            self,
+            tool_input: _RecoveryInput,
+            context: ToolRunContext,
+        ) -> dict[str, str]:
+            execution_keys.append(context.idempotency_key)
+            return {"value": tool_input.value}
+
+        def reconcile(
+            self,
+            tool_input: _RecoveryInput,
+            context: ToolRunContext,
+        ) -> ToolReconciliation:
+            reconciliation_keys.append(context.idempotency_key)
+            return ToolReconciliation(
+                status=reconciliation_status,
+                output=(
+                    {"value": tool_input.value}
+                    if reconciliation_status == "succeeded"
+                    else None
+                ),
+            )
+
+    db_session.add(
+        AgentSession(
+            id="session_external_recovery",
+            datasource_id=str(test_datasource.id),
+            title="Recovery",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session_external_recovery",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="write once",
+        idempotency_key="request_external_recovery",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(
+        session_id="session_external_recovery",
+        owner="worker",
+        ttl_seconds=120,
+    )
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    registry = ToolRegistry().register(_ExternalWriteTool())
+    definition = AgentDefinition(
+        allowed_tool_groups=("schema",),
+        execution_mode="user_requested_read",
+    )
+    tools = materialize_tools(
+        registry,
+        allowed_groups={"schema"},
+        execution_mode=definition.execution_mode,
+    )
+    turn = sessions.start_turn(
+        lease=lease,
+        run_id=admission.run_id,
+        agent_definition_version=definition.version,
+        prompt_version="test",
+        prompt_hash="prompt",
+        context_snapshot={},
+        context_hash="context",
+        tool_materialization=tools.model_dump(mode="json"),
+        tool_materialization_hash=tools.hash,
+        provider="test",
+        model_name="test",
+    )
+    invocations = ToolInvocationRepository(db_session)
+    invocation = invocations.request(
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(turn.id),
+        provider_call_id="call_external_write",
+        tool_name="external_write",
+        raw_input={"value": "once"},
+        materialization=tools,
+        policy_decision={
+            "status": "allowed",
+            "reason": "test",
+            "safe_args": {"value": "once"},
+        },
+    )
+    invocations.mark_running(lease=lease, invocation_id=invocation.id)
+    db_session.commit()
+
+    recovered = invocations.recover_interrupted(
+        lease=lease,
+        run_id=admission.run_id,
+    )
+    db_session.commit()
+    assert [item.id for item in recovered] == [invocation.id]
+    if reconciliation_status == "succeeded":
+        # Reconciliation is a read-only recovery step, so a later execution-policy
+        # change must not hide an external action that already completed.
+        registry.require("external_write").policy = ToolPolicy(
+            allowed_execution_modes=("never",),
+        )
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    run = db_session.get(AgentRun, admission.run_id)
+    executor = ToolExecutor(max_workers=1)
+    try:
+        ToolDispatcher(
+            session_factory=factory,
+            registry=registry,
+            definition=definition,
+            executor=executor,
+        ).execute_requested(
+            lease,
+            recovered[0],
+            control=LeaseAwareRunControl(
+                run=run,
+                limits=RunLimits(),
+                cancellation_probe=lambda: False,
+                lease_lost_probe=None,
+            ),
+        )
+    finally:
+        executor.close()
+
+    db_session.expire_all()
+    durable = db_session.get(AgentToolInvocation, invocation.id)
+    observation = (
+        db_session.query(AgentObservationRecord)
+        .filter_by(tool_invocation_id=invocation.id)
+        .one()
+    )
+    assert durable.status == "succeeded"
+    assert observation.status == "succeeded"
+    assert reconciliation_keys == [invocation.idempotency_key]
+    assert execution_keys == [invocation.idempotency_key] * expected_execution_count

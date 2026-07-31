@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from openai import OpenAI
 
 from engine.llm.config import LlmConfig
-from engine.llm.providers.openai import create_openai_compatible_api_client
+from engine.llm.providers.openai import create_openai_responses_client
 
 
 def create_openai_compatible_client(
@@ -22,7 +22,7 @@ def create_openai_compatible_client(
     ownership are therefore shared with the Agent model factory.
     """
 
-    return create_openai_compatible_api_client(
+    return create_openai_responses_client(
         api_key=config.api_key,
         api_base=config.api_base,
         timeout=timeout,

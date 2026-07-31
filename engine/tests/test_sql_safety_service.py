@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from engine.errors import GuardrailValidationError
-from engine.schema_sync import sync_schema
+from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
 from engine.sql.executor import execute_query
 from engine.sql.guardrail import GuardrailResult
 from engine.sql.dialect_context import DialectContext
@@ -132,7 +132,7 @@ def test_console_execute_api_passes_explicit_safety_decision(
         }
 
     monkeypatch.setattr(SqlSafetyService, "build_execution_decision", fake_build_execution_decision)
-    monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
+    monkeypatch.setattr("engine.agent.console.execute_query", fake_execute_query)
 
     result = agent_api.api_agent_console_execute(
         agent_api.ConsoleExecuteRequest(

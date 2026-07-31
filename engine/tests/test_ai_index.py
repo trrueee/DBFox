@@ -70,6 +70,7 @@ def test_segment_for_fts_preserves_english():
 
 def test_build_table_search_text_includes_all_fields():
     text = build_table_search_text(
+        table_schema="analytics",
         table_name="xhs_feature_usage_daily",
         ai_description="测试描述",
         semantic_tags=["测试标签"],
@@ -88,6 +89,7 @@ def test_build_table_search_text_includes_all_fields():
 def test_build_column_search_text():
     text = build_column_search_text(
         column_name="usage_count",
+        table_schema="analytics",
         table_name="xhs_feature_usage_daily",
         ai_description="功能使用次数",
         semantic_tags=["使用次数"],

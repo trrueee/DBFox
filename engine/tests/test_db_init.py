@@ -35,7 +35,6 @@ def test_agent_write_trace_path_stays_inside_private_runtime(
     path = db_module._agent_write_trace_path("20260712_010203")
 
     assert path == tmp_path / "diagnostics" / "db_write_trace_20260712_010203.jsonl"
-    assert ".agent_eval" not in path.parts
 
 
 def test_agent_write_trace_error_diagnostic_never_contains_exception_text() -> None:

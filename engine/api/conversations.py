@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import queue
 import threading
 from datetime import UTC, datetime
@@ -11,21 +10,51 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from engine.agent.approval import ApprovalConflict
-from engine.agent.events import COMMIT_NOTIFICATIONS, LiveDelta, LiveStreamGap, RuntimeEvent
+from engine.agent.approval import Approval, ApprovalConflict
+from engine.agent.artifact import Artifact
+from engine.agent.events import COMMIT_NOTIFICATIONS, LiveStreamGap, RuntimeEvent
 from engine.agent.loop import LIVE_STREAM_HUB
-from engine.agent.question import QuestionAnswer, QuestionConflict, QuestionStatus
+from engine.agent.question import (
+    QuestionAnswer,
+    QuestionConflict,
+    QuestionRequest,
+    QuestionStatus,
+)
 from engine.agent.projection import conversation_snapshot
+from engine.agent.run_item import (
+    RunItemDelta,
+    project_run,
+)
 from engine.agent.repositories.approval import ApprovalRepository
+from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import EventHistoryGap, SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
+from engine.agent.run import TERMINAL_RUN_STATUSES
 from engine.agent.session import DeliveryMode
+from engine.json_codec import dumps as json_dumps, loads as json_loads
+from engine.agent.tracing import build_run_trace
 from engine.db import SessionLocal, get_db
 from engine.errors import DBFoxError
 from engine.llm.config import LlmConfigurationError, normalize_product_llm_preferences
-from engine.models import AgentSession, DataSource
+from engine.models import (
+    AgentEvidenceRecord,
+    AgentRun,
+    AgentRunItemRecord,
+    AgentSession,
+    DataSource,
+)
+from engine.schemas.api_responses import (
+    ArtifactSelectionResponse,
+    ConversationDeleteResponse,
+    ConversationInputAcceptedResponse,
+    ConversationSnapshotResponse,
+    ConversationSummaryResponse,
+    EvidenceResponse,
+    RunCancelledResponse,
+    RunTraceResponse,
+)
 
 
 router = APIRouter()
@@ -76,14 +105,21 @@ class QuestionResolutionRequest(BaseModel):
     text: str | None = Field(default=None, max_length=20_000)
 
 
-@router.get("/conversations")
+@router.get(
+    "/conversations",
+    response_model=list[ConversationSummaryResponse],
+)
 def list_conversations(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[dict[str, object]]:
     rows = db.execute(
-        select(AgentSession).order_by(AgentSession.updated_at.desc()).offset(offset).limit(limit)
+        select(AgentSession)
+        .where(AgentSession.deleted_at.is_(None))
+        .order_by(AgentSession.updated_at.desc())
+        .offset(offset)
+        .limit(limit)
     ).scalars().all()
     return [{
         "id": str(row.id), "datasource_id": str(row.datasource_id), "title": str(row.title),
@@ -92,7 +128,7 @@ def list_conversations(
     } for row in rows]
 
 
-@router.post("/conversations")
+@router.post("/conversations", response_model=ConversationSnapshotResponse)
 def create_conversation(
     payload: ConversationCreateRequest,
     db: Session = Depends(get_db),
@@ -107,7 +143,7 @@ def create_conversation(
     row = AgentSession(
         datasource_id=payload.datasource_id,
         title=payload.title or "New conversation",
-        context_tables_json=json.dumps(payload.context_tables, ensure_ascii=False),
+        context_tables_json=json_dumps(payload.context_tables),
         created_at=now,
         updated_at=now,
     )
@@ -118,9 +154,22 @@ def create_conversation(
     return detail
 
 
-@router.get("/conversations/{conversation_id}")
-def get_conversation(conversation_id: str, db: Session = Depends(get_db)) -> dict[str, object]:
-    detail = conversation_snapshot(db, conversation_id)
+@router.get(
+    "/conversations/{conversation_id}",
+    response_model=ConversationSnapshotResponse,
+)
+def get_conversation(
+    conversation_id: str,
+    item_limit: int = Query(default=200, ge=1, le=1_000),
+    run_limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    detail = conversation_snapshot(
+        db,
+        conversation_id,
+        item_limit=item_limit,
+        run_limit=run_limit,
+    )
     if detail is None:
         raise HTTPException(
             status_code=404,
@@ -129,19 +178,114 @@ def get_conversation(conversation_id: str, db: Session = Depends(get_db)) -> dic
     return detail
 
 
-@router.patch("/conversations/{conversation_id}")
+@router.get(
+    "/conversations/{conversation_id}/history",
+    response_model=ConversationSnapshotResponse,
+)
+def get_conversation_history(
+    conversation_id: str,
+    before_item_sequence: int | None = Query(default=None, ge=1),
+    before_run_sequence: int | None = Query(default=None, ge=1),
+    item_limit: int = Query(default=200, ge=1, le=1_000),
+    run_limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    detail = conversation_snapshot(
+        db,
+        conversation_id,
+        item_limit=item_limit,
+        run_limit=run_limit,
+        before_item_sequence=before_item_sequence,
+        before_run_sequence=before_run_sequence,
+    )
+    if detail is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "CONVERSATION_NOT_FOUND", "message": "Conversation not found."},
+        )
+    return detail
+
+
+@router.get(
+    "/conversations/{conversation_id}/runs/{run_id}/artifacts",
+    response_model=list[Artifact],
+)
+def get_run_artifacts(
+    conversation_id: str,
+    run_id: str,
+    db: Session = Depends(get_db),
+) -> list[dict[str, object]]:
+    run = db.get(AgentRun, run_id)
+    if run is None or str(run.session_id) != conversation_id:
+        raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND"})
+    return [
+        item.model_dump(mode="json")
+        for item in ArtifactRepository(db).list_for_run(run_id)
+    ]
+
+
+@router.get(
+    "/conversations/{conversation_id}/runs/{run_id}/evidence",
+    response_model=list[EvidenceResponse],
+)
+def get_run_evidence(
+    conversation_id: str,
+    run_id: str,
+    db: Session = Depends(get_db),
+) -> list[dict[str, object]]:
+    run = db.get(AgentRun, run_id)
+    if run is None or str(run.session_id) != conversation_id:
+        raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND"})
+    rows = db.execute(
+        select(AgentEvidenceRecord)
+        .where(AgentEvidenceRecord.run_id == run_id)
+        .order_by(AgentEvidenceRecord.created_at)
+    ).scalars().all()
+    return [{
+        "id": str(row.id),
+        "session_id": str(row.session_id),
+        "run_id": str(row.run_id),
+        "claim_id": str(row.claim_id),
+        "artifact_id": str(row.artifact_id),
+        "label": str(row.label),
+        "query_fingerprint": str(row.query_fingerprint),
+        "observed_at": row.observed_at.isoformat(),
+        "locator": json_loads(str(row.locator_json or "{}")),
+        "value": json_loads(str(row.value_json)) if row.value_json else None,
+    } for row in rows]
+
+
+@router.get(
+    "/conversations/{conversation_id}/runs/{run_id}/trace",
+    response_model=RunTraceResponse,
+)
+def get_run_trace(
+    conversation_id: str,
+    run_id: str,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    trace = build_run_trace(db, session_id=conversation_id, run_id=run_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND"})
+    return trace
+
+
+@router.patch(
+    "/conversations/{conversation_id}",
+    response_model=ConversationSnapshotResponse,
+)
 def patch_conversation(
     conversation_id: str,
     payload: ConversationPatchRequest,
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     row = db.query(AgentSession).filter(AgentSession.id == conversation_id).first()
-    if row is None:
+    if row is None or row.deleted_at is not None:
         raise DBFoxError("Conversation not found.", code="CONVERSATION_NOT_FOUND")
     if payload.title is not None:
         row.title = payload.title
     if payload.context_tables is not None:
-        row.context_tables_json = json.dumps(payload.context_tables, ensure_ascii=False)
+        row.context_tables_json = json_dumps(payload.context_tables)
     if payload.archived is not None:
         row.archived_at = datetime.now(UTC) if payload.archived else None
     row.updated_at = datetime.now(UTC)
@@ -151,13 +295,48 @@ def patch_conversation(
     return detail
 
 
-@router.delete("/conversations/{conversation_id}")
-def delete_conversation(conversation_id: str, db: Session = Depends(get_db)) -> dict[str, str]:
+@router.delete(
+    "/conversations/{conversation_id}",
+    response_model=ConversationDeleteResponse,
+)
+def delete_conversation(
+    conversation_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
     row = db.query(AgentSession).filter(AgentSession.id == conversation_id).first()
-    if row is not None:
+    if row is None or row.deleted_at is not None:
+        return {"status": "ok"}
+    active_runs = list(db.execute(
+        select(AgentRun).where(
+            AgentRun.session_id == conversation_id,
+            AgentRun.status.not_in([status.value for status in TERMINAL_RUN_STATUSES]),
+        )
+    ).scalars().all())
+    if not active_runs:
         db.delete(row)
         db.commit()
-    return {"status": "ok"}
+        return {"status": "ok"}
+
+    coordinator = _coordinator(request)
+    now = datetime.now(UTC)
+    row.deleted_at = now
+    row.archived_at = now
+    row.updated_at = now
+    repository = RunRepository(db)
+    execution_ids: list[str] = []
+    for run in active_runs:
+        repository.request_cancel(run_id=str(run.id))
+        if run.execution_id:
+            execution_ids.append(str(run.execution_id))
+    db.commit()
+    if execution_ids:
+        from engine.query_registry import QUERY_REGISTRY
+
+        for execution_id in execution_ids:
+            QUERY_REGISTRY.cancel(execution_id)
+    coordinator.wake(conversation_id)
+    return {"status": "deleting"}
 
 
 def _coordinator(request: Request):
@@ -170,7 +349,11 @@ def _coordinator(request: Request):
     return value
 
 
-@router.post("/conversations/{conversation_id}/inputs", status_code=202)
+@router.post(
+    "/conversations/{conversation_id}/inputs",
+    response_model=ConversationInputAcceptedResponse,
+    status_code=202,
+)
 def admit_conversation_input(
     conversation_id: str,
     payload: ConversationInputRequest,
@@ -179,7 +362,7 @@ def admit_conversation_input(
 ) -> dict[str, object]:
     coordinator = _coordinator(request)
     aggregate = db.get(AgentSession, conversation_id)
-    if aggregate is None:
+    if aggregate is None or aggregate.deleted_at is not None:
         raise HTTPException(
             status_code=404,
             detail={"code": "CONVERSATION_NOT_FOUND", "message": "Conversation not found."},
@@ -214,6 +397,17 @@ def admit_conversation_input(
             workspace_context=payload.workspace_context,
         )
         db.commit()
+        run = db.get(AgentRun, admission.run_id)
+        user_item = db.get(AgentRunItemRecord, admission.user_message_id)
+        aggregate = db.get(AgentSession, conversation_id)
+        if run is None or user_item is None or aggregate is None:
+            raise RuntimeError("Committed Agent admission projection is incomplete")
+        admission_projection = {
+            "protocol_version": 2,
+            "cursor": int(aggregate.event_sequence or 0),
+            "items": [json_loads(str(user_item.item_json))],
+            "runs": [project_run(run)],
+        }
     except (ValueError, LlmConfigurationError) as exc:
         db.rollback()
         raise HTTPException(
@@ -226,21 +420,25 @@ def admit_conversation_input(
         "input_id": admission.input_id,
         "run_id": admission.run_id,
         "user_message_id": admission.user_message_id,
-        "assistant_message_id": admission.assistant_message_id,
         "input_sequence": admission.input_sequence,
-        "event_cursor": int(db.get(AgentSession, conversation_id).event_sequence),
+        "event_cursor": admission_projection["cursor"],
+        "projection": admission_projection,
         "stream_path": f"/conversations/{conversation_id}/stream",
     }
 
 
-@router.get("/conversations/{conversation_id}/events")
+@router.get(
+    "/conversations/{conversation_id}/events",
+    response_model=list[RuntimeEvent],
+)
 def list_conversation_events(
     conversation_id: str,
     after_sequence: int = Query(default=0, ge=0),
     limit: int = Query(default=500, ge=1, le=1_000),
     db: Session = Depends(get_db),
 ) -> list[dict[str, object]]:
-    if db.get(AgentSession, conversation_id) is None:
+    aggregate = db.get(AgentSession, conversation_id)
+    if aggregate is None or aggregate.deleted_at is not None:
         raise HTTPException(status_code=404, detail={"code": "CONVERSATION_NOT_FOUND"})
     try:
         events = SessionRepository(db).list_events(
@@ -265,7 +463,8 @@ def stream_conversation(
     after_sequence: int = Query(default=0, ge=0),
 ) -> StreamingResponse:
     with SessionLocal() as db:
-        if db.get(AgentSession, conversation_id) is None:
+        aggregate = db.get(AgentSession, conversation_id)
+        if aggregate is None or aggregate.deleted_at is not None:
             raise HTTPException(status_code=404, detail={"code": "CONVERSATION_NOT_FOUND"})
     last_event_id = request.headers.get("last-event-id", "").strip()
     if last_event_id.isdigit():
@@ -291,7 +490,10 @@ def stream_conversation(
     )
 
 
-@router.post("/conversations/{conversation_id}/artifact-selection")
+@router.post(
+    "/conversations/{conversation_id}/artifact-selection",
+    response_model=ArtifactSelectionResponse,
+)
 def select_conversation_artifact(
     conversation_id: str,
     payload: ArtifactSelectionRequest,
@@ -308,7 +510,10 @@ def select_conversation_artifact(
     return {"session_id": conversation_id, "artifact_id": payload.artifact_id}
 
 
-@router.post("/approvals/{approval_id}/resolve")
+@router.post(
+    "/approvals/{approval_id}/resolve",
+    response_model=Approval,
+)
 def resolve_approval(
     approval_id: str,
     payload: ApprovalResolutionRequest,
@@ -335,7 +540,10 @@ def resolve_approval(
     return value.model_dump(mode="json")
 
 
-@router.post("/questions/{question_id}/resolve")
+@router.post(
+    "/questions/{question_id}/resolve",
+    response_model=QuestionRequest,
+)
 def resolve_question(
     question_id: str,
     payload: QuestionResolutionRequest,
@@ -366,7 +574,7 @@ def resolve_question(
     return value.model_dump(mode="json")
 
 
-@router.post("/runs/{run_id}/cancel")
+@router.post("/runs/{run_id}/cancel", response_model=RunCancelledResponse)
 def cancel_run(run_id: str, request: Request, db: Session = Depends(get_db)) -> dict[str, object]:
     coordinator = _coordinator(request)
     try:
@@ -386,26 +594,45 @@ def cancel_run(run_id: str, request: Request, db: Session = Depends(get_db)) -> 
 def _conversation_stream(session_id: str, after_sequence: int):
     commit_subscription = COMMIT_NOTIFICATIONS.subscribe(session_id)
     live_subscription = LIVE_STREAM_HUB.subscribe_session(session_id)
-    signals: queue.Queue[tuple[str, object]] = queue.Queue()
+    # This queue is the final buffer before the HTTP client. It must remain
+    # bounded even though the upstream hubs already have their own limits.
+    signals: queue.Queue[tuple[str, object]] = queue.Queue(maxsize=512)
     stopped = threading.Event()
+    commit_pending = threading.Event()
+    stream_gap = threading.Event()
 
     def forward_commits() -> None:
         while not stopped.is_set():
             value = commit_subscription.receive(timeout=1.0)
-            if value is not None:
-                signals.put(("commit", value))
+            if value is None or commit_pending.is_set():
+                continue
+            commit_pending.set()
+            try:
+                signals.put_nowait(("commit", value))
+            except queue.Full:
+                # Any already queued signal wakes the generator, which always
+                # replays durable SQL truth before consuming the next signal.
+                commit_pending.clear()
 
     def forward_live() -> None:
         while not stopped.is_set():
             try:
                 value = live_subscription.receive(timeout=1.0)
             except LiveStreamGap:
-                # End this response cleanly. The client reloads the durable
-                # snapshot and reconnects from its authoritative cursor.
-                signals.put(("gap", None))
+                stream_gap.set()
+                try:
+                    signals.put_nowait(("gap", None))
+                except queue.Full:
+                    pass
                 return
             if value is not None:
-                signals.put(("live", value))
+                try:
+                    signals.put_nowait(("live", value))
+                except queue.Full:
+                    # Do not accumulate an unbounded token backlog. Closing this
+                    # response makes the client reload the durable snapshot.
+                    stream_gap.set()
+                    return
 
     threads = [
         threading.Thread(target=forward_commits, daemon=True),
@@ -424,6 +651,8 @@ def _conversation_stream(session_id: str, after_sequence: int):
             for event in events:
                 cursor = event.sequence
                 yield _sse_event(event.event_type.value, event.model_dump(mode="json"), event_id=str(cursor))
+            if stream_gap.is_set():
+                return
             try:
                 kind, value = signals.get(timeout=15.0)
             except queue.Empty:
@@ -431,18 +660,22 @@ def _conversation_stream(session_id: str, after_sequence: int):
                 continue
             if kind == "live":
                 delta = value
-                assert isinstance(delta, LiveDelta)
-                yield _sse_event("live.delta", delta.model_dump(mode="json"))
+                assert isinstance(delta, RunItemDelta)
+                yield _sse_event("run.item.delta", delta.model_dump(mode="json"))
             elif kind == "gap":
                 return
+            elif kind == "commit":
+                commit_pending.clear()
             # commit notifications deliberately carry no payload; loop replays SQL truth.
     finally:
         stopped.set()
         commit_subscription.close()
         live_subscription.close()
+        for thread in threads:
+            thread.join(timeout=1.25)
 
 
 def _sse_event(event_type: str, payload: object, event_id: str | None = None) -> str:
-    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+    encoded = json_dumps(payload)
     identity = f"id: {event_id}\n" if event_id else ""
     return f"{identity}event: {event_type}\ndata: {encoded}\n\n"

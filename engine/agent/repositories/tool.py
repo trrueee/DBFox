@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -12,22 +11,28 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from engine.agent.events import RuntimeEventType
-from engine.agent.observation import Observation, ObservationStatus
+from engine.agent.observation import (
+    Observation,
+    ObservationStatus,
+    serialize_model_observation,
+)
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
+from engine.agent.run_item import (
+    dump_run_item,
+    function_call_output_item,
+    function_call_item,
+)
 from engine.agent.session import SessionLease
 from engine.agent.tool import ToolInvocation, ToolInvocationStatus
+from engine.json_codec import canonical_dumps as _json, loads
 from engine.models import AgentObservationRecord, AgentToolInvocation, AgentTurn
 from engine.tools.materialization import ToolMaterialization
-from engine.tools.materialization import ToolRecoveryPolicy
+from engine.tools.runtime.base import ToolRecoveryPolicy
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
-
-
-def _json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
 def _hash(value: Any) -> str:
@@ -105,6 +110,7 @@ class ToolInvocationRepository:
             idempotency_key=idempotency_key,
             status=status.value,
             policy_json=_json(policy_decision),
+            presentation_json=_json(tool.presentation),
             recovery_policy=tool.recovery_policy.value,
             attempt_count=0,
             created_at=_utcnow(),
@@ -113,10 +119,14 @@ class ToolInvocationRepository:
         self.session.flush()
         self.sessions.append_event(
             lease=lease,
-            event_type=RuntimeEventType.TOOL_REQUESTED,
+            event_type=(
+                RuntimeEventType.RUN_ITEM_FAILED
+                if status is ToolInvocationStatus.REJECTED
+                else RuntimeEventType.RUN_ITEM_STARTED
+            ),
             run_id=run_id,
             turn_id=turn_id,
-            payload={"tool_invocation": self._domain(row).model_dump(mode="json")},
+            payload={"item": dump_run_item(function_call_item(row))},
         )
         return self._domain(row)
 
@@ -134,10 +144,41 @@ class ToolInvocationRepository:
         row.started_at = _utcnow()
         self.sessions.append_event(
             lease=lease,
-            event_type=RuntimeEventType.TOOL_RUNNING,
+            event_type=RuntimeEventType.RUN_ITEM_UPDATED,
             run_id=str(row.run_id),
             turn_id=str(row.turn_id),
-            payload={"tool_invocation_id": row.id, "attempt": row.attempt_count},
+            payload={"item": dump_run_item(function_call_item(row))},
+        )
+        self.session.flush()
+        return self._domain(row)
+
+    def mark_waiting_input(
+        self,
+        *,
+        lease: SessionLease,
+        invocation_id: str,
+    ) -> ToolInvocation:
+        """Suspend an interaction call until its user response is durable."""
+
+        begin_agent_write(self.session)
+        row = self.session.execute(
+            select(AgentToolInvocation)
+            .where(AgentToolInvocation.id == invocation_id)
+            .with_for_update()
+        ).scalar_one()
+        if row.session_id != lease.session_id:
+            raise ValueError("ToolInvocation is outside the Session")
+        if row.status != ToolInvocationStatus.REQUESTED.value:
+            raise ValueError(
+                f"ToolInvocation cannot wait for input from status {row.status}"
+            )
+        row.status = ToolInvocationStatus.WAITING_INPUT.value
+        self.sessions.append_event(
+            lease=lease,
+            event_type=RuntimeEventType.RUN_ITEM_UPDATED,
+            run_id=str(row.run_id),
+            turn_id=str(row.turn_id),
+            payload={"item": dump_run_item(function_call_item(row))},
         )
         self.session.flush()
         return self._domain(row)
@@ -154,17 +195,10 @@ class ToolInvocationRepository:
         row.attempt_count = int(row.attempt_count or 0) + 1
         self.sessions.append_event(
             lease=lease,
-            event_type=RuntimeEventType.ACTIVITY_UPDATED,
+            event_type=RuntimeEventType.RUN_ITEM_UPDATED,
             run_id=str(row.run_id),
             turn_id=str(row.turn_id),
-            payload={"activity": {
-                "id": f"activity:{row.id}",
-                "kind": "recovery",
-                "title": "正在重试工具操作",
-                "summary": f"第 {row.attempt_count} 次执行使用同一幂等调用标识。",
-                "status": "running",
-                "tool_invocation_id": str(row.id),
-            }},
+            payload={"item": dump_run_item(function_call_item(row))},
         )
         self.session.flush()
         return self._domain(row)
@@ -178,6 +212,46 @@ class ToolInvocationRepository:
         ).scalars()
         return [self._domain(row) for row in rows]
 
+    def cancel_active_for_run(
+        self,
+        *,
+        lease: SessionLease,
+        run_id: str,
+    ) -> list[Observation]:
+        """Atomically terminalize every non-terminal invocation in a cancelled Run."""
+        begin_agent_write(self.session)
+        rows = self.session.execute(
+            select(AgentToolInvocation).where(
+                AgentToolInvocation.run_id == run_id,
+                AgentToolInvocation.status.in_(
+                    [
+                        ToolInvocationStatus.REQUESTED.value,
+                        ToolInvocationStatus.WAITING_APPROVAL.value,
+                        ToolInvocationStatus.WAITING_INPUT.value,
+                        ToolInvocationStatus.RUNNING.value,
+                    ]
+                ),
+            ).order_by(AgentToolInvocation.created_at).with_for_update()
+        ).scalars().all()
+        observations: list[Observation] = []
+        for row in rows:
+            if str(row.session_id) != lease.session_id:
+                raise ValueError("ToolInvocation is outside the Session")
+            observations.append(
+                self.settle(
+                    lease=lease,
+                    invocation_id=str(row.id),
+                    status=ObservationStatus.CANCELLED,
+                    model_visible_summary="The tool execution was cancelled with its Run.",
+                    error_code="TOOL_CANCELLED",
+                    error_message="Tool execution was cancelled.",
+                    contributes_progress=False,
+                    retryable=False,
+                )
+            )
+        self.session.flush()
+        return observations
+
     def recover_interrupted(self, *, lease: SessionLease, run_id: str) -> list[ToolInvocation]:
         """Settle or requeue invocations left running by a crashed worker."""
         begin_agent_write(self.session)
@@ -187,31 +261,25 @@ class ToolInvocationRepository:
                 AgentToolInvocation.status == ToolInvocationStatus.RUNNING.value,
             ).order_by(AgentToolInvocation.created_at).with_for_update()
         ).scalars().all()
-        retryable: list[ToolInvocation] = []
+        recoverable: list[ToolInvocation] = []
         for row in rows:
             if str(row.session_id) != lease.session_id:
                 raise ValueError("ToolInvocation is outside the Session")
             policy = ToolRecoveryPolicy(str(row.recovery_policy))
-            if policy is ToolRecoveryPolicy.RETRY_SAFE:
+            if policy in {
+                ToolRecoveryPolicy.RETRY_SAFE,
+                ToolRecoveryPolicy.RECONCILE,
+            }:
                 row.status = ToolInvocationStatus.REQUESTED.value
                 row.started_at = None
                 self.sessions.append_event(
                     lease=lease,
-                    event_type=RuntimeEventType.ACTIVITY_UPDATED,
+                    event_type=RuntimeEventType.RUN_ITEM_UPDATED,
                     run_id=run_id,
                     turn_id=str(row.turn_id),
-                    payload={
-                        "activity": {
-                            "id": f"activity:{row.id}",
-                            "kind": "recovery",
-                            "title": "恢复未完成的只读操作",
-                            "summary": "上次执行在结算前中断，正在使用同一调用标识安全重试。",
-                            "status": "running",
-                            "tool_invocation_id": str(row.id),
-                        }
-                    },
+                    payload={"item": dump_run_item(function_call_item(row))},
                 )
-                retryable.append(self._domain(row))
+                recoverable.append(self._domain(row))
                 continue
             self.settle(
                 lease=lease,
@@ -226,7 +294,7 @@ class ToolInvocationRepository:
                 retryable=False,
             )
         self.session.flush()
-        return retryable
+        return recoverable
 
     def settle(
         self,
@@ -238,6 +306,8 @@ class ToolInvocationRepository:
         structured_result_ref: str | None = None,
         artifact_ids: list[str] | None = None,
         facts: dict[str, Any] | None = None,
+        capabilities: tuple[str, ...] | list[str] | None = None,
+        contributes_progress: bool = True,
         error_code: str | None = None,
         error_message: str | None = None,
         retryable: bool = False,
@@ -249,9 +319,11 @@ class ToolInvocationRepository:
         if row.session_id != lease.session_id:
             raise ValueError("ToolInvocation is outside the Session")
         if row.status not in {
+            ToolInvocationStatus.REQUESTED.value,
             ToolInvocationStatus.RUNNING.value,
             ToolInvocationStatus.REJECTED.value,
             ToolInvocationStatus.WAITING_APPROVAL.value,
+            ToolInvocationStatus.WAITING_INPUT.value,
         }:
             raise ValueError(f"ToolInvocation cannot settle from status {row.status}")
         existing = self.session.execute(
@@ -270,6 +342,17 @@ class ToolInvocationRepository:
             ).scalar_one()
         ) + 1
         now = _utcnow()
+        resolved_artifact_ids = artifact_ids or []
+        resolved_facts = facts or {}
+        model_output = serialize_model_observation(
+            status=status.value,
+            summary=model_visible_summary,
+            facts=resolved_facts,
+            artifact_ids=resolved_artifact_ids,
+            retryable=retryable,
+            error_code=error_code,
+            error_message=error_message,
+        )
         observation = AgentObservationRecord(
             id=f"observation_{uuid4().hex}",
             session_id=str(row.session_id),
@@ -279,9 +362,12 @@ class ToolInvocationRepository:
             sequence=sequence,
             status=status.value,
             model_visible_summary=model_visible_summary,
+            model_output_json=model_output,
             structured_result_ref=structured_result_ref,
-            artifact_ids_json=_json(artifact_ids or []),
-            facts_json=_json(facts or {}),
+            artifact_ids_json=_json(resolved_artifact_ids),
+            facts_json=_json(resolved_facts),
+            semantic_capabilities_json=_json(list(capabilities or [])),
+            contributes_progress=contributes_progress,
             error_code=error_code,
             error_message=error_message,
             retryable=retryable,
@@ -291,6 +377,7 @@ class ToolInvocationRepository:
         row.status = {
             ObservationStatus.SUCCEEDED: ToolInvocationStatus.SUCCEEDED.value,
             ObservationStatus.FAILED: ToolInvocationStatus.FAILED.value,
+            ObservationStatus.CANCELLED: ToolInvocationStatus.CANCELLED.value,
             ObservationStatus.REJECTED: ToolInvocationStatus.REJECTED.value,
             ObservationStatus.UNKNOWN: ToolInvocationStatus.UNKNOWN.value,
         }[status]
@@ -303,20 +390,32 @@ class ToolInvocationRepository:
         self.sessions.append_event(
             lease=lease,
             event_type=(
-                RuntimeEventType.TOOL_COMPLETED
+                RuntimeEventType.RUN_ITEM_COMPLETED
                 if status is ObservationStatus.SUCCEEDED
-                else RuntimeEventType.TOOL_FAILED
+                else RuntimeEventType.RUN_ITEM_CANCELLED
+                if status is ObservationStatus.CANCELLED
+                else RuntimeEventType.RUN_ITEM_FAILED
             ),
             run_id=str(row.run_id),
             turn_id=str(row.turn_id),
-            payload={"tool_invocation_id": row.id, "status": row.status},
+            payload={"item": dump_run_item(function_call_item(row))},
         )
         self.sessions.append_event(
             lease=lease,
-            event_type=RuntimeEventType.OBSERVATION_CREATED,
+            event_type=(
+                RuntimeEventType.RUN_ITEM_COMPLETED
+                if status is ObservationStatus.SUCCEEDED
+                else RuntimeEventType.RUN_ITEM_CANCELLED
+                if status is ObservationStatus.CANCELLED
+                else RuntimeEventType.RUN_ITEM_FAILED
+            ),
             run_id=str(row.run_id),
             turn_id=str(row.turn_id),
-            payload={"observation": domain.model_dump(mode="json")},
+            payload={
+                "item": dump_run_item(
+                    function_call_output_item(row, observation)
+                )
+            },
         )
         return domain
 
@@ -330,11 +429,11 @@ class ToolInvocationRepository:
             provider_call_id=str(row.provider_call_id),
             tool_name=str(row.tool_name),
             tool_version=str(row.tool_version),
-            authorized_input=json.loads(str(row.input_json)),
+            authorized_input=loads(str(row.input_json)),
             authorized_input_hash=str(row.input_hash),
             idempotency_key=str(row.idempotency_key),
             status=ToolInvocationStatus(str(row.status)),
-            policy=json.loads(str(row.policy_json or "{}")),
+            policy=loads(str(row.policy_json or "{}")),
             recovery_policy=str(row.recovery_policy),
             attempt_count=int(row.attempt_count or 0),
         )
@@ -351,9 +450,12 @@ class ToolInvocationRepository:
             tool_version=str(invocation.tool_version),
             status=ObservationStatus(str(row.status)),
             model_visible_summary=str(row.model_visible_summary),
+            model_output=str(row.model_output_json),
             structured_result_ref=str(row.structured_result_ref) if row.structured_result_ref else None,
-            artifact_ids=json.loads(str(row.artifact_ids_json or "[]")),
-            facts=json.loads(str(row.facts_json or "{}")),
+            artifact_ids=loads(str(row.artifact_ids_json or "[]")),
+            facts=loads(str(row.facts_json or "{}")),
+            capabilities=tuple(loads(str(row.semantic_capabilities_json or "[]"))),
+            contributes_progress=bool(row.contributes_progress),
             error_code=str(row.error_code) if row.error_code else None,
             error_message=str(row.error_message) if row.error_message else None,
             retryable=bool(row.retryable),

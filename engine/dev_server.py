@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import os
 import sys
-import json
 import socket
 from pathlib import Path
 
 import uvicorn
+
+from engine.json_codec import dumps
 
 ENGINE_DIR = Path(__file__).resolve().parent
 ENGINE_HOST = "127.0.0.1"
@@ -36,7 +37,7 @@ def bind_engine_socket(port: int) -> tuple[socket.socket, int]:
 
 
 def _emit_engine_ready(port: int) -> None:
-    print(f"DBFOX_ENGINE_READY {json.dumps({'port': port}, separators=(',', ':'))}", flush=True)
+    print(f"DBFOX_ENGINE_READY {dumps({'port': port})}", flush=True)
 
 
 def run_engine_server(*, reload: bool | None = None) -> None:

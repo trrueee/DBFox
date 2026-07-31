@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,6 +7,8 @@ from typing import TYPE_CHECKING, Mapping
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+
+from engine.json_codec import loads
 
 logger = logging.getLogger("dbfox.semantic.alias")
 
@@ -137,7 +138,7 @@ class SemanticAliasResolver:
         if not path.exists():
             return {}
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            raw = loads(path.read_text(encoding="utf-8"))
             if not isinstance(raw, dict):
                 return {}
             aliases: dict[str, str] = {}

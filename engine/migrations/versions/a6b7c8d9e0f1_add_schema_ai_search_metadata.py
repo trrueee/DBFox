@@ -1,7 +1,7 @@
 """add_schema_ai_search_metadata
 
 Revision ID: a6b7c8d9e0f1
-Revises: d4e5f6a7b8c9
+Revises: c3d4e5f6a7b8
 Create Date: 2026-06-16 14:40:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision: str = "a6b7c8d9e0f1"
-down_revision: Union[str, Sequence[str], None] = "d4e5f6a7b8c9"
+down_revision: Union[str, Sequence[str], None] = "c3d4e5f6a7b8"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

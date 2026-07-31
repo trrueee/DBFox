@@ -10,6 +10,10 @@ from engine.api.datasources.common import schema_column_to_dict, schema_table_to
 from engine.db import get_db
 from engine.errors import DBFoxError, NotFoundError
 from engine.models import SchemaColumn, SchemaTable
+from engine.schemas.datasource import (
+    SchemaColumnUpdateResponse,
+    SchemaTableUpdateResponse,
+)
 
 router = APIRouter()
 
@@ -33,7 +37,10 @@ class ColumnMetadataUpdateRequest(BaseModel):
     ai_confidence: float | None = Field(default=None, ge=0, le=1)
 
 
-@router.put("/schema/tables/{table_id}")
+@router.put(
+    "/schema/tables/{table_id}",
+    response_model=SchemaTableUpdateResponse,
+)
 def api_update_table_metadata(
     table_id: str,
     req: TableMetadataUpdateRequest,
@@ -63,7 +70,10 @@ def api_update_table_metadata(
         raise DBFoxError(code="UPDATE_FAILED", message=str(exc)) from exc
 
 
-@router.put("/schema/columns/{column_id}")
+@router.put(
+    "/schema/columns/{column_id}",
+    response_model=SchemaColumnUpdateResponse,
+)
 def api_update_column_metadata(
     column_id: str,
     req: ColumnMetadataUpdateRequest,

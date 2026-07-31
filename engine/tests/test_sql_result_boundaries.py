@@ -14,6 +14,7 @@ from engine.sql.row_serializer import (
     _fetch_and_serialize,
     _process_rows,
 )
+from engine.json_codec import byte_size
 
 
 class _Cursor:
@@ -60,7 +61,7 @@ def test_server_hard_cap_is_an_informational_agent_readonly_warning(
     db_session,
     test_datasource,
 ) -> None:
-    from engine.schema_sync import sync_schema
+    from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
     from engine.sql.safety_gate import validate_sql_schema
     from engine.sql.trust_gate import TrustGate
 
@@ -120,9 +121,7 @@ def test_column_limit_has_its_own_truncation_marker(
 
 def test_response_byte_boundary_is_exact_and_independent() -> None:
     raw_row = {"value": "x"}
-    serialized_row_bytes = len(
-        json.dumps(raw_row, ensure_ascii=False, default=str).encode("utf-8")
-    )
+    serialized_row_bytes = byte_size(raw_row)
     one_row_payload_bytes = JSON_OVERHEAD_BYTES + serialized_row_bytes
 
     exact = _process_rows(
@@ -149,9 +148,7 @@ def test_response_byte_boundary_is_exact_and_independent() -> None:
 
 def test_response_bytes_match_the_complete_json_array_encoding() -> None:
     raw_rows = [{"value": "x"}, {"value": "y"}]
-    expected_bytes = len(
-        json.dumps(raw_rows, ensure_ascii=False, default=str).encode("utf-8")
-    )
+    expected_bytes = byte_size(raw_rows)
 
     result = _process_rows(
         raw_rows,
@@ -170,7 +167,7 @@ def test_executor_exposes_independent_truncation_reasons(
     monkeypatch,
 ) -> None:
     import engine.sql.executor as executor
-    from engine.schema_sync import sync_schema
+    from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
 
     sync_schema(db_session, test_datasource.id)
     bounded_result = QueryExecutionResult(
@@ -214,7 +211,7 @@ def test_executor_recalculates_response_bytes_after_redaction(
 ) -> None:
     import engine.policy.sensitivity as sensitivity_module
     import engine.sql.executor as executor
-    from engine.schema_sync import sync_schema
+    from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
 
     sync_schema(db_session, test_datasource.id)
     bounded_result = QueryExecutionResult(
@@ -240,9 +237,7 @@ def test_executor_recalculates_response_bytes_after_redaction(
         test_datasource.id,
         "SELECT id FROM users LIMIT 1",
     )
-    expected_bytes = JSON_OVERHEAD_BYTES + len(
-        json.dumps(result["rows"][0], ensure_ascii=False, default=str).encode("utf-8")
-    )
+    expected_bytes = JSON_OVERHEAD_BYTES + byte_size(result["rows"][0])
 
     assert result["responseBytes"] == expected_bytes
     assert result["responseBytes"] > bounded_result.response_bytes

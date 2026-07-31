@@ -5,9 +5,11 @@ import pytest
 
 from engine.agent.events import (
     RUNTIME_EVENT_CONTRACTS,
+    RuntimeEvent,
     RuntimeEventType,
     validate_runtime_event_payload,
 )
+from engine.schemas.api_responses import ConversationSnapshotResponse
 from engine.models import SecurityAuditRecord, utcnow
 from engine.security.audit import SecurityAuditService
 
@@ -17,16 +19,36 @@ def test_every_public_event_has_one_versioned_contract() -> None:
     assert all(contract.version == 1 for contract in RUNTIME_EVENT_CONTRACTS.values())
 
 
+def test_snapshot_and_runtime_event_publish_the_same_discriminated_item_contract() -> None:
+    snapshot_schema = ConversationSnapshotResponse.model_json_schema()
+    snapshot_items = snapshot_schema["properties"]["items"]["items"]
+    event_schema = RuntimeEvent.model_json_schema()
+    event_item = event_schema["$defs"]["RuntimeEventPayload"]["properties"]["item"]["anyOf"][0]
+
+    expected_mapping = {
+        "approval",
+        "function_call",
+        "function_call_output",
+        "message",
+        "plan",
+        "question",
+    }
+    assert snapshot_items["discriminator"]["propertyName"] == "type"
+    assert set(snapshot_items["discriminator"]["mapping"]) == expected_mapping
+    assert event_item["discriminator"] == snapshot_items["discriminator"]
+    assert event_item["oneOf"] == snapshot_items["oneOf"]
+
+
 def test_public_events_reject_result_rows_and_chart_series() -> None:
     with pytest.raises(ValueError, match="result values"):
         validate_runtime_event_payload(
-            RuntimeEventType.ARTIFACT_CREATED,
-            {"artifact": {"payload": {"rows": [{"secret": "value"}]}}},
+            RuntimeEventType.RUN_ITEM_COMPLETED,
+            {"item": {"payload": {"rows": [{"secret": "value"}]}}},
         )
     with pytest.raises(ValueError, match="result values"):
         validate_runtime_event_payload(
-            RuntimeEventType.ARTIFACT_CREATED,
-            {"artifact": {"payload": {"series": [{"value": 1}]}}},
+            RuntimeEventType.RUN_ITEM_COMPLETED,
+            {"item": {"payload": {"series": [{"value": 1}]}}},
         )
 
 

@@ -1,13 +1,16 @@
 import pytest
 
-from engine.agent.events import LiveDelta, LiveStreamGap, LiveStreamHub
+from engine.agent.events import LiveStreamGap, LiveStreamHub
+from engine.agent.run_item import RunItemDelta, RunItemType
 
 
-def _delta(revision: int, content: str = "x") -> LiveDelta:
-    return LiveDelta(
+def _delta(revision: int, content: str = "x", *, offset: int | None = None) -> RunItemDelta:
+    return RunItemDelta(
         session_id="session", run_id="run", turn_id="turn",
-        channel="answer", operation="append", live_id="live:session:run:turn:answer",
-        channel_revision=revision, correlation_id="message-assistant", content=content,
+        item_id="message:run:turn", item_type=RunItemType.MESSAGE,
+        field="content", revision=revision,
+        offset=revision - 1 if offset is None else offset,
+        content=content,
     )
 
 
@@ -36,20 +39,20 @@ def test_session_subscription_receives_deltas_for_new_runs():
 
 def test_late_subscription_receives_full_channel_rebase_then_new_deltas():
     hub = LiveStreamHub()
-    hub.publish(_delta(1, "A"))
-    hub.publish(_delta(2, "B"))
+    hub.publish(_delta(1, "A", offset=0))
+    hub.publish(_delta(2, "B", offset=1))
 
     subscription = hub.subscribe_session("session")
     rebase = subscription.receive(timeout=0.01)
     assert rebase is not None
-    assert rebase.operation == "replace"
-    assert rebase.channel_revision == 2
+    assert rebase.offset == 0
+    assert rebase.revision == 2
     assert rebase.content == "AB"
 
-    hub.publish(_delta(3, "C"))
+    hub.publish(_delta(3, "C", offset=2))
     appended = subscription.receive(timeout=0.01)
     assert appended is not None
-    assert appended.operation == "append"
-    assert appended.channel_revision == 3
+    assert appended.offset == 2
+    assert appended.revision == 3
     assert appended.content == "C"
     subscription.close()

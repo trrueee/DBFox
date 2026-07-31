@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-import json
-
 from sqlalchemy.orm import Session
 
 from engine.agent.evidence import Evidence
 from engine.agent.repositories.write_transaction import begin_agent_write
+from engine.json_codec import canonical_dumps as _json
 from engine.models import AgentArtifactRecord, AgentEvidenceRecord
-
-
-def _json(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
 class EvidenceRepository:
