@@ -18,8 +18,6 @@ dbfox_local.db.bak_*
 dbfox_local.db-shm
 dbfox_local.db-wal
 dbfox_demo.db
-dbfox_agent_kernel_checkpoints.sqlite
-dbfox_agent_core_checkpoints.sqlite.version
 demo_shop
 *.sqlite
 *.sqlite.version

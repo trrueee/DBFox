@@ -3,7 +3,7 @@
 `main` 分支和每个 Pull Request 由 `.github/workflows/ci.yml` 执行分层门禁：
 
 1. Python 编译、渐进式 mypy 基线、空数据库 Alembic upgrade/check；
-2. 不依赖外部服务或真实 LLM 凭据的核心后端、Agent 运行时、评测回归；
+2. 不依赖外部服务或真实 LLM 凭据的核心后端与 Agent 运行时回归；
 3. 在独立 `.build_venv` 中执行完整 PyInstaller sidecar 构建；
 4. 前端的 `npm ci`、ESLint、Vitest、TypeScript/Vite build；
 5. Rust 的锁文件验证、fmt、Clippy（警告即失败）和单元测试。
@@ -19,7 +19,7 @@ python -m mypy --no-warn-unused-configs --follow-imports=skip build_sidecar.py e
 python -m alembic upgrade head
 python -m alembic check
 python -m pytest engine/tests -q --tb=short -m "not e2e and not integration and not real_llm"
-python -m pytest engine/agent/tests engine/agent_runtime/tests -q --tb=short -m "not e2e and not integration and not real_llm"
+python -m pytest engine/agent/tests -q --tb=short -m "not e2e and not integration and not real_llm"
 
 cd desktop
 npm ci

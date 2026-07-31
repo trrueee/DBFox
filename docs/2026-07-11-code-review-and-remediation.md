@@ -145,7 +145,7 @@ DBFox 是 local-first 的 AI 数据库桌面工作台。Tauri 负责桌面宿主
 每个阶段结束前至少应执行：
 
 ```powershell
-python -m pytest engine/tests engine/agent/tests engine/evaluation/tests
+python -m pytest engine/tests engine/agent/tests
 python -m alembic check
 python -m mypy --no-warn-unused-configs --follow-imports=skip engine build_sidecar.py
 cd desktop; npm test; npm run lint; npm run build
