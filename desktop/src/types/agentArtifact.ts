@@ -54,8 +54,6 @@ export type MarkdownArtifact = AgentArtifactBase & {
   content: string;
 };
 
-export type AgentArtifact = ChartArtifact | SqlArtifact | ResultViewArtifact | MarkdownArtifact;
-
 export type DataReference =
   | { type: "table"; datasourceId?: string; schema?: string; table: string; label: string }
   | { type: "column"; datasourceId?: string; schema?: string; table?: string; column: string; label: string }

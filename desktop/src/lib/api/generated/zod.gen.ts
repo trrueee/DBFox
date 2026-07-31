@@ -1028,9 +1028,35 @@ export const zRestoreOperationResponse = z.object({
  * ResultFilter
  */
 export const zResultFilter = z.object({
-    column: z.string(),
-    operator: z.string(),
-    value: z.unknown()
+    column: z.string().min(1).max(256),
+    operator: z.enum([
+        'equals',
+        'not_equals',
+        'contains',
+        'starts_with',
+        'ends_with',
+        'gt',
+        'gte',
+        'lt',
+        'lte',
+        'is_null',
+        'is_not_null',
+        'in',
+        'not_in'
+    ]),
+    value: z.union([
+        z.string().max(4096),
+        z.int(),
+        z.number(),
+        z.boolean(),
+        z.array(z.union([
+            z.string().max(4096),
+            z.int(),
+            z.number(),
+            z.boolean(),
+            z.null()
+        ])).max(100)
+    ]).nullish()
 });
 
 /**
@@ -1058,7 +1084,7 @@ export const zResultPageResponse = z.object({
  * ResultSort
  */
 export const zResultSort = z.object({
-    column: z.string(),
+    column: z.string().min(1).max(256),
     direction: z.enum(['asc', 'desc'])
 });
 
@@ -1066,9 +1092,9 @@ export const zResultSort = z.object({
  * ResultExportRequest
  */
 export const zResultExportRequest = z.object({
-    filters: z.array(zResultFilter).nullish(),
-    search: z.string().nullish(),
-    sort: z.array(zResultSort).nullish()
+    filters: z.array(zResultFilter).max(16).nullish(),
+    search: z.string().max(512).nullish(),
+    sort: z.array(zResultSort).max(16).nullish()
 });
 
 /**
@@ -1080,11 +1106,11 @@ export const zResultPageRequest = z.object({
         'exact',
         'estimate'
     ]).optional().default('none'),
-    filters: z.array(zResultFilter).nullish(),
+    filters: z.array(zResultFilter).max(16).nullish(),
     page: z.int().gte(1),
     pageSize: z.int().gte(1).lte(500),
-    search: z.string().nullish(),
-    sort: z.array(zResultSort).nullish()
+    search: z.string().max(512).nullish(),
+    sort: z.array(zResultSort).max(16).nullish()
 });
 
 /**
@@ -1425,12 +1451,12 @@ export const zTableMetadataUpdateRequest = z.object({
  * TableResultExportRequest
  */
 export const zTableResultExportRequest = z.object({
-    datasourceId: z.string(),
-    filters: z.array(zResultFilter).nullish(),
-    search: z.string().nullish(),
-    sort: z.array(zResultSort).nullish(),
-    tableId: z.string().nullish(),
-    tableName: z.string()
+    datasourceId: z.string().min(1).max(256),
+    filters: z.array(zResultFilter).max(16).nullish(),
+    search: z.string().max(512).nullish(),
+    sort: z.array(zResultSort).max(16).nullish(),
+    tableId: z.string().min(1).max(256).nullish(),
+    tableName: z.string().min(1).max(256)
 });
 
 /**
@@ -1442,14 +1468,14 @@ export const zTableResultPageRequest = z.object({
         'exact',
         'estimate'
     ]).optional().default('none'),
-    datasourceId: z.string(),
-    filters: z.array(zResultFilter).nullish(),
+    datasourceId: z.string().min(1).max(256),
+    filters: z.array(zResultFilter).max(16).nullish(),
     page: z.int().gte(1),
     pageSize: z.int().gte(1).lte(500),
-    search: z.string().nullish(),
-    sort: z.array(zResultSort).nullish(),
-    tableId: z.string().nullish(),
-    tableName: z.string()
+    search: z.string().max(512).nullish(),
+    sort: z.array(zResultSort).max(16).nullish(),
+    tableId: z.string().min(1).max(256).nullish(),
+    tableName: z.string().min(1).max(256)
 });
 
 /**
@@ -1619,37 +1645,6 @@ export const zRuntimeEvent = z.object({
     session_id: z.string(),
     timestamp: z.iso.datetime(),
     turn_id: z.string().nullish()
-});
-
-/**
- * TraceSpanResponse
- */
-export const zTraceSpanResponse = z.object({
-    attributes: z.record(z.string(), z.unknown()),
-    ended_at: z.string().nullish(),
-    id: z.string(),
-    kind: z.enum([
-        'run',
-        'turn',
-        'model',
-        'tool',
-        'policy',
-        'approval'
-    ]),
-    name: z.string(),
-    parent_id: z.string().nullish(),
-    started_at: z.string().nullish(),
-    status: z.string()
-});
-
-/**
- * RunTraceResponse
- */
-export const zRunTraceResponse = z.object({
-    run_id: z.string(),
-    session_id: z.string(),
-    spans: z.array(zTraceSpanResponse),
-    trace_id: z.string()
 });
 
 /**
@@ -1942,16 +1937,6 @@ export const zGetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGet
  * Successful Response
  */
 export const zGetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetResponse = z.array(zEvidenceResponse);
-
-export const zGetRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGetPath = z.object({
-    conversation_id: z.string(),
-    run_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zGetRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGetResponse = zRunTraceResponse;
 
 export const zStreamConversationApiV1ConversationsConversationIdStreamGetPath = z.object({
     conversation_id: z.string()

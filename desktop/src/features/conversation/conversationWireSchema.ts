@@ -10,11 +10,9 @@ import {
   zPlanItem,
   zQuestionItem,
   zRunProjection,
-  zRunTraceResponse,
   zRuntimeEvent,
 } from "../../lib/api/generated/zod.gen";
 import type {
-  AgentRunTrace,
   ConversationArtifact,
   ConversationEvidence,
   ConversationRun,
@@ -134,19 +132,6 @@ export const parseConversationArtifact = (value: unknown): ConversationArtifact 
 
 export const parseConversationEvidence = (value: unknown): ConversationEvidence =>
   zEvidenceResponse.parse(value);
-
-export const parseAgentRunTrace = (value: unknown): AgentRunTrace => {
-  const trace = zRunTraceResponse.parse(value);
-  return {
-    ...trace,
-    spans: trace.spans.map((span) => ({
-      ...span,
-      parent_id: span.parent_id ?? null,
-      started_at: span.started_at ?? null,
-      ended_at: span.ended_at ?? null,
-    })),
-  };
-};
 
 export const parseRuntimeEvent = (value: unknown): RuntimeEventEnvelope => {
   const event = zRuntimeEvent.parse(value);

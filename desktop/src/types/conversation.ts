@@ -231,24 +231,6 @@ export interface ConversationDetail {
   cursor?: number;
 }
 
-export interface AgentTraceSpan {
-  id: string;
-  parent_id: string | null;
-  kind: "run" | "turn" | "model" | "tool" | "policy" | "approval";
-  name: string;
-  status: string;
-  started_at: string | null;
-  ended_at: string | null;
-  attributes: Record<string, unknown>;
-}
-
-export interface AgentRunTrace {
-  trace_id: string;
-  session_id: string;
-  run_id: string;
-  spans: AgentTraceSpan[];
-}
-
 export interface ConversationCreateInput {
   datasource_id: string;
   title?: string;

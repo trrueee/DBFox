@@ -9,7 +9,6 @@ import {
   getConversationHistoryApiV1ConversationsConversationIdHistoryGet,
   getRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGet,
   getRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGet,
-  getRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGet,
   listConversationsApiV1ConversationsGet,
   patchConversationApiV1ConversationsConversationIdPatch,
   resolveApprovalApiV1ApprovalsApprovalIdResolvePost,
@@ -29,7 +28,6 @@ import type {
   ConversationSummary,
 } from "../../types/conversation";
 import {
-  parseAgentRunTrace,
   parseConversationArtifact,
   parseConversationEvidence,
   parseConversationRun,
@@ -104,17 +102,6 @@ export const getConversationRunEvidence = async (
     throwOnError: true,
   });
   return data.map(parseConversationEvidence);
-};
-
-export const getConversationRunTrace = async (
-  conversationId: string,
-  runId: string,
-) => {
-  const { data } = await getRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGet({
-    path: { conversation_id: conversationId, run_id: runId },
-    throwOnError: true,
-  });
-  return parseAgentRunTrace(data);
 };
 
 export const patchConversation = async (

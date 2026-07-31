@@ -31,8 +31,9 @@ describe("api type contracts", () => {
 
   it("uses a discriminated artifact payload union instead of a bare record", () => {
     const source = groupedTypesSource("artifact.ts");
+    const conversation = workspaceSource("src/types/conversation.ts");
     expect(source).toContain("export type AgentArtifactPayload =");
-    expect(source).toContain("payload: AgentArtifactPayload;");
+    expect(conversation).toContain("payload: AgentArtifactPayload;");
     expect(source).not.toContain("payload: Record<string, unknown>;");
   });
 

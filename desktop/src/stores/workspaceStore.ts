@@ -243,7 +243,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
           type: "query-result",
           queryText: text,
           conversationId: `conversation-${nextId}`,
-          artifacts: [],
         },
       ],
       activeTabId: tabId,

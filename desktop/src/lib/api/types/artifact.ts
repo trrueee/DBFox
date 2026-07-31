@@ -1,15 +1,3 @@
-export type AgentArtifactType =
-  | "agent_plan"
-  | "query_plan"
-  | "sql"
-  | "sql_suggestion"
-  | "safety"
-  | "result_view"
-  | "chart"
-  | "error"
-  | "insight"
-  | "recommendation";
-
 export interface AgentArtifactPayloadCommon {
   sourceSqlArtifactId?: unknown;
   sourceResultArtifactId?: unknown;
@@ -126,27 +114,3 @@ export type AgentArtifactPayload =
   | AgentResultViewArtifactPayload
   | AgentChartArtifactPayload
   | AgentTextArtifactPayload;
-
-export interface AgentArtifact {
-  id: string;
-  semantic_id?: string | null;
-  type: AgentArtifactType;
-  title: string;
-  payload: AgentArtifactPayload;
-  presentation: {
-    mode: "inline" | "dock" | "both" | "hidden";
-    priority: number;
-    collapsed?: boolean;
-  };
-  refs?: Record<string, unknown>;
-  produced_by_step?: string | null;
-  depends_on?: string[];
-}
-
-export interface AgentArtifactRecord {
-  id: string;
-  run_id?: string;
-  type?: string;
-  title?: string;
-  payload?: AgentArtifactPayload;
-}

@@ -1,6 +1,6 @@
 /** Core workspace types. */
 
-import type { AgentArtifact, ResultViewArtifact } from "./agentArtifact";
+import type { ResultViewArtifact } from "./agentArtifact";
 
 export type WorkspaceTabType =
   | "smart-query"
@@ -22,7 +22,6 @@ export interface WorkspaceTab {
   selectedTables?: string[];
   queryText?: string;
   conversationId?: string;
-  artifacts?: AgentArtifact[];
   artifactResult?: ResultViewArtifact;
 }
 

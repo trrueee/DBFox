@@ -2659,11 +2659,11 @@ export type ResultFilter = {
     /**
      * Operator
      */
-    operator: string;
+    operator: 'equals' | 'not_equals' | 'contains' | 'starts_with' | 'ends_with' | 'gt' | 'gte' | 'lt' | 'lte' | 'is_null' | 'is_not_null' | 'in' | 'not_in';
     /**
      * Value
      */
-    value: unknown;
+    value?: string | number | number | boolean | Array<string | number | number | boolean | null> | null;
 };
 
 /**
@@ -2872,28 +2872,6 @@ export type RunProjection = {
      * Version
      */
     version: number;
-};
-
-/**
- * RunTraceResponse
- */
-export type RunTraceResponse = {
-    /**
-     * Run Id
-     */
-    run_id: string;
-    /**
-     * Session Id
-     */
-    session_id: string;
-    /**
-     * Spans
-     */
-    spans: Array<TraceSpanResponse>;
-    /**
-     * Trace Id
-     */
-    trace_id: string;
 };
 
 /**
@@ -3517,46 +3495,6 @@ export type ToolPresentation = {
      * Visibility
      */
     visibility?: 'summary' | 'details' | 'developer';
-};
-
-/**
- * TraceSpanResponse
- */
-export type TraceSpanResponse = {
-    /**
-     * Attributes
-     */
-    attributes: {
-        [key: string]: unknown;
-    };
-    /**
-     * Ended At
-     */
-    ended_at?: string | null;
-    /**
-     * Id
-     */
-    id: string;
-    /**
-     * Kind
-     */
-    kind: 'run' | 'turn' | 'model' | 'tool' | 'policy' | 'approval';
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Parent Id
-     */
-    parent_id?: string | null;
-    /**
-     * Started At
-     */
-    started_at?: string | null;
-    /**
-     * Status
-     */
-    status: string;
 };
 
 /**
@@ -4384,40 +4322,6 @@ export type GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetRe
 };
 
 export type GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetResponse = GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetResponses[keyof GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetResponses];
-
-export type GetRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGetData = {
-    body?: never;
-    path: {
-        /**
-         * Conversation Id
-         */
-        conversation_id: string;
-        /**
-         * Run Id
-         */
-        run_id: string;
-    };
-    query?: never;
-    url: '/api/v1/conversations/{conversation_id}/runs/{run_id}/trace';
-};
-
-export type GetRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGetError = GetRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGetErrors[keyof GetRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGetErrors];
-
-export type GetRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: RunTraceResponse;
-};
-
-export type GetRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGetResponse = GetRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGetResponses[keyof GetRunTraceApiV1ConversationsConversationIdRunsRunIdTraceGetResponses];
 
 export type StreamConversationApiV1ConversationsConversationIdStreamGetData = {
     body?: never;
