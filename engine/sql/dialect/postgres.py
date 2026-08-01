@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
 
 from engine.connectivity.factory import ConnectionFactory
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
@@ -36,7 +35,9 @@ def _execute_on_postgres_profiled(
     ) as conn:
         connect_ms = int((time.perf_counter() - t_conn_start) * 1000)
         if execution_id:
-            QUERY_REGISTRY.register_postgres(execution_id, datasource_id, conn)
+            if QUERY_REGISTRY.register_postgres(execution_id, datasource_id, conn):
+                QUERY_REGISTRY.unregister(execution_id)
+                raise SQLQueryCancelledError("SQL query cancelled by user")
 
         try:
             with conn.cursor() as cursor:

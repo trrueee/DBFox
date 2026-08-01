@@ -52,7 +52,6 @@ class FixedErrorCode(str, Enum):
     SCHEMA_SYNC_FAILED = "SCHEMA_SYNC_FAILED"
     SQL_EXECUTION_FAILED = "SQL_EXECUTION_FAILED"
     SQL_SEMANTIC_PARSE_FAILED = "SQL_SEMANTIC_PARSE_FAILED"
-    TABLE_DESIGN_ERROR = "TABLE_DESIGN_ERROR"
     TEST_DATA_FAILED = "TEST_DATA_FAILED"
     AGENT_CONTEXT_UNAVAILABLE = "AGENT_CONTEXT_UNAVAILABLE"
 
@@ -98,7 +97,6 @@ _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
     FixedErrorCode.SCHEMA_SYNC_FAILED: "Schema synchronization failed.",
     FixedErrorCode.SQL_EXECUTION_FAILED: "The SQL request could not be completed.",
     FixedErrorCode.SQL_SEMANTIC_PARSE_FAILED: "SQL could not be parsed.",
-    FixedErrorCode.TABLE_DESIGN_ERROR: "The table design operation could not be completed.",
     FixedErrorCode.TEST_DATA_FAILED: "Test data could not be generated.",
     FixedErrorCode.AGENT_CONTEXT_UNAVAILABLE: "Agent context is temporarily unavailable.",
 }
@@ -131,7 +129,7 @@ class SafeLogOperation(str, Enum):
     AGENT_MEMORY_LOAD_SESSION = "agent_memory_load_session"
     AGENT_MEMORY_LIST_REUSABLE_SQL = "agent_memory_list_reusable_sql"
     AGENT_MEMORY_SAVE_PROJECTION = "agent_memory_save_projection"
-    TABLE_DESIGN_TEST_DATA = "table_design_test_data"
+    TEST_DATA_GENERATION = "test_data_generation"
     TOOL_RUNTIME_INPUT_CONTRACT_FAILED = "tool_runtime_tool_input_contract_failed"
     TOOL_RUNTIME_OUTPUT_CONTRACT_FAILED = "tool_runtime_tool_output_contract_failed"
     TOOL_RUNTIME_EXECUTION_FAILED = "tool_runtime_tool_execution_failed"

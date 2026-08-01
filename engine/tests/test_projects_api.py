@@ -5,7 +5,18 @@ import uuid
 from sqlalchemy import event
 
 from engine.api.projects import api_list_projects
-from engine.models import DataSource, Project
+from engine.models import DEFAULT_PROJECT_ID, DataSource, Project
+from engine.projects.service import resolve_project_id
+
+
+def test_project_id_resolution_fallback_creates_default_project(db_session) -> None:
+    assert resolve_project_id(db_session, None) == DEFAULT_PROJECT_ID
+    assert resolve_project_id(db_session, "") == DEFAULT_PROJECT_ID
+    assert resolve_project_id(db_session, DEFAULT_PROJECT_ID) == DEFAULT_PROJECT_ID
+
+    project = db_session.get(Project, DEFAULT_PROJECT_ID)
+    assert project is not None
+    assert project.status == "active"
 
 
 def _datasource(project_id: str | None, name: str) -> DataSource:

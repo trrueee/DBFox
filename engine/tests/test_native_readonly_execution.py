@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from engine.connectivity.factory import ConnectionFactory
-from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
+from engine.connectivity.profile import ConnectionProfile
 from engine.errors import SQLExecutionError
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 from engine.sql.row_serializer import FetchSerializationResult, ResultTruncation

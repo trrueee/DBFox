@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 import importlib
-import os
 import sqlite3
 import sys
 from pathlib import Path
 
 import engine as engine_package
-from engine.db import build_metadata_engine, configure_sqlite_pragmas, DATABASE_URL
+from engine.db import build_metadata_engine, configure_sqlite_pragmas
 
 
 class TestConfigureSqlitePragmas:

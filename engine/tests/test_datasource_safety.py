@@ -297,7 +297,7 @@ def test_postgres_ssl_params_map_shared_fields() -> None:
 
 
 from unittest.mock import MagicMock, patch
-from engine.tunnel import TUNNEL_MANAGER, get_or_create_tunnel_for_dict, open_temporary_tunnel
+from engine.tunnel import TUNNEL_MANAGER
 
 @patch("engine.tunnel.SSHTunnelForwarder")
 def test_temporary_tunnel_stops_on_success_and_failure(mock_tunnel_class) -> None:

@@ -49,7 +49,6 @@ class BackupResponse(BaseModel):
     id: str
     project_id: str | None = None
     datasource_id: str | None = None
-    environment_id: str | None = None
     label: str | None = None
     backup_type: str | None = None
     status: str | None = None

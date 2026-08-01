@@ -138,8 +138,6 @@ def _rule_validated_sql(
     passed = bool(safety.get("passed"))
     can_execute = bool(safety.get("can_execute"))
     safe_sql = str(safety.get("safe_sql") or "").strip()
-    original_sql = str(safety.get("original_sql") or "").strip()
-
     blocked_reasons = [str(r) for r in safety.get("blocked_reasons", [])]
     hard_blockers = [r for r in blocked_reasons if r != "requires_confirmation"]
 

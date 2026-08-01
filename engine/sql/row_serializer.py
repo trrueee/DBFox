@@ -12,7 +12,6 @@ from engine.sql.result_limits import (
     MAX_COLUMNS,
     MAX_RESPONSE_BYTES,
     MAX_ROWS,
-    QUERY_TIMEOUT_MS,
 )
 
 JSON_OVERHEAD_BYTES = 2  # Represents the brackets '[' and ']' of the JSON array wrapper

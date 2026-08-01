@@ -20,7 +20,6 @@ class ConnectionPurpose(StrEnum):
     SCHEMA_SYNC = "schema_sync"
     HEALTH_CHECK = "health_check"
     CONNECTION_TEST = "connection_test"
-    TABLE_DESIGN = "table_design"
     TEST_DATA = "test_data"
     BACKUP = "backup"
     RESTORE = "restore"

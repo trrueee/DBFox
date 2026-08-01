@@ -11,7 +11,6 @@ import engine.ai_index as ai_index
 import engine.llm.providers.openai as openai_provider
 from engine.llm.config import LlmConfig
 from engine.llm.endpoint_policy import LlmEndpointPolicyError, ResolvedLlmEndpoint
-from engine.llm.factory import create_openai_compatible_client
 from engine.llm.http_clients import LlmHttpTransportRegistry
 
 
@@ -78,7 +77,7 @@ def test_schema_enrichment_rejects_dns_rebinding_target_before_client_constructi
     assert constructed is False
 
 
-def test_schema_enrichment_delegates_to_the_shared_openai_factory(
+def test_schema_enrichment_delegates_to_the_shared_openai_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
@@ -93,12 +92,13 @@ def test_schema_enrichment_delegates_to_the_shared_openai_factory(
     class FakeClient:
         chat = SimpleNamespace(completions=FakeCompletions())
 
-    def fake_factory(config: LlmConfig, *, timeout: float) -> FakeClient:
-        captured["config"] = config
+    def fake_provider(*, api_key: str, api_base: str, timeout: float) -> FakeClient:
+        captured["api_key"] = api_key
+        captured["api_base"] = api_base
         captured["timeout"] = timeout
         return FakeClient()
 
-    monkeypatch.setattr(ai_index, "create_openai_compatible_client", fake_factory)
+    monkeypatch.setattr(ai_index, "create_openai_responses_client", fake_provider)
 
     result = ai_index._call_aliyun_llm(
         "schema prompt",
@@ -106,7 +106,8 @@ def test_schema_enrichment_delegates_to_the_shared_openai_factory(
     )
 
     assert result == '{"tables": []}'
-    assert captured["config"] == _manual_config("https://schema.example.test/v1")
+    assert captured["api_key"] == "TEST_LLM_SECRET"
+    assert captured["api_base"] == "https://schema.example.test/v1"
     assert captured["timeout"] == ai_index.AI_ENRICH_LLM_TIMEOUT_SECONDS
     assert captured["request"] == {
         "model": "qwen-test",
@@ -116,7 +117,7 @@ def test_schema_enrichment_delegates_to_the_shared_openai_factory(
     }
 
 
-def test_openai_compatible_factory_uses_owned_no_proxy_no_redirect_transport(
+def test_openai_provider_uses_owned_no_proxy_no_redirect_transport(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
@@ -141,8 +142,9 @@ def test_openai_compatible_factory_uses_owned_no_proxy_no_redirect_transport(
     monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
 
     try:
-        create_openai_compatible_client(
-            _manual_config("https://schema.example.test/v1"),
+        openai_provider.create_openai_responses_client(
+            api_key="TEST_LLM_SECRET",
+            api_base="https://schema.example.test/v1",
             timeout=12.0,
         )
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session, selectinload
 
-from engine.models import SchemaColumn, SchemaTable
+from engine.models import SchemaTable
 
 
 def _inferred_table_name(column_name: str, table_names: set[str]) -> str | None:

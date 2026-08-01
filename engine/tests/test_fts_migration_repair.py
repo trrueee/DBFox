@@ -5,7 +5,11 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+import pytest
 from sqlalchemy import create_engine, text
+
+
+pytestmark = pytest.mark.migration
 
 
 PRE_REPAIR_REVISION = "5a6b7c8d9e0f"

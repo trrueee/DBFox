@@ -18,7 +18,13 @@ class CredentialKind(StrEnum):
 
 
 class CredentialVault(Protocol):
-    def put(self, *, kind: CredentialKind, secret: str) -> str:
+    def put(
+        self,
+        *,
+        kind: CredentialKind,
+        secret: str,
+        credential_id: str | None = None,
+    ) -> str:
         raise NotImplementedError
 
     def get(
@@ -74,7 +80,7 @@ def _normalized_secret(secret: str) -> str:
     return value
 
 
-def _credential_id(kind: CredentialKind) -> str:
+def create_credential_id(kind: CredentialKind) -> str:
     return f"cred_{kind.value}_{uuid4().hex}"
 
 
@@ -88,9 +94,17 @@ def _matches_expected_kind(
 class KeyringCredentialVault:
     service_name = "com.dbfox.desktop.credentials"
 
-    def put(self, *, kind: CredentialKind, secret: str) -> str:
+    def put(
+        self,
+        *,
+        kind: CredentialKind,
+        secret: str,
+        credential_id: str | None = None,
+    ) -> str:
         value = _normalized_secret(secret)
-        credential_id = _credential_id(kind)
+        credential_id = credential_id or create_credential_id(kind)
+        if not _matches_expected_kind(credential_id, kind):
+            raise ValueError("Credential reference kind does not match its identifier")
         _require_os_native_keyring_backend()
         try:
             keyring.set_password(self.service_name, credential_id, value)
@@ -128,8 +142,16 @@ class InMemoryCredentialVault:
     def __init__(self) -> None:
         self._credentials: dict[str, tuple[CredentialKind, str]] = {}
 
-    def put(self, *, kind: CredentialKind, secret: str) -> str:
-        credential_id = _credential_id(kind)
+    def put(
+        self,
+        *,
+        kind: CredentialKind,
+        secret: str,
+        credential_id: str | None = None,
+    ) -> str:
+        credential_id = credential_id or create_credential_id(kind)
+        if not _matches_expected_kind(credential_id, kind):
+            raise ValueError("Credential reference kind does not match its identifier")
         self._credentials[credential_id] = (kind, _normalized_secret(secret))
         return credential_id
 

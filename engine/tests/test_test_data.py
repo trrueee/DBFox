@@ -1,23 +1,9 @@
 import sqlite3
 
-from fastapi.testclient import TestClient
-import pytest
 from sqlalchemy.orm import Session
 
-from engine.db import get_db
-from engine.main import LOCAL_SECURE_TOKEN, app
-from engine.models import DataSource, SchemaTable, SchemaColumn
+from engine.main import LOCAL_SECURE_TOKEN
 from engine.tests.support.datasource import sqlite_datasource_create_payload
-
-
-@pytest.fixture
-def client(db_session):
-    def override_get_db():
-        yield db_session
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
 
 
 def _headers() -> dict[str, str]:
@@ -46,7 +32,7 @@ def test_generate_test_data_success(client, db_session, test_datasource) -> None
     resp = client.get(f"/api/v1/schema/tables?datasource_id={ds_id}", headers=_headers())
     tables = resp.json()
     assert len(tables) > 0
-    users_table = next(t for t in tables if t["table_name"] == "users")
+    assert any(table["table_name"] == "users" for table in tables)
 
     # 4. Generate test data for 'users'
     gen_resp = client.post("/api/v1/schema/generate-test-data", json={

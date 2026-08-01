@@ -16,6 +16,9 @@ from engine.db import (
 from engine.security.runtime_reset import FOUNDATION_RUNTIME_VERSION
 
 
+pytestmark = pytest.mark.migration
+
+
 def _sqlite_url(path: Path) -> str:
     return f"sqlite:///{path.as_posix()}"
 

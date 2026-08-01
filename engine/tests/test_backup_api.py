@@ -7,13 +7,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.backup import BackupError, _backup_path, _run_mysqldump, execute_restore
-from engine.db import get_db
-from engine.main import LOCAL_SECURE_TOKEN, SAFE_DBFOX_ERROR_MESSAGE, app
+from engine.main import LOCAL_SECURE_TOKEN, SAFE_DBFOX_ERROR_MESSAGE
 from engine.models import DEFAULT_PROJECT_ID, BackupRecord, DataSource, Project, RestoreOperation
 
 
@@ -30,17 +28,6 @@ def _assert_fixed_dbfox_error(response) -> None:
 
 def _runtime_dir(name: str) -> Path:
     return Path(tempfile.mkdtemp(prefix=f"dbfox-{name}-"))
-
-
-@pytest.fixture
-def client(db_session):
-    def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
 
 
 def _ensure_default_project(db_session: Session) -> None:

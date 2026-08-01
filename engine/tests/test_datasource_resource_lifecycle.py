@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from engine.api.credentials import get_credential_lease_registry
+from engine.security.credential_lease import CredentialLeaseSaga
 from engine.api.datasources import crud as datasource_crud
 from engine.connectivity._pools import _get_mysql_pool
 from engine.connectivity.lifecycle import DatasourceResourceLifecycle
@@ -274,7 +274,8 @@ def test_update_invalidates_resources_before_deleting_replaced_credentials(
         kind=CredentialKind.DATASOURCE_PASSWORD,
         secret="new-database-password",
     )
-    lease_id = get_credential_lease_registry().issue({new_password_id})
+    lease_id = CredentialLeaseSaga(db_session, vault).issue({new_password_id})
+    db_session.commit()
     lifecycle = _RecordingLifecycle(events)
     monkeypatch.setattr(datasource_crud, "get_credential_vault", lambda: vault)
     monkeypatch.setattr(datasource_crud, "get_datasource_resource_lifecycle", lambda: lifecycle)

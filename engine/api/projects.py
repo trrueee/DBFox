@@ -1,22 +1,20 @@
 import logging
 import uuid
-import sys
 from typing import Any
 
 from engine.schemas.project import ProjectResponse
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.models import (
-    DEFAULT_PROJECT_ID,
-    DEFAULT_PROJECT_NAME,
     DataSource,
     Project,
 )
+from engine.projects.service import get_or_create_default_project
 from engine.schemas import ProjectCreateRequest
 
 logger = logging.getLogger("dbfox.api.projects")
@@ -27,9 +25,6 @@ def _project_to_dict(project: Project, datasource_count: int = 0) -> dict[str, A
     result = ProjectResponse.model_validate(project).model_dump(mode="json")
     result["datasource_count"] = datasource_count
     return result
-
-
-from engine.projects.service import get_or_create_default_project
 
 
 @router.get("/projects", response_model=list[ProjectResponse])

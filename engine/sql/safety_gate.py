@@ -16,7 +16,7 @@ from engine.app.safe_errors import (
 )
 from engine.errors import GuardrailValidationError
 from engine.models import DataSource, SchemaTable
-from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision, TrustGate
+from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
 
 logger = logging.getLogger("dbfox.sql.executor")
 

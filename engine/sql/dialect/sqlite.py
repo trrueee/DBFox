@@ -47,7 +47,8 @@ def _execute_on_sqlite_profiled(
             conn.execute("PRAGMA busy_timeout = 5000;")
             conn.set_progress_handler(abort_when_timed_out, 1000)
             if execution_id:
-                QUERY_REGISTRY.register_sqlite(execution_id, datasource_id, conn)
+                if QUERY_REGISTRY.register_sqlite(execution_id, datasource_id, conn):
+                    raise SQLQueryCancelledError("SQL query cancelled by user")
             cursor = conn.cursor()
 
             t_exec_start = time.perf_counter()

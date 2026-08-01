@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 import uuid
 from typing import Any
@@ -28,7 +27,25 @@ from engine.models import DataSource, QueryHistory
 from engine.policy.redactor import DataRedactor
 from engine.policy.sensitivity import _SENSITIVE_FALLBACK
 from engine.persistence.search_index import SearchIndexService
+from engine.query_registry import QUERY_REGISTRY
+from engine.sql.dialect.mysql import _execute_on_mysql_profiled
+from engine.sql.dialect.postgres import _execute_on_postgres_profiled
+from engine.sql.dialect.sqlite import _execute_on_sqlite_profiled
 from engine.sql.explain_validator import validate_explain_sql
+from engine.sql.guardrail import GuardrailResult
+from engine.sql.result_limits import MAX_CELL_CHARS, MAX_COLUMNS, MAX_RESPONSE_BYTES, MAX_ROWS
+from engine.sql.row_serializer import (
+    JSON_OVERHEAD_BYTES,
+    ResultTruncation,
+    _process_rows,
+)
+from engine.sql.safety_gate import (
+    _decision_block_message,
+    _decision_checks_for_error,
+    _decision_checks_for_history,
+    _resolve_execution_safety_decision,
+)
+from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
 
 
 def _sql_execution_failure_message() -> str:
@@ -43,9 +60,6 @@ def _write_query_history(db: Session, history: QueryHistory) -> str | None:
     caller's transaction (history must survive a caller rollback).
     Also populates the FTS5 index for query history search.
     """
-    if os.getenv("DBFOX_DISABLE_QUERY_HISTORY", "").strip().lower() in {"1", "true", "yes", "on"}:
-        return None
-
     from sqlalchemy.orm import sessionmaker
 
     audit_db = sessionmaker(bind=db.get_bind())()
@@ -76,24 +90,6 @@ def _write_query_history(db: Session, history: QueryHistory) -> str | None:
         return None
     finally:
         audit_db.close()
-from engine.sql.dialect.sqlite import _execute_on_sqlite_profiled
-from engine.sql.dialect.postgres import _execute_on_postgres_profiled
-from engine.sql.dialect.mysql import _execute_on_mysql_profiled
-from engine.sql.result_limits import MAX_CELL_CHARS, MAX_COLUMNS, MAX_RESPONSE_BYTES, MAX_ROWS
-from engine.sql.row_serializer import (
-    _process_rows, _serialize_value,
-    JSON_OVERHEAD_BYTES,
-    ResultTruncation,
-)
-from engine.sql.safety_gate import (
-    _resolve_execution_safety_decision,
-    _decision_checks_for_history,
-    _decision_checks_for_error,
-    _decision_block_message,
-)
-from engine.sql.guardrail import GuardrailResult
-from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
-
 logger = logging.getLogger("dbfox.sql.executor")
 
 
@@ -302,19 +298,41 @@ def execute_query(
     redact: bool = True,
     expected_connection_generation: int | None = None,
 ) -> dict[str, Any]:
-    """
-    Safely executes a SQL query:
-    1. Resolve an ExecutionSafetyDecision through TrustGate
-    2. Execute the approved safe SQL on the target datasource
-    3. Serialize results and log history
-    """
+    execution_id = execution_id or f"exec-{uuid.uuid4()}"
+    QUERY_REGISTRY.reserve(execution_id, datasource_id)
+    try:
+        return _execute_reserved_query(
+            db=db,
+            datasource_id=datasource_id,
+            sql_str=sql_str,
+            question=question,
+            execution_id=execution_id,
+            safety_decision=safety_decision,
+            safety_policy=safety_policy,
+            redact=redact,
+            expected_connection_generation=expected_connection_generation,
+        )
+    finally:
+        QUERY_REGISTRY.unregister(execution_id)
+
+
+def _execute_reserved_query(
+    db: Session,
+    datasource_id: str,
+    sql_str: str,
+    execution_id: str,
+    question: str | None = None,
+    safety_decision: ExecutionSafetyDecision | dict[str, Any] | None = None,
+    safety_policy: ExecutionPolicy = "readonly",
+    redact: bool = True,
+    expected_connection_generation: int | None = None,
+) -> dict[str, Any]:
+    """Resolve policy and execute an already-registered query."""
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not ds:
         raise ValueError("Data source not found")
     _assert_expected_connection_generation(ds, expected_connection_generation)
 
-    execution_id = execution_id or f"exec-{uuid.uuid4()}"
-    
     t_guard_start = time.perf_counter()
     decision = _resolve_execution_safety_decision(
         db=db,

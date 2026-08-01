@@ -7,8 +7,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from engine.sql.executor import _serialize_value, _process_rows, MAX_ROWS, execute_query, explain_sql
 from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
+from engine.sql.executor import execute_query, explain_sql
+from engine.sql.result_limits import MAX_ROWS
+from engine.sql.row_serializer import _process_rows, _serialize_value
 
 
 class TestSerializeValue:
@@ -285,23 +287,6 @@ class TestPerformanceAndExplain:
         assert history.execute_ms is not None
         assert history.fetch_ms is not None
         assert history.serialize_ms is not None
-
-    def test_execute_query_can_disable_query_history_for_eval(
-        self,
-        db_session,
-        test_datasource,
-        monkeypatch,
-    ) -> None:
-        from engine.models import QueryHistory
-
-        sync_schema(db_session, test_datasource.id)
-        monkeypatch.setenv("DBFOX_DISABLE_QUERY_HISTORY", "1")
-
-        res = execute_query(db_session, test_datasource.id, "SELECT id, username FROM users LIMIT 3")
-
-        assert res["success"] is True
-        assert res["historyId"] is None
-        assert db_session.query(QueryHistory).filter(QueryHistory.data_source_id == test_datasource.id).count() == 0
 
     def test_execute_query_blocks_schema_hallucination(self, db_session_module, test_datasource_module) -> None:
         sync_schema(db_session_module, test_datasource_module.id)

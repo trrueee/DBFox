@@ -40,6 +40,20 @@ def clear_database_runtime_state(
     delete_order: Iterable[str],
 ) -> None:
     inspector = inspect(connection)
+
+    # External vault deletion cannot join the metadata transaction. Preserve
+    # its already-durable cleanup intent across a Foundation reset so startup
+    # reconciliation can finish or retry it after this transaction commits.
+    if inspector.has_table("credential_leases"):
+        connection.execute(
+            text(
+                """
+                DELETE FROM credential_leases
+                WHERE status <> 'cleanup_pending'
+                """
+            )
+        )
+
     for table_name in delete_order:
         if inspector.has_table(table_name):
             connection.execute(text(f"DELETE FROM {table_name}"))
@@ -68,18 +82,21 @@ def clear_database_runtime_state(
             """
         )
     )
-    connection.execute(
-        text(
-            """
-            UPDATE database_environments
-            SET password_credential_id = NULL,
-                status = 'created',
-                last_health_status = NULL,
-                last_health_at = NULL,
-                last_error = NULL
-            """
+    # Old installations may still carry the retired environment table. Keep
+    # clearing its credential metadata during the one-way legacy reset.
+    if inspector.has_table("database_environments"):
+        connection.execute(
+            text(
+                """
+                UPDATE database_environments
+                SET password_credential_id = NULL,
+                    status = 'created',
+                    last_health_status = NULL,
+                    last_health_at = NULL,
+                    last_error = NULL
+                """
+            )
         )
-    )
     connection.execute(text("INSERT INTO schema_search_fts(schema_search_fts) VALUES ('rebuild')"))
     connection.execute(text("INSERT INTO query_history_fts(query_history_fts) VALUES ('rebuild')"))
 

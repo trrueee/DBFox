@@ -3,6 +3,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Any
 
+import pytest
+
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.connectivity.profile import ConnectionProfile
 from engine.query_registry import QueryRegistry
@@ -106,3 +108,28 @@ def test_postgres_cancel_failure_uses_fixed_error_catalog() -> None:
     assert "admin@example.com" not in result["message"]
     assert "pg-secret" not in result["message"]
     assert result["message"] == fixed_error_message(FixedErrorCode.QUERY_CANCELLATION_FAILED)
+
+
+def test_cancel_between_reservation_and_connection_registration_is_preserved() -> None:
+    registry = QueryRegistry()
+    registry.reserve("queued-query", "ds-sqlite")
+
+    result = registry.cancel("queued-query")
+
+    assert result["success"] is True
+    assert result["cancelled"] is True
+    assert registry.register_sqlite(
+        "queued-query",
+        "ds-sqlite",
+        object(),  # type: ignore[arg-type]
+    ) is True
+    registry.unregister("queued-query")
+    assert registry.is_running("queued-query") is False
+
+
+def test_reservation_rejects_execution_id_reuse_across_datasources() -> None:
+    registry = QueryRegistry()
+    registry.reserve("shared-id", "ds-a")
+
+    with pytest.raises(ValueError, match="another datasource"):
+        registry.reserve("shared-id", "ds-b")

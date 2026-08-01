@@ -4,7 +4,6 @@ import pytest
 
 from engine.errors import DBFoxError
 from engine.llm.config import LlmConfigurationError, resolve_product_llm_config_from_credential
-from engine.llm.factory import create_openai_compatible_client
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 
 
@@ -50,31 +49,3 @@ def test_product_config_rejects_a_missing_or_wrong_vault_reference() -> None:
         )
 
     assert exc_info.value.code == "LLM_CREDENTIAL_NOT_FOUND"
-
-
-def test_create_client_delegates_to_openai_provider(monkeypatch) -> None:
-    import engine.llm.factory as factory
-
-    vault = InMemoryCredentialVault()
-    credential_id = vault.put(kind=CredentialKind.LLM_API_KEY, secret="TEST_LLM_SECRET")
-    config = resolve_product_llm_config_from_credential(
-        llm_credential_id=credential_id,
-        api_base="https://product.example/v1",
-        model_name="gpt-product",
-        credential_vault=vault,
-    )
-    captured: dict[str, object] = {}
-
-    def fake_create_openai_client(**kwargs: object) -> object:
-        captured.update(kwargs)
-        return object()
-
-    monkeypatch.setattr(factory, "create_openai_responses_client", fake_create_openai_client)
-
-    create_openai_compatible_client(config, timeout=9.0)
-
-    assert captured == {
-        "api_key": "TEST_LLM_SECRET",
-        "api_base": "https://product.example/v1",
-        "timeout": 9.0,
-    }

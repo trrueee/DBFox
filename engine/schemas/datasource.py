@@ -28,7 +28,6 @@ class DataSourceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
     id: str
     project_id: str | None = None
-    environment_id: str | None = None
     name: str
     db_type: DbType
     host: str | None = None

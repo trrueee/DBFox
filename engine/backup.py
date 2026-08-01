@@ -348,7 +348,6 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None) -> 
         id=backup_id,
         project_id=str(ds.project_id or DEFAULT_PROJECT_ID),
         datasource_id=datasource_id,
-        environment_id=ds.environment_id,
         label=(label or "").strip() or None,
         backup_type="mysqldump",
         status="running",

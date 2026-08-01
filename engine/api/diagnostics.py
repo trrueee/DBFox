@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 

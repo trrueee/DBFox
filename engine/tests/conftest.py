@@ -2,34 +2,49 @@
 
 Fixture lifecycle (fastest → slowest, ordered by scope):
 
-* ``db_session``          function  file-backed SQLite upgraded by Alembic
-* ``test_datasource``     function  copy-on-write from session-shared file   ~0.05 s
-* ``_shared_test_db_file`` session  one-time tables + seed data (~20 tables) ~0.15 s
+* ``db_session``          function  isolated copy of one migrated template
+* ``test_datasource``     function  isolated copy of one seeded template
+* template databases      session   built once, then copied per consumer
 
-The session-shared ``_shared_test_db_file`` eliminates ~3 s of repeated
-``_init_test_db()`` work for every ``test_datasource`` consumer.
+Templates are copied only after their creating connection is closed.  Tests
+keep file-level isolation without repeating migrations or the large seed SQL.
 """
 from pathlib import Path
+from shutil import copy2
 
 import uuid
 import pytest
 from sqlalchemy.orm import sessionmaker
 from engine.models import DataSource
-from engine.tests.support.metadata import create_migrated_metadata_engine
+from engine.db import build_metadata_engine
+from engine.tests.support.metadata import (
+    create_migrated_metadata_engine,
+    sqlite_metadata_url,
+)
 
 
-def _make_db_session(database_path: Path):
-    """Create an isolated Alembic-upgraded SQLite metadata session."""
-    engine = create_migrated_metadata_engine(database_path)
+def _open_db_session(database_path: Path):
+    """Open one isolated copy of the migrated metadata template."""
+    engine = build_metadata_engine(sqlite_metadata_url(database_path))
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
     return session, engine
 
 
+@pytest.fixture(scope="session")
+def metadata_template_file(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    template = tmp_path_factory.mktemp("metadata_template") / "metadata.db"
+    engine = create_migrated_metadata_engine(template)
+    engine.dispose()
+    return template
+
+
 @pytest.fixture
-def db_session(tmp_path: Path):
-    """Function-scoped Alembic-upgraded SQLite session (full isolation)."""
-    session, engine = _make_db_session(tmp_path / "metadata.db")
+def db_session(tmp_path: Path, metadata_template_file: Path):
+    """Function-scoped metadata session backed by an isolated template copy."""
+    database_path = tmp_path / "metadata.db"
+    copy2(metadata_template_file, database_path)
+    session, engine = _open_db_session(database_path)
     try:
         yield session
     finally:
@@ -37,15 +52,44 @@ def db_session(tmp_path: Path):
         engine.dispose()
 
 
+@pytest.fixture(name="client")
+def api_client_fixture(db_session):
+    """Authenticated FastAPI client with dependency overrides restored exactly."""
+    from fastapi.testclient import TestClient
+
+    from engine.db import get_db
+    from engine.main import LOCAL_SECURE_TOKEN, app
+
+    previous_overrides = dict(app.dependency_overrides)
+
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(
+            app,
+            headers={"X-Local-Token": LOCAL_SECURE_TOKEN},
+        ) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)
+
+
 @pytest.fixture(scope="module")
-def db_session_module(tmp_path_factory: pytest.TempPathFactory):
+def db_session_module(
+    tmp_path_factory: pytest.TempPathFactory,
+    metadata_template_file: Path,
+):
     """Module-scoped file-backed Alembic-upgraded SQLite session.
 
     Use in test classes that only perform read-only catalog operations
     and do not modify tables within the same module.
     """
     database_path = tmp_path_factory.mktemp("metadata_module") / "metadata.db"
-    session, engine = _make_db_session(database_path)
+    copy2(metadata_template_file, database_path)
+    session, engine = _open_db_session(database_path)
     try:
         yield session
     finally:
@@ -264,17 +308,22 @@ def _init_test_db(db_path: str) -> str:
     return db_path
 
 
-def _make_datasource(db_session, db_dir: Path, ds_id: str | None = None) -> DataSource:
-    """Create a SQLite DataSource row pointing at a test database."""
+def _make_datasource(
+    db_session,
+    db_dir: Path,
+    template: Path,
+    ds_id: str | None = None,
+) -> DataSource:
+    """Create a DataSource row pointing at an isolated seeded database copy."""
     db_file = db_dir / "test_engine.db"
-    db_path = _init_test_db(str(db_file))
+    copy2(template, db_file)
 
     ds = DataSource(
         id=ds_id or str(uuid.uuid4()),
         name="test_sqlite",
         host="localhost",
         port=0,
-        database_name=db_path,
+        database_name=str(db_file),
         username="test",
         db_type="sqlite",
         status="active",
@@ -284,14 +333,25 @@ def _make_datasource(db_session, db_dir: Path, ds_id: str | None = None) -> Data
     return ds
 
 
+@pytest.fixture(scope="session")
+def datasource_template_file(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    template = tmp_path_factory.mktemp("datasource_template") / "seeded.db"
+    _init_test_db(str(template))
+    return template
+
+
 @pytest.fixture
-def test_datasource(db_session, tmp_path):
+def test_datasource(db_session, tmp_path, datasource_template_file: Path):
     """Function-scoped SQLite datasource — full per-test isolation (default)."""
-    return _make_datasource(db_session, tmp_path)
+    return _make_datasource(db_session, tmp_path, datasource_template_file)
 
 
 @pytest.fixture(scope="module")
-def test_datasource_module(db_session_module, tmp_path_factory):
+def test_datasource_module(
+    db_session_module,
+    tmp_path_factory,
+    datasource_template_file: Path,
+):
     """Module-scoped SQLite datasource.
 
     Use in test classes that treat the test database as read-only or
@@ -299,7 +359,12 @@ def test_datasource_module(db_session_module, tmp_path_factory):
     Saves ~0.5 s of DB-init overhead per additional test.
     """
     db_dir = tmp_path_factory.mktemp("ds_module")
-    return _make_datasource(db_session_module, db_dir, ds_id="ds-test-module")
+    return _make_datasource(
+        db_session_module,
+        db_dir,
+        datasource_template_file,
+        ds_id="ds-test-module",
+    )
 
 
 

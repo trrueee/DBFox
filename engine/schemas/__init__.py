@@ -14,32 +14,15 @@ def _to_iso(v: Any) -> str | None:
 from engine.schemas.project import ProjectCreateRequest
 from engine.schemas.backup import BackupCreateRequest
 from engine.schemas.error import ErrorResponse
-from engine.schemas.table_design import (
-    TableDesignColumnRequest,
-    TableDesignIndexRequest,
-    TableDesignDDLRequest,
-    TableDesignExecuteRequest,
-    TableDesignDraftSaveRequest,
-    TableDesignAIRequest,
-    TestDataGenerateRequest,
-)
+from engine.schemas.test_data import TestDataGenerateRequest
 from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateRequest, DataSourceUpdateRequest
 from engine.schemas.query import SQLValidateRequest, SQLCancelRequest, SQLExplainRequest
-from engine.schemas.semantic import (
-    WorkspaceTableScopeUpdateRequest,
-)
 from engine.schemas.credentials import CredentialEnrollmentRequest, CredentialReference
 
 __all__ = [
     "ProjectCreateRequest",
     "BackupCreateRequest",
     "ErrorResponse",
-    "TableDesignColumnRequest",
-    "TableDesignIndexRequest",
-    "TableDesignDDLRequest",
-    "TableDesignExecuteRequest",
-    "TableDesignDraftSaveRequest",
-    "TableDesignAIRequest",
     "TestDataGenerateRequest",
     "DataSourceTestRequest",
     "DataSourceCreateRequest",
@@ -47,7 +30,6 @@ __all__ = [
     "SQLValidateRequest",
     "SQLCancelRequest",
     "SQLExplainRequest",
-    "WorkspaceTableScopeUpdateRequest",
     "CredentialEnrollmentRequest",
     "CredentialReference",
 ]

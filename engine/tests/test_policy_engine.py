@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sqlglot
-
 from engine.errors import DBFoxError
 from engine.models import DataSource
 from engine.policy.engine import PolicyEngine
@@ -22,10 +20,10 @@ def test_query_policy_blocks_when_sql_cannot_be_parsed(monkeypatch) -> None:
         env="prod",
     )
 
-    def fail_parse(_sql: str):
-        raise sqlglot.errors.ParseError("broken syntax")
+    def fail_parse(_sql: str, _dialect: str):
+        raise ValueError("broken syntax")
 
-    monkeypatch.setattr("engine.policy.engine.sqlglot.parse", fail_parse)
+    monkeypatch.setattr("engine.policy.engine.parse_sql", fail_parse)
 
     try:
         PolicyEngine.enforce_query_policy(ds, "SELECT replace_count FROM grant_records")

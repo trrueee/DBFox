@@ -5,7 +5,6 @@ from typing import Literal, TypedDict
 import logging
 import re
 
-import sqlglot
 from sqlglot import exp
 from engine.sql.parser import normalize_dialect as _sqlglot_dialect, parse_sql
 from engine.sql.result_limits import MAX_ROWS

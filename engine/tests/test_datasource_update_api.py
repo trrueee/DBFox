@@ -1,27 +1,14 @@
-from fastapi.testclient import TestClient
 import pytest
 
-from engine.api.credentials import get_credential_lease_registry
 from engine.api.datasources import crud as datasource_crud
-from engine.db import get_db
-from engine.main import LOCAL_SECURE_TOKEN, app
+from engine.main import LOCAL_SECURE_TOKEN
 from engine.models import DEFAULT_PROJECT_ID, DataSource, Project, SchemaColumn, SchemaTable
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
+from engine.security.credential_lease import CredentialLeaseSaga
 
 
 def _headers() -> dict[str, str]:
     return {"X-Local-Token": LOCAL_SECURE_TOKEN}
-
-
-@pytest.fixture
-def client(db_session):
-    def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -185,13 +172,14 @@ def test_update_datasource_replaces_credential_references(client, db_session, cr
         kind=CredentialKind.SSH_KEY_PASSPHRASE,
         secret=new_ssh_key_passphrase_secret,
     )
-    lease_id = get_credential_lease_registry().issue(
+    lease_id = CredentialLeaseSaga(db_session, credential_vault).issue(
         {
             new_password_credential_id,
             new_ssh_password_credential_id,
             new_ssh_key_passphrase_credential_id,
         }
     )
+    db_session.commit()
 
     response = client.put(
         f"/api/v1/datasources/{datasource.id}",
@@ -240,7 +228,10 @@ def test_update_datasource_repairs_missing_credentials_after_runtime_reset(
         kind=CredentialKind.DATASOURCE_PASSWORD,
         secret="re-enrolled-password",
     )
-    lease_id = get_credential_lease_registry().issue({new_password_credential_id})
+    lease_id = CredentialLeaseSaga(db_session, credential_vault).issue(
+        {new_password_credential_id}
+    )
+    db_session.commit()
 
     response = client.put(
         f"/api/v1/datasources/{datasource.id}",

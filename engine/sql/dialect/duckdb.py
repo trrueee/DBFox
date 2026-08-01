@@ -37,7 +37,9 @@ def _execute_on_duckdb_profiled(
     ) as conn:
         connect_ms = int((time.perf_counter() - t_conn_start) * 1000)
         if execution_id:
-            QUERY_REGISTRY.register_duckdb(execution_id, datasource_id, conn)
+            if QUERY_REGISTRY.register_duckdb(execution_id, datasource_id, conn):
+                QUERY_REGISTRY.unregister(execution_id)
+                raise SQLQueryCancelledError("SQL query cancelled by user")
         cursor: Any | None = None
         try:
             cursor = conn.cursor()

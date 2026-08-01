@@ -25,20 +25,14 @@ from engine.models import (
     BackupRecord,
     ConfirmationToken,
     DataSource,
-    DatabaseEnvironment,
     DomainTagRule,
-    GoldenSQL,
-    LLMLog,
     Project,
     QueryHistory,
     QueryHistorySearchDoc,
-    ReusableSQL,
     SchemaColumn,
     SchemaSearchDoc,
     SchemaTable,
     SemanticAlias,
-    TableDesignDraft,
-    WorkspaceTableScope,
 )
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 from engine.security.runtime_reset import (
@@ -107,6 +101,53 @@ def _create_v2_metadata_db(runtime_root: Path, name: str = "metadata.db") -> tup
     metadata_path = runtime_root / name
     metadata_url = _sqlite_url(metadata_path)
     command.upgrade(_alembic_config(metadata_url), "head")
+    engine = build_metadata_engine(metadata_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "CREATE TABLE table_design_drafts ("
+                    "id VARCHAR PRIMARY KEY NOT NULL, "
+                    "project_id VARCHAR NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+                    "table_name VARCHAR NOT NULL, "
+                    "table_comment VARCHAR, "
+                    "columns_json TEXT NOT NULL, "
+                    "indexes_json TEXT NOT NULL, "
+                    "created_at DATETIME NOT NULL, "
+                    "updated_at DATETIME NOT NULL"
+                    ")"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE TABLE database_environments ("
+                    "id VARCHAR PRIMARY KEY NOT NULL, "
+                    "project_id VARCHAR NOT NULL, "
+                    "password_credential_id VARCHAR, "
+                    "status VARCHAR NOT NULL, "
+                    "last_health_status VARCHAR, "
+                    "last_health_at DATETIME, "
+                    "last_error TEXT"
+                    ")"
+                )
+            )
+            for retired_table in (
+                "llm_logs",
+                "golden_sqls",
+                "reusable_sqls",
+                "workspace_table_scopes",
+            ):
+                connection.execute(
+                    text(f"CREATE TABLE {retired_table} (id VARCHAR PRIMARY KEY NOT NULL)")
+                )
+            connection.execute(
+                text(
+                    "CREATE INDEX ix_table_design_drafts_project "
+                    "ON table_design_drafts (project_id)"
+                )
+            )
+    finally:
+        engine.dispose()
     return metadata_url, metadata_path
 
 
@@ -208,29 +249,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
             )
             session.add_all((project, datasource))
             session.flush()
-
-            environment = DatabaseEnvironment(
-                id="environment-1",
-                project_id=project.id,
-                name="Warehouse environment",
-                runtime="docker",
-                engine_type="postgresql",
-                engine_version="16",
-                image="postgres:16",
-                container_name="dbfox-warehouse",
-                host="db.example.test",
-                port=5432,
-                database_name="warehouse",
-                username="reader",
-                password_credential_id=environment_password_id,
-                status="running",
-                last_health_status="healthy",
-                last_health_at=datetime.now(UTC),
-                last_error="stale health error",
-            )
-            session.add(environment)
-            session.flush()
-            datasource.environment_id = environment.id
 
             schema_table = SchemaTable(
                 id="schema-table-1",
@@ -336,40 +354,11 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
                         details_json='{"sensitive":true}',
                         expected_confirm_text="Warehouse endpoint",
                     ),
-                    LLMLog(
-                        id="llm-log-1",
-                        data_source_id=datasource.id,
-                        request_type="agent",
-                        prompt_hash=LLMLog.fingerprint_request("test", hmac_key=b"t" * 32),
-                        model_name="test-model",
-                        status="completed",
-                    ),
-                    GoldenSQL(
-                        id="golden-sql-1",
-                        data_source_id=datasource.id,
-                        question="sensitive query",
-                        golden_sql="SELECT customer_email FROM orders",
-                    ),
-                    ReusableSQL(
-                        id="reusable-sql-1",
-                        data_source_id=datasource.id,
-                        question="sensitive query",
-                        safe_sql="SELECT customer_email FROM orders",
-                        sql_fingerprint="fingerprint-1",
-                    ),
                     BackupRecord(
                         id="backup-record-1",
                         project_id=project.id,
                         datasource_id=datasource.id,
-                        environment_id=environment.id,
                         file_path="C:/backups/contains-sensitive-data.sql",
-                    ),
-                    TableDesignDraft(
-                        id="table-design-draft-1",
-                        project_id=project.id,
-                        table_name="sensitive_draft",
-                        columns_json="[]",
-                        indexes_json="[]",
                     ),
                     SemanticAlias(
                         id="semantic-alias-1",
@@ -378,12 +367,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
                         target_type="table",
                         target="orders",
                     ),
-                    WorkspaceTableScope(
-                        id="workspace-scope-1",
-                        project_id=project.id,
-                        data_source_id=datasource.id,
-                        table_id=schema_table.id,
-                    ),
                     DomainTagRule(
                         id="domain-tag-rule-1",
                         data_source_id=datasource.id,
@@ -391,6 +374,67 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
                         tag="pii",
                     ),
                 )
+            )
+            now = datetime.now(UTC)
+            session.execute(
+                text(
+                    """
+                    INSERT INTO credential_leases (
+                        id, credential_ids_json, status, version, created_at,
+                        expires_at, cleanup_started_at
+                    ) VALUES (
+                        'lease-retired-environment', :credential_ids_json,
+                        'cleanup_pending', 0, :now, :now, :now
+                    )
+                    """
+                ),
+                {
+                    "credential_ids_json": f'["{environment_password_id}"]',
+                    "now": now,
+                },
+            )
+            session.execute(
+                text(
+                    "INSERT INTO database_environments "
+                    "(id, project_id, password_credential_id, status, last_health_status, "
+                    "last_health_at, last_error) VALUES "
+                    "(:id, :project_id, :credential_id, 'running', 'healthy', :now, "
+                    "'stale health error')"
+                ),
+                {
+                    "id": "environment-1",
+                    "project_id": project.id,
+                    "credential_id": environment_password_id,
+                    "now": now,
+                },
+            )
+            for retired_table, retired_id in (
+                ("llm_logs", "llm-log-1"),
+                ("golden_sqls", "golden-sql-1"),
+                ("reusable_sqls", "reusable-sql-1"),
+                ("workspace_table_scopes", "workspace-scope-1"),
+            ):
+                session.execute(
+                    text(f"INSERT INTO {retired_table} (id) VALUES (:id)"),
+                    {"id": retired_id},
+                )
+            session.execute(
+                text(
+                    "INSERT INTO table_design_drafts "
+                    "(id, project_id, table_name, table_comment, columns_json, "
+                    "indexes_json, created_at, updated_at) "
+                    "VALUES (:id, :project_id, :table_name, NULL, :columns_json, "
+                    ":indexes_json, :created_at, :updated_at)"
+                ),
+                {
+                    "id": "table-design-draft-1",
+                    "project_id": project.id,
+                    "table_name": "sensitive_draft",
+                    "columns_json": "[]",
+                    "indexes_json": "[]",
+                    "created_at": now,
+                    "updated_at": now,
+                },
             )
             session.commit()
 
@@ -432,19 +476,16 @@ def test_foundation_reset_preserves_only_non_secret_endpoint_metadata(tmp_path: 
     assert _count_rows(metadata_url, "schema_search_fts") == 0
     for table_name in _PRESERVED_TABLES:
         assert _count_rows(metadata_url, table_name) == 1
+    assert _count_rows(metadata_url, "credential_leases") == 1
 
     engine = build_metadata_engine(metadata_url)
     try:
         with Session(engine) as session:
             project = session.get(Project, "project-1")
-            environment = session.get(DatabaseEnvironment, "environment-1")
             datasource = session.get(DataSource, "datasource-1")
             assert project is not None
-            assert environment is not None
             assert datasource is not None
             assert datasource.project_id == project.id
-            assert datasource.environment_id == environment.id
-            assert environment.project_id == project.id
             assert (
                 datasource.name,
                 datasource.db_type,
@@ -487,7 +528,6 @@ def test_foundation_reset_preserves_only_non_secret_endpoint_metadata(tmp_path: 
             assert datasource.ssh_key_passphrase_credential_id is None
             assert datasource.ssh_pkey_path is None
             assert datasource.ssl_key_path is None
-            assert environment.password_credential_id is None
             assert (
                 datasource.last_test_at,
                 datasource.last_test_status,
@@ -501,13 +541,35 @@ def test_foundation_reset_preserves_only_non_secret_endpoint_metadata(tmp_path: 
                 datasource.last_sync_status,
                 datasource.last_sync_error,
             ) == (None,) * 11
-            assert (
-                environment.last_health_status,
-                environment.last_health_at,
-                environment.last_error,
-            ) == (None,) * 3
-            assert environment.status == "created"
             assert datasource.status == "needs_credentials"
+            environment = session.execute(
+                text(
+                    "SELECT project_id, password_credential_id, status, last_health_status, "
+                    "last_health_at, last_error FROM database_environments "
+                    "WHERE id = 'environment-1'"
+                )
+            ).mappings().one()
+            assert dict(environment) == {
+                "project_id": project.id,
+                "password_credential_id": None,
+                "status": "created",
+                "last_health_status": None,
+                "last_health_at": None,
+                "last_error": None,
+            }
+            cleanup_lease = session.execute(
+                text(
+                    """
+                    SELECT credential_ids_json, status
+                    FROM credential_leases
+                    WHERE id = 'lease-retired-environment'
+                    """
+                )
+            ).mappings().one()
+            assert dict(cleanup_lease) == {
+                "credential_ids_json": f'["{credentials["environment_password_id"]}"]',
+                "status": "cleanup_pending",
+            }
     finally:
         engine.dispose()
 

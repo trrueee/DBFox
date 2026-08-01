@@ -1,4 +1,3 @@
-import pytest
 from engine.sql.guardrail import guardrail_check, count_statement_delimiters
 
 # covers: G1 empty_sql
@@ -219,4 +218,3 @@ def test_rejected_sql_golden_set():
     for sql in sqls:
         res = guardrail_check(sql, "mysql")
         assert res["result"] == "reject", f"Rejected SQL was not rejected: {sql} | result: {res['result']}"
-

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from engine.sql.guardrail import guardrail_check

@@ -10,7 +10,7 @@ from typing import Any
 
 from engine.json_codec import dumps, load_object
 from engine.llm.config import LlmConfig
-from engine.llm.factory import create_openai_compatible_client
+from engine.llm.providers.openai import create_openai_responses_client
 
 logger = logging.getLogger("dbfox.ai_index")
 LLM_ENRICH_FAILED = "LLM_ENRICH_FAILED"
@@ -288,13 +288,9 @@ def _call_aliyun_llm(
     # The shared factory repeats endpoint DNS/IP admission immediately before
     # construction and injects an owned no-redirect, no-proxy HTTP transport.
     # Retrying remains owned by ``enrich_tables_batch``.
-    client = create_openai_compatible_client(
-        LlmConfig(
-            api_key=resolved_api_key,
-            api_base=llm_config.api_base,
-            model_name=llm_config.model_name,
-            source=llm_config.source,
-        ),
+    client = create_openai_responses_client(
+        api_key=resolved_api_key,
+        api_base=llm_config.api_base,
         timeout=AI_ENRICH_LLM_TIMEOUT_SECONDS,
     )
     response = client.chat.completions.create(

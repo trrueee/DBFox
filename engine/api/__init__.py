@@ -4,8 +4,7 @@ from engine.api.datasources import router as datasources_router
 from engine.api.query import router as query_router
 from engine.api.agent import router as agent_router
 from engine.api.backup import router as backup_router
-from engine.api.table_design import router as table_design_router
-from engine.api.semantic import router as semantic_router
+from engine.api.test_data import router as test_data_router
 from engine.api.conversations import router as conversations_router
 from engine.api.diagnostics import router as diagnostics_router
 from engine.api.credentials import router as credentials_router
@@ -17,8 +16,7 @@ router.include_router(datasources_router)
 router.include_router(query_router)
 router.include_router(agent_router)
 router.include_router(backup_router)
-router.include_router(table_design_router)
-router.include_router(semantic_router)
+router.include_router(test_data_router)
 router.include_router(conversations_router)
 router.include_router(diagnostics_router)
 router.include_router(credentials_router)

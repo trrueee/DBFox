@@ -2,7 +2,6 @@
 import inspect
 import logging
 
-import pytest
 from engine.sql.guardrail import guardrail_check, GuardrailResult
 
 

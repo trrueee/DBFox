@@ -15,6 +15,57 @@ from engine.schemas.datasource import DataSourceTestRequest
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 
 
+def test_datasource_connection_dict_preserves_persisted_connection_metadata() -> None:
+    datasource = SimpleNamespace(
+        id="ds_123",
+        db_type="mysql",
+        host="localhost",
+        port=3306,
+        username="root",
+        database_name="testdb",
+        password_credential_id="cred_datasource_password",
+        connection_generation=7,
+        ssh_enabled=True,
+        ssh_host="jump",
+        ssh_port=22,
+        ssh_username="sshuser",
+        ssh_password_credential_id="cred_ssh_password",
+        ssh_pkey_path="/path/to/key",
+        ssh_key_passphrase_credential_id="cred_ssh_key_passphrase",
+        ssl_enabled=True,
+        ssl_ca_path="/path/to/ca",
+        ssl_cert_path="/path/to/cert",
+        ssl_key_path="/path/to/key",
+        ssl_verify_identity=True,
+    )
+
+    config = datasource_connection_dict(datasource)
+
+    assert config == {
+        "id": "ds_123",
+        "is_managed": True,
+        "db_type": "mysql",
+        "host": "localhost",
+        "port": 3306,
+        "username": "root",
+        "database_name": "testdb",
+        "password_credential_id": "cred_datasource_password",
+        "connection_generation": 7,
+        "ssh_enabled": True,
+        "ssh_host": "jump",
+        "ssh_port": 22,
+        "ssh_username": "sshuser",
+        "ssh_password_credential_id": "cred_ssh_password",
+        "ssh_pkey_path": "/path/to/key",
+        "ssh_key_passphrase_credential_id": "cred_ssh_key_passphrase",
+        "ssl_enabled": True,
+        "ssl_ca_path": "/path/to/ca",
+        "ssl_cert_path": "/path/to/cert",
+        "ssl_key_path": "/path/to/key",
+        "ssl_verify_identity": True,
+    }
+
+
 def _network_config(password_credential_id: str, **extra: object) -> dict[str, object]:
     return {
         "id": "datasource-1",

@@ -1,6 +1,3 @@
-import hashlib
-import hmac
-import re
 import uuid
 from datetime import UTC, datetime
 
@@ -13,19 +10,16 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    LargeBinary,
     String,
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship, validates
+from sqlalchemy.orm import relationship
 
 from engine.db import Base
 
 DEFAULT_PROJECT_ID = "default-project"
 DEFAULT_PROJECT_NAME = "Default Workspace"
-_LLM_REQUEST_FINGERPRINT_RE = re.compile(r"hmac-sha256:[0-9a-f]{64}$")
-_LLM_ERROR_CODE_RE = re.compile(r"[A-Z][A-Z0-9_]{0,63}$")
 
 
 def generate_uuid() -> str:
@@ -51,46 +45,10 @@ class Project(Base):  # type: ignore[misc,valid-type]
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
     data_sources = relationship("DataSource", back_populates="project")
-    environments = relationship("DatabaseEnvironment", back_populates="project", cascade="all, delete-orphan")
     backups = relationship("BackupRecord", back_populates="project", cascade="all, delete-orphan")
-    drafts = relationship("TableDesignDraft", back_populates="project", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Project id={self.id!r} name={self.name!r} status={self.status!r}>"
-
-
-class DatabaseEnvironment(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "database_environments"
-    __table_args__ = (
-        Index("ix_database_environments_project", "project_id"),
-        Index("ix_database_environments_status", "status"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-
-    name = Column(String, nullable=False)
-    runtime = Column(String, nullable=False, default="docker")
-    engine_type = Column(String, nullable=False, default="mysql")
-    engine_version = Column(String, nullable=False, default="8.0")
-    image = Column(String, nullable=False, default="mysql:8.0")
-    container_name = Column(String, nullable=False)
-
-    host = Column(String, nullable=False, default="127.0.0.1")
-    port = Column(Integer, nullable=False)
-    database_name = Column(String, nullable=False)
-    username = Column(String, nullable=False)
-    password_credential_id = Column(String, nullable=True)
-
-    status = Column(String, nullable=False, default="created")
-    last_health_status = Column(String, nullable=True)
-    last_health_at = Column(DateTime, nullable=True)
-    last_error = Column(Text, nullable=True)
-
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
-    project = relationship("Project", back_populates="environments")
 
 
 class FoundationRuntimeState(Base):  # type: ignore[misc,valid-type]
@@ -127,6 +85,26 @@ class ConfirmationToken(Base):  # type: ignore[misc,valid-type]
     expected_confirm_text = Column(Text, nullable=False, default="")
 
 
+class CredentialLeaseRecord(Base):  # type: ignore[misc,valid-type]
+    """Durable saga state for credential-vault references awaiting ownership."""
+
+    __tablename__ = "credential_leases"
+    __table_args__ = (
+        Index("ix_credential_leases_status_expires", "status", "expires_at"),
+    )
+
+    id = Column(String, primary_key=True)
+    credential_ids_json = Column(Text, nullable=False)
+    status = Column(String, nullable=False)
+    version = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    claimed_at = Column(DateTime, nullable=True)
+    committed_at = Column(DateTime, nullable=True)
+    cleanup_started_at = Column(DateTime, nullable=True)
+    released_at = Column(DateTime, nullable=True)
+
+
 class DataSource(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "data_sources"
     __table_args__ = (
@@ -135,7 +113,6 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
 
     id = Column(String, primary_key=True, default=generate_uuid)
     project_id = Column(String, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
-    environment_id = Column(String, ForeignKey("database_environments.id", ondelete="SET NULL"), nullable=True, index=True)
     name = Column(String, nullable=False)
     db_type = Column(String, nullable=False, default="mysql")
 
@@ -191,8 +168,6 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
     project = relationship("Project", back_populates="data_sources")
     tables = relationship("SchemaTable", back_populates="datasource", cascade="all, delete-orphan")
     queries = relationship("QueryHistory", back_populates="datasource", cascade="all, delete-orphan")
-    golden_sqls = relationship("GoldenSQL", back_populates="datasource", cascade="all, delete-orphan")
-    reusable_sqls = relationship("ReusableSQL", back_populates="datasource", cascade="all, delete-orphan")
     backups = relationship("BackupRecord", back_populates="datasource", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
@@ -210,7 +185,6 @@ class BackupRecord(Base):  # type: ignore[misc,valid-type]
     id = Column(String, primary_key=True, default=generate_uuid)
     project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    environment_id = Column(String, ForeignKey("database_environments.id", ondelete="SET NULL"), nullable=True)
 
     label = Column(String, nullable=True)
     backup_type = Column(String, nullable=False, default="mysqldump")
@@ -435,119 +409,6 @@ class QueryHistorySearchDoc(Base):  # type: ignore[misc,valid-type]
     search_text = Column(Text, nullable=False, default="")
     created_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
-
-class LLMLog(Base):  # type: ignore[misc,valid-type]
-    """Non-sensitive telemetry for an LLM invocation.
-
-    This record is deliberately not an audit transcript.  Prompts, model
-    responses, provider error text, and free-form validation warnings can
-    contain user data, schema details, or credentials and must never enter
-    metadata storage.  Callers may store only a non-reversible request
-    fingerprint plus bounded operational fields.
-    """
-
-    __tablename__ = "llm_logs"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=True)
-    request_type = Column(String, nullable=False)
-
-    prompt_hash = Column(String, nullable=True)
-
-    model_name = Column(String, nullable=True)
-    latency_ms = Column(Integer, nullable=True)
-    status = Column(String, nullable=True)
-    error_code = Column(String, nullable=True)
-
-    # Prompt versioning & RAG audit fields
-    prompt_version = Column(String, nullable=True)
-    prompt_template_hash = Column(String, nullable=True)
-    model_temperature = Column(Float, nullable=True)
-    max_tokens = Column(Integer, nullable=True)
-
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-
-    datasource = relationship("DataSource")
-
-    @staticmethod
-    def fingerprint_request(request: str | bytes, *, hmac_key: bytes) -> str:
-        """Build the only accepted request fingerprint format.
-
-        The caller owns the per-install secret; this model intentionally does
-        not load credentials or create any secret-bearing runtime state.
-        """
-        if len(hmac_key) < 32:
-            raise ValueError("LLM request fingerprint key must contain at least 32 bytes.")
-        request_bytes = request.encode("utf-8") if isinstance(request, str) else request
-        if not isinstance(request_bytes, bytes):
-            raise TypeError("LLM request fingerprint input must be str or bytes.")
-        digest = hmac.new(hmac_key, request_bytes, hashlib.sha256).hexdigest()
-        return f"hmac-sha256:{digest}"
-
-    @validates("prompt_hash")
-    def _validate_prompt_hash(self, _key: str, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if not _LLM_REQUEST_FINGERPRINT_RE.fullmatch(value):
-            raise ValueError("LLM prompt hash must be an hmac-sha256 request fingerprint.")
-        return value
-
-    @validates("error_code")
-    def _validate_error_code(self, _key: str, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if not _LLM_ERROR_CODE_RE.fullmatch(value):
-            raise ValueError("LLM error code must be a fixed uppercase identifier.")
-        return value
-
-
-
-class GoldenSQL(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "golden_sqls"
-    __table_args__ = (
-        Index("ix_golden_sqls_datasource", "data_source_id"),
-        UniqueConstraint("data_source_id", "question", name="uq_golden_sqls_ds_question"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-
-    question = Column(String, nullable=False)
-    golden_sql = Column(Text, nullable=False)
-
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-
-    datasource = relationship("DataSource", back_populates="golden_sqls")
-
-
-class ReusableSQL(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "reusable_sqls"
-    __table_args__ = (
-        Index("ix_reusable_sqls_datasource", "data_source_id"),
-        Index("ix_reusable_sqls_fingerprint", "sql_fingerprint"),
-        UniqueConstraint("data_source_id", "sql_fingerprint", name="uq_reusable_sqls_ds_fingerprint"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-
-    question = Column(String, nullable=False)
-    safe_sql = Column(Text, nullable=False)
-    sql_fingerprint = Column(String, nullable=False)
-    purpose = Column(Text, nullable=True)
-    involved_tables_json = Column(Text, nullable=False, default="[]")
-    result_columns_json = Column(Text, nullable=False, default="[]")
-    source_artifact_id = Column(String, nullable=True)
-    source_sql_artifact_id = Column(String, nullable=True)
-
-    usage_count = Column(Integer, nullable=False, default=1)
-    verified = Column(Boolean, nullable=False, default=False)
-    last_used_at = Column(DateTime, nullable=False, default=utcnow)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
-    datasource = relationship("DataSource", back_populates="reusable_sqls")
 
 
 class AgentSession(Base):  # type: ignore[misc,valid-type]
@@ -1006,26 +867,6 @@ class SecurityAuditRecord(Base):  # type: ignore[misc,valid-type]
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
 
-class TableDesignDraft(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "table_design_drafts"
-    __table_args__ = (
-        Index("ix_table_design_drafts_project", "project_id"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-
-    table_name = Column(String, nullable=False)
-    table_comment = Column(String, nullable=True)
-    columns_json = Column(Text, nullable=False)
-    indexes_json = Column(Text, nullable=False)
-
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
-    project = relationship("Project", back_populates="drafts")
-
-
 class SemanticAlias(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "semantic_aliases"
     __table_args__ = (
@@ -1043,26 +884,6 @@ class SemanticAlias(Base):  # type: ignore[misc,valid-type]
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
-
-# NOTE: SemanticMetric and SemanticDimension models were removed in the MVP
-# simplification (2026-06-20).  Metric rules and formula expansion are deferred
-# to a future release.  The DB tables may still exist but are no longer used.
-
-
-class WorkspaceTableScope(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "workspace_table_scopes"
-    __table_args__ = (
-        Index("ix_workspace_table_scopes_project_ds", "project_id", "data_source_id"),
-        UniqueConstraint("project_id", "data_source_id", "table_id", name="uq_workspace_scopes_project_ds_table"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    table_id = Column(String, ForeignKey("schema_tables.id", ondelete="CASCADE"), nullable=False)
-    enabled = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
 class DomainTagRule(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "domain_tag_rules"

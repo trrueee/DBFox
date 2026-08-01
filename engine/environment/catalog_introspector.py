@@ -7,7 +7,6 @@ import ssl
 from typing import Any, Iterable, Mapping, Sequence
 
 from sqlalchemy import inspect as sqlalchemy_inspect
-from sqlalchemy.engine import Connection
 from sqlalchemy.engine.reflection import Inspector, ObjectKind
 from sqlalchemy.engine.interfaces import ReflectedColumn, ReflectedForeignKeyConstraint
 from sqlalchemy.orm import Session

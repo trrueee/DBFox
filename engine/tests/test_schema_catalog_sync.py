@@ -15,7 +15,7 @@ from engine.environment.schema_catalog_sync import (
     ensure_catalog,
 )
 from engine.api.datasources.schema import load_schema_tables
-from engine.models import DataSource, SchemaTable, SchemaColumn
+from engine.models import SchemaTable, SchemaColumn
 
 
 def sync_schema(db_session, datasource_id: str, **kwargs):

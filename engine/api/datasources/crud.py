@@ -40,9 +40,7 @@ from engine.api.datasources.common import (
     datasource_to_dict,
     set_model_attr,
 )
-from engine.api.credentials import (
-    get_credential_lease_registry,
-)
+from engine.security.credential_lease import CredentialLeaseSaga
 from engine.security.credential_vault import (
     CredentialKind,
     CredentialVault,
@@ -119,6 +117,7 @@ def _request_credential_ids(
 
 
 def _claim_credential_lease(
+    db: Session,
     req: DataSourceTestRequest | DataSourceCreateRequest | DataSourceUpdateRequest,
     credential_ids: set[str],
 ) -> str | None:
@@ -134,16 +133,19 @@ def _claim_credential_lease(
             "New datasource credentials require a server-issued credential lease.",
             code="CREDENTIAL_LEASE_REQUIRED",
         )
-    get_credential_lease_registry().claim(req.credential_lease_id, credential_ids)
+    CredentialLeaseSaga(db).claim(req.credential_lease_id, credential_ids)
     return req.credential_lease_id
 
 
-def _release_credential_lease(vault: CredentialVault, lease_id: str | None) -> None:
+def _release_credential_lease(
+    db: Session,
+    vault: CredentialVault,
+    lease_id: str | None,
+) -> None:
     if not lease_id:
         return
     try:
-        for credential_id in get_credential_lease_registry().abort_claimed(lease_id):
-            vault.delete(credential_id)
+        CredentialLeaseSaga(db, vault).release(lease_id)
     except Exception as exc:
         log_unexpected_exception(
             logger,
@@ -164,9 +166,10 @@ def _public_connection_test_failure(exc: Exception) -> DataSourceConnectionError
     return DataSourceConnectionError(_CONNECTION_TEST_FAILED_MESSAGE)
 
 
-def _commit_credential_lease(lease_id: str | None) -> None:
+def _commit_credential_lease(db: Session, lease_id: str | None) -> None:
     if lease_id:
-        get_credential_lease_registry().commit(lease_id)
+        CredentialLeaseSaga(db).commit_claim(lease_id)
+        db.commit()
 
 
 def _delete_replaced_credentials(vault: CredentialVault, credential_ids: set[str]) -> None:
@@ -246,9 +249,13 @@ def _validate_effective_credential_references(
 
 
 @router.post("/datasources/test", response_model=DataSourceTestResponse)
-def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
+def api_test_connection(
+    req: DataSourceTestRequest,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
     vault = get_credential_vault()
-    lease_id = _claim_credential_lease(req, _request_credential_ids(req))
+    lease_id = _claim_credential_lease(db, req, _request_credential_ids(req))
+    db.commit()
     try:
         try:
             config = _connection_test_config(req)
@@ -263,7 +270,7 @@ def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
         except Exception as exc:
             raise _public_connection_test_failure(exc) from None
     finally:
-        _release_credential_lease(vault, lease_id)
+        _release_credential_lease(db, vault, lease_id)
 
 
 @router.post("/datasources", response_model=DataSourceResponse)
@@ -275,7 +282,7 @@ def api_create_datasource(
     lease_id: str | None = None
     metadata_committed = False
     try:
-        lease_id = _claim_credential_lease(req, _request_credential_ids(req))
+        lease_id = _claim_credential_lease(db, req, _request_credential_ids(req))
         from engine.projects.service import resolve_project_id
 
         config = req.model_dump()
@@ -326,13 +333,13 @@ def api_create_datasource(
         db.add(datasource)
         db.commit()
         metadata_committed = True
-        _commit_credential_lease(lease_id)
+        _commit_credential_lease(db, lease_id)
         db.refresh(datasource)
         return datasource_to_dict(datasource)
     except Exception:
         db.rollback()
         if not metadata_committed:
-            _release_credential_lease(vault, lease_id)
+            _release_credential_lease(db, vault, lease_id)
         raise
 
 
@@ -390,7 +397,7 @@ def api_update_datasource(
             for field, credential_id in effective_references.items()
             if credential_id and credential_id != existing_credential_ids[field]
         }
-        lease_id = _claim_credential_lease(req, changed_credential_ids)
+        lease_id = _claim_credential_lease(db, req, changed_credential_ids)
         old_credential_ids = {
             credential_id
             for credential_id in (
@@ -456,7 +463,7 @@ def api_update_datasource(
 
         db.commit()
         metadata_committed = True
-        _commit_credential_lease(lease_id)
+        _commit_credential_lease(db, lease_id)
         db.refresh(datasource)
         current_credential_ids = {
             credential_id
@@ -480,7 +487,7 @@ def api_update_datasource(
     except Exception:
         db.rollback()
         if not metadata_committed:
-            _release_credential_lease(vault, lease_id)
+            _release_credential_lease(db, vault, lease_id)
         raise
 
 

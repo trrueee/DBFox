@@ -1,5 +1,4 @@
 import logging
-import sqlglot
 from sqlglot import exp
 from engine.sql.parser import parse_sql
 
@@ -41,7 +40,6 @@ class PolicyEngine:
             ) from exc
 
         # DDL and Commands are always blocked — regardless of environment.
-        # Table designer / DDL intent must go through enforce_ddl_policy().
         _BLOCKED_IN_ALL_ENVS = (exp.Drop, exp.Create, exp.Alter, exp.Command)
         # DML is blocked on read-only datasources; allowed otherwise.
         _DML_MUTATIONS = (exp.Insert, exp.Update, exp.Delete, exp.Merge)
@@ -56,7 +54,7 @@ class PolicyEngine:
                         message=(
                             f"数据源 '{ds.name}' 拒绝执行结构定义/命令 SQL "
                             f"(指令类型: {type(node).__name__})。"
-                            f"DDL 操作请通过表设计器执行。"
+                            "DDL 操作不受支持。"
                         )
                     )
                 if isinstance(node, _DML_MUTATIONS):
@@ -68,22 +66,6 @@ class PolicyEngine:
                                 f"禁止执行写入/修改 SQL (指令类型: {type(node).__name__})。"
                             )
                         )
-
-    @staticmethod
-    def enforce_ddl_policy(ds: DataSource) -> None:
-        """
-        Explicit check before table designer executing generated DDL.
-        """
-        if ds.is_read_only:
-            raise DBFoxError(
-                code="READ_ONLY_VIOLATION",
-                message=f"数据源 '{ds.name}' 已开启只读保护，禁止执行任何结构变更变更 DDL。"
-            )
-        if ds.env == "prod":
-            raise DBFoxError(
-                code="PROD_POLICY_VIOLATION",
-                message=f"数据源 '{ds.name}' 属于生产环境 (Production)，安全策略禁止通过桌面客户端直接执行结构修改/建表 DDL。"
-            )
 
     @staticmethod
     def enforce_test_data_policy(ds: DataSource) -> None:
@@ -99,21 +81,4 @@ class PolicyEngine:
             raise DBFoxError(
                 code="PROD_POLICY_VIOLATION",
                 message=f"数据源 '{ds.name}' 属于生产环境 (Production)，已被安全 Policy 引擎拦截：禁止在生产环境生成测试数据。"
-            )
-
-    @staticmethod
-    def enforce_restore_policy(ds: DataSource) -> None:
-        """
-        Checks before database restore recovery actions.
-        """
-        if ds.is_read_only:
-            raise DBFoxError(
-                code="RESTORE_READONLY_ERROR",
-                message=f"数据源 '{ds.name}' 处于只读模式下，禁止执行数据库覆盖还原操作。"
-            )
-        if ds.env == "prod":
-            # In a production context, restore is a catastrophic operation if done casually
-            raise DBFoxError(
-                code="PROD_POLICY_VIOLATION",
-                message=f"拒绝操作：数据源 '{ds.name}' 属于生产环境 (Production)，Policy 引擎默认禁止对其执行覆盖还原 (Restore) 操作。"
             )

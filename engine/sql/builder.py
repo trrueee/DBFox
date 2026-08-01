@@ -113,11 +113,17 @@ def build_select(
             if clause:
                 sql += f" ORDER BY {clause}"
         elif isinstance(order, list):
-            clauses = [
-                build_order_clause(o, dialect, catalog_validated=catalog_validated_identifiers)
-                for o in order if o
-            ]
-            clauses = [c for c in clauses if c]
+            clauses: list[str] = []
+            for order_item in order:
+                if not order_item:
+                    continue
+                clause = build_order_clause(
+                    order_item,
+                    dialect,
+                    catalog_validated=catalog_validated_identifiers,
+                )
+                if clause:
+                    clauses.append(clause)
             if clauses:
                 sql += f" ORDER BY {', '.join(clauses)}"
                 

@@ -11,14 +11,12 @@ from sqlalchemy.orm import Session as OrmSession
 
 from engine.ai_index import (
     LLM_ENRICH_FAILED,
-    build_column_search_text,
-    build_table_search_text,
     compute_schema_hash,
     enrich_tables_batch,
 )
 from engine.llm.config import LlmConfig
 from engine.json_codec import dumps
-from engine.models import DomainTagRule, SchemaColumn, SchemaSearchDoc, SchemaTable
+from engine.models import DomainTagRule, SchemaTable
 
 logger = logging.getLogger("dbfox.ai_enrich")
 

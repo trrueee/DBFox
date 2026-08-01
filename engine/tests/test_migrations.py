@@ -1,6 +1,7 @@
 """Contract tests for the foundation v2 Alembic schema migration."""
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import subprocess
@@ -14,14 +15,22 @@ from alembic.config import Config
 import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError, OperationalError, SAWarning
+from sqlalchemy.orm import sessionmaker
 
 from engine.db import Base
 from engine.migrations.sqlite_mutex import SQLITE_MIGRATION_LOCKED, sqlite_migration_mutex
 from engine.models import FoundationRuntimeState
+from engine.security.credential_lease import CredentialLeaseSaga
+from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
+
+
+pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "b1c2d3e4f607"
+FOUNDATION_HEAD_REVISION = "e4f5a6b7c810"
+LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
+LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
 _QUERY_HISTORY_FTS_TRIGGERS = {
     "query_history_search_docs_ai",
@@ -136,6 +145,18 @@ def _upgrade(monkeypatch, database_url: str, revision: str = "head") -> None:
         migration_engine.dispose()
 
 
+def _downgrade(monkeypatch, database_url: str, revision: str) -> None:
+    import engine.db as db_module
+
+    migration_engine = create_engine(database_url, connect_args={"check_same_thread": False})
+    monkeypatch.setattr(db_module, "DATABASE_URL", database_url)
+    monkeypatch.setattr(db_module, "engine", migration_engine)
+    try:
+        command.downgrade(_alembic_config(database_url), revision)
+    finally:
+        migration_engine.dispose()
+
+
 def _column_names(engine, table_name: str) -> set[str]:
     return {column["name"] for column in inspect(engine).get_columns(table_name)}
 
@@ -167,8 +188,22 @@ def _assert_final_contract(engine) -> None:
         "ix_confirmation_tokens_expires_at",
     }.issubset({index["name"] for index in inspector.get_indexes("confirmation_tokens")})
 
+    assert _column_names(engine, "credential_leases") == {
+        "id",
+        "credential_ids_json",
+        "status",
+        "version",
+        "created_at",
+        "expires_at",
+        "claimed_at",
+        "committed_at",
+        "cleanup_started_at",
+        "released_at",
+    }
+
     data_source_columns = _column_names(engine, "data_sources")
     assert "connection_generation" in data_source_columns
+    assert "environment_id" not in data_source_columns
     assert {
         "password_credential_id",
         "ssh_password_credential_id",
@@ -182,18 +217,7 @@ def _assert_final_contract(engine) -> None:
         or "key_version" in column
     }
 
-    environment_columns = _column_names(engine, "database_environments")
-    assert "datasource_id" not in environment_columns
-    assert {
-        "password_credential_id",
-    } == {
-        column
-        for column in environment_columns
-        if "credential_id" in column
-        or "ciphertext" in column
-        or "nonce" in column
-        or "key_version" in column
-    }
+    assert "environment_id" not in _column_names(engine, "backup_records")
 
     assert {
         "llm_credential_id",
@@ -246,35 +270,14 @@ def _assert_final_contract(engine) -> None:
     }.issubset(artifact_columns)
     assert "preview_json" not in artifact_columns
 
-    assert _column_names(engine, "llm_logs") == {
-        "id",
-        "data_source_id",
-        "request_type",
-        "prompt_hash",
-        "model_name",
-        "latency_ms",
-        "status",
-        "error_code",
-        "prompt_version",
-        "prompt_template_hash",
-        "model_temperature",
-        "max_tokens",
-        "created_at",
-    }
-
-    data_source_fks = inspector.get_foreign_keys("data_sources")
-    assert any(
-        fk["constrained_columns"] == ["environment_id"]
-        and fk["referred_table"] == "database_environments"
-        and fk["options"].get("ondelete") == "SET NULL"
-        for fk in data_source_fks
-    )
-    environment_fks = inspector.get_foreign_keys("database_environments")
-    assert not any(
-        fk["constrained_columns"] == ["datasource_id"]
-        and fk["referred_table"] == "data_sources"
-        for fk in environment_fks
-    )
+    assert {
+        "database_environments",
+        "llm_logs",
+        "golden_sqls",
+        "reusable_sqls",
+        "workspace_table_scopes",
+        "table_design_drafts",
+    }.isdisjoint(tables)
 
     schema_column_fks = inspector.get_foreign_keys("schema_columns")
     assert any(
@@ -303,12 +306,6 @@ def _assert_final_contract(engine) -> None:
         for fk in inspector.get_foreign_keys("agent_question_requests")
     )
     assert any(
-        fk["constrained_columns"] == ["table_id"]
-        and fk["referred_table"] == "schema_tables"
-        and fk["options"].get("ondelete") == "CASCADE"
-        for fk in inspector.get_foreign_keys("workspace_table_scopes")
-    )
-    assert any(
         fk["constrained_columns"] == ["foreign_column_id"]
         and fk["referred_table"] == "schema_columns"
         and fk["options"].get("ondelete") == "SET NULL"
@@ -330,6 +327,153 @@ def test_fresh_upgrade_has_the_complete_foundation_v2_contract(monkeypatch, tmp_
             assert connection.execute(text("SELECT COUNT(*) FROM foundation_runtime_state")).scalar_one() == 0
         _assert_final_contract(engine)
         command.check(_alembic_config(database_url))
+    finally:
+        engine.dispose()
+
+
+def test_legacy_metadata_retirement_queues_unowned_environment_credentials(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "legacy-metadata-retirement.db")
+    _upgrade(monkeypatch, database_url, LEGACY_METADATA_RETIREMENT_BASE_REVISION)
+
+    retired_credential_id = "cred_datasource_password_retired_environment"
+    shared_credential_id = "cred_datasource_password_shared_datasource"
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO projects (id, name, description, status, created_at, updated_at)
+                    VALUES (
+                        'retirement-project', 'Retirement project', NULL, 'active',
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO data_sources (
+                        id, project_id, name, db_type, host, port, database_name,
+                        username, password_credential_id, ssh_enabled, ssh_port,
+                        ssl_enabled, ssl_verify_identity, connection_mode,
+                        connection_generation, is_read_only, env, status,
+                        created_at, updated_at
+                    ) VALUES (
+                        'retirement-source', 'retirement-project', 'Retirement source',
+                        'postgresql', 'db.internal', 5432, 'analytics', 'reader',
+                        :shared_credential_id, 0, 22, 0, 1, 'direct', 1, 1,
+                        'prod', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    """
+                ),
+                {"shared_credential_id": shared_credential_id},
+            )
+            for environment_id, credential_id in (
+                ("retired-environment", retired_credential_id),
+                ("shared-environment", shared_credential_id),
+            ):
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO database_environments (
+                            id, project_id, name, runtime, engine_type,
+                            engine_version, image, container_name, host, port,
+                            database_name, username, status, created_at, updated_at,
+                            password_credential_id
+                        ) VALUES (
+                            :id, 'retirement-project', :id, 'docker', 'postgresql',
+                            '16', 'postgres:16', :id, 'db.internal', 5432,
+                            'analytics', 'reader', 'ready', CURRENT_TIMESTAMP,
+                            CURRENT_TIMESTAMP, :credential_id
+                        )
+                        """
+                    ),
+                    {"id": environment_id, "credential_id": credential_id},
+                )
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            cleanup_lease = connection.execute(
+                text(
+                    """
+                    SELECT id, credential_ids_json, status
+                    FROM credential_leases
+                    WHERE id LIKE 'lease_retired_environment_%'
+                    """
+                )
+            ).mappings().one()
+        assert json.loads(str(cleanup_lease["credential_ids_json"])) == [retired_credential_id]
+        assert cleanup_lease["status"] == "cleanup_pending"
+
+        vault = InMemoryCredentialVault()
+        vault.put(
+            kind=CredentialKind.DATASOURCE_PASSWORD,
+            credential_id=retired_credential_id,
+            secret="retired secret",
+        )
+        vault.put(
+            kind=CredentialKind.DATASOURCE_PASSWORD,
+            credential_id=shared_credential_id,
+            secret="shared secret",
+        )
+        session_factory = sessionmaker(bind=engine)
+        with session_factory() as session:
+            CredentialLeaseSaga(session, vault).reconcile()
+
+        assert vault.get(retired_credential_id) is None
+        assert vault.get(shared_credential_id) == "shared secret"
+        with engine.connect() as connection:
+            assert connection.execute(
+                text("SELECT status FROM credential_leases WHERE id = :id"),
+                {"id": cleanup_lease["id"]},
+            ).scalar_one() == "released"
+    finally:
+        engine.dispose()
+
+    _downgrade(monkeypatch, database_url, LEGACY_METADATA_RETIREMENT_BASE_REVISION)
+    engine = create_engine(database_url)
+    try:
+        inspector = inspect(engine)
+        assert {
+            "database_environments",
+            "llm_logs",
+            "golden_sqls",
+            "reusable_sqls",
+            "workspace_table_scopes",
+        }.issubset(inspector.get_table_names())
+        with engine.connect() as connection:
+            assert connection.execute(
+                text("SELECT COUNT(*) FROM database_environments")
+            ).scalar_one() == 0
+            assert connection.execute(
+                text("SELECT status FROM credential_leases WHERE id = :id"),
+                {"id": cleanup_lease["id"]},
+            ).scalar_one() == "released"
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        _assert_final_contract(engine)
+        with engine.connect() as connection:
+            assert connection.execute(
+                text(
+                    """
+                    SELECT COUNT(*) FROM credential_leases
+                    WHERE id LIKE 'lease_retired_environment_%'
+                    """
+                )
+            ).scalar_one() == 1
     finally:
         engine.dispose()
 
@@ -517,13 +661,13 @@ def test_llm_telemetry_migration_removes_preexisting_plaintext_columns(
     finally:
         engine.dispose()
 
-    _upgrade(monkeypatch, database_url)
+    _upgrade(monkeypatch, database_url, LLM_TELEMETRY_REVISION)
 
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-                FOUNDATION_HEAD_REVISION
+                LLM_TELEMETRY_REVISION
             )
             migrated = connection.execute(
                 text(
@@ -545,7 +689,6 @@ def test_llm_telemetry_migration_removes_preexisting_plaintext_columns(
             "model_temperature": 0.1,
             "max_tokens": 256,
         }
-        _assert_final_contract(engine)
     finally:
         engine.dispose()
 
@@ -574,7 +717,7 @@ def test_llm_telemetry_migration_clears_unverifiable_legacy_fingerprints(
     finally:
         engine.dispose()
 
-    _upgrade(monkeypatch, database_url)
+    _upgrade(monkeypatch, database_url, LLM_TELEMETRY_REVISION)
 
     engine = create_engine(database_url)
     try:
@@ -712,7 +855,7 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
             migrated = connection.execute(
                 text(
                     """
-                    SELECT id, environment_id, host, port, database_name, username,
+                    SELECT id, host, port, database_name, username,
                            password_credential_id, connection_generation
                     FROM data_sources WHERE id = 'source-1'
                     """
@@ -720,7 +863,6 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
             ).mappings().one()
         assert dict(migrated) == {
             "id": "source-1",
-            "environment_id": "environment-1",
             "host": "db.internal",
             "port": 5432,
             "database_name": "analytics",
@@ -749,21 +891,6 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
             assert connection.execute(
                 text("SELECT COUNT(*) FROM schema_tables WHERE id = 'orphan-table'")
             ).scalar_one() == 0
-            environment = connection.execute(
-                text(
-                    """
-                    SELECT host, port, database_name, username, password_credential_id
-                    FROM database_environments WHERE id = 'environment-1'
-                    """
-                )
-            ).mappings().one()
-            assert dict(environment) == {
-                "host": "db.internal",
-                "port": 5432,
-                "database_name": "analytics",
-                "username": "readonly",
-                "password_credential_id": None,
-            }
             catalog_reference = connection.execute(
                 text(
                     """
@@ -1019,7 +1146,7 @@ def test_v2_removes_ascii_case_variant_legacy_secret_columns(
     finally:
         engine.dispose()
 
-    _upgrade(monkeypatch, database_url)
+    _upgrade(monkeypatch, database_url, FOUNDATION_V2_REVISION)
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:

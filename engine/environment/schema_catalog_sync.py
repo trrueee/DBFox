@@ -1,7 +1,7 @@
 """Sync introspection results (SchemaInventory) into the DBFox system catalog.
 
-Writes to SchemaTable / SchemaColumn so that SchemaLinker and downstream
-tools can discover tables without re-introspecting the live datasource
+Writes to SchemaTable / SchemaColumn so tools and downstream catalog consumers
+can discover tables without re-introspecting the live datasource
 every time.
 """
 from __future__ import annotations

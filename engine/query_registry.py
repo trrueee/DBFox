@@ -16,7 +16,7 @@ BackendKind = Literal["sqlite", "duckdb", "mysql", "postgresql"]
 class RunningQuery:
     execution_id: str
     datasource_id: str
-    backend: BackendKind
+    backend: BackendKind | None = None
     sqlite_connection: sqlite3.Connection | None = None
     duckdb_connection: Any = None
     mysql_thread_id: int | None = None
@@ -31,12 +31,25 @@ class QueryRegistry:
         self._queries: dict[str, RunningQuery] = {}
         self._connection_factory = connection_factory or ConnectionFactory()
 
+    def reserve(self, execution_id: str, datasource_id: str) -> None:
+        """Publish an execution before it is queued on a worker thread."""
+        with self._lock:
+            existing = self._queries.get(execution_id)
+            if existing is None:
+                self._queries[execution_id] = RunningQuery(
+                    execution_id=execution_id,
+                    datasource_id=datasource_id,
+                )
+                return
+            if existing.datasource_id != datasource_id:
+                raise ValueError("Execution ID is already reserved for another datasource")
+
     def register_sqlite(
         self,
         execution_id: str,
         datasource_id: str,
         connection: sqlite3.Connection,
-    ) -> None:
+    ) -> bool:
         with self._lock:
             existing = self._queries.get(execution_id)
             self._queries[execution_id] = RunningQuery(
@@ -46,13 +59,14 @@ class QueryRegistry:
                 sqlite_connection=connection,
                 cancel_requested=existing.cancel_requested if existing else False,
             )
+            return self._queries[execution_id].cancel_requested
 
     def register_postgres(
         self,
         execution_id: str,
         datasource_id: str,
         connection: Any,
-    ) -> None:
+    ) -> bool:
         with self._lock:
             existing = self._queries.get(execution_id)
             self._queries[execution_id] = RunningQuery(
@@ -62,13 +76,14 @@ class QueryRegistry:
                 postgres_connection=connection,
                 cancel_requested=existing.cancel_requested if existing else False,
             )
+            return self._queries[execution_id].cancel_requested
 
     def register_duckdb(
         self,
         execution_id: str,
         datasource_id: str,
         connection: Any,
-    ) -> None:
+    ) -> bool:
         with self._lock:
             existing = self._queries.get(execution_id)
             self._queries[execution_id] = RunningQuery(
@@ -78,6 +93,7 @@ class QueryRegistry:
                 duckdb_connection=connection,
                 cancel_requested=existing.cancel_requested if existing else False,
             )
+            return self._queries[execution_id].cancel_requested
 
     def register_mysql(
         self,
@@ -85,7 +101,7 @@ class QueryRegistry:
         datasource_id: str,
         profile: ConnectionProfile,
         thread_id: int,
-    ) -> None:
+    ) -> bool:
         with self._lock:
             existing = self._queries.get(execution_id)
             self._queries[execution_id] = RunningQuery(
@@ -96,6 +112,7 @@ class QueryRegistry:
                 mysql_profile=profile,
                 cancel_requested=existing.cancel_requested if existing else False,
             )
+            return self._queries[execution_id].cancel_requested
 
     def unregister(self, execution_id: str) -> None:
         with self._lock:
@@ -129,6 +146,14 @@ class QueryRegistry:
             mysql_thread_id = query.mysql_thread_id
             mysql_profile = query.mysql_profile
             postgres_connection = query.postgres_connection
+
+        if backend is None:
+            return {
+                "success": True,
+                "cancelled": True,
+                "executionId": execution_id,
+                "message": "Query cancellation requested before execution started.",
+            }
 
         if backend == "sqlite" and sqlite_connection is not None:
             sqlite_connection.interrupt()

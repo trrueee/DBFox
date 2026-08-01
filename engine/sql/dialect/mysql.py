@@ -38,12 +38,15 @@ def _execute_on_mysql_profiled(
     ) as conn:
         connect_ms = int((time.perf_counter() - t_conn_start) * 1000)
         if execution_id:
-            QUERY_REGISTRY.register_mysql(
+            cancelled_before_start = QUERY_REGISTRY.register_mysql(
                 execution_id,
                 datasource_id,
                 profile,
                 int(conn.thread_id()),
             )
+            if cancelled_before_start:
+                QUERY_REGISTRY.unregister(execution_id)
+                raise SQLQueryCancelledError("SQL query cancelled by user")
 
         try:
             with conn.cursor() as cursor:

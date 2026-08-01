@@ -6,12 +6,6 @@ from pydantic import ValidationError
 from engine.schemas.backup import BackupCreateRequest
 from engine.schemas.datasource import DataSourceCreateRequest, DataSourceTestRequest, DataSourceUpdateRequest
 from engine.api.agent import ConsoleExecuteRequest
-from engine.schemas.table_design import (
-    TableDesignAIRequest,
-    TableDesignDDLRequest,
-    TableDesignDraftSaveRequest,
-    TableDesignExecuteRequest,
-)
 from engine.api.datasources import ColumnMetadataUpdateRequest, TableMetadataUpdateRequest
 
 
@@ -96,96 +90,6 @@ def test_datasource_request_rejects_plaintext_secret_fields(
 def test_console_execute_request_rejects_invalid_core_fields(payload: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         ConsoleExecuteRequest(**payload)
-
-
-def _table_design_column(**overrides: object) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "name": "user_id",
-        "type": "BIGINT",
-        "nullable": False,
-    }
-    payload.update(overrides)
-    return payload
-
-
-def _table_design_payload(**overrides: object) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "table_name": "users",
-        "columns": [_table_design_column()],
-        "indexes": [{"name": "idx_user_id", "columns": ["user_id"], "unique": False}],
-    }
-    payload.update(overrides)
-    return payload
-
-
-@pytest.mark.parametrize(
-    "field,value",
-    [
-        ("table_name", ""),
-        ("table_name", "users; DROP TABLE users"),
-        ("table_name", "1users"),
-        ("columns", []),
-        ("columns", [_table_design_column(name="bad column")]),
-        ("indexes", [{"name": "idx;drop", "columns": ["user_id"], "unique": False}]),
-        ("indexes", [{"name": "idx_user_id", "columns": ["bad column"], "unique": False}]),
-    ],
-)
-def test_table_design_ddl_request_rejects_invalid_identifiers_and_empty_columns(
-    field: str,
-    value: object,
-) -> None:
-    with pytest.raises(ValidationError):
-        TableDesignDDLRequest(**_table_design_payload(**{field: value}))
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"datasource_id": "", "ddl": "CREATE TABLE users (id BIGINT)"},
-        {"datasource_id": "ds-1", "ddl": ""},
-        {"datasource_id": "ds-1", "ddl": " " * 3},
-        {"datasource_id": "d" * 129, "ddl": "CREATE TABLE users (id BIGINT)"},
-        {"datasource_id": "ds-1", "ddl": "x" * 200_001},
-    ],
-)
-def test_table_design_execute_request_rejects_invalid_core_fields(payload: dict[str, object]) -> None:
-    with pytest.raises(ValidationError):
-        TableDesignExecuteRequest(**payload)
-
-
-@pytest.mark.parametrize(
-    "field,value",
-    [
-        ("project_id", ""),
-        ("project_id", "p" * 129),
-        ("table_name", "bad table"),
-        ("columns", []),
-    ],
-)
-def test_table_design_draft_request_reuses_safe_table_constraints(field: str, value: object) -> None:
-    payload = {
-        "project_id": "proj-1",
-        **_table_design_payload(),
-    }
-    payload[field] = value
-
-    with pytest.raises(ValidationError):
-        TableDesignDraftSaveRequest(**payload)
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"prompt": ""},
-        {"prompt": " " * 3},
-        {"prompt": "x" * 20_001},
-        {"prompt": "create users", "api_base": "x" * 2049},
-        {"prompt": "create users", "model_name": "m" * 129},
-    ],
-)
-def test_table_design_ai_request_rejects_invalid_core_fields(payload: dict[str, object]) -> None:
-    with pytest.raises(ValidationError):
-        TableDesignAIRequest(**payload)
 
 
 @pytest.mark.parametrize(

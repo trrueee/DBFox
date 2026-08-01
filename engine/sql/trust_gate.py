@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Callable, Literal, TypedDict
+from collections.abc import Mapping
+from typing import Any, Callable, Literal, TypedDict, cast
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -55,17 +56,20 @@ class ExecutionSafetyDecision(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-def _public_guardrail_result(guardrail: dict[str, Any]) -> GuardrailResult:
+def _public_guardrail_result(guardrail: Mapping[str, Any]) -> GuardrailResult:
     """Strip internal-only parser artifacts from guardrail payloads.
 
     Every value stored in ExecutionSafetyDecision may be persisted or returned
     by FastAPI, so it must be JSON serializable.
     """
-    return {
-        key: value
-        for key, value in guardrail.items()
-        if not key.startswith("_")
-    }  # type: ignore[return-value]
+    return cast(
+        GuardrailResult,
+        {
+            key: value
+            for key, value in guardrail.items()
+            if not key.startswith("_")
+        },
+    )
 
 
 class TrustGate:
@@ -212,7 +216,6 @@ class TrustGate:
                 "env": env,
                 "is_read_only": bool(datasource.is_read_only) if datasource else None,
                 "project_id": str(datasource.project_id) if datasource and datasource.project_id else None,
-                "environment_id": str(datasource.environment_id) if datasource and datasource.environment_id else None,
             },
             blocked_reasons=blocked_reasons,
             messages=messages,

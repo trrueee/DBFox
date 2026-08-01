@@ -30,7 +30,6 @@ from engine.sql.result_view.models import (
     TablePageQuery,
     TableSourceRef,
     ResultViewError,
-    ResultViewQuery,
     VerifiedResultSource,
 )
 from engine.tools.chart_suggestion import build_chart_series

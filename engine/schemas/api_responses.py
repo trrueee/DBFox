@@ -69,13 +69,6 @@ class BackupPrecheckResponse(BaseModel):
     restoreAvailable: bool
 
 
-class TableScopeUpdateResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    success: Literal[True] = True
-    message: str
-
-
 class TestDataGeneratedResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

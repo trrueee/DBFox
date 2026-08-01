@@ -12,10 +12,10 @@ from alembic.util import CommandError
 import sqlalchemy as sa
 
 # Import our custom database engine builder and Base model.
-from engine.db import Base, DATABASE_URL, build_metadata_engine
+from engine.db import DATABASE_URL, build_metadata_engine
 from engine.migrations.sqlite_mutex import sqlite_file_target, sqlite_migration_mutex
 # Import models to ensure they are registered on Base.metadata for autogenerate
-from engine import models
+from engine import models as _models  # register ORM tables on Base.metadata
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -30,7 +30,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Set target metadata for autogenerate support
-target_metadata = Base.metadata
+target_metadata = _models.Base.metadata
 
 _FTS_VIRTUAL_TABLES = {"schema_search_fts", "query_history_fts"}
 _FTS_SHADOW_SUFFIXES = {"data", "idx", "content", "docsize", "config"}
