@@ -47,6 +47,7 @@ vi.mock("../datasourceSelectionStore", () => ({
 import { useConversationStore } from "../conversationStore";
 
 const initialDetail: ConversationDetail = {
+  protocol_version: 2,
   id: "conversation-1",
   title: "Orders",
   datasource_id: "datasource-1",

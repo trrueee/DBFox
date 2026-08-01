@@ -8,8 +8,10 @@ afterEach(() => {
 
 describe("diagnosticsApi", () => {
   it("fetches diagnostic logs with a bounded line count", async () => {
-    const fetchMock = vi.fn(async () =>
-      Response.json(
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return Response.json(
         {
           generated_at: "2026-06-20T00:00:00Z",
           policy: { redacted: true, max_lines_per_source: 25, omitted: [] },
@@ -17,8 +19,8 @@ describe("diagnosticsApi", () => {
           sources: [],
           security_audit: { retention_days: 90, export_window_days: 7, max_records: 500, records: [] },
         },
-      ),
-    );
+      );
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await diagnosticsApi.getLogs(25);
@@ -30,9 +32,11 @@ describe("diagnosticsApi", () => {
   });
 
   it("sends the explicit confirmation text when clearing security audit", async () => {
-    const fetchMock = vi.fn(async () =>
-      Response.json({ cleared: true, records_deleted: 3 }),
-    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return Response.json({ cleared: true, records_deleted: 3 });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await diagnosticsApi.clearSecurityAudit("清空安全审计");

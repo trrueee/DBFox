@@ -10,6 +10,7 @@ import {
   isTerminalRun,
   isTerminalRunItem,
 } from "../features/conversation/conversationState";
+import { mergeProjectionById } from "./conversationProjection";
 
 export function removeConversationState(
   state: ConversationStore,
@@ -51,7 +52,7 @@ export function upsertRun(
       ...state.detailById,
       [conversationId]: {
         ...detail,
-        runs: mergeById(detail.runs, [run]).sort(
+        runs: mergeProjectionById(detail.runs, [run]).sort(
           (left, right) => left.session_sequence - right.session_sequence,
         ),
       },
@@ -74,7 +75,7 @@ export function upsertItem(
       ...state.detailById,
       [conversationId]: {
         ...detail,
-        items: sortItems(mergeById(detail.items, [item])),
+        items: sortItems(mergeProjectionById(detail.items, [item])),
       },
     },
   };
@@ -220,12 +221,6 @@ function sortItems(items: ConversationRunItem[]): ConversationRunItem[] {
     || left.created_at.localeCompare(right.created_at)
     || left.id.localeCompare(right.id)
   ));
-}
-
-function mergeById<T extends { id: string }>(older: T[], newer: T[]): T[] {
-  const values = new Map(older.map((item) => [item.id, item]));
-  for (const item of newer) values.set(item.id, item);
-  return [...values.values()];
 }
 
 function filterRecord<T>(

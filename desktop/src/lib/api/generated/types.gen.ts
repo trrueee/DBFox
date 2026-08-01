@@ -391,10 +391,6 @@ export type BackupResponse = {
      */
     duration_ms?: number | null;
     /**
-     * Environment Id
-     */
-    environment_id?: string | null;
-    /**
      * Error Message
      */
     error_message?: string | null;
@@ -1104,10 +1100,6 @@ export type DataSourceResponse = {
      * Env
      */
     env?: 'dev' | 'test' | 'prod';
-    /**
-     * Environment Id
-     */
-    environment_id?: string | null;
     /**
      * Host
      */
@@ -1995,7 +1987,7 @@ export type LlmTestRequest = {
     /**
      * Model Name
      */
-    model_name: string;
+    model_name?: string | null;
 };
 
 /**
@@ -3404,20 +3396,6 @@ export type TableResultPageRequest = {
 };
 
 /**
- * TableScopeUpdateResponse
- */
-export type TableScopeUpdateResponse = {
-    /**
-     * Message
-     */
-    message: string;
-    /**
-     * Success
-     */
-    success?: true;
-};
-
-/**
  * TestDataGenerateRequest
  */
 export type TestDataGenerateRequest = {
@@ -3513,58 +3491,6 @@ export type ValidationError = {
      * Error Type
      */
     type: string;
-};
-
-/**
- * WorkspaceTableScopeResponse
- */
-export type WorkspaceTableScopeResponse = {
-    /**
-     * Created At
-     */
-    created_at?: string | null;
-    /**
-     * Data Source Id
-     */
-    data_source_id: string;
-    /**
-     * Enabled
-     */
-    enabled?: boolean;
-    /**
-     * Id
-     */
-    id: string;
-    /**
-     * Project Id
-     */
-    project_id: string;
-    /**
-     * Table Id
-     */
-    table_id: string;
-    /**
-     * Updated At
-     */
-    updated_at?: string | null;
-};
-
-/**
- * WorkspaceTableScopeUpdateRequest
- */
-export type WorkspaceTableScopeUpdateRequest = {
-    /**
-     * Datasource Id
-     */
-    datasource_id: string;
-    /**
-     * Enabled Table Ids
-     */
-    enabled_table_ids: Array<string>;
-    /**
-     * Project Id
-     */
-    project_id: string;
 };
 
 /**
@@ -5266,64 +5192,3 @@ export type ApiListColumnsApiV1SchemaTablesTableIdColumnsGetResponses = {
 };
 
 export type ApiListColumnsApiV1SchemaTablesTableIdColumnsGetResponse = ApiListColumnsApiV1SchemaTablesTableIdColumnsGetResponses[keyof ApiListColumnsApiV1SchemaTablesTableIdColumnsGetResponses];
-
-export type ApiGetTableScopeApiV1SemanticTableScopeGetData = {
-    body?: never;
-    path?: never;
-    query: {
-        /**
-         * Project Id
-         */
-        project_id: string;
-        /**
-         * Datasource Id
-         */
-        datasource_id: string;
-    };
-    url: '/api/v1/semantic/table-scope';
-};
-
-export type ApiGetTableScopeApiV1SemanticTableScopeGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ApiGetTableScopeApiV1SemanticTableScopeGetError = ApiGetTableScopeApiV1SemanticTableScopeGetErrors[keyof ApiGetTableScopeApiV1SemanticTableScopeGetErrors];
-
-export type ApiGetTableScopeApiV1SemanticTableScopeGetResponses = {
-    /**
-     * Response Api Get Table Scope Api V1 Semantic Table Scope Get
-     *
-     * Successful Response
-     */
-    200: Array<WorkspaceTableScopeResponse>;
-};
-
-export type ApiGetTableScopeApiV1SemanticTableScopeGetResponse = ApiGetTableScopeApiV1SemanticTableScopeGetResponses[keyof ApiGetTableScopeApiV1SemanticTableScopeGetResponses];
-
-export type ApiUpdateTableScopeApiV1SemanticTableScopePostData = {
-    body: WorkspaceTableScopeUpdateRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/semantic/table-scope';
-};
-
-export type ApiUpdateTableScopeApiV1SemanticTableScopePostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ApiUpdateTableScopeApiV1SemanticTableScopePostError = ApiUpdateTableScopeApiV1SemanticTableScopePostErrors[keyof ApiUpdateTableScopeApiV1SemanticTableScopePostErrors];
-
-export type ApiUpdateTableScopeApiV1SemanticTableScopePostResponses = {
-    /**
-     * Successful Response
-     */
-    200: TableScopeUpdateResponse;
-};
-
-export type ApiUpdateTableScopeApiV1SemanticTableScopePostResponse = ApiUpdateTableScopeApiV1SemanticTableScopePostResponses[keyof ApiUpdateTableScopeApiV1SemanticTableScopePostResponses];

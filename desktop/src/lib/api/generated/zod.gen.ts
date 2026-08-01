@@ -190,7 +190,6 @@ export const zBackupResponse = z.object({
     created_at: z.string().nullish(),
     datasource_id: z.string().nullish(),
     duration_ms: z.int().nullish(),
-    environment_id: z.string().nullish(),
     error_message: z.string().nullish(),
     file_path: z.string().nullish(),
     file_size_bytes: z.int().nullish(),
@@ -462,7 +461,6 @@ export const zDataSourceResponse = z.object({
         'test',
         'prod'
     ]).optional().default('dev'),
-    environment_id: z.string().nullish(),
     host: z.string().nullish(),
     id: z.string(),
     is_read_only: z.boolean().optional().default(false),
@@ -788,7 +786,7 @@ export const zGuardrailResponse = z.object({
 export const zLlmTestRequest = z.object({
     api_base: z.string().min(1).max(2048),
     llm_credential_id: z.string().min(1).max(256),
-    model_name: z.string().min(1).max(256)
+    model_name: z.string().max(256).nullish()
 });
 
 /**
@@ -1479,14 +1477,6 @@ export const zTableResultPageRequest = z.object({
 });
 
 /**
- * TableScopeUpdateResponse
- */
-export const zTableScopeUpdateResponse = z.object({
-    message: z.string(),
-    success: z.literal(true).optional().default(true)
-});
-
-/**
  * TestDataGenerateRequest
  */
 export const zTestDataGenerateRequest = z.object({
@@ -1661,28 +1651,6 @@ export const zValidationError = z.object({
  */
 export const zHttpValidationError = z.object({
     detail: z.array(zValidationError).optional()
-});
-
-/**
- * WorkspaceTableScopeResponse
- */
-export const zWorkspaceTableScopeResponse = z.object({
-    created_at: z.string().nullish(),
-    data_source_id: z.string(),
-    enabled: z.boolean().optional().default(true),
-    id: z.string(),
-    project_id: z.string(),
-    table_id: z.string(),
-    updated_at: z.string().nullish()
-});
-
-/**
- * WorkspaceTableScopeUpdateRequest
- */
-export const zWorkspaceTableScopeUpdateRequest = z.object({
-    datasource_id: z.string(),
-    enabled_table_ids: z.array(z.string()),
-    project_id: z.string()
 });
 
 /**
@@ -2250,22 +2218,3 @@ export const zApiListColumnsApiV1SchemaTablesTableIdColumnsGetPath = z.object({
  * Successful Response
  */
 export const zApiListColumnsApiV1SchemaTablesTableIdColumnsGetResponse = z.array(zSchemaColumnResponse);
-
-export const zApiGetTableScopeApiV1SemanticTableScopeGetQuery = z.object({
-    project_id: z.string(),
-    datasource_id: z.string()
-});
-
-/**
- * Response Api Get Table Scope Api V1 Semantic Table Scope Get
- *
- * Successful Response
- */
-export const zApiGetTableScopeApiV1SemanticTableScopeGetResponse = z.array(zWorkspaceTableScopeResponse);
-
-export const zApiUpdateTableScopeApiV1SemanticTableScopePostBody = zWorkspaceTableScopeUpdateRequest;
-
-/**
- * Successful Response
- */
-export const zApiUpdateTableScopeApiV1SemanticTableScopePostResponse = zTableScopeUpdateResponse;

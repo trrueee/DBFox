@@ -50,6 +50,7 @@ describe("llmConfig credential boundary", () => {
     const saved = getStoredApiConfig();
     const discarded = discardLlmConfigDraft({
       apiKey: "TEST_LLM_SECRET",
+      credentialId: "cred_llm_api_key_draft",
       apiBase: "https://other.test/v1",
       modelName: "draft-model",
     }, saved);

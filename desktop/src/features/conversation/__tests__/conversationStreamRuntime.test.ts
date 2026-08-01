@@ -16,14 +16,16 @@ function snapshot(status: "running" | "completed"): ConversationDetail {
     runs: [{
       id: "run-1",
       session_id: "conversation-1",
+      input_id: "input-1",
       datasource_id: "datasource-1",
       session_sequence: 1,
+      user_message_id: "message-1",
       question: "test",
       status,
       version: 1,
       cancel_requested: false,
-      completion_disposition: null,
-      limitation_codes: [],
+      result: {},
+      error: null,
     }],
     cursor: 4,
   };
@@ -59,9 +61,9 @@ describe("ConversationStreamRuntime", () => {
     const durableEvent: ConversationStreamEvent = {
       kind: "event",
       event: {
-        protocol_version: 2,
-        id: "event-3",
-        type: "run.updated",
+        event_id: "event-3",
+        event_type: "run.updated",
+        event_version: 1,
         session_id: "conversation-1",
         run_id: "run-1",
         turn_id: null,

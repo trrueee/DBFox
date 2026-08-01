@@ -19,6 +19,7 @@ import {
   isFollowableRun,
   isTerminalRunItem,
 } from "../features/conversation/conversationState";
+import { mergeProjectionById } from "./conversationProjection";
 import { buildConversationLlmPayload, getStoredApiConfig } from "../lib/llmConfig";
 import type {
   ApprovalItem,
@@ -115,8 +116,8 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     });
     get().loadConversation({
       ...current,
-      items: mergeById(page.items, current.items),
-      runs: mergeById(page.runs, current.runs),
+      items: mergeProjectionById(page.items, current.items),
+      runs: mergeProjectionById(page.runs, current.runs),
       pagination: page.pagination,
       cursor: Math.max(current.cursor || 0, page.cursor || 0),
     });
@@ -209,8 +210,8 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     });
     get().loadConversation({
       ...detail,
-      items: mergeById(detail.items, created.projection.items),
-      runs: mergeById(detail.runs, created.projection.runs),
+      items: mergeProjectionById(detail.items, created.projection.items),
+      runs: mergeProjectionById(detail.runs, created.projection.runs),
       cursor: Math.max(detail.cursor || 0, created.event_cursor, created.projection.cursor),
     });
     void followRun(get, conversationId, created.run_id, created.projection.cursor);
@@ -291,12 +292,6 @@ async function followRun(
   });
 }
 
-function mergeById<T extends { id: string }>(older: T[], newer: T[]): T[] {
-  const values = new Map(older.map((item) => [item.id, item]));
-  for (const item of newer) values.set(item.id, item);
-  return [...values.values()];
-}
-
 function findItem<T extends ConversationRunItem>(
   state: ConversationStore,
   itemId: string,
@@ -321,14 +316,14 @@ function preserveLiveProjection(
 ): ConversationDetail {
   if (!current) return snapshot;
   const currentItems = new Map(current.items.map((item) => [item.id, item]));
-  const items = mergeById(current.items, snapshot.items).sort(
+  const items = mergeProjectionById(current.items, snapshot.items).sort(
     (left, right) => left.sequence - right.sequence
       || left.created_at.localeCompare(right.created_at)
       || left.id.localeCompare(right.id),
   );
   return {
     ...snapshot,
-    runs: mergeById(current.runs, snapshot.runs).sort(
+    runs: mergeProjectionById(current.runs, snapshot.runs).sort(
       (left, right) => left.session_sequence - right.session_sequence,
     ),
     items: items.map((item) => {

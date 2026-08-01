@@ -8,7 +8,11 @@ afterEach(() => {
 
 describe("datasourcesApi", () => {
   it("syncs schema docs without AI metadata payload by default", async () => {
-    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return Response.json({ ok: true });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     await datasourcesApi.syncSchema("ds-1");
@@ -20,7 +24,11 @@ describe("datasourcesApi", () => {
   });
 
   it("sends delete confirmation in the request body instead of the URL", async () => {
-    const fetchMock = vi.fn(async () => Response.json({ success: true, message: "deleted" }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return Response.json({ success: true, message: "deleted" });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     await datasourcesApi.deleteDatasource("ds-1", {

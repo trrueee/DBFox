@@ -455,8 +455,7 @@ export function ErDiagram({
         const hasToggle = node.fields.length > 5 && node.label !== focusTable;
         return estimateNodeHeight(fields.length, hasToggle);
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visibleNodes, focusTable, viewMode, isTableCollapsed, getVisibleFields],
+    [visibleNodes, focusTable, viewMode, getVisibleFields],
   );
 
   const rfNodes: Node[] = useMemo(

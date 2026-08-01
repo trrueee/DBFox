@@ -2,7 +2,6 @@ import type { ApiConfig, LlmConfigDraft, SchemaSyncOptions } from "./api/types";
 import { validateApiConfig } from "./api/types";
 import { DEFAULT_LLM_API_BASE } from "./llmPresets";
 
-export const DEFAULT_LLM_MODEL_NAME = "gpt-4o-mini";
 export const API_CONFIG_STORAGE_KEY = "dbfox-api-config";
 
 export const DEFAULT_API_CONFIG: ApiConfig = {
@@ -87,7 +86,7 @@ export function normalizeProductLlmConfig(
   return {
     credentialId,
     apiBase: clean(config?.apiBase) || DEFAULT_LLM_API_BASE,
-    modelName: clean(config?.modelName) || DEFAULT_LLM_MODEL_NAME,
+    modelName: clean(config?.modelName),
     hasCredential: Boolean(credentialId),
   };
 }
@@ -100,7 +99,7 @@ export function buildConversationLlmPayload(
   return {
     llm_credential_id: llm.credentialId,
     api_base: llm.apiBase,
-    model_name: llm.modelName,
+    model_name: llm.modelName || undefined,
   };
 }
 
@@ -115,7 +114,7 @@ export function buildSchemaSyncOptions(
     ai_enrich: true,
     llm_credential_id: llm.credentialId,
     api_base: llm.apiBase,
-    model_name: llm.modelName,
+    model_name: llm.modelName || undefined,
   };
 }
 

@@ -92,7 +92,7 @@ export type { LlmTestResponse };
 export async function testLlmConnection(
   llmCredentialId: string,
   apiBase: string,
-  modelName: string,
+  modelName?: string,
 ): Promise<LlmTestResponse> {
   const { data } = await apiLlmTestApiV1AgentLlmTestPost({
     body: {

@@ -122,6 +122,7 @@ describe("conversationStoreReducer", () => {
 
 function state(): ConversationStore {
   const detail: ConversationDetail = {
+    protocol_version: 2,
     id: "session-1",
     title: "测试",
     datasource_id: "ds-1",
@@ -136,7 +137,7 @@ function state(): ConversationStore {
     detailById: { "session-1": detail },
     artifactsById: {},
     liveFieldsById: {},
-  } as ConversationStore;
+  } as unknown as ConversationStore;
 }
 
 function run(): ConversationRun {

@@ -65,8 +65,8 @@ describe("workspaceStore — tabs", () => {
   });
 
   it("patchTab merges a partial update into a single tab", () => {
-    useWorkspaceStore.getState().patchTab("smart-query", { agentStatus: "running" });
-    expect(useWorkspaceStore.getState().tabs[0].agentStatus).toBe("running");
+    useWorkspaceStore.getState().patchTab("smart-query", { title: "分析运行中" });
+    expect(useWorkspaceStore.getState().tabs[0].title).toBe("分析运行中");
   });
 
   it("opens settings as an app mode without adding a workspace tab", () => {
