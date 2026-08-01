@@ -59,12 +59,15 @@ jobs:
           python -m pip check
 
       - name: Compile all Python runtime modules
-        run: python -m compileall -q engine build_sidecar.py
+        run: python -m compileall -q engine build_sidecar.py conftest.py scripts
+
+      - name: Lint Python runtime, tests, and repository scripts
+        run: python -m pyflakes engine build_sidecar.py conftest.py scripts
 
       - name: Type-check the complete Python runtime
         run: >-
           python -m mypy --no-warn-unused-configs --follow-imports=skip
-          engine build_sidecar.py
+          engine build_sidecar.py --no-incremental
 
       - name: Verify committed dependency lock contracts
         run: python -m pytest engine/tests/test_engineering_contracts.py -q --tb=short
@@ -112,7 +115,7 @@ jobs:
       - name: Run backend tests without external services or live LLM credentials
         run: >-
           python -m pytest engine/tests -q --tb=short
-          -m "not e2e and not integration and not real_llm"
+          -m "not e2e and not integration and not real_llm and not migration and not engineering_contract and not platform_contract"
 
   agent-runtime:
     name: Agent runtime regression
@@ -281,6 +284,9 @@ jobs:
 
       - name: Run ESLint
         run: npm run lint
+
+      - name: Type-check frontend tests
+        run: npm run typecheck:test
 
       - name: Run frontend unit tests serially for deterministic memory usage
         run: npm test -- --maxWorkers=1

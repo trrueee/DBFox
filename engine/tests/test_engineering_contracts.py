@@ -7,7 +7,12 @@ import re
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from engine import __version__
+
+
+pytestmark = pytest.mark.engineering_contract
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -61,7 +66,8 @@ def test_ci_enforces_the_required_layered_quality_gates() -> None:
 
     for command in (
         "python -m alembic check",
-        "python -m compileall -q engine build_sidecar.py",
+        "python -m compileall -q engine build_sidecar.py conftest.py scripts",
+        "python -m pyflakes engine build_sidecar.py conftest.py scripts",
         "python -m mypy --no-warn-unused-configs --follow-imports=skip",
         "engine build_sidecar.py",
         "python -m pytest engine/agent/tests",

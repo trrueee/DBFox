@@ -1,5 +1,6 @@
 [tool.mypy]
 python_version = "3.12"
+plugins = ["sqlalchemy.ext.mypy.plugin"]
 strict = false
 warn_return_any = false
 warn_unused_configs = true
@@ -9,42 +10,13 @@ exclude = [
     "tests/",
 ]
 
-[[tool.mypy.overrides]]
-module = [
-    "engine.agent.repositories.*",
-    "engine.api.*",
-    "engine.environment.*",
-    "engine.semantic.*",
-    "engine.sql.*",
-    "engine.tools.*",
-    "engine.ai_enrich",
-]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "engine.agent.*",
-    "engine.api.agent",
-    "engine.api.datasources",
-    "engine.api.table_design",
-    "engine.sql.dialect_context",
-    "engine.sql.executor",
-    "engine.sql.execution.*",
-    "engine.sql.permissions.*",
-    "engine.sql.result_view.*",
-    "engine.sql.safety.*",
-    "engine.sql.safety_gate",
-    "engine.sql.sql_backed_view",
-    "engine.test_data",
-]
-ignore_errors = false
-
-
-
 [tool.pytest.ini_options]
 markers = [
     "e2e: end-to-end tests that require a real DBFox runtime and external services",
+    "engineering_contract: repository and dependency governance contracts",
     "integration: tests that require external services (real API calls, etc.)",
+    "migration: metadata schema migration and repair contracts",
+    "platform_contract: platform-sensitive sidecar and desktop build contracts",
     "slow: tests that take longer to run",
     "real_llm: tests that require real LLM API access (API key, etc.)",
 ]

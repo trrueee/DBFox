@@ -333,11 +333,11 @@ Python sidecar 由 `build_sidecar.py` 构建，前端由 TypeScript/Vite 构建�
 
 最后一次完整回归：
 
-- Backend：913 passed，2 skipped；随后新增审计确认专项通过；
-- Frontend：76 files / 411 tests passed；随后诊断 API 专项 5 passed；
-- mypy：277 source files / 0 issues；
+- Backend：881 passed，2 skipped；
+- Frontend：68 files / 341 tests passed；
+- mypy：250 source files / 0 issues；
 - ESLint、production build、bundle budget：通过；
-- Alembic：单一 head `e9f0a1b2c3d4`；
+- Alembic：单一 head `c2d3e4f5a608`；
 - `git diff --check`：通过。
 
 测试覆盖正常路径、事务并发、lease fencing、事件 gap、provider contract、取消、工具预算、Artifact 数据边界、CSP、前端 reducer、Activity/Approval/Result 交互和供应链合同。

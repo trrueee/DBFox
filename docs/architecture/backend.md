@@ -259,7 +259,7 @@ SecurityAuditRecord 与普通诊断日志分离：前者记录安全动作和结
 
 ## 14. 测试与发布证据
 
-后端测试覆盖 migration、SQLite writer 并发、lease、RunControl、ToolExecutor、Provider contract、Artifact 边界、Result Gateway、取消、备份恢复、错误脱敏和审计生命周期。最后一次完整回归为 913 passed、2 skipped；之后新增审计确认专项通过。
+后端测试覆盖 migration、SQLite writer 并发、lease、RunControl、ToolExecutor、Provider contract、Artifact 边界、Result Gateway、取消、备份恢复、错误脱敏和审计生命周期。测试数量属于易漂移的运行结果，不在架构文档中固化；以 CI 的分层收集与当次报告为准。
 
 发布还需要 Windows MSVC、macOS 和 Linux 候选构建证据。源码架构全绿不等于缺少签名或平台构建时可以发布正式安装包。
 

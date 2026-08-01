@@ -3,19 +3,37 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
+
+pytestmark = pytest.mark.platform_contract
+
 
 def test_write_env_local_uses_frontend_engine_env_names(tmp_path, monkeypatch) -> None:
     desktop_dir = tmp_path / "desktop"
     desktop_dir.mkdir()
     monkeypatch.setattr(build_sidecar, "DESKTOP_DIR", desktop_dir)
 
-    path = build_sidecar.write_env_local("test-token")
+    token = "a" * 64
+    path = build_sidecar.write_env_local(token)
 
     assert path == desktop_dir / ".env.local"
     env_text = path.read_text(encoding="utf-8")
     assert "VITE_LOCAL_ENGINE_PORT=18625\n" in env_text
-    assert 'VITE_LOCAL_ENGINE_TOKEN="test-token"\n' in env_text
+    assert f'VITE_LOCAL_ENGINE_TOKEN="{token}"\n' in env_text
     assert "VITE_DBFOX_STATIC_TOKEN" not in env_text
+
+
+def test_dev_launchers_delegate_frontend_env_writes_to_one_helper() -> None:
+    root = Path(__file__).resolve().parents[2]
+    powershell_source = (root / "dev.ps1").read_text(encoding="utf-8")
+    shell_source = (root / "dev.sh").read_text(encoding="utf-8")
+
+    assert "scripts\\dev_environment.py" in powershell_source
+    assert "scripts/dev_environment.py" in shell_source
+    assert "WriteAllText" not in powershell_source
+    assert ".env.local" not in powershell_source
+    assert ".env.local" not in shell_source
 
 
 def test_tauri_package_build_rebuilds_sidecar_before_frontend() -> None:
@@ -73,7 +91,6 @@ def test_dynamic_runtime_dependencies_are_declared_for_the_frozen_sidecar() -> N
     root = Path(__file__).resolve().parents[2]
     requirements = (root / "requirements.txt").read_text(encoding="utf-8")
 
-    assert any(line.lower().startswith("pyyaml") for line in requirements.splitlines())
     assert any(line.startswith("openai") for line in requirements.splitlines())
     assert not any(line.startswith(("langgraph", "langchain", "langsmith")) for line in requirements.splitlines())
     assert "openai" in build_sidecar.HIDDEN_IMPORTS

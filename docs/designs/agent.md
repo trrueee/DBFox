@@ -142,7 +142,7 @@ sequenceDiagram
         end
     end
     RL->>DB: atomically commit answer, evidence, memory and terminal state
-    DB-->>UI: answer.completed + run.completed
+    DB-->>UI: final_answer run.item.completed + run.completed
     UI->>API: reload projection after refresh/reconnect
 ```
 
@@ -221,7 +221,7 @@ created → queued → running ↔ waiting_approval
 
 Turn 在启动时冻结：AgentDefinition、模型参数、PromptBundle、ContextSnapshot、ToolMaterialization 和预算切片。provider retry 可产生 attempt，但不能暗中改变工具和权限集合。
 
-Provider 通过 `ModelAdapter` 归一化为以下 Turn stream item：`text_delta`、`reasoning_summary_delta`、`tool_call_start`、`tool_call_delta`、`tool_call_end`、`usage`、`finish` 和 `error`。`TurnStreamAssembler` 按 `turn_id + channel + offset` 组装 draft 和 tool calls，校验完整参数后才允许进入 ToolInvocation。原始 provider chunk 不是领域事件，也不能直接进入前端 reducer。
+Provider 通过 `OpenAIModelAdapter` 将官方 SDK typed events 归一化为 `answer_start/delta/end`、`reasoning_summary_start/delta/end`、`tool_call_start/delta/end`、`model_output_item`、`usage`、`finish` 和 `error`。`TurnStreamAssembler` 按稳定 item ID 和 revision 组装消息与 tool calls，校验完整参数和已完成 output Items 后才允许进入 ToolInvocation。原始 provider chunk 不是领域事件，也不能直接进入前端 reducer。
 
 热 delta 直接送入 LiveStreamHub；Turn 完成、暂停或失败时，已组装 message parts、usage、finish signal 和安全的 provider diagnostic 在短事务中结算。不能为了持久化每个 token 阻塞 provider stream。
 
@@ -393,7 +393,7 @@ Artifact selection 是持久化会话状态。自动策略只在“用户从未�
 - 生成 assistant message blocks；
 - 确定默认展开工件建议；
 - 生成 Session memory delta；
-- 生成 `answer.completed` 与 terminal payload。
+- 生成 `message(phase=final_answer)` RunItem 与 terminal payload。
 
 以下对象在一个数据库事务中提交：assistant message、answer、evidence、artifact final states、memory delta、Run terminal state、Session projection 和 terminal events。失败时全部回滚，Run 保持可恢复的非终态。
 
@@ -404,9 +404,9 @@ Artifact selection 是持久化会话状态。自动策略只在“用户从未�
 - `RuntimeEventLog`：事务内写入的权威领域事件，支持 replay 和页面恢复；
 - `LiveStreamHub`：首 token、reasoning summary delta、tool progress 的低延迟扇出。
 
-Live delta 使用 `(run_id, turn_id, channel, offset)` 去重；领域事件使用 Session `sequence` 排序。`answer.delta` 定期合并到持久 message draft，`answer.completed` 校验最终文本哈希。
+Live delta 使用 `(item_id, revision, offset)` 合并；领域事件使用 Session `sequence` 排序。断线恢复以持久 message 内容和 durable cursor 为准，delta 不作为恢复真相源。
 
-`RuntimeEventProjector` 是领域状态到公开事件协议的唯一映射边界。它把 Run、Turn、ToolInvocation、Approval、QuestionRequest、Observation、Artifact、Evidence 和 Answer 的变化投影成版本化 payload；映射采用穷尽测试，API 和前端不得各自再造事件含义。
+`engine.agent.run_item` 是领域状态到公开 RunItem 协议的唯一投影边界，`EventRepository` 在同一事务写入投影和版本化事件；API 和前端不得各自再造事件含义。
 
 SSE 连接顺序：先建立通知订阅，再读取 cursor 后的 EventLog，再接收通知并按 sequence/offset 去重，避免查询与订阅之间的丢失窗口。
 

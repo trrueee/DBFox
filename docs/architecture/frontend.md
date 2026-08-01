@@ -150,7 +150,7 @@ flowchart TB
 - Answer 使用增量合并和平滑显示；终态消息以持久投影为准。
 - Citation 由 Markdown AST 插件解析为句内 Evidence 按钮，不依赖字符串后处理。
 - Markdown 不解析通用 raw HTML；GFM、Citation 和安全换行都在 AST 层处理，最终仍经过 sanitize。
-- Live envelope 使用 `live_id + channel_revision + operation`；正常流为 `append`，重连先接收 `replace` 快照再继续 append，避免首段缺失或重复。
+- Live delta 使用稳定的 `item_id + revision + offset` 追加到已开始的 RunItem；断线后以 snapshot 的完整持久内容为准，再从 durable event cursor 继续，避免首段缺失或重复。
 
 ## 6. Artifact Dock 与 SQL-backed 数据
 

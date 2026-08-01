@@ -28,7 +28,7 @@ cd desktop && npm run dev          # http://localhost:5173
 ### Tests
 ```bash
 # Backend
-pytest engine/ -q --tb=short --ignore=engine/agent/tests/test_e2e_qwen.py
+pytest engine/ -q --tb=short
 
 # Frontend
 cd desktop && npm test
@@ -53,7 +53,7 @@ cd desktop && npm test
 
 ## Key Conventions
 - **Backend startup**: ALWAYS `python -m engine.main` (module mode), NEVER `python engine/main.py`
-- **Frontend env**: `build_sidecar.py` writes `desktop/.env.local`; the backend never writes frontend source-tree configuration at runtime
+- **Frontend env**: `scripts/dev_environment.py` is the single writer for the ignored `desktop/.env.local`; build and dev launchers delegate to it
 - **Default ports**: Backend 18625, Frontend 5173
 - **Database**: SQLite by default at `./dbfox_local.db`, WAL mode, auto-migration on startup
 - **Migrations**: Alembic in `engine/migrations/versions/`

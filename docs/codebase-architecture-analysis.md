@@ -281,8 +281,9 @@ sequenceDiagram
     participant UDB as 目标数据库
 
     UI->>API: 凭据登记（batch + lease）
-    API->>VAULT: put(secret) → opaque cred_{kind}_id
-    API-->>UI: credential_id 引用
+    API->>META: 预分配 credential IDs，提交 pending Lease intent
+    API->>VAULT: 按预分配 ID put(secret)
+    API-->>UI: credential_id 引用 + lease_id
     UI->>API: POST /datasources（payload 含 credential_id）
     API->>META: 保存元数据 + connection_generation 自增
     META-->>API: DataSource(id, generation)
@@ -294,7 +295,7 @@ sequenceDiagram
     API->>META: 持久化脱敏的 last_test_*
 ```
 
-- **关键点**：凭据**只写不读**（`api/credentials.py:1-6`，浏览器永不取回明文）；密码仅在 `ConnectionFactory` 内解析（factory.py:113,521-531）；`ConnectionProfile` 拒绝明文字段（profile.py:153-159）；旧连接靠 `connection_generation` 栅栏失效（lifecycle.py:89-115）。
+- **关键点**：浏览器永不取回明文；批量登记先持久化 Lease intent，再写 OS Vault，进程中断后由 Saga reconcile 提交或清理；密码仅在 `ConnectionFactory` 内解析；`ConnectionProfile` 拒绝明文字段；旧连接靠 `connection_generation` 栅栏失效。
 
 ## 7.4 MySQL 备份与隔离恢复
 
@@ -357,7 +358,6 @@ sequenceDiagram
 | `SchemaTable`/`SchemaColumn` | models.py:260/:299 | name、ai_description、semantic_tags、is_pii | Table 1—N Column | Schema 目录缓存 |
 | `SchemaSearchDoc` | models.py:343 | search_text（FTS5） | → Table/Column | 语义搜索索引 |
 | `QueryHistory` | models.py:381 | original_sql、guardrail 结果、耗时 | — | 查询历史 + FTS |
-| `LLMLog` | models.py:440 | **仅 hmac-sha256 指纹**，无明文 | — | LLM 遥测 |
 | `AgentSession`/`AgentMessage`/`AgentSessionInput` | models.py:553+ | sequence、state | Session 1—N Message/Input | 会话事实源 |
 | `AgentRun`/`AgentTurn` | models.py:553+ | status、budget、prompt_hash | Session 1—N Run 1—N Turn | ReAct 执行记录 |
 | `AgentToolInvocation`/`AgentObservationRecord` | models.py:553+ | authorized_input_hash、status | Run 1—N Invocation | 工具调用幂等与结算 |
@@ -437,20 +437,16 @@ cargo test --locked                            # Rust
 | 问题 | 影响 | 判断依据 | 文件 | 验证方式 |
 | --- | --- | --- | --- | --- |
 | **文档与工作树漂移**：工具清单、协议说明和 generated 产物必须随注册表与 FastAPI 契约更新 | 误导新开发者，按旧文档写代码会出错 | 新实现为 `engine/tools/builtin/`（下划线命名），CLAUDE.md 已改为当前 13 个函数 | CLAUDE.md、架构约束测试 | 比对工具注册表、文档和生成 diff |
-| **开发环境 token 缺口**：CLAUDE.md 称"Engine auto-writes `desktop/.env.local`"，但引擎已不再写入，仅 `build_sidecar.py` 写；`dev.ps1 both` 干净检出会空等 30s 后 401 | 浏览器源码调试失败 | `engine/tests/test_startup.py:102-109` 断言源码不含 `.env.local`；README.md:100 明确"后端绝不写入" | `dev.ps1`、`build_sidecar.py:163-172` | 干净检出运行 `./dev.ps1 both` 观察 |
 
 ### 中风险
 | 问题 | 影响 | 判断依据 | 文件 | 验证方式 |
 | --- | --- | --- | --- | --- |
 | **重构中间态未提交**：大量新增文件未跟踪（`engine/tools/builtin/`、`terminalizer.py`、`policy/authority.py` 等），大量旧文件已删除但 HEAD 仍存在 | 分支状态不稳定，他人 checkout 会拿到残缺代码 | git status `??` 与 `D` 并存；`agent_runtime/`、`agent_core/` 仅剩 `.pyc` 残留且从未被 git 跟踪 | 工作树 | `git status --short`；确认该分支是否应被提交/丢弃 |
-| **`sql` 与 `connectivity` 双向依赖** | 模块边界不清，依赖环风险 | `sql/pool_registry` 被 `connectivity/_pools` 反向依赖，靠延迟 import 解耦 | factory.py:486-491、lifecycle.py:26-35 | 架构评审确认是否应提取公共层 |
+| **连接池注册表目录边界失真** | 所有生产调用者都在 connectivity/tunnel 边界，但实现仍位于 `engine/sql` | `connectivity/_pools.py`、`connectivity/lifecycle.py`、`tunnel.py` 调用 `sql/pool_registry.py`；当前没有反向 import 环 | 相关调用链 | 后续将注册表整体移入 connectivity；不要增加转发兼容层 |
 
 ### 低风险
 | 问题 | 影响 | 判断依据 | 文件 | 验证方式 |
 | --- | --- | --- | --- | --- |
-| `requirements-dev.txt` 含 `httpx2`（非常见包名） | 可能为拼写错误 | requirements-dev.txt:4 | requirements-dev.txt | `pip install -r requirements-dev.lock` 验证 |
-| `SqlEditor.tsx`（Monaco）未被生产代码引用，`@monaco-editor/react` 依赖存在但 SQL 控制台用自研 textarea | 死代码/未启用功能 | Grep 证实仅测试引用 | `components/SqlEditor.tsx`、`SqlConsoleWorkspace.tsx` | 确认是否有启用计划 |
-| `engine/llm/structured.py`（LangChain 薄封装）与 Agent 主路径无关 | 遗留代码 | 主路径仅用 Responses API | `engine/llm/structured.py` | 确认用途或移除 |
 
 ### 暂时无法确认
 - keyring 在各平台运行时可用性（代码 fail-closed，本机是否配置原生后端未验证）。
@@ -504,6 +500,8 @@ cargo test --locked                            # Rust
 | SSE 流实现 | 双线程 fanout + 有界队列(512) + 先重放 DB 真值再 live + event_id=sequence + 15s keep-alive | `engine/api/conversations.py:594-681` |
 | 前端流运行时 | `RunLifecycleController`（每会话单 Run + AbortController）+ `streamEventBatcher`（rAF 批处理）+ flush-before-snapshot | `runLifecycleController.ts`、`streamEventBatcher.ts`、`conversationStreamRuntime.ts:47-106` |
 | schemas 层结构 | Pydantic 请求模型按领域分文件 | `engine/schemas/__init__.py` |
+| `.local_token` | 当前 sidecar 认证文件，不是仓库根遗留入口 | `engine/main.py:74`、`engine/runtime_credentials.py` |
+| `SqlEditor.tsx` / `engine/llm/structured.py` | 文件及对应未使用依赖已不存在 | 源码与依赖清单检索 |
 
 ## 仍开放（无法仅凭代码确认）
 
@@ -512,9 +510,7 @@ cargo test --locked                            # Rust
 3. **`.env.local` 开发流程**：干净检出上 `./dev.ps1 both` 是否真实可用，还是必须先 `python build_sidecar.py --token-only`。
 4. **CI 发布闭环**：8 个 job 均 `--no-bundle`，正式安装包由什么流程产出（人工？私有 CI？）。
 5. **keyring 可用性**：目标机器上 OS 原生 keyring 后端是否可用（fail-closed 意味着不可用则功能全禁）。
-6. **`httpx2`** 是否拼写失误；`SqlEditor.tsx`/`structured.py` 是否保留。
-7. **测试环境绕过开关**：`DBFOX_TESTING`/`DBFOX_ALLOW_GUARDRAIL_BYPASS` 在生产是否被严格控制。
-8. **`engine/.local_token`**（仓库根遗留文件）是否仍被任何 dev 流程引用（当前 main.py 不用它）。
+6. **测试环境绕过开关**：`DBFOX_TESTING`/`DBFOX_ALLOW_GUARDRAIL_BYPASS` 在生产是否被严格控制。
 
 ---
 

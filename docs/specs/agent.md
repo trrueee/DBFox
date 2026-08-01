@@ -190,7 +190,7 @@ PromptBundle 必须包含稳定版本和内容哈希。System Prompt 至少表�
 - 记录 selected_artifact_ids；
 - 记录 reply_to_request_id（响应 Agent 提问时）；
 - 创建 Run 或记录待创建关系；
-- 追加 `session.input.admitted`；
+- 追加 `run.started` 和用户 `message` 的 `run.item.completed`；
 - 提交后唤醒 Session。
 
 支持：
@@ -447,40 +447,22 @@ Answer、assistant message、Evidence、Run terminal state、Session memory delt
 
 权威事件使用 Session sequence，包含 event_id、event_type、event_version、conversation_id、run_id、turn_id、sequence、timestamp 和 payload。
 
-事件族：
+耐久事件族只有 Run 与 RunItem 生命周期：
 
 ```text
-session.input.admitted
-session.input.promoted
-session.context.updated
-run.created
 run.started
+run.updated
 run.completed
 run.failed
-run.cancelling
 run.cancelled
-turn.started
-turn.completed
-activity.updated
-reasoning.summary.delta
-tool.requested
-tool.running
-tool.progress
-tool.completed
-tool.failed
-approval.requested
-approval.resolved
-question.requested
-question.resolved
-observation.created
-artifact.created
-artifact.updated
-artifact.selected
-answer.delta
-answer.completed
+run.item.started
+run.item.updated
+run.item.completed
+run.item.failed
+run.item.cancelled
 ```
 
-LiveStreamHub 提供低延迟 delta；RuntimeEventLog 提供权威 replay；SSE 先订阅通知再补历史，客户端按 sequence 和 offset 去重。
+Message、Plan、Function Call、Function Call Output、Approval 和 Question 都使用带判别字段的 RunItem payload，不再各自扩展事件名称。LiveStreamHub 仅提供非耐久 `run.item.delta`；RuntimeEventLog 提供权威 replay。SSE 先订阅通知再补历史，客户端按 durable sequence 以及 delta 的 item ID、revision、offset 去重。
 
 ## 20. 错误、取消与恢复
 

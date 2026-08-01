@@ -443,6 +443,10 @@ Only after confirming no historical data must be preserved:
 
 This phase should be a separate migration with backup / rollback notes.
 
+> Status (2026-08-01): `workspace_table_scopes` was confirmed unused and
+> retired by Alembic revision `e4f5a6b7c810`. `semantic_aliases` remains in
+> use by the sensitivity policy and schema search enrichment boundaries.
+
 ## 9. Summary
 
 Current retained direction:

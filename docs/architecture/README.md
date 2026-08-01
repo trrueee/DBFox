@@ -12,7 +12,7 @@
 6. [前后端与 Agent 深度评审](../reviews/frontend-backend-agent-architecture-deep-review.md)：当前设计符合度、开放风险和评审问题。
 7. [实施后全局核验](../reviews/architecture-global-verification.md)：修复前证据与实施后权威结论。
 
-以下文档属于历史决策材料，不可覆盖当前事实：
+以下文档属于历史决策材料，不可覆盖当前事实。历史术语不应被机械更新为当前协议：
 
 - `docs/designs/` 与 `docs/plans/` 中的旧 LangGraph/Graph/Checkpoint 方案；
 - `agent-architecture-review.md` 中的修复前链路分析；

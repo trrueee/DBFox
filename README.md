@@ -28,7 +28,7 @@ DBFox 是一个本地优先的 AI 数据库桌面客户端，面向数据库浏�
 | 后端引擎 | Python 3.12, FastAPI, Uvicorn, SQLAlchemy, Alembic |
 | AI 能力 | 自有 ReAct Runtime、OpenAI-compatible API、持久化事件流 |
 | 数据库驱动 | PyMySQL, psycopg2, SQLite |
-| 测试与质量 | pytest, mypy, Vitest, ESLint |
+| 测试与质量 | pytest, pyflakes, mypy, Vitest, ESLint |
 
 ## 环境要求
 
@@ -97,7 +97,7 @@ cp .env.example .env  # 仅端口、连接池和导出上限等白名单参数
 
 > 数据库原地恢复已被禁用：逻辑 SQL dump 无法对既有目标提供原子恢复保证。`POST /backups/{id}/restore` 会固定返回 `409 RESTORE_REQUIRES_ISOLATED_TARGET`，直到实现“隔离目标恢复 + 可审计切换”的持久化恢复设计。
 
-桌面打包运行时由 Tauri IPC 将每次启动生成的引擎端口和令牌交给前端；后端绝不会向源码工作区写入 `.env.local`。浏览器式源码调试必须在启动前显式为后端和 Vite 注入同一个一次性 `DBFOX_ENGINE_TOKEN` / `VITE_LOCAL_ENGINE_TOKEN`，不要把令牌写入仓库文件。
+桌面打包运行时由 Tauri IPC 将每次启动生成的引擎端口和令牌交给前端；后端不会在运行时写入源码工作区。源码调试脚本通过 `scripts/dev_environment.py` 生成同一个一次性令牌，将它注入后端进程并写入已忽略的 `desktop/.env.local` 供 Vite 使用。
 
 ## 启动
 
@@ -194,6 +194,9 @@ pytest engine -q
 
 # Python 类型检查
 mypy engine
+
+# Python 静态 lint
+python -m pyflakes engine build_sidecar.py
 
 # 前端测试
 cd desktop
