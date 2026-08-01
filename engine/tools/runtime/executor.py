@@ -5,7 +5,6 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
-from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Callable
 
@@ -76,6 +75,7 @@ class ToolExecutor:
                 status="failed",
                 error=f"Tool execution backend '{spec.backend}' is unavailable.",
                 error_code="TOOL_EXECUTION_BACKEND_UNAVAILABLE",
+                latency_ms=0,
             )
         attempts = 0
         started = time.monotonic()
@@ -145,7 +145,9 @@ class ToolExecutor:
         lock = self._scope_lock(scope_key) if tool.execution.concurrency == "sequential" else None
 
         def invoke() -> ToolResult:
-            with lock if lock is not None else nullcontext():
+            if lock is None:
+                return operation(control)
+            with lock:
                 return operation(control)
 
         with self._pool_guard:

@@ -1,21 +1,17 @@
 """Public conversation API uses the canonical Session Core projections."""
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 
 import pytest
-from fastapi.testclient import TestClient
 
 from engine.agent.events import RuntimeEventType
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.run_item import dump_run_item, function_call_item
 from engine.agent.session import DeliveryMode
-from engine.db import get_db
 from engine.main import LOCAL_SECURE_TOKEN, app
 from engine.models import (
-    AgentMessage,
     AgentRun,
     AgentSession,
     AgentToolInvocation,
@@ -23,22 +19,13 @@ from engine.models import (
 )
 
 
-@pytest.fixture
-def client(db_session):
+@pytest.fixture(autouse=True)
+def conversation_datasource(db_session):
     db_session.add(DataSource(
         id="ds-1", name="Conversation datasource", db_type="sqlite",
         host="", port=0, database_name=":memory:", username="",
     ))
     db_session.commit()
-
-    def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-    value = TestClient(app)
-    yield value
-    value.close()
-    app.dependency_overrides.clear()
 
 
 def _headers() -> dict[str, str]:
@@ -116,7 +103,7 @@ def test_snapshot_restores_messages_run_artifact_and_event_cursor(client, db_ses
     )
     db_session.add(invocation)
     db_session.flush()
-    repository.append_event(
+    repository.events.append(
         lease=lease,
         event_type=RuntimeEventType.RUN_ITEM_COMPLETED,
         run_id=admitted.run_id,

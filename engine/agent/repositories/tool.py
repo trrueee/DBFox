@@ -25,7 +25,7 @@ from engine.agent.run_item import (
 )
 from engine.agent.session import SessionLease
 from engine.agent.tool import ToolInvocation, ToolInvocationStatus
-from engine.json_codec import canonical_dumps as _json, loads
+from engine.json_codec import canonical_dumps as _json, load_array, load_object
 from engine.models import AgentObservationRecord, AgentToolInvocation, AgentTurn
 from engine.tools.materialization import ToolMaterialization
 from engine.tools.runtime.base import ToolRecoveryPolicy
@@ -117,7 +117,7 @@ class ToolInvocationRepository:
         )
         self.session.add(row)
         self.session.flush()
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=(
                 RuntimeEventType.RUN_ITEM_FAILED
@@ -142,7 +142,7 @@ class ToolInvocationRepository:
         row.status = ToolInvocationStatus.RUNNING.value
         row.attempt_count = int(row.attempt_count or 0) + 1
         row.started_at = _utcnow()
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_ITEM_UPDATED,
             run_id=str(row.run_id),
@@ -173,7 +173,7 @@ class ToolInvocationRepository:
                 f"ToolInvocation cannot wait for input from status {row.status}"
             )
         row.status = ToolInvocationStatus.WAITING_INPUT.value
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_ITEM_UPDATED,
             run_id=str(row.run_id),
@@ -193,7 +193,7 @@ class ToolInvocationRepository:
         if row.status != ToolInvocationStatus.RUNNING.value:
             raise ValueError(f"ToolInvocation cannot retry from status {row.status}")
         row.attempt_count = int(row.attempt_count or 0) + 1
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_ITEM_UPDATED,
             run_id=str(row.run_id),
@@ -272,7 +272,7 @@ class ToolInvocationRepository:
             }:
                 row.status = ToolInvocationStatus.REQUESTED.value
                 row.started_at = None
-                self.sessions.append_event(
+                self.sessions.events.append(
                     lease=lease,
                     event_type=RuntimeEventType.RUN_ITEM_UPDATED,
                     run_id=run_id,
@@ -387,7 +387,7 @@ class ToolInvocationRepository:
         row.completed_at = now
         self.session.flush()
         domain = self._observation(observation, row)
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=(
                 RuntimeEventType.RUN_ITEM_COMPLETED
@@ -400,7 +400,7 @@ class ToolInvocationRepository:
             turn_id=str(row.turn_id),
             payload={"item": dump_run_item(function_call_item(row))},
         )
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=(
                 RuntimeEventType.RUN_ITEM_COMPLETED
@@ -429,12 +429,12 @@ class ToolInvocationRepository:
             provider_call_id=str(row.provider_call_id),
             tool_name=str(row.tool_name),
             tool_version=str(row.tool_version),
-            authorized_input=loads(str(row.input_json)),
+            authorized_input=load_object(str(row.input_json)),
             authorized_input_hash=str(row.input_hash),
             idempotency_key=str(row.idempotency_key),
             status=ToolInvocationStatus(str(row.status)),
-            policy=loads(str(row.policy_json or "{}")),
-            recovery_policy=str(row.recovery_policy),
+            policy=load_object(str(row.policy_json or "{}")),
+            recovery_policy=ToolRecoveryPolicy(str(row.recovery_policy)),
             attempt_count=int(row.attempt_count or 0),
         )
 
@@ -452,9 +452,9 @@ class ToolInvocationRepository:
             model_visible_summary=str(row.model_visible_summary),
             model_output=str(row.model_output_json),
             structured_result_ref=str(row.structured_result_ref) if row.structured_result_ref else None,
-            artifact_ids=loads(str(row.artifact_ids_json or "[]")),
-            facts=loads(str(row.facts_json or "{}")),
-            capabilities=tuple(loads(str(row.semantic_capabilities_json or "[]"))),
+            artifact_ids=[str(value) for value in load_array(str(row.artifact_ids_json or "[]"))],
+            facts=load_object(str(row.facts_json or "{}")),
+            capabilities=tuple(str(value) for value in load_array(str(row.semantic_capabilities_json or "[]"))),
             contributes_progress=bool(row.contributes_progress),
             error_code=str(row.error_code) if row.error_code else None,
             error_message=str(row.error_message) if row.error_message else None,

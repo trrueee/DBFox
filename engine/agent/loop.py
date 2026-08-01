@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from threading import Event
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
@@ -27,7 +27,6 @@ from engine.agent.events import LiveStreamHub
 from engine.agent.progress_guard import ProgressGuard
 from engine.agent.prompt import PromptAssembler
 from engine.agent.providers.openai import OpenAIModelAdapter
-from engine.agent.runners import ModelTurnRunner
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
@@ -37,6 +36,7 @@ from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
 from engine.agent.run_item import RunItemDelta, RunItemType
 from engine.agent.turn import (
     ModelTurnResult,
+    TurnStreamAssembler,
     TurnStreamCancelled,
     TurnStreamError,
     TurnStreamItem,
@@ -138,7 +138,6 @@ class RunLoop:
         self.pricing_resolver = pricing_resolver or (lambda _settings: None)
         self.prompts = PromptAssembler()
         self.completion = CompletionGate()
-        self.model_turn_runner = ModelTurnRunner()
         self.tool_dispatcher = ToolDispatcher(
             session_factory=self.session_factory,
             registry=self.registry,
@@ -361,21 +360,20 @@ class RunLoop:
     ) -> ModelTurnResult | None:
         adapter = self.model_factory(prepared.provider_settings)
         try:
-            result = self.model_turn_runner.run(
-                control=state.control,
-                stream=adapter.stream(
+            state.control.checkpoint()
+            result = TurnStreamAssembler().consume(
+                self._publish_stream(
+                    lease=lease,
+                    run_id=run_id,
+                    turn_id=prepared.turn_id,
+                    control=state.control,
+                    items=adapter.stream(
                     messages=prepared.messages,
                     tools=prepared.tools.provider_schemas(),
                     timeout_seconds=state.control.remaining_seconds(),
                     cancellation_probe=state.control.is_cancel_requested,
                 ),
-                publish=lambda items: self._publish_stream(
-                    lease=lease,
-                    run_id=run_id,
-                    turn_id=prepared.turn_id,
-                    control=state.control,
-                    items=items,
-                ),
+                )
             )
         except TurnStreamCancelled as exc:
             state.control.checkpoint()
@@ -589,7 +587,7 @@ class RunLoop:
         last_flush = time.monotonic()
         answer_revision = 0
         answer_item_id = f"message:{run_id}:{turn_id}"
-        message_phase = "commentary"
+        message_phase: Literal["commentary", "final_answer"] = "commentary"
         for item in items:
             control.checkpoint()
             if item.kind is TurnStreamKind.ANSWER_START:
@@ -652,7 +650,7 @@ class RunLoop:
         lease: SessionLease,
         run_id: str,
         text: str,
-        phase: str,
+        phase: Literal["commentary", "final_answer"],
     ) -> None:
         with self.session_factory() as db:
             RunRepository(db).merge_answer_draft(

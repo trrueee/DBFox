@@ -5,7 +5,7 @@ import json
 from engine.agent.context import ContextAssembler
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.session import DeliveryMode
-from engine.models import AgentArtifactRecord, AgentMessage, AgentRun, AgentSession
+from engine.models import AgentArtifactRecord, AgentMessage, AgentSession
 
 
 def test_next_run_reads_durable_history_and_selected_artifact(db_session, test_datasource) -> None:

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from engine.tools.runtime.base import BaseTool, ControlCommand
+from engine.tools.runtime.base import BaseTool, ControlCommand, ToolCapability
 
 
 RegisteredFunction = BaseTool | ControlCommand
 
 
-IN_PROCESS_CAPABILITIES = frozenset({"metadata_read", "metadata_write", "database_read"})
+IN_PROCESS_CAPABILITIES: frozenset[ToolCapability] = frozenset(
+    {"metadata_read", "metadata_write", "database_read"}
+)
 
 
 class ToolRegistry:

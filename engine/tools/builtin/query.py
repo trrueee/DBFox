@@ -99,10 +99,12 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
         tool_input: DataPreviewInput,
         context: ToolRunContext,
     ) -> ToolOutcome[DataPreviewOutput]:
+        db = context.require_database()
+        request = context.require_request()
         output = DataPreviewOutput.model_validate(
             db_preview(
-                context.db_session,
-                context.request.datasource_id,
+                db,
+                request.datasource_id,
                 table=tool_input.table,
                 columns=tool_input.columns,
                 limit=tool_input.limit,
@@ -121,9 +123,9 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
         return ToolOutcome(
             output=output,
             artifacts=preview_drafts(
-                context.db_session,
-                context.request.datasource_id,
-                context.request.datasource_generation,
+                db,
+                request.datasource_id,
+                request.datasource_generation,
                 output,
             ),
         )
@@ -163,11 +165,13 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
         tool_input: SqlValidateInput,
         context: ToolRunContext,
     ) -> ToolOutcome[SqlValidateOutput]:
+        db = context.require_database()
+        request = context.require_request()
         raw = sql_validate(
-            context.db_session,
-            context.request.datasource_id,
+            db,
+            request.datasource_id,
             tool_input.sql,
-            context.request.question,
+            request.question,
         )
         output = SqlValidateOutput(
             can_execute=bool(raw.get("can_execute")),
@@ -184,8 +188,8 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
         return ToolOutcome(
             output=output,
             artifacts=sql_validation_drafts(
-                context.db_session,
-                context.request.datasource_id,
+                db,
+                request.datasource_id,
                 output,
             ),
         )
@@ -251,18 +255,20 @@ class SqlExecuteReadonlyTool(
         tool_input: SqlExecuteReadonlyInput,
         context: ToolRunContext,
     ) -> ToolOutcome[QueryResultOutput]:
-        repository = ArtifactRepository(context.db_session)
+        db = context.require_database()
+        request = context.require_request()
+        repository = ArtifactRepository(db)
         try:
             validated = repository.require_validated_sql(
-                session_id=context.request.session_id,
-                run_id=context.request.run_id,
+                session_id=request.session_id,
+                run_id=request.run_id,
                 sql_artifact_id=tool_input.validation_artifact_id,
             )
         except ValueError as exc:
             raise ToolInputError(str(exc)) from exc
         existing = repository.result_for_sql_artifact(
-            session_id=context.request.session_id,
-            run_id=context.request.run_id,
+            session_id=request.session_id,
+            run_id=request.run_id,
             sql_artifact_id=tool_input.validation_artifact_id,
         )
         if existing is not None:
@@ -271,12 +277,12 @@ class SqlExecuteReadonlyTool(
                 f"{existing.id}; reuse that result instead of executing it again."
             )
         raw = sql_execute_readonly(
-            context.db_session,
-            context.request.datasource_id,
-            question=context.request.question,
+            db,
+            request.datasource_id,
+            question=request.question,
             safety=validated.safety,
-            execution_id=context.request.execution_id or None,
-            expected_connection_generation=context.request.datasource_generation,
+            execution_id=request.execution_id or None,
+            expected_connection_generation=request.datasource_generation,
             execution_authority=context.execution_authority,
         )
         output = QueryResultOutput(
@@ -301,10 +307,10 @@ class SqlExecuteReadonlyTool(
             output=output,
             artifacts=(
                 query_result_draft(
-                    context.db_session,
-                    context.request.datasource_id,
+                    db,
+                    request.datasource_id,
                     tool_input.validation_artifact_id,
-                    context.request.datasource_generation,
+                    request.datasource_generation,
                     output,
                 ),
             ),

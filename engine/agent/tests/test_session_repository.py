@@ -8,7 +8,8 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 
 from engine.agent.events import RuntimeEventType
-from engine.agent.repositories.session import EventHistoryGap, SessionRepository
+from engine.agent.repositories.events import EventHistoryGap
+from engine.agent.repositories.session import SessionRepository
 from engine.agent.run import RunStatus, SessionLeaseConflict
 from engine.agent.session import DeliveryMode
 from engine.models import AgentMessage, AgentRun, AgentSession, AgentSessionInput, AgentTurn
@@ -48,7 +49,7 @@ def test_admission_is_atomic_ordered_and_idempotent(db_session, test_datasource)
     assert db_session.query(AgentSessionInput).count() == 1
     assert db_session.query(AgentRun).count() == 1
     assert db_session.query(AgentMessage).count() == 2
-    assert [event.event_type for event in repository.list_events("session_1")] == [
+    assert [event.event_type for event in repository.events.list("session_1")] == [
         RuntimeEventType.RUN_STARTED,
         RuntimeEventType.RUN_ITEM_COMPLETED,
     ]
@@ -108,10 +109,10 @@ def test_concurrent_idempotent_admission_returns_one_run(db_session, test_dataso
 def test_event_history_compacts_to_a_snapshot_replay_boundary(
     db_session, test_datasource, monkeypatch
 ) -> None:
-    from engine.agent.repositories import session as session_module
+    from engine.agent.repositories import events as events_module
 
-    monkeypatch.setattr(session_module, "EVENT_REPLAY_RETAINED", 3)
-    monkeypatch.setattr(session_module, "EVENT_COMPACTION_TRIGGER", 4)
+    monkeypatch.setattr(events_module, "EVENT_REPLAY_RETAINED", 3)
+    monkeypatch.setattr(events_module, "EVENT_COMPACTION_TRIGGER", 4)
     _session(db_session, str(test_datasource.id))
     repository = SessionRepository(db_session)
 
@@ -123,9 +124,9 @@ def test_event_history_compacts_to_a_snapshot_replay_boundary(
     assert int(aggregate.event_sequence) == 6
     assert int(aggregate.event_floor_sequence) == 2
     with pytest.raises(EventHistoryGap) as error:
-        repository.list_events("session_1", after_sequence=0)
+        repository.events.list("session_1", after_sequence=0)
     assert error.value.floor_sequence == 2
-    assert [event.sequence for event in repository.list_events("session_1", after_sequence=2)] == [3, 4, 5, 6]
+    assert [event.sequence for event in repository.events.list("session_1", after_sequence=2)] == [3, 4, 5, 6]
 
 
 def test_session_lease_fences_old_owner_and_promotes_input(db_session, test_datasource) -> None:
@@ -165,7 +166,7 @@ def test_turn_snapshot_is_frozen_under_the_session_lease(db_session, test_dataso
     assert lease is not None
     assert repository.promote_next_input(lease=lease) == admission.run_id
 
-    events_before_turn = repository.list_events("session_1")
+    events_before_turn = repository.events.list("session_1")
     turn = repository.start_turn(
         lease=lease,
         run_id=admission.run_id,
@@ -185,7 +186,7 @@ def test_turn_snapshot_is_frozen_under_the_session_lease(db_session, test_dataso
     assert stored.sequence == 1
     assert stored.context_hash == "context-hash"
     assert stored.tool_materialization_hash == "tools-hash"
-    assert repository.list_events("session_1") == events_before_turn
+    assert repository.events.list("session_1") == events_before_turn
 
 
 def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(

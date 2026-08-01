@@ -7,16 +7,15 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from uuid import uuid4
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from engine.agent.events import (
     COMMIT_NOTIFICATIONS,
-    RuntimeEvent,
     RuntimeEventType,
-    validate_runtime_event_payload,
 )
+from engine.agent.repositories.events import EventRepository
 from engine.agent.run import RunStatus, SessionLeaseConflict, TERMINAL_RUN_STATUSES
 from engine.agent.run_item import (
     dump_run_item,
@@ -25,12 +24,10 @@ from engine.agent.run_item import (
 )
 from engine.agent.session import DeliveryMode, SessionInputStatus, SessionLease
 from engine.agent.repositories.write_transaction import begin_agent_write
-from engine.json_codec import canonical_dumps as _json, loads
+from engine.json_codec import canonical_dumps as _json
 from engine.models import (
-    AgentEventRecord,
     AgentMessage,
     AgentRun,
-    AgentRunItemRecord,
     AgentSession,
     AgentSessionInput,
     AgentTurn,
@@ -45,19 +42,6 @@ def _aware(value: datetime | None) -> datetime | None:
     if value is None or value.tzinfo is not None:
         return value
     return value.replace(tzinfo=UTC)
-
-
-EVENT_REPLAY_RETAINED = 2_000
-EVENT_COMPACTION_TRIGGER = 2_500
-
-
-class EventHistoryGap(RuntimeError):
-    """The requested cursor predates the canonical snapshot replay boundary."""
-
-    def __init__(self, *, floor_sequence: int, current_sequence: int) -> None:
-        super().__init__("The event cursor is older than the retained replay history.")
-        self.floor_sequence = floor_sequence
-        self.current_sequence = current_sequence
 
 
 @dataclass(frozen=True)
@@ -81,6 +65,7 @@ class SessionRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        self.events = EventRepository(session)
 
     def create(
         self,
@@ -308,14 +293,14 @@ class SessionRepository:
         run = self.session.get(AgentRun, run_id)
         if user_message is None or run is None:
             raise RuntimeError("Admitted Run projection is incomplete")
-        self._append_event(
+        self.events.append_locked(
             aggregate,
             RuntimeEventType.RUN_STARTED,
             run_id=run_id,
             payload={"run": project_run(run)},
             now=now,
         )
-        self._append_event(
+        self.events.append_locked(
             aggregate,
             RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=run_id,
@@ -358,7 +343,7 @@ class SessionRepository:
             row.consumed_at = now
         run.version = int(run.version or 0) + 1
         run.updated_at = now
-        self._append_event(
+        self.events.append_locked(
             aggregate,
             RuntimeEventType.RUN_UPDATED,
             run_id=run_id,
@@ -462,7 +447,7 @@ class SessionRepository:
         run.lease_token = lease.token
         run.started_at = now
         run.updated_at = now
-        self._append_event(
+        self.events.append_locked(
             aggregate,
             RuntimeEventType.RUN_UPDATED,
             run_id=str(run.id),
@@ -526,97 +511,6 @@ class SessionRepository:
         self.session.flush()
         return turn
 
-    def list_events(self, session_id: str, *, after_sequence: int = 0, limit: int = 500) -> list[RuntimeEvent]:
-        aggregate = self.session.get(AgentSession, session_id)
-        if aggregate is None:
-            raise KeyError(f"Unknown Agent Session: {session_id}")
-        floor_sequence = int(aggregate.event_floor_sequence or 0)
-        if after_sequence < floor_sequence:
-            raise EventHistoryGap(
-                floor_sequence=floor_sequence,
-                current_sequence=int(aggregate.event_sequence or 0),
-            )
-        records = self.session.execute(
-            select(AgentEventRecord)
-            .where(
-                AgentEventRecord.session_id == session_id,
-                AgentEventRecord.sequence > after_sequence,
-            )
-            .order_by(AgentEventRecord.sequence)
-            .limit(limit)
-        ).scalars()
-        return [
-            RuntimeEvent(
-                event_id=str(record.id),
-                event_type=RuntimeEventType(str(record.type)),
-                event_version=int(record.event_version),
-                session_id=str(record.session_id),
-                run_id=str(record.run_id) if record.run_id else None,
-                turn_id=str(record.turn_id) if record.turn_id else None,
-                sequence=int(record.sequence),
-                timestamp=_aware(record.created_at) or _utcnow(),
-                payload=loads(str(record.payload_json or "{}")),
-            )
-            for record in records
-        ]
-
-    def append_event(
-        self,
-        *,
-        lease: SessionLease,
-        event_type: RuntimeEventType,
-        run_id: str | None,
-        payload: dict[str, Any],
-        turn_id: str | None = None,
-    ) -> int:
-        aggregate = self._session_for_update(lease.session_id)
-        self._require_lease(aggregate, lease)
-        if run_id is not None:
-            run = self.session.get(AgentRun, run_id)
-            if run is None:
-                raise ValueError(f"Agent Run does not exist: {run_id}")
-            self._require_run_lease(run, lease)
-        self._append_event(
-            aggregate,
-            event_type,
-            run_id=run_id,
-            turn_id=turn_id,
-            payload=payload,
-            now=_utcnow(),
-        )
-        self.session.flush()
-        return int(aggregate.event_sequence)
-
-    def append_user_command_event(
-        self,
-        *,
-        session_id: str,
-        run_id: str,
-        event_type: RuntimeEventType,
-        payload: dict[str, Any],
-        turn_id: str | None = None,
-    ) -> int:
-        """Append an event produced by a user command while a worker owns the lease.
-
-        Commands such as cancellation must remain admissible while the Run is
-        executing. The Session row lock still serializes the aggregate sequence;
-        the worker lease deliberately does not fence the user's command.
-        """
-        aggregate = self._session_for_update(session_id)
-        run = self.session.get(AgentRun, run_id)
-        if run is None or str(run.session_id) != session_id:
-            raise ValueError("Run is outside the Session")
-        self._append_event(
-            aggregate,
-            event_type,
-            run_id=run_id,
-            turn_id=turn_id,
-            payload=payload,
-            now=_utcnow(),
-        )
-        self.session.flush()
-        return int(aggregate.event_sequence)
-
     def add_response_input(
         self,
         *,
@@ -669,7 +563,7 @@ class SessionRepository:
             )
         )
         self.session.flush()
-        self._append_event(
+        self.events.append_locked(
             aggregate,
             RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=run_id,
@@ -687,114 +581,6 @@ class SessionRepository:
             raise ValueError("Artifact is outside the Session")
         aggregate.selected_artifact_id = artifact_id
         self.session.flush()
-
-    def _append_event(
-        self,
-        aggregate: AgentSession,
-        event_type: RuntimeEventType,
-        *,
-        run_id: str | None,
-        payload: dict[str, Any],
-        now: datetime,
-        turn_id: str | None = None,
-    ) -> None:
-        aggregate.event_sequence = int(aggregate.event_sequence or 0) + 1
-        item = payload.get("item")
-        if isinstance(item, dict):
-            item_id = str(item.get("id") or "")
-            if not item_id:
-                raise ValueError("RunItem event payload is missing its id")
-            record = self.session.get(AgentRunItemRecord, item_id)
-            if record is None:
-                item["sequence"] = int(aggregate.event_sequence)
-                record = AgentRunItemRecord(
-                    id=item_id,
-                    session_id=str(aggregate.id),
-                    run_id=str(item.get("run_id") or run_id or ""),
-                    turn_id=str(item["turn_id"]) if item.get("turn_id") else None,
-                    sequence=int(item["sequence"]),
-                    item_type=str(item.get("type") or ""),
-                    revision=int(item.get("revision") or 1),
-                    status=str(item.get("status") or ""),
-                    item_json="{}",
-                    created_at=datetime.fromisoformat(
-                        str(item["created_at"]).replace("Z", "+00:00")
-                    ),
-                    updated_at=now,
-                    completed_at=(
-                        datetime.fromisoformat(
-                            str(item["completed_at"]).replace("Z", "+00:00")
-                        )
-                        if item.get("completed_at")
-                        else None
-                    ),
-                )
-                self.session.add(record)
-            else:
-                if str(record.session_id) != str(aggregate.id):
-                    raise ValueError("RunItem id is already owned by another Session")
-                item_run_id = str(item.get("run_id") or run_id or "")
-                if item_run_id != str(record.run_id):
-                    raise ValueError("RunItem run_id is immutable")
-                item_type = str(item.get("type") or "")
-                if item_type != str(record.item_type):
-                    raise ValueError("RunItem type is immutable")
-                next_revision = int(item.get("revision") or record.revision)
-                if next_revision < int(record.revision):
-                    raise ValueError("RunItem revision cannot regress")
-                terminal_statuses = {"completed", "failed", "cancelled"}
-                if (
-                    str(record.status) in terminal_statuses
-                    and str(item.get("status") or "") != str(record.status)
-                ):
-                    raise ValueError("Terminal RunItem status is immutable")
-                item["sequence"] = int(record.sequence)
-                record.turn_id = (
-                    str(item["turn_id"]) if item.get("turn_id") else record.turn_id
-                )
-                record.revision = next_revision
-                record.status = str(item.get("status") or record.status)
-                record.updated_at = now
-                record.completed_at = (
-                    datetime.fromisoformat(
-                        str(item["completed_at"]).replace("Z", "+00:00")
-                    )
-                    if item.get("completed_at")
-                    else None
-                )
-            record.item_json = _json(item)
-        event_version = validate_runtime_event_payload(event_type, payload)
-        self.session.add(
-            AgentEventRecord(
-                id=f"event_{uuid4().hex}",
-                session_id=str(aggregate.id),
-                run_id=run_id,
-                turn_id=turn_id,
-                sequence=int(aggregate.event_sequence),
-                type=event_type.value,
-                event_version=event_version,
-                payload_json=_json(payload),
-                created_at=now,
-            )
-        )
-        self._compact_event_log(aggregate)
-        pending = self.session.info.setdefault("dbfox_agent_event_sessions", set())
-        pending.add(str(aggregate.id))
-
-    def _compact_event_log(self, aggregate: AgentSession) -> None:
-        """Bound replay storage; canonical tables remain the durable snapshot truth."""
-        current = int(aggregate.event_sequence or 0)
-        floor = int(aggregate.event_floor_sequence or 0)
-        if current - floor <= EVENT_COMPACTION_TRIGGER:
-            return
-        next_floor = current - EVENT_REPLAY_RETAINED
-        self.session.execute(
-            delete(AgentEventRecord).where(
-                AgentEventRecord.session_id == str(aggregate.id),
-                AgentEventRecord.sequence <= next_floor,
-            )
-        )
-        aggregate.event_floor_sequence = next_floor
 
     def _admit_steer(
         self,
@@ -839,7 +625,7 @@ class SessionRepository:
         )
         self.session.add(admitted)
         self.session.flush()
-        self._append_event(
+        self.events.append_locked(
             aggregate,
             RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=str(run.id),
@@ -871,7 +657,7 @@ class SessionRepository:
             run.status = RunStatus.CANCELLING.value
             run.version = int(run.version or 0) + 1
             run.updated_at = _utcnow()
-            self._append_event(
+            self.events.append_locked(
                 aggregate,
                 RuntimeEventType.RUN_UPDATED,
                 run_id=str(run.id),

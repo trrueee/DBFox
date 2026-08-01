@@ -14,7 +14,7 @@ from engine.agent.run_item import dump_run_item, plan_item
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.session import SessionLease
-from engine.json_codec import canonical_dumps, loads
+from engine.json_codec import canonical_dumps, load_array
 from engine.models import AgentArtifactRecord, AgentRun, AgentTaskPlanRecord
 
 
@@ -74,7 +74,7 @@ class PlanRepository:
             row.updated_at = now
         self.session.flush()
         plan = self._domain(row)
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=(
                 RuntimeEventType.RUN_ITEM_STARTED
@@ -123,7 +123,7 @@ class PlanRepository:
 
         steps = [
             self._terminal_step(PlanStep.model_validate(value), status)
-            for value in loads(str(row.steps_json or "[]"))
+            for value in load_array(str(row.steps_json or "[]"))
         ]
         now = _utcnow()
         row.version = int(row.version or 0) + 1
@@ -133,7 +133,7 @@ class PlanRepository:
         row.updated_at = now
         self.session.flush()
         plan = self._domain(row)
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=(
                 RuntimeEventType.RUN_ITEM_CANCELLED
@@ -208,7 +208,7 @@ class PlanRepository:
             turn_id=str(row.turn_id),
             version=int(row.version),
             objective=str(row.objective),
-            steps=[PlanStep.model_validate(value) for value in loads(str(row.steps_json or "[]"))],
+            steps=[PlanStep.model_validate(value) for value in load_array(str(row.steps_json or "[]"))],
             status=PlanStatus(str(row.status)),
             summary=str(row.summary) if row.summary else None,
             created_at=row.created_at,

@@ -474,7 +474,7 @@ def test_native_assistant_commentary_precedes_durable_question_tool_call(
     loop.execute(lease=lease, run_id=admission.run_id)
 
     db_session.expire_all()
-    turn = db_session.query(AgentTurn).filter_by(run_id=admission.run_id).one()
+    db_session.query(AgentTurn).filter_by(run_id=admission.run_id).one()
     run = db_session.get(AgentRun, admission.run_id)
     item_payloads = [
         json.loads(str(row.item_json))

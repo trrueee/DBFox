@@ -79,12 +79,12 @@ class ApprovalRepository:
         run.version = int(run.version or 0) + 1
         run.updated_at = now
         value = self._domain(row)
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease, event_type=RuntimeEventType.RUN_UPDATED,
             run_id=str(run.id), turn_id=str(invocation.turn_id),
             payload={"run": project_run(run)},
         )
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease, event_type=RuntimeEventType.RUN_ITEM_STARTED,
             run_id=str(run.id), turn_id=str(invocation.turn_id),
             payload={"item": dump_run_item(approval_item(row))},
@@ -196,14 +196,14 @@ class ApprovalRepository:
                 error_message="The requested action was not authorized.",
             )
             value = self._domain(row)
-            self.sessions.append_event(
+            self.sessions.events.append(
                 lease=lease,
                 event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
                 run_id=str(run.id),
                 turn_id=str(invocation.turn_id),
                 payload={"item": dump_run_item(approval_item(row))},
             )
-            self.sessions.append_event(
+            self.sessions.events.append(
                 lease=lease,
                 event_type=RuntimeEventType.RUN_UPDATED,
                 run_id=str(run.id),
@@ -257,7 +257,7 @@ class ApprovalRepository:
             row.decision_note = "The Run was cancelled before this action was approved."
             self.session.flush()
             value = self._domain(row)
-            self.sessions.append_event(
+            self.sessions.events.append(
                 lease=lease,
                 event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
                 run_id=run_id,
@@ -351,7 +351,7 @@ class ApprovalRepository:
                 ),
                 error_message="The requested action was not authorized.",
             )
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=(
                 RuntimeEventType.RUN_ITEM_CANCELLED
@@ -361,7 +361,7 @@ class ApprovalRepository:
             run_id=str(run.id), turn_id=str(invocation.turn_id),
             payload={"item": dump_run_item(approval_item(row))},
         )
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease, event_type=RuntimeEventType.RUN_UPDATED,
             run_id=str(run.id), turn_id=str(invocation.turn_id),
             payload={"run": project_run(run)},

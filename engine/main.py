@@ -23,7 +23,6 @@ from engine.runtime_env import load_runtime_env
 # Load runtime configuration before provider and database clients initialize.
 load_runtime_env()
 
-import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -72,24 +71,15 @@ def _safe_dbfox_error_code(exc: DBFoxError) -> str:
             return code
     return "DBFOX_ERROR"
 
-# 1. 本地引擎安全性：生成或读取本地安全访问令牌 (Local Secure Token)
 TOKEN_FILE = private_runtime_file("auth", ".local_token")
 is_frozen = getattr(sys, "frozen", False)
 
 
 def get_or_create_local_token() -> str:
-    """
-    获取现有的或者创建全新的本地高强度安全认证 Token。
-    
-    Python 知识点:
-      - `getattr(sys, "frozen", False)`：检测当前 Python 程序是否被打包成了单文件可执行文件（比如用 PyInstaller 或 Tauri 打包）。
-        如果是打包后的独立程序，该值为 True，否则为 False。
-      - `secrets.token_hex(32)`：利用 Python 的密码学安全随机数生成器生成一个 32 字节（64 个字符）的十六进制随机字符串，极其难被暴力破解。
-    """
+    """Resolve the process-local authentication token."""
     return RuntimeCredentialPolicy(token_file=TOKEN_FILE, is_frozen=is_frozen).resolve_token()
 
 
-# 初始化并保存当前运行周期的安全令牌
 LOCAL_SECURE_TOKEN = get_or_create_local_token()
 ALLOWED_TAURI_ORIGINS = {
     "tauri://localhost",
@@ -99,23 +89,15 @@ ALLOWED_TAURI_ORIGINS = {
 
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> Any:
-    """
-    异步生命周期管理器 (Lifespan Context Manager)
-
-    FastAPI 推荐使用这种方式来执行应用“启动前（Startup）”和“关闭后（Shutdown）”的勾子任务。
-
-    Python & FastAPI 知识点:
-      - `@asynccontextmanager`：装饰器，用于将一个生成器函数转为异步上下文管理器。
-      - `async def`：定义一个异步协程函数。
-      - `yield` 关键字是分水岭：
-        - `yield` 之前的代码会在 FastAPI 接收请求**启动前**执行（比如执行数据库初始化/迁移）。
-        - `yield` 之后的代码会在 FastAPI 接收到关闭信号、退出**停机时**执行（比如清理释放资源）。
-    """
+    """Initialize durable runtime services and stop them in dependency order."""
     agent_coordinator: SessionCoordinator | None = None
     startup_stage = "migrating"
     try:
         _emit_startup_stage(startup_stage)
         initialize_metadata_database()
+
+        from engine.security.credential_lease import reconcile_credential_leases
+        reconcile_credential_leases(SessionLocal)
 
         # Security audit is local product data with an explicit bounded lifecycle.
         # Prune before the coordinator starts so startup recovery cannot race it.
@@ -150,7 +132,7 @@ async def lifespan(application: FastAPI) -> Any:
     logger.info("DBFox Local Engine is ready on 127.0.0.1:%s", port)
 
     try:
-        yield  # 此时程序处于运行态，等待并处理前端的所有 API 请求
+        yield
     finally:
         agent_coordinator.stop()
         application.state.agent_coordinator = None
@@ -160,13 +142,11 @@ async def lifespan(application: FastAPI) -> Any:
         await close_llm_http_clients()
 
 
-# 实例化 FastAPI 核心应用对象
 app = FastAPI(
     title="DBFox Local Engine",
     description="专为 DBFox 桌面外壳设计的安全数据库客户端核心引擎",
     version=__version__,
     lifespan=lifespan,
-    # 如果是在生产打包（frozen）模式下，关闭自动生成的交互式接口文档，提高安全性
     docs_url=None if is_frozen else "/docs",
     redoc_url=None if is_frozen else "/redoc",
     openapi_url=None if is_frozen else "/openapi.json",
@@ -174,18 +154,9 @@ app = FastAPI(
 
 app.add_middleware(AgentInputRequestBodyLimitMiddleware)
 
-# 2. 核心安全防护中间件 (Security Guard Middleware)
-# 拦截所有请求，校验请求来源 Origin 并且强制校验 X-Local-Token 头部，防止 CSRF 或非法调用
 @app.middleware("http")
 async def verify_local_access_token(request: Request, call_next):  # type: ignore[no-untyped-def]
-    """
-    请求校验中间件
-
-    FastAPI 知识点:
-      - `verify_local_access_token` 被 `@app.middleware("http")` 装饰后，会在每一次 HTTP 请求到达具体接口路由前被自动调用。
-      - `call_next` 是一个协程函数，调用它表示把请求放行并传递给下一个处理器或目标路由，并返回路由生成的 Response。
-    """
-    # 允许所有 CORS 预检请求（OPTIONS 方法）直接通过，由 CORSMiddleware 处理
+    """Enforce local token and trusted-origin policy."""
     if request.method == "OPTIONS":
         return await call_next(request)
 
@@ -282,17 +253,9 @@ app.add_middleware(
 )
 
 
-# 4. 全局业务异常捕获器 (Global Exception Handler)
-# 拦截所有继承自 DBFoxError 的自定义业务错误，将其转换为标准的 HTTP 400 JSON 错误响应，避免程序崩溃或暴露敏感调用栈
 @app.exception_handler(DBFoxError)
 async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse:
-    """
-    全局自定义异常捕获
-
-    FastAPI 知识点:
-      - `@app.exception_handler(异常类型)` 使得每当接口运行期间抛出此类型异常时，FastAPI 就会直接跳过默认报错行为，
-        调用这个装饰的函数来生成自定义 HTTP 响应给客户端。
-    """
+    """Map trusted domain error classes to fixed public responses."""
     # DBFoxError instances may wrap arbitrary provider or driver exceptions,
     # so neither their message nor caller-supplied code is trusted here.
     code = _safe_dbfox_error_code(exc)

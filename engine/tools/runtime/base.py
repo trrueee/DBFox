@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 import re
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -219,7 +219,10 @@ class BaseTool(Generic[I, O]):
         version = str(getattr(cls, "version", "")).strip()
         if not version or len(version) > 32:
             raise TypeError(f"{cls.__name__}.version must contain 1 to 32 characters")
-        execution = getattr(cls, "execution", ToolExecutionSpec())
+        execution = cast(
+            ToolExecutionSpec,
+            getattr(cls, "execution", ToolExecutionSpec()),
+        )
         if (
             execution.recovery is ToolRecoveryPolicy.RECONCILE
             and "reconcile" not in cls.__dict__

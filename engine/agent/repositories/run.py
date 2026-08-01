@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -72,7 +72,7 @@ class RunRepository:
         run.status = RunStatus.CANCELLING.value
         run.version = int(run.version or 0) + 1
         run.updated_at = now
-        self.sessions.append_user_command_event(
+        self.sessions.events.append_user_command(
             session_id=str(run.session_id),
             event_type=RuntimeEventType.RUN_UPDATED,
             run_id=str(run.id),
@@ -112,14 +112,14 @@ class RunRepository:
             assistant.status = "cancelled"
             assistant.updated_at = now
             if str(assistant.content or ""):
-                self.sessions.append_event(
+                self.sessions.events.append(
                     lease=lease,
                     event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
                     run_id=str(run.id),
                     turn_id=str(run.current_turn_id) if run.current_turn_id else None,
                     payload={"item": dump_run_item(final_answer_item(assistant, run=run))},
                 )
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_CANCELLED,
             run_id=str(run.id),
@@ -195,7 +195,7 @@ class RunRepository:
         run.updated_at = _utcnow()
         self.session.flush()
         if commentary_message is not None:
-            self.sessions.append_event(
+            self.sessions.events.append(
                 lease=lease,
                 event_type=RuntimeEventType.RUN_ITEM_COMPLETED,
                 run_id=str(run.id),
@@ -206,7 +206,7 @@ class RunRepository:
             message.status = "created"
             message.updated_at = _utcnow()
         if cancelled_answer is not None:
-            self.sessions.append_event(
+            self.sessions.events.append(
                 lease=lease,
                 event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
                 run_id=str(run.id),
@@ -275,7 +275,7 @@ class RunRepository:
         lease: SessionLease,
         run_id: str,
         content: str,
-        phase: str,
+        phase: Literal["commentary", "final_answer"],
     ) -> None:
         begin_agent_write(self.session)
         run = self.session.execute(
@@ -290,7 +290,7 @@ class RunRepository:
         message.status = "streaming"
         message.updated_at = _utcnow()
         self.session.flush()
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=(
                 RuntimeEventType.RUN_ITEM_STARTED
@@ -324,7 +324,7 @@ class RunRepository:
         message.status = "cancelled"
         message.updated_at = _utcnow()
         self.session.flush()
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
             run_id=run_id,
@@ -371,7 +371,8 @@ class RunRepository:
         ).scalar_one()
         self._require_lease(run, lease)
         state = self._working_result(run)
-        previous = state.get("progress") if isinstance(state.get("progress"), dict) else {}
+        progress = state.get("progress")
+        previous = progress if isinstance(progress, dict) else {}
         stalled_turns = (
             int(previous.get("stalled_turns") or 0) + 1
             if previous.get("fingerprint") == fingerprint
@@ -445,7 +446,7 @@ class RunRepository:
             aggregate.selected_artifact_id = response.selection_suggestion.artifact_id
         self._write_memory(aggregate, run, response, memory_delta or {})
         self.session.flush()
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=str(run.id),
@@ -460,7 +461,7 @@ class RunRepository:
                 ],
             ))},
         )
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_COMPLETED,
             run_id=str(run.id),
@@ -492,14 +493,14 @@ class RunRepository:
             admitted.consumed_at = now
         self.session.flush()
         if assistant is not None and str(assistant.content or ""):
-            self.sessions.append_event(
+            self.sessions.events.append(
                 lease=lease,
                 event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
                 run_id=run_id,
                 turn_id=str(run.current_turn_id) if run.current_turn_id else None,
                 payload={"item": dump_run_item(final_answer_item(assistant, run=run))},
             )
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_FAILED,
             run_id=run_id,

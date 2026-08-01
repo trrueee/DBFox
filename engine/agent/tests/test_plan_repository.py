@@ -70,7 +70,7 @@ def test_task_plan_is_versioned_and_replayed_as_a_public_event(db_session, test_
     assert first.version == 1
     assert second.version == 2
     assert second.status.value == "completed"
-    events = sessions.list_events("session-plan")
+    events = sessions.events.list("session-plan")
     assert [event.event_type for event in events[-2:]] == [
         RuntimeEventType.RUN_ITEM_STARTED,
         RuntimeEventType.RUN_ITEM_COMPLETED,

@@ -49,17 +49,21 @@ def _require_query_result(
     context: ToolRunContext,
     artifact_id: str,
 ) -> AgentArtifactRecord:
-    artifact = context.db_session.get(AgentArtifactRecord, artifact_id)
+    db = context.require_database()
+    request = context.require_request()
+    artifact = db.get(AgentArtifactRecord, artifact_id)
     if (
         artifact is None
-        or str(artifact.session_id) != str(context.request.session_id)
-        or str(artifact.run_id) != str(context.request.run_id)
+        or str(artifact.session_id) != request.session_id
+        or str(artifact.run_id) != request.run_id
         or str(artifact.type) != ArtifactType.RESULT_VIEW.value
     ):
         raise ToolInputError(
             "The Result Artifact is unavailable in the current Run."
         )
     payload = loads(str(artifact.payload_json or "{}"))
+    if not isinstance(payload, dict):
+        raise ToolInputError("The Result Artifact payload is invalid.")
     if str(payload.get("evidenceKind") or "query_result") != "query_result":
         raise ToolInputError(
             "Sample-row Artifacts cannot be inspected as analytical query results."
@@ -325,7 +329,7 @@ class ResultInspectTool(BaseTool[ResultInspectInput, ResultInspectOutput]):
         context: ToolRunContext,
     ) -> ResultInspectOutput:
         _require_query_result(context, tool_input.result_artifact_id)
-        service = ResultViewService(context.db_session)
+        service = ResultViewService(context.require_database())
         source_ref = ResultSourceRef(
             artifact_id=tool_input.result_artifact_id
         )
@@ -407,7 +411,7 @@ class ResultProfileTool(BaseTool[ResultProfileInput, ResultProfileOutput]):
     ) -> ResultProfileOutput:
         _require_query_result(context, tool_input.result_artifact_id)
         source_ref = ResultSourceRef(artifact_id=tool_input.result_artifact_id)
-        service = ResultViewService(context.db_session)
+        service = ResultViewService(context.require_database())
         source = service.load_verified_source(source_ref)
         available = source.column_names
         columns = list(tool_input.columns) or available[:12]
@@ -497,7 +501,7 @@ class ChartCreateTool(BaseTool[ChartCreateInput, ChartCreateOutput]):
         context: ToolRunContext,
     ) -> ToolOutcome[ChartCreateOutput]:
         _require_query_result(context, tool_input.result_artifact_id)
-        service = ResultViewService(context.db_session)
+        service = ResultViewService(context.require_database())
         source = service.load_verified_source(
             ResultSourceRef(artifact_id=tool_input.result_artifact_id)
         )

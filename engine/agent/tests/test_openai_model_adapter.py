@@ -225,7 +225,10 @@ def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
                 output=[completed_message, completed_call, reasoning_item],
                 usage={
                     "input_tokens": 10,
-                    "input_tokens_details": {"cached_tokens": 0},
+                    "input_tokens_details": {
+                        "cached_tokens": 0,
+                        "cache_write_tokens": 0,
+                    },
                     "output_tokens": 4,
                     "output_tokens_details": {"reasoning_tokens": 1},
                     "total_tokens": 14,

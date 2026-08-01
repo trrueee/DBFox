@@ -12,7 +12,6 @@ from engine.sql.dialect_context import DialectContext
 from engine.sql.executor import execute_query
 from engine.sql.safety.service import SqlSafetyService
 from engine.tools.db._common import (
-    DEFAULT_PREVIEW_ROWS,
     MAX_PREVIEW_ROWS,
     _catalog_table,
     _clamp,

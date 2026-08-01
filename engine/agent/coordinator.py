@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from functools import partial
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
 from threading import Event, RLock, Thread, current_thread
@@ -29,6 +31,12 @@ from engine.models import (
 logger = logging.getLogger("dbfox.agent.coordinator")
 
 
+@dataclass(frozen=True)
+class _ActiveSession:
+    future: Future[None]
+    interrupt: Event
+
+
 class SessionCoordinator:
     """Serializes one Session while allowing independent Sessions in parallel."""
 
@@ -44,7 +52,7 @@ class SessionCoordinator:
         self.run_loop = run_loop
         self.lease_ttl_seconds = lease_ttl_seconds
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="dbfox-agent")
-        self._active: dict[str, Future[None]] = {}
+        self._active: dict[str, _ActiveSession] = {}
         self._lock = RLock()
         self._stopped = Event()
         self._maintenance: Thread | None = None
@@ -72,14 +80,18 @@ class SessionCoordinator:
             raise RuntimeError("SessionCoordinator has stopped")
         with self._lock:
             current = self._active.get(session_id)
-            if current is not None and not current.done():
+            if current is not None and not current.future.done():
                 return
-            future = self._executor.submit(self._drain_session, session_id)
-            self._active[session_id] = future
-            future.add_done_callback(lambda _: self._finished(session_id))
+            interrupt = Event()
+            future = self._executor.submit(self._drain_session, session_id, interrupt)
+            self._active[session_id] = _ActiveSession(future=future, interrupt=interrupt)
+            future.add_done_callback(partial(self._finished, session_id))
 
     def stop(self, *, wait: bool = True) -> None:
         self._stopped.set()
+        with self._lock:
+            for active in self._active.values():
+                active.interrupt.set()
         self._executor.shutdown(wait=wait, cancel_futures=False)
         close_run_loop = getattr(self.run_loop, "close", None)
         if callable(close_run_loop):
@@ -88,9 +100,9 @@ class SessionCoordinator:
         if maintenance is not None and maintenance is not current_thread():
             maintenance.join(timeout=2)
 
-    def _drain_session(self, session_id: str) -> None:
+    def _drain_session(self, session_id: str, interrupt: Event) -> None:
         owner = f"worker:{uuid4().hex}"
-        while not self._stopped.is_set():
+        while not self._stopped.is_set() and not interrupt.is_set():
             try:
                 lease, run_id = self._claim_work(session_id, owner)
             except Exception:
@@ -101,16 +113,15 @@ class SessionCoordinator:
             if lease is None or run_id is None:
                 return
             heartbeat_stop = Event()
-            lease_lost = Event()
             heartbeat = Thread(
                 target=self._heartbeat,
-                args=(lease, heartbeat_stop, lease_lost),
+                args=(lease, heartbeat_stop, interrupt),
                 name=f"dbfox-agent-heartbeat-{session_id[:12]}",
                 daemon=True,
             )
             heartbeat.start()
             try:
-                self.run_loop.execute(lease=lease, run_id=run_id, lease_lost=lease_lost)
+                self.run_loop.execute(lease=lease, run_id=run_id, lease_lost=interrupt)
             except Exception:
                 logger.exception("Agent RunLoop failed run_id=%s", run_id)
                 try:
@@ -285,8 +296,11 @@ class SessionCoordinator:
                 ).limit(1)
             ).scalar_one_or_none() is not None
 
-    def _finished(self, session_id: str) -> None:
+    def _finished(self, session_id: str, completed: Future[None]) -> None:
         with self._lock:
-            self._active.pop(session_id, None)
+            current = self._active.get(session_id)
+            if current is None or current.future is not completed:
+                return
+            self._active.pop(session_id)
         if not self._stopped.is_set() and self._has_work(session_id):
             self.wake(session_id)

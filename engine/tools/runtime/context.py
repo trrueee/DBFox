@@ -1,9 +1,19 @@
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.orm import Session
+
+
+class ToolInvocationRequest(Protocol):
+    datasource_id: str
+    datasource_generation: int
+    question: str
+    session_id: str
+    run_id: str
+    execution_id: str
 
 class ToolRunContext(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -21,6 +31,16 @@ class ToolRunContext(BaseModel):
 
     def is_cancelled(self) -> bool:
         return bool(self.cancellation_probe and self.cancellation_probe())
+
+    def require_database(self) -> Session:
+        if self.db_session is None:
+            raise RuntimeError("This tool requires a database session")
+        return cast(Session, self.db_session)
+
+    def require_request(self) -> ToolInvocationRequest:
+        if self.request is None:
+            raise RuntimeError("This tool requires an agent invocation request")
+        return cast(ToolInvocationRequest, self.request)
 
     @classmethod
     def for_invocation(

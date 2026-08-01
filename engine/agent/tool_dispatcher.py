@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -24,7 +23,6 @@ from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
-from engine.agent.runners import ToolInvocationRunner
 from engine.agent.session import SessionLease
 from engine.agent.tool import ToolInvocation
 from engine.agent.turn import ModelToolCall
@@ -92,7 +90,7 @@ class ToolDispatcher:
         self.session_factory = session_factory
         self.registry = registry
         self.definition = definition
-        self.invocation_runner = ToolInvocationRunner(executor)
+        self.executor = executor
         self.approval_authority = ApprovalAuthorityVerifier()
 
     def request_and_execute(
@@ -404,13 +402,14 @@ class ToolDispatcher:
                     leaf_db.rollback()
                     return reconciled
 
-            result = self.invocation_runner.run(
+            result = self.executor.execute(
                 tool=tool,
                 scope_key=invocation.run_id,
                 operation=reconcile_leaf,
-                control=control,
+                should_cancel=control.is_cancel_requested,
                 cancel_action=None,
                 on_attempt=None,
+                deadline=control.deadline,
             )
             if result.error_code == "TOOL_RECONCILIATION_NOT_APPLIED":
                 with self.session_factory() as db:
@@ -455,19 +454,27 @@ class ToolDispatcher:
 
         execution_id = str(state.get("execution_id") or "")
 
+        if execution_id:
+            QUERY_REGISTRY.reserve(execution_id, request.datasource_id)
+
         def cancel_query() -> None:
             if execution_id:
                 QUERY_REGISTRY.cancel(execution_id)
 
-        if result is None:
-            result = self.invocation_runner.run(
-                tool=tool,
-                scope_key=invocation.run_id,
-                operation=execute_leaf,
-                control=control,
-                cancel_action=cancel_query if execution_id else None,
-                on_attempt=record_attempt,
-            )
+        try:
+            if result is None:
+                result = self.executor.execute(
+                    tool=tool,
+                    scope_key=invocation.run_id,
+                    operation=execute_leaf,
+                    should_cancel=control.is_cancel_requested,
+                    cancel_action=cancel_query if execution_id else None,
+                    on_attempt=record_attempt,
+                    deadline=control.deadline,
+                )
+        finally:
+            if execution_id:
+                QUERY_REGISTRY.unregister(execution_id)
 
         return result
 

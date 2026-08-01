@@ -5,7 +5,7 @@ import pytest
 
 from engine.agent.events import CommitNotificationHub
 from engine.agent.run_item import RunItemDelta, RunItemType
-from engine.api import conversations
+from engine.api import conversation_stream
 
 
 class FakeSubscription:
@@ -46,11 +46,11 @@ class FakeDb:
         return False
 
 
-class FakeSessionRepository:
+class FakeEventRepository:
     def __init__(self, _db):
         pass
 
-    def list_events(self, _session_id, *, after_sequence, limit):
+    def list(self, _session_id, *, after_sequence, limit):
         return []
 
 
@@ -84,19 +84,19 @@ def test_sse_multiplexer_closes_on_bounded_live_queue_overflow(monkeypatch):
     commit_subscription = FakeSubscription()
     live_subscription = FakeSubscription(live_values)
     monkeypatch.setattr(
-        conversations,
+        conversation_stream,
         "COMMIT_NOTIFICATIONS",
         FakeHub(commit_subscription),
     )
     monkeypatch.setattr(
-        conversations,
+        conversation_stream,
         "LIVE_STREAM_HUB",
         FakeHub(live_subscription),
     )
-    monkeypatch.setattr(conversations, "SessionLocal", FakeDb)
-    monkeypatch.setattr(conversations, "SessionRepository", FakeSessionRepository)
+    monkeypatch.setattr(conversation_stream, "SessionLocal", FakeDb)
+    monkeypatch.setattr(conversation_stream, "EventRepository", FakeEventRepository)
 
-    stream = conversations._conversation_stream("session-1", 0)
+    stream = conversation_stream.conversation_stream("session-1", 0)
     # Depending on scheduling, overflow may be detected before the consumer
     # sees the first delta or immediately afterward. Either way, a stream gap
     # must close the connection instead of exposing an incomplete projection.

@@ -69,8 +69,10 @@ class CatalogOverviewTool(BaseTool[EmptyInput, CatalogOverviewOutput]):
         tool_input: EmptyInput,
         context: ToolRunContext,
     ) -> CatalogOverviewOutput:
+        db = context.require_database()
+        request = context.require_request()
         return CatalogOverviewOutput.model_validate(
-            db_observe(context.db_session, context.request.datasource_id)
+            db_observe(db, request.datasource_id)
         )
 
     def project_observation(self, *, status, output, artifacts):
@@ -130,24 +132,26 @@ class CatalogRefreshTool(BaseTool[EmptyInput, CatalogRefreshOutput]):
         if context.is_cancelled():
             raise ToolInputError("Catalog refresh was cancelled.")
 
-        datasource_id = context.request.datasource_id
+        db = context.require_database()
+        request = context.require_request()
+        datasource_id = request.datasource_id
         result = SchemaCatalogSync().sync(
-            context.db_session,
+            db,
             datasource_id,
             ai_enrich=False,
         )
-        datasource = context.db_session.get(DataSource, datasource_id)
+        datasource = db.get(DataSource, datasource_id)
         if datasource is None or datasource.last_sync_at is None:
             raise ToolInputError("The datasource is unavailable after catalog refresh.")
 
         table_count = (
-            context.db_session.query(func.count(SchemaTable.id))
+            db.query(func.count(SchemaTable.id))
             .filter(SchemaTable.data_source_id == datasource_id)
             .scalar()
             or 0
         )
         schema_count = (
-            context.db_session.query(
+            db.query(
                 func.count(func.distinct(SchemaTable.table_schema))
             )
             .filter(SchemaTable.data_source_id == datasource_id)
@@ -215,8 +219,10 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
         tool_input: SchemaListInput,
         context: ToolRunContext,
     ) -> SchemaListOutput:
+        db = context.require_database()
+        request = context.require_request()
         filters: list[Any] = [
-            SchemaTable.data_source_id == context.request.datasource_id
+            SchemaTable.data_source_id == request.datasource_id
         ]
         if tool_input.cursor:
             cursor = tool_input.cursor
@@ -239,7 +245,7 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
                 SchemaTable.table_name.ilike(f"%{tool_input.name_filter}%")
             )
         rows = (
-            context.db_session.query(
+            db.query(
                 SchemaTable.id,
                 SchemaTable.table_schema,
                 SchemaTable.table_name,
@@ -350,12 +356,14 @@ class SchemaSearchTool(BaseTool[SchemaSearchInput, SchemaSearchOutput]):
         tool_input: SchemaSearchInput,
         context: ToolRunContext,
     ) -> SchemaSearchOutput:
+        db = context.require_database()
+        request = context.require_request()
         searches: list[SearchResultSet] = []
         candidates: dict[tuple[str, str, str, str], dict[str, Any]] = {}
         for query in tool_input.queries:
             raw = db_search(
-                context.db_session,
-                context.request.datasource_id,
+                db,
+                request.datasource_id,
                 query,
                 tool_input.limit_per_query,
             )
@@ -446,9 +454,11 @@ class SchemaInspectTool(BaseTool[SchemaInspectInput, SchemaInspectOutput]):
         tool_input: SchemaInspectInput,
         context: ToolRunContext,
     ) -> SchemaInspectOutput:
+        db = context.require_database()
+        request = context.require_request()
         details = db_inspect(
-            context.db_session,
-            context.request.datasource_id,
+            db,
+            request.datasource_id,
             tool_input.targets,
         )
         return SchemaInspectOutput(

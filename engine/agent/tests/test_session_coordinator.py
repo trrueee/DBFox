@@ -1,5 +1,6 @@
 import threading
 import time
+from concurrent.futures import Future
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import sessionmaker
@@ -172,3 +173,76 @@ def test_heartbeat_signals_lease_loss(monkeypatch):
     coordinator._heartbeat(lease, SingleTickStop(), lease_lost)
 
     assert lease_lost.is_set()
+
+
+def test_finished_callback_cannot_remove_a_newer_session_worker() -> None:
+    coordinator = SessionCoordinator(
+        session_factory=object(),
+        run_loop=object(),
+        max_workers=1,
+    )
+    older: Future[None] = Future()
+    newer: Future[None] = Future()
+    from engine.agent.coordinator import _ActiveSession
+
+    coordinator._active["session"] = _ActiveSession(newer, threading.Event())
+
+    coordinator._finished("session", older)
+
+    assert coordinator._active["session"].future is newer
+    coordinator.stop(wait=False)
+
+
+def test_stop_interrupts_active_run_before_waiting_for_workers(db_session, test_datasource) -> None:
+    session_id = "coordinator_shutdown"
+    db_session.add(AgentSession(
+        id=session_id,
+        datasource_id=str(test_datasource.id),
+        title="Shutdown",
+    ))
+    db_session.commit()
+    SessionRepository(db_session).admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="wait",
+        idempotency_key="shutdown",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    db_session.commit()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+
+    class InterruptibleLoop:
+        def __init__(self) -> None:
+            self.started = threading.Event()
+            self.interrupted = threading.Event()
+            self.closed = False
+
+        def execute(self, *, lease, run_id, lease_lost=None):
+            assert lease_lost is not None
+            self.started.set()
+            assert lease_lost.wait(2)
+            self.interrupted.set()
+
+        def close(self) -> None:
+            self.closed = True
+
+    loop = InterruptibleLoop()
+    coordinator = SessionCoordinator(
+        session_factory=factory,
+        run_loop=loop,
+        max_workers=1,
+        lease_ttl_seconds=30,
+    )
+    coordinator.start()
+    assert loop.started.wait(2)
+
+    started = time.monotonic()
+    coordinator.stop()
+
+    assert time.monotonic() - started < 1
+    assert loop.interrupted.is_set()
+    assert loop.closed is True

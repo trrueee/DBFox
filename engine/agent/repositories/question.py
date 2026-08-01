@@ -24,7 +24,7 @@ from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.run import RunStatus
 from engine.agent.run_item import dump_run_item, project_run, question_item
 from engine.agent.session import SessionLease
-from engine.json_codec import canonical_dumps as _json, loads
+from engine.json_codec import canonical_dumps as _json, load_array, load_object
 from engine.models import AgentQuestionRequest, AgentRun, AgentToolInvocation
 
 
@@ -110,14 +110,14 @@ class QuestionRepository:
         run.version = int(run.version or 0) + 1
         run.updated_at = now
         self.session.flush()
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_UPDATED,
             run_id=run_id,
             turn_id=turn_id,
             payload={"run": project_run(run)},
         )
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_ITEM_STARTED,
             run_id=run_id,
@@ -185,7 +185,7 @@ class QuestionRepository:
             row.answered_at = now
             self.session.flush()
             value = self._domain(row)
-            self.sessions.append_event(
+            self.sessions.events.append(
                 lease=lease,
                 event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
                 run_id=run_id,
@@ -228,7 +228,7 @@ class QuestionRepository:
             self.sessions.release(lease=lease)
             return value
 
-        options = [QuestionOption.model_validate(item) for item in loads(str(row.options_json or "[]"))]
+        options = [QuestionOption.model_validate(item) for item in load_array(str(row.options_json or "[]"))]
         if answer.selected_value and answer.selected_value not in {item.value for item in options}:
             raise QuestionConflict("Selected option is not available")
         if answer.text and not bool(row.allow_free_text):
@@ -281,14 +281,14 @@ class QuestionRepository:
         run.updated_at = now
         self.session.flush()
         value = self._domain(row)
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=str(run.id),
             turn_id=str(row.turn_id),
             payload={"item": dump_run_item(question_item(row))},
         )
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_UPDATED,
             run_id=str(run.id),
@@ -325,7 +325,7 @@ class QuestionRepository:
         )
         self.session.flush()
         value = self._domain(row)
-        self.sessions.append_event(
+        self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
             run_id=str(run.id),
@@ -354,8 +354,8 @@ class QuestionRepository:
             version=int(row.version or 0),
             question=str(row.question),
             reason=str(row.reason),
-            options=[QuestionOption.model_validate(value) for value in loads(str(row.options_json or "[]"))],
+            options=[QuestionOption.model_validate(value) for value in load_array(str(row.options_json or "[]"))],
             allow_free_text=bool(row.allow_free_text),
-            response=loads(str(row.response_json)) if row.response_json else None,
+            response=load_object(str(row.response_json)) if row.response_json else None,
             expires_at=row.expires_at,
         )
