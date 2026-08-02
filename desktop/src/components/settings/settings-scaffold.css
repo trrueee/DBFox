@@ -268,8 +268,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-top: 1px solid var(--hairline);
-  background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
+  border-top: 0;
+  background: transparent;
   padding: 12px 20px;
 }
 

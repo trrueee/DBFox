@@ -1,6 +1,13 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FolderOpen, RefreshCw } from "lucide-react";
-import { ApiError, waitEngineHealth, waitForEngineConfig } from "../lib/api/client";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import {
+  ApiError,
+  getRuntimeSession,
+  subscribeEngineState,
+  waitEngineHealth,
+  waitForEngineConfig,
+} from "../lib/api/client";
 import { FoxIcon } from "./brand/FoxIcon";
 import { Button } from "./ui/button";
 
@@ -49,12 +56,7 @@ function startupFailure(error: unknown): StartupFailure {
   }
 }
 
-function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
 async function invokeDesktopCommand(command: "restart_python_engine" | "open_diagnostic_logs") {
-  const { invoke } = await import("@tauri-apps/api/core");
   await invoke(command);
 }
 
@@ -64,6 +66,8 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
   const [enginePhase, setEnginePhase] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [runtimeNotice, setRuntimeNotice] = useState<string | null>(null);
+  const generationRef = useRef(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -82,7 +86,10 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
         if (controller.signal.aborted) return;
         setStage("health-check");
         await waitEngineHealth({ signal: controller.signal });
-        if (!controller.signal.aborted) setStage("ready");
+        if (!controller.signal.aborted) {
+          generationRef.current = getRuntimeSession().generation;
+          setStage("ready");
+        }
       } catch (error) {
         if (controller.signal.aborted) return;
         setFailure(startupFailure(error));
@@ -95,13 +102,62 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
     };
   }, [attempt]);
 
+  useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+    void subscribeEngineState((status) => {
+      if (disposed) return;
+      if (status.state === "restarting") {
+        setRuntimeNotice("本地引擎意外退出，正在自动恢复…");
+        return;
+      }
+      if (status.state === "failed") {
+        setRuntimeNotice(null);
+        setFailure(startupFailure(new ApiError(
+          status.error || "Engine restart failed",
+          503,
+          "ENGINE_RESTART_FAILED",
+        )));
+        setStage("failed");
+        return;
+      }
+      if (status.state !== "ready" || (status.generation ?? 0) <= generationRef.current) return;
+      const previousGeneration = generationRef.current;
+      void (async () => {
+        try {
+          await waitForEngineConfig({ afterGeneration: previousGeneration, attempts: 40, intervalMs: 250 });
+          await waitEngineHealth({ attempts: 20, intervalMs: 250 });
+          if (!disposed) {
+            generationRef.current = getRuntimeSession().generation;
+            setRuntimeNotice(null);
+            setFailure(null);
+            setStage("ready");
+          }
+        } catch (error) {
+          if (!disposed) {
+            setRuntimeNotice(null);
+            setFailure(startupFailure(error));
+            setStage("failed");
+          }
+        }
+      })();
+    }).then((cleanup) => {
+      if (disposed) cleanup();
+      else unsubscribe = cleanup;
+    });
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, []);
+
   const retry = async () => {
     setStage("starting");
     setFailure(null);
     setEnginePhase(null);
     setActionMessage("正在重新加载 DBFox…");
     try {
-      if (isTauriRuntime()) await invokeDesktopCommand("restart_python_engine");
+      if (isTauri()) await invokeDesktopCommand("restart_python_engine");
       setAttempt((value) => value + 1);
     } catch {
       setFailure(startupFailure(new ApiError("Engine restart failed", 503, "ENGINE_RESTART_FAILED")));
@@ -111,7 +167,7 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
   };
 
   const openDiagnosticLogs = async () => {
-    if (!isTauriRuntime()) {
+    if (!isTauri()) {
       setActionMessage("诊断日志目录只能在 DBFox 桌面应用中打开。");
       return;
     }
@@ -123,7 +179,14 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
     }
   };
 
-  if (stage === "ready") return <>{children}</>;
+  if (stage === "ready") {
+    return (
+      <>
+        {runtimeNotice ? <div className="engine-runtime-notice" role="status">{runtimeNotice}</div> : null}
+        {children}
+      </>
+    );
+  }
 
   const isLoading = stage !== "failed";
 

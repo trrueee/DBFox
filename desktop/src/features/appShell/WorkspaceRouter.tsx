@@ -209,12 +209,10 @@ function DatasourceSettingsTab({ activeTab, showToast }: { activeTab: WorkspaceT
   void showToast;
 
   return (
-    <WorkspaceShell title={activeTab.title} description="管理数据源连接、连接状态和表结构同步。">
-      <DataSourcesPage
-        chrome="workspace"
-        initialShowAddForm={activeTab.title === "新建数据源"}
-      />
-    </WorkspaceShell>
+    <DataSourcesPage
+      chrome="workspace"
+      initialShowAddForm={activeTab.title === "新建数据源"}
+    />
   );
 }
 

@@ -80,7 +80,7 @@ describe("DiagnosticsPage", () => {
 
     expect(queryByRole("heading", { name: "诊断日志" })).not.toBeInTheDocument();
     expect(getByRole("button", { name: "刷新" })).toBeInTheDocument();
-    expect(getByRole("button", { name: "复制诊断包" })).toBeInTheDocument();
+    expect(getByRole("button", { name: "导出诊断包" })).toBeInTheDocument();
     expect(getByRole("button", { name: "更多诊断操作" })).toBeInTheDocument();
     expect(getByRole("switch", { name: "显示空日志" })).toBeInTheDocument();
   });
@@ -99,7 +99,7 @@ describe("DiagnosticsPage", () => {
     expect(getByText(/backend stderr/)).toBeInTheDocument();
     expect(queryByText("secret-key")).not.toBeInTheDocument();
 
-    fireEvent.click(getByRole("button", { name: "复制诊断包" }));
+    fireEvent.click(getByRole("button", { name: "导出诊断包" }));
 
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledOnce());
     expect(onToast).toHaveBeenCalledWith("诊断包已复制", "success");

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, CheckCircle2, ChevronDown, Copy, FileWarning, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, Copy, Download, FileWarning, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import {
   Button,
   DropdownMenu,
@@ -103,6 +104,25 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
     }
   };
 
+  const handleExport = async () => {
+    if (!logs) return;
+    if (!isTauri()) {
+      await handleCopy();
+      return;
+    }
+    try {
+      const result = await invoke<{ path: string; sizeBytes: number }>("export_diagnostic_bundle", {
+        payload: {
+          engineSnapshot: logs,
+          webviewSnapshot: getClientLogSource(),
+        },
+      });
+      onToast(`诊断包已导出：${result.path}`, "success");
+    } catch (err) {
+      onToast(getUserErrorMessage(err, "诊断包导出失败"), "error");
+    }
+  };
+
   const handleClearLogs = async () => {
     try {
       const result = await diagnosticsApi.clearLogs();
@@ -163,9 +183,9 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
         <RefreshCw size={14} />
         刷新
       </Button>
-      <Button type="button" size="sm" onClick={handleCopy} disabled={!logs}>
-        <Copy size={14} />
-        复制诊断包
+      <Button type="button" size="sm" onClick={() => void handleExport()} disabled={!logs}>
+        <Download size={14} />
+        导出诊断包
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -174,6 +194,10 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => void handleCopy()} disabled={!logs}>
+            <Copy size={14} />
+            复制诊断内容
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void handleClearLogs()} disabled={loading}>
             <Trash2 size={14} />
             清空日志

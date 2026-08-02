@@ -10,7 +10,7 @@ import "./App.css";
 import { setDialogContainer } from "./components/ui/dialogContainer";
 import { setToastRoot, useToast } from "./components/toastState";
 import type { ContextMenuState } from "./types/workspace";
-import { installClientErrorLogging } from "./lib/diagnostics/clientLog";
+import { installClientErrorLogging, recordClientLog } from "./lib/diagnostics/clientLog";
 import { useDatasourceState } from "./features/datasource/useDatasourceState";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 import { useConversationStore } from "./stores/conversationStore";
@@ -74,7 +74,9 @@ export default function App() {
   // ── Store initialization (mount once) ──
   useEffect(() => {
     installClientErrorLogging();
-    void useConversationStore.getState().initConversations();
+    void useConversationStore.getState().initConversations().catch((error) => {
+      recordClientLog("error", "初始化对话列表失败", error);
+    });
   }, []);
 
   // ── Store selectors (minimal — children read from stores directly) ──

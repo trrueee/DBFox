@@ -247,28 +247,18 @@ describe("WorkspaceRouter desktop shell tabs", () => {
     datasourceState.activeDatasourceId = "ds-2";
   });
 
-  it.each([
-    [
-      "datasource settings",
-      { id: "datasource-settings", title: "Data Sources", type: "datasource-settings" } as WorkspaceTab,
-      "datasources-page",
-    ],
-    [
-      "artifact result",
-      {
-        id: "artifact-result",
-        title: "Query Artifact",
-        type: "artifact-result",
-        artifactResult: { id: "artifact-1", title: "Query Artifact" },
-      } as unknown as WorkspaceTab,
-      "table-artifact",
-    ],
-  ])("wraps %s in WorkspaceShell chrome", async (_label, activeTab, testId) => {
+  it("wraps artifact results in WorkspaceShell chrome", async () => {
+    const activeTab = {
+      id: "artifact-result",
+      title: "Query Artifact",
+      type: "artifact-result",
+      artifactResult: { id: "artifact-1", title: "Query Artifact" },
+    } as unknown as WorkspaceTab;
     render(<WorkspaceRouter activeTab={activeTab} showToast={vi.fn()} />);
 
     const shell = await findLazyRouteRegion(activeTab.title);
     expect(within(shell).getByRole("heading", { name: activeTab.title })).toBeTruthy();
-    expect(within(shell).getByTestId(testId)).toBeTruthy();
+    expect(within(shell).getByTestId("table-artifact")).toBeTruthy();
   });
 
   it("gives artifact result tabs a non-scrolling shell body so the table owns scrolling", async () => {
@@ -286,10 +276,11 @@ describe("WorkspaceRouter desktop shell tabs", () => {
     expect(shellBody?.classList.contains("workspace-shell__body--artifact-result")).toBe(true);
   });
 
-  it("passes workspace chrome to pages that already sit inside WorkspaceShell", async () => {
+  it("renders datasource settings as a single workspace surface", async () => {
     render(<WorkspaceRouter activeTab={{ id: "datasource-settings", title: "Data Sources", type: "datasource-settings" }} showToast={vi.fn()} />);
     await findLazyRouteByTestId("datasources-page");
     expect(workspacePageProps.datasourceSettings).toMatchObject({ chrome: "workspace" });
+    expect(screen.queryByRole("region", { name: "Data Sources" })).toBeNull();
   });
 
   it("tests the current unsaved LLM draft through a temporary credential lease", async () => {

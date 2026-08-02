@@ -1,13 +1,15 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { invokeMock, waitForConfigMock, waitForHealthMock } = vi.hoisted(() => ({
+const { invokeMock, isTauriMock, waitForConfigMock, waitForHealthMock, subscribeMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
+  isTauriMock: vi.fn(() => false),
   waitForConfigMock: vi.fn(),
   waitForHealthMock: vi.fn(),
+  subscribeMock: vi.fn(async () => () => undefined),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock, isTauri: isTauriMock }));
 
 vi.mock("../../lib/api/client", () => ({
   ApiError: class ApiError extends Error {
@@ -22,6 +24,8 @@ vi.mock("../../lib/api/client", () => ({
   },
   waitForEngineConfig: waitForConfigMock,
   waitEngineHealth: waitForHealthMock,
+  getRuntimeSession: () => ({ generation: 1 }),
+  subscribeEngineState: subscribeMock,
 }));
 
 import { EngineStartupGate } from "../EngineStartupGate";
@@ -30,9 +34,12 @@ import { ApiError } from "../../lib/api/client";
 afterEach(() => {
   cleanup();
   invokeMock.mockReset();
+  isTauriMock.mockReset();
+  isTauriMock.mockReturnValue(false);
   waitForConfigMock.mockReset();
   waitForHealthMock.mockReset();
-  Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  subscribeMock.mockReset();
+  subscribeMock.mockResolvedValue(() => undefined);
 });
 
 describe("EngineStartupGate", () => {
@@ -84,7 +91,7 @@ describe("EngineStartupGate", () => {
   });
 
   it("restarts the desktop engine and mounts children after retry succeeds", async () => {
-    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+    isTauriMock.mockReturnValue(true);
     waitForConfigMock
       .mockRejectedValueOnce(new ApiError("stopped", 503, "ENGINE_STOPPED"))
       .mockResolvedValueOnce(undefined);
@@ -104,7 +111,7 @@ describe("EngineStartupGate", () => {
   });
 
   it("opens the desktop diagnostic log directory from the failure state", async () => {
-    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+    isTauriMock.mockReturnValue(true);
     waitForConfigMock.mockRejectedValue(
       new ApiError("health unavailable", 503, "ENGINE_HEALTH_UNAVAILABLE"),
     );

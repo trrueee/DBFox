@@ -873,6 +873,13 @@
   padding: 34px 28px 28px;
 }
 
+.ds-page-console--focused .settings-action-bar {
+  box-sizing: border-box;
+  width: min(100%, 936px);
+  margin: 0 auto;
+  padding: 12px 28px 20px;
+}
+
 .ds-page-console--focused .ds-form-scroll {
   padding: 0 28px;
 }
@@ -917,6 +924,11 @@
 
   .ds-page-console--focused .ds-form-scroll {
     padding: 0 16px;
+  }
+
+  .ds-page-console--focused .settings-action-bar {
+    width: 100%;
+    padding: 12px 16px 16px;
   }
 }
 
