@@ -177,6 +177,66 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Enables the export_diagnostic_bundle command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-export-diagnostic-bundle",
+          "markdownDescription": "Enables the export_diagnostic_bundle command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_engine_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-engine-config",
+          "markdownDescription": "Enables the get_engine_config command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_engine_startup_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-engine-startup-status",
+          "markdownDescription": "Enables the get_engine_startup_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_diagnostic_logs command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-diagnostic-logs",
+          "markdownDescription": "Enables the open_diagnostic_logs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the restart_python_engine command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-restart-python-engine",
+          "markdownDescription": "Enables the restart_python_engine command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the export_diagnostic_bundle command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-export-diagnostic-bundle",
+          "markdownDescription": "Denies the export_diagnostic_bundle command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_engine_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-engine-config",
+          "markdownDescription": "Denies the get_engine_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_engine_startup_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-engine-startup-status",
+          "markdownDescription": "Denies the get_engine_startup_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_diagnostic_logs command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-diagnostic-logs",
+          "markdownDescription": "Denies the open_diagnostic_logs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the restart_python_engine command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-restart-python-engine",
+          "markdownDescription": "Denies the restart_python_engine command without any pre-configured scope."
+        },
+        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",
@@ -2191,6 +2251,24 @@
           "type": "string",
           "const": "core:window:deny-unminimize",
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
+        },
+        {
+          "description": "Allows the log command\n#### This default permission set includes:\n\n- `allow-log`",
+          "type": "string",
+          "const": "log:default",
+          "markdownDescription": "Allows the log command\n#### This default permission set includes:\n\n- `allow-log`"
+        },
+        {
+          "description": "Enables the log command without any pre-configured scope.",
+          "type": "string",
+          "const": "log:allow-log",
+          "markdownDescription": "Enables the log command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the log command without any pre-configured scope.",
+          "type": "string",
+          "const": "log:deny-log",
+          "markdownDescription": "Denies the log command without any pre-configured scope."
         }
       ]
     },

@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && node ./scripts/build.mjs && node ./scripts/check-bundle-budget.mjs",
+    "build": "tsc -b && node ./scripts/build.mjs && node ./scripts/check-production-token.mjs && node ./scripts/check-bundle-budget.mjs",
     "generate:api": "node ./scripts/generate-api.mjs",
     "check:bundle": "node ./scripts/check-bundle-budget.mjs",
     "lint": "eslint . && node ./scripts/check-design-contracts.mjs",
@@ -40,6 +40,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.3",
     "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-log": "^2.9.0",
     "@xyflow/react": "^12.10.2",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

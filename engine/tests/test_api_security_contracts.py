@@ -189,10 +189,10 @@ def test_list_tables_reports_auto_sync_failure(client, db_session, monkeypatch):
     )
 
     assert resp.status_code == 400, resp.json()
-    detail = resp.json()["detail"]
-    assert detail["code"] == "DBFOX_ERROR"
-    assert "secret" not in detail["message"]
-    assert "mysql://root" not in detail["message"]
+    problem = resp.json()
+    assert problem["code"] == "DBFOX_ERROR"
+    assert "secret" not in problem["detail"]
+    assert "mysql://root" not in problem["detail"]
 
 
 def test_query_history_response_sanitizes_legacy_sensitive_fields(client, db_session, test_datasource):
@@ -260,7 +260,7 @@ def test_console_execute_response_is_artifact_backed(client, test_datasource):
     ("/api/v1/agent/console/execute", {"datasourceId": "non-existent-ds", "sql": "SELECT 1"}, "DATASOURCE_NOT_FOUND"),
     ("/api/v1/datasources/non-existent/health", None, "DBFOX_ERROR"),
 ])
-def test_error_response_always_has_detail_code_key(client, test_datasource, endpoint, payload, expected_code):
+def test_error_response_is_problem_details(client, test_datasource, endpoint, payload, expected_code):
     if payload is not None:
         p = payload
         resp = client.post(endpoint, json=p, headers={"X-Local-Token": LOCAL_SECURE_TOKEN})
@@ -269,9 +269,11 @@ def test_error_response_always_has_detail_code_key(client, test_datasource, endp
 
     assert resp.status_code in (400, 404), resp.json()
     body = resp.json()
-    assert "detail" in body and isinstance(body["detail"], dict)
-    assert body["detail"]["code"] == expected_code
-    assert "message" in body["detail"]
+    assert resp.headers["content-type"].startswith("application/problem+json")
+    assert body["code"] == expected_code
+    assert body["status"] == resp.status_code
+    assert isinstance(body["detail"], str)
+    assert body["request_id"] == resp.headers["x-request-id"]
 
 def test_error_response_for_guardrail_blocked(client, test_datasource):
     resp = client.post(
@@ -281,6 +283,5 @@ def test_error_response_for_guardrail_blocked(client, test_datasource):
     )
     assert resp.status_code == 400, resp.json()
     body = resp.json()
-    assert "detail" in body and isinstance(body["detail"], dict)
-    assert body["detail"]["code"] == "AGENT_REQUEST_ERROR"
-    assert "message" in body["detail"]
+    assert body["code"] == "AGENT_REQUEST_ERROR"
+    assert isinstance(body["detail"], str)

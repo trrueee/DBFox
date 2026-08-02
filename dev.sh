@@ -49,7 +49,7 @@ wait_backend_ready() {
             echo "[DBFox] ERROR: backend exited before becoming healthy." >&2
             return 1
         fi
-        if "$PYTHON" -c 'import json, urllib.request; response = urllib.request.urlopen("http://127.0.0.1:18625/api/v1/health", timeout=1); raise SystemExit(0 if json.load(response).get("status") == "healthy" else 1)' 2>/dev/null; then
+        if "$PYTHON" -c 'import json, os, urllib.request; request = urllib.request.Request("http://127.0.0.1:18625/api/v1/health", headers={"X-Local-Token": os.environ["DBFOX_ENGINE_TOKEN"], "Origin": "http://127.0.0.1:5173"}); response = urllib.request.urlopen(request, timeout=1); raise SystemExit(0 if json.load(response).get("status") == "healthy" else 1)' 2>/dev/null; then
             return 0
         fi
         sleep 0.25

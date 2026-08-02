@@ -1,9 +1,12 @@
 import build_sidecar
 import json
+import re
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from scripts import verify_release_artifact
 
 
 pytestmark = pytest.mark.platform_contract
@@ -44,6 +47,69 @@ def test_tauri_package_build_rebuilds_sidecar_before_frontend() -> None:
 
     assert "build_sidecar.py" in before_build
     assert before_build.index("build_sidecar.py") < before_build.index("npm run build")
+    assert config["bundle"]["resources"]["binaries/dbfox-engine-runtime-manifest.json"] == "dbfox-engine-runtime-manifest.json"
+
+
+def _runtime_manifest(version: tuple[int, int, int]) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "sqlite_version": ".".join(map(str, version)),
+        "sqlite_version_info": list(version),
+        "sqlite_source_id": f"{'.'.join(map(str, version))} source-id",
+        "sqlite_compile_options": ["THREADSAFE=1"],
+    }
+
+
+def test_runtime_manifest_gate_rejects_last_affected_sqlite() -> None:
+    with pytest.raises(RuntimeError, match=r"minimum is 3\.51\.3"):
+        build_sidecar.validate_runtime_manifest(_runtime_manifest((3, 51, 2)))
+
+
+def test_runtime_manifest_gate_accepts_fixed_sqlite() -> None:
+    build_sidecar.validate_runtime_manifest(_runtime_manifest((3, 51, 3)))
+
+
+def test_artifact_manifest_binds_runtime_to_sidecar_hash(tmp_path, monkeypatch) -> None:
+    binary = tmp_path / "dbfox-engine-test"
+    binary.write_bytes(b"final-sidecar")
+    output = tmp_path / "runtime-manifest.json"
+    monkeypatch.setattr(build_sidecar, "RUNTIME_MANIFEST_PATH", output)
+    monkeypatch.setattr(build_sidecar, "get_target_triplet", lambda: "test-triplet")
+
+    result = build_sidecar.write_artifact_manifest(binary, _runtime_manifest((3, 53, 4)))
+    manifest = json.loads(result.read_text(encoding="utf-8"))
+
+    assert manifest["target_triplet"] == "test-triplet"
+    assert manifest["sidecar_filename"] == binary.name
+    assert manifest["sidecar_sha256"] == "3d3e01030d00b413489c82ee644fdfac09c83dd4b21aeacd9feeea8caa4f1c5f"
+    assert manifest["minimum_sqlite_version"] == "3.51.3"
+    assert manifest["target_sqlite_version"] == "3.53.4"
+
+
+def test_extracted_installer_must_match_manifest_hash_and_runtime(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "installer"
+    root.mkdir()
+    sidecar = root / ("dbfox-engine.exe" if sys.platform == "win32" else "dbfox-engine")
+    sidecar.write_bytes(b"installed-sidecar")
+    runtime = _runtime_manifest((3, 53, 4))
+    manifest = {
+        "schema_version": 1,
+        "target_triplet": "test-triplet",
+        "sidecar_sha256": build_sidecar._sha256(sidecar),
+        "runtime": runtime,
+    }
+    expected_manifest = tmp_path / "expected.json"
+    expected_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+    (root / "dbfox-engine-runtime-manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _path: runtime)
+
+    result = verify_release_artifact.verify_extracted_tree(root, expected_manifest)
+
+    assert result["verified"] is True
+    assert result["sqlite_version"] == runtime["sqlite_version"]
 
 
 def test_packaged_sidecar_preserves_control_stream_without_showing_a_window() -> None:
@@ -68,6 +134,30 @@ def test_tauri_config_does_not_disable_platform_security_features() -> None:
 
     assert "msSmartScreenProtection" not in browser_args
     assert "--no-proxy-server" not in browser_args
+
+
+def test_tauri_app_commands_have_explicit_main_window_permissions() -> None:
+    root = Path(__file__).resolve().parents[2]
+    tauri_root = root / "desktop" / "src-tauri"
+    build_source = (tauri_root / "build.rs").read_text(encoding="utf-8")
+    runtime = json.loads((tauri_root / "capabilities" / "runtime.json").read_text(encoding="utf-8"))
+    diagnostics = json.loads((tauri_root / "capabilities" / "diagnostics.json").read_text(encoding="utf-8"))
+    default = json.loads((tauri_root / "capabilities" / "default.json").read_text(encoding="utf-8"))
+
+    declared_commands = set(re.findall(r'^\s*"([a-z_]+)",?$', build_source, re.MULTILINE))
+    runtime_permissions = set(runtime["permissions"])
+    diagnostic_permissions = set(diagnostics["permissions"])
+    allowed_commands = {
+        permission.removeprefix("allow-").replace("-", "_")
+        for permission in runtime_permissions | diagnostic_permissions
+    }
+
+    assert declared_commands == allowed_commands
+    assert runtime["windows"] == ["main"]
+    assert diagnostics["windows"] == ["main"]
+    assert default["windows"] == ["main"]
+    assert runtime_permissions.isdisjoint(diagnostic_permissions)
+    assert not any(permission.startswith("allow-") for permission in default["permissions"])
 
 
 def test_sidecar_builder_has_no_langsmith_plaintext_export_path() -> None:
@@ -123,5 +213,87 @@ def test_token_only_does_not_write_production_static_token(monkeypatch, tmp_path
     monkeypatch.setattr(build_sidecar, "write_token_preset", fail_static_token_write, raising=False)
     monkeypatch.setattr(build_sidecar, "write_env_local", lambda _token: tmp_path / ".env.local")
     monkeypatch.setattr(sys, "argv", ["build_sidecar.py", "--token-only"])
+
+    build_sidecar.main()
+
+
+def test_target_triplet_uses_rustc_host_tuple(monkeypatch) -> None:
+    observed: list[list[str]] = []
+
+    def run(command, **_kwargs):
+        observed.append(command)
+        return subprocess.CompletedProcess(command, 0, "aarch64-apple-darwin\n", "")
+
+    monkeypatch.setattr(build_sidecar.subprocess, "run", run)
+
+    assert build_sidecar.get_target_triplet() == "aarch64-apple-darwin"
+    assert observed == [["rustc", "--print", "host-tuple"]]
+
+
+def test_target_triplet_fails_closed_when_rustc_fails(monkeypatch) -> None:
+    monkeypatch.setattr(
+        build_sidecar.subprocess,
+        "run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(command, 1, "", "toolchain missing"),
+    )
+
+    with pytest.raises(RuntimeError, match=r"rustc --print host-tuple.*exit=1"):
+        build_sidecar.get_target_triplet()
+
+
+def test_release_sync_requires_uv(monkeypatch, tmp_path, capsys) -> None:
+    lock = tmp_path / "requirements-build.lock"
+    lock.write_text("", encoding="utf-8")
+    monkeypatch.setattr(build_sidecar, "BUILD_LOCK", lock)
+    monkeypatch.setattr(build_sidecar.shutil, "which", lambda _name: None)
+
+    with pytest.raises(SystemExit) as exit_info:
+        build_sidecar.sync_build_environment("python")
+
+    assert exit_info.value.code == 1
+    assert "Release builds require uv" in capsys.readouterr().err
+
+
+def test_release_sync_uses_uv_exact_environment_semantics(monkeypatch, tmp_path, capsys) -> None:
+    lock = tmp_path / "requirements-build.lock"
+    lock.write_text("", encoding="utf-8")
+    observed: list[list[str]] = []
+    monkeypatch.setattr(build_sidecar, "BUILD_LOCK", lock)
+    monkeypatch.setattr(build_sidecar.shutil, "which", lambda _name: "uv")
+
+    def run(command, **_kwargs):
+        observed.append(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(build_sidecar.subprocess, "run", run)
+
+    build_sidecar.sync_build_environment("clean-build-python")
+
+    assert observed == [[
+        "uv",
+        "pip",
+        "sync",
+        str(lock),
+        "--python",
+        "clean-build-python",
+    ]]
+    assert "Synced" in capsys.readouterr().out
+
+
+def test_release_build_never_writes_frontend_dev_token(monkeypatch, tmp_path) -> None:
+    binary = tmp_path / "dbfox-engine"
+    binary.write_bytes(b"sidecar")
+    monkeypatch.setattr(build_sidecar, "_venv_python", lambda: "python")
+    monkeypatch.setattr(build_sidecar, "sync_build_environment", lambda _python: None)
+    monkeypatch.setattr(build_sidecar, "build_pyinstaller", lambda _python: binary)
+    monkeypatch.setattr(build_sidecar, "install_sidecar", lambda source: source)
+    monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _binary: _runtime_manifest((3, 53, 4)))
+    monkeypatch.setattr(build_sidecar, "write_artifact_manifest", lambda *_args: tmp_path / "manifest.json")
+    monkeypatch.setattr(
+        build_sidecar,
+        "write_env_local",
+        lambda _token: (_ for _ in ()).throw(AssertionError("release wrote .env.local")),
+    )
+    monkeypatch.setattr(sys, "argv", ["build_sidecar.py"])
 
     build_sidecar.main()

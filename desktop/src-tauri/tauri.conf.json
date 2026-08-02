@@ -41,7 +41,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "icons/icon.ico": "dbfox-icon.ico"
+      "icons/icon.ico": "dbfox-icon.ico",
+      "binaries/dbfox-engine-runtime-manifest.json": "dbfox-engine-runtime-manifest.json"
     },
     "externalBin": [
       "binaries/dbfox-engine"

@@ -871,6 +871,23 @@ export const zPlanPayload = z.object({
 });
 
 /**
+ * ProblemDetails
+ *
+ * RFC 9457 response with DBFox correlation and machine-code extensions.
+ */
+export const zProblemDetails = z.object({
+    checks: z.array(z.record(z.string(), z.unknown())).optional(),
+    code: z.string(),
+    detail: z.string(),
+    errors: z.array(z.record(z.string(), z.unknown())).optional(),
+    instance: z.string(),
+    request_id: z.string(),
+    status: z.int(),
+    title: z.string(),
+    type: z.string()
+});
+
+/**
  * ProjectCreateRequest
  */
 export const zProjectCreateRequest = z.object({
@@ -1635,22 +1652,6 @@ export const zRuntimeEvent = z.object({
     session_id: z.string(),
     timestamp: z.iso.datetime(),
     turn_id: z.string().nullish()
-});
-
-/**
- * ValidationError
- */
-export const zValidationError = z.object({
-    loc: z.array(z.union([z.string(), z.int()])),
-    msg: z.string(),
-    type: z.string()
-});
-
-/**
- * HTTPValidationError
- */
-export const zHttpValidationError = z.object({
-    detail: z.array(zValidationError).optional()
 });
 
 /**

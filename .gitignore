@@ -71,7 +71,8 @@ desktop/coverage/
 desktop/playwright-report/
 desktop/test-results/
 desktop/src-tauri/target/
-desktop/src-tauri/binaries/
+desktop/src-tauri/binaries/*
+!desktop/src-tauri/binaries/dbfox-engine-runtime-manifest.json
 desktop/src-tauri/gen/*
 desktop/src-tauri/.tauri/
 !desktop/src-tauri/gen/schemas/

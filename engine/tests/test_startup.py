@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -17,7 +18,10 @@ def test_fastapi_app_startup_and_health() -> None:
     returns status 200 with standard health indicators.
     """
     client = TestClient(app)
-    response = client.get("/api/v1/health")
+    response = client.get(
+        "/api/v1/health",
+        headers={"X-Local-Token": LOCAL_SECURE_TOKEN},
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
@@ -43,6 +47,21 @@ def test_bind_engine_socket_returns_actual_ephemeral_port() -> None:
         assert sock.getsockname()[1] == port
     finally:
         sock.close()
+
+
+def test_ready_control_message_declares_runtime_protocol(capsys) -> None:
+    dev_server_module._emit_engine_ready(18731)
+
+    line = capsys.readouterr().out.strip()
+    marker = "DBFOX_ENGINE_READY "
+    assert line.startswith(marker)
+    payload = json.loads(line[len(marker):])
+    assert payload == {
+        "port": 18731,
+        "protocolVersion": 1,
+        "serverInfo": {"name": "dbfox-engine", "version": __version__},
+        "capabilities": ["http", "sse", "problem-details"],
+    }
 
 
 def test_optional_startup_stage_cannot_crash_engine(monkeypatch) -> None:
@@ -71,14 +90,54 @@ def test_frozen_engine_allows_tauri_localhost_origins(monkeypatch) -> None:
             assert response.headers.get("access-control-allow-origin") == origin
 
 
-def test_frozen_engine_allows_health_without_origin(monkeypatch) -> None:
+def test_frozen_health_uses_the_same_origin_and_token_policy(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "is_frozen", True)
 
     with TestClient(app) as client:
-        response = client.get("/api/v1/health")
+        missing_token = client.get(
+            "/api/v1/health",
+            headers={"Origin": "http://tauri.localhost"},
+        )
+        wrong_token = client.get(
+            "/api/v1/health",
+            headers={"Origin": "http://tauri.localhost", "X-Local-Token": "wrong"},
+        )
+        missing_origin = client.get(
+            "/api/v1/health",
+            headers={"X-Local-Token": LOCAL_SECURE_TOKEN},
+        )
+        response = client.get(
+            "/api/v1/health",
+            headers={
+                "Origin": "http://tauri.localhost",
+                "X-Local-Token": LOCAL_SECURE_TOKEN,
+            },
+        )
 
+    assert missing_token.status_code == 401
+    assert wrong_token.status_code == 401
+    assert missing_origin.status_code == 403
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
+
+
+def test_health_rejects_the_previous_runtime_token(monkeypatch) -> None:
+    previous_token = "previous-runtime-token"
+    next_token = "next-runtime-token"
+    monkeypatch.setattr(main_module, "LOCAL_SECURE_TOKEN", next_token)
+
+    with TestClient(app) as client:
+        stale = client.get(
+            "/api/v1/health",
+            headers={"X-Local-Token": previous_token},
+        )
+        current = client.get(
+            "/api/v1/health",
+            headers={"X-Local-Token": next_token},
+        )
+
+    assert stale.status_code == 401
+    assert current.status_code == 200
 
 
 def test_protected_routes_compare_local_token_in_constant_time(monkeypatch) -> None:

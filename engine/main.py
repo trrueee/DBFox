@@ -24,10 +24,12 @@ from engine.runtime_env import load_runtime_env
 load_runtime_env()
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from engine.json_codec import dumps
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from engine.api import router
 from engine.db import SessionLocal, initialize_metadata_database
@@ -36,8 +38,9 @@ from engine.agent.loop import RunLoop
 from engine.app.request_limits import AgentInputRequestBodyLimitMiddleware
 from engine.diagnostics.logs import configure_diagnostic_logging
 from engine.errors import BackupSourceMismatchError, DBFoxError, NotFoundError
-from engine.schemas import ErrorResponse
 from engine.engine_runtime.credentials import RuntimeCredentialPolicy
+from engine.problem_details import REQUEST_ID_HEADER, new_request_id, problem_response
+from engine.schemas import ProblemDetails
 from engine.runtime_paths import private_runtime_file
 from engine.security.credential_vault import CredentialVaultUnavailableError
 
@@ -142,6 +145,19 @@ async def lifespan(application: FastAPI) -> Any:
         await close_llm_http_clients()
 
 
+_PROBLEM_RESPONSES = {
+    status: {
+        "content": {
+            "application/problem+json": {
+                "schema": {"$ref": "#/components/schemas/ProblemDetails"},
+            }
+        },
+        "description": f"RFC 9457 error response ({status})",
+    }
+    for status in (400, 401, 403, 404, 409, 422, 500, 503)
+}
+
+
 app = FastAPI(
     title="DBFox Local Engine",
     description="专为 DBFox 桌面外壳设计的安全数据库客户端核心引擎",
@@ -150,6 +166,7 @@ app = FastAPI(
     docs_url=None if is_frozen else "/docs",
     redoc_url=None if is_frozen else "/redoc",
     openapi_url=None if is_frozen else "/openapi.json",
+    responses=_PROBLEM_RESPONSES,
 )
 
 app.add_middleware(AgentInputRequestBodyLimitMiddleware)
@@ -158,11 +175,6 @@ app.add_middleware(AgentInputRequestBodyLimitMiddleware)
 async def verify_local_access_token(request: Request, call_next):  # type: ignore[no-untyped-def]
     """Enforce local token and trusted-origin policy."""
     if request.method == "OPTIONS":
-        return await call_next(request)
-
-    # Native startup probes use raw local HTTP and do not send browser
-    # Origin/Referer headers, so health must be public before frozen-origin gates.
-    if request.url.path == "/api/v1/health":
         return await call_next(request)
 
     # 🔒 在生产环境（Tauri 容器内）强制检查请求的 Origin 来源头部
@@ -188,41 +200,41 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
                 logger.warning(
                     "拦截到缺失 Origin 且 Referer 非本地的请求，Referer: %s", referer
                 )
-                return JSONResponse(
-                    status_code=403,
-                    content={
-                        "code": "FORBIDDEN_ORIGIN",
-                        "message": "拒绝访问：必须从合法的 Origin 发起请求！"
-                    }
+                return problem_response(
+                    request,
+                    status=403,
+                    code="FORBIDDEN_ORIGIN",
+                    detail="The request origin is not allowed.",
                 )
         elif origin not in ALLOWED_TAURI_ORIGINS:
             logger.warning("拦截到非法的跨域恶意连接请求，尝试来源: %s", origin)
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "code": "FORBIDDEN_ORIGIN",
-                    "message": "拒绝访问：必须从合法的 Origin 发起请求！"
-                }
+            return problem_response(
+                request,
+                status=403,
+                code="FORBIDDEN_ORIGIN",
+                detail="The request origin is not allowed.",
             )
 
-    # 排除部分不需要 Token 鉴权的公开路由和文档页面
-    if request.url.path in ["/", "/docs", "/openapi.json", "/redoc"]:
-        if is_frozen and request.url.path in ["/docs", "/openapi.json", "/redoc"]:
-            return JSONResponse(
-                status_code=404,
-                content={"message": "Not Found"}
+    # Development API documentation is public only in source mode. Runtime
+    # status endpoints, including `/`, always use the same token boundary.
+    if request.url.path in ["/docs", "/openapi.json", "/redoc"]:
+        if is_frozen:
+            return problem_response(
+                request,
+                status=404,
+                code="NOT_FOUND",
+                detail="The requested resource was not found.",
             )
         return await call_next(request)
 
     # 🔒 核心 Token 令牌安全校验
     token_header = request.headers.get("X-Local-Token", "")
     if not secrets.compare_digest(token_header, LOCAL_SECURE_TOKEN):
-        return JSONResponse(
-            status_code=401,
-            content={
-                "code": "UNAUTHORIZED_ENGINE_ACCESS",
-                "message": "拒绝访问：缺少合法或有效的本地认证 Token。",
-            },
+        return problem_response(
+            request,
+            status=401,
+            code="UNAUTHORIZED_ENGINE_ACCESS",
+            detail="A valid local engine token is required.",
         )
 
     # 校验通过，放行请求，返回响应
@@ -253,6 +265,61 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def attach_request_context(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Give every HTTP response a local, non-identifying correlation ID."""
+    request_id = new_request_id()
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers[REQUEST_ID_HEADER] = request_id
+    return response
+
+
+def _http_exception_fields(exc: StarletteHTTPException) -> tuple[str, str, list[dict[str, Any]]]:
+    detail = exc.detail
+    if isinstance(detail, dict):
+        code = str(detail.get("code") or "HTTP_ERROR")
+        message = str(detail.get("message") or detail.get("detail") or "Request failed.")
+        raw_checks = detail.get("checks")
+        checks = [item for item in raw_checks if isinstance(item, dict)] if isinstance(raw_checks, list) else []
+        return code, message, checks
+    if isinstance(detail, str) and detail.strip():
+        return "HTTP_ERROR", detail.strip(), []
+    return "HTTP_ERROR", "Request failed.", []
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    code, detail, checks = _http_exception_fields(exc)
+    return problem_response(
+        request,
+        status=exc.status_code,
+        code=code,
+        detail=detail,
+        checks=checks,
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    errors = [
+        {
+            "location": [str(part) for part in error.get("loc", ())],
+            "message": str(error.get("msg") or "Invalid value."),
+            "error_type": str(error.get("type") or "validation_error"),
+        }
+        for error in exc.errors()
+    ]
+    return problem_response(
+        request,
+        status=422,
+        code="VALIDATION_ERROR",
+        detail="Request validation failed.",
+        errors=errors,
+    )
+
+
 @app.exception_handler(DBFoxError)
 async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse:
     """Map trusted domain error classes to fixed public responses."""
@@ -266,21 +333,18 @@ async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse
         request.url.path,
         code,
     )
-    return JSONResponse(
-        status_code=(
-            404
-            if isinstance(exc, NotFoundError)
-            else 409
-            if isinstance(exc, BackupSourceMismatchError)
-            else 400
-        ),
-        content={
-            "detail": ErrorResponse(
-                code=code,
-                message=SAFE_DBFOX_ERROR_MESSAGE,
-                checks=[],
-            ).model_dump()
-        },
+    status = (
+        404
+        if isinstance(exc, NotFoundError)
+        else 409
+        if isinstance(exc, BackupSourceMismatchError)
+        else 400
+    )
+    return problem_response(
+        request,
+        status=status,
+        code=code,
+        detail=SAFE_DBFOX_ERROR_MESSAGE,
     )
 
 
@@ -298,14 +362,11 @@ async def global_unhandled_exception_handler(request: Request, exc: Exception) -
         request.method,
         request.url.path,
     )
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": {
-                "code": "INTERNAL_ERROR",
-                "message": "服务器内部错误，请稍后重试。如果问题持续出现，请检查引擎日志。",
-            }
-        },
+    return problem_response(
+        request,
+        status=500,
+        code="INTERNAL_ERROR",
+        detail="The server could not complete the request. Check the engine logs if the problem persists.",
     )
 
 
@@ -329,6 +390,22 @@ def api_health() -> dict[str, str]:
 # 将 api 目录下的多模块业务路由（路由组）挂载进应用
 app.include_router(router)
 
+
+_fastapi_openapi = app.openapi
+
+
+def dbfox_openapi() -> dict[str, Any]:
+    """Publish the shared Problem Details schema without copying it into every operation."""
+    schema = _fastapi_openapi()
+    schemas = schema.setdefault("components", {}).setdefault("schemas", {})
+    schemas["ProblemDetails"] = ProblemDetails.model_json_schema(
+        ref_template="#/components/schemas/{model}",
+    )
+    return schema
+
+
+app.openapi = dbfox_openapi  # type: ignore[method-assign]
+
 # 6. 本地运行脚本守护 (Uvicorn CLI Web Server)
 if __name__ == "__main__":
     import argparse
@@ -342,6 +419,16 @@ if __name__ == "__main__":
         default=default_reload_enabled(),
         help="Watch engine/*.py and auto-restart on save (default: on in dev)",
     )
+    parser.add_argument(
+        "--runtime-manifest",
+        action="store_true",
+        help="Print final Python/SQLite runtime facts and exit",
+    )
     args = parser.parse_args()
+    if args.runtime_manifest:
+        from engine.runtime_manifest import collect_runtime_manifest
+
+        print(f"DBFOX_RUNTIME_MANIFEST {dumps(collect_runtime_manifest())}", flush=True)
+        raise SystemExit(0)
     run_engine_server(reload=args.reload)
 

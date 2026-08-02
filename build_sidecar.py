@@ -2,11 +2,12 @@
 """Build the DBFox Python engine into a standalone sidecar binary.
 
 This script:
-  1. Generates a cryptographically random dev token
-  2. Writes it to desktop/.env.local (source-mode frontend env)
-  3. Builds the engine with PyInstaller inside the .build_venv virtualenv
-  4. Copies the binary to desktop/src-tauri/binaries/ with the correct
+  1. Builds the engine with PyInstaller inside a locked build environment
+  2. Copies the binary to desktop/src-tauri/binaries/ with the correct
      target-triplet filename that Tauri's externalBin expects
+
+Development credentials are generated only by dev.ps1/dev.sh or the explicit
+--token-only development command. A release build never writes frontend env.
 
 Usage:
     python build_sidecar.py              # full build
@@ -16,10 +17,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from scripts.dev_environment import generate_dev_token, write_frontend_env
@@ -30,40 +34,31 @@ DESKTOP_DIR = ROOT / "desktop"
 BINARIES_DIR = DESKTOP_DIR / "src-tauri" / "binaries"
 BUILD_VENV = ROOT / ".build_venv"
 BUILD_LOCK = ROOT / "requirements-build.lock"
+RUNTIME_MANIFEST_PATH = BINARIES_DIR / "dbfox-engine-runtime-manifest.json"
+MINIMUM_SQLITE_VERSION = (3, 51, 3)
+TARGET_SQLITE_VERSION = "3.53.4"
+RUNTIME_MANIFEST_MARKER = "DBFOX_RUNTIME_MANIFEST "
 
 
 def get_target_triplet() -> str:
-    """Gets the target triplet for the current platform from rustc, falling back to OS detection."""
+    """Return rustc's official host tuple and fail closed when unavailable."""
+    command = ["rustc", "--print", "host-tuple"]
     try:
-        output = subprocess.check_output(["rustc", "-vV"], text=True)
-        for line in output.splitlines():
-            if line.startswith("host:"):
-                return line.split(":", 1)[1].strip()
-    except Exception:
-        pass
-    
-    # Fallback to standard OS and arch mapping
-    import platform
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-
-    arch = "x86_64"
-    if "arm" in machine or "aarch64" in machine:
-        arch = "aarch64"
-    elif "386" in machine or "686" in machine or "i386" in machine or "i686" in machine:
-        arch = "i686"
-    elif "x86_64" not in machine and "amd64" not in machine:
-        print(
-            f"  [WARN] Unknown architecture '{machine}' — falling back to x86_64 triplet",
-            file=sys.stderr,
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    except OSError as error:
+        raise RuntimeError(
+            "Failed to run `rustc --print host-tuple`. Install the Rust toolchain "
+            f"and ensure rustc is on PATH: {error}"
+        ) from error
+    target = result.stdout.strip()
+    if result.returncode != 0 or not target:
+        stderr = result.stderr.strip() or "no stderr"
+        raise RuntimeError(
+            "`rustc --print host-tuple` failed "
+            f"(exit={result.returncode}, stderr={stderr}). Install or repair the "
+            "Rust toolchain before building a release."
         )
-
-    if system == "windows":
-        return f"{arch}-pc-windows-msvc"
-    elif system == "darwin":
-        return f"{arch}-apple-darwin"
-    else:
-        return f"{arch}-unknown-linux-gnu"
+    return target
 
 # Must match the dependencies in requirements.txt that PyInstaller
 # cannot auto-detect (lazy imports, dynamic loaders, etc.)
@@ -120,7 +115,7 @@ def _venv_python() -> str:
             f"  [FAIL] 构建虚拟环境未找到: {BUILD_VENV}\n"
             f"  请先创建并安装依赖:\n"
             f"    python -m venv {BUILD_VENV}\n"
-            f"    {BUILD_VENV / 'Scripts' / 'pip'} install --require-hashes -r requirements-build.lock",
+            f"    uv pip sync requirements-build.lock --python {exe}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -133,31 +128,25 @@ def generate_token() -> str:
 
 def sync_build_environment(python_exe: str) -> None:
     uv_exe = shutil.which("uv")
-    if uv_exe is None:
-        print(
-            "  [FAIL] uv is required for reproducible release builds.\n"
-            "  Install uv, then rerun the build.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
     if not BUILD_LOCK.exists():
         print(f"  [FAIL] Build lock file not found: {BUILD_LOCK}", file=sys.stderr)
         sys.exit(1)
+    if uv_exe is None:
+        print(
+            "  [FAIL] Release builds require uv for exact environment sync. "
+            "Install it with `python -m pip install uv` and retry.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    command = [uv_exe, "pip", "sync", str(BUILD_LOCK), "--python", python_exe]
     result = subprocess.run(
-        [
-            uv_exe,
-            "pip",
-            "sync",
-            str(BUILD_LOCK),
-            "--python",
-            python_exe,
-        ],
+        command,
         cwd=str(ROOT),
     )
     if result.returncode != 0:
         print("  [FAIL] Locked build environment sync failed", file=sys.stderr)
         sys.exit(result.returncode)
-    print(f"  [OK] Synced from {BUILD_LOCK.name}")
+    print(f"  [OK] Synced from {BUILD_LOCK.name} with uv pip sync")
 
 
 def write_env_local(token: str) -> Path:
@@ -245,6 +234,91 @@ def install_sidecar(binary: Path) -> Path:
     return dest
 
 
+def probe_sidecar_runtime(binary: Path) -> dict[str, object]:
+    """Ask the final executable—not the build interpreter—what it loaded."""
+    with tempfile.TemporaryDirectory(prefix="dbfox-sidecar-probe-") as runtime_dir:
+        env = os.environ.copy()
+        env["DBFOX_ENGINE_TOKEN"] = generate_token()
+        env["DBFOX_RUNTIME_DIR"] = runtime_dir
+        result = subprocess.run(
+            [str(binary), "--runtime-manifest"],
+            cwd=str(binary.parent),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=90,
+        )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Frozen sidecar runtime probe failed "
+            f"(exit={result.returncode}): {result.stderr[-2000:]}"
+        )
+    manifest_line = next(
+        (line for line in reversed(result.stdout.splitlines()) if line.startswith(RUNTIME_MANIFEST_MARKER)),
+        None,
+    )
+    if manifest_line is None:
+        raise RuntimeError("Frozen sidecar did not emit DBFOX_RUNTIME_MANIFEST")
+    try:
+        manifest = json.loads(manifest_line[len(RUNTIME_MANIFEST_MARKER):])
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"Frozen sidecar emitted invalid runtime manifest: {error}") from error
+    if not isinstance(manifest, dict):
+        raise RuntimeError("Frozen sidecar runtime manifest must be a JSON object")
+    validate_runtime_manifest(manifest)
+    return manifest
+
+
+def validate_runtime_manifest(manifest: dict[str, object]) -> None:
+    if manifest.get("schema_version") != 1:
+        raise RuntimeError("Unsupported sidecar runtime manifest schema")
+    version_raw = manifest.get("sqlite_version_info")
+    if not isinstance(version_raw, list) or len(version_raw) < 3:
+        raise RuntimeError("Sidecar runtime manifest has no valid SQLite version tuple")
+    try:
+        version = tuple(int(part) for part in version_raw[:3])
+    except (TypeError, ValueError) as error:
+        raise RuntimeError("Sidecar SQLite version tuple is invalid") from error
+    if version < MINIMUM_SQLITE_VERSION:
+        actual = ".".join(str(part) for part in version)
+        minimum = ".".join(str(part) for part in MINIMUM_SQLITE_VERSION)
+        raise RuntimeError(
+            f"Release blocked: final sidecar uses SQLite {actual}; minimum is {minimum} "
+            f"and the current upgrade target is {TARGET_SQLITE_VERSION}."
+        )
+    if not manifest.get("sqlite_source_id") or not manifest.get("sqlite_compile_options"):
+        raise RuntimeError("Sidecar runtime manifest is missing SQLite provenance")
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_artifact_manifest(binary: Path, runtime: dict[str, object]) -> Path:
+    artifact = {
+        "schema_version": 1,
+        "target_triplet": get_target_triplet(),
+        "sidecar_filename": binary.name,
+        "sidecar_sha256": _sha256(binary),
+        "minimum_sqlite_version": ".".join(str(part) for part in MINIMUM_SQLITE_VERSION),
+        "target_sqlite_version": TARGET_SQLITE_VERSION,
+        "runtime": runtime,
+    }
+    RUNTIME_MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = RUNTIME_MANIFEST_PATH.with_suffix(".json.tmp")
+    temporary.write_text(
+        json.dumps(artifact, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(RUNTIME_MANIFEST_PATH)
+    print(f"  [OK] Runtime manifest -> {RUNTIME_MANIFEST_PATH}")
+    return RUNTIME_MANIFEST_PATH
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build DBFox engine sidecar")
     parser.add_argument(
@@ -273,15 +347,20 @@ def main() -> None:
     print("\n[1/4] Sync locked build environment")
     sync_build_environment(python_exe)
 
-    token = generate_token()
-    print(f"\n[2/4] Dev token ({len(token)} hex chars)")
-    write_env_local(token)
-
-    print("\n[3/4] PyInstaller build")
+    print("\n[2/4] PyInstaller build")
     binary = build_pyinstaller(python_exe)
 
-    print("\n[4/4] Install to Tauri binaries")
+    print("\n[3/4] Install to Tauri binaries")
     dest = install_sidecar(binary)
+
+    print("\n[4/4] Probe final sidecar and enforce SQLite release policy")
+    try:
+        runtime_manifest = probe_sidecar_runtime(dest)
+        write_artifact_manifest(dest, runtime_manifest)
+    except Exception as error:
+        dest.unlink(missing_ok=True)
+        print(f"  [FAIL] {error}", file=sys.stderr)
+        sys.exit(1)
 
     shutil.rmtree(ROOT / "pyinstaller_dist", ignore_errors=True)
     shutil.rmtree(ROOT / "pyinstaller_build", ignore_errors=True)

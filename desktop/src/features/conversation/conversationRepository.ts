@@ -1,5 +1,5 @@
 import { createParser, type EventSourceMessage } from "eventsource-parser";
-import { BASE_URL, ENGINE_TOKEN } from "../../lib/api/client";
+import { fetchEnginePath } from "../../lib/api/client";
 import {
   admitConversationInputApiV1ConversationsConversationIdInputsPost,
   cancelRunApiV1RunsRunIdCancelPost,
@@ -215,11 +215,10 @@ export async function streamConversation(
     onEvent: (event: ConversationStreamEvent) => void;
   },
 ): Promise<number> {
-  const response = await fetch(
-    `${BASE_URL}/conversations/${encodeURIComponent(conversationId)}/stream?after_sequence=${options.afterSequence}`,
+  const response = await fetchEnginePath(
+    `/conversations/${encodeURIComponent(conversationId)}/stream?after_sequence=${options.afterSequence}`,
     {
       headers: {
-        "X-Local-Token": ENGINE_TOKEN,
         "Last-Event-ID": String(options.afterSequence),
       },
       signal: options.signal,

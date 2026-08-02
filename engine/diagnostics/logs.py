@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 import platform
 import re
@@ -17,6 +18,7 @@ LOG_FILE_NAME = "dbfox-engine.log"
 DEFAULT_MAX_LINES = 300
 MAX_MAX_LINES = 1000
 MAX_READ_BYTES = 256 * 1024
+MAX_REDACTED_TEXT_CHARS = 64 * 1024
 _DIAGNOSTIC_HANDLER_MARKER = "_dbfox_diagnostic_log_handler"
 
 _ASSIGNMENT_RE = re.compile(
@@ -59,12 +61,25 @@ def redact_sensitive_text(text: str) -> str:
         lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]{match.group(4)}",
         redacted,
     )
-    return DataRedactor.redact_sql(redacted)
+    redacted = DataRedactor.redact_sql(redacted)
+    if len(redacted) > MAX_REDACTED_TEXT_CHARS:
+        return redacted[:MAX_REDACTED_TEXT_CHARS] + "… [truncated]"
+    return redacted
 
 
-class RedactingFormatter(logging.Formatter):
+class RedactingJsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
-        return redact_sensitive_text(super().format(record))
+        message = redact_sensitive_text(super().format(record))
+        return json.dumps(
+            {
+                "timestamp": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
+                "level": record.levelname.lower(),
+                "logger": record.name,
+                "message": message,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
 
 
 def configure_diagnostic_logging(level: int = logging.INFO) -> Path:
@@ -85,7 +100,7 @@ def configure_diagnostic_logging(level: int = logging.INFO) -> Path:
     setattr(handler, _DIAGNOSTIC_HANDLER_MARKER, True)
     handler.setLevel(level)
     handler.setFormatter(
-        RedactingFormatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
+        RedactingJsonFormatter("%(message)s")
     )
     logger.addHandler(handler)
     return log_path

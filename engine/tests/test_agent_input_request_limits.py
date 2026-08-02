@@ -33,7 +33,8 @@ def test_agent_input_routes_reject_oversized_bodies() -> None:
         ):
             response = client.post(path, content=b"123456789")
             assert response.status_code == 413
-            assert response.json()["detail"]["code"] == "REQUEST_BODY_TOO_LARGE"
+            assert response.headers["content-type"].startswith("application/problem+json")
+            assert response.json()["code"] == "REQUEST_BODY_TOO_LARGE"
 
 
 def test_unrelated_routes_are_not_claimed_by_agent_input_limit() -> None:

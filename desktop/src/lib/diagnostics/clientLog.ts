@@ -1,4 +1,6 @@
 import type { DiagnosticLogSource } from "../api/diagnostics";
+import { isTauri } from "@tauri-apps/api/core";
+import { error as hostError, info as hostInfo, warn as hostWarn } from "@tauri-apps/plugin-log";
 
 type ClientLogLevel = "info" | "warning" | "error";
 
@@ -11,6 +13,9 @@ interface ClientLogEntry {
 
 const STORAGE_KEY = "dbfox.clientLogs.v1";
 const MAX_ENTRIES = 200;
+const RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
+const MAX_MESSAGE_CHARS = 2 * 1024;
+const MAX_DETAIL_CHARS = 16 * 1024;
 const INSTALL_FLAG = "__DBFOX_CLIENT_LOG_INSTALLED__";
 
 const ASSIGNMENT_RE =
@@ -20,13 +25,35 @@ const URL_PASSWORD_RE = /(\/\/[^:/@\s]+:)([^@/\s]+)(@)/g;
 
 export function recordClientLog(level: ClientLogLevel, message: string, detail?: unknown): void {
   const entries = readEntries();
-  entries.push({
+  const entry: ClientLogEntry = {
     at: new Date().toISOString(),
     level,
-    message: redactSensitiveText(message),
-    detail: detail === undefined ? undefined : redactSensitiveText(safeStringify(detail)),
-  });
+    message: redactSensitiveText(message).slice(0, MAX_MESSAGE_CHARS),
+    detail: detail === undefined
+      ? undefined
+      : redactSensitiveText(safeStringify(detail)).slice(0, MAX_DETAIL_CHARS),
+  };
+  entries.push(entry);
   writeEntries(entries.slice(-MAX_ENTRIES));
+  emitDesktopLog(entry);
+}
+
+function emitDesktopLog(entry: ClientLogEntry): void {
+  if (!isTauri()) return;
+  const message = JSON.stringify({
+    component: "webview",
+    at: entry.at,
+    message: entry.message,
+    detail: entry.detail,
+  });
+  const operation = entry.level === "error"
+    ? hostError(message)
+    : entry.level === "warning"
+      ? hostWarn(message)
+      : hostInfo(message);
+  void operation.catch(() => {
+    // A logging transport failure must never affect product behavior.
+  });
 }
 
 export function getClientLogSource(): DiagnosticLogSource {
@@ -84,7 +111,12 @@ function readEntries(): ClientLogEntry[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isClientLogEntry) : [];
+    if (!Array.isArray(parsed)) return [];
+    const cutoff = Date.now() - RETENTION_MS;
+    return parsed.filter(isClientLogEntry).filter((entry) => {
+      const timestamp = Date.parse(entry.at);
+      return Number.isFinite(timestamp) && timestamp >= cutoff;
+    });
   } catch {
     return [];
   }
@@ -109,12 +141,30 @@ function isClientLogEntry(value: unknown): value is ClientLogEntry {
 }
 
 function safeStringify(value: unknown): string {
-  if (value instanceof Error) {
-    return JSON.stringify({ name: value.name, message: value.message, stack: value.stack });
-  }
+  const seen = new WeakSet<object>();
   try {
-    return JSON.stringify(value);
+    const serialized = JSON.stringify(value, (_key, candidate: unknown) => {
+      if (typeof candidate === "bigint") return `${candidate.toString()}n`;
+      if (candidate && typeof candidate === "object") {
+        if (seen.has(candidate)) return "[Circular]";
+        seen.add(candidate);
+      }
+      if (candidate instanceof Error) {
+        return {
+          name: candidate.name,
+          message: candidate.message,
+          stack: candidate.stack,
+          ...Object.fromEntries(Object.entries(candidate)),
+        };
+      }
+      return candidate;
+    });
+    return serialized ?? String(value);
   } catch {
-    return String(value);
+    try {
+      return String(value);
+    } catch {
+      return "[Unserializable diagnostic value]";
+    }
   }
 }

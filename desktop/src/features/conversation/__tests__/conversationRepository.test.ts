@@ -9,6 +9,7 @@ import {
 const sdkMocks = vi.hoisted(() => ({
   admitInput: vi.fn(),
   createConversation: vi.fn(),
+  fetchEnginePath: vi.fn(),
   listConversations: vi.fn(),
 }));
 
@@ -19,8 +20,7 @@ vi.mock("../../../lib/api/generated/sdk.gen", () => ({
 }));
 
 vi.mock("../../../lib/api/client", () => ({
-  BASE_URL: "http://127.0.0.1:8000/api/v1",
-  ENGINE_TOKEN: "test-token",
+  fetchEnginePath: sdkMocks.fetchEnginePath,
 }));
 
 const pagination = {
@@ -172,12 +172,12 @@ describe("conversationRepository", () => {
       ": heartbeat\n\nevent: run.item.delta\ndata: {\"session_id\":\"conv-1\",\"run_id\":\"run-1\",\"item_id\":\"message:run-1:turn-1\",\"item_type\":\"message\",\"field\":\"content\",\"revision\":1,\"offset\":0,\"content\":\"Hi\"}\n\n",
       `event: run.completed\nid: 8\ndata: ${completed}\n\n`,
     ];
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new ReadableStream({
+    sdkMocks.fetchEnginePath.mockResolvedValue(new Response(new ReadableStream({
       start(controller) {
         for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
         controller.close();
       },
-    }), { status: 200 })));
+    }), { status: 200 }));
     const events: unknown[] = [];
 
     const cursor = await streamConversation("conv-1", {
@@ -201,14 +201,14 @@ describe("conversationRepository", () => {
       `event: run.completed\nid: 8\ndata: ${completed}\n\n`,
       `event: run.started\nid: 9\ndata: ${started}\n\n`,
     ].join("");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new ReadableStream({
+    sdkMocks.fetchEnginePath.mockResolvedValue(new Response(new ReadableStream({
       start(controller) {
         controller.enqueue(encoder.encode(chunk));
       },
       cancel() {
         cancelled = true;
       },
-    }), { status: 200 })));
+    }), { status: 200 }));
 
     const cursor = await streamConversation("conv-1", {
       afterSequence: 4,

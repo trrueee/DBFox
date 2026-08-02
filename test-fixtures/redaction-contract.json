@@ -1,0 +1,80 @@
+{
+  "textCases": [
+    {
+      "id": "runtime-token",
+      "input": "token=runtime-token-secret-8d8195",
+      "forbidden": ["runtime-token-secret-8d8195"],
+      "required": ["[REDACTED]"]
+    },
+    {
+      "id": "authorization",
+      "input": "Authorization: Bearer bearer-secret-72af",
+      "forbidden": ["bearer-secret-72af"],
+      "required": ["Authorization: Bearer [REDACTED]"]
+    },
+    {
+      "id": "local-token-header-case-insensitive",
+      "input": "x-LoCaL-ToKeN: local-header-secret-401b",
+      "forbidden": ["local-header-secret-401b"],
+      "required": ["[REDACTED]"]
+    },
+    {
+      "id": "database-dsn",
+      "input": "dsn=postgresql://dbuser:dsn-password-64ef@db.invalid/app",
+      "forbidden": ["dsn-password-64ef"],
+      "required": ["[REDACTED]"]
+    },
+    {
+      "id": "url-password",
+      "input": "request https://alice:url-password-c921@example.invalid/query failed",
+      "forbidden": ["url-password-c921"],
+      "required": ["alice:[REDACTED]@example.invalid"]
+    },
+    {
+      "id": "api-key-environment",
+      "input": "OPENAI_API_KEY=api-key-secret-93ba",
+      "forbidden": ["api-key-secret-93ba"],
+      "required": ["[REDACTED]"]
+    },
+    {
+      "id": "normal-and-partial-match",
+      "input": "healthy tokenizer completed; request count=4",
+      "forbidden": [],
+      "required": ["healthy tokenizer completed", "request count=4"]
+    },
+    {
+      "id": "unprintable-secret",
+      "input": "password=control-secret-5fa2\u0000\u0001",
+      "forbidden": ["control-secret-5fa2"],
+      "required": ["[REDACTED]"]
+    }
+  ],
+  "structuredCases": [
+    {
+      "id": "nested-object-and-array",
+      "input": {
+        "phase": "startup",
+        "nested": {
+          "X-Local-Token": "nested-token-secret-b774",
+          "items": [
+            { "api_key": "array-api-secret-e155" },
+            "safe-array-value"
+          ]
+        }
+      },
+      "forbidden": ["nested-token-secret-b774", "array-api-secret-e155"],
+      "required": ["startup", "safe-array-value", "[REDACTED]"]
+    }
+  ],
+  "recursiveCase": {
+    "safeValue": "recursive-safe-value",
+    "secretValue": "recursive-token-secret-f610",
+    "depth": 32
+  },
+  "oversizedCase": {
+    "prefix": "token=oversized-token-secret-7c21 ",
+    "fill": "x",
+    "repeat": 1100000,
+    "forbidden": ["oversized-token-secret-7c21"]
+  }
+}

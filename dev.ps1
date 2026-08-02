@@ -70,7 +70,8 @@ function Wait-BackendReady {
             throw "Backend exited before becoming healthy."
         }
         try {
-            $Health = Invoke-RestMethod -Uri "http://127.0.0.1:18625/api/v1/health" -TimeoutSec 1
+            $Headers = @{ "X-Local-Token" = $env:DBFOX_ENGINE_TOKEN; "Origin" = "http://127.0.0.1:5173" }
+            $Health = Invoke-RestMethod -Uri "http://127.0.0.1:18625/api/v1/health" -Headers $Headers -TimeoutSec 1
             if ($Health.status -eq "healthy") {
                 return
             }

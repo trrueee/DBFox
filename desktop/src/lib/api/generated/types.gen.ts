@@ -1963,16 +1963,6 @@ export type GuardrailResponse = {
 };
 
 /**
- * HTTPValidationError
- */
-export type HttpValidationError = {
-    /**
-     * Detail
-     */
-    detail?: Array<ValidationError>;
-};
-
-/**
  * LlmTestRequest
  */
 export type LlmTestRequest = {
@@ -2216,6 +2206,54 @@ export type PlanStep = {
  * PlanStepStatus
  */
 export type PlanStepStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'skipped';
+
+/**
+ * ProblemDetails
+ *
+ * RFC 9457 response with DBFox correlation and machine-code extensions.
+ */
+export type ProblemDetails = {
+    /**
+     * Checks
+     */
+    checks?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Errors
+     */
+    errors?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Request Id
+     */
+    request_id: string;
+    /**
+     * Status
+     */
+    status: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: string;
+};
 
 /**
  * ProjectCreateRequest
@@ -3476,24 +3514,6 @@ export type ToolPresentation = {
 };
 
 /**
- * ValidationError
- */
-export type ValidationError = {
-    /**
-     * Location
-     */
-    loc: Array<string | number>;
-    /**
-     * Message
-     */
-    msg: string;
-    /**
-     * Error Type
-     */
-    type: string;
-};
-
-/**
  * CredentialEnrollmentBatchRequest
  *
  * Transient, all-or-cleaned enrollment input for related credentials.
@@ -3525,6 +3545,43 @@ export type ReadRootGetData = {
     url: '/';
 };
 
+export type ReadRootGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ReadRootGetError = ReadRootGetErrors[keyof ReadRootGetErrors];
+
 export type ReadRootGetResponses = {
     /**
      * Response Read Root  Get
@@ -3547,9 +3604,37 @@ export type ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostData = {
 
 export type ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostError = ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostErrors[keyof ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostErrors];
@@ -3572,9 +3657,37 @@ export type ApiLlmTestApiV1AgentLlmTestPostData = {
 
 export type ApiLlmTestApiV1AgentLlmTestPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiLlmTestApiV1AgentLlmTestPostError = ApiLlmTestApiV1AgentLlmTestPostErrors[keyof ApiLlmTestApiV1AgentLlmTestPostErrors];
@@ -3597,9 +3710,37 @@ export type ApiAgentTableResultExportApiV1AgentResultsTableExportPostData = {
 
 export type ApiAgentTableResultExportApiV1AgentResultsTableExportPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiAgentTableResultExportApiV1AgentResultsTableExportPostError = ApiAgentTableResultExportApiV1AgentResultsTableExportPostErrors[keyof ApiAgentTableResultExportApiV1AgentResultsTableExportPostErrors];
@@ -3620,9 +3761,37 @@ export type ApiAgentTableResultPageApiV1AgentResultsTablePagePostData = {
 
 export type ApiAgentTableResultPageApiV1AgentResultsTablePagePostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiAgentTableResultPageApiV1AgentResultsTablePagePostError = ApiAgentTableResultPageApiV1AgentResultsTablePagePostErrors[keyof ApiAgentTableResultPageApiV1AgentResultsTablePagePostErrors];
@@ -3650,9 +3819,37 @@ export type ResolveApprovalApiV1ApprovalsApprovalIdResolvePostData = {
 
 export type ResolveApprovalApiV1ApprovalsApprovalIdResolvePostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ResolveApprovalApiV1ApprovalsApprovalIdResolvePostError = ResolveApprovalApiV1ApprovalsApprovalIdResolvePostErrors[keyof ResolveApprovalApiV1ApprovalsApprovalIdResolvePostErrors];
@@ -3680,9 +3877,37 @@ export type ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostData = {
 
 export type ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostError = ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostErrors[keyof ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostErrors];
@@ -3710,9 +3935,37 @@ export type ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostData = {
 
 export type ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostError = ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostErrors[keyof ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostErrors];
@@ -3738,9 +3991,37 @@ export type ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostData = {
 
 export type ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostError = ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostErrors[keyof ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostErrors];
@@ -3763,9 +4044,37 @@ export type ApiCreateBackupApiV1BackupsPostData = {
 
 export type ApiCreateBackupApiV1BackupsPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiCreateBackupApiV1BackupsPostError = ApiCreateBackupApiV1BackupsPostErrors[keyof ApiCreateBackupApiV1BackupsPostErrors];
@@ -3793,9 +4102,37 @@ export type ApiGetBackupApiV1BackupsBackupIdGetData = {
 
 export type ApiGetBackupApiV1BackupsBackupIdGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiGetBackupApiV1BackupsBackupIdGetError = ApiGetBackupApiV1BackupsBackupIdGetErrors[keyof ApiGetBackupApiV1BackupsBackupIdGetErrors];
@@ -3823,9 +4160,37 @@ export type ApiRestoreBackupApiV1BackupsBackupIdRestorePostData = {
 
 export type ApiRestoreBackupApiV1BackupsBackupIdRestorePostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiRestoreBackupApiV1BackupsBackupIdRestorePostError = ApiRestoreBackupApiV1BackupsBackupIdRestorePostErrors[keyof ApiRestoreBackupApiV1BackupsBackupIdRestorePostErrors];
@@ -3853,9 +4218,37 @@ export type ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostData = {
 
 export type ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostError = ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostErrors[keyof ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostErrors];
@@ -3887,9 +4280,37 @@ export type ListConversationsApiV1ConversationsGetData = {
 
 export type ListConversationsApiV1ConversationsGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ListConversationsApiV1ConversationsGetError = ListConversationsApiV1ConversationsGetErrors[keyof ListConversationsApiV1ConversationsGetErrors];
@@ -3914,9 +4335,37 @@ export type CreateConversationApiV1ConversationsPostData = {
 
 export type CreateConversationApiV1ConversationsPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type CreateConversationApiV1ConversationsPostError = CreateConversationApiV1ConversationsPostErrors[keyof CreateConversationApiV1ConversationsPostErrors];
@@ -3944,9 +4393,37 @@ export type DeleteConversationApiV1ConversationsConversationIdDeleteData = {
 
 export type DeleteConversationApiV1ConversationsConversationIdDeleteErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type DeleteConversationApiV1ConversationsConversationIdDeleteError = DeleteConversationApiV1ConversationsConversationIdDeleteErrors[keyof DeleteConversationApiV1ConversationsConversationIdDeleteErrors];
@@ -3983,9 +4460,37 @@ export type GetConversationApiV1ConversationsConversationIdGetData = {
 
 export type GetConversationApiV1ConversationsConversationIdGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type GetConversationApiV1ConversationsConversationIdGetError = GetConversationApiV1ConversationsConversationIdGetErrors[keyof GetConversationApiV1ConversationsConversationIdGetErrors];
@@ -4013,9 +4518,37 @@ export type PatchConversationApiV1ConversationsConversationIdPatchData = {
 
 export type PatchConversationApiV1ConversationsConversationIdPatchErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type PatchConversationApiV1ConversationsConversationIdPatchError = PatchConversationApiV1ConversationsConversationIdPatchErrors[keyof PatchConversationApiV1ConversationsConversationIdPatchErrors];
@@ -4043,9 +4576,37 @@ export type SelectConversationArtifactApiV1ConversationsConversationIdArtifactSe
 
 export type SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostError = SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostErrors[keyof SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostErrors];
@@ -4082,9 +4643,37 @@ export type ListConversationEventsApiV1ConversationsConversationIdEventsGetData 
 
 export type ListConversationEventsApiV1ConversationsConversationIdEventsGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ListConversationEventsApiV1ConversationsConversationIdEventsGetError = ListConversationEventsApiV1ConversationsConversationIdEventsGetErrors[keyof ListConversationEventsApiV1ConversationsConversationIdEventsGetErrors];
@@ -4131,9 +4720,37 @@ export type GetConversationHistoryApiV1ConversationsConversationIdHistoryGetData
 
 export type GetConversationHistoryApiV1ConversationsConversationIdHistoryGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type GetConversationHistoryApiV1ConversationsConversationIdHistoryGetError = GetConversationHistoryApiV1ConversationsConversationIdHistoryGetErrors[keyof GetConversationHistoryApiV1ConversationsConversationIdHistoryGetErrors];
@@ -4161,9 +4778,37 @@ export type AdmitConversationInputApiV1ConversationsConversationIdInputsPostData
 
 export type AdmitConversationInputApiV1ConversationsConversationIdInputsPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type AdmitConversationInputApiV1ConversationsConversationIdInputsPostError = AdmitConversationInputApiV1ConversationsConversationIdInputsPostErrors[keyof AdmitConversationInputApiV1ConversationsConversationIdInputsPostErrors];
@@ -4195,9 +4840,37 @@ export type GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGet
 
 export type GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetError = GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetErrors[keyof GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetErrors];
@@ -4231,9 +4904,37 @@ export type GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetDa
 
 export type GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetError = GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetErrors[keyof GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetErrors];
@@ -4268,9 +4969,37 @@ export type StreamConversationApiV1ConversationsConversationIdStreamGetData = {
 
 export type StreamConversationApiV1ConversationsConversationIdStreamGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type StreamConversationApiV1ConversationsConversationIdStreamGetError = StreamConversationApiV1ConversationsConversationIdStreamGetErrors[keyof StreamConversationApiV1ConversationsConversationIdStreamGetErrors];
@@ -4291,9 +5020,37 @@ export type ApiEnrollCredentialApiV1CredentialsPostData = {
 
 export type ApiEnrollCredentialApiV1CredentialsPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiEnrollCredentialApiV1CredentialsPostError = ApiEnrollCredentialApiV1CredentialsPostErrors[keyof ApiEnrollCredentialApiV1CredentialsPostErrors];
@@ -4316,9 +5073,37 @@ export type ApiEnrollCredentialsApiV1CredentialsBatchPostData = {
 
 export type ApiEnrollCredentialsApiV1CredentialsBatchPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiEnrollCredentialsApiV1CredentialsBatchPostError = ApiEnrollCredentialsApiV1CredentialsBatchPostErrors[keyof ApiEnrollCredentialsApiV1CredentialsBatchPostErrors];
@@ -4346,9 +5131,37 @@ export type ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteData = {
 
 export type ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteError = ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteErrors[keyof ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteErrors];
@@ -4376,9 +5189,37 @@ export type ApiListDatasourcesApiV1DatasourcesGetData = {
 
 export type ApiListDatasourcesApiV1DatasourcesGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiListDatasourcesApiV1DatasourcesGetError = ApiListDatasourcesApiV1DatasourcesGetErrors[keyof ApiListDatasourcesApiV1DatasourcesGetErrors];
@@ -4403,9 +5244,37 @@ export type ApiCreateDatasourceApiV1DatasourcesPostData = {
 
 export type ApiCreateDatasourceApiV1DatasourcesPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiCreateDatasourceApiV1DatasourcesPostError = ApiCreateDatasourceApiV1DatasourcesPostErrors[keyof ApiCreateDatasourceApiV1DatasourcesPostErrors];
@@ -4428,9 +5297,37 @@ export type ApiTestConnectionApiV1DatasourcesTestPostData = {
 
 export type ApiTestConnectionApiV1DatasourcesTestPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiTestConnectionApiV1DatasourcesTestPostError = ApiTestConnectionApiV1DatasourcesTestPostErrors[keyof ApiTestConnectionApiV1DatasourcesTestPostErrors];
@@ -4461,9 +5358,37 @@ export type ApiDeleteDatasourceApiV1DatasourcesIdDeleteData = {
 
 export type ApiDeleteDatasourceApiV1DatasourcesIdDeleteErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiDeleteDatasourceApiV1DatasourcesIdDeleteError = ApiDeleteDatasourceApiV1DatasourcesIdDeleteErrors[keyof ApiDeleteDatasourceApiV1DatasourcesIdDeleteErrors];
@@ -4493,9 +5418,37 @@ export type ApiUpdateDatasourceApiV1DatasourcesIdPutData = {
 
 export type ApiUpdateDatasourceApiV1DatasourcesIdPutErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiUpdateDatasourceApiV1DatasourcesIdPutError = ApiUpdateDatasourceApiV1DatasourcesIdPutErrors[keyof ApiUpdateDatasourceApiV1DatasourcesIdPutErrors];
@@ -4523,9 +5476,37 @@ export type ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostData = {
 
 export type ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostError = ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostErrors[keyof ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostErrors];
@@ -4553,9 +5534,37 @@ export type ApiReleaseDatasourceApiV1DatasourcesIdReleasePostData = {
 
 export type ApiReleaseDatasourceApiV1DatasourcesIdReleasePostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiReleaseDatasourceApiV1DatasourcesIdReleasePostError = ApiReleaseDatasourceApiV1DatasourcesIdReleasePostErrors[keyof ApiReleaseDatasourceApiV1DatasourcesIdReleasePostErrors];
@@ -4586,9 +5595,37 @@ export type ApiSyncSchemaApiV1DatasourcesIdSyncPostData = {
 
 export type ApiSyncSchemaApiV1DatasourcesIdSyncPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiSyncSchemaApiV1DatasourcesIdSyncPostError = ApiSyncSchemaApiV1DatasourcesIdSyncPostErrors[keyof ApiSyncSchemaApiV1DatasourcesIdSyncPostErrors];
@@ -4616,9 +5653,37 @@ export type GetDiagnosticLogsApiV1DiagnosticsLogsGetData = {
 
 export type GetDiagnosticLogsApiV1DiagnosticsLogsGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type GetDiagnosticLogsApiV1DiagnosticsLogsGetError = GetDiagnosticLogsApiV1DiagnosticsLogsGetErrors[keyof GetDiagnosticLogsApiV1DiagnosticsLogsGetErrors];
@@ -4639,6 +5704,43 @@ export type ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostData = {
     url: '/api/v1/diagnostics/logs/clear';
 };
 
+export type ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostError = ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostErrors[keyof ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostErrors];
+
 export type ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostResponses = {
     /**
      * Successful Response
@@ -4657,9 +5759,37 @@ export type ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostData = {
 
 export type ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostError = ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostErrors[keyof ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostErrors];
@@ -4679,6 +5809,43 @@ export type ApiHealthApiV1HealthGetData = {
     query?: never;
     url: '/api/v1/health';
 };
+
+export type ApiHealthApiV1HealthGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ApiHealthApiV1HealthGetError = ApiHealthApiV1HealthGetErrors[keyof ApiHealthApiV1HealthGetErrors];
 
 export type ApiHealthApiV1HealthGetResponses = {
     /**
@@ -4700,6 +5867,43 @@ export type ApiListProjectsApiV1ProjectsGetData = {
     url: '/api/v1/projects';
 };
 
+export type ApiListProjectsApiV1ProjectsGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ApiListProjectsApiV1ProjectsGetError = ApiListProjectsApiV1ProjectsGetErrors[keyof ApiListProjectsApiV1ProjectsGetErrors];
+
 export type ApiListProjectsApiV1ProjectsGetResponses = {
     /**
      * Response Api List Projects Api V1 Projects Get
@@ -4720,9 +5924,37 @@ export type ApiCreateProjectApiV1ProjectsPostData = {
 
 export type ApiCreateProjectApiV1ProjectsPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiCreateProjectApiV1ProjectsPostError = ApiCreateProjectApiV1ProjectsPostErrors[keyof ApiCreateProjectApiV1ProjectsPostErrors];
@@ -4755,9 +5987,37 @@ export type ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetData = {
 
 export type ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetError = ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetErrors[keyof ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetErrors];
@@ -4782,9 +6042,37 @@ export type ApiCancelSqlApiV1QueryCancelPostData = {
 
 export type ApiCancelSqlApiV1QueryCancelPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiCancelSqlApiV1QueryCancelPostError = ApiCancelSqlApiV1QueryCancelPostErrors[keyof ApiCancelSqlApiV1QueryCancelPostErrors];
@@ -4807,9 +6095,37 @@ export type ApiExplainSqlApiV1QueryExplainPostData = {
 
 export type ApiExplainSqlApiV1QueryExplainPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiExplainSqlApiV1QueryExplainPostError = ApiExplainSqlApiV1QueryExplainPostErrors[keyof ApiExplainSqlApiV1QueryExplainPostErrors];
@@ -4837,9 +6153,37 @@ export type ApiClearQueryHistoryApiV1QueryHistoryDeleteData = {
 
 export type ApiClearQueryHistoryApiV1QueryHistoryDeleteErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiClearQueryHistoryApiV1QueryHistoryDeleteError = ApiClearQueryHistoryApiV1QueryHistoryDeleteErrors[keyof ApiClearQueryHistoryApiV1QueryHistoryDeleteErrors];
@@ -4879,9 +6223,37 @@ export type ApiQueryHistoryApiV1QueryHistoryGetData = {
 
 export type ApiQueryHistoryApiV1QueryHistoryGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiQueryHistoryApiV1QueryHistoryGetError = ApiQueryHistoryApiV1QueryHistoryGetErrors[keyof ApiQueryHistoryApiV1QueryHistoryGetErrors];
@@ -4911,9 +6283,37 @@ export type ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteData = {
 
 export type ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteError = ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteErrors[keyof ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteErrors];
@@ -4936,9 +6336,37 @@ export type ApiValidateSqlApiV1QueryValidatePostData = {
 
 export type ApiValidateSqlApiV1QueryValidatePostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiValidateSqlApiV1QueryValidatePostError = ApiValidateSqlApiV1QueryValidatePostErrors[keyof ApiValidateSqlApiV1QueryValidatePostErrors];
@@ -4966,9 +6394,37 @@ export type ResolveQuestionApiV1QuestionsQuestionIdResolvePostData = {
 
 export type ResolveQuestionApiV1QuestionsQuestionIdResolvePostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ResolveQuestionApiV1QuestionsQuestionIdResolvePostError = ResolveQuestionApiV1QuestionsQuestionIdResolvePostErrors[keyof ResolveQuestionApiV1QuestionsQuestionIdResolvePostErrors];
@@ -4996,9 +6452,37 @@ export type CancelRunApiV1RunsRunIdCancelPostData = {
 
 export type CancelRunApiV1RunsRunIdCancelPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type CancelRunApiV1RunsRunIdCancelPostError = CancelRunApiV1RunsRunIdCancelPostErrors[keyof CancelRunApiV1RunsRunIdCancelPostErrors];
@@ -5026,9 +6510,37 @@ export type ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutData = {
 
 export type ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutError = ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutErrors[keyof ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutErrors];
@@ -5056,9 +6568,37 @@ export type ApiGetErDiagramApiV1SchemaErDiagramGetData = {
 
 export type ApiGetErDiagramApiV1SchemaErDiagramGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiGetErDiagramApiV1SchemaErDiagramGetError = ApiGetErDiagramApiV1SchemaErDiagramGetErrors[keyof ApiGetErDiagramApiV1SchemaErDiagramGetErrors];
@@ -5081,9 +6621,37 @@ export type ApiGenerateTestDataApiV1SchemaGenerateTestDataPostData = {
 
 export type ApiGenerateTestDataApiV1SchemaGenerateTestDataPostErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiGenerateTestDataApiV1SchemaGenerateTestDataPostError = ApiGenerateTestDataApiV1SchemaGenerateTestDataPostErrors[keyof ApiGenerateTestDataApiV1SchemaGenerateTestDataPostErrors];
@@ -5113,9 +6681,37 @@ export type ApiListTablesApiV1SchemaTablesGetData = {
 
 export type ApiListTablesApiV1SchemaTablesGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiListTablesApiV1SchemaTablesGetError = ApiListTablesApiV1SchemaTablesGetErrors[keyof ApiListTablesApiV1SchemaTablesGetErrors];
@@ -5145,9 +6741,37 @@ export type ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutData = {
 
 export type ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutError = ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutErrors[keyof ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutErrors];
@@ -5175,9 +6799,37 @@ export type ApiListColumnsApiV1SchemaTablesTableIdColumnsGetData = {
 
 export type ApiListColumnsApiV1SchemaTablesTableIdColumnsGetErrors = {
     /**
-     * Validation Error
+     * RFC 9457 error response (400)
      */
-    422: HttpValidationError;
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
 };
 
 export type ApiListColumnsApiV1SchemaTablesTableIdColumnsGetError = ApiListColumnsApiV1SchemaTablesTableIdColumnsGetErrors[keyof ApiListColumnsApiV1SchemaTablesTableIdColumnsGetErrors];

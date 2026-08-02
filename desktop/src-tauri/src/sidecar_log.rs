@@ -47,12 +47,27 @@ impl SidecarLog {
     }
 
     pub(crate) fn error(&self, message: &str) {
+        self.event("error", "host.error", message);
+    }
+
+    pub(crate) fn info(&self, event: &str, message: &str) {
+        self.event("info", event, message);
+    }
+
+    pub(crate) fn event(&self, level: &str, event: &str, message: &str) {
         let safe_message = redact_sidecar_log_message(message);
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|duration| duration.as_secs().to_string())
+            .map(|duration| duration.as_secs())
             .unwrap_or_default();
-        let entry = format!("[{}] {}\n", ts, safe_message);
+        let entry = serde_json::json!({
+            "timestampUnix": ts,
+            "level": level,
+            "component": "desktop-host",
+            "event": event,
+            "message": safe_message,
+        });
+        let entry = format!("{}\n", entry);
 
         if let Ok(_guard) = self.write_lock.lock() {
             let path = self.log_path();

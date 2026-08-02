@@ -21,9 +21,9 @@ def _headers() -> dict[str, str]:
 
 def _assert_fixed_dbfox_error(response) -> None:
     assert response.status_code == 400
-    detail = response.json()["detail"]
-    assert detail["code"] == "DBFOX_ERROR"
-    assert detail["message"] == SAFE_DBFOX_ERROR_MESSAGE
+    problem = response.json()
+    assert problem["code"] == "DBFOX_ERROR"
+    assert problem["detail"] == SAFE_DBFOX_ERROR_MESSAGE
 
 
 def _runtime_dir(name: str) -> Path:
@@ -227,7 +227,7 @@ def test_restore_rejects_backup_after_datasource_profile_changes(
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "BACKUP_SOURCE_MISMATCH"
+    assert response.json()["code"] == "BACKUP_SOURCE_MISMATCH"
     assert db_session.query(RestoreOperation).count() == 0
 
 

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from engine.problem_details import problem_response_for_scope
 
 
 MAX_AGENT_INPUT_REQUEST_BYTES = 512 * 1024
@@ -86,13 +87,10 @@ class AgentInputRequestBodyLimitMiddleware:
         receive: Receive,
         send: Send,
     ) -> None:
-        response = JSONResponse(
-            status_code=413,
-            content={
-                "detail": {
-                    "code": "REQUEST_BODY_TOO_LARGE",
-                    "message": "Agent request body exceeds the allowed size.",
-                }
-            },
+        response = problem_response_for_scope(
+            scope,
+            status=413,
+            code="REQUEST_BODY_TOO_LARGE",
+            detail="Agent request body exceeds the allowed size.",
         )
         await response(scope, receive, send)

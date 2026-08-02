@@ -1,35 +1,114 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
 import { userFacingErrorMessage } from "../presentation";
 import { client as generatedApiClient } from "./generated/client.gen";
 import type { ClientOptions } from "./generated/types.gen";
+import { zProblemDetails } from "./generated/zod.gen";
 
-export let ENGINE_PORT = import.meta.env.VITE_LOCAL_ENGINE_PORT || "18625";
-export let ENGINE_TOKEN = import.meta.env.VITE_LOCAL_ENGINE_TOKEN || "";
+const DEVELOPMENT_ENGINE_PORT = import.meta.env.DEV
+  ? import.meta.env.VITE_LOCAL_ENGINE_PORT || "18625"
+  : "18625";
+const DEVELOPMENT_ENGINE_TOKEN = import.meta.env.DEV
+  ? import.meta.env.VITE_LOCAL_ENGINE_TOKEN || ""
+  : "";
+
+export let ENGINE_PORT = DEVELOPMENT_ENGINE_PORT;
+export let ENGINE_TOKEN = DEVELOPMENT_ENGINE_TOKEN;
 export let BASE_URL = `http://127.0.0.1:${ENGINE_PORT}/api/v1`;
 
-export type EngineStartupState = "starting" | "ready" | "failed" | "stopped";
+const ENGINE_PROTOCOL_VERSION = 1;
+const REQUIRED_ENGINE_CAPABILITIES = ["http", "sse", "problem-details"] as const;
+
+export type EngineStartupState = "starting" | "restarting" | "ready" | "failed" | "stopped";
 
 export interface EngineStartupStatus {
   state: EngineStartupState;
   error?: string | null;
   stage?: string | null;
+  generation?: number;
+  restartCount?: number;
 }
+
+type EngineServerInfo = {
+  name: string;
+  version: string;
+};
 
 type EngineConfig = {
   port: number;
   token: string;
+  generation: number;
+  protocolVersion: number;
+  serverInfo: EngineServerInfo;
+  capabilities: string[];
 };
 
-function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+export interface RuntimeSession {
+  generation: number;
+  port: number;
+  baseUrl: string;
+  token: string;
+  protocolVersion: number;
+  serverInfo: Readonly<EngineServerInfo>;
+  capabilities: readonly string[];
+}
+
+let runtimeSession: RuntimeSession = Object.freeze({
+  generation: 0,
+  port: Number(ENGINE_PORT),
+  baseUrl: BASE_URL,
+  token: ENGINE_TOKEN,
+  protocolVersion: ENGINE_PROTOCOL_VERSION,
+  serverInfo: Object.freeze({ name: "dbfox-engine", version: "development" }),
+  capabilities: Object.freeze([...REQUIRED_ENGINE_CAPABILITIES]),
+});
+
+export function getRuntimeSession(): RuntimeSession {
+  return runtimeSession;
+}
+
+export async function subscribeEngineState(
+  listener: (status: EngineStartupStatus) => void,
+): Promise<UnlistenFn> {
+  if (!isTauri()) return () => undefined;
+  return listen<EngineStartupStatus>("dbfox://engine-state", (event) => listener(event.payload));
+}
+
+function validateEngineConfig(config: EngineConfig): void {
+  const capabilities = Array.isArray(config.capabilities) ? config.capabilities : [];
+  const valid = Number.isInteger(config.port)
+    && config.port >= 1
+    && config.port <= 65_535
+    && Boolean(config.token?.trim())
+    && Number.isInteger(config.generation)
+    && config.generation >= 1
+    && config.protocolVersion === ENGINE_PROTOCOL_VERSION
+    && Boolean(config.serverInfo?.name?.trim())
+    && Boolean(config.serverInfo?.version?.trim())
+    && REQUIRED_ENGINE_CAPABILITIES.every((capability) => capabilities.includes(capability));
+  if (!valid) {
+    throw new ApiError("Desktop host returned an incompatible engine configuration", 503, "ENGINE_CONFIG_INVALID");
+  }
 }
 
 export async function initEngineConfig(): Promise<void> {
-  if (!isTauriRuntime()) return;
-  const { invoke } = await import("@tauri-apps/api/core");
+  if (!isTauri()) return;
   const config = await invoke<EngineConfig>("get_engine_config");
+  validateEngineConfig(config);
+  if (config.generation < runtimeSession.generation) return;
   ENGINE_PORT = String(config.port);
-  ENGINE_TOKEN = config.token;
+  ENGINE_TOKEN = config.token.trim();
   BASE_URL = `http://127.0.0.1:${ENGINE_PORT}/api/v1`;
+  runtimeSession = Object.freeze({
+    generation: config.generation,
+    port: config.port,
+    baseUrl: BASE_URL,
+    token: ENGINE_TOKEN,
+    protocolVersion: config.protocolVersion,
+    serverInfo: Object.freeze({ ...config.serverInfo }),
+    capabilities: Object.freeze([...config.capabilities]),
+  });
   configureGeneratedApiClient();
 }
 
@@ -41,6 +120,7 @@ type EngineHealthOptions = {
 
 type EngineConfigWaitOptions = EngineHealthOptions & {
   onStatus?: (status: EngineStartupStatus) => void;
+  afterGeneration?: number;
 };
 
 function abortError(): Error {
@@ -72,7 +152,6 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 async function getEngineStartupStatus(): Promise<EngineStartupStatus> {
-  const { invoke } = await import("@tauri-apps/api/core");
   return invoke<EngineStartupStatus>("get_engine_startup_status");
 }
 
@@ -82,7 +161,7 @@ async function getEngineStartupStatus(): Promise<EngineStartupStatus> {
  * starting. Browser-only development paths remain a no-op.
  */
 export async function waitForEngineConfig(options: EngineConfigWaitOptions = {}): Promise<void> {
-  if (!isTauriRuntime()) return;
+  if (!isTauri()) return;
 
   const attempts = options.attempts;
   const intervalMs = options.intervalMs ?? 250;
@@ -95,7 +174,8 @@ export async function waitForEngineConfig(options: EngineConfigWaitOptions = {})
       const status = await getEngineStartupStatus();
       throwIfAborted(options.signal);
       options.onStatus?.(status);
-      if (status.state === "ready") {
+      if (status.state === "ready" && (options.afterGeneration === undefined
+        || (status.generation ?? 0) > options.afterGeneration)) {
         await initEngineConfig();
         return;
       }
@@ -131,7 +211,7 @@ export async function waitEngineHealth(options: EngineHealthOptions = {}): Promi
   for (let attempt = 0; attempt < attempts; attempt++) {
     throwIfAborted(options.signal);
     try {
-      const response = await fetch(`${BASE_URL}/health`, { method: "GET", signal: options.signal });
+      const response = await fetchEnginePath("/health", { method: "GET", signal: options.signal });
       if (response.ok) {
         const text = await response.text();
         const payload = text ? JSON.parse(text) : null;
@@ -170,44 +250,128 @@ function apiErrorFromPayload(
   payload: unknown,
   status?: number,
 ): ApiError {
-  const record =
-    payload && typeof payload === "object"
-      ? payload as Record<string, unknown>
-      : {};
-  const detail = record.detail;
-  const detailRecord =
-    detail && typeof detail === "object" && !Array.isArray(detail)
-      ? detail as Record<string, unknown>
-      : undefined;
-  const validationDetail = Array.isArray(detail) ? detail[0] : undefined;
-  const validationRecord =
-    validationDetail && typeof validationDetail === "object"
-      ? validationDetail as Record<string, unknown>
-      : undefined;
-  const message = String(
-    detailRecord?.message
-      ?? record.message
-      ?? validationRecord?.msg
-      ?? "Request failed",
-  );
-  const code = String(
-    detailRecord?.code
-      ?? record.code
-      ?? (validationRecord ? "VALIDATION_ERROR" : "REQUEST_FAILED"),
-  );
-  const checks = detailRecord?.checks ?? record.checks;
+  const parsed = zProblemDetails.safeParse(payload);
+  if (!parsed.success || (status !== undefined && parsed.data.status !== status)) {
+    return new ApiError(
+      "Engine returned an invalid Problem Details response",
+      status,
+      "INVALID_PROBLEM_DETAILS",
+      [],
+      parsed.success ? payload : parsed.error,
+    );
+  }
+  const problem = parsed.data;
   return new ApiError(
-    message,
-    status,
-    code,
-    Array.isArray(checks) ? checks : [],
-    detail ?? payload,
+    problem.detail,
+    problem.status,
+    problem.code,
+    problem.checks ?? [],
+    problem,
   );
+}
+
+let hostSnapshotRefresh: Promise<void> | null = null;
+
+function refreshHostSnapshot(): Promise<void> {
+  hostSnapshotRefresh ??= initEngineConfig().finally(() => {
+    hostSnapshotRefresh = null;
+  });
+  return hostSnapshotRefresh;
+}
+
+function awaitWithoutCancellingSharedTask(task: Promise<void>, signal?: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
+  if (!signal) return task;
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(abortError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    task.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
+
+async function refreshEngineConfig(requiredGeneration?: number, signal?: AbortSignal): Promise<void> {
+  try {
+    await awaitWithoutCancellingSharedTask(refreshHostSnapshot(), signal);
+  } catch (error) {
+    if (requiredGeneration === undefined || signal?.aborted) throw error;
+  }
+  throwIfAborted(signal);
+  if (requiredGeneration !== undefined && runtimeSession.generation <= requiredGeneration) {
+    await waitForEngineConfig({
+      afterGeneration: requiredGeneration,
+      attempts: 40,
+      intervalMs: 250,
+      signal,
+    });
+  }
+}
+
+function isReplaySafe(method: string): boolean {
+  return method === "GET" || method === "HEAD" || method === "OPTIONS";
+}
+
+function rebaseEngineUrl(url: string, session: RuntimeSession): string {
+  const parsed = new URL(url);
+  if (!parsed.pathname.startsWith("/api/v1")) return url;
+  return `${new URL(session.baseUrl).origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
+async function requestForSession(template: Request, session: RuntimeSession): Promise<Request> {
+  const headers = new Headers(template.headers);
+  headers.set("X-Local-Token", session.token);
+  const hasBody = template.method !== "GET" && template.method !== "HEAD";
+  return new Request(rebaseEngineUrl(template.url, session), {
+    method: template.method,
+    headers,
+    body: hasBody ? await template.clone().arrayBuffer() : undefined,
+    cache: template.cache,
+    credentials: template.credentials,
+    integrity: template.integrity,
+    keepalive: template.keepalive,
+    mode: template.mode,
+    redirect: template.redirect,
+    referrer: template.referrer,
+    referrerPolicy: template.referrerPolicy,
+    signal: template.signal,
+  });
+}
+
+async function engineAwareFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  let request = new Request(input, init);
+  if (isTauri() && runtimeSession.generation === 0) {
+    await refreshEngineConfig();
+    request = await requestForSession(request, runtimeSession);
+  }
+  const retryTemplate = request.clone();
+  const initialGeneration = runtimeSession.generation;
+  let response: Response;
+  try {
+    response = await globalThis.fetch(request);
+  } catch (error) {
+    if (!isTauri() || !isReplaySafe(request.method) || request.signal.aborted) throw error;
+    await refreshEngineConfig(initialGeneration, request.signal);
+    return globalThis.fetch(await requestForSession(retryTemplate, runtimeSession));
+  }
+  if (response.status !== 401 || !isTauri() || !isReplaySafe(request.method)) return response;
+
+  await refreshEngineConfig(undefined, request.signal);
+  return globalThis.fetch(await requestForSession(retryTemplate, runtimeSession));
+}
+
+export async function fetchEnginePath(path: string, init?: RequestInit): Promise<Response> {
+  const session = runtimeSession;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const headers = new Headers(init?.headers);
+  headers.set("X-Local-Token", session.token);
+  return engineAwareFetch(`${session.baseUrl}${normalizedPath}`, { ...init, headers });
 }
 
 function configureGeneratedApiClient(): void {
   generatedApiClient.setConfig({
-    baseUrl: BASE_URL as ClientOptions["baseUrl"],
+    // OpenAPI operation paths already begin with /api/v1. Supplying the API
+    // prefix here would produce /api/v1/api/v1/... in the packaged WebView.
+    baseUrl: new URL(BASE_URL).origin as ClientOptions["baseUrl"],
+    fetch: engineAwareFetch,
     headers: {
       "X-Local-Token": ENGINE_TOKEN,
     },

@@ -7,11 +7,14 @@ from pathlib import Path
 
 import uvicorn
 
+from engine import __version__
 from engine.json_codec import dumps
 
 ENGINE_DIR = Path(__file__).resolve().parent
 ENGINE_HOST = "127.0.0.1"
 ENGINE_PORT = int(os.environ.get("DBFOX_ENGINE_PORT", "18625"))
+ENGINE_PROTOCOL_VERSION = 1
+ENGINE_CAPABILITIES = ["http", "sse", "problem-details"]
 
 _RELOAD_EXCLUDES = [
     "**/__pycache__/**",
@@ -37,7 +40,18 @@ def bind_engine_socket(port: int) -> tuple[socket.socket, int]:
 
 
 def _emit_engine_ready(port: int) -> None:
-    print(f"DBFOX_ENGINE_READY {dumps({'port': port})}", flush=True)
+    print(
+        "DBFOX_ENGINE_READY "
+        + dumps(
+            {
+                "port": port,
+                "protocolVersion": ENGINE_PROTOCOL_VERSION,
+                "serverInfo": {"name": "dbfox-engine", "version": __version__},
+                "capabilities": ENGINE_CAPABILITIES,
+            }
+        ),
+        flush=True,
+    )
 
 
 def run_engine_server(*, reload: bool | None = None) -> None:

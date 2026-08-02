@@ -113,4 +113,4 @@ def test_generate_test_data_confirmation_binds_language(client, test_datasource,
     }, headers=_headers())
 
     assert resp.status_code == 400
-    assert resp.json()["detail"]["code"] == "CONFIRMATION_FAILED"
+    assert resp.json()["code"] == "CONFIRMATION_FAILED"

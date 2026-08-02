@@ -1,8 +1,16 @@
+import json
+import logging
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from engine.main import LOCAL_SECURE_TOKEN, app
+
+
+REDACTION_CONTRACT = json.loads(
+    (Path(__file__).resolve().parents[2] / "test-fixtures" / "redaction-contract.json")
+    .read_text(encoding="utf-8")
+)
 
 
 def test_redact_sensitive_text_masks_tokens_passwords_and_connection_strings() -> None:
@@ -26,6 +34,64 @@ def test_redact_sensitive_text_masks_tokens_passwords_and_connection_strings() -
     assert "db-password" not in redacted
     assert "normal message stays visible" in redacted
     assert "[REDACTED]" in redacted
+
+
+def test_python_redaction_satisfies_shared_cross_language_contract() -> None:
+    from engine.diagnostics.logs import redact_sensitive_text
+
+    for case in REDACTION_CONTRACT["textCases"]:
+        redacted = redact_sensitive_text(case["input"])
+        for forbidden in case["forbidden"]:
+            assert forbidden not in redacted, case["id"]
+        for required in case["required"]:
+            assert required in redacted, case["id"]
+
+    for case in REDACTION_CONTRACT["structuredCases"]:
+        redacted = redact_sensitive_text(json.dumps(case["input"], ensure_ascii=False))
+        for forbidden in case["forbidden"]:
+            assert forbidden not in redacted, case["id"]
+        for required in case["required"]:
+            assert required in redacted, case["id"]
+
+
+def test_python_redaction_handles_recursive_and_oversized_diagnostics() -> None:
+    from engine.diagnostics.logs import MAX_REDACTED_TEXT_CHARS, redact_sensitive_text
+
+    recursive = REDACTION_CONTRACT["recursiveCase"]
+    value: dict[str, object] = {
+        "safe": recursive["safeValue"],
+        "token": recursive["secretValue"],
+    }
+    value["self"] = value
+    redacted = redact_sensitive_text(repr(value))
+    assert recursive["secretValue"] not in redacted
+    assert recursive["safeValue"] in redacted
+
+    oversized = REDACTION_CONTRACT["oversizedCase"]
+    content = oversized["prefix"] + oversized["fill"] * oversized["repeat"]
+    redacted = redact_sensitive_text(content)
+    assert all(secret not in redacted for secret in oversized["forbidden"])
+    assert len(redacted) <= MAX_REDACTED_TEXT_CHARS + len("… [truncated]")
+
+
+def test_python_diagnostic_formatter_emits_redacted_json_lines() -> None:
+    from engine.diagnostics.logs import RedactingJsonFormatter
+
+    record = logging.LogRecord(
+        "dbfox.test",
+        logging.ERROR,
+        __file__,
+        1,
+        "request failed token=%s",
+        ("engine-secret",),
+        None,
+    )
+    payload = json.loads(RedactingJsonFormatter("%(message)s").format(record))
+
+    assert payload["level"] == "error"
+    assert payload["logger"] == "dbfox.test"
+    assert payload["message"] == "request failed token=[REDACTED]"
+    assert "engine-secret" not in json.dumps(payload)
 
 
 def test_read_log_source_returns_only_tail_and_redacts(tmp_path: Path) -> None:
@@ -101,6 +167,6 @@ def test_security_audit_clear_requires_explicit_confirmation() -> None:
         )
 
     assert rejected.status_code == 400
-    assert rejected.json()["detail"]["code"] == "AUDIT_CLEAR_CONFIRMATION_REQUIRED"
+    assert rejected.json()["code"] == "AUDIT_CLEAR_CONFIRMATION_REQUIRED"
     assert cleared.status_code == 200
     assert cleared.json()["cleared"] is True

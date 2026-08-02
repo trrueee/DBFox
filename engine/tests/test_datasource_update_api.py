@@ -259,7 +259,7 @@ def test_update_datasource_missing_id_returns_404(client) -> None:
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"]["code"] == "DBFOX_ERROR"
+    assert response.json()["code"] == "DBFOX_ERROR"
 
 
 def test_update_column_metadata_updates_semantic_fields(client, db_session, credential_vault) -> None:

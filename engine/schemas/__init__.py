@@ -13,7 +13,7 @@ def _to_iso(v: Any) -> str | None:
 
 from engine.schemas.project import ProjectCreateRequest
 from engine.schemas.backup import BackupCreateRequest
-from engine.schemas.error import ErrorResponse
+from engine.schemas.error import ErrorResponse, ProblemDetails
 from engine.schemas.test_data import TestDataGenerateRequest
 from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateRequest, DataSourceUpdateRequest
 from engine.schemas.query import SQLValidateRequest, SQLCancelRequest, SQLExplainRequest
@@ -23,6 +23,7 @@ __all__ = [
     "ProjectCreateRequest",
     "BackupCreateRequest",
     "ErrorResponse",
+    "ProblemDetails",
     "TestDataGenerateRequest",
     "DataSourceTestRequest",
     "DataSourceCreateRequest",

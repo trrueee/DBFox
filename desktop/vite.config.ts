@@ -2,7 +2,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // `.env.local` exists solely for the explicit browser-development entry.
+  // Vite eagerly substitutes exposed variables before dead-code elimination,
+  // so release builds must not expose the VITE_ namespace at all.
+  envPrefix: command === "serve" ? "VITE_" : "DBFOX_RELEASE_CLIENT_",
   // Relative base so Tauri's custom protocol (tauri://localhost) resolves
   // assets correctly.  Absolute /assets/… paths cause white screen.
   base: "./",
@@ -33,4 +37,4 @@ export default defineConfig({
     // manual chunk naming can break ES module resolution under Tauri's
     // custom protocol, yielding "a is not a function" in production.
   },
-});
+}));
