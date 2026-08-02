@@ -11,6 +11,7 @@
 5. [Agent Typed RunItem 协议](./agent-runtime-item-protocol.md)：中间摘要、计划、工具、审批、正式回答及 SSE 恢复的统一合同。
 6. [前后端与 Agent 深度评审](../reviews/frontend-backend-agent-architecture-deep-review.md)：当前设计符合度、开放风险和评审问题。
 7. [实施后全局核验](../reviews/architecture-global-verification.md)：修复前证据与实施后权威结论。
+8. [Runtime 基础能力 ADR](./runtime-foundation-decisions.md)：Sidecar 生命周期、Transport、错误、诊断、SQLite 发布门禁和自动更新边界。
 
 以下文档属于历史决策材料，不可覆盖当前事实。历史术语不应被机械更新为当前协议：
 
