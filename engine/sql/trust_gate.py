@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlglot import exp
 
-from engine.sql.guardrail import GuardrailResult, guardrail_check, guardrail_parsed_ast
+from engine.sql.guardrail import GuardrailResult, guardrail_check_with_ast
 from engine.models import DataSource
 from engine.sql.dry_run import dry_run_query
 
@@ -86,10 +86,7 @@ class TrustGate:
         dialect = str(datasource.db_type or "mysql") if datasource else "mysql"
         env = str(datasource.env or "dev").lower() if datasource else "dev"
 
-        guardrail = guardrail_check(sql, dialect=dialect)
-        parsed_ast = None
-        if guardrail.get("result") != "reject":
-            parsed_ast = guardrail_parsed_ast(sql, dialect=dialect)
+        guardrail, parsed_ast = guardrail_check_with_ast(sql, dialect=dialect)
         schema_warnings = self.schema_validator(parsed_ast if isinstance(parsed_ast, exp.Expression) else sql, self.db, datasource_id)
         public_guardrail = _public_guardrail_result(guardrail)
         messages: list[str] = []
@@ -176,7 +173,6 @@ class TrustGate:
             datasource
             and not guardrail_rejected
             and candidate_safe_sql
-            and _should_dry_run(candidate_safe_sql)
         ):
             try:
                 dry_run = dry_run_query(self.db, datasource_id, candidate_safe_sql)
@@ -274,8 +270,3 @@ def _is_auto_limit_only_warning(guardrail: GuardrailResult) -> bool:
     # rewritten to the same server-enforced result cap.  They are therefore
     # informational only once no other validation warning remains.
     return warning_rules.issubset({"auto_limit", "limit_hard_cap"}) and not non_warning_rules
-
-
-def _should_dry_run(sql: str) -> bool:
-    normalized = sql.strip().lstrip("(").upper()
-    return normalized.startswith("SELECT") or normalized.startswith("WITH")

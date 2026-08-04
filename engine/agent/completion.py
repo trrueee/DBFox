@@ -59,18 +59,19 @@ class CompletionPolicy:
             for artifact_id in observation.artifact_ids
         }
         cited_artifact_ids = {
-            artifact_id for artifact_id, _, _ in citation_references(model_result.text)
+            artifact_id
+            for artifact_id, _, _ in citation_references(model_result.answer_text)
         }
 
         turn_budget_reached = turn_count >= max_turns
 
-        if failures and not model_result.text.strip() and not turn_budget_reached:
+        if failures and not model_result.display_text and not turn_budget_reached:
             return CompletionDecision(
                 kind=CompletionKind.REPAIR,
                 reason="The latest failed tool call needs a model-visible repair turn.",
             )
 
-        if not model_result.text.strip():
+        if not model_result.display_text:
             return CompletionDecision(
                 kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
                 reason=(
@@ -80,7 +81,7 @@ class CompletionPolicy:
                 ),
                 missing=["answer"],
             )
-        if model_result.message_phase != "final_answer":
+        if not model_result.has_completed_answer_candidate:
             return CompletionDecision(
                 kind=(
                     CompletionKind.FAIL
@@ -88,10 +89,9 @@ class CompletionPolicy:
                     else CompletionKind.CONTINUE
                 ),
                 reason=(
-                    "The model produced commentary but did not emit a final_answer "
-                    "message for the active request."
+                    "The model text is not a completed answer for the active request."
                 ),
-                missing=["final_answer_phase"],
+                missing=["completed_answer"],
             )
 
         observed_artifact_ids = {
@@ -165,8 +165,7 @@ class CompletionGate:
     ) -> bool:
         successes = [item for item in context.observations if item.status == "succeeded"]
         return (
-            model_result.message_phase == "final_answer"
-            and bool(model_result.text.strip())
+            model_result.has_completed_answer_candidate
         ) or any(
             bool(item.artifact_ids) for item in successes
         )

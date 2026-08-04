@@ -6,9 +6,13 @@ from typing import Any, Callable, Final, Literal
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
-from engine.errors import ToolInputError
+from engine.errors import DBFoxError, ToolInputError
 from engine.tools.runtime.result import ToolOutcome, ToolReconciliation, ToolResult
-from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
+from engine.app.safe_errors import (
+    SafeLogOperation,
+    fixed_error_detail,
+    log_unexpected_exception,
+)
 from engine.tools.runtime.context import ToolRunContext
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.base import BaseTool
@@ -125,6 +129,26 @@ class ToolRuntime:
                 },
                 error=exc.message,
                 error_code=exc.code,
+                latency_ms=int((time.perf_counter() - start) * 1000),
+            )
+        except DBFoxError as exc:
+            # DBFoxError.message is internal diagnostic text unless an explicit
+            # boundary type (ToolInputError above) declares otherwise.  Only a
+            # registered fixed code may cross into Tool/Observation/Provider
+            # output; unknown codes collapse to the generic catalog member.
+            logger.info("%s failed with domain error code=%s", tool_name, exc.code)
+            detail = fixed_error_detail(exc.code)
+            return ToolResult(
+                name=tool_name,
+                status="failed",
+                input=dict(raw_input),
+                output={
+                    "status": "failed",
+                    "error_code": detail["code"],
+                    "safe_message": detail["message"],
+                },
+                error=detail["message"],
+                error_code=detail["code"],
                 latency_ms=int((time.perf_counter() - start) * 1000),
             )
         except Exception as exc:

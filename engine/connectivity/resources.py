@@ -8,7 +8,12 @@ from typing import Any, Callable, Generator
 
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
-from engine.errors import DataSourceConnectionError
+from engine.errors import (
+    DataSourceConnectionError,
+    DataSourceCredentialUnavailableError,
+    DataSourceSshConnectionError,
+)
+from engine.security.credential_vault import CredentialVaultUnavailableError
 from engine.tunnel import get_or_create_tunnel_for_dict, open_temporary_tunnel
 
 
@@ -64,10 +69,16 @@ class ConnectionResources:
         try:
             tunnel = opener(profile.tunnel_config())
             local_port = int(tunnel.local_bind_port)
-        except DataSourceConnectionError:
+        except (DataSourceCredentialUnavailableError, CredentialVaultUnavailableError):
             if temporary_tunnel and tunnel is not None:
                 self._stop_temporary_tunnel(tunnel)
             raise
+        except DataSourceConnectionError as exc:
+            if temporary_tunnel and tunnel is not None:
+                self._stop_temporary_tunnel(tunnel)
+            raise DataSourceSshConnectionError(
+                "Unable to establish the SSH tunnel."
+            ) from exc
         except Exception as exc:
             if temporary_tunnel and tunnel is not None:
                 self._stop_temporary_tunnel(tunnel)
@@ -77,7 +88,9 @@ class ConnectionResources:
                 exc=exc,
                 level="warning",
             )
-            raise DataSourceConnectionError("Unable to establish the SSH tunnel.") from None
+            raise DataSourceSshConnectionError(
+                "Unable to establish the SSH tunnel."
+            ) from None
 
         endpoint = ConnectionEndpoint(
             host="127.0.0.1",

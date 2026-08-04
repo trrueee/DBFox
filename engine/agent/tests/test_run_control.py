@@ -2,7 +2,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from engine.agent.control import ModelPricing, RunControl, RunControlError, RunLeaseLost
+from engine.agent.control import (
+    ModelPricing,
+    RunCancellationRequested,
+    RunControl,
+    RunControlError,
+    RunLeaseLost,
+)
 from engine.agent.run import RunLimits
 from engine.models import AgentRun
 
@@ -105,3 +111,56 @@ def test_lease_loss_preempts_user_cancellation_and_stops_external_probes() -> No
     assert control.is_cancel_requested() is True
     with pytest.raises(RunLeaseLost):
         control.checkpoint()
+
+
+def test_provider_backoff_is_cooperatively_cancellable(monkeypatch: pytest.MonkeyPatch) -> None:
+    cancelled = False
+    now = 0.0
+    monkeypatch.setattr("engine.agent.control.time.monotonic", lambda: now)
+    control = RunControl(
+        run=_run(),
+        limits=RunLimits(max_provider_retries=2),
+        cancellation_probe=lambda: cancelled,
+        probe_interval_seconds=0.01,
+        provider_retry_base_seconds=1,
+    )
+    control.record_provider_failure()
+
+    def cancel_during_sleep(_duration: float) -> None:
+        nonlocal cancelled, now
+        cancelled = True
+        now += 0.02
+
+    monkeypatch.setattr("engine.agent.control.time.sleep", cancel_during_sleep)
+
+    with pytest.raises(RunCancellationRequested):
+        control.wait_for_provider_retry()
+
+
+def test_provider_backoff_honors_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = 0.0
+    sleeps: list[float] = []
+    control = RunControl(
+        run=_run(),
+        limits=RunLimits(max_provider_retries=2, timeout_seconds=120),
+        cancellation_probe=lambda: False,
+        probe_interval_seconds=1,
+        provider_retry_base_seconds=0.5,
+        provider_retry_max_seconds=30,
+    )
+    control.record_provider_failure()
+
+    def monotonic() -> float:
+        return now
+
+    def sleep(duration: float) -> None:
+        nonlocal now
+        sleeps.append(duration)
+        now += duration
+
+    monkeypatch.setattr("engine.agent.control.time.monotonic", monotonic)
+    monkeypatch.setattr("engine.agent.control.time.sleep", sleep)
+    control.deadline = 120
+    control.wait_for_provider_retry(3)
+
+    assert sum(sleeps) == pytest.approx(3)

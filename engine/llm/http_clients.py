@@ -113,12 +113,9 @@ class LlmHttpTransportRegistry:
 
             async_client = self._async_clients.get(key)
             if async_client is None or async_client.is_closed:
-                async_client = httpx.AsyncClient(
-                    base_url=endpoint.api_base,
+                async_client = create_llm_async_http_client(
+                    endpoint=endpoint,
                     timeout=timeout,
-                    follow_redirects=False,
-                    trust_env=False,
-                    transport=_PinnedAsyncTransport(endpoint),
                 )
                 self._async_clients[key] = async_client
             return sync_client, async_client
@@ -137,6 +134,26 @@ class LlmHttpTransportRegistry:
 
 
 _LLM_HTTP_TRANSPORTS = LlmHttpTransportRegistry()
+
+
+def create_llm_async_http_client(
+    *,
+    endpoint: ResolvedLlmEndpoint,
+    timeout: float,
+) -> httpx.AsyncClient:
+    """Create a request-owner async client pinned to an admitted endpoint.
+
+    Agent Responses streams run in a short-lived asyncio Runner.  They must not
+    reuse the process registry's async client across different event loops.
+    """
+
+    return httpx.AsyncClient(
+        base_url=endpoint.api_base,
+        timeout=timeout,
+        follow_redirects=False,
+        trust_env=False,
+        transport=_PinnedAsyncTransport(endpoint),
+    )
 
 
 def get_llm_http_clients(

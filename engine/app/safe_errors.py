@@ -54,6 +54,39 @@ class FixedErrorCode(str, Enum):
     SQL_SEMANTIC_PARSE_FAILED = "SQL_SEMANTIC_PARSE_FAILED"
     TEST_DATA_FAILED = "TEST_DATA_FAILED"
     AGENT_CONTEXT_UNAVAILABLE = "AGENT_CONTEXT_UNAVAILABLE"
+    CONNECTION_FAILED = "CONNECTION_FAILED"
+    GUARDRAIL_BLOCKED = "GUARDRAIL_BLOCKED"
+    SQL_QUERY_TIMEOUT = "SQL_QUERY_TIMEOUT"
+    SQL_QUERY_CANCELLED = "SQL_QUERY_CANCELLED"
+    TOOL_INPUT_ERROR = "TOOL_INPUT_ERROR"
+    VALIDATION_FAILED = "VALIDATION_FAILED"
+    SCHEMA_DATASOURCE_NOT_FOUND = "SCHEMA_DATASOURCE_NOT_FOUND"
+    SCHEMA_SQLITE_PATH_UNAVAILABLE = "SCHEMA_SQLITE_PATH_UNAVAILABLE"
+    SCHEMA_DUCKDB_PATH_UNAVAILABLE = "SCHEMA_DUCKDB_PATH_UNAVAILABLE"
+    SCHEMA_DUCKDB_MEMORY_UNSUPPORTED = "SCHEMA_DUCKDB_MEMORY_UNSUPPORTED"
+    SCHEMA_CONNECTION_FAILED = "SCHEMA_CONNECTION_FAILED"
+    SCHEMA_CREDENTIAL_UNAVAILABLE = "SCHEMA_CREDENTIAL_UNAVAILABLE"
+    SCHEMA_SSH_FAILED = "SCHEMA_SSH_FAILED"
+    SCHEMA_TLS_FAILED = "SCHEMA_TLS_FAILED"
+    SCHEMA_INSPECTION_FAILED = "SCHEMA_INSPECTION_FAILED"
+    AGENT_INPUT_INVALID = "AGENT_INPUT_INVALID"
+    NO_LLM_CREDENTIAL = "NO_LLM_CREDENTIAL"
+    LLM_CONFIG_ERROR = "LLM_CONFIG_ERROR"
+    LLM_CREDENTIAL_NOT_FOUND = "LLM_CREDENTIAL_NOT_FOUND"
+    LLM_ENDPOINT_NOT_ALLOWED = "LLM_ENDPOINT_NOT_ALLOWED"
+    MODEL_PROVIDER_TIMEOUT = "MODEL_PROVIDER_TIMEOUT"
+    MODEL_PROVIDER_UNAVAILABLE = "MODEL_PROVIDER_UNAVAILABLE"
+    MODEL_PROVIDER_RATE_LIMITED = "MODEL_PROVIDER_RATE_LIMITED"
+    MODEL_PROVIDER_QUOTA_EXCEEDED = "MODEL_PROVIDER_QUOTA_EXCEEDED"
+    MODEL_PROVIDER_AUTHENTICATION_FAILED = "MODEL_PROVIDER_AUTHENTICATION_FAILED"
+    MODEL_PROVIDER_PERMISSION_DENIED = "MODEL_PROVIDER_PERMISSION_DENIED"
+    MODEL_PROVIDER_MODEL_NOT_FOUND = "MODEL_PROVIDER_MODEL_NOT_FOUND"
+    MODEL_PROVIDER_REQUEST_REJECTED = "MODEL_PROVIDER_REQUEST_REJECTED"
+    MODEL_PROVIDER_PROTOCOL_ERROR = "MODEL_PROVIDER_PROTOCOL_ERROR"
+    MODEL_PROVIDER_STREAM_FAILED = "MODEL_PROVIDER_STREAM_FAILED"
+    MODEL_PROVIDER_STREAM_TRUNCATED = "MODEL_PROVIDER_STREAM_TRUNCATED"
+    MODEL_PROVIDER_INCOMPLETE = "MODEL_PROVIDER_INCOMPLETE"
+    MODEL_PROVIDER_FAILED = "MODEL_PROVIDER_FAILED"
 
 
 _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
@@ -99,6 +132,49 @@ _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
     FixedErrorCode.SQL_SEMANTIC_PARSE_FAILED: "SQL could not be parsed.",
     FixedErrorCode.TEST_DATA_FAILED: "Test data could not be generated.",
     FixedErrorCode.AGENT_CONTEXT_UNAVAILABLE: "Agent context is temporarily unavailable.",
+    FixedErrorCode.CONNECTION_FAILED: "The datasource connection could not be established.",
+    FixedErrorCode.GUARDRAIL_BLOCKED: "The requested SQL operation was blocked by the safety policy.",
+    FixedErrorCode.SQL_QUERY_TIMEOUT: "The SQL query exceeded its execution deadline.",
+    FixedErrorCode.SQL_QUERY_CANCELLED: "The SQL query was cancelled.",
+    FixedErrorCode.TOOL_INPUT_ERROR: "The tool input is invalid.",
+    FixedErrorCode.VALIDATION_FAILED: "The request did not satisfy the required validation rules.",
+    FixedErrorCode.SCHEMA_DATASOURCE_NOT_FOUND: "The datasource is unavailable for schema inspection.",
+    FixedErrorCode.SCHEMA_SQLITE_PATH_UNAVAILABLE: "The SQLite database file is unavailable.",
+    FixedErrorCode.SCHEMA_DUCKDB_PATH_UNAVAILABLE: "The DuckDB database file is unavailable.",
+    FixedErrorCode.SCHEMA_DUCKDB_MEMORY_UNSUPPORTED: (
+        "In-memory DuckDB schema inspection is unavailable."
+    ),
+    FixedErrorCode.SCHEMA_CONNECTION_FAILED: "The datasource could not be reached for schema inspection.",
+    FixedErrorCode.SCHEMA_CREDENTIAL_UNAVAILABLE: (
+        "The datasource credential is unavailable for schema inspection."
+    ),
+    FixedErrorCode.SCHEMA_SSH_FAILED: "The SSH connection required for schema inspection failed.",
+    FixedErrorCode.SCHEMA_TLS_FAILED: "The TLS connection required for schema inspection failed.",
+    FixedErrorCode.SCHEMA_INSPECTION_FAILED: "Schema inspection could not be completed.",
+    FixedErrorCode.AGENT_INPUT_INVALID: "输入无效，请检查必填字段。",
+    FixedErrorCode.NO_LLM_CREDENTIAL: "请先在设置中配置模型凭据。",
+    FixedErrorCode.LLM_CONFIG_ERROR: "模型配置无效，请检查模型设置。",
+    FixedErrorCode.LLM_CREDENTIAL_NOT_FOUND: (
+        "模型凭据已不可用，请在设置中重新选择或保存凭据。"
+    ),
+    FixedErrorCode.LLM_ENDPOINT_NOT_ALLOWED: "不允许连接该模型服务地址，请检查端点配置。",
+    FixedErrorCode.MODEL_PROVIDER_TIMEOUT: "模型服务响应超时。",
+    FixedErrorCode.MODEL_PROVIDER_UNAVAILABLE: "模型服务暂时不可用，请稍后重试。",
+    FixedErrorCode.MODEL_PROVIDER_RATE_LIMITED: "模型服务请求过于频繁，请稍后重试。",
+    FixedErrorCode.MODEL_PROVIDER_QUOTA_EXCEEDED: (
+        "模型服务额度或账单限制已阻止请求，请检查账户额度。"
+    ),
+    FixedErrorCode.MODEL_PROVIDER_AUTHENTICATION_FAILED: "模型服务鉴权失败，请检查凭据。",
+    FixedErrorCode.MODEL_PROVIDER_PERMISSION_DENIED: "当前凭据无权使用所选模型或模型服务。",
+    FixedErrorCode.MODEL_PROVIDER_MODEL_NOT_FOUND: "未找到所选模型或模型服务地址，请检查配置。",
+    FixedErrorCode.MODEL_PROVIDER_REQUEST_REJECTED: (
+        "模型服务拒绝了当前请求，请检查模型和参数配置。"
+    ),
+    FixedErrorCode.MODEL_PROVIDER_PROTOCOL_ERROR: "模型服务返回了无法识别的响应。",
+    FixedErrorCode.MODEL_PROVIDER_STREAM_FAILED: "模型服务调用失败。",
+    FixedErrorCode.MODEL_PROVIDER_STREAM_TRUNCATED: "模型响应在完成前意外中断。",
+    FixedErrorCode.MODEL_PROVIDER_INCOMPLETE: "模型未能完成当前响应。",
+    FixedErrorCode.MODEL_PROVIDER_FAILED: "模型服务未能完成当前响应。",
 }
 
 
@@ -176,16 +252,22 @@ class SafeLogOperation(str, Enum):
 
 
 def _safe_error_code(code: object) -> FixedErrorCode:
-    return code if isinstance(code, FixedErrorCode) else FixedErrorCode.INTERNAL_ERROR
+    if isinstance(code, FixedErrorCode):
+        return code
+    candidate = code.value if isinstance(code, Enum) else code
+    try:
+        return FixedErrorCode(str(candidate))
+    except (TypeError, ValueError):
+        return FixedErrorCode.INTERNAL_ERROR
 
 
-def fixed_error_detail(code: FixedErrorCode) -> dict[str, str]:
+def fixed_error_detail(code: object) -> dict[str, str]:
     """Return a cataloged public error without accepting arbitrary text."""
     safe_code = _safe_error_code(code)
     return {"code": safe_code.value, "message": _FIXED_ERROR_MESSAGES[safe_code]}
 
 
-def fixed_error_message(code: FixedErrorCode) -> str:
+def fixed_error_message(code: object) -> str:
     """Return only the fixed message for a catalog member."""
     return fixed_error_detail(code)["message"]
 

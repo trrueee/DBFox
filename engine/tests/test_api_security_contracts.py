@@ -37,8 +37,8 @@ def test_sqlite_datasource_response_serializes_nullable_connection_fields():
 
     sample = _datasource_to_dict(ds)
 
-    assert sample["host"] == ""
-    assert sample["username"] == ""
+    assert sample["host"] is None
+    assert sample["username"] is None
 
 
 def test_delete_datasource_accepts_confirmation_in_request_body(client, db_session, monkeypatch):

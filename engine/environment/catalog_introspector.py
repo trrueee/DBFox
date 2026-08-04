@@ -4,21 +4,20 @@ from __future__ import annotations
 from collections import defaultdict
 import logging
 import ssl
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence, TypeVar
 
 from sqlalchemy import inspect as sqlalchemy_inspect
 from sqlalchemy.engine.reflection import Inspector, ObjectKind
 from sqlalchemy.engine.interfaces import ReflectedColumn, ReflectedForeignKeyConstraint
 from sqlalchemy.orm import Session
 
-from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
+from engine.app.safe_errors import FixedErrorCode, SafeLogOperation, log_unexpected_exception
 from engine.connectivity.factory import ConnectionFactory
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 from engine.datasource import datasource_connection_dict
 from engine.environment.authoritative_inventory import (
     AuthoritativeInventory,
     SchemaInspectionError,
-    SchemaInspectionErrorCode,
 )
 from engine.environment.inventory import (
     ColumnInventory,
@@ -33,7 +32,13 @@ from engine.environment.inventory import (
     SchemaInventory,
     TableInventory,
 )
-from engine.errors import DataSourceConnectionError, ToolInputError
+from engine.errors import (
+    DataSourceConnectionError,
+    DataSourceCredentialUnavailableError,
+    DataSourceSshConnectionError,
+    DataSourceTlsConnectionError,
+    ToolInputError,
+)
 from engine.models import DataSource
 from engine.security.credential_vault import CredentialVaultUnavailableError
 
@@ -50,6 +55,8 @@ _SYSTEM_SCHEMAS = frozenset(
     }
 )
 
+_InspectionResult = TypeVar("_InspectionResult")
+
 
 class CatalogIntrospector:
     """Reflect complete catalogs and explicit objects through one connection boundary."""
@@ -58,46 +65,18 @@ class CatalogIntrospector:
         self._connection_factory = connection_factory or ConnectionFactory()
 
     def inspect_catalog(self, db: Session, datasource_id: str) -> AuthoritativeInventory:
-        datasource, profile = self._load_datasource(db, datasource_id)
-        try:
-            inventory = self._reflect_catalog(datasource, profile)
-        except SchemaInspectionError:
-            raise
-        except CredentialVaultUnavailableError:
-            raise SchemaInspectionError(
-                datasource_id,
-                SchemaInspectionErrorCode.CREDENTIAL_UNAVAILABLE,
-            ) from None
-        except DataSourceConnectionError:
-            raise SchemaInspectionError(
-                datasource_id,
-                self._connection_error_code(profile),
-            ) from None
-        except (ConnectionError, OSError, TimeoutError):
-            raise SchemaInspectionError(
-                datasource_id,
-                self._connection_error_code(profile),
-            ) from None
-        except ssl.SSLError:
-            raise SchemaInspectionError(
-                datasource_id,
-                SchemaInspectionErrorCode.TLS_FAILED,
-            ) from None
-        except Exception as exc:
-            log_unexpected_exception(
-                logger,
-                operation=SafeLogOperation.UNEXPECTED,
-                exc=exc,
-                level="warning",
-            )
-            raise SchemaInspectionError(
-                datasource_id,
-                SchemaInspectionErrorCode.INSPECTION_FAILED,
-            ) from None
+        inventory, generation = self._run_inspection(
+            db,
+            datasource_id,
+            lambda datasource, profile: (
+                self._reflect_catalog(datasource, profile),
+                int(getattr(datasource, "connection_generation", 0) or 0),
+            ),
+        )
 
         return AuthoritativeInventory.from_completed_inventory(
             inventory,
-            generation=int(getattr(datasource, "connection_generation", 0) or 0),
+            generation=generation,
         )
 
     def inspect_objects(
@@ -110,7 +89,17 @@ class CatalogIntrospector:
         if not normalized or any(not target for target in normalized):
             raise ToolInputError("At least one non-empty inspection target is required.")
 
-        datasource, profile = self._load_datasource(db, datasource_id)
+        return self._run_inspection(
+            db,
+            datasource_id,
+            lambda _datasource, profile: self._inspect_objects(profile, normalized),
+        )
+
+    def _inspect_objects(
+        self,
+        profile: ConnectionProfile,
+        normalized: Sequence[str],
+    ) -> list[InspectedTable | InspectedColumnObject]:
         if profile.dialect == "duckdb":
             with self._connection_factory.connection_scope(
                 profile,
@@ -133,6 +122,38 @@ class CatalogIntrospector:
                 for target in normalized
             ]
 
+    def _run_inspection(
+        self,
+        db: Session,
+        datasource_id: str,
+        operation: Callable[[DataSource, ConnectionProfile], _InspectionResult],
+    ) -> _InspectionResult:
+        profile: ConnectionProfile | None = None
+        try:
+            datasource, profile = self._load_datasource(db, datasource_id)
+            return operation(datasource, profile)
+        except SchemaInspectionError:
+            raise
+        except (CredentialVaultUnavailableError, DataSourceCredentialUnavailableError):
+            code = FixedErrorCode.SCHEMA_CREDENTIAL_UNAVAILABLE
+        except DataSourceSshConnectionError:
+            code = FixedErrorCode.SCHEMA_SSH_FAILED
+        except (DataSourceTlsConnectionError, ssl.SSLError):
+            code = FixedErrorCode.SCHEMA_TLS_FAILED
+        except DataSourceConnectionError:
+            code = self._connection_error_code(profile)
+        except (ConnectionError, OSError, TimeoutError):
+            code = self._connection_error_code(profile)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.UNEXPECTED,
+                exc=exc,
+                level="warning",
+            )
+            code = FixedErrorCode.SCHEMA_INSPECTION_FAILED
+        raise SchemaInspectionError(datasource_id, code) from None
+
     def _load_datasource(
         self,
         db: Session,
@@ -146,7 +167,7 @@ class CatalogIntrospector:
         if datasource is None:
             raise SchemaInspectionError(
                 datasource_id,
-                SchemaInspectionErrorCode.DATASOURCE_NOT_FOUND,
+                FixedErrorCode.SCHEMA_DATASOURCE_NOT_FOUND,
             )
         if (
             str(datasource.db_type or "").lower() not in {"sqlite", "duckdb"}
@@ -154,7 +175,7 @@ class CatalogIntrospector:
         ):
             raise SchemaInspectionError(
                 datasource_id,
-                SchemaInspectionErrorCode.CREDENTIAL_UNAVAILABLE,
+                FixedErrorCode.SCHEMA_CREDENTIAL_UNAVAILABLE,
             )
         try:
             profile = ConnectionProfile.from_mapping(
@@ -163,12 +184,12 @@ class CatalogIntrospector:
         except DataSourceConnectionError:
             raise SchemaInspectionError(
                 datasource_id,
-                SchemaInspectionErrorCode.INSPECTION_FAILED,
+                FixedErrorCode.SCHEMA_INSPECTION_FAILED,
             ) from None
         if profile.dialect == "duckdb" and profile.database_name.strip() == ":memory:":
             raise SchemaInspectionError(
                 datasource_id,
-                SchemaInspectionErrorCode.DUCKDB_MEMORY_UNSUPPORTED,
+                FixedErrorCode.SCHEMA_DUCKDB_MEMORY_UNSUPPORTED,
             )
         return datasource, profile
 
@@ -797,17 +818,13 @@ class CatalogIntrospector:
 
     @staticmethod
     def _connection_error_code(
-        profile: ConnectionProfile,
-    ) -> SchemaInspectionErrorCode:
-        if profile.dialect == "sqlite":
-            return SchemaInspectionErrorCode.SQLITE_PATH_UNAVAILABLE
-        if profile.dialect == "duckdb":
-            return SchemaInspectionErrorCode.DUCKDB_PATH_UNAVAILABLE
-        if profile.ssh_enabled:
-            return SchemaInspectionErrorCode.SSH_FAILED
-        if profile.ssl_enabled:
-            return SchemaInspectionErrorCode.TLS_FAILED
-        return SchemaInspectionErrorCode.CONNECTION_FAILED
+        profile: ConnectionProfile | None,
+    ) -> FixedErrorCode:
+        if profile is not None and profile.dialect == "sqlite":
+            return FixedErrorCode.SCHEMA_SQLITE_PATH_UNAVAILABLE
+        if profile is not None and profile.dialect == "duckdb":
+            return FixedErrorCode.SCHEMA_DUCKDB_PATH_UNAVAILABLE
+        return FixedErrorCode.SCHEMA_CONNECTION_FAILED
 
 
 def inspect_catalog(db: Session, datasource_id: str) -> AuthoritativeInventory:

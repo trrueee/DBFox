@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 import sqlite3
+import ssl
 import stat
 from typing import Any, Generator, Mapping
 
@@ -18,7 +19,11 @@ from engine.connectivity.lifecycle import (
 )
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 from engine.connectivity.resources import ConnectionEndpoint, ConnectionResources
-from engine.errors import DataSourceConnectionError
+from engine.errors import (
+    DataSourceConnectionError,
+    DataSourceCredentialUnavailableError,
+    DataSourceTlsConnectionError,
+)
 from engine.security.credential_vault import (
     CredentialKind,
     CredentialVault,
@@ -71,7 +76,9 @@ def build_mysql_ssl_params(config: Mapping[str, Any] | ConnectionProfile) -> dic
     key_path = _normalized_optional_path(_config_value(config, "ssl_key_path"))
     verify_identity = bool(_config_value(config, "ssl_verify_identity", True))
     if verify_identity and not ca_path:
-        raise DataSourceConnectionError("SSL identity verification requires a CA certificate path.")
+        raise DataSourceTlsConnectionError(
+            "SSL identity verification requires a CA certificate path."
+        )
 
     ssl_params: dict[str, Any] = {
         "ssl_verify_cert": True,
@@ -96,7 +103,9 @@ def build_postgres_ssl_params(config: Mapping[str, Any] | ConnectionProfile) -> 
     key_path = _normalized_optional_path(_config_value(config, "ssl_key_path"))
     verify_identity = bool(_config_value(config, "ssl_verify_identity", True))
     if verify_identity and not ca_path:
-        raise DataSourceConnectionError("PostgreSQL SSL identity verification requires a CA certificate path.")
+        raise DataSourceTlsConnectionError(
+            "PostgreSQL SSL identity verification requires a CA certificate path."
+        )
 
     params: dict[str, Any] = {
         "sslmode": "verify-full" if verify_identity else ("verify-ca" if ca_path else "require"),
@@ -409,7 +418,6 @@ class ConnectionFactory:
                 "user": profile.username,
                 "database": profile.database_name,
                 "charset": "utf8mb4",
-                "cursorclass": pymysql.cursors.DictCursor,
                 "connect_timeout": 5,
                 "read_timeout": 10,
                 "write_timeout": 10,
@@ -462,6 +470,10 @@ class ConnectionFactory:
                 return psycopg2.connect(**dict(params), connect_timeout=5)
         except (DataSourceConnectionError, CredentialVaultUnavailableError):
             raise
+        except ssl.SSLError as exc:
+            raise DataSourceTlsConnectionError(
+                "Database TLS connection could not be established."
+            ) from exc
         except Exception as exc:
             raise DataSourceConnectionError("Database connection could not be opened.") from exc
         raise DataSourceConnectionError("Unsupported datasource dialect.")
@@ -511,6 +523,10 @@ class ConnectionFactory:
                 ).connect()
         except (DataSourceConnectionError, CredentialVaultUnavailableError):
             raise
+        except ssl.SSLError as exc:
+            raise DataSourceTlsConnectionError(
+                "Database TLS connection could not be established."
+            ) from exc
         except Exception as exc:
             # QueuePool can surface the raw DBAPI exception before the dialect
             # adapter sees it. Keep the sole connectivity boundary's error
@@ -520,12 +536,12 @@ class ConnectionFactory:
 
     def _require_secret(self, credential_id: str | None, kind: CredentialKind) -> str:
         if not credential_id:
-            raise DataSourceConnectionError(
+            raise DataSourceCredentialUnavailableError(
                 "A password credential is required for network datasource connections."
             )
         secret = self._vault.get(credential_id, expected_kind=kind)
         if not secret:
-            raise DataSourceConnectionError(
+            raise DataSourceCredentialUnavailableError(
                 "Credential reference was not found or has the wrong kind."
             )
         return secret

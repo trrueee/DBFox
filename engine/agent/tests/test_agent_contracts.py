@@ -13,7 +13,13 @@ from engine.agent.response import (
     ResponseComposer,
     ResponseCompositionError,
 )
-from engine.agent.turn import TurnStreamAssembler, TurnStreamError, TurnStreamItem, TurnStreamKind
+from engine.agent.turn import (
+    TurnStreamAssembler,
+    TurnStreamError,
+    TurnStreamItem,
+    TurnStreamKind,
+    TurnTermination,
+)
 
 
 def test_turn_stream_assembler_merges_reasoning_summary_and_fragmented_tool_call() -> None:
@@ -73,16 +79,16 @@ def test_turn_stream_assembler_merges_reasoning_summary_and_fragmented_tool_call
                 kind=TurnStreamKind.FINISH,
                 item_id="finish",
                 revision=1,
-                finish_signal="tool_calls",
+                termination=TurnTermination.COMPLETED,
             ),
         ]
     )
 
-    assert result.text == ""
+    assert result.answer_text == ""
     assert result.reasoning_summary == "分析中"
     assert result.tool_calls[0].name == "sql_execute_readonly"
     assert result.tool_calls[0].arguments == {"sql": "SELECT 1"}
-    assert result.finish_signal == "tool_calls"
+    assert result.termination is TurnTermination.COMPLETED
 
 
 def test_turn_stream_assembler_rejects_gaps_and_bad_tool_json() -> None:
@@ -114,6 +120,41 @@ def test_turn_stream_assembler_rejects_gaps_and_bad_tool_json() -> None:
                     tool_call_index=0,
                 ),
             ]
+        )
+
+
+@pytest.mark.parametrize(
+    ("termination", "error_code"),
+    [
+        (TurnTermination.INCOMPLETE, "MODEL_PROVIDER_INCOMPLETE"),
+        (TurnTermination.FAILED, "MODEL_PROVIDER_FAILED"),
+        (TurnTermination.CANCELLED, "MODEL_PROVIDER_CANCELLED"),
+    ],
+)
+def test_turn_stream_assembler_rejects_non_completed_termination(
+    termination: TurnTermination,
+    error_code: str,
+) -> None:
+    with pytest.raises(TurnStreamError) as exc_info:
+        TurnStreamAssembler().consume([
+            TurnStreamItem(
+                kind=TurnStreamKind.FINISH,
+                item_id="finish",
+                revision=1,
+                termination=termination,
+            )
+        ])
+
+    assert exc_info.value.code == error_code
+
+
+def test_turn_stream_item_rejects_unknown_termination() -> None:
+    with pytest.raises(ValueError):
+        TurnStreamItem(
+            kind=TurnStreamKind.FINISH,
+            item_id="finish",
+            revision=1,
+            termination="tool_calls",  # type: ignore[arg-type]
         )
 
 

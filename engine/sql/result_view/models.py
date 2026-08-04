@@ -4,6 +4,9 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
+from engine.errors import DBFoxError
+
 
 ResultFilterOperator = Literal[
     "equals",
@@ -136,10 +139,18 @@ class ChartData(ResultViewModel):
     query_fingerprint: str
 
 
-class ResultViewError(ValueError):
+class ResultViewError(DBFoxError):
     def __init__(self, code: str, message: str, *, status_code: int = 400) -> None:
-        super().__init__(f"{code}: {message}")
-        self.code = code
-        self.message = message
+        try:
+            public_code = FixedErrorCode(code)
+        except ValueError:
+            public_code = FixedErrorCode.INTERNAL_ERROR
+        super().__init__(
+            fixed_error_message(public_code),
+            code=public_code.value,
+        )
+        # Retain diagnostic context without rendering it through Exception,
+        # ToolResult, API Problem Details, or model-visible observations.
+        self.internal_message = message
         self.status_code = status_code
 

@@ -322,6 +322,11 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
             summary=f"已浏览 {int(output.get('returned_count') or 0)} 张表。",
             facts=safe_observation_facts(
                 {
+                    # The list is already bounded by SchemaListInput.limit and
+                    # safe_observation_facts enforces the model-context byte
+                    # ceiling.  Omitting it leaves the model with a count but
+                    # no catalog evidence to reason from.
+                    "tables": output.get("tables") or [],
                     "returned_count": output.get("returned_count"),
                     "next_cursor": output.get("next_cursor"),
                     "has_more": output.get("has_more"),

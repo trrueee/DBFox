@@ -7,6 +7,7 @@ import sqlglot
 from pydantic import BaseModel
 from sqlglot import exp
 
+from engine.sql.readonly_query import ReadonlyQueryError, parse_single_readonly_query
 
 FilterOperator = Literal[
     "equals",
@@ -108,14 +109,14 @@ def build_sql_backed_page_sql(
     return SqlBackedQuery(sql=query.sql(dialect=dialect))
 
 
-def _parse_select(base_sql: str, dialect: str) -> exp.Select:
+def _parse_select(base_sql: str, dialect: str) -> exp.Query:
     try:
-        expressions = sqlglot.parse(base_sql, read=dialect)
-    except Exception as exc:
-        raise SqlBackedViewError("SOURCE_SQL_VALIDATION_FAILED", f"Source SQL parse failed: {exc}") from exc
-    if len(expressions) != 1 or not isinstance(expressions[0], exp.Select):
-        raise SqlBackedViewError("SOURCE_SQL_VALIDATION_FAILED", "Source SQL must be a single SELECT statement.")
-    return expressions[0]
+        return parse_single_readonly_query(base_sql, dialect)
+    except ReadonlyQueryError as exc:
+        raise SqlBackedViewError(
+            "SOURCE_SQL_VALIDATION_FAILED",
+            "Source SQL must be a single read-only query statement.",
+        ) from exc
 
 
 def _normalize_column(column: str) -> str:

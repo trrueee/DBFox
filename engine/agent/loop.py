@@ -33,7 +33,7 @@ from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.response import CompletionDisposition, CompletionLimitationCode
 from engine.agent.session import SessionLease
 from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
-from engine.agent.run_item import RunItemDelta, RunItemType
+from engine.agent.run_item import RunItemDelta, RunItemStatus, RunItemType
 from engine.agent.turn import (
     ModelTurnResult,
     TurnStreamAssembler,
@@ -42,7 +42,12 @@ from engine.agent.turn import (
     TurnStreamItem,
     TurnStreamKind,
 )
-from engine.llm.config import resolve_product_llm_config_from_credential
+from engine.app.safe_errors import fixed_error_detail
+from engine.llm.config import (
+    LlmConfigurationError,
+    resolve_product_llm_config_from_credential,
+)
+from engine.llm.endpoint_policy import LlmEndpointPolicyError
 from engine.models import (
     AgentTurn,
 )
@@ -81,6 +86,18 @@ class _PreparedTurn:
 
 
 @dataclass
+class _StreamingMessageState:
+    output_index: int
+    phase: Literal["commentary", "final_answer"] | None
+    text: str = ""
+    live_revision: int = 0
+    persisted_revision: int = 0
+    flushed_bytes: int = 0
+    last_flush: float = field(default_factory=time.monotonic)
+    ended: bool = False
+
+
+@dataclass
 class _ExecutionState:
     control: LeaseAwareRunControl
     provider_settings: ProviderSettings
@@ -92,13 +109,13 @@ class _ExecutionState:
 
     @property
     def answer_result(self) -> ModelTurnResult:
-        if self.best_answer_result.text.strip():
+        if self.best_answer_result.answer_text:
             return self.best_answer_result
         return self.last_result
 
     def record_result(self, result: ModelTurnResult) -> None:
         self.last_result = result
-        if result.message_phase == "final_answer" and result.text.strip():
+        if result.has_completed_answer_candidate:
             self.best_answer_result = result
 
 
@@ -296,25 +313,7 @@ class RunLoop:
                     AgentTurn.run_id == run_id
                 )
             ) or 0)
-            latest_answer_turn = db.execute(
-                select(AgentTurn)
-                .where(
-                    AgentTurn.run_id == run_id,
-                    AgentTurn.draft_text != "",
-                    AgentTurn.message_phase == "final_answer",
-                )
-                .order_by(AgentTurn.sequence.desc())
-                .limit(1)
-            ).scalar_one_or_none()
-            best_answer_result = (
-                ModelTurnResult(
-                    text=str(latest_answer_turn.draft_text),
-                    message_phase="final_answer",
-                    reasoning_summary=str(latest_answer_turn.reasoning_summary or ""),
-                )
-                if latest_answer_turn is not None
-                else ModelTurnResult()
-            )
+            best_answer_result = RunRepository(db).latest_completed_answer(run_id)
             provider_settings = ProviderSettings(
                 credential_id=str(run.llm_credential_id),
                 api_base=str(run.api_base) if run.api_base else None,
@@ -358,8 +357,8 @@ class RunLoop:
         prepared: _PreparedTurn,
         state: _ExecutionState,
     ) -> ModelTurnResult | None:
-        adapter = self.model_factory(prepared.provider_settings)
         try:
+            adapter = self.model_factory(prepared.provider_settings)
             state.control.checkpoint()
             result = TurnStreamAssembler().consume(
                 self._publish_stream(
@@ -375,6 +374,18 @@ class RunLoop:
                 ),
                 )
             )
+        except (LlmConfigurationError, LlmEndpointPolicyError) as exc:
+            detail = fixed_error_detail(exc.code)
+            with self.session_factory() as db:
+                RunRepository(db).settle_turn(
+                    lease=lease,
+                    turn_id=prepared.turn_id,
+                    result=ModelTurnResult(),
+                    error_code=detail["code"],
+                    error_message=detail["message"],
+                )
+                db.commit()
+            raise RunControlError(detail["code"], detail["message"]) from exc
         except TurnStreamCancelled as exc:
             state.control.checkpoint()
             raise RunCancellationRequested() from exc
@@ -384,11 +395,14 @@ class RunLoop:
                     lease=lease,
                     turn_id=prepared.turn_id,
                     result=ModelTurnResult(),
-                    error_code="MODEL_PROVIDER_STREAM_FAILED",
+                    error_code=exc.code,
                     error_message=str(exc),
                 )
                 db.commit()
+            if exc.retryable is False:
+                raise RunControlError(exc.code, str(exc)) from exc
             state.control.record_provider_failure()
+            state.control.wait_for_provider_retry(exc.retry_after_seconds)
             return None
 
         state.record_result(result)
@@ -510,7 +524,6 @@ class RunLoop:
     ) -> None:
         with self.session_factory() as db:
             repository = RunRepository(db)
-            repository.discard_answer_draft(lease=lease, run_id=run_id)
             repository.record_focus(
                 lease=lease,
                 run_id=run_id,
@@ -582,41 +595,130 @@ class RunLoop:
         self, *, lease: SessionLease, run_id: str, turn_id: str,
         items: Iterable[TurnStreamItem], control: LeaseAwareRunControl,
     ) -> Iterable[TurnStreamItem]:
-        text = ""
-        flushed_bytes = 0
-        last_flush = time.monotonic()
-        answer_revision = 0
-        answer_item_id = f"message:{run_id}:{turn_id}"
-        message_phase: Literal["commentary", "final_answer"] = "commentary"
-        for item in items:
-            control.checkpoint()
-            if item.kind is TurnStreamKind.ANSWER_START:
-                message_phase = item.phase or "commentary"
-                self._merge_draft(lease, run_id, "", message_phase)
-            elif item.kind is TurnStreamKind.ANSWER_DELTA:
-                content = item.content or ""
-                offset = len(text)
-                text += content
-                answer_revision += 1
-                self.live_stream.publish(RunItemDelta(
-                    session_id=lease.session_id,
-                    run_id=run_id,
-                    turn_id=turn_id,
-                    item_id=answer_item_id,
-                    item_type=RunItemType.MESSAGE,
-                    field="content",
-                    revision=answer_revision,
-                    offset=offset,
-                    content=content,
-                ))
-            current_bytes = len(text.encode("utf-8"))
-            if text and (current_bytes - flushed_bytes >= 1024 or time.monotonic() - last_flush >= 0.25):
-                self._merge_draft(lease, run_id, text, message_phase)
-                flushed_bytes = current_bytes
-                last_flush = time.monotonic()
-            yield item
-        if text:
-            self._merge_draft(lease, run_id, text, message_phase)
+        messages: dict[str, _StreamingMessageState] = {}
+        stream_completed = False
+        try:
+            for item in items:
+                control.checkpoint()
+                if item.kind is TurnStreamKind.ANSWER_START:
+                    if item.output_index is None:
+                        raise TurnStreamError(
+                            "Answer stream item is missing its output index"
+                        )
+                    state = _StreamingMessageState(
+                        output_index=item.output_index,
+                        phase=item.phase,
+                    )
+                    messages[item.item_id] = state
+                    state.persisted_revision = 1
+                    self._persist_turn_message(
+                        lease=lease,
+                        run_id=run_id,
+                        turn_id=turn_id,
+                        state=state,
+                        status=RunItemStatus.IN_PROGRESS,
+                    )
+                elif item.kind is TurnStreamKind.ANSWER_DELTA:
+                    delta_state = messages.get(item.item_id)
+                    if delta_state is None or delta_state.ended:
+                        raise TurnStreamError(
+                            "Answer delta is outside its persisted message lifecycle"
+                        )
+                    content = item.content or ""
+                    offset = len(delta_state.text)
+                    delta_state.text += content
+                    delta_state.live_revision += 1
+                    durable_item_id = (
+                        f"message:{run_id}:{turn_id}:{delta_state.output_index}"
+                    )
+                    self.live_stream.publish(RunItemDelta(
+                        session_id=lease.session_id,
+                        run_id=run_id,
+                        turn_id=turn_id,
+                        item_id=durable_item_id,
+                        item_type=RunItemType.MESSAGE,
+                        field="content",
+                        revision=delta_state.live_revision,
+                        offset=offset,
+                        content=content,
+                    ))
+                    current_bytes = len(delta_state.text.encode("utf-8"))
+                    if delta_state.text and (
+                        current_bytes - delta_state.flushed_bytes >= 1024
+                        or time.monotonic() - delta_state.last_flush >= 0.25
+                    ):
+                        delta_state.persisted_revision += 1
+                        self._persist_turn_message(
+                            lease=lease,
+                            run_id=run_id,
+                            turn_id=turn_id,
+                            state=delta_state,
+                            status=RunItemStatus.IN_PROGRESS,
+                        )
+                        delta_state.flushed_bytes = current_bytes
+                        delta_state.last_flush = time.monotonic()
+                elif item.kind is TurnStreamKind.ANSWER_END:
+                    ended_state = messages.get(item.item_id)
+                    if ended_state is None or ended_state.ended:
+                        raise TurnStreamError(
+                            "Answer end is outside its persisted message lifecycle"
+                        )
+                    if item.message_status not in {"completed", "incomplete"}:
+                        raise TurnStreamError(
+                            "Answer end is missing its completed status"
+                        )
+                    ended_state.phase = item.phase
+                    ended_state.ended = True
+                    ended_state.persisted_revision += 1
+                    self._persist_turn_message(
+                        lease=lease,
+                        run_id=run_id,
+                        turn_id=turn_id,
+                        state=ended_state,
+                        status=(
+                            RunItemStatus.COMPLETED
+                            if item.message_status == "completed"
+                            else RunItemStatus.FAILED
+                        ),
+                    )
+                yield item
+            stream_completed = True
+        finally:
+            if not stream_completed:
+                for state in messages.values():
+                    if state.ended:
+                        continue
+                    state.ended = True
+                    state.persisted_revision += 1
+                    self._persist_turn_message(
+                        lease=lease,
+                        run_id=run_id,
+                        turn_id=turn_id,
+                        state=state,
+                        status=RunItemStatus.CANCELLED,
+                    )
+
+    def _persist_turn_message(
+        self,
+        *,
+        lease: SessionLease,
+        run_id: str,
+        turn_id: str,
+        state: _StreamingMessageState,
+        status: RunItemStatus,
+    ) -> None:
+        with self.session_factory() as db:
+            RunRepository(db).persist_turn_message(
+                lease=lease,
+                run_id=run_id,
+                turn_id=turn_id,
+                output_index=state.output_index,
+                revision=state.persisted_revision,
+                phase=state.phase,
+                content=state.text,
+                status=status,
+            )
+            db.commit()
 
     def _complete(
         self,
@@ -644,22 +746,6 @@ class RunLoop:
         with self.session_factory() as db:
             run = RunRepository(db).get(run_id)
             return bool(run.cancel_requested) or str(run.status) in {"cancelling", "cancelled"}
-
-    def _merge_draft(
-        self,
-        lease: SessionLease,
-        run_id: str,
-        text: str,
-        phase: Literal["commentary", "final_answer"],
-    ) -> None:
-        with self.session_factory() as db:
-            RunRepository(db).merge_answer_draft(
-                lease=lease,
-                run_id=run_id,
-                content=text,
-                phase=phase,
-            )
-            db.commit()
 
     def _stop_if_stalled(
         self,

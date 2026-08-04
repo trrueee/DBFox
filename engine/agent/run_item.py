@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from engine.agent.plan import PlanStep
 from engine.agent.response import CompletionDisposition, CompletionLimitationCode
 from engine.json_codec import load_array, load_object
 from engine.tools.runtime.base import RiskLevel, ToolPresentation
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 class RunItemType(StrEnum):
@@ -50,6 +58,13 @@ class EvidenceReference(BaseModel):
     observed_at: datetime
     locator: dict[str, Any] = Field(default_factory=dict)
     value: Any | None = None
+
+    @field_validator("observed_at")
+    @classmethod
+    def normalize_observed_at(cls, value: datetime) -> datetime:
+        normalized = _as_utc(value)
+        assert normalized is not None
+        return normalized
 
 
 class MessagePayload(BaseModel):
@@ -138,34 +153,39 @@ class RunItemBase(BaseModel):
     created_at: datetime
     completed_at: datetime | None = None
 
+    @field_validator("created_at", "completed_at")
+    @classmethod
+    def normalize_public_timestamps(cls, value: datetime | None) -> datetime | None:
+        return _as_utc(value)
+
 
 class MessageItem(RunItemBase):
-    type: Literal[RunItemType.MESSAGE] = RunItemType.MESSAGE
+    type: Literal[RunItemType.MESSAGE]
     payload: MessagePayload
 
 
 class PlanItem(RunItemBase):
-    type: Literal[RunItemType.PLAN] = RunItemType.PLAN
+    type: Literal[RunItemType.PLAN]
     payload: PlanPayload
 
 
 class FunctionCallItem(RunItemBase):
-    type: Literal[RunItemType.FUNCTION_CALL] = RunItemType.FUNCTION_CALL
+    type: Literal[RunItemType.FUNCTION_CALL]
     payload: FunctionCallPayload
 
 
 class FunctionCallOutputItem(RunItemBase):
-    type: Literal[RunItemType.FUNCTION_CALL_OUTPUT] = RunItemType.FUNCTION_CALL_OUTPUT
+    type: Literal[RunItemType.FUNCTION_CALL_OUTPUT]
     payload: FunctionCallOutputPayload
 
 
 class ApprovalItem(RunItemBase):
-    type: Literal[RunItemType.APPROVAL] = RunItemType.APPROVAL
+    type: Literal[RunItemType.APPROVAL]
     payload: ApprovalPayload
 
 
 class QuestionItem(RunItemBase):
-    type: Literal[RunItemType.QUESTION] = RunItemType.QUESTION
+    type: Literal[RunItemType.QUESTION]
     payload: QuestionPayload
 
 
@@ -269,6 +289,7 @@ def project_run(run: Any) -> dict[str, Any]:
 
 def user_message_item(message: Any, *, run_id: str, sequence: int = 0) -> MessageItem:
     return MessageItem(
+        type=RunItemType.MESSAGE,
         id=str(message.id),
         session_id=str(message.session_id),
         run_id=run_id,
@@ -305,6 +326,7 @@ def assistant_message_item(
     completion_disposition = response.get("completion_disposition")
     limitation_codes = response.get("limitation_codes")
     return MessageItem(
+        type=RunItemType.MESSAGE,
         id=f"message:{run.id}:{resolved_turn_id or 'terminal'}",
         session_id=str(message.session_id),
         run_id=str(run.id),
@@ -380,6 +402,7 @@ def plan_item(plan: Any, *, sequence: int = 0) -> PlanItem:
         "cancelled": RunItemStatus.CANCELLED,
     }[str(plan.status)]
     return PlanItem(
+        type=RunItemType.PLAN,
         id=str(plan.id),
         session_id=str(plan.session_id),
         run_id=str(plan.run_id),
@@ -418,6 +441,7 @@ def function_call_item(
     }[str(invocation.status)]
     presentation = ToolPresentation.model_validate_json(str(invocation.presentation_json))
     return FunctionCallItem(
+        type=RunItemType.FUNCTION_CALL,
         id=str(invocation.id),
         session_id=str(invocation.session_id),
         run_id=str(invocation.run_id),
@@ -451,6 +475,7 @@ def function_call_output_item(
     failed = str(observation.status) != "succeeded"
     cancelled = str(observation.status) == "cancelled"
     return FunctionCallOutputItem(
+        type=RunItemType.FUNCTION_CALL_OUTPUT,
         id=f"output:{invocation.id}",
         session_id=str(invocation.session_id),
         run_id=str(invocation.run_id),
@@ -488,6 +513,7 @@ def approval_item(approval: Any, *, sequence: int = 0) -> ApprovalItem:
         else RunItemStatus.COMPLETED
     )
     return ApprovalItem(
+        type=RunItemType.APPROVAL,
         id=str(approval.id),
         session_id=str(approval.session_id),
         run_id=str(approval.run_id),
@@ -525,6 +551,7 @@ def question_item(question: Any, *, sequence: int = 0) -> QuestionItem:
         else RunItemStatus.COMPLETED
     )
     return QuestionItem(
+        type=RunItemType.QUESTION,
         id=str(question.id),
         session_id=str(question.session_id),
         run_id=str(question.run_id),

@@ -196,6 +196,81 @@ def test_admission_returns_authoritative_projection_for_immediate_ui(client, mon
     assert "assistant_message_id" not in body
 
 
+def test_request_contract_rejects_missing_llm_credential_before_creating_a_run(
+    client,
+    db_session,
+    monkeypatch,
+):
+    created = client.post(
+        "/api/v1/conversations",
+        json={"datasource_id": "ds-1", "title": "No credential"},
+        headers=_headers(),
+    )
+    conversation_id = created.json()["session"]["id"]
+
+    class Coordinator:
+        available = True
+
+        def wake(self, _session_id: str) -> None:
+            raise AssertionError("Rejected input must not wake the worker")
+
+    monkeypatch.setattr(app.state, "agent_coordinator", Coordinator(), raising=False)
+    before = db_session.query(AgentRun).count()
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/inputs",
+        json={
+            "content": "分析订单",
+            "idempotency_key": "missing-credential-input",
+            "delivery_mode": "queue",
+            "selected_artifact_ids": [],
+            "workspace_context": {},
+            "llm_credential_id": "",
+            "api_base": "https://api.openai.com/v1",
+            "model_name": "gpt-4.1-mini",
+        },
+        headers=_headers(),
+    )
+
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.json()["code"] == "VALIDATION_ERROR"
+    assert response.json()["detail"] == "Request validation failed."
+    assert db_session.query(AgentRun).count() == before
+
+
+def test_admission_returns_cataloged_endpoint_policy_error_without_creating_a_run(
+    client,
+    db_session,
+):
+    created = client.post(
+        "/api/v1/conversations",
+        json={"datasource_id": "ds-1", "title": "Unsafe endpoint"},
+        headers=_headers(),
+    )
+    conversation_id = created.json()["session"]["id"]
+    before = db_session.query(AgentRun).count()
+
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/inputs",
+        json={
+            "content": "分析订单",
+            "idempotency_key": "unsafe-endpoint-input",
+            "delivery_mode": "queue",
+            "selected_artifact_ids": [],
+            "workspace_context": {},
+            "llm_credential_id": "credential-reference",
+            "api_base": "http://public.example/v1",
+            "model_name": "gpt-4.1-mini",
+        },
+        headers=_headers(),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "LLM_ENDPOINT_NOT_ALLOWED"
+    assert response.json()["detail"] == "不允许连接该模型服务地址，请检查端点配置。"
+    assert db_session.query(AgentRun).count() == before
+
+
 def test_snapshot_pages_messages_and_exposes_history_cursor(client, db_session):
     now = datetime.now(UTC)
     db_session.add(AgentSession(

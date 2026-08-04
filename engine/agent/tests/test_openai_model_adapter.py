@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import httpx
+from openai import APIStatusError
 from openai.types.responses import ResponseStreamEvent
 from pydantic import TypeAdapter
 
+from engine.agent.completion import CompletionKind, CompletionPolicy
+from engine.agent.context import ContextSnapshot
 from engine.agent.providers.openai import OpenAIModelAdapter
 from engine.agent.turn import (
     TurnStreamAssembler,
     TurnStreamCancelled,
     TurnStreamError,
     TurnStreamKind,
+    TurnTermination,
 )
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 
 _STREAM_EVENT = TypeAdapter(ResponseStreamEvent)
 
@@ -27,7 +34,7 @@ def _event(payload: dict[str, Any]) -> ResponseStreamEvent:
 def _message(
     item_id: str,
     *,
-    phase: str,
+    phase: str | None,
     status: str,
     text: str = "",
     refusal: str = "",
@@ -42,14 +49,16 @@ def _message(
         })
     if refusal:
         content.append({"type": "refusal", "refusal": refusal})
-    return {
+    message = {
         "id": item_id,
         "type": "message",
         "role": "assistant",
         "status": status,
-        "phase": phase,
         "content": content,
     }
+    if phase is not None:
+        message["phase"] = phase
+    return message
 
 
 def _function_call(
@@ -97,13 +106,16 @@ class _EventStream:
         self._events = iter(events)
         self.closed = False
 
-    def __iter__(self) -> "_EventStream":
+    def __aiter__(self) -> "_EventStream":
         return self
 
-    def __next__(self) -> ResponseStreamEvent:
-        return next(self._events)
+    async def __anext__(self) -> ResponseStreamEvent:
+        try:
+            return next(self._events)
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
 
-    def close(self) -> None:
+    async def close(self) -> None:
         self.closed = True
 
 
@@ -113,7 +125,7 @@ class _Responses:
         self.stream: _EventStream | None = None
         self.request: dict[str, object] | None = None
 
-    def create(self, **request: object) -> _EventStream:
+    async def create(self, **request: object) -> _EventStream:
         self.request = request
         self.stream = _EventStream(self.events)
         return self.stream
@@ -256,8 +268,8 @@ def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
         adapter.stream(messages=input_items, tools=tools)
     )
 
-    assert result.text == "我先检查订单结构。"
-    assert result.message_phase == "commentary"
+    assert result.messages[0].text == "我先检查订单结构。"
+    assert result.messages[0].phase == "commentary"
     assert result.reasoning_summary == "正在确认所需数据。"
     assert result.tool_calls[0].id == "call_1"
     assert result.tool_calls[0].name == "schema_inspect"
@@ -284,6 +296,8 @@ def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
         "tool_choice": "auto",
         "parallel_tool_calls": False,
     }
+    assert client.responses.stream is not None
+    assert client.responses.stream.closed
 
 
 def test_responses_adapter_preserves_final_answer_phase_and_bounds_deltas() -> None:
@@ -335,8 +349,137 @@ def test_responses_adapter_preserves_final_answer_phase_and_bounds_deltas() -> N
     deltas = [item for item in items if item.kind is TurnStreamKind.ANSWER_DELTA]
     assert [len(item.content or "") for item in deltas] == [96, 96, 13]
     result = TurnStreamAssembler().consume(items)
-    assert result.text == content
-    assert result.message_phase == "final_answer"
+    assert result.answer_text == content
+    assert result.messages[0].phase == "final_answer"
+
+
+def test_responses_adapter_completes_terminal_text_when_phase_is_omitted() -> None:
+    completed = _message(
+        "msg_without_phase",
+        phase=None,
+        status="completed",
+        text="这是最终答案。",
+    )
+    client = _Client([
+        _event({
+            "type": "response.output_item.added",
+            "sequence_number": 1,
+            "output_index": 0,
+            "item": _message(
+                "msg_without_phase",
+                phase=None,
+                status="in_progress",
+            ),
+        }),
+        _event({
+            "type": "response.output_item.done",
+            "sequence_number": 2,
+            "output_index": 0,
+            "item": completed,
+        }),
+        _event({
+            "type": "response.completed",
+            "sequence_number": 3,
+            "response": _response(status="completed", output=[completed]),
+        }),
+    ])
+
+    result = TurnStreamAssembler().consume(OpenAIModelAdapter(
+        client=client,  # type: ignore[arg-type]
+        model_name="gpt-5",
+    ).stream(messages=[{"role": "user", "content": "回答问题"}], tools=[]))
+    decision = CompletionPolicy().evaluate(
+        context=ContextSnapshot(
+            session_id="session-1",
+            run_id="run-1",
+            context_epoch=0,
+            messages=[{"role": "user", "content": "回答问题"}],
+            observations=[],
+            sources=[],
+            hash="context-hash",
+        ),
+        model_result=result,
+        turn_count=1,
+        max_turns=8,
+    )
+
+    assert result.messages[0].phase is None
+    assert result.termination is TurnTermination.COMPLETED
+    assert result.answer_text == "这是最终答案。"
+    assert decision.kind is CompletionKind.SYNTHESIZE
+
+
+def test_responses_adapter_keeps_commentary_and_final_messages_distinct() -> None:
+    commentary = _message(
+        "msg_commentary",
+        phase="commentary",
+        status="completed",
+        text="我正在检查数据。",
+    )
+    final = _message(
+        "msg_final",
+        phase="final_answer",
+        status="completed",
+        text="最终结论。",
+    )
+    client = _Client([
+        _event({
+            "type": "response.output_item.added",
+            "sequence_number": 1,
+            "output_index": 0,
+            "item": _message(
+                "msg_commentary",
+                phase="commentary",
+                status="in_progress",
+            ),
+        }),
+        _event({
+            "type": "response.output_item.done",
+            "sequence_number": 2,
+            "output_index": 0,
+            "item": commentary,
+        }),
+        _event({
+            "type": "response.output_item.added",
+            "sequence_number": 3,
+            "output_index": 1,
+            "item": _message(
+                "msg_final",
+                phase="final_answer",
+                status="in_progress",
+            ),
+        }),
+        _event({
+            "type": "response.output_item.done",
+            "sequence_number": 4,
+            "output_index": 1,
+            "item": final,
+        }),
+        _event({
+            "type": "response.completed",
+            "sequence_number": 5,
+            "response": _response(
+                status="completed",
+                output=[commentary, final],
+            ),
+        }),
+    ])
+
+    result = TurnStreamAssembler().consume(OpenAIModelAdapter(
+        client=client,  # type: ignore[arg-type]
+        model_name="gpt-5",
+    ).stream(messages=[], tools=[]))
+
+    assert [message.phase for message in result.messages] == [
+        "commentary",
+        "final_answer",
+    ]
+    assert [message.text for message in result.messages] == [
+        "我正在检查数据。",
+        "最终结论。",
+    ]
+    assert result.display_text == "我正在检查数据。\n\n最终结论。"
+    assert result.answer_text == "最终结论。"
 
 
 def test_responses_adapter_preserves_refusal_text() -> None:
@@ -394,8 +537,8 @@ def test_responses_adapter_preserves_refusal_text() -> None:
         ).stream(messages=[], tools=[])
     )
 
-    assert result.text == refusal
-    assert result.message_phase == "final_answer"
+    assert result.answer_text == refusal
+    assert result.messages[0].phase == "final_answer"
 
 
 def test_responses_adapter_uses_completed_message_when_no_text_delta_arrives() -> None:
@@ -436,8 +579,8 @@ def test_responses_adapter_uses_completed_message_when_no_text_delta_arrives() -
         ).stream(messages=[], tools=[])
     )
 
-    assert result.text == "最终答案"
-    assert result.message_phase == "final_answer"
+    assert result.answer_text == "最终答案"
+    assert result.messages[0].phase == "final_answer"
 
 
 def test_responses_adapter_rejects_terminal_incomplete_response() -> None:
@@ -454,7 +597,7 @@ def test_responses_adapter_rejects_terminal_incomplete_response() -> None:
 
     with pytest.raises(
         TurnStreamError,
-        match=r"Model response was incomplete \(max_output_tokens\)",
+        match=fixed_error_message(FixedErrorCode.MODEL_PROVIDER_INCOMPLETE),
     ):
         TurnStreamAssembler().consume(
             OpenAIModelAdapter(
@@ -489,7 +632,7 @@ def test_responses_adapter_rejects_stream_without_terminal_event() -> None:
 
     with pytest.raises(
         TurnStreamError,
-        match="without a terminal response event",
+        match=fixed_error_message(FixedErrorCode.MODEL_PROVIDER_STREAM_TRUNCATED),
     ):
         TurnStreamAssembler().consume(
             OpenAIModelAdapter(
@@ -501,7 +644,7 @@ def test_responses_adapter_rejects_stream_without_terminal_event() -> None:
 
 def test_responses_adapter_emits_safe_error_item() -> None:
     class _FailingResponses:
-        def create(self, **_request: object) -> object:
+        async def create(self, **_request: object) -> object:
             raise RuntimeError("secret provider detail")
 
     client = SimpleNamespace(responses=_FailingResponses())
@@ -515,26 +658,95 @@ def test_responses_adapter_emits_safe_error_item() -> None:
     assert "secret provider detail" not in (item.error_message or "")
 
 
+def test_responses_adapter_classifies_rate_limit_and_preserves_retry_after() -> None:
+    request = httpx.Request("POST", "https://provider.test/v1/responses")
+    response = httpx.Response(429, headers={"Retry-After": "3"}, request=request)
+
+    class _RateLimitedResponses:
+        async def create(self, **_request: object) -> object:
+            raise APIStatusError("private provider body", response=response, body=None)
+
+    client = SimpleNamespace(responses=_RateLimitedResponses())
+    item = list(OpenAIModelAdapter(
+        client=client,  # type: ignore[arg-type]
+        model_name="gpt-5",
+    ).stream(messages=[], tools=[]))[0]
+
+    assert item.error_code == "MODEL_PROVIDER_RATE_LIMITED"
+    assert item.error_retryable is True
+    assert item.retry_after_seconds == 3
+    assert "private provider body" not in (item.error_message or "")
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "expected_code", "retryable"),
+    [
+        (400, {"error": {"code": "invalid_request_error"}}, "MODEL_PROVIDER_REQUEST_REJECTED", False),
+        (401, {"error": {"code": "invalid_api_key"}}, "MODEL_PROVIDER_AUTHENTICATION_FAILED", False),
+        (403, {"error": {"code": "permission_denied"}}, "MODEL_PROVIDER_PERMISSION_DENIED", False),
+        (404, {"error": {"code": "model_not_found"}}, "MODEL_PROVIDER_MODEL_NOT_FOUND", False),
+        (
+            429,
+            {"error": {"code": "organization_spend_limit_exceeded"}},
+            "MODEL_PROVIDER_QUOTA_EXCEEDED",
+            False,
+        ),
+    ],
+)
+def test_responses_adapter_classifies_structured_status_without_leaking_provider_body(
+    status: int,
+    body: dict[str, object],
+    expected_code: str,
+    retryable: bool,
+) -> None:
+    request = httpx.Request("POST", "https://provider.test/v1/responses")
+    response = httpx.Response(status, request=request)
+
+    class _RejectedResponses:
+        async def create(self, **_request: object) -> object:
+            raise APIStatusError(
+                "private provider body with secret-token",
+                response=response,
+                body=body,
+            )
+
+    client = SimpleNamespace(responses=_RejectedResponses())
+    item = list(OpenAIModelAdapter(
+        client=client,  # type: ignore[arg-type]
+        model_name="gpt-5",
+    ).stream(messages=[], tools=[]))[0]
+
+    assert item.error_code == expected_code
+    assert item.error_retryable is retryable
+    assert "private provider body" not in (item.error_message or "")
+    assert "secret-token" not in (item.error_message or "")
+
+
 def test_responses_stream_honors_cancellation_and_closes_sdk_stream() -> None:
-    client = _Client([
-        _event({
-            "type": "response.output_item.added",
-            "sequence_number": 1,
-            "output_index": 0,
-            "item": _message(
-                "msg_1",
-                phase="final_answer",
-                status="in_progress",
-            ),
-        }),
-    ])
+    class _BlockingStream(_EventStream):
+        async def __anext__(self) -> ResponseStreamEvent:
+            await asyncio.Event().wait()
+            raise StopAsyncIteration
+
+    class _BlockingResponses(_Responses):
+        async def create(self, **request: object) -> _EventStream:
+            self.request = request
+            self.stream = _BlockingStream([])
+            return self.stream
+
+    client = SimpleNamespace(responses=_BlockingResponses([]))
     adapter = OpenAIModelAdapter(
         client=client,  # type: ignore[arg-type]
         model_name="gpt-5",
     )
 
+    probes = iter([False, True])
     with pytest.raises(TurnStreamCancelled, match="cancelled"):
-        list(adapter.stream(messages=[], tools=[], cancellation_probe=lambda: True))
+        list(adapter.stream(
+            messages=[],
+            tools=[],
+            cancellation_probe=lambda: next(probes, True),
+        ))
 
     assert client.responses.stream is not None
     assert client.responses.stream.closed

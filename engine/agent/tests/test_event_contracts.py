@@ -1,5 +1,5 @@
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -8,6 +8,13 @@ from engine.agent.events import (
     RuntimeEvent,
     RuntimeEventType,
     validate_runtime_event_payload,
+)
+from engine.agent.run_item import (
+    MessageItem,
+    MessagePayload,
+    RunItemStatus,
+    RunItemType,
+    dump_run_item,
 )
 from engine.schemas.api_responses import ConversationSnapshotResponse
 from engine.models import SecurityAuditRecord, utcnow
@@ -37,6 +44,39 @@ def test_snapshot_and_runtime_event_publish_the_same_discriminated_item_contract
     assert set(snapshot_items["discriminator"]["mapping"]) == expected_mapping
     assert event_item["discriminator"] == snapshot_items["discriminator"]
     assert event_item["oneOf"] == snapshot_items["oneOf"]
+    for definition_name in (
+        "ApprovalItem",
+        "FunctionCallItem",
+        "FunctionCallOutputItem",
+        "MessageItem",
+        "PlanItem",
+        "QuestionItem",
+    ):
+        assert "type" in snapshot_schema["$defs"][definition_name]["required"]
+
+
+def test_run_items_restore_utc_on_naive_sqlite_timestamps() -> None:
+    naive_timestamp = datetime(2026, 8, 4, 10, 0, 0)
+    item = MessageItem(
+        type=RunItemType.MESSAGE,
+        id="item-1",
+        session_id="session-1",
+        run_id="run-1",
+        sequence=1,
+        status=RunItemStatus.COMPLETED,
+        created_at=naive_timestamp,
+        completed_at=naive_timestamp,
+        payload=MessagePayload(
+            role="assistant",
+            phase="final_answer",
+            content="done",
+        ),
+    )
+
+    serialized = dump_run_item(item)
+
+    assert serialized["created_at"] == "2026-08-04T10:00:00Z"
+    assert serialized["completed_at"] == "2026-08-04T10:00:00Z"
 
 
 def test_public_events_reject_result_rows_and_chart_series() -> None:

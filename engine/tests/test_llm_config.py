@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from engine.errors import DBFoxError
 from engine.llm.config import LlmConfigurationError, resolve_product_llm_config_from_credential
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 
@@ -40,7 +39,7 @@ def test_product_config_rejects_a_missing_or_wrong_vault_reference() -> None:
     vault = InMemoryCredentialVault()
     wrong_kind_id = vault.put(kind=CredentialKind.DATASOURCE_PASSWORD, secret="database-secret")
 
-    with pytest.raises(DBFoxError) as exc_info:
+    with pytest.raises(LlmConfigurationError) as exc_info:
         resolve_product_llm_config_from_credential(
             llm_credential_id=wrong_kind_id,
             api_base=None,

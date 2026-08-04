@@ -2,6 +2,7 @@ from engine.sql.safety_gate import validate_sql_schema
 from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
 from engine.sql.dry_run import DryRunResult
 from engine.sql.trust_gate import TrustGate
+from sqlglot import parse_one
 
 
 def test_trust_gate_safe_select(db_session_module, test_datasource_module) -> None:
@@ -154,20 +155,20 @@ def test_trust_gate_execution_decision_dry_runs_guardrail_safe_sql(
     safe_sql = "SELECT id FROM users LIMIT 1000"
     dry_run_sql: list[str] = []
 
-    def fake_guardrail(sql: str, dialect: str = "mysql"):
-        return {
+    def fake_guardrail_with_ast(sql: str, dialect: str = "mysql"):
+        return ({
             "result": "pass",
             "originalSql": sql,
             "safeSql": safe_sql,
             "checks": [],
             "message": "ok",
-        }
+        }, parse_one(safe_sql, read=dialect))
 
     def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
         dry_run_sql.append(sql)
         return DryRunResult(True)
 
-    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check_with_ast", fake_guardrail_with_ast)
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
     decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
@@ -191,21 +192,21 @@ def test_trust_gate_execution_decision_original_sql_does_not_drive_dry_run_resul
     sync_schema(db_session_module, test_datasource_module.id)
     safe_sql = "SELECT id FROM users LIMIT 1000"
 
-    def fake_guardrail(sql: str, dialect: str = "mysql"):
-        return {
+    def fake_guardrail_with_ast(sql: str, dialect: str = "mysql"):
+        return ({
             "result": "pass",
             "originalSql": sql,
             "safeSql": safe_sql,
             "checks": [],
             "message": "ok",
-        }
+        }, parse_one(safe_sql, read=dialect))
 
     def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
         if sql != safe_sql:
             return DryRunResult(False, "syntax_error", "original SQL should not be dry-run")
         return DryRunResult(True)
 
-    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check_with_ast", fake_guardrail_with_ast)
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
     decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
@@ -229,8 +230,8 @@ def test_trust_gate_auto_limit_warning_is_executable_without_confirmation_on_dev
     db_session_module.commit()
     safe_sql = "SELECT id FROM users LIMIT 1000"
 
-    def fake_guardrail(sql: str, dialect: str = "mysql"):
-        return {
+    def fake_guardrail_with_ast(sql: str, dialect: str = "mysql"):
+        return ({
             "result": "warn",
             "originalSql": sql,
             "safeSql": safe_sql,
@@ -242,13 +243,13 @@ def test_trust_gate_auto_limit_warning_is_executable_without_confirmation_on_dev
                 }
             ],
             "message": "LIMIT 1000 was appended automatically.",
-        }
+        }, parse_one(safe_sql, read=dialect))
 
     def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
         assert sql == safe_sql
         return DryRunResult(True)
 
-    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check_with_ast", fake_guardrail_with_ast)
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
     decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
@@ -305,14 +306,14 @@ def test_trust_gate_execution_decision_blocks_when_safe_sql_dry_run_fails(
     safe_sql = "SELECT missing_column FROM users LIMIT 1000"
     dry_run_sql: list[str] = []
 
-    def fake_guardrail(sql: str, dialect: str = "mysql"):
-        return {
+    def fake_guardrail_with_ast(sql: str, dialect: str = "mysql"):
+        return ({
             "result": "pass",
             "originalSql": sql,
             "safeSql": safe_sql,
             "checks": [],
             "message": "ok",
-        }
+        }, parse_one(safe_sql, read=dialect))
 
     def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
         dry_run_sql.append(sql)
@@ -320,7 +321,7 @@ def test_trust_gate_execution_decision_blocks_when_safe_sql_dry_run_fails(
             return DryRunResult(False, "schema_error", "no such column: missing_column")
         return DryRunResult(True)
 
-    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check_with_ast", fake_guardrail_with_ast)
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
     decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
@@ -345,20 +346,20 @@ def test_trust_gate_execution_decision_skips_dry_run_when_guardrail_rejects(
     sync_schema(db_session_module, test_datasource_module.id)
     dry_run_sql: list[str] = []
 
-    def fake_guardrail(sql: str, dialect: str = "mysql"):
-        return {
+    def fake_guardrail_with_ast(sql: str, dialect: str = "mysql"):
+        return ({
             "result": "reject",
             "originalSql": sql,
             "safeSql": "",
             "checks": [{"rule": "select_only", "level": "reject", "message": "blocked"}],
             "message": "blocked",
-        }
+        }, parse_one(sql, read=dialect))
 
     def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
         dry_run_sql.append(sql)
         return DryRunResult(True)
 
-    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check_with_ast", fake_guardrail_with_ast)
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
     decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
@@ -381,20 +382,20 @@ def test_trust_gate_execution_decision_skips_dry_run_when_safe_sql_is_empty(
     sync_schema(db_session_module, test_datasource_module.id)
     dry_run_sql: list[str] = []
 
-    def fake_guardrail(sql: str, dialect: str = "mysql"):
-        return {
+    def fake_guardrail_with_ast(sql: str, dialect: str = "mysql"):
+        return ({
             "result": "pass",
             "originalSql": sql,
             "safeSql": "",
             "checks": [],
             "message": "ok",
-        }
+        }, parse_one(sql, read=dialect))
 
     def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
         dry_run_sql.append(sql)
         return DryRunResult(True)
 
-    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check_with_ast", fake_guardrail_with_ast)
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
     decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(

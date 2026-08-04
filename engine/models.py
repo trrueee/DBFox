@@ -116,10 +116,11 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
     name = Column(String, nullable=False)
     db_type = Column(String, nullable=False, default="mysql")
 
-    host = Column(String, nullable=False)
-    port = Column(Integer, nullable=False, default=3306)
+    # Network coordinates do not apply to file-backed SQLite datasources.
+    host = Column(String, nullable=True)
+    port = Column(Integer, nullable=True)
     database_name = Column(String, nullable=False)
-    username = Column(String, nullable=False)
+    username = Column(String, nullable=True)
 
     # Secrets are held exclusively in the OS credential vault.  Metadata may
     # contain their opaque identifiers but never ciphertext/nonces.
@@ -658,13 +659,11 @@ class AgentTurn(Base):  # type: ignore[misc,valid-type]
     tool_materialization_hash = Column(String, nullable=False)
     provider = Column(String, nullable=False)
     model_name = Column(String, nullable=False)
-    draft_text = Column(Text, nullable=False, default="")
-    message_phase = Column(String, nullable=True)
     reasoning_summary = Column(Text, nullable=False, default="")
     tool_calls_json = Column(Text, nullable=False, default="[]")
     response_items_json = Column(Text, nullable=False, default="[]")
     usage_json = Column(Text, nullable=False, default="{}")
-    finish_signal = Column(String, nullable=True)
+    termination = Column(String, nullable=True)
     error_code = Column(String, nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)

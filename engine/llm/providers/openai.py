@@ -4,10 +4,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from engine.llm.endpoint_policy import resolve_runtime_llm_endpoint
-from engine.llm.http_clients import get_llm_http_clients
+from engine.llm.http_clients import create_llm_async_http_client, get_llm_http_clients
 
 if TYPE_CHECKING:
-    from openai import OpenAI
+    from openai import AsyncOpenAI, OpenAI
 
 
 def create_openai_responses_client(
@@ -32,6 +32,27 @@ def create_openai_responses_client(
         timeout=timeout,
     )
     return OpenAI(
+        api_key=api_key,
+        base_url=endpoint.api_base,
+        timeout=timeout,
+        max_retries=0,
+        http_client=http_client,
+    )
+
+
+def create_openai_responses_async_client(
+    *,
+    api_key: str,
+    api_base: str,
+    timeout: float = 120.0,
+) -> "AsyncOpenAI":
+    """Build an async Responses client owned by one Agent adapter."""
+
+    from openai import AsyncOpenAI
+
+    endpoint = resolve_runtime_llm_endpoint(api_base)
+    http_client = create_llm_async_http_client(endpoint=endpoint, timeout=timeout)
+    return AsyncOpenAI(
         api_key=api_key,
         base_url=endpoint.api_base,
         timeout=timeout,

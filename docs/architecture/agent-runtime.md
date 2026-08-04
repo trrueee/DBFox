@@ -401,7 +401,9 @@ Activity Feed 的可见过程包括：
 
 私有 chain-of-thought 不展示。Provider 可输出 `reasoning_summary`，但必须是适合用户阅读的简洁摘要，由协议明确标记，不把原始推理 token 当产品内容。
 Turn start/finish 本身不生成“已完成分析”之类的推测性 Activity；Run 完成只由
-`message(phase=final_answer)` 的 `run.item.completed` 与 terminal Run event 表达。任意 Activity 数量也不作为计划进度，
+`completed` Turn 中符合完成策略的 assistant message 的 `run.item.completed` 与 terminal Run event 表达。
+`phase=final_answer` 是优先提示而非必需字段；`phase=null` 的正常完整文本可以完成，
+`phase=commentary`、未结算工具调用和 incomplete/failed/cancelled Turn 均不能完成。任意 Activity 数量也不作为计划进度，
 只有 versioned Task Plan 可以展示步骤完成比例。
 
 ## 19. 当前验证与开放边界

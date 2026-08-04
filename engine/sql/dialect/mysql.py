@@ -49,7 +49,10 @@ def _execute_on_mysql_profiled(
                 raise SQLQueryCancelledError("SQL query cancelled by user")
 
         try:
-            with conn.cursor() as cursor:
+            # Keep pooled PyMySQL connections on the DBAPI's standard tuple
+            # cursor so SQLAlchemy can safely adapt the same connection for
+            # reflection.  Query consumers opt into mapping rows locally.
+            with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 try:
                     cursor.execute("SET SESSION MAX_EXECUTION_TIME=%s", (timeout_ms,))
                 except Exception as exc:
@@ -121,7 +124,7 @@ def explain(
         purpose=ConnectionPurpose.EXPLAIN,
         read_only=True,
     ) as conn:
-        with conn.cursor() as cursor:
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             cursor.execute(f"EXPLAIN {safe_sql}")
             raw_rows = cursor.fetchall()
             for row in raw_rows:

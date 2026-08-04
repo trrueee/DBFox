@@ -84,12 +84,12 @@ class ResultViewCompiler:
         source_sql = self.build_view_sql(query, source, ctx, limit=None, offset=None)
         try:
             parsed_base = sqlglot.parse_one(source_sql, read=ctx.sqlglot_dialect)
-            if not isinstance(parsed_base, exp.Select):
+            if not isinstance(parsed_base, exp.Query):
                 raise ResultViewError(
                     FixedErrorCode.COUNT_SQL_BUILD_FAILED.value,
                     fixed_error_message(FixedErrorCode.COUNT_SQL_BUILD_FAILED),
                 )
-            base_expr = cast(exp.Select, parsed_base)
+            base_expr = cast(exp.Query, parsed_base)
             return (
                 sqlglot.select("COUNT(*)")
                 .from_(base_expr.subquery("dbfox_count"))

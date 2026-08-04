@@ -10,7 +10,12 @@ from engine.connectivity.factory import ConnectionFactory
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 from engine.connectivity.resources import ConnectionResources
 from engine.datasource import datasource_connection_dict
-from engine.errors import DataSourceConnectionError
+from engine.errors import (
+    DataSourceConnectionError,
+    DataSourceCredentialUnavailableError,
+    DataSourceSshConnectionError,
+    DataSourceTlsConnectionError,
+)
 from engine.schemas.datasource import DataSourceTestRequest
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 
@@ -143,6 +148,45 @@ def test_factory_resolves_network_password_only_from_vault() -> None:
         assert client.database == "warehouse"
 
 
+def test_factory_preserves_credential_and_tls_failure_types() -> None:
+    missing_credential_profile = ConnectionProfile.from_mapping(
+        _network_config("missing-credential-reference")
+    )
+    with pytest.raises(DataSourceCredentialUnavailableError):
+        with ConnectionFactory(
+            vault=InMemoryCredentialVault(),
+        ).mysql_client_scope(
+            missing_credential_profile,
+            purpose=ConnectionPurpose.BACKUP,
+        ):
+            pytest.fail("A missing credential cannot open a client scope")
+
+    tls_profile = ConnectionProfile.from_mapping(
+        _network_config(
+            "credential-reference",
+            ssl_enabled=True,
+            ssl_verify_identity=True,
+            ssl_ca_path=None,
+        )
+    )
+    with pytest.raises(DataSourceTlsConnectionError):
+        ConnectionFactory._network_params(
+            tls_profile,
+            SimpleNamespace(host="db.internal.test", port=3306),
+        )
+
+
+def test_mysql_connection_defaults_to_dbapi_tuple_cursor_for_sqlalchemy() -> None:
+    profile = ConnectionProfile.from_mapping(
+        _network_config("cred_datasource_password_opaque")
+    )
+    endpoint = SimpleNamespace(host="db.internal.test", port=3306)
+
+    params = ConnectionFactory._network_params(profile, endpoint)
+
+    assert "cursorclass" not in params
+
+
 def test_connection_test_configuration_keeps_credential_references_opaque(monkeypatch) -> None:
     from engine.api.datasources import crud
 
@@ -262,7 +306,7 @@ def test_ssh_tunnel_failure_never_falls_back_to_direct_host() -> None:
     resources = ConnectionResources(temporary_tunnel_opener=fail_tunnel)
     factory = ConnectionFactory(vault=vault, resources=resources)
 
-    with pytest.raises(DataSourceConnectionError) as exc_info:
+    with pytest.raises(DataSourceSshConnectionError) as exc_info:
         with factory.connection_scope(
             profile,
             purpose=ConnectionPurpose.CONNECTION_TEST,

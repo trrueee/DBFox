@@ -29,17 +29,22 @@ flowchart LR
 
 | RunItem type | 用途 | 关键身份 |
 |---|---|---|
-| `message` | 用户输入、assistant commentary、assistant final answer | item ID；assistant message 带 `phase` |
+| `message` | 用户输入、assistant commentary、assistant final answer | item ID；assistant message 带可选 `phase`、`output_index` 和 stream item ID |
 | `function_call` | 工具请求、参数、版本和展示信息 | invocation ID 与 provider `call_id` |
 | `function_call_output` | 模型可见输出、摘要、错误和 Artifact 引用 | 与调用相同的 `call_id` |
 | `plan` | 多阶段任务的耐久计划 | plan ID 与 version |
 | `approval` | 高风险动作的审批中断及决定 | approval ID 与 version |
 | `question` | 缺少必要信息时的用户输入中断 | question ID 与 version |
 
-Assistant `message.phase` 只允许：
+Assistant `message.phase` 是 Provider 提供的可选提示；非空时只允许：
 
 - `commentary`：适合用户阅读的进度说明或公开 reasoning summary；
 - `final_answer`：本次 Run 的正式终态回答。
+
+`phase=null` 不是协议错误，也不能由 Adapter 伪造为 `final_answer`。当 Turn 以
+`completed` 正常终止、存在非空可展示文本、没有待处理工具调用或继续控制信号，
+且流没有中断/协议错误时，无 phase 的消息可以成为最终回答候选。显式
+`final_answer` 优先，`commentary` 永不作为最终回答。
 
 不公开私有 chain-of-thought。Provider 的 reasoning summary 只有在适合用户阅读时才投影为 commentary。
 
@@ -90,7 +95,8 @@ Conversation snapshot 返回 protocol version、Runs、RunItems、游标和分�
 
 - 一个 Session 同时最多有一个活跃 Run；Coordinator 只负责进程内执行租约和唤醒，不是持久状态源。
 - 一个模型响应可以产生 commentary、零个或多个 function calls；存在工具调用时，工具结果加入下一轮上下文后继续循环。
-- 没有工具调用且收到 `final_answer` 后，Run 才进入成功终态。
+- Turn 的 provider-neutral 终止值是封闭枚举 `completed | incomplete | failed | cancelled`；必须恰好收到一次末尾终止事件，只有 `completed` 能进入完成判断。
+- 没有工具调用或继续控制信号，并且存在符合上文规则的最终回答候选时，Run 才进入成功终态；`phase` 不是所有 Provider 的必需能力。
 - Approval、Question、取消、失败和 lease loss 均先持久化，再向前端发布对应事件。
 - 同一职责只有一个公开合同：不存在 `answer.completed`、`activity.updated`、旧 tool 名称映射或第二套自定义聊天消息协议。
 

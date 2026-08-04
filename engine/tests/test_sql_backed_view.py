@@ -54,6 +54,26 @@ def test_builds_multiple_filter_operators() -> None:
     assert "`deleted_at` IS NULL" in sql
 
 
+def test_builds_paginated_sql_from_readonly_union() -> None:
+    result = build_sql_backed_page_sql(
+        base_sql=(
+            "SELECT id, status FROM current_orders "
+            "UNION ALL SELECT id, status FROM archived_orders"
+        ),
+        dialect="mysql",
+        columns=["id", "status"],
+        sorts=[SqlBackedSort(column="id", direction="asc")],
+        limit=21,
+        offset=20,
+    )
+
+    sql = compact(result.sql)
+    assert "FROM (SELECT id, status FROM current_orders UNION ALL SELECT id, status FROM archived_orders) AS dbfox_result" in sql
+    assert "`id` ASC" in sql
+    assert "LIMIT 21" in sql
+    assert "OFFSET 20" in sql
+
+
 def test_rejects_filter_column_outside_source_columns() -> None:
     with pytest.raises(SqlBackedViewError) as exc_info:
         build_sql_backed_page_sql(

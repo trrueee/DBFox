@@ -14,6 +14,11 @@ accepts `FixedErrorCode` members and renders them through
 `fixed_error_detail()` or `fixed_error_message()`. Unknown values fall back to
 `INTERNAL_ERROR`; arbitrary caller text never becomes a public code or message.
 
+`DBFoxError.message` 本身仍是不可信内部诊断，不因异常类型属于 DBFox 就自动公开。
+唯一例外是 `ToolInputError`：它只能携带 DBFox 自己编写的、有界的输入纠正消息，
+不得包装驱动、Provider、Vault 或远端响应文本。Tool Runtime 对其他
+`DBFoxError` 必须只按固定 code 查询目录；未注册 code 按 `INTERNAL_ERROR` 处理。
+
 `log_unexpected_exception()` records only a finite `SafeLogOperation`, the
 exception type, and an opaque diagnostic fingerprint. It never logs
 `str(exc)`, exception arguments, causes, tracebacks, credentials, SQL results,

@@ -6,7 +6,6 @@ from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.environment.authoritative_inventory import (
     AuthoritativeInventory,
     SchemaInspectionError,
-    SchemaInspectionErrorCode,
 )
 from engine.environment.inventory import ColumnInventory, SchemaInventory, TableInventory
 from engine.environment.er_diagram import build_er_diagram as build_er_diagram_data
@@ -273,7 +272,7 @@ def test_sync_failure_status(db_session) -> None:
     # Use a non-existent datasource id
     with pytest.raises(SchemaInspectionError) as exc_info:
         sync_schema(db_session, str(uuid.uuid4()))
-    assert exc_info.value.code == SchemaInspectionErrorCode.DATASOURCE_NOT_FOUND
+    assert exc_info.value.code == FixedErrorCode.SCHEMA_DATASOURCE_NOT_FOUND.value
 
 
 def test_sync_passes_resolved_config_to_ai_enrichment(db_session, test_datasource, monkeypatch) -> None:
@@ -364,7 +363,7 @@ def test_sync_failure_preserves_existing_schema(db_session, test_datasource, mon
 
     with pytest.raises(SchemaInspectionError) as exc_info:
         sync_schema(db_session, test_datasource.id)
-    assert exc_info.value.code == SchemaInspectionErrorCode.INSPECTION_FAILED
+    assert exc_info.value.code == FixedErrorCode.SCHEMA_INSPECTION_FAILED.value
 
     assert db_session.query(SchemaTable).filter(
         SchemaTable.data_source_id == test_datasource.id

@@ -234,6 +234,49 @@ def test_result_view_service_compiles_page_count_and_export_from_same_query(db_s
     assert "LIMIT" not in export_sql.upper()
 
 
+def test_result_view_service_pages_union_result_artifact(db_session) -> None:
+    union_sql = (
+        "SELECT id, status FROM current_orders "
+        "UNION ALL SELECT id, status FROM archived_orders"
+    )
+    result_id = _add_result_source(
+        db_session,
+        artifact_id="artifact-union-result",
+        safe_sql=union_sql,
+        columns=[
+            {"name": "id", "type": "integer"},
+            {"name": "status", "type": "text"},
+        ],
+    )
+    executed_sql: list[str] = []
+
+    def fake_execute_query(_db, _datasource_id, sql, **_kwargs):
+        executed_sql.append(sql)
+        return {
+            "columns": ["id", "status"],
+            "rows": [{"id": 1, "status": "paid"}],
+            "latencyMs": 1,
+            "warnings": [],
+            "notices": [],
+        }
+
+    page = ResultViewService(
+        db_session,
+        row_executor=fake_execute_query,
+    ).page(
+        ResultPageQuery(
+            source=ResultSourceRef(artifact_id=result_id),
+            page=1,
+            page_size=20,
+        )
+    )
+
+    assert page.rows == [{"id": 1, "status": "paid"}]
+    assert len(executed_sql) == 1
+    assert "UNION ALL" in executed_sql[0]
+    assert "AS dbfox_result" in executed_sql[0]
+
+
 def test_exact_count_diagnostic_never_logs_sql_or_exception_text(db_session, caplog) -> None:
     sql_secret = "SELECT id, token FROM orders WHERE token = 'result-view-sql-secret'"
     exception_secret = "result-view-driver-secret"

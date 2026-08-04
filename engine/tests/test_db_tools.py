@@ -167,6 +167,16 @@ def test_schema_list_queries_only_requested_cursor_page(
     assert len(statements) == 1
     assert sum("schema_columns" in statement.lower() for statement in statements) == 1
 
+    observation = SchemaListTool().project_observation(
+        status="success",
+        output=result.model_dump(mode="json"),
+        artifacts=[],
+    )
+    assert observation.facts["returned_count"] == 5
+    assert [table["qualified_name"] for table in observation.facts["tables"]] == [
+        table.qualified_name for table in result.tables
+    ]
+
 
 def test_schema_list_cursor_preserves_same_named_tables_across_schemas(
     db_session,

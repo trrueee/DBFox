@@ -57,10 +57,12 @@ class _TimeoutSettingFailsCursor(_FakeCursor):
 class _FakeConnection:
     def __init__(self, cursor: _FakeCursor) -> None:
         self._cursor = cursor
+        self.cursor_classes: list[object | None] = []
         self.closed = False
         self.rolled_back = False
 
-    def cursor(self) -> _FakeCursor:
+    def cursor(self, cursor_class: object | None = None) -> _FakeCursor:
+        self.cursor_classes.append(cursor_class)
         return self._cursor
 
     def close(self) -> None:
@@ -100,6 +102,8 @@ def test_mysql_execution_begins_a_native_read_only_transaction(monkeypatch) -> N
 
     assert cursor.calls[0] == ("START TRANSACTION READ ONLY", None)
     assert ("SELECT 1", None) in cursor.calls
+    assert connection.cursor_classes[0] is None
+    assert connection.cursor_classes[1] is mysql.pymysql.cursors.DictCursor
     assert connection.rolled_back is True
 
 

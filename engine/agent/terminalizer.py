@@ -59,8 +59,8 @@ class Terminalizer:
             artifacts = ArtifactRepository(db).list_for_run(run_id)
             result_artifacts = [item for item in artifacts if item.type is ArtifactType.RESULT_VIEW]
             final_text = (
-                result.text.strip()
-                if result.message_phase == "final_answer"
+                result.answer_text
+                if result.has_completed_answer_candidate
                 else ""
             )
             text = final_text or (
@@ -148,6 +148,11 @@ class Terminalizer:
                 db,
                 lease,
                 response,
+                terminal_output_index=(
+                    result.completed_answer_messages[-1].output_index
+                    if result.completed_answer_messages
+                    else None
+                ),
                 plan_status=PlanStatus.PARTIAL if partial else PlanStatus.COMPLETED,
                 memory_delta={
                     "verified_claims": [
@@ -172,6 +177,7 @@ class Terminalizer:
         lease: SessionLease,
         response: ComposedResponse,
         *,
+        terminal_output_index: int | None = None,
         plan_status: PlanStatus = PlanStatus.COMPLETED,
         memory_delta: dict[str, Any] | None = None,
     ) -> None:
@@ -187,6 +193,7 @@ class Terminalizer:
         RunRepository(db).complete(
             lease=lease,
             response=response,
+            terminal_output_index=terminal_output_index,
             memory_delta=memory_delta or {},
         )
 

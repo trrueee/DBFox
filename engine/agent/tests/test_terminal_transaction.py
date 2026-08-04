@@ -15,7 +15,15 @@ from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.response import AnswerCandidate, CompletionDisposition, ResponseComposer
-from engine.models import AgentEvidenceRecord, AgentMessage, AgentRun, AgentSession, AgentSessionMemory
+from engine.agent.run_item import RunItemStatus
+from engine.models import (
+    AgentEvidenceRecord,
+    AgentMessage,
+    AgentRun,
+    AgentRunItemRecord,
+    AgentSession,
+    AgentSessionMemory,
+)
 
 
 def test_answer_evidence_memory_and_terminal_state_commit_together(db_session, test_datasource):
@@ -181,11 +189,15 @@ def test_interrupted_model_turn_is_closed_before_run_recovery(db_session, test_d
         tool_materialization={}, tool_materialization_hash="tools", provider="test", model_name="test",
     )
     runs = RunRepository(db_session)
-    runs.merge_answer_draft(
+    item_id = runs.persist_turn_message(
         lease=lease,
         run_id=admission.run_id,
+        turn_id=str(turn.id),
+        output_index=0,
+        revision=1,
         content="未完成的半截回答",
         phase="final_answer",
+        status=RunItemStatus.IN_PROGRESS,
     )
     db_session.commit()
 
@@ -195,5 +207,7 @@ def test_interrupted_model_turn_is_closed_before_run_recovery(db_session, test_d
     message = db_session.get(AgentMessage, admission.assistant_message_id)
     assert turn.status == "failed"
     assert turn.error_code == "MODEL_STREAM_INTERRUPTED"
+    recovered_item = db_session.get(AgentRunItemRecord, item_id)
+    assert recovered_item.status == RunItemStatus.CANCELLED.value
     assert message.content == ""
     assert message.status == "created"

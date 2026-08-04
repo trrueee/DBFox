@@ -16,6 +16,7 @@ from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.run_item import project_run
+from engine.app.safe_errors import FixedErrorCode, fixed_error_detail
 from engine.api.conversation_common import coordinator
 from engine.api.conversation_contracts import (
     ApprovalResolutionRequest,
@@ -169,14 +170,17 @@ def admit_conversation_input(
             "items": [json_loads(str(user_item.item_json))],
             "runs": [project_run(run)],
         }
-    except (ValueError, LlmConfigurationError) as exc:
+    except LlmConfigurationError as exc:
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail={
-                "code": getattr(exc, "code", "AGENT_INPUT_INVALID"),
-                "message": "输入或模型配置无效。",
-            },
+            detail=fixed_error_detail(exc.code),
+        ) from None
+    except ValueError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=fixed_error_detail(FixedErrorCode.AGENT_INPUT_INVALID),
         ) from None
     active_coordinator.wake(conversation_id)
     return {

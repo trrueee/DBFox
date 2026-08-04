@@ -63,6 +63,8 @@ class RunControl:
         cancellation_probe: Callable[[], bool],
         lease_lost_probe: Callable[[], bool] | None = None,
         probe_interval_seconds: float = 0.1,
+        provider_retry_base_seconds: float = 0.5,
+        provider_retry_max_seconds: float = 30.0,
     ) -> None:
         started_at = run.started_at or run.created_at or datetime.now(UTC)
         if started_at.tzinfo is None:
@@ -77,6 +79,11 @@ class RunControl:
         self._cancellation_probe = cancellation_probe
         self._lease_lost_probe = lease_lost_probe
         self._probe_interval = max(0.01, probe_interval_seconds)
+        self._provider_retry_base = max(0.01, provider_retry_base_seconds)
+        self._provider_retry_max = max(
+            self._provider_retry_base,
+            provider_retry_max_seconds,
+        )
         self._last_probe = 0.0
         self._cancelled = False
 
@@ -154,6 +161,24 @@ class RunControl:
         self.provider_retry_count += 1
         if self.provider_retry_count > self.limits.max_provider_retries:
             raise RunControlError("AGENT_PROVIDER_RETRY_BUDGET", "模型服务连续失败，已停止重试。")
+
+    def wait_for_provider_retry(self, retry_after_seconds: float | None = None) -> None:
+        """Wait with persisted exponential backoff while remaining cancellable."""
+
+        exponent = max(0, self.provider_retry_count - 1)
+        backoff = min(
+            self._provider_retry_max,
+            self._provider_retry_base * (2 ** exponent),
+        )
+        advertised = max(0.0, float(retry_after_seconds or 0.0))
+        delay = min(self._provider_retry_max, max(backoff, advertised))
+        wake_at = time.monotonic() + delay
+        while True:
+            self.checkpoint()
+            remaining = wake_at - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(self._probe_interval, remaining))
 
     def record_repair(self) -> None:
         self.repair_attempt_count += 1

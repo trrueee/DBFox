@@ -8,24 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
 
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.environment.inventory import SchemaInventory, TableInventory
 from engine.errors import DBFoxError
-
-
-class SchemaInspectionErrorCode(str, Enum):
-    """Stable, non-secret reasons why an inspection could not complete."""
-
-    DATASOURCE_NOT_FOUND = "SCHEMA_DATASOURCE_NOT_FOUND"
-    SQLITE_PATH_UNAVAILABLE = "SCHEMA_SQLITE_PATH_UNAVAILABLE"
-    DUCKDB_PATH_UNAVAILABLE = "SCHEMA_DUCKDB_PATH_UNAVAILABLE"
-    DUCKDB_MEMORY_UNSUPPORTED = "SCHEMA_DUCKDB_MEMORY_UNSUPPORTED"
-    CONNECTION_FAILED = "SCHEMA_CONNECTION_FAILED"
-    CREDENTIAL_UNAVAILABLE = "SCHEMA_CREDENTIAL_UNAVAILABLE"
-    SSH_FAILED = "SCHEMA_SSH_FAILED"
-    TLS_FAILED = "SCHEMA_TLS_FAILED"
-    INSPECTION_FAILED = "SCHEMA_INSPECTION_FAILED"
 
 
 class SchemaInspectionError(DBFoxError):
@@ -34,9 +20,9 @@ class SchemaInspectionError(DBFoxError):
     def __init__(
         self,
         datasource_id: str,
-        code: SchemaInspectionErrorCode = SchemaInspectionErrorCode.INSPECTION_FAILED,
+        code: FixedErrorCode = FixedErrorCode.SCHEMA_INSPECTION_FAILED,
     ) -> None:
-        super().__init__("Schema inspection could not be completed.", code=code)
+        super().__init__(fixed_error_message(code), code=code.value)
         self.datasource_id = datasource_id
 
 

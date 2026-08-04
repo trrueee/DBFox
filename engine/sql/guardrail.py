@@ -7,6 +7,11 @@ import re
 
 from sqlglot import exp
 from engine.sql.parser import normalize_dialect as _sqlglot_dialect, parse_sql
+from engine.sql.readonly_query import (
+    READONLY_FORBIDDEN_TYPES,
+    READONLY_SIDE_EFFECT_FUNCTIONS,
+    is_readonly_query,
+)
 from engine.sql.result_limits import MAX_ROWS
 
 from engine.app.safe_errors import (
@@ -47,7 +52,7 @@ DANGEROUS_FUNCTIONS = {
     "sleep", "benchmark", "load_file", "database", "user", "current_user", "version",
     "pg_sleep", "pg_read_file", "pg_write_file", "lo_import", "lo_export", "query_to_xml",
     "sys_eval", "sys_exec", "xp_cmdshell"
-}
+} | READONLY_SIDE_EFFECT_FUNCTIONS
 
 # sqlglot normalizes some MySQL functions into dedicated expression types, so
 # string-based function-name checks are not enough for these security rules.
@@ -58,37 +63,6 @@ DANGEROUS_EXPRESSION_TYPES = (
 )
 
 # List of blocked SQL command types (anything that is not a SELECT)
-BLOCKED_COMMAND_TYPES = (
-    exp.Insert,
-    exp.Update,
-    exp.Delete,
-    exp.Drop,
-    exp.Create,
-    exp.Alter,
-    exp.Command,
-    exp.Merge,
-    exp.Execute,
-    exp.TruncateTable,
-    exp.LoadData,
-    exp.Copy,
-)
-
-
-def guardrail_parsed_ast(sql_str: str, dialect: str = "mysql") -> exp.Expression | None:
-    """Return a parsed AST for trusted internal consumers, or None if unavailable."""
-    sql_str = sql_str.strip()
-    if not sql_str:
-        return None
-
-    try:
-        expressions = parse_sql(sql_str, dialect)
-    except Exception:
-        return None
-    if len(expressions) != 1 or not expressions[0]:
-        return None
-    return expressions[0]  # type: ignore[return-value]
-
-
 def guardrail_check_with_ast(
     sql_str: str,
     dialect: str = "mysql",
@@ -158,19 +132,6 @@ def count_statement_delimiters(sql: str) -> int:
 # Pattern that matches MySQL executable comment openings: /*! followed by digits.
 # Used to block these outright — they can hide dangerous SQL from the AST walker.
 _MYSQL_EXEC_COMMENT_START = re.compile(r"/\*!\d")
-
-
-def _is_select_node(node: exp.Expression) -> bool:
-    """Check if an AST node is a read-only SELECT or set operation."""
-    if isinstance(node, exp.Select):
-        return True
-    if isinstance(node, (exp.Union, exp.Intersect, exp.Except)):
-        return _is_select_node(node.left) and _is_select_node(node.right)  # type: ignore[arg-type]
-    if isinstance(node, exp.Subquery):
-        return _is_select_node(node.this)
-    if isinstance(node, exp.With):
-        return _is_select_node(node.this)
-    return False
 
 
 def _projection_has_star(projection: exp.Expression) -> bool:
@@ -347,7 +308,7 @@ def _ast_rejection_checks(expression: exp.Expression) -> list[GuardrailCheck]:
             expression,
             (exp.Select, exp.Union, exp.Intersect, exp.Except, exp.Subquery, exp.With),
         )
-        or not _is_select_node(expression)
+        or not is_readonly_query(expression)
     ):
         checks.append({
             "rule": "select_only",
@@ -359,7 +320,25 @@ def _ast_rejection_checks(expression: exp.Expression) -> list[GuardrailCheck]:
         })
 
     for node in expression.walk():
-        if isinstance(node, BLOCKED_COMMAND_TYPES):
+        if isinstance(node, exp.Lock):
+            checks.append({
+                "rule": "row_locking_blocked",
+                "level": "reject",
+                "message": (
+                    "在只读/安全模式下，禁止执行包含 row-locking "
+                    "(FOR UPDATE / FOR SHARE) 的锁表或锁行操作。"
+                ),
+            })
+        elif isinstance(node, exp.Into):
+            checks.append({
+                "rule": "into_outfile_blocked",
+                "level": "reject",
+                "message": (
+                    "禁止执行文件写入/导出操作 "
+                    "(INTO OUTFILE / INTO DUMPFILE)"
+                ),
+            })
+        elif isinstance(node, READONLY_FORBIDDEN_TYPES):
             checks.append({
                 "rule": "blocked_command_type",
                 "level": "reject",
@@ -372,15 +351,6 @@ def _ast_rejection_checks(expression: exp.Expression) -> list[GuardrailCheck]:
                 "message": (
                     "由于安全性与性能考量，"
                     "禁止执行包含 RECURSIVE (递归) 的 CTE 语句。"
-                ),
-            })
-        elif isinstance(node, exp.Lock):
-            checks.append({
-                "rule": "row_locking_blocked",
-                "level": "reject",
-                "message": (
-                    "在只读/安全模式下，禁止执行包含 row-locking "
-                    "(FOR UPDATE / FOR SHARE) 的锁表或锁行操作。"
                 ),
             })
         elif isinstance(node, exp.Table):
@@ -424,15 +394,6 @@ def _ast_rejection_checks(expression: exp.Expression) -> list[GuardrailCheck]:
                         f"'{func_name}'"
                     ),
                 })
-        elif isinstance(node, exp.Into):
-            checks.append({
-                "rule": "into_outfile_blocked",
-                "level": "reject",
-                "message": (
-                    "禁止执行文件写入/导出操作 "
-                    "(INTO OUTFILE / INTO DUMPFILE)"
-                ),
-            })
     return checks
 
 

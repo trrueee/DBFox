@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from engine.errors import DBFoxError
 from engine.llm.endpoint_policy import LlmEndpointPolicyError, normalize_llm_api_base
 from engine.security.credential_vault import CredentialKind, CredentialVault, get_credential_vault
 
@@ -98,7 +97,7 @@ def resolve_product_llm_config_from_credential(
         expected_kind=CredentialKind.LLM_API_KEY,
     )
     if not secret:
-        raise DBFoxError(
+        raise LlmConfigurationError(
             "LLM credential was not found.",
             code="LLM_CREDENTIAL_NOT_FOUND",
         )

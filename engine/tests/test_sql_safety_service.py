@@ -34,6 +34,20 @@ def test_source_artifact_validation_reuses_guardrail_rules() -> None:
     assert any("sleep" in warning.lower() or "dangerous" in warning.lower() for warning in warnings)
 
 
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT id FROM current_orders UNION ALL SELECT id FROM archived_orders",
+        "SELECT id FROM current_orders INTERSECT SELECT id FROM paid_orders",
+        "SELECT id FROM current_orders EXCEPT SELECT id FROM cancelled_orders",
+    ],
+)
+def test_source_artifact_validation_accepts_readonly_set_operations(sql: str) -> None:
+    ctx = DialectContext(datasource_id="ds-source", dialect="postgresql")
+
+    assert SqlSafetyService().validate_source_artifact_sql(sql, ctx) == []
+
+
 def test_pagination_base_wrapper_reuses_unified_safety_service() -> None:
     warnings = validate_pagination_base_sql("SELECT SLEEP(10)", dialect="mysql")
 

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from engine.errors import DBFoxError
 from engine.tools.runtime.base import (
     BaseTool,
     ToolExecutionSpec,
@@ -192,6 +193,64 @@ def test_runtime_validation_and_execution_failures_are_safe(monkeypatch, caplog)
     assert failed.error == "Tool execution failed."
     assert "secret-sentinel" not in failed.model_dump_json()
     assert "secret-sentinel" not in caplog.text
+
+
+def test_runtime_uses_registered_public_contract_for_domain_error() -> None:
+    class DomainFailureTool(EchoTool):
+        name = "test_domain_failure"
+
+        def run(self, _tool_input: EchoInput, _context: ToolRunContext) -> dict[str, Any]:
+            raise DBFoxError(
+                "secret://driver-detail-must-not-cross-boundary",
+                code="SCHEMA_INSPECTION_FAILED",
+            )
+
+    result = ToolRuntime(ToolRegistry().register(DomainFailureTool())).invoke(
+        tool_name="test_domain_failure",
+        raw_input={"value": "x"},
+        request=None,
+        db=None,
+        idempotency_key="invocation-domain-failure",
+    )
+
+    assert result.status == "failed"
+    assert result.error_code == "SCHEMA_INSPECTION_FAILED"
+    assert result.error == "Schema inspection could not be completed."
+    assert result.output == {
+        "status": "failed",
+        "error_code": "SCHEMA_INSPECTION_FAILED",
+        "safe_message": "Schema inspection could not be completed.",
+    }
+    assert "secret://" not in str(result.model_dump(mode="json"))
+
+
+def test_runtime_collapses_unregistered_domain_error_to_internal_error() -> None:
+    class UnregisteredFailureTool(EchoTool):
+        name = "test_unregistered_domain_failure"
+
+        def run(self, _tool_input: EchoInput, _context: ToolRunContext) -> dict[str, Any]:
+            raise DBFoxError(
+                "secret://unregistered-detail-must-not-cross-boundary",
+                code="UNREGISTERED_DOMAIN_FAILURE",
+            )
+
+    result = ToolRuntime(ToolRegistry().register(UnregisteredFailureTool())).invoke(
+        tool_name="test_unregistered_domain_failure",
+        raw_input={"value": "x"},
+        request=None,
+        db=None,
+        idempotency_key="invocation-unregistered-domain-failure",
+    )
+
+    assert result.status == "failed"
+    assert result.error_code == "INTERNAL_ERROR"
+    assert result.error == "The request could not be completed."
+    assert result.output == {
+        "status": "failed",
+        "error_code": "INTERNAL_ERROR",
+        "safe_message": "The request could not be completed.",
+    }
+    assert "secret://" not in str(result.model_dump(mode="json"))
 
 
 def test_validation_error_raised_inside_tool_is_an_execution_failure():

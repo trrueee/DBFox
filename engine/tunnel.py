@@ -13,8 +13,12 @@ from engine.app.safe_errors import (
     fixed_error_message,
     log_unexpected_exception,
 )
-from engine.errors import DataSourceConnectionError
-from engine.security.credential_vault import CredentialKind, get_credential_vault
+from engine.errors import DataSourceConnectionError, DataSourceCredentialUnavailableError
+from engine.security.credential_vault import (
+    CredentialKind,
+    CredentialVaultUnavailableError,
+    get_credential_vault,
+)
 
 logger = logging.getLogger("dbfox.tunnel")
 
@@ -86,7 +90,9 @@ def _create_physical_tunnel_forwarder(config: dict[str, Any]) -> SSHTunnelForwar
             expected_kind=CredentialKind.SSH_PASSWORD,
         )
         if ssh_password is None:
-            raise DataSourceConnectionError("SSH password credential was not found.")
+            raise DataSourceCredentialUnavailableError(
+                "SSH password credential was not found."
+            )
     pkey_passphrase_id = config.get("ssh_key_passphrase_credential_id")
     if pkey_passphrase_id:
         pkey_passphrase = vault.get(
@@ -94,7 +100,9 @@ def _create_physical_tunnel_forwarder(config: dict[str, Any]) -> SSHTunnelForwar
             expected_kind=CredentialKind.SSH_KEY_PASSPHRASE,
         )
         if pkey_passphrase is None:
-            raise DataSourceConnectionError("SSH key passphrase credential was not found.")
+            raise DataSourceCredentialUnavailableError(
+                "SSH key passphrase credential was not found."
+            )
 
     ssh_pkey = config.get("ssh_pkey_path") if config.get("ssh_pkey_path") else None
     ssh_host = config.get("ssh_host")
@@ -270,6 +278,11 @@ class TunnelManager:
                 instance.error_message = None
             logger.info("SSH Tunnel auto-reconnect successful for %s.", datasource_id)
             return new_tunnel
+        except (DataSourceCredentialUnavailableError, CredentialVaultUnavailableError):
+            with self._lock:
+                instance.state = TunnelState.FAILED
+                instance.error_message = "SSH tunnel credential is unavailable."
+            raise
         except Exception as exc:
             log_unexpected_exception(
                 logger,

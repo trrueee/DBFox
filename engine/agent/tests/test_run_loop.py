@@ -7,9 +7,12 @@ from engine.agent.events import LiveStreamHub
 from engine.agent.definition import AgentDefinition
 from engine.agent.loop import RunLoop
 from engine.agent.repositories.artifact import ArtifactRepository
+from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.run import RunLimits
-from engine.agent.turn import TurnStreamItem, TurnStreamKind
+from engine.agent.turn import TurnStreamItem, TurnStreamKind, TurnTermination
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
+from engine.llm.config import LlmConfigurationError
 from engine.models import (
     AgentEvidenceRecord,
     AgentMessage,
@@ -105,6 +108,71 @@ class FailingExecuteTool(ExecuteTool):
         raise RuntimeError("execution failed")
 
 
+def test_model_configuration_failure_settles_turn_and_fails_run(
+    db_session,
+    test_datasource,
+) -> None:
+    db_session.add(AgentSession(
+        id="session_missing_llm_credential",
+        datasource_id=str(test_datasource.id),
+        title="Missing credential",
+    ))
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session_missing_llm_credential",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="分析订单",
+        idempotency_key="missing-llm-credential",
+        llm_credential_id="deleted-credential-reference",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(
+        session_id="session_missing_llm_credential",
+        owner="worker",
+        ttl_seconds=120,
+    )
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    private_detail = "vault secret reference must not be rendered"
+
+    def missing_credential_factory(_settings):
+        raise LlmConfigurationError(
+            private_detail,
+            code="LLM_CREDENTIAL_NOT_FOUND",
+        )
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=missing_credential_factory,
+        registry=ToolRegistry(),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    turn = (
+        db_session.query(AgentTurn)
+        .filter(AgentTurn.run_id == admission.run_id)
+        .one()
+    )
+    expected_message = fixed_error_message(FixedErrorCode.LLM_CREDENTIAL_NOT_FOUND)
+    assert run is not None
+    assert run.status == "failed"
+    assert run.error_code == "LLM_CREDENTIAL_NOT_FOUND"
+    assert run.error_message == expected_message
+    assert private_detail not in str(run.error_message)
+    assert turn.status == "failed"
+    assert turn.error_code == "LLM_CREDENTIAL_NOT_FOUND"
+    assert turn.error_message == expected_message
+
+
 class ScriptedModel:
     def __init__(self, call_number):
         self.call_number = call_number
@@ -115,6 +183,7 @@ class ScriptedModel:
                 kind=TurnStreamKind.ANSWER_START,
                 item_id="answer",
                 revision=1,
+                output_index=0,
                 phase="commentary",
             )
             yield TurnStreamItem(
@@ -127,7 +196,9 @@ class ScriptedModel:
                 kind=TurnStreamKind.ANSWER_END,
                 item_id="answer",
                 revision=3,
+                output_index=0,
                 phase="commentary",
+                message_status="completed",
             )
             yield TurnStreamItem(
                 kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
@@ -173,7 +244,7 @@ class ScriptedModel:
                 kind=TurnStreamKind.FINISH,
                 item_id="finish",
                 revision=1,
-                finish_signal="tool_calls",
+                termination=TurnTermination.COMPLETED,
             )
         elif self.call_number == 2:
             prompt_content = json.dumps(messages, ensure_ascii=False)
@@ -216,17 +287,38 @@ class ScriptedModel:
                 kind=TurnStreamKind.FINISH,
                 item_id="finish",
                 revision=1,
-                finish_signal="tool_calls",
+                termination=TurnTermination.COMPLETED,
             )
         else:
             prompt_content = json.dumps(messages, ensure_ascii=False)
             assert re.search(r"artifact_[A-Za-z0-9_-]+", prompt_content)
+            yield TurnStreamItem(
+                kind=TurnStreamKind.ANSWER_START,
+                item_id="commentary",
+                revision=1,
+                output_index=0,
+                phase="commentary",
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.ANSWER_DELTA,
+                item_id="commentary",
+                revision=2,
+                content="正在整理可验证结论。",
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.ANSWER_END,
+                item_id="commentary",
+                revision=3,
+                output_index=0,
+                phase="commentary",
+                message_status="completed",
+            )
             content = "共有 42 条订单。"
             yield TurnStreamItem(
                 kind=TurnStreamKind.ANSWER_START,
                 item_id="answer",
                 revision=1,
-                phase="final_answer",
+                output_index=1,
             )
             yield TurnStreamItem(
                 kind=TurnStreamKind.ANSWER_DELTA,
@@ -238,17 +330,17 @@ class ScriptedModel:
                 kind=TurnStreamKind.ANSWER_END,
                 item_id="answer",
                 revision=3,
-                phase="final_answer",
+                output_index=1,
+                message_status="completed",
             )
             yield TurnStreamItem(
                 kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
                 item_id="answer",
                 revision=4,
-                output_index=0,
+                output_index=1,
                 model_output_item={
                     "type": "message",
                     "role": "assistant",
-                    "phase": "final_answer",
                     "content": content,
                 },
             )
@@ -256,7 +348,7 @@ class ScriptedModel:
                 kind=TurnStreamKind.FINISH,
                 item_id="finish",
                 revision=1,
-                finish_signal="stop",
+                termination=TurnTermination.COMPLETED,
             )
 
 
@@ -304,7 +396,7 @@ class ToolBudgetModel:
             kind=TurnStreamKind.FINISH,
             item_id="finish",
             revision=1,
-            finish_signal="tool_calls",
+            termination=TurnTermination.COMPLETED,
         )
 
 
@@ -315,6 +407,7 @@ class BudgetAnswerModel:
             kind=TurnStreamKind.ANSWER_START,
             item_id="answer",
             revision=1,
+            output_index=0,
             phase="final_answer",
         )
         yield TurnStreamItem(
@@ -327,7 +420,9 @@ class BudgetAnswerModel:
             kind=TurnStreamKind.ANSWER_END,
             item_id="answer",
             revision=3,
+            output_index=0,
             phase="final_answer",
+            message_status="completed",
         )
         yield TurnStreamItem(
             kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
@@ -355,7 +450,7 @@ class BudgetAnswerModel:
             kind=TurnStreamKind.FINISH,
             item_id="finish",
             revision=1,
-            finish_signal="stop",
+            termination=TurnTermination.COMPLETED,
         )
 
 
@@ -365,6 +460,7 @@ class CommentaryAndQuestionModel:
             kind=TurnStreamKind.ANSWER_START,
             item_id="answer",
             revision=1,
+            output_index=0,
             phase="commentary",
         )
         yield TurnStreamItem(
@@ -377,7 +473,9 @@ class CommentaryAndQuestionModel:
             kind=TurnStreamKind.ANSWER_END,
             item_id="answer",
             revision=3,
+            output_index=0,
             phase="commentary",
+            message_status="completed",
         )
         yield TurnStreamItem(
             kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
@@ -435,7 +533,7 @@ class CommentaryAndQuestionModel:
             kind=TurnStreamKind.FINISH,
             item_id="finish",
             revision=1,
-            finish_signal="tool_calls",
+            termination=TurnTermination.COMPLETED,
         )
 
 
@@ -553,14 +651,20 @@ def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(db_ses
         "function_call",
         "function_call_output",
         "message",
+        "message",
     ]
     assert timeline[1]["payload"]["phase"] == "commentary"
-    assert timeline[-1]["payload"]["phase"] == "final_answer"
+    assert timeline[-1]["payload"]["phase"] is None
+    assert timeline[-1]["payload"]["completion_disposition"] == "complete"
+    recovered = RunRepository(db_session).latest_completed_answer(str(run.id))
+    assert [message.phase for message in recovered.messages] == ["commentary", None]
+    assert recovered.answer_text == "共有 42 条订单。"
     assert (
         timeline[2]["payload"]["call_id"]
         == timeline[3]["payload"]["call_id"]
     )
     assert subscription.receive(timeout=0.01).content == "先验证并执行聚合查询。"
+    assert subscription.receive(timeout=0.01).content == "正在整理可验证结论。"
     assert subscription.receive(timeout=0.01).content == "共有 42 条订单。"
 def test_result_rows_are_transient_and_never_enter_durable_facts() -> None:
     secret = "transient-sensitive-cell"

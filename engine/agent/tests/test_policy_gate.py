@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from engine.policy.gate import PolicyGate
+from engine.tools.builtin.registry import register_dbfox_tools
 from engine.tools.runtime import (
     BaseTool,
     ToolExecutionSpec,
@@ -89,6 +90,17 @@ def test_input_contract_is_enforced_before_policy_rules(db_session):
     )
     assert decision.status == "blocked"
     assert "input contract" in decision.reason
+
+
+def test_schema_list_empty_arguments_apply_canonical_model_defaults(db_session):
+    decision = PolicyGate(register_dbfox_tools(), db_session).check(
+        _state(allowed_tool_groups=["catalog"]),
+        "schema_list",
+        {},
+    )
+
+    assert decision.status == "allowed"
+    assert decision.safe_args == {"limit": 20}
 
 
 def test_disallowed_group_is_blocked(db_session):

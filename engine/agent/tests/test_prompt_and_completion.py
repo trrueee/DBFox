@@ -2,7 +2,7 @@ from engine.agent.completion import CompletionKind, CompletionPolicy
 from engine.agent.context import ContextObservation, ContextSnapshot
 from engine.agent.definition import DEFAULT_AGENT_DEFINITION
 from engine.agent.prompt import PromptAssembler
-from engine.agent.turn import ModelTurnResult
+from engine.agent.turn import ModelTurnResult, TurnAssistantMessage, TurnTermination
 from engine.tools.runtime.semantics import ToolSemanticCapability
 
 
@@ -20,9 +20,14 @@ def _context(*, observations=None):
 
 def _final(text: str) -> ModelTurnResult:
     return ModelTurnResult(
-        text=text,
-        message_phase="final_answer",
-        finish_signal="stop",
+        messages=[TurnAssistantMessage(
+            item_id="message:0",
+            output_index=0,
+            phase="final_answer",
+            status="completed",
+            text=text,
+        )],
+        termination=TurnTermination.COMPLETED,
     )
 
 
@@ -270,13 +275,57 @@ def test_commentary_without_tools_cannot_become_the_final_answer():
     decision = CompletionPolicy().evaluate(
         context=_context(),
         model_result=ModelTurnResult(
-            text="我继续检查相关数据。",
-            message_phase="commentary",
-            finish_signal="stop",
+            messages=[TurnAssistantMessage(
+                item_id="message:0",
+                output_index=0,
+                phase="commentary",
+                status="completed",
+                text="我继续检查相关数据。",
+            )],
+            termination=TurnTermination.COMPLETED,
         ),
         turn_count=1,
         max_turns=8,
     )
 
     assert decision.kind is CompletionKind.CONTINUE
-    assert decision.missing == ["final_answer_phase"]
+    assert decision.missing == ["completed_answer"]
+
+
+def test_completed_text_without_phase_is_an_answer_candidate():
+    decision = CompletionPolicy().evaluate(
+        context=_context(),
+        model_result=ModelTurnResult(
+            messages=[TurnAssistantMessage(
+                item_id="message:0",
+                output_index=0,
+                phase=None,
+                status="completed",
+                text="这是最终答案。",
+            )],
+            termination=TurnTermination.COMPLETED,
+        ),
+        turn_count=1,
+        max_turns=8,
+    )
+
+    assert decision.kind is CompletionKind.SYNTHESIZE
+    assert decision.missing == []
+
+
+def test_text_without_phase_and_without_normal_finish_does_not_complete():
+    decision = CompletionPolicy().evaluate(
+        context=_context(),
+        model_result=ModelTurnResult(messages=[TurnAssistantMessage(
+            item_id="message:0",
+            output_index=0,
+            phase=None,
+            status="completed",
+            text="尚未完整的回答",
+        )]),
+        turn_count=1,
+        max_turns=8,
+    )
+
+    assert decision.kind is CompletionKind.CONTINUE
+    assert decision.missing == ["completed_answer"]

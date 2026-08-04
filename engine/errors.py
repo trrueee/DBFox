@@ -17,6 +17,18 @@ class DataSourceConnectionError(DBFoxError):
         super().__init__(message, code="CONNECTION_FAILED")
 
 
+class DataSourceCredentialUnavailableError(DataSourceConnectionError):
+    """A datasource credential reference cannot currently yield its secret."""
+
+
+class DataSourceSshConnectionError(DataSourceConnectionError):
+    """The configured SSH transport failed before the database connection."""
+
+
+class DataSourceTlsConnectionError(DataSourceConnectionError):
+    """TLS configuration or negotiation failed at the connectivity boundary."""
+
+
 class GuardrailValidationError(DBFoxError):
     def __init__(
         self,

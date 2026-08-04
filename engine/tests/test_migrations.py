@@ -28,7 +28,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "e4f5a6b7c810"
+FOUNDATION_HEAD_REVISION = "12ab34cd56ef"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -243,6 +243,11 @@ def _assert_final_contract(engine) -> None:
         "agent_events",
         "agent_task_plans",
     }.issubset(tables)
+    agent_turn_columns = _column_names(engine, "agent_turns")
+    assert "termination" in agent_turn_columns
+    assert {"draft_text", "message_phase", "finish_signal"}.isdisjoint(
+        agent_turn_columns
+    )
     assert "model_output_json" in _column_names(engine, "agent_observations")
     assert {
         "input_sequence",
@@ -327,6 +332,109 @@ def test_fresh_upgrade_has_the_complete_foundation_v2_contract(monkeypatch, tmp_
             assert connection.execute(text("SELECT COUNT(*) FROM foundation_runtime_state")).scalar_one() == 0
         _assert_final_contract(engine)
         command.check(_alembic_config(database_url))
+    finally:
+        engine.dispose()
+
+
+def test_agent_turn_contract_only_preserves_canonical_termination_values(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "agent-turn-contract.db")
+    _upgrade(monkeypatch, database_url, "e4f5a6b7c810")
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(
+                """
+                INSERT INTO data_sources (
+                    id, name, db_type, host, port, database_name, username,
+                    ssh_enabled, ssh_port, ssl_enabled, ssl_verify_identity,
+                    connection_mode, connection_generation, is_read_only, env,
+                    status, created_at, updated_at
+                ) VALUES (
+                    'turn-source', 'Turn source', 'sqlite', 'localhost', 0,
+                    ':memory:', '', 0, 22, 0, 1, 'direct', 1, 1, 'dev',
+                    'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            ))
+            connection.execute(text(
+                """
+                INSERT INTO agent_sessions (
+                    id, datasource_id, context_tables_json, input_sequence,
+                    event_sequence, event_floor_sequence, lease_token,
+                    context_epoch, message_sequence, created_at, updated_at
+                ) VALUES (
+                    'turn-session', 'turn-source', '[]', 0, 0, 0, 0, 0, 0,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            ))
+            for turn_id, finish_signal in (
+                ("canonical-turn", "completed"),
+                ("provider-finish-turn", "length"),
+            ):
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO agent_runs (
+                            id, session_id, session_sequence, datasource_id,
+                            datasource_generation, question, status, version,
+                            lease_token, request_json, cancel_requested,
+                            consumed_input_tokens, consumed_output_tokens,
+                            consumed_tokens, consumed_cost_usd,
+                            provider_retry_count, repair_attempt_count,
+                            created_at, updated_at
+                        ) VALUES (
+                            :id, 'turn-session', 1, 'turn-source', 1, 'test',
+                            'completed', 1, 0, '{}', 0, 0, 0, 0, 0, 0, 0,
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        )
+                        """
+                    ),
+                    {"id": turn_id},
+                )
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO agent_turns (
+                            id, session_id, run_id, sequence, attempt, status,
+                            agent_definition_version, prompt_version, prompt_hash,
+                            context_snapshot_json, context_hash,
+                            tool_materialization_json, tool_materialization_hash,
+                            provider, model_name, draft_text, reasoning_summary,
+                            tool_calls_json, response_items_json, usage_json,
+                            finish_signal, created_at
+                        ) VALUES (
+                            :id, 'turn-session', :id, 1, 1, 'completed',
+                            'v1', 'v1', 'prompt', '{}', 'context', '{}', 'tools',
+                            'test', 'test-model', 'legacy answer', '', '[]', '[]',
+                            '{}', :finish_signal, CURRENT_TIMESTAMP
+                        )
+                        """
+                    ),
+                    {"id": turn_id, "finish_signal": finish_signal},
+                )
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            values = dict(
+                connection.execute(
+                    text("SELECT id, termination FROM agent_turns")
+                ).all()
+            )
+        assert values == {
+            "canonical-turn": "completed",
+            "provider-finish-turn": None,
+        }
+        assert {"draft_text", "message_phase", "finish_signal"}.isdisjoint(
+            _column_names(engine, "agent_turns")
+        )
     finally:
         engine.dispose()
 

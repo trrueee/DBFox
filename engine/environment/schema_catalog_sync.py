@@ -20,7 +20,6 @@ from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.environment.authoritative_inventory import (
     AuthoritativeInventory,
     SchemaInspectionError,
-    SchemaInspectionErrorCode,
 )
 from engine.models import DataSource, SchemaTable, SchemaColumn, SchemaSearchDoc
 from engine.environment.inventory import (
@@ -218,7 +217,7 @@ class SchemaCatalogSync:
             if inventory.datasource_id != datasource_id:
                 raise SchemaInspectionError(
                     datasource_id,
-                    SchemaInspectionErrorCode.INSPECTION_FAILED,
+                    FixedErrorCode.SCHEMA_INSPECTION_FAILED,
                 )
         except SchemaInspectionError:
             self._record_inspection_failure(db, datasource_id)
@@ -227,7 +226,7 @@ class SchemaCatalogSync:
             logger.warning("Schema inspection failed (%s)", type(exc).__name__)
             error = SchemaInspectionError(
                 datasource_id,
-                SchemaInspectionErrorCode.INSPECTION_FAILED,
+                FixedErrorCode.SCHEMA_INSPECTION_FAILED,
             )
             self._record_inspection_failure(db, datasource_id)
             raise error from None

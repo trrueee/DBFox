@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-from typing import Literal
-
-import sqlglot
 from sqlalchemy.orm import Session
 from sqlglot import exp
 
 from engine.sql.dialect_context import DialectContext
-from engine.sql.guardrail import guardrail_check
+from engine.sql.guardrail import guardrail_check, guardrail_check_with_ast
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision, TrustGate
-
-
-SqlValidationKind = Literal["user", "agent", "source_artifact", "derived", "explain"]
 
 
 class SqlSafetyService:
@@ -19,19 +13,19 @@ class SqlSafetyService:
         self.db = db
 
     def validate_user_sql(self, sql: str, ctx: DialectContext) -> list[str]:
-        return self._validate_readonly_sql(sql, ctx, kind="user")
+        return self._validate_readonly_sql(sql, ctx)
 
     def validate_agent_sql(self, sql: str, ctx: DialectContext) -> list[str]:
-        return self._validate_readonly_sql(sql, ctx, kind="agent")
+        return self._validate_readonly_sql(sql, ctx)
 
     def validate_source_artifact_sql(self, sql: str, ctx: DialectContext) -> list[str]:
-        return self._validate_readonly_sql(sql, ctx, kind="source_artifact")
+        return self._validate_readonly_sql(sql, ctx)
 
     def validate_derived_sql(self, sql: str, ctx: DialectContext) -> list[str]:
-        return self._validate_readonly_sql(sql, ctx, kind="derived")
+        return self._validate_readonly_sql(sql, ctx)
 
     def validate_explain_sql(self, sql: str, ctx: DialectContext) -> list[str]:
-        return self._validate_readonly_sql(sql, ctx, kind="explain")
+        return self._validate_readonly_sql(sql, ctx)
 
     def public_validate_sql(self, sql: str, ctx: DialectContext) -> dict[str, object]:
         guardrail = guardrail_check(sql, dialect=ctx.sqlglot_dialect)
@@ -66,14 +60,11 @@ class SqlSafetyService:
         self,
         sql: str,
         ctx: DialectContext,
-        *,
-        kind: SqlValidationKind,
     ) -> list[str]:
-        warnings = self._validate_single_select(sql, ctx, kind=kind)
-        if warnings:
-            return warnings
-
-        guardrail = guardrail_check(sql, dialect=ctx.sqlglot_dialect)
+        guardrail, _expression = guardrail_check_with_ast(
+            sql,
+            dialect=ctx.sqlglot_dialect,
+        )
         if guardrail.get("result") == "reject":
             message = str(guardrail.get("message") or "SQL safety guardrail rejected this statement.")
             checks = guardrail.get("checks") or []
@@ -83,23 +74,4 @@ class SqlSafetyService:
                 if isinstance(check, dict) and check.get("message")
             ]
             return [message, *check_messages]
-        return []
-
-    @staticmethod
-    def _validate_single_select(sql: str, ctx: DialectContext, *, kind: SqlValidationKind) -> list[str]:
-        label = {
-            "source_artifact": "Source SQL",
-            "derived": "Derived SQL",
-            "explain": "Explain SQL",
-            "agent": "Agent SQL",
-            "user": "User SQL",
-        }[kind]
-        try:
-            exprs = sqlglot.parse(sql, read=ctx.sqlglot_dialect)
-        except Exception as exc:
-            return [f"{label} validation parse error: {exc}"]
-        if len(exprs) != 1:
-            return [f"{label} must be a single statement."]
-        if not isinstance(exprs[0], exp.Select):
-            return [f"{label} must be a SELECT statement."]
         return []

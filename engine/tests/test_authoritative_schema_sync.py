@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import pytest
 
+from engine.app.safe_errors import FixedErrorCode
 from engine.connectivity.factory import ConnectionFactory
 from engine.environment.authoritative_inventory import (
     AuthoritativeInventory,
     SchemaInspectionError,
-    SchemaInspectionErrorCode,
 )
 from engine.environment.inventory import SchemaInventory
 from engine.environment.schema_catalog_sync import SchemaCatalogSync
@@ -55,7 +55,7 @@ def test_failed_mysql_inspection_never_deletes_existing_catalog(
         SchemaCatalogSync().sync(db_session, test_datasource.id)
 
     assert exc_info.value.datasource_id == test_datasource.id
-    assert exc_info.value.code == SchemaInspectionErrorCode.CONNECTION_FAILED
+    assert exc_info.value.code == FixedErrorCode.SCHEMA_CONNECTION_FAILED.value
     assert _catalog_table_names(db_session, test_datasource.id) == expected_catalog
     db_session.refresh(test_datasource)
     assert test_datasource.last_sync_status == "failed"

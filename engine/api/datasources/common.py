@@ -5,37 +5,13 @@ from typing import Any
 
 from engine.datasource import datasource_connection_dict
 from engine.json_codec import dumps
-from engine.models import DEFAULT_PROJECT_ID, DataSource, SchemaColumn, SchemaTable
+from engine.models import DataSource, SchemaColumn, SchemaTable
 from engine.schemas.datasource import DataSourceResponse
 from engine.app.safe_errors import FixedErrorCode
 
 
 def datasource_to_dict(ds: DataSource) -> dict[str, Any]:
-    result = DataSourceResponse.model_validate(ds).model_dump(mode="json")
-    result.setdefault("db_type", "mysql")
-    result.setdefault("env", "dev")
-    for field in (
-        "host",
-        "database_name",
-        "username",
-        "ssh_host",
-        "ssh_username",
-        "ssh_pkey_path",
-        "ssl_ca_path",
-        "ssl_cert_path",
-        "ssl_key_path",
-    ):
-        if result.get(field) is None:
-            result[field] = ""
-    result.setdefault("ssh_port", 22)
-    result.setdefault("is_read_only", False)
-    result.setdefault("ssl_verify_identity", False)
-    result.setdefault("connection_mode", "direct")
-    result.setdefault("status", "active")
-    result.setdefault("ssh_enabled", False)
-    result.setdefault("ssl_enabled", False)
-    result.setdefault("project_id", DEFAULT_PROJECT_ID)
-    return result
+    return DataSourceResponse.model_validate(ds).model_dump(mode="json")
 
 
 def schema_table_to_dict(table: SchemaTable) -> dict[str, Any]:
