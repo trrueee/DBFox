@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import _sqlite3
+import json
 import platform
 import sqlite3
 import sys
@@ -12,10 +13,23 @@ from typing import Any
 from engine import __version__
 
 
-RUNTIME_MANIFEST_SCHEMA_VERSION = 1
+RUNTIME_MANIFEST_SCHEMA_VERSION = 2
+BUILD_PROVENANCE_FILENAME = "_build_provenance.json"
+
+
+def _build_provenance() -> dict[str, Any]:
+    path = Path(__file__).resolve().with_name(BUILD_PROVENANCE_FILENAME)
+    if not path.is_file():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def collect_runtime_manifest() -> dict[str, Any]:
+    provenance = _build_provenance()
     with sqlite3.connect(":memory:") as connection:
         source_id = str(connection.execute("SELECT sqlite_source_id()").fetchone()[0])
         compile_options = sorted(
@@ -37,4 +51,8 @@ def collect_runtime_manifest() -> dict[str, Any]:
         "platform": platform.platform(),
         "machine": platform.machine(),
         "frozen": bool(getattr(sys, "frozen", False)),
+        "build_python_version": provenance.get("python_version"),
+        "build_lock_file": provenance.get("lock_file"),
+        "build_lock_sha256": provenance.get("lock_sha256"),
+        "build_packages": provenance.get("packages", {}),
     }

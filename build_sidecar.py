@@ -34,10 +34,22 @@ DESKTOP_DIR = ROOT / "desktop"
 BINARIES_DIR = DESKTOP_DIR / "src-tauri" / "binaries"
 BUILD_VENV = ROOT / ".build_venv"
 BUILD_LOCK = ROOT / "requirements-build.lock"
+SIDECAR_PYTHON_VERSION_PATH = ROOT / ".sidecar-python-version"
 RUNTIME_MANIFEST_PATH = BINARIES_DIR / "dbfox-engine-runtime-manifest.json"
+BUILD_PROVENANCE_FILENAME = "_build_provenance.json"
+ARTIFACT_MANIFEST_SCHEMA_VERSION = 2
 MINIMUM_SQLITE_VERSION = (3, 51, 3)
 TARGET_SQLITE_VERSION = "3.53.4"
 RUNTIME_MANIFEST_MARKER = "DBFOX_RUNTIME_MANIFEST "
+KEY_BUILD_PACKAGES = (
+    "alembic",
+    "fastapi",
+    "openai",
+    "pydantic",
+    "pyinstaller",
+    "sqlalchemy",
+    "sqlglot",
+)
 
 
 def get_target_triplet() -> str:
@@ -60,6 +72,20 @@ def get_target_triplet() -> str:
         )
     return target
 
+
+def sidecar_python_version() -> str:
+    """Return the repository-pinned production Sidecar CPython version."""
+
+    if not SIDECAR_PYTHON_VERSION_PATH.is_file():
+        raise RuntimeError(
+            f"Sidecar Python version file is missing: {SIDECAR_PYTHON_VERSION_PATH}"
+        )
+    version = SIDECAR_PYTHON_VERSION_PATH.read_text(encoding="utf-8").strip()
+    parts = version.split(".")
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        raise RuntimeError("Sidecar Python version must be an exact X.Y.Z version")
+    return version
+
 # Must match the dependencies in requirements.txt that PyInstaller
 # cannot auto-detect (lazy imports, dynamic loaders, etc.)
 HIDDEN_IMPORTS = [
@@ -75,6 +101,12 @@ HIDDEN_IMPORTS = [
     "sshtunnel",
     "keyring",
     "sqlglot",
+    # SQLGlot resolves dialect modules with importlib at runtime, which static
+    # PyInstaller analysis cannot discover.  Bundle only DBFox's supported
+    # dialects instead of collecting SQLGlot's entire dialect package.
+    "sqlglot.dialects.mysql",
+    "sqlglot.dialects.postgres",
+    "sqlglot.dialects.sqlite",
     "httpx",
     "dotenv",
     "openai",
@@ -167,13 +199,70 @@ def _ignore_sidecar_runtime(src: str, names: list[str]) -> set[str]:
     return ignored
 
 
-def prepare_sidecar_engine_tree(work_dir: Path) -> Path:
+def _build_environment_facts(python_exe: str) -> dict[str, object]:
+    package_literal = json.dumps(KEY_BUILD_PACKAGES)
+    command = [
+        python_exe,
+        "-c",
+        (
+            "import importlib.metadata as metadata, json, platform; "
+            f"names = {package_literal}; "
+            "print(json.dumps({'python_version': platform.python_version(), "
+            "'packages': {name: metadata.version(name) for name in names}}, "
+            "sort_keys=True))"
+        ),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Unable to inspect the locked Sidecar build environment "
+            f"(exit={result.returncode}): {result.stderr[-1000:]}"
+        )
+    try:
+        facts = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("Sidecar build environment emitted invalid provenance") from error
+    if not isinstance(facts, dict) or not isinstance(facts.get("packages"), dict):
+        raise RuntimeError("Sidecar build environment provenance is incomplete")
+    return facts
+
+
+def collect_build_provenance(python_exe: str) -> dict[str, object]:
+    """Bind the exact interpreter and lock used by the PyInstaller build."""
+
+    expected_python = sidecar_python_version()
+    facts = _build_environment_facts(python_exe)
+    actual_python = str(facts.get("python_version") or "")
+    if actual_python != expected_python:
+        raise RuntimeError(
+            "Sidecar build interpreter does not match the production pin: "
+            f"expected {expected_python}, got {actual_python or 'unknown'}"
+        )
+    if not BUILD_LOCK.is_file():
+        raise RuntimeError(f"Build lock file not found: {BUILD_LOCK}")
+    return {
+        "schema_version": 1,
+        "python_version": actual_python,
+        "lock_file": BUILD_LOCK.name,
+        "lock_sha256": _sha256(BUILD_LOCK),
+        "packages": facts["packages"],
+    }
+
+
+def prepare_sidecar_engine_tree(
+    work_dir: Path,
+    provenance: dict[str, object],
+) -> Path:
     """Stage only runtime engine files for PyInstaller --add-data."""
     staging_root = work_dir / "_runtime_data"
     staged_engine = staging_root / "engine"
     shutil.rmtree(staging_root, ignore_errors=True)
     staging_root.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ENGINE_DIR, staged_engine, ignore=_ignore_sidecar_runtime)
+    (staged_engine / BUILD_PROVENANCE_FILENAME).write_text(
+        json.dumps(provenance, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     return staged_engine
 
 
@@ -186,7 +275,8 @@ def build_pyinstaller(python_exe: str) -> Path:
     shutil.rmtree(work_dir, ignore_errors=True)
     for spec_path in spec_paths:
         spec_path.unlink(missing_ok=True)
-    staged_engine = prepare_sidecar_engine_tree(work_dir)
+    provenance = collect_build_provenance(python_exe)
+    staged_engine = prepare_sidecar_engine_tree(work_dir, provenance)
 
     cmd = [
         python_exe, "-m", "PyInstaller",
@@ -270,8 +360,27 @@ def probe_sidecar_runtime(binary: Path) -> dict[str, object]:
 
 
 def validate_runtime_manifest(manifest: dict[str, object]) -> None:
-    if manifest.get("schema_version") != 1:
+    if manifest.get("schema_version") != 2:
         raise RuntimeError("Unsupported sidecar runtime manifest schema")
+    if manifest.get("frozen") is not True:
+        raise RuntimeError("Release sidecar did not report a frozen runtime")
+    expected_python = sidecar_python_version()
+    if manifest.get("python_version") != expected_python:
+        raise RuntimeError(
+            "Release sidecar Python version differs from the production pin"
+        )
+    if manifest.get("build_python_version") != expected_python:
+        raise RuntimeError("Release sidecar build provenance has the wrong Python version")
+    if manifest.get("build_lock_file") != BUILD_LOCK.name:
+        raise RuntimeError("Release sidecar build provenance has the wrong lock file")
+    if manifest.get("build_lock_sha256") != _sha256(BUILD_LOCK):
+        raise RuntimeError("Release sidecar build lock hash differs from the repository lock")
+    packages = manifest.get("build_packages")
+    if not isinstance(packages, dict) or any(
+        not isinstance(packages.get(name), str) or not packages[name]
+        for name in KEY_BUILD_PACKAGES
+    ):
+        raise RuntimeError("Release sidecar build provenance is missing package versions")
     version_raw = manifest.get("sqlite_version_info")
     if not isinstance(version_raw, list) or len(version_raw) < 3:
         raise RuntimeError("Sidecar runtime manifest has no valid SQLite version tuple")
@@ -300,7 +409,7 @@ def _sha256(path: Path) -> str:
 
 def write_artifact_manifest(binary: Path, runtime: dict[str, object]) -> Path:
     artifact = {
-        "schema_version": 1,
+        "schema_version": ARTIFACT_MANIFEST_SCHEMA_VERSION,
         "target_triplet": get_target_triplet(),
         "sidecar_filename": binary.name,
         "sidecar_sha256": _sha256(binary),

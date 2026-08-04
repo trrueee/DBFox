@@ -52,7 +52,15 @@ def test_tauri_package_build_rebuilds_sidecar_before_frontend() -> None:
 
 def _runtime_manifest(version: tuple[int, int, int]) -> dict[str, object]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
+        "frozen": True,
+        "python_version": build_sidecar.sidecar_python_version(),
+        "build_python_version": build_sidecar.sidecar_python_version(),
+        "build_lock_file": build_sidecar.BUILD_LOCK.name,
+        "build_lock_sha256": build_sidecar._sha256(build_sidecar.BUILD_LOCK),
+        "build_packages": {
+            name: "test-version" for name in build_sidecar.KEY_BUILD_PACKAGES
+        },
         "sqlite_version": ".".join(map(str, version)),
         "sqlite_version_info": list(version),
         "sqlite_source_id": f"{'.'.join(map(str, version))} source-id",
@@ -84,6 +92,7 @@ def test_artifact_manifest_binds_runtime_to_sidecar_hash(tmp_path, monkeypatch) 
     assert manifest["sidecar_sha256"] == "3d3e01030d00b413489c82ee644fdfac09c83dd4b21aeacd9feeea8caa4f1c5f"
     assert manifest["minimum_sqlite_version"] == "3.51.3"
     assert manifest["target_sqlite_version"] == "3.53.4"
+    assert manifest["schema_version"] == build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION
 
 
 def test_extracted_installer_must_match_manifest_hash_and_runtime(tmp_path, monkeypatch) -> None:
@@ -93,7 +102,7 @@ def test_extracted_installer_must_match_manifest_hash_and_runtime(tmp_path, monk
     sidecar.write_bytes(b"installed-sidecar")
     runtime = _runtime_manifest((3, 53, 4))
     manifest = {
-        "schema_version": 1,
+        "schema_version": build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION,
         "target_triplet": "test-triplet",
         "sidecar_sha256": build_sidecar._sha256(sidecar),
         "runtime": runtime,
@@ -110,18 +119,118 @@ def test_extracted_installer_must_match_manifest_hash_and_runtime(tmp_path, monk
 
     assert result["verified"] is True
     assert result["sqlite_version"] == runtime["sqlite_version"]
+    assert result["sidecar_size_bytes"] == len(b"installed-sidecar")
+    assert result["package_files_scanned"] == 2
+    assert result["forbidden_file_hits"] == 0
+    assert result["forbidden_value_hits"] == 0
+
+
+def test_extracted_installer_rejects_release_token_sentinel(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "installer"
+    root.mkdir()
+    sidecar = root / ("dbfox-engine.exe" if sys.platform == "win32" else "dbfox-engine")
+    sidecar.write_bytes(b"installed-sidecar")
+    runtime = _runtime_manifest((3, 53, 4))
+    manifest = {
+        "schema_version": build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        "target_triplet": "test-triplet",
+        "sidecar_sha256": build_sidecar._sha256(sidecar),
+        "runtime": runtime,
+    }
+    expected_manifest = tmp_path / "expected.json"
+    expected_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+    (root / "dbfox-engine-runtime-manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    (root / "frontend.js").write_bytes(b"prefix-dbfox-release-sentinel-1234567890-suffix")
+    monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _path: runtime)
+
+    with pytest.raises(RuntimeError, match="forbidden production value"):
+        verify_release_artifact.verify_extracted_tree(
+            root,
+            expected_manifest,
+            forbidden_values=(b"dbfox-release-sentinel-1234567890",),
+        )
+
+
+def test_extracted_installer_rejects_development_files(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "installer"
+    root.mkdir()
+    sidecar = root / ("dbfox-engine.exe" if sys.platform == "win32" else "dbfox-engine")
+    sidecar.write_bytes(b"installed-sidecar")
+    runtime = _runtime_manifest((3, 53, 4))
+    manifest = {
+        "schema_version": build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        "target_triplet": "test-triplet",
+        "sidecar_sha256": build_sidecar._sha256(sidecar),
+        "runtime": runtime,
+    }
+    expected_manifest = tmp_path / "expected.json"
+    expected_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+    (root / "dbfox-engine-runtime-manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    (root / ".env.local").write_text("VITE_LOCAL_ENGINE_TOKEN=forbidden", encoding="utf-8")
+    monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _path: runtime)
+
+    with pytest.raises(RuntimeError, match="forbidden development files"):
+        verify_release_artifact.verify_extracted_tree(root, expected_manifest)
+
+
+def test_frozen_smoke_uses_rustc_host_tuple_without_platform_mapping() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "desktop" / "scripts" / "smoke-sidecar.mjs").read_text(encoding="utf-8")
+
+    assert '["--print", "host-tuple"]' in source
+    assert "x86_64-pc-windows-msvc" not in source
+    assert "x86_64-unknown-linux-gnu" not in source
+    assert "aarch64-apple-darwin" not in source
+
+
+def test_frozen_smoke_covers_schema_result_artifact_and_restart_contracts() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "desktop" / "scripts" / "smoke-sidecar.mjs").read_text(
+        encoding="utf-8"
+    )
+
+    for contract in (
+        "/api/v1/datasources/${datasource.id}/sync",
+        "/api/v1/agent/console/execute",
+        "/api/v1/artifacts/${first.resultArtifactId}/page",
+        "/api/v1/conversations/${sessionId}",
+        "stale_token_rejected",
+        "restart_reload",
+    ):
+        assert contract in source
 
 
 def test_packaged_sidecar_preserves_control_stream_without_showing_a_window() -> None:
     root = Path(__file__).resolve().parents[2]
     builder_source = Path(build_sidecar.__file__).read_text(encoding="utf-8")
-    supervisor_source = (root / "desktop" / "src-tauri" / "src" / "lib.rs").read_text(
+    process_source = (root / "desktop" / "src-tauri" / "src" / "sidecar_process.rs").read_text(
         encoding="utf-8"
     )
+    cargo = (root / "desktop" / "src-tauri" / "Cargo.toml").read_text(encoding="utf-8")
 
     assert '"--console"' in builder_source
     assert '"--noconsole"' not in builder_source
-    assert "command.creation_flags(CREATE_NO_WINDOW);" in supervisor_source
+    assert 'tauri-plugin-shell = "2.3.5"' in cargo
+    assert '.sidecar("dbfox-engine")' in process_source
+    assert "CommandEvent::Stdout" in process_source
+    assert "CommandEvent::Stderr" in process_source
+    assert "CommandEvent::Terminated" in process_source
+    assert "sidecar_candidate_paths" not in process_source
+
+
+def test_webview_does_not_receive_shell_process_permissions() -> None:
+    root = Path(__file__).resolve().parents[2] / "desktop" / "src-tauri" / "capabilities"
+    permissions = []
+    for path in root.glob("*.json"):
+        permissions.extend(json.loads(path.read_text(encoding="utf-8"))["permissions"])
+
+    assert not any(permission.startswith("shell:") for permission in permissions)
 
 
 def test_tauri_config_does_not_disable_platform_security_features() -> None:
@@ -140,24 +249,31 @@ def test_tauri_app_commands_have_explicit_main_window_permissions() -> None:
     root = Path(__file__).resolve().parents[2]
     tauri_root = root / "desktop" / "src-tauri"
     build_source = (tauri_root / "build.rs").read_text(encoding="utf-8")
-    runtime = json.loads((tauri_root / "capabilities" / "runtime.json").read_text(encoding="utf-8"))
-    diagnostics = json.loads((tauri_root / "capabilities" / "diagnostics.json").read_text(encoding="utf-8"))
-    default = json.loads((tauri_root / "capabilities" / "default.json").read_text(encoding="utf-8"))
+    capabilities = {
+        path.stem: json.loads(path.read_text(encoding="utf-8"))
+        for path in (tauri_root / "capabilities").glob("*.json")
+    }
 
     declared_commands = set(re.findall(r'^\s*"([a-z_]+)",?$', build_source, re.MULTILINE))
-    runtime_permissions = set(runtime["permissions"])
-    diagnostic_permissions = set(diagnostics["permissions"])
+    command_permission_sets = {
+        name: {permission for permission in capability["permissions"] if permission.startswith("allow-")}
+        for name, capability in capabilities.items()
+    }
+    command_permissions = set().union(*command_permission_sets.values())
     allowed_commands = {
         permission.removeprefix("allow-").replace("-", "_")
-        for permission in runtime_permissions | diagnostic_permissions
+        for permission in command_permissions
     }
 
     assert declared_commands == allowed_commands
-    assert runtime["windows"] == ["main"]
-    assert diagnostics["windows"] == ["main"]
-    assert default["windows"] == ["main"]
-    assert runtime_permissions.isdisjoint(diagnostic_permissions)
-    assert not any(permission.startswith("allow-") for permission in default["permissions"])
+    assert all(capability["windows"] == ["main"] for capability in capabilities.values())
+    assert sum(len(permissions) for permissions in command_permission_sets.values()) == len(command_permissions)
+    assert not command_permission_sets["default"]
+    assert not any(
+        permission.startswith("opener:")
+        for capability in capabilities.values()
+        for permission in capability["permissions"]
+    )
 
 
 def test_sidecar_builder_has_no_langsmith_plaintext_export_path() -> None:
@@ -185,6 +301,14 @@ def test_dynamic_runtime_dependencies_are_declared_for_the_frozen_sidecar() -> N
     assert not any(line.startswith(("langgraph", "langchain", "langsmith")) for line in requirements.splitlines())
     assert "openai" in build_sidecar.HIDDEN_IMPORTS
     assert "langsmith" not in build_sidecar.HIDDEN_IMPORTS
+
+
+def test_supported_sqlglot_dialects_are_declared_as_frozen_hidden_imports() -> None:
+    assert {
+        "sqlglot.dialects.mysql",
+        "sqlglot.dialects.postgres",
+        "sqlglot.dialects.sqlite",
+    }.issubset(build_sidecar.HIDDEN_IMPORTS)
 
 
 def test_sidecar_build_dependencies_are_separate_from_runtime_dependencies() -> None:
@@ -278,6 +402,49 @@ def test_release_sync_uses_uv_exact_environment_semantics(monkeypatch, tmp_path,
         "clean-build-python",
     ]]
     assert "Synced" in capsys.readouterr().out
+
+
+def test_sidecar_python_version_is_an_exact_repository_pin() -> None:
+    version = build_sidecar.sidecar_python_version()
+
+    assert re.fullmatch(r"\d+\.\d+\.\d+", version)
+
+
+def test_build_provenance_rejects_a_different_interpreter(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    lock = tmp_path / "requirements-build.lock"
+    lock.write_text("locked", encoding="utf-8")
+    monkeypatch.setattr(build_sidecar, "BUILD_LOCK", lock)
+    monkeypatch.setattr(
+        build_sidecar,
+        "_build_environment_facts",
+        lambda _python: {
+            "python_version": "0.0.0",
+            "packages": {name: "1" for name in build_sidecar.KEY_BUILD_PACKAGES},
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="does not match the production pin"):
+        build_sidecar.collect_build_provenance("wrong-python")
+
+
+def test_staged_engine_contains_build_provenance(tmp_path) -> None:
+    provenance = {
+        "schema_version": 1,
+        "python_version": build_sidecar.sidecar_python_version(),
+        "lock_file": "requirements-build.lock",
+        "lock_sha256": "a" * 64,
+        "packages": {name: "1" for name in build_sidecar.KEY_BUILD_PACKAGES},
+    }
+
+    staged = build_sidecar.prepare_sidecar_engine_tree(tmp_path, provenance)
+    written = json.loads(
+        (staged / build_sidecar.BUILD_PROVENANCE_FILENAME).read_text(encoding="utf-8")
+    )
+
+    assert written == provenance
 
 
 def test_release_build_never_writes_frontend_dev_token(monkeypatch, tmp_path) -> None:

@@ -2,6 +2,10 @@
 
 本矩阵是发布门禁，不是“理论支持”列表。定时 CI 与人工发布前检查必须在三个目标系统上执行相同的锁定依赖、Sidecar 和 Tauri 编译链。
 
+门禁配置不等于平台已通过。每次候选版本必须绑定具体 commit、workflow/job、
+产物 SHA-256 和 smoke 输出；缺少真实 Runner/产物时该平台只能标记“静态合同已审查、
+未真实验证”。Windows 结果不得外推到 macOS/Linux。
+
 | 能力 | Windows 11 / windows-2025 | macOS 14 / Apple Silicon runner | Ubuntu 24.04 |
 |---|---:|---:|---:|
 | Python hash lock 安装 | 必须 | 必须 | 必须 |
@@ -18,6 +22,14 @@
 ## 自动门禁
 
 `.github/workflows/ci.yml` 的 `release-platform-contract` 在每周定时任务和手工触发时运行三平台矩阵。任何平台失败都阻止标记发布候选。
+
+生产 Sidecar 的解释器唯一来源为仓库根目录 `.sidecar-python-version`，构建依赖唯一
+来源为 `requirements-build.lock`。Frozen smoke 必须从最终可执行文件验证鉴权、
+Schema、只读查询、Result Artifact、耐久多 Run 和重启重载；runtime manifest schema 2
+必须绑定解释器、锁哈希、关键包版本、SQLite provenance 和 Sidecar 哈希。
+
+截至 2026-08-04 的本地证据仅覆盖 Windows x64；macOS/Linux 的结论必须以对应
+远程 Runner 结果另行更新，当前文档不声称这两个平台已通过。
 
 供应链门禁由 `scripts/dependency_governance.py` 执行：
 

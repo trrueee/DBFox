@@ -25,6 +25,7 @@ PYTHON_LOCKS = {
     "requirements-dev.txt": "requirements-dev.lock",
     "requirements-build.txt": "requirements-build.lock",
 }
+SIDECAR_PYTHON_VERSION_FILE = ROOT / ".sidecar-python-version"
 
 
 def _normalise_package_name(name: str) -> str:
@@ -131,7 +132,15 @@ def test_python_dependency_locks_cover_all_direct_inputs_and_have_hashes() -> No
         lock_names = _locked_package_names(lock)
 
         assert lock.is_file(), lock_name
-        assert "--universal --generate-hashes --python-version 3.12" in lock_text.splitlines()[1]
+        expected_python = (
+            SIDECAR_PYTHON_VERSION_FILE.read_text(encoding="utf-8").strip()
+            if lock_name == "requirements-build.lock"
+            else "3.12"
+        )
+        assert (
+            f"--universal --generate-hashes --python-version {expected_python}"
+            in lock_text.splitlines()[1]
+        )
         assert "--hash=sha256:" in lock_text
         assert _direct_requirement_names(source) <= lock_names
         assert not re.search(
@@ -165,10 +174,23 @@ def test_ci_installs_only_hash_checked_python_locks() -> None:
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
     assert "PIP_REQUIRE_HASHES: \"1\"" in workflow
-    assert workflow.count("--require-hashes -r requirements-dev.lock") == 3
-    assert "--require-hashes -r requirements-build.lock" in workflow
+    assert workflow.count("--require-hashes -r requirements-dev.lock") == 4
+    assert "uv pip sync requirements-dev.lock" in workflow
+    assert "python-version-file: .sidecar-python-version" in workflow
+    assert "SIDECAR_PYTHON_VERSION" not in workflow
     assert "python -m pip install -r requirements-dev.txt" not in workflow
     assert "python -m pip install -r requirements-build.txt" not in workflow
+
+
+def test_sidecar_build_uses_one_exact_python_version_source() -> None:
+    version = SIDECAR_PYTHON_VERSION_FILE.read_text(encoding="utf-8").strip()
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+    builder = (ROOT / "build_sidecar.py").read_text(encoding="utf-8")
+
+    assert re.fullmatch(r"\d+\.\d+\.\d+", version)
+    assert workflow.count("python-version-file: .sidecar-python-version") == 2
+    assert version not in workflow
+    assert "SIDECAR_PYTHON_VERSION_PATH" in builder
 
 
 def test_npm_lock_is_registry_resolved_and_integrity_verified() -> None:
