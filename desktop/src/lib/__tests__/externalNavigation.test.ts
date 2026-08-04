@@ -1,11 +1,26 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   canOpenExternalHttpsUrl,
   openUserConfirmedExternalHttpsUrl,
   parseExternalHttpsUrl,
 } from "../externalNavigation";
 
+const { invokeMock, isTauriMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn(),
+  isTauriMock: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: invokeMock,
+  isTauri: isTauriMock,
+}));
+
 describe("externalNavigation", () => {
+  beforeEach(() => {
+    invokeMock.mockReset().mockResolvedValue(undefined);
+    isTauriMock.mockReset().mockReturnValue(true);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -31,25 +46,24 @@ describe("externalNavigation", () => {
     expect(canOpenExternalHttpsUrl(unsafeUrl)).toBe(false);
   });
 
-  it("opens only an approved URL with noopener and noreferrer", () => {
-    const openedWindow = { opener: window } as unknown as Window;
-    const openSpy = vi.spyOn(window, "open").mockReturnValue(openedWindow);
+  it("delegates an approved URL to the policy-validated Rust command", async () => {
+    await expect(openUserConfirmedExternalHttpsUrl("https://cdn.example.com/image.png")).resolves.toBe(true);
 
-    expect(openUserConfirmedExternalHttpsUrl("https://cdn.example.com/image.png")).toBe(true);
-
-    expect(openSpy).toHaveBeenCalledWith(
-      "https://cdn.example.com/image.png",
-      "_blank",
-      "noopener,noreferrer",
-    );
-    expect(openedWindow.opener).toBeNull();
+    expect(invokeMock).toHaveBeenCalledWith("open_external_https_url", {
+      url: "https://cdn.example.com/image.png",
+    });
   });
 
-  it("never invokes window.open for a rejected URL", () => {
-    const openSpy = vi.spyOn(window, "open");
+  it("never invokes the host for a rejected URL", async () => {
+    await expect(openUserConfirmedExternalHttpsUrl("file:///C:/Users/Lenovo/private.png")).resolves.toBe(false);
 
-    expect(openUserConfirmedExternalHttpsUrl("file:///C:/Users/Lenovo/private.png")).toBe(false);
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
 
-    expect(openSpy).not.toHaveBeenCalled();
+  it("does not add a browser fallback outside Tauri", async () => {
+    isTauriMock.mockReturnValue(false);
+
+    await expect(openUserConfirmedExternalHttpsUrl("https://cdn.example.com/image.png")).resolves.toBe(false);
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 });

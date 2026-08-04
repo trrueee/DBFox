@@ -114,23 +114,52 @@
 - 可逆性：高。
 - 何时重新评估：签名、密钥托管、回滚演练和正式发布渠道全部就绪时。
 
-## ADR-09：Sidecar 底层适配迁移到官方 Shell 插件
+## ADR-09：Sidecar 底层进程适配迁移到官方 Shell 插件
 
-- 标题：以独立提交替换 Sidecar 的底层进程适配，不在质量收敛补丁中重写 Supervisor
-- 状态：Accepted / Deferred to isolated implementation
-- 上下文：Tauri 官方 `tauri-plugin-shell` 2.3 提供 `externalBin` 路径解析、stdout/stderr 事件、`CommandEvent::Terminated` 和 `CommandChild`；当前实现则把 `std::process::Child`、同步 Ready/health 握手、`try_wait` 监控和 Windows `taskkill /T` 直接组合在 `RuntimeSupervisor` 中。
+- 标题：使用官方 Shell 统一 Sidecar 解析、输出事件和退出观察
+- 状态：Accepted / Implemented
+- 上下文：Tauri 官方 `tauri-plugin-shell` 2.3 提供 `externalBin` 路径解析、stdout/stderr 事件、`CommandEvent::Terminated` 和 `CommandChild`。迁移实验最初使用的未跟踪 Frozen 二进制只输出 `{"port":...}`，缺少当前协议要求的 `protocolVersion/serverInfo/capabilities`，因此被 Host 正确拒绝；使用当前源码隔离构建的 Frozen 二进制后，插件事件路径在 Windows x64 正常完成 Ready、health、异常退出观察、自动重启和关闭清理。
 - 必须满足的约束：保留 Supervisor 状态机、generation、一次性 Token、Ready/health 握手、崩溃强度、关闭竞态和 Windows process-tree 清理；不得让插件事件与手写轮询长期并存；不得向 WebView 暴露 shell spawn 权限。
-- 候选方案：本轮整体替换；只替换正式产物路径并保留开发路径；独立提交按 characterization test 逐项替换。
-- 方案比较：整体替换会同时改变 Child 所有权、同步/异步事件模型和终止策略；只替换正式路径会形成两套长期进程语义；独立提交可以先把 Supervisor 的底层句柄改成单一 adapter，再一次性删除对应手写路径。
-- 决定：本轮不引入插件或第二套启动路径。后续独立提交先为 Terminated、stdout 分帧、kill-tree 和关闭竞态补 characterization tests，再使用官方插件替换全部底层 spawn/event 能力并删除 `sidecar_candidate_paths`、pipe reader 和 `try_wait` 轮询。
-- 决定理由：官方插件是目标成熟组件，但当前变更不是可验证的小步替换；强行接入会违反“不得重写 RuntimeSupervisor”和“不得保留双路径”的约束。
-- 负面影响：当前版本仍维护手写路径解析和进程事件适配；底层通用代码尚未由官方插件承接。
-- 可逆性：高；该决定只规定迁移边界，IPC 和领域状态机不变。
-- 何时重新评估：本轮改动合并后立即建立独立变更，且 Windows/macOS/Linux 至少各有一个可运行的 Sidecar characterization 环境时。
+- 候选方案：完整采用插件事件；继续全部手写；只采用插件路径解析并保留标准进程事件。
+- 方案比较：完整插件事件删除最多重复基础设施并保持一个 Child 所有者；全部手写继续承担 externalBin 路径和 pipe/退出适配；部分采用会长期保留两套进程抽象。
+- 决定：开发态与正式态均通过 `app.shell()` 构造命令；正式态只调用 `.sidecar("dbfox-engine")`。Supervisor 只持有 `CommandChild` adapter，并消费 `CommandEvent::Stdout/Stderr/Terminated`；删除 `sidecar_candidate_paths`、target 映射、手写 pipe reader 和 `std::process::Child::try_wait`。Windows 仅在停止时保留已验证的 `taskkill /T /F`，因为 PyInstaller one-file 具有 wrapper/inner 进程树。WebView 不授予任何 `shell:*` capability。
+- 决定理由：最大限度复用 Tauri 官方跨平台实现，同时保留 DBFox 的生命周期、协议和安全策略；不引入第二套启动路径。
+- 负面影响：Windows process-tree 清理仍有一个平台专用边界；macOS/Linux Frozen 行为仍需远程 Runner 验证。
+- 可逆性：高；adapter 隔离插件类型，Supervisor 的领域状态不依赖插件细节。
+- 何时重新评估：官方插件能够明确终止完整 PyInstaller 进程树，或 macOS/Linux Frozen characterization 发现平台差异时。
+
+## ADR-10：外部资源只通过 Rust 策略边界交给官方 Opener
+
+- 标题：系统浏览器和诊断目录统一使用 `tauri-plugin-opener`
+- 状态：Accepted / Implemented
+- 上下文：数据库内容属于不可信输入；`window.open` 属于 WebView 新窗口机制，手写 `explorer/open/xdg-open` 又重复平台适配。正式 CSP 同时禁止任意 HTTPS 图片内联加载。
+- 必须满足的约束：只响应直接用户操作；外部 URL 必须为绝对 HTTPS、包含主机且无 userinfo；Rust 必须重复校验；不得向 WebView 授予通用 `opener:*` 权限；不得通过放宽 CSP 或新增图片代理绕过边界。
+- 候选方案：继续 `window.open`；WebView 直接使用 opener Guest API；Rust 窄 command 调用官方 opener。
+- 方案比较：前两项分别产生 WebView 导航歧义或扩大 capability；Rust command 能集中产品策略，同时复用官方跨平台打开实现。
+- 决定：保留 `open_diagnostic_logs` 和 `open_external_https_url` 两个窄 command，内部调用官方 opener；远程图片单元格不再在 WebView 内联加载，只提供经过确认的系统浏览器操作。
+- 决定理由：平台机制与产品安全策略分层明确，不需要 fallback、代理或第二套 URL 打开路径。
+- 负面影响：不再提供任意数据库远程图片的应用内预览；浏览器开发模式不提供桌面 opener fallback。
+- 可逆性：高；若未来需要预览，应先定义可信源、缓存隔离和内容安全合同。
+- 何时重新评估：产品形成受管理的媒体源白名单或独立安全图片服务时。
+
+## ADR-11：Sidecar 日志复用官方轮转，DBFox 保留脱敏所有权
+
+- 标题：`tauri-plugin-log` 独占 Host/Sidecar 日志写入和轮转
+- 状态：Accepted / Implemented
+- 上下文：多个 `SidecarLog` 实例曾各自持有独立 mutex，却操作同一个文件，手动重启和监控线程可能并发轮转。
+- 必须满足的约束：写入和轮转只有一个实现；Sidecar 日志与普通 Host 日志分文件；秘密在进入 logger 前完成脱敏；单条消息和文件大小有界；诊断包只收集官方 active/dated rotation 命名且二次脱敏。
+- 候选方案：全局共享自写锁；继续每实例文件写入；现有日志插件的过滤 Target。
+- 方案比较：共享锁仍需维护文件、命名和轮转协议；官方 Target 已提供同步、平台日志目录和 `KeepSome`，DBFox 只需保留领域事件格式。
+- 决定：使用 `dbfox::sidecar` target 写入 `dbfox-sidecar.log`，`dbfox-host` 排除该 target；删除自写 OpenOptions、轮转和实例锁。
+- 决定理由：消除并发事实来源，复用已存在依赖，不改变脱敏和诊断包安全策略。
+- 负面影响：轮转文件改为带日期名称，诊断包发现逻辑必须与插件合同同步。
+- 可逆性：高；事件 schema 与日志后端通过 target 隔离。
+- 何时重新评估：需要结构化 tracing、远程日志汇聚或插件轮转合同发生破坏性变化时。
 
 ## 运维验收
 
 - `cargo test --manifest-path desktop/src-tauri/Cargo.toml --lib`：Supervisor、crash-loop、关闭竞态、诊断 ZIP。
+- `cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets -- -D warnings`：官方插件适配和日志 target 必须无警告。
 - `python -m pytest engine/tests/test_problem_details.py engine/tests/test_build_sidecar.py engine/tests/test_runtime_manifest.py`：错误协议和产物门禁。
-- `npm test -- --run src/lib/api/__tests__/engineStartup.test.ts src/lib/diagnostics/__tests__/clientLog.test.ts`：会话恢复、写请求不重放、循环日志。
+- `npm test -- --run src/lib/api/__tests__/engineStartup.test.ts src/lib/diagnostics/__tests__/clientLog.test.ts src/lib/__tests__/externalNavigation.test.ts src/components/__tests__/ImageCell.test.tsx`：会话恢复、写请求不重放、循环日志和外部资源边界。
 - 正式发布使用 `python scripts/verify_release_artifact.py --output reports/release-artifact-verification.json`；任何平台没有最终安装包、manifest、匹配 hash 或 SQLite 最低版本都失败。

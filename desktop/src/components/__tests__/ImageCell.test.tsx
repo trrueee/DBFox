@@ -1,10 +1,24 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ImageCell } from "../ImageCell";
 import { isImageUrl } from "../imageUrl";
 
+const { invokeMock, isTauriMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn(),
+  isTauriMock: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: invokeMock,
+  isTauri: isTauriMock,
+}));
+
 describe("ImageCell", () => {
-  beforeEach(() => cleanup());
+  beforeEach(() => {
+    cleanup();
+    invokeMock.mockReset().mockResolvedValue(undefined);
+    isTauriMock.mockReset().mockReturnValue(true);
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it("detects supported image URLs", () => {
@@ -14,34 +28,30 @@ describe("ImageCell", () => {
     expect(isImageUrl("not-a-url.png")).toBe(false);
   });
 
-  it("opens the full image in a dialog when clicked", () => {
+  it("does not load a database-controlled remote image inside the WebView", () => {
     render(<ImageCell url="https://cdn.example.com/a.png" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "预览图片 https://cdn.example.com/a.png" }));
-
-    const dialog = screen.getByRole("dialog", { name: "图片预览" });
-    expect(dialog).toBeTruthy();
-    expect(within(dialog).getAllByText("https://cdn.example.com/a.png").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.getByText("https://cdn.example.com/a.png")).toBeTruthy();
   });
 
-  it("opens an HTTPS original only after the user clicks the lightbox action", () => {
-    const openedWindow = { opener: window } as unknown as Window;
-    const openSpy = vi.spyOn(window, "open").mockReturnValue(openedWindow);
+  it("opens an HTTPS image only after a direct user action", async () => {
     render(<ImageCell url="https://cdn.example.com/a.png" />);
 
-    expect(openSpy).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "预览图片 https://cdn.example.com/a.png" }));
-    fireEvent.click(screen.getByRole("button", { name: "打开原图" }));
+    expect(invokeMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "在系统浏览器打开图片 https://cdn.example.com/a.png" }));
 
-    expect(openSpy).toHaveBeenCalledWith("https://cdn.example.com/a.png", "_blank", "noopener,noreferrer");
-    expect(openedWindow.opener).toBeNull();
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("open_external_https_url", {
+      url: "https://cdn.example.com/a.png",
+    }));
   });
 
   it("does not offer external navigation for non-HTTPS image URLs", () => {
     render(<ImageCell url="http://cdn.example.com/a.png" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "预览图片 http://cdn.example.com/a.png" }));
-
-    expect((screen.getByRole("button", { name: "打开原图" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", {
+      name: "在系统浏览器打开图片 http://cdn.example.com/a.png",
+    }) as HTMLButtonElement).disabled).toBe(true);
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 });

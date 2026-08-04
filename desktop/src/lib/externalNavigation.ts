@@ -1,4 +1,4 @@
-const EXTERNAL_WINDOW_FEATURES = "noopener,noreferrer";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 
 /**
  * Parse an external URL only when it is safe to hand to the system browser.
@@ -34,30 +34,19 @@ export function canOpenExternalHttpsUrl(rawUrl: string): boolean {
 }
 
 /**
- * Open a URL after an explicit user click has already confirmed the action.
- *
- * Call this only from a direct UI event handler.  It intentionally has no
- * Tauri shell/opener fallback: browser navigation remains constrained by the
- * WebView and is always opened without an opener or referrer relationship.
+ * Open a URL in the operating system's default browser after a direct user
+ * gesture. The Rust host repeats the policy validation before delegating to
+ * Tauri's official opener plugin.
  */
-export function openUserConfirmedExternalHttpsUrl(rawUrl: string): boolean {
+export async function openUserConfirmedExternalHttpsUrl(rawUrl: string): Promise<boolean> {
   const url = parseExternalHttpsUrl(rawUrl);
-  if (!url || typeof window === "undefined") {
+  if (!url || !isTauri()) {
     return false;
   }
 
   try {
-    const openedWindow = window.open(url.href, "_blank", EXTERNAL_WINDOW_FEATURES);
-    if (openedWindow) {
-      // Keep the isolation guarantee even in WebViews that do not fully honor
-      // the feature string.
-      try {
-        openedWindow.opener = null;
-      } catch {
-        // The browser-level noopener feature remains the primary guarantee.
-      }
-    }
-    return openedWindow !== null;
+    await invoke("open_external_https_url", { url: url.href });
+    return true;
   } catch {
     return false;
   }

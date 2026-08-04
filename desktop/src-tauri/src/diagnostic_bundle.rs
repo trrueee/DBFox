@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zip::write::SimpleFileOptions;
@@ -130,40 +130,44 @@ fn write_bundle(
     write_json(&mut zip, "engine.json", engine, options)?;
     write_json(&mut zip, "webview.json", webview, options)?;
 
-    for index in 0..=3 {
-        let filename = if index == 0 {
-            "dbfox-sidecar.log".to_string()
-        } else {
-            format!("dbfox-sidecar.log.{index}")
-        };
-        let source = log_directory.join(&filename);
-        if let Some(content) = read_regular_log(&source)? {
-            zip.start_file(format!("host/{filename}"), options)
-                .map_err(|error| error.to_string())?;
-            zip.write_all(redact_text(&content).as_bytes())
-                .map_err(|error| error.to_string())?;
-        }
-    }
-    let mut host_logs = fs::read_dir(log_directory)
-        .map_err(|error| error.to_string())?
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            (name.starts_with("dbfox-host") && name.ends_with(".log"))
-                .then_some((name, entry.path()))
-        })
-        .collect::<Vec<_>>();
-    host_logs.sort_by(|left, right| left.0.cmp(&right.0));
-    for (filename, source) in host_logs.into_iter().take(4) {
-        if let Some(content) = read_regular_log(&source)? {
-            zip.start_file(format!("host/{filename}"), options)
-                .map_err(|error| error.to_string())?;
-            zip.write_all(redact_text(&content).as_bytes())
-                .map_err(|error| error.to_string())?;
+    for base_name in ["dbfox-sidecar", "dbfox-host"] {
+        for (filename, source) in diagnostic_log_files(log_directory, base_name)? {
+            if let Some(content) = read_regular_log(&source)? {
+                zip.start_file(format!("host/{filename}"), options)
+                    .map_err(|error| error.to_string())?;
+                zip.write_all(redact_text(&content).as_bytes())
+                    .map_err(|error| error.to_string())?;
+            }
         }
     }
     zip.finish().map_err(|error| error.to_string())?;
     Ok(())
+}
+
+fn diagnostic_log_files(
+    log_directory: &Path,
+    base_name: &str,
+) -> Result<Vec<(String, PathBuf)>, String> {
+    let active_name = format!("{base_name}.log");
+    let rotated_prefix = format!("{base_name}_");
+    let mut files = fs::read_dir(log_directory)
+        .map_err(|error| error.to_string())?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            (name == active_name || (name.starts_with(&rotated_prefix) && name.ends_with(".log")))
+                .then_some((name, entry.path()))
+        })
+        .collect::<Vec<_>>();
+    files.sort_by(
+        |left, right| match (left.0 == active_name, right.0 == active_name) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => right.0.cmp(&left.0),
+        },
+    );
+    files.truncate(4);
+    Ok(files)
 }
 
 fn write_json(
@@ -365,6 +369,16 @@ mod tests {
             "authorization: Bearer host-secret\nhealthy\n",
         )
         .expect("host log");
+        fs::write(
+            directory.join("dbfox-sidecar_2026-08-03_22-40-00.log"),
+            "password=rotated-secret\nrotated healthy\n",
+        )
+        .expect("rotated sidecar log");
+        fs::write(
+            directory.join("dbfox-sidecar.log.1"),
+            "legacy-file-must-not-be-collected\n",
+        )
+        .expect("legacy unmanaged log");
         let result = export_bundle(
             &directory,
             DiagnosticBundlePayload {
@@ -384,7 +398,12 @@ mod tests {
 
         let file = File::open(&result.path).expect("bundle file");
         let mut archive = ZipArchive::new(file).expect("zip archive");
-        for name in ["engine.json", "webview.json", "host/dbfox-sidecar.log"] {
+        for name in [
+            "engine.json",
+            "webview.json",
+            "host/dbfox-sidecar.log",
+            "host/dbfox-sidecar_2026-08-03_22-40-00.log",
+        ] {
             let mut entry = archive.by_name(name).expect("bundle entry");
             let mut content = String::new();
             entry.read_to_string(&mut content).expect("entry text");
@@ -392,7 +411,9 @@ mod tests {
             assert!(!content.contains("engine-secret"));
             assert!(!content.contains("web-secret"));
             assert!(!content.contains("host-secret"));
+            assert!(!content.contains("rotated-secret"));
         }
+        assert!(archive.by_name("host/dbfox-sidecar.log.1").is_err());
         fs::remove_dir_all(directory).expect("cleanup test bundle");
     }
 }

@@ -1,7 +1,4 @@
 fn main() {
-    let target = std::env::var("TARGET").expect("Cargo did not provide the build target tuple");
-    println!("cargo:rustc-env=DBFOX_TARGET_TRIPLE={target}");
-
     configure_bundle_resources_for_profile();
 
     for path in [
@@ -22,6 +19,7 @@ fn main() {
         "get_engine_startup_status",
         "restart_python_engine",
         "open_diagnostic_logs",
+        "open_external_https_url",
         "export_diagnostic_bundle",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(app_manifest))

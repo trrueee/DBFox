@@ -1,112 +1,44 @@
-use std::fs::{self, OpenOptions};
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::fs;
 
 const SIDECAR_LOG_FILE_NAME: &str = "dbfox-sidecar.log";
-const SIDECAR_LOG_MAX_BYTES: u64 = 2 * 1024 * 1024;
-const SIDECAR_LOG_BACKUP_COUNT: usize = 3;
 pub(crate) const SIDECAR_LOG_MAX_MESSAGE_CHARS: usize = 2048;
+pub(crate) const SIDECAR_LOG_TARGET: &str = "dbfox::sidecar";
 
 /// Bounded, redacted diagnostics for the Python sidecar process.
-#[derive(Clone, Debug)]
-pub(crate) struct SidecarLog {
-    directory: PathBuf,
-    max_bytes: u64,
-    backup_count: usize,
-    write_lock: Arc<Mutex<()>>,
-}
+///
+/// Tauri's log plugin owns file creation, synchronization and rotation. DBFox
+/// owns only the product-specific event schema and secret redaction policy.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SidecarLog;
 
 impl SidecarLog {
-    pub(crate) fn new(directory: PathBuf) -> Result<Self, String> {
-        Self::with_limits(directory, SIDECAR_LOG_MAX_BYTES, SIDECAR_LOG_BACKUP_COUNT)
-    }
-
-    pub(crate) fn with_limits(
-        directory: PathBuf,
-        max_bytes: u64,
-        backup_count: usize,
-    ) -> Result<Self, String> {
-        fs::create_dir_all(&directory).map_err(|error| {
-            format!(
-                "Failed to create DBFox sidecar log directory {}: {}",
-                directory.display(),
-                error
-            )
-        })?;
-        Ok(Self {
-            directory,
-            max_bytes,
-            backup_count,
-            write_lock: Arc::new(Mutex::new(())),
-        })
-    }
-
-    pub(crate) fn log_path(&self) -> PathBuf {
-        self.directory.join(SIDECAR_LOG_FILE_NAME)
-    }
-
     pub(crate) fn error(&self, message: &str) {
-        self.event("error", "host.error", message);
+        self.event(log::Level::Error, "host.error", message);
     }
 
     pub(crate) fn info(&self, event: &str, message: &str) {
-        self.event("info", event, message);
+        self.event(log::Level::Info, event, message);
     }
 
-    pub(crate) fn event(&self, level: &str, event: &str, message: &str) {
-        let safe_message = redact_sidecar_log_message(message);
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|duration| duration.as_secs())
-            .unwrap_or_default();
-        let entry = serde_json::json!({
-            "timestampUnix": ts,
-            "level": level,
-            "component": "desktop-host",
-            "event": event,
-            "message": safe_message,
-        });
-        let entry = format!("{}\n", entry);
-
-        if let Ok(_guard) = self.write_lock.lock() {
-            let path = self.log_path();
-            if let Err(error) = self.rotate_if_needed(&path) {
-                eprintln!("Failed to rotate DBFox sidecar log: {}", error);
-            }
-            if let Err(error) = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-                .and_then(|mut file| file.write_all(entry.as_bytes()))
-            {
-                eprintln!("Failed to write DBFox sidecar log: {}", error);
-            }
-        }
-        eprintln!("{}", safe_message);
+    pub(crate) fn event(&self, level: log::Level, event: &str, message: &str) {
+        let entry = format_sidecar_log_event(level, event, message);
+        log::log!(target: SIDECAR_LOG_TARGET, level, "{entry}");
     }
+}
 
-    fn rotate_if_needed(&self, path: &Path) -> std::io::Result<()> {
-        if !path.exists() || fs::metadata(path)?.len() < self.max_bytes {
-            return Ok(());
-        }
-
-        for index in (1..=self.backup_count).rev() {
-            let destination = path.with_extension(format!("log.{}", index));
-            if destination.exists() {
-                fs::remove_file(&destination)?;
-            }
-            let source = if index == 1 {
-                path.to_path_buf()
-            } else {
-                path.with_extension(format!("log.{}", index - 1))
-            };
-            if source.exists() {
-                fs::rename(source, destination)?;
-            }
-        }
-        Ok(())
-    }
+fn format_sidecar_log_event(level: log::Level, event: &str, message: &str) -> String {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
+    serde_json::json!({
+        "timestampUnix": timestamp,
+        "level": level.to_string().to_ascii_lowercase(),
+        "component": "desktop-host",
+        "event": event,
+        "message": redact_sidecar_log_message(message),
+    })
+    .to_string()
 }
 
 pub(crate) fn redact_sidecar_log_message(message: &str) -> String {
@@ -170,4 +102,38 @@ pub(crate) fn retire_legacy_temp_sidecar_log() -> Result<(), String> {
             error
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sidecar_log_event_is_structured_and_redacted_before_dispatch() {
+        let entry = format_sidecar_log_event(
+            log::Level::Error,
+            "sidecar.failed",
+            "token=must-not-be-persisted",
+        );
+        let value: serde_json::Value = serde_json::from_str(&entry).expect("JSON log event");
+
+        assert_eq!(value["level"], "error");
+        assert_eq!(value["component"], "desktop-host");
+        assert_eq!(value["event"], "sidecar.failed");
+        assert!(value["message"]
+            .as_str()
+            .expect("message")
+            .contains("[REDACTED"));
+        assert!(!entry.contains("must-not-be-persisted"));
+    }
+
+    #[test]
+    fn sidecar_log_redacts_urls_and_bounds_non_sensitive_messages() {
+        assert_eq!(
+            redact_sidecar_log_message("https://example.invalid/request"),
+            "[REDACTED sidecar diagnostic containing sensitive-looking data]"
+        );
+        let oversized = "x".repeat(SIDECAR_LOG_MAX_MESSAGE_CHARS + 1);
+        assert!(redact_sidecar_log_message(&oversized).ends_with("… [truncated]"));
+    }
 }
