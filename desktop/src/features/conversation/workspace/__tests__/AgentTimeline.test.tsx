@@ -54,6 +54,15 @@ describe("AgentTimeline", () => {
     renderTimeline([cancelled]);
     expect(screen.queryByText("候选答案")).toBeNull();
   });
+
+  it("renders a terminal answer when the provider omits phase", () => {
+    const answer = assistant("这是最终答案。", null, 1);
+    answer.payload.completion_disposition = "complete";
+    const { container } = renderTimeline([answer]);
+
+    expect(screen.getByText("这是最终答案。")).toBeTruthy();
+    expect(container.querySelector(".conv-answer-document")).toBeTruthy();
+  });
 });
 
 function renderTimeline(items: ConversationRunItem[]) {
@@ -104,7 +113,7 @@ function user(content: string, sequence: number): UserMessageItem {
 
 function assistant(
   content: string,
-  phase: "commentary" | "final_answer",
+  phase: "commentary" | "final_answer" | null,
   sequence: number,
   turnId = "turn-1",
 ): AssistantMessageItem {
@@ -122,6 +131,7 @@ function assistant(
       evidence: [],
       artifact_refs: [],
       limitation_codes: [],
+      completion_disposition: phase === "final_answer" ? "complete" : null,
     },
   };
 }

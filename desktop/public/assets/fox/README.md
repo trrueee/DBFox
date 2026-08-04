@@ -52,3 +52,15 @@ export function AIAssistantEntry() {
 2. 标准化为 `viewBox="0 0 128 128"`；
 3. 不带 DBFox 盒子；
 4. 生成 SVG / PNG / React wrapper。
+
+## Desktop App Icon Pipeline
+
+`png/fox-icon-app-transparent-512.png` 是桌面图标的高清透明母版。标题栏直接从这份干净的 alpha 画布缩放到 24px，避免 `fox-icon-tight.svg` 在小尺寸下出现近白边缘像素。Windows、macOS、Linux 及移动端打包资产先由 Tauri 官方图标生成器生成，再用 Pillow 补齐 Windows Shell 的 128px ICO 帧并同步 favicon：
+
+```powershell
+cd desktop
+npm run tauri -- icon public/assets/fox/png/fox-icon-app-transparent-512.png --output src-tauri/icons
+python scripts/finalize_desktop_icons.py
+```
+
+不要为 Windows 任务栏母版重复增加透明边距；Windows Shell 本身会预留图标安全区，二次加边会让任务栏图形显得过小。Pillow 脚本会从透明内容边界生成占比至少 80% 的 Windows ICO、补全官方生成器缺少的 Windows 尺寸，并清理 alpha 小于 8 的不可见插值边缘，不改变品牌图形。

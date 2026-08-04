@@ -2,7 +2,11 @@ import type {
   ConversationDetail,
   ConversationStreamEvent,
 } from "../../types/conversation";
-import { getConversation, streamConversation } from "./conversationRepository";
+import {
+  getConversation,
+  isRetryableConversationTransportError,
+  streamConversation,
+} from "./conversationRepository";
 import { isFollowableRun } from "./conversationState";
 import { createStreamEventBatcher } from "./streamEventBatcher";
 import {
@@ -12,6 +16,7 @@ import {
 export interface ConversationStreamAdapter {
   applyEvents: (events: ConversationStreamEvent[]) => void;
   loadSnapshot: (snapshot: ConversationDetail) => void;
+  onError?: (error: unknown) => void;
 }
 
 export interface ConversationStreamDependencies {
@@ -71,6 +76,10 @@ export class ConversationStreamRuntime {
           attempt = 0;
         } catch (error) {
           if (!this.lifecycle.isCurrent(active) || isAbortError(error)) return;
+          if (!isRetryableConversationTransportError(error)) {
+            adapter.onError?.(error);
+            return;
+          }
           attempt += 1;
         }
 
@@ -82,8 +91,12 @@ export class ConversationStreamRuntime {
           snapshot = await this.dependencies.snapshot(active.conversationId);
           if (!this.lifecycle.isCurrent(active)) return;
           adapter.loadSnapshot(snapshot);
-        } catch {
+        } catch (error) {
           if (!this.lifecycle.isCurrent(active)) return;
+          if (!isRetryableConversationTransportError(error)) {
+            adapter.onError?.(error);
+            return;
+          }
           attempt += 1;
           await this.dependencies.wait(
             Math.min(4_000, 250 * (2 ** Math.min(attempt, 4))),

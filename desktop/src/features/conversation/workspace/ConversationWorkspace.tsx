@@ -41,6 +41,7 @@ export function ConversationWorkspace({
     runningRun,
     openConversation,
     conversationLoadError,
+    streamError,
     sendMessage,
     sending,
     sendError,
@@ -175,7 +176,7 @@ export function ConversationWorkspace({
         running={Boolean(runningRun)}
         submitting={sending}
         cancelling={cancelling}
-        error={sendError}
+        error={sendError || streamError}
         onSend={(text, mode) => sendMessage(conversationId, text, mode)}
         onCancel={() => runningRun ? cancelRun(runningRun.id) : Promise.resolve()}
       />

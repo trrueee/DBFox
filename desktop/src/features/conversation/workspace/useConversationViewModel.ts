@@ -19,6 +19,7 @@ export function useConversationViewModel(conversationId: string) {
   } | null>(null);
   const detail = useConversationStore((state) => state.detailById[conversationId]);
   const artifactsById = useConversationStore((state) => state.artifactsById);
+  const streamError = useConversationStore((state) => state.streamErrorById[conversationId]);
   const openConversationAction = useConversationStore((state) => state.openConversation);
   const sendMessageAction = useConversationStore((state) => state.sendMessage);
   const cancelRunAction = useConversationStore((state) => state.cancelRun);
@@ -97,6 +98,7 @@ export function useConversationViewModel(conversationId: string) {
     conversationLoadError: openMutation.error
       ? getUserErrorMessage(openMutation.error, "对话载入失败，请重试。")
       : null,
+    streamError: streamError ?? null,
     sendMessage: async (
       targetConversationId: string,
       content: string,

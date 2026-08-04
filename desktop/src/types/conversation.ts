@@ -132,7 +132,7 @@ export type UserMessageItem = MessageItem & { payload: MessageItem["payload"] & 
 export type AssistantMessageItem = MessageItem & {
   payload: MessageItem["payload"] & {
     role: "assistant";
-    phase: "commentary" | "final_answer";
+    phase?: "commentary" | "final_answer" | null;
   };
 };
 export type PlanItem = RunItemBase<"plan", {

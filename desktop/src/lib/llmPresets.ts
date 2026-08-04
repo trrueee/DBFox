@@ -13,12 +13,12 @@ export const LLM_MODEL_PRESETS: LlmModelPreset[] = [
   { value: "", label: "自动检测", apiBase: DEFAULT_LLM_API_BASE, provider: "auto" },
   { value: "gpt-4o", label: "GPT-4o", apiBase: "https://api.openai.com/v1", provider: "openai" },
   { value: "gpt-4o-mini", label: "GPT-4o Mini", apiBase: "https://api.openai.com/v1", provider: "openai" },
-  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", apiBase: "https://openrouter.ai/api/v1", provider: "anthropic" },
-  { value: "claude-opus-4-8", label: "Claude Opus 4.8", apiBase: "https://openrouter.ai/api/v1", provider: "anthropic" },
-  { value: "claude-haiku-4-5", label: "Claude Haiku 4.5", apiBase: "https://openrouter.ai/api/v1", provider: "anthropic" },
-  { value: "deepseek-v4-pro", label: "DeepSeek V4 Pro", apiBase: "https://api.deepseek.com/v1", provider: "deepseek" },
+  { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6", apiBase: "https://openrouter.ai/api/v1", provider: "anthropic" },
+  { value: "anthropic/claude-opus-4.8", label: "Claude Opus 4.8", apiBase: "https://openrouter.ai/api/v1", provider: "anthropic" },
+  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5", apiBase: "https://openrouter.ai/api/v1", provider: "anthropic" },
+  { value: "deepseek-v4-flash", label: "DeepSeek V4 Flash", apiBase: "https://api.deepseek.com/v1", provider: "deepseek" },
   { value: "qwen3-max", label: "Qwen3 Max", apiBase: "https://dashscope.aliyuncs.com/compatible-mode/v1", provider: "qwen" },
-  { value: "qwen3-coder", label: "Qwen3 Coder", apiBase: "https://dashscope.aliyuncs.com/compatible-mode/v1", provider: "qwen" },
+  { value: "qwen3-coder-plus", label: "Qwen3 Coder Plus", apiBase: "https://dashscope.aliyuncs.com/compatible-mode/v1", provider: "qwen" },
   { value: "qwen-plus", label: "Qwen Plus", apiBase: "https://dashscope.aliyuncs.com/compatible-mode/v1", provider: "qwen" },
 ];
 
@@ -37,7 +37,7 @@ export function resolveApiBaseForModel(modelName: string): string {
   if (lower.startsWith("deepseek")) {
     return "https://api.deepseek.com/v1";
   }
-  if (lower.startsWith("claude")) {
+  if (lower.startsWith("anthropic/claude")) {
     return "https://openrouter.ai/api/v1";
   }
   return DEFAULT_LLM_API_BASE;

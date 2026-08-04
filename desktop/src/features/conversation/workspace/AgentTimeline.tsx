@@ -67,7 +67,7 @@ export function AgentTimeline({
   const hasFinalAnswer = items.some(
     (item) => item.type === "message"
       && item.payload.role === "assistant"
-      && item.payload.phase === "final_answer"
+      && item.payload.completion_disposition != null
       && item.status !== "cancelled",
   );
 
@@ -168,10 +168,11 @@ function AssistantMessage({
   onSelectArtifact?: (artifactId: string) => void;
 }) {
   if (item.status === "cancelled" || !item.payload.content) return null;
-  const finalAnswer = item.payload.phase === "final_answer";
+  const finalAnswer = item.payload.completion_disposition != null;
+  const presentationPhase = finalAnswer ? "final_answer" : "commentary";
   return (
     <article
-      className={`conv-agent-message is-${item.payload.phase} ${finalAnswer ? "conv-answer-document" : ""}`}
+      className={`conv-agent-message is-${presentationPhase} ${finalAnswer ? "conv-answer-document" : ""}`}
       aria-live={item.status === "in_progress" ? "polite" : undefined}
     >
       {finalAnswer && item.payload.completion_disposition === "bounded_partial" && (

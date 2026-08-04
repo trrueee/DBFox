@@ -13,6 +13,14 @@ interface TableMetadata {
   tableId: string;
   columns: string[];
   columnTypes: Map<string, string>;
+  columnDetails: Map<string, TableColumnDetail>;
+}
+
+export interface TableColumnDetail {
+  isPrimaryKey: boolean;
+  isForeignKey: boolean;
+  isNullable: boolean;
+  comment: string;
 }
 
 interface UseTablePreviewDataOptions {
@@ -59,8 +67,15 @@ export function useTablePreviewData({
         const columns = await listColumns(table.id);
         if (request !== metadataRequest.current) return;
         const columnTypes = new Map<string, string>();
+        const columnDetails = new Map<string, TableColumnDetail>();
         columns.forEach((column: EngineColumn) => {
           columnTypes.set(column.column_name, column.data_type || "");
+          columnDetails.set(column.column_name, {
+            isPrimaryKey: column.is_primary_key,
+            isForeignKey: column.is_foreign_key,
+            isNullable: column.is_nullable,
+            comment: column.column_comment || "",
+          });
         });
         setMetadataState({
           scopeKey,
@@ -68,6 +83,7 @@ export function useTablePreviewData({
             tableId: table.id,
             columns: columns.map((column: EngineColumn) => column.column_name),
             columnTypes,
+            columnDetails,
           },
           error: "",
         });
@@ -138,10 +154,12 @@ export function useTablePreviewData({
   return {
     ...gateway,
     columnTypes: metadata?.columnTypes ?? EMPTY_COLUMN_TYPES,
+    columnDetails: metadata?.columnDetails ?? EMPTY_COLUMN_DETAILS,
     error: metadataError || gateway.error || "",
   };
 }
 
 const EMPTY_COLUMN_TYPES = new Map<string, string>();
+const EMPTY_COLUMN_DETAILS = new Map<string, TableColumnDetail>();
 
 export type TableFilterOperator = ResultFilterOperator;

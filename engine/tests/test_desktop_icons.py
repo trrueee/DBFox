@@ -11,6 +11,15 @@ TAURI_ICONS = ROOT / "desktop" / "src-tauri" / "icons"
 NSIS_HOOKS = ROOT / "desktop" / "src-tauri" / "nsis-hooks.nsh"
 WIX_TEMPLATE = ROOT / "desktop" / "src-tauri" / "wix-template.wxs"
 FAVICON = ROOT / "desktop" / "public" / "favicon.png"
+TITLEBAR_ICON = (
+    ROOT
+    / "desktop"
+    / "public"
+    / "assets"
+    / "fox"
+    / "png"
+    / "fox-icon-app-transparent-512.png"
+)
 
 
 def _rgba(path: Path) -> Image.Image:
@@ -99,10 +108,24 @@ def test_windows_ico_contains_common_shell_sizes() -> None:
             frame = icon.ico.getimage(size).convert("RGBA")
             label = f"icon.ico {size[0]}x{size[1]}"
 
-            _assert_image_transparent_padding(frame, label, min_padding_ratio=0.16)
+            _assert_image_transparent_padding(frame, label, min_padding_ratio=0.02)
             assert not _border_has_opaque_white_pixel(frame), (
                 f"{label} has opaque white pixels on the canvas border"
             )
+            alpha_bounds = frame.getchannel("A").getbbox()
+            assert alpha_bounds is not None
+            visible_width = alpha_bounds[2] - alpha_bounds[0]
+            assert visible_width / size[0] >= 0.87, (
+                f"{label} only uses {visible_width}/{size[0]}px of the taskbar canvas"
+            )
+
+
+def test_titlebar_icon_source_has_clean_transparent_edges() -> None:
+    icon = _rgba(TITLEBAR_ICON)
+
+    assert icon.size == (512, 512)
+    _assert_image_transparent_padding(icon, str(TITLEBAR_ICON))
+    assert not _border_has_opaque_white_pixel(icon)
 
 
 def test_favicon_uses_same_transparent_mark_as_bundle_icon() -> None:

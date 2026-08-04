@@ -21,6 +21,8 @@ export function removeConversationState(
   );
   const detailById = { ...state.detailById };
   delete detailById[conversationId];
+  const streamErrorById = { ...state.streamErrorById };
+  delete streamErrorById[conversationId];
   return {
     ...state,
     summaries: state.summaries.filter((summary) => summary.id !== conversationId),
@@ -28,6 +30,7 @@ export function removeConversationState(
       ? null
       : state.activeConversationId,
     detailById,
+    streamErrorById,
     artifactsById: filterRecord(
       state.artifactsById,
       (artifact) => artifact.session_id !== conversationId,

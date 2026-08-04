@@ -5,6 +5,7 @@ import { defaultSql } from "../workspace/defaultSql";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDatasourceState } from "../datasource/useDatasourceState";
 import { useConversationStore } from "../../stores/conversationStore";
+import { getUserErrorMessage } from "../../lib/api/client";
 import type { ConversationSummary } from "../../types/conversation";
 import { WorkspaceShell } from "./WorkspaceShell";
 
@@ -94,16 +95,15 @@ function SmartQueryHomeTab({ showToast }: { showToast: WorkspaceRouterProps["sho
   const handleSubmitAsk = async () => {
     const text = askInputValue.trim();
     if (!text) return;
-    setAskInputValue("");
     try {
       const detail = await useConversationStore.getState().createAndOpenConversation(text, contextTables);
-      useWorkspaceStore.getState().openConversationResult({ id: detail.id, title: detail.title });
-      void useConversationStore
+      await useConversationStore
         .getState()
-        .sendMessage(detail.id, text, "queue", globalThis.crypto.randomUUID())
-        .catch((error) => showToast(error instanceof Error ? error.message : "执行失败", "error"));
+        .sendMessage(detail.id, text, "queue", globalThis.crypto.randomUUID());
+      useWorkspaceStore.getState().openConversationResult({ id: detail.id, title: detail.title });
+      setAskInputValue("");
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "创建会话失败", "error");
+      showToast(getUserErrorMessage(error, "创建智能分析失败，请重试。"), "error");
     }
   };
 

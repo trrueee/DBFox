@@ -20,7 +20,12 @@ import {
   isTerminalRunItem,
 } from "../features/conversation/conversationState";
 import { mergeProjectionById } from "./conversationProjection";
-import { buildConversationLlmPayload, getStoredApiConfig } from "../lib/llmConfig";
+import {
+  buildConversationLlmPayload,
+  getStoredApiConfig,
+  type ConversationLlmPayload,
+} from "../lib/llmConfig";
+import { getUserErrorMessage } from "../lib/api/client";
 import type {
   ApprovalItem,
   ConversationArtifact,
@@ -46,6 +51,7 @@ export interface ConversationState {
   detailById: Record<string, ConversationDetail>;
   artifactsById: Record<string, ConversationArtifact>;
   liveFieldsById: Record<string, { revision: number; offset: number }>;
+  streamErrorById: Record<string, string | undefined>;
 }
 
 export interface ConversationActions {
@@ -91,6 +97,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   detailById: {},
   artifactsById: {},
   liveFieldsById: {},
+  streamErrorById: {},
 
   initConversations: async () => {
     set({ summaries: await listConversations() });
@@ -125,6 +132,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   },
 
   createAndOpenConversation: async (question, contextTables) => {
+    requireConversationLlmPayload();
     const datasourceId = useDatasourceSelectionStore.getState().activeDatasourceId;
     if (!datasourceId) throw new Error("Please select a datasource first.");
     const detail = await createConversation({
@@ -190,8 +198,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   },
 
   sendMessage: async (conversationId, content, mode, idempotencyKey) => {
-    const llmPayload = buildConversationLlmPayload(getStoredApiConfig());
-    if (!llmPayload.llm_credential_id) throw new Error("请先配置模型后再开始智能分析。");
+    const llmPayload = requireConversationLlmPayload();
     const detail = get().detailById[conversationId]
       || await get().openConversation(conversationId);
     const created = await admitConversationInput(conversationId, {
@@ -286,10 +293,30 @@ async function followRun(
   runId: string,
   afterSequence: number,
 ): Promise<void> {
+  useConversationStore.setState((state) => ({
+    streamErrorById: { ...state.streamErrorById, [conversationId]: undefined },
+  }));
   await conversationStreamRuntime.follow(conversationId, runId, afterSequence, {
     applyEvents: (events) => get().applyStreamEvents(events),
     loadSnapshot: (snapshot) => get().loadConversation(snapshot),
+    onError: (error) => useConversationStore.setState((state) => ({
+      streamErrorById: {
+        ...state.streamErrorById,
+        [conversationId]: getUserErrorMessage(
+          error,
+          "智能分析连接异常，请刷新后重试。",
+        ),
+      },
+    })),
   });
+}
+
+function requireConversationLlmPayload(): ConversationLlmPayload & { llm_credential_id: string } {
+  const payload = buildConversationLlmPayload(getStoredApiConfig());
+  if (!payload.llm_credential_id) {
+    throw new Error("请先配置模型后再开始智能分析。");
+  }
+  return payload as ConversationLlmPayload & { llm_credential_id: string };
 }
 
 function findItem<T extends ConversationRunItem>(

@@ -1171,7 +1171,7 @@ export const zApprovalItem = z.object({
     session_id: z.string(),
     status: zRunItemStatus,
     turn_id: z.string().nullish(),
-    type: z.literal('approval').optional().default('approval')
+    type: z.literal('approval')
 });
 
 /**
@@ -1188,7 +1188,7 @@ export const zFunctionCallOutputItem = z.object({
     session_id: z.string(),
     status: zRunItemStatus,
     turn_id: z.string().nullish(),
-    type: z.literal('function_call_output').optional().default('function_call_output')
+    type: z.literal('function_call_output')
 });
 
 /**
@@ -1205,7 +1205,7 @@ export const zMessageItem = z.object({
     session_id: z.string(),
     status: zRunItemStatus,
     turn_id: z.string().nullish(),
-    type: z.literal('message').optional().default('message')
+    type: z.literal('message')
 });
 
 /**
@@ -1222,7 +1222,7 @@ export const zPlanItem = z.object({
     session_id: z.string(),
     status: zRunItemStatus,
     turn_id: z.string().nullish(),
-    type: z.literal('plan').optional().default('plan')
+    type: z.literal('plan')
 });
 
 /**
@@ -1239,7 +1239,7 @@ export const zQuestionItem = z.object({
     session_id: z.string(),
     status: zRunItemStatus,
     turn_id: z.string().nullish(),
-    type: z.literal('question').optional().default('question')
+    type: z.literal('question')
 });
 
 /**
@@ -1567,7 +1567,7 @@ export const zFunctionCallItem = z.object({
     session_id: z.string(),
     status: zRunItemStatus,
     turn_id: z.string().nullish(),
-    type: z.literal('function_call').optional().default('function_call')
+    type: z.literal('function_call')
 });
 
 /**

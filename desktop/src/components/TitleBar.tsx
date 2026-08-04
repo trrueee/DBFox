@@ -62,7 +62,7 @@ export default function TitleBar() {
     <div className="titlebar" data-tauri-drag-region onDoubleClick={handleToggleMaximize}>
       <span className="titlebar-brand">
         <span className="titlebar-logo">
-          <FoxIcon variant="app" size={20} />
+          <FoxIcon variant="app" size={24} />
         </span>
         <span className="titlebar-title">DBFox</span>
       </span>

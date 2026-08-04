@@ -1,8 +1,9 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceRouter } from "../WorkspaceRouter";
 import { testDraftLlmConnection } from "../llmDraftConnection";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
+import { useConversationStore } from "../../../stores/conversationStore";
 import type { WorkspaceTab } from "../../../types/workspace";
 
 const LAZY_ROUTE_TIMEOUT_MS = 10_000;
@@ -28,6 +29,9 @@ const sqlConsoleProps = vi.hoisted(() => ({
 const workspacePageProps = vi.hoisted(() => ({
   datasourceSettings: null as Record<string, unknown> | null,
 }));
+const smartQueryHomeProps = vi.hoisted(() => ({
+  latest: null as Record<string, unknown> | null,
+}));
 const datasourceState = vi.hoisted(() => ({
   datasources: [] as Array<Record<string, unknown>>,
   activeDatasourceId: "",
@@ -47,7 +51,10 @@ const llmConnectionApi = vi.hoisted(() => ({
 }));
 
 vi.mock("../../workspace/SmartQueryHome", () => ({
-  SmartQueryHome: () => <div data-testid="smart-query-home" />,
+  SmartQueryHome: (props: Record<string, unknown>) => {
+    smartQueryHomeProps.latest = props;
+    return <div data-testid="smart-query-home" />;
+  },
 }));
 vi.mock("../../conversation/ConversationHistoryPanel", () => ({
   ConversationHistoryPanel: () => <div data-testid="conversation-history" />,
@@ -186,6 +193,55 @@ describe("WorkspaceRouter table tabs", () => {
       datasourceDbType: "postgresql",
     });
     expect(state.sqlConsoleState["sql-1"].draftSql).toBe("SELECT * FROM users;");
+  });
+});
+
+describe("WorkspaceRouter smart query admission", () => {
+  it("keeps the draft and does not open an empty tab when admission fails", async () => {
+    const showToast = vi.fn();
+    const create = vi.spyOn(
+      useConversationStore.getState(),
+      "createAndOpenConversation",
+    ).mockResolvedValue({
+      protocol_version: 2,
+      id: "conversation-1",
+      title: "分析订单",
+      datasource_id: "ds-1",
+      context_tables: [],
+      runs: [],
+      items: [],
+      cursor: 0,
+    });
+    const send = vi.spyOn(
+      useConversationStore.getState(),
+      "sendMessage",
+    ).mockRejectedValue(new Error('[{"code":"invalid_type","path":["created_at"]}]'));
+    const openResult = vi.spyOn(
+      useWorkspaceStore.getState(),
+      "openConversationResult",
+    ).mockImplementation(() => undefined);
+
+    render(<WorkspaceRouter
+      activeTab={{ id: "smart-query", title: "智能问数", type: "smart-query" }}
+      showToast={showToast}
+    />);
+    await findLazyRouteByTestId("smart-query-home");
+    act(() => {
+      (smartQueryHomeProps.latest?.onAskInputChange as (value: string) => void)("分析订单");
+    });
+    await act(async () => {
+      await (smartQueryHomeProps.latest?.onSubmitAsk as () => Promise<void>)();
+    });
+
+    expect(create).toHaveBeenCalledWith("分析订单", []);
+    expect(send).toHaveBeenCalledOnce();
+    expect(openResult).not.toHaveBeenCalled();
+    expect(smartQueryHomeProps.latest?.askInputValue).toBe("分析订单");
+    expect(showToast).toHaveBeenCalledWith("创建智能分析失败，请重试。", "error");
+
+    create.mockRestore();
+    send.mockRestore();
+    openResult.mockRestore();
   });
 });
 

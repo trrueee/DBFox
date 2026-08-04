@@ -76,7 +76,7 @@ describe("TablePreviewPane", () => {
     expect(await screen.findByText("user-1")).toBeTruthy();
     expect(schemaMocks.findTableByName).toHaveBeenCalledWith("ds-1", "users");
 
-    fireEvent.click(screen.getByText(">"));
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
 
     await waitFor(() => expect(agentApiMocks.fetchTableResultPage).toHaveBeenCalledTimes(2));
     expect(screen.getByText("user-1")).toBeTruthy();
@@ -178,8 +178,8 @@ describe("TablePreviewPane", () => {
 
     const footer = container.querySelector(".hifi-table-footer");
     expect(footer?.querySelector(".hifi-toolbar-btn")).toBeNull();
-    expect(screen.getByRole("button", { name: "<" }).className).toContain("dbfox-button");
-    expect(screen.getByRole("combobox").className).toContain("dbfox-select-trigger");
+    expect(screen.getByRole("button", { name: "上一页" }).className).toContain("dbfox-button");
+    expect(screen.getByRole("combobox", { name: "每页" }).className).toContain("dbfox-select-trigger");
 
     const emptyActions = container.querySelector(".hifi-preview-empty-actions");
     expect(emptyActions?.querySelector(".hifi-toolbar-btn")).toBeNull();
@@ -187,6 +187,7 @@ describe("TablePreviewPane", () => {
     expect(emptyButtons).toHaveLength(2);
     expect(emptyButtons[0].className).toContain("dbfox-button");
     expect(emptyButtons[1].className).toContain("dbfox-button");
+    expect(screen.getByRole("button", { name: "导入数据" })).toBeTruthy();
   });
 
   it("exports the current matching table result without page limits", async () => {
@@ -248,6 +249,63 @@ describe("TablePreviewPane", () => {
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("NULL");
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已复制单元格"));
+  });
+
+  it("pins the primary key and exposes resize, sort, and column menu controls", async () => {
+    schemaMocks.listColumns.mockResolvedValueOnce([
+      { column_name: "id", data_type: "bigint", is_primary_key: true, is_foreign_key: false, is_nullable: false, column_comment: "row id" },
+      { column_name: "name", data_type: "varchar", is_primary_key: false, is_foreign_key: false, is_nullable: true, column_comment: "display name" },
+    ]);
+
+    const { container } = render(
+      <TablePreviewPane tableId="structured_users" datasourceId="ds-1" datasourceDbType="mysql" onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />,
+    );
+
+    expect(await screen.findByText("amy")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "id bigint" }).className).toContain("is-pinned");
+    expect(screen.getByRole("separator", { name: "调整 id 列宽" })).toBeTruthy();
+    expect(container.querySelector(".table-preview-key-icon")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "name 排序" }));
+    await waitFor(() => expect(agentApiMocks.fetchTableResultPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sort: [{ column: "name", direction: "asc" }] }),
+    ));
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "name 列菜单" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "隐藏此列" }));
+    expect(screen.queryByRole("columnheader", { name: "name varchar" })).toBeNull();
+  });
+
+  it("opens structured JSON in the side drawer and copies it explicitly", async () => {
+    const onToast = vi.fn();
+    schemaMocks.listColumns.mockResolvedValueOnce([
+      { column_name: "id", data_type: "bigint" },
+      { column_name: "payload", data_type: "json" },
+    ]);
+    agentApiMocks.fetchTableResultPage.mockResolvedValue(
+      pageResult([{ id: "1", payload: { enabled: true, count: 2 } }], 5, ["id", "payload"]),
+    );
+
+    render(
+      <TablePreviewPane tableId="json_events" datasourceId="ds-1" datasourceDbType="mysql" onOpenSqlConsole={vi.fn()} onToast={onToast} />,
+    );
+
+    const jsonSummary = await screen.findByText(/JSON ·/);
+    const cell = jsonSummary.closest("td");
+    if (!cell) throw new Error("Expected JSON preview cell");
+    fireEvent.click(cell);
+
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("JSON · payload")).toBeTruthy();
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "复制 JSON" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith('{"enabled":true,"count":2}'));
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith("已复制 JSON"));
   });
 });
 

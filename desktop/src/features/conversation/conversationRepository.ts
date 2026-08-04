@@ -1,5 +1,5 @@
 import { createParser, type EventSourceMessage } from "eventsource-parser";
-import { fetchEnginePath } from "../../lib/api/client";
+import { ApiError, fetchEnginePath } from "../../lib/api/client";
 import {
   admitConversationInputApiV1ConversationsConversationIdInputsPost,
   cancelRunApiV1RunsRunIdCancelPost,
@@ -36,6 +36,37 @@ import {
   parseRuntimeEvent,
 } from "./conversationWireSchema";
 import { isFollowableRun } from "./conversationState";
+
+export class ConversationProtocolError extends Error {
+  constructor(cause?: unknown) {
+    super("智能分析返回了无法识别的数据，请刷新后重试。", { cause });
+    this.name = "ConversationProtocolError";
+  }
+}
+
+export class ConversationStreamHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super("智能分析连接失败，请稍后重试。");
+    this.name = "ConversationStreamHttpError";
+    this.status = status;
+  }
+}
+
+export function isRetryableConversationTransportError(error: unknown): boolean {
+  if (error instanceof ConversationProtocolError) return false;
+  if (error instanceof ConversationStreamHttpError || error instanceof ApiError) {
+    const status = error.status;
+    return status === 408
+      || status === 409
+      || status === 425
+      || status === 429
+      || Boolean(status && status >= 500);
+  }
+  if (error instanceof DOMException && error.name === "AbortError") return false;
+  return error instanceof TypeError;
+}
 
 export const listConversations = async (): Promise<ConversationSummary[]> => {
   const { data } = await listConversationsApiV1ConversationsGet({
@@ -151,16 +182,20 @@ export const admitConversationInput = async (
     body: input,
     throwOnError: true,
   });
-  const admitted: AdmittedConversationInput = {
-    ...data,
-    projection: {
-      ...data.projection,
-      items: data.projection.items.map(parseConversationRunItem),
-      runs: data.projection.runs.map(parseConversationRun),
-    },
-  };
-  requireProtocolVersion(admitted.projection.protocol_version);
-  return admitted;
+  try {
+    const admitted: AdmittedConversationInput = {
+      ...data,
+      projection: {
+        ...data.projection,
+        items: data.projection.items.map(parseConversationRunItem),
+        runs: data.projection.runs.map(parseConversationRun),
+      },
+    };
+    requireProtocolVersion(admitted.projection.protocol_version);
+    return admitted;
+  } catch (error) {
+    throw asProtocolError(error);
+  }
 };
 
 export const selectConversationArtifact = async (
@@ -224,8 +259,8 @@ export async function streamConversation(
       signal: options.signal,
     },
   );
-  if (!response.ok) throw new Error("无法连接智能分析流。");
-  if (!response.body) throw new Error("当前环境不支持流式响应。");
+  if (!response.ok) throw new ConversationStreamHttpError(response.status);
+  if (!response.body) throw new ConversationProtocolError();
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let cursor = options.afterSequence;
@@ -266,16 +301,21 @@ export async function streamConversation(
 
 function parseSseMessage(message: EventSourceMessage): ConversationStreamEvent | null {
   if (!message.data) return null;
-  const payload: unknown = JSON.parse(message.data);
-  if (message.event === "run.item.delta") {
-    return { kind: "delta", delta: parseRunItemDelta(payload) };
+  try {
+    const payload: unknown = JSON.parse(message.data);
+    if (message.event === "run.item.delta") {
+      return { kind: "delta", delta: parseRunItemDelta(payload) };
+    }
+    return { kind: "event", event: parseRuntimeEvent(payload) };
+  } catch (error) {
+    throw asProtocolError(error);
   }
-  return { kind: "event", event: parseRuntimeEvent(payload) };
 }
 
 function normalizeSnapshot(raw: ConversationSnapshotResponse): ConversationDetail {
-  requireProtocolVersion(raw.protocol_version);
-  return {
+  try {
+    requireProtocolVersion(raw.protocol_version);
+    return {
     protocol_version: 2,
     id: raw.session.id,
     title: raw.session.title,
@@ -295,12 +335,21 @@ function normalizeSnapshot(raw: ConversationSnapshotResponse): ConversationDetai
         next_before_sequence: raw.pagination.runs.next_before_sequence ?? null,
       },
     },
-    cursor: raw.cursor,
-  };
+      cursor: raw.cursor,
+    };
+  } catch (error) {
+    throw asProtocolError(error);
+  }
 }
 
 function requireProtocolVersion(version: number): asserts version is 2 {
   if (version !== 2) {
-    throw new Error(`不支持的 Agent 时间线协议版本：${version}`);
+    throw new ConversationProtocolError();
   }
+}
+
+function asProtocolError(error: unknown): ConversationProtocolError {
+  return error instanceof ConversationProtocolError
+    ? error
+    : new ConversationProtocolError(error);
 }

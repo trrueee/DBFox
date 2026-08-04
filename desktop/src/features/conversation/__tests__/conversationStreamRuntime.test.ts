@@ -4,6 +4,7 @@ import type {
   ConversationStreamEvent,
 } from "../../../types/conversation";
 import { ConversationStreamRuntime } from "../conversationStreamRuntime";
+import { ConversationProtocolError } from "../conversationRepository";
 
 function snapshot(status: "running" | "completed"): ConversationDetail {
   return {
@@ -34,7 +35,7 @@ function snapshot(status: "running" | "completed"): ConversationDetail {
 describe("ConversationStreamRuntime", () => {
   it("owns retries and finishes lifecycle from an authoritative snapshot", async () => {
     const stream = vi.fn()
-      .mockRejectedValueOnce(new Error("temporary disconnect"))
+      .mockRejectedValueOnce(new TypeError("temporary disconnect"))
       .mockResolvedValueOnce(4);
     const loadSnapshot = vi.fn();
     const runtime = new ConversationStreamRuntime({
@@ -75,7 +76,7 @@ describe("ConversationStreamRuntime", () => {
     const stream = vi.fn()
       .mockImplementationOnce(async (_conversationId, options) => {
         options.onEvent(durableEvent);
-        throw new Error("connection lost after event");
+        throw new TypeError("connection lost after event");
       })
       .mockResolvedValueOnce(4);
     const runtime = new ConversationStreamRuntime({
@@ -109,5 +110,26 @@ describe("ConversationStreamRuntime", () => {
 
     expect(first.controller.signal.aborted).toBe(true);
     expect(runtime.lifecycle.get("conversation-1")?.runId).toBe("run-2");
+  });
+
+  it("stops permanently and reports a protocol failure instead of reconnecting forever", async () => {
+    const error = new ConversationProtocolError(new Error("schema detail"));
+    const stream = vi.fn().mockRejectedValue(error);
+    const onError = vi.fn();
+    const runtime = new ConversationStreamRuntime({
+      stream,
+      snapshot: vi.fn(),
+      wait: vi.fn(),
+    });
+
+    await runtime.follow("conversation-1", "run-1", 0, {
+      applyEvents: vi.fn(),
+      loadSnapshot: vi.fn(),
+      onError,
+    });
+
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(error);
+    expect(runtime.lifecycle.get("conversation-1")).toBeUndefined();
   });
 });

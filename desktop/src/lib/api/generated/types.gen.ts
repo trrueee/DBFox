@@ -120,7 +120,7 @@ export type ApprovalItem = {
     /**
      * Type
      */
-    type?: 'approval';
+    type: 'approval';
 };
 
 /**
@@ -1811,7 +1811,7 @@ export type FunctionCallItem = {
     /**
      * Type
      */
-    type?: 'function_call';
+    type: 'function_call';
 };
 
 /**
@@ -1855,7 +1855,7 @@ export type FunctionCallOutputItem = {
     /**
      * Type
      */
-    type?: 'function_call_output';
+    type: 'function_call_output';
 };
 
 /**
@@ -2051,7 +2051,7 @@ export type MessageItem = {
     /**
      * Type
      */
-    type?: 'message';
+    type: 'message';
 };
 
 /**
@@ -2154,7 +2154,7 @@ export type PlanItem = {
     /**
      * Type
      */
-    type?: 'plan';
+    type: 'plan';
 };
 
 /**
@@ -2459,7 +2459,7 @@ export type QuestionItem = {
     /**
      * Type
      */
-    type?: 'question';
+    type: 'question';
 };
 
 /**

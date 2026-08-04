@@ -23,12 +23,20 @@
 }
 
 .titlebar-logo {
-  width: 20px;
-  height: 20px;
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
   border-radius: 6px;
-  overflow: hidden;
-  box-shadow: 0 1px 4px rgba(118, 103, 242, 0.18);
   flex-shrink: 0;
+}
+
+.titlebar-logo .fox-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  image-rendering: auto;
 }
 
 .titlebar-title {

@@ -3,6 +3,7 @@ import {
   admitConversationInput,
   createConversation,
   listConversations,
+  ConversationProtocolError,
   streamConversation,
 } from "../conversationRepository";
 
@@ -20,6 +21,7 @@ vi.mock("../../../lib/api/generated/sdk.gen", () => ({
 }));
 
 vi.mock("../../../lib/api/client", () => ({
+  ApiError: class ApiError extends Error {},
   fetchEnginePath: sdkMocks.fetchEnginePath,
 }));
 
@@ -138,7 +140,7 @@ describe("conversationRepository", () => {
     await expect(createConversation({
       datasource_id: "ds-1",
       context_tables: [],
-    })).rejects.toThrow("不支持的 Agent 时间线协议版本：1");
+    })).rejects.toThrow("智能分析返回了无法识别的数据，请刷新后重试。");
   });
 
   it("rejects admission projections from an unsupported timeline protocol", async () => {
@@ -162,7 +164,7 @@ describe("conversationRepository", () => {
       selected_artifact_ids: [],
       workspace_context: {},
       llm_credential_id: "credential-1",
-    })).rejects.toThrow("不支持的 Agent 时间线协议版本：1");
+    })).rejects.toThrow("智能分析返回了无法识别的数据，请刷新后重试。");
   });
 
   it("parses fragmented and multi-line SSE frames with the standard parser", async () => {
@@ -218,5 +220,21 @@ describe("conversationRepository", () => {
 
     expect(cursor).toBe(9);
     expect(cancelled).toBe(true);
+  });
+
+  it("wraps malformed stream payloads as a safe non-retryable protocol error", async () => {
+    const encoder = new TextEncoder();
+    sdkMocks.fetchEnginePath.mockResolvedValue(new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode("event: run.updated\ndata: {invalid}\n\n"));
+        controller.close();
+      },
+    }), { status: 200 }));
+
+    await expect(streamConversation("conv-1", {
+      afterSequence: 0,
+      targetRunId: "run-1",
+      onEvent: () => undefined,
+    })).rejects.toBeInstanceOf(ConversationProtocolError);
   });
 });
