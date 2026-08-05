@@ -1,7 +1,12 @@
 import pytest
 
 from engine.policy.redactor import DataRedactor
-from engine.policy.sensitivity import _SENSITIVE_FALLBACK, load_sensitivity, redact_row
+from engine.policy.sensitivity import (
+    _SENSITIVE_FALLBACK,
+    load_sensitivity,
+    projection_sensitivity_mask,
+    redact_row,
+)
 
 def test_data_redactor_pii_and_credentials() -> None:
     # Test credentials redaction
@@ -101,6 +106,123 @@ def test_schema_pii_flag_extends_datasource_sensitivity_policy(db_session, test_
     assert redacted == {"customer_code": "[REDACTED]", "status": "active"}
 
 
+def test_projection_sensitivity_tracks_alias_expression_cte_and_star(
+    db_session,
+    test_datasource,
+) -> None:
+    from engine.models import SchemaColumn, SchemaTable
+
+    table = SchemaTable(
+        id="table-projection-sensitivity",
+        data_source_id=test_datasource.id,
+        table_schema="main",
+        table_name="projection_users",
+    )
+    db_session.add(table)
+    db_session.flush()
+    db_session.add_all(
+        [
+            SchemaColumn(
+                id="column-projection-name",
+                table_id=table.id,
+                column_name="display_name",
+                data_type="TEXT",
+            ),
+            SchemaColumn(
+                id="column-projection-password",
+                table_id=table.id,
+                column_name="password",
+                data_type="TEXT",
+            ),
+        ]
+    )
+    db_session.commit()
+    sensitivity = load_sensitivity(db_session, test_datasource.id)
+
+    assert projection_sensitivity_mask(
+        db_session,
+        test_datasource.id,
+        "SELECT password AS public_value FROM projection_users",
+        "sqlite",
+        sensitivity,
+    ) == (True,)
+    assert projection_sensitivity_mask(
+        db_session,
+        test_datasource.id,
+        "SELECT UPPER(password) AS public_value FROM projection_users",
+        "sqlite",
+        sensitivity,
+    ) == (True,)
+    assert projection_sensitivity_mask(
+        db_session,
+        test_datasource.id,
+        (
+            "WITH source AS (SELECT password FROM projection_users) "
+            "SELECT password AS public_value FROM source"
+        ),
+        "sqlite",
+        sensitivity,
+    ) == (True,)
+    assert projection_sensitivity_mask(
+        db_session,
+        test_datasource.id,
+        "SELECT * FROM projection_users",
+        "sqlite",
+        sensitivity,
+    ) == (False, True)
+
+
+def test_projection_sensitivity_fails_closed_for_unknown_source_column(
+    db_session,
+    test_datasource,
+) -> None:
+    sensitivity = load_sensitivity(db_session, test_datasource.id)
+
+    assert projection_sensitivity_mask(
+        db_session,
+        test_datasource.id,
+        "SELECT unindexed_value AS public_value FROM users",
+        "sqlite",
+        sensitivity,
+    ) is None
+
+
+def test_executor_redacts_sensitive_projection_hidden_by_alias(
+    db_session,
+    test_datasource,
+    monkeypatch,
+) -> None:
+    import engine.sql.executor as executor
+    from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
+    from engine.sql.row_serializer import QueryExecutionResult, ResultTruncation
+
+    sync_schema(db_session, test_datasource.id)
+    bounded_result = QueryExecutionResult(
+        rows=[{"display_name": "secret@example.test"}],
+        columns=["display_name"],
+        truncation=ResultTruncation(),
+        response_bytes=64,
+        connect_ms=0,
+        execute_ms=0,
+        fetch_ms=0,
+        serialize_ms=0,
+    )
+    monkeypatch.setattr(
+        executor,
+        "_execute_on_sqlite_profiled",
+        lambda *_args, **_kwargs: bounded_result,
+    )
+
+    result = executor.execute_query(
+        db_session,
+        test_datasource.id,
+        "SELECT email AS display_name FROM users LIMIT 1",
+    )
+
+    assert result["rows"] == [{"display_name": "[REDACTED]"}]
+    assert "secret@example.test" not in str(result)
+
+
 def test_executor_redacts_sensitive_queries(db_session, test_datasource) -> None:
     from engine.tests.support.executor import execute_query_for_test
     from engine.models import QueryHistory
@@ -155,4 +277,3 @@ def test_executor_history_redacts_sensitive_error_messages(db_session, test_data
     assert "user@example.com" not in history.error_message
     assert "driver-secret" not in history.error_message
     assert history.error_message == fixed_error_message(FixedErrorCode.SQL_EXECUTION_FAILED)
-

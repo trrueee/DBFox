@@ -227,7 +227,7 @@ def test_executor_recalculates_response_bytes_after_redaction(
     monkeypatch.setattr(
         sensitivity_module,
         "redact_row",
-        lambda _row, _sensitivity: {"id": "[REDACTED-LONGER-THAN-ONE]"},
+        lambda _row, _sensitivity, **_kwargs: {"id": "[REDACTED-LONGER-THAN-ONE]"},
     )
 
     result = executor.execute_query(

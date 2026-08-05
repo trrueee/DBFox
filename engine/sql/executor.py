@@ -221,10 +221,14 @@ def _run_approved_query(
 
     # Apply redaction pipeline at the executor level if requested
     if redact:
-        from engine.policy.sensitivity import load_sensitivity, redact_row
+        from engine.policy.sensitivity import (
+            _SENSITIVE_FALLBACK,
+            load_sensitivity,
+            projection_sensitivity_mask,
+            redact_row,
+        )
         try:
             sensitivity = load_sensitivity(db, datasource_id)
-            rows = [redact_row(row, sensitivity) for row in rows]
         except Exception as exc:
             log_unexpected_exception(
                 logger,
@@ -232,7 +236,33 @@ def _run_approved_query(
                 exc=exc,
                 level="warning",
             )
-            rows = [redact_row(row, _SENSITIVE_FALLBACK) for row in rows]
+            sensitivity = _SENSITIVE_FALLBACK
+
+        projection_mask = projection_sensitivity_mask(
+            db,
+            datasource_id,
+            safe_sql,
+            profile.dialect,
+            sensitivity,
+        )
+        if projection_mask is None or len(projection_mask) != len(columns):
+            # A result whose projection lineage cannot be proven safe must not
+            # expose values under caller-controlled aliases.
+            sensitive_columns = set(columns)
+        else:
+            sensitive_columns = {
+                column
+                for index, column in enumerate(columns)
+                if projection_mask[index]
+            }
+        rows = [
+            redact_row(
+                row,
+                sensitivity,
+                sensitive_columns=sensitive_columns,
+            )
+            for row in rows
+        ]
 
         # Redaction can change the serialized byte size (for example, a number
         # can become the literal "[REDACTED]"). Re-apply the transport contract
