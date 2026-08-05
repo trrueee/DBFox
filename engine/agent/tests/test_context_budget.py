@@ -121,6 +121,56 @@ def test_budget_accounts_for_typed_response_items_and_drops_complete_old_pairs()
     assert retained_call_ids == retained_output_ids
 
 
+def test_consumed_steer_follows_the_response_batch_it_updates() -> None:
+    snapshot = ContextSnapshot(
+        session_id="session",
+        run_id="run",
+        context_epoch=0,
+        current_request="分析所有地区",
+        consumed_steers=["只看华东区"],
+        messages=[],
+        response_batches=[
+            ResponseItemBatch(
+                turn_id="turn-1",
+                items=[
+                    {
+                        "type": "function_call_output",
+                        "call_id": "call-1",
+                        "output": "all-regions-result",
+                    }
+                ],
+            )
+        ],
+        sources=[],
+        hash="hash",
+    )
+    from engine.agent.definition import AgentDefinition
+    from engine.agent.prompt import PromptAssembler
+
+    bundle = PromptAssembler().assemble(
+        definition=AgentDefinition(),
+        context=snapshot,
+    )
+
+    current_index = next(
+        index
+        for index, item in enumerate(bundle.messages)
+        if "分析所有地区" in str(item.get("content") or "")
+    )
+    output_index = next(
+        index
+        for index, item in enumerate(bundle.messages)
+        if item.get("type") == "function_call_output"
+    )
+    steer_index = next(
+        index
+        for index, item in enumerate(bundle.messages)
+        if "只看华东区" in str(item.get("content") or "")
+    )
+    assert current_index < output_index < steer_index
+    assert bundle.budget["consumed_steer_count"] == 1
+
+
 def test_observations_are_internal_state_not_duplicate_model_messages() -> None:
     observations = [
         ContextObservation(

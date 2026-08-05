@@ -117,6 +117,7 @@ class ContextSnapshot(BaseModel):
     run_id: str
     context_epoch: int
     current_request: str = ""
+    consumed_steers: list[str] = Field(default_factory=list)
     messages: list[dict[str, str]]
     response_batches: list[ResponseItemBatch] = Field(default_factory=list)
     selected_artifacts: list[ContextArtifact] = Field(default_factory=list)
@@ -278,7 +279,7 @@ class ContextAssembler:
             )
 
         sources: list[ContextSource] = []
-        messages, current_request = self._messages(run, sources)
+        messages, current_request, consumed_steers = self._messages(run, sources)
         response_batches = self._response_batches(run, sources)
         selected_artifacts = self._selected_artifacts(aggregate, admitted, sources)
         observations = self._observations(run, sources)
@@ -305,6 +306,7 @@ class ContextAssembler:
             "run_id": str(run.id),
             "context_epoch": int(aggregate.context_epoch or 0),
             "current_request": current_request,
+            "consumed_steers": consumed_steers,
             "messages": messages,
             "response_batches": [
                 value.model_dump(mode="json") for value in response_batches
@@ -325,6 +327,7 @@ class ContextAssembler:
             run_id=str(run.id),
             context_epoch=int(aggregate.context_epoch or 0),
             current_request=current_request,
+            consumed_steers=consumed_steers,
             messages=messages,
             response_batches=response_batches,
             selected_artifacts=selected_artifacts,
@@ -430,7 +433,7 @@ class ContextAssembler:
         self,
         run: AgentRun,
         sources: list[ContextSource],
-    ) -> tuple[list[dict[str, str]], str]:
+    ) -> tuple[list[dict[str, str]], str, list[str]]:
         current_user = self.session.get(AgentMessage, run.user_message_id)
         if current_user is None:
             raise ValueError("Agent Run has no durable user message")
@@ -478,27 +481,19 @@ class ContextAssembler:
             if row.role == "user"
             or (row.role == "assistant" and row.status == "completed")
         ]
-        supplemental = [
+        consumed_steers = [
             str(row.content or "")[:MAX_MESSAGE_CHARS]
             for row in rows
             if str(row.id) in supplemental_message_ids and row.role == "user"
         ]
         current_request = str(current_user.content or "")[:MAX_MESSAGE_CHARS]
-        if supplemental:
-            prefix = "\n\nIn-run user responses:\n"
-            remaining = MAX_CURRENT_REQUEST_CHARS - len(current_request) - len(prefix)
-            accepted: list[str] = []
-            for value in supplemental:
-                if remaining <= 0:
-                    break
-                accepted.append(value[:remaining])
-                remaining -= len(accepted[-1]) + 1
-            if accepted:
-                current_request += prefix + "\n".join(accepted)
-            if len(accepted) < len(supplemental):
-                current_request += (
-                    "\n[additional in-run responses omitted by context budget]"
-                )
+        remaining = MAX_CURRENT_REQUEST_CHARS
+        accepted_steers: list[str] = []
+        for value in consumed_steers:
+            if remaining <= 0:
+                break
+            accepted_steers.append(value[:remaining])
+            remaining -= len(accepted_steers[-1])
         sources.append(
             ContextSource(
                 kind="session_history",
@@ -507,12 +502,12 @@ class ContextAssembler:
                 included=True,
                 reason=(
                     f"included {len(messages)} historical messages; isolated the current request "
-                    f"and {len(supplemental_message_ids)} in-run user responses"
+                    f"and {len(accepted_steers)} consumed in-run steers"
                 ),
                 provenance={"supplemental_message_ids": supplemental_message_ids},
             )
         )
-        return messages, current_request
+        return messages, current_request, accepted_steers
 
     def _response_batches(
         self,

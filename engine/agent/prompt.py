@@ -18,7 +18,7 @@ from engine.agent.model.system_prompt import build_system_prompt
 from engine.json_codec import canonical_dumps
 
 
-PROMPT_VERSION = "3.1"
+PROMPT_VERSION = "3.2"
 MAX_EVIDENCE_LEDGER_OBSERVATIONS = 8
 MAX_EVIDENCE_LEDGER_FACT_CHARS = 512
 
@@ -59,6 +59,19 @@ class PromptAssembler:
         )
         schema_tokens = estimate_tool_schema_tokens(tool_schemas or [])
         response_batches = list(context.response_batches)
+        steer_items = [
+            {
+                "role": "user",
+                "content": (
+                    '<dbfox_current_steer scope="active_run_update">\n'
+                    "This is a consumed user update to the active request. Apply it to the "
+                    "latest Run state and tool results.\n"
+                    f"{value}\n</dbfox_current_steer>"
+                ),
+            }
+            for value in context.consumed_steers
+            if value.strip()
+        ]
         omitted_turn_ids: set[str] = set()
         omitted_response_items = 0
         omitted_response_batches = 0
@@ -73,6 +86,7 @@ class PromptAssembler:
                 omitted_turn_ids=omitted_turn_ids,
             )
             response_item_tokens = estimate_input_items_tokens(response_items)
+            steer_tokens = estimate_input_items_tokens(steer_items)
             ledger_tokens = estimate_input_items_tokens(
                 [evidence_ledger] if evidence_ledger else []
             )
@@ -81,7 +95,7 @@ class PromptAssembler:
                     system_prompt=system,
                     max_prompt_tokens=definition.limits.max_prompt_tokens,
                     reserved_tokens=(
-                        schema_tokens + response_item_tokens + ledger_tokens
+                        schema_tokens + response_item_tokens + ledger_tokens + steer_tokens
                     ),
                 )
             except ContextBudgetExceeded:
@@ -105,6 +119,7 @@ class PromptAssembler:
             *plan.messages,
             *([evidence_ledger] if evidence_ledger else []),
             *response_items,
+            *steer_items,
         ]
         rendered_messages = canonical_dumps(messages)
         used_transient_outputs = [
@@ -134,6 +149,8 @@ class PromptAssembler:
                 **plan.telemetry(),
                 "tool_schema_tokens": schema_tokens,
                 "response_item_tokens": response_item_tokens,
+                "consumed_steer_tokens": steer_tokens,
+                "consumed_steer_count": len(steer_items),
                 "evidence_ledger_tokens": ledger_tokens,
                 "omitted_response_items": omitted_response_items,
                 "omitted_response_batches": omitted_response_batches,

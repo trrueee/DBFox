@@ -206,9 +206,8 @@ def test_context_includes_consumed_steer_without_leaking_queued_input(
     snapshot = ContextAssembler(db_session).build(active.run_id)
 
     assert snapshot.messages == []
-    assert snapshot.current_request == (
-        "分析所有地区的退款率\n\nIn-run user responses:\n补充：只看华东区"
-    )
+    assert snapshot.current_request == "分析所有地区的退款率"
+    assert snapshot.consumed_steers == ["补充：只看华东区"]
     assert "下一项任务：分析客单价" not in snapshot.current_request
 
 
