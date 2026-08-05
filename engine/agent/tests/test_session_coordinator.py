@@ -1,5 +1,6 @@
 import threading
 import time
+import pytest
 from concurrent.futures import Future
 from datetime import UTC, datetime, timedelta
 
@@ -191,6 +192,40 @@ def test_finished_callback_cannot_remove_a_newer_session_worker() -> None:
 
     assert coordinator._active["session"].future is newer
     coordinator.stop(wait=False)
+
+
+def test_wake_hints_are_bounded_without_creating_a_second_durable_queue() -> None:
+    release = threading.Event()
+    coordinator = SessionCoordinator(
+        session_factory=object(),
+        run_loop=object(),
+        max_workers=1,
+        max_scheduled_sessions=2,
+    )
+
+    def block(_session_id, _interrupt):
+        release.wait(2)
+
+    coordinator._drain_session = block  # type: ignore[method-assign]
+    try:
+        assert coordinator.wake("session-1") is True
+        assert coordinator.wake("session-2") is True
+        assert coordinator.wake("session-3") is False
+        assert set(coordinator._active) == {"session-1", "session-2"}
+        assert not hasattr(coordinator, "_pending")
+    finally:
+        release.set()
+        coordinator.stop()
+
+
+def test_scheduled_capacity_cannot_be_smaller_than_worker_capacity() -> None:
+    with pytest.raises(ValueError, match="at least max_workers"):
+        SessionCoordinator(
+            session_factory=object(),
+            run_loop=object(),
+            max_workers=2,
+            max_scheduled_sessions=1,
+        )
 
 
 def test_stop_interrupts_active_run_before_waiting_for_workers(db_session, test_datasource) -> None:

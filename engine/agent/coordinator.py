@@ -46,11 +46,19 @@ class SessionCoordinator:
         session_factory: Callable[[], Session],
         run_loop: RunLoop,
         max_workers: int = 4,
+        max_scheduled_sessions: int | None = None,
         lease_ttl_seconds: int = 120,
     ) -> None:
         self.session_factory = session_factory
         self.run_loop = run_loop
         self.lease_ttl_seconds = lease_ttl_seconds
+        self.max_scheduled_sessions = (
+            max_workers * 2
+            if max_scheduled_sessions is None
+            else max_scheduled_sessions
+        )
+        if self.max_scheduled_sessions < max_workers:
+            raise ValueError("max_scheduled_sessions must be at least max_workers")
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="dbfox-agent")
         self._active: dict[str, _ActiveSession] = {}
         self._lock = RLock()
@@ -75,17 +83,21 @@ class SessionCoordinator:
                 )
                 self._maintenance.start()
 
-    def wake(self, session_id: str) -> None:
+    def wake(self, session_id: str) -> bool:
+        """Schedule a bounded in-memory wake hint; durable work stays in the database."""
         if self._stopped.is_set():
             raise RuntimeError("SessionCoordinator has stopped")
         with self._lock:
             current = self._active.get(session_id)
             if current is not None and not current.future.done():
-                return
+                return True
+            if len(self._active) >= self.max_scheduled_sessions:
+                return False
             interrupt = Event()
             future = self._executor.submit(self._drain_session, session_id, interrupt)
             self._active[session_id] = _ActiveSession(future=future, interrupt=interrupt)
             future.add_done_callback(partial(self._finished, session_id))
+            return True
 
     def stop(self, *, wait: bool = True) -> None:
         self._stopped.set()
