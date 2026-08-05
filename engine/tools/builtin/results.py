@@ -39,7 +39,10 @@ from engine.tools.runtime import (
     ToolSemanticCapability,
     ToolSemanticSpec,
 )
-from engine.tools.runtime.observation import safe_observation_facts
+from engine.tools.runtime.observation import (
+    bounded_tabular_provider_payload,
+    safe_observation_facts,
+)
 
 
 MAX_PROFILE_VALUE_CHARS = 256
@@ -58,9 +61,7 @@ def _require_query_result(
         or str(artifact.run_id) != request.run_id
         or str(artifact.type) != ArtifactType.RESULT_VIEW.value
     ):
-        raise ToolInputError(
-            "The Result Artifact is unavailable in the current Run."
-        )
+        raise ToolInputError("The Result Artifact is unavailable in the current Run.")
     payload = loads(str(artifact.payload_json or "{}"))
     if not isinstance(payload, dict):
         raise ToolInputError("The Result Artifact payload is invalid.")
@@ -98,9 +99,7 @@ def _resolve_chart_suggestion(
             suggestion["title"] = tool_input.title
         return suggestion
 
-    missing = [
-        field for field in (tool_input.x, tool_input.y) if field not in columns
-    ]
+    missing = [field for field in (tool_input.x, tool_input.y) if field not in columns]
     if missing:
         available = ", ".join(columns[:30])
         raise ToolInputError(
@@ -164,9 +163,7 @@ def _resolve_chart_suggestion(
                 "name": tool_input.y,
                 "source_column": tool_input.y,
                 "expression": (
-                    f"SUM({tool_input.y})"
-                    if aggregation == "sum"
-                    else tool_input.y
+                    f"SUM({tool_input.y})" if aggregation == "sum" else tool_input.y
                 ),
                 "aggregation": aggregation,
                 "role": "y",
@@ -176,11 +173,7 @@ def _resolve_chart_suggestion(
 
 
 def _infer_chart_type(x_column: str, rows: list[dict]) -> str:
-    values = [
-        row.get(x_column)
-        for row in rows[:50]
-        if row.get(x_column) is not None
-    ]
+    values = [row.get(x_column) for row in rows[:50] if row.get(x_column) is not None]
     if values and all(_number(value) is not None for value in values):
         return "scatter"
     if values and all(_temporal(value) is not None for value in values):
@@ -330,9 +323,7 @@ class ResultInspectTool(BaseTool[ResultInspectInput, ResultInspectOutput]):
     ) -> ResultInspectOutput:
         _require_query_result(context, tool_input.result_artifact_id)
         service = ResultViewService(context.require_database())
-        source_ref = ResultSourceRef(
-            artifact_id=tool_input.result_artifact_id
-        )
+        source_ref = ResultSourceRef(artifact_id=tool_input.result_artifact_id)
         source = service.load_verified_source(source_ref)
         page = service.page(
             ResultPageQuery(
@@ -361,23 +352,39 @@ class ResultInspectTool(BaseTool[ResultInspectInput, ResultInspectOutput]):
     def project_observation(self, *, status, output, artifacts):
         if status != "success":
             return ToolObservationProjection(summary="查询结果分页读取失败。")
+        columns = [str(item) for item in output.get("columns") or []]
+        returned_rows = int(output.get("returned_rows") or 0)
+        durable_facts = safe_observation_facts(
+            {
+                "result_artifact_id": output.get("result_artifact_id"),
+                "referenced_artifact_ids": output.get("referenced_artifact_ids") or [],
+                "query_fingerprint": output.get("query_fingerprint"),
+                "columns": columns,
+                "row_count": output.get("row_count"),
+                "page": output.get("page"),
+                "page_size": output.get("page_size"),
+                "returned_rows": returned_rows,
+                "has_next_page": output.get("has_next_page"),
+                "warnings": output.get("warnings") or [],
+                "notices": output.get("notices") or [],
+                "recovery": (
+                    "Call result_inspect again with this result_artifact_id and "
+                    "an explicit page when more values are needed."
+                ),
+            }
+        )
         return ToolObservationProjection(
             summary=(
                 f"已读取结果第 {int(output.get('page') or 1)} 页，"
                 f"返回 {int(output.get('returned_rows') or 0)} 行。"
             ),
-            facts=safe_observation_facts(
-                {
-                    "result_artifact_id": output.get("result_artifact_id"),
-                    "referenced_artifact_ids": output.get(
-                        "referenced_artifact_ids"
-                    )
-                    or [],
-                    "query_fingerprint": output.get("query_fingerprint"),
-                    "row_count": output.get("row_count"),
-                    "returned_rows": output.get("returned_rows"),
-                    "has_next_page": output.get("has_next_page"),
-                }
+            facts=durable_facts,
+            provider_payload=bounded_tabular_provider_payload(
+                facts=durable_facts,
+                columns=columns,
+                rows=list(output.get("rows") or []),
+                total_returned_rows=returned_rows,
+                source_truncated=bool(output.get("has_next_page")),
             ),
         )
 
@@ -461,9 +468,7 @@ class ResultProfileTool(BaseTool[ResultProfileInput, ResultProfileOutput]):
             facts=safe_observation_facts(
                 {
                     "result_artifact_id": output.get("result_artifact_id"),
-                    "referenced_artifact_ids": output.get(
-                        "referenced_artifact_ids"
-                    )
+                    "referenced_artifact_ids": output.get("referenced_artifact_ids")
                     or [],
                     "query_fingerprint": output.get("query_fingerprint"),
                     "profiled_columns": columns,
@@ -507,9 +512,7 @@ class ChartCreateTool(BaseTool[ChartCreateInput, ChartCreateOutput]):
         )
         page = service.page(
             ResultPageQuery(
-                source=ResultSourceRef(
-                    artifact_id=tool_input.result_artifact_id
-                ),
+                source=ResultSourceRef(artifact_id=tool_input.result_artifact_id),
                 page=1,
                 page_size=500,
                 count_mode="none",
@@ -524,16 +527,8 @@ class ChartCreateTool(BaseTool[ChartCreateInput, ChartCreateOutput]):
             result_artifact_id=tool_input.result_artifact_id,
             chartable=bool(suggestion.get("chartable")),
             chart_type=str(suggestion.get("type") or "none"),
-            x=(
-                str(suggestion["x"])
-                if suggestion.get("x") is not None
-                else None
-            ),
-            y=(
-                str(suggestion["y"])
-                if suggestion.get("y") is not None
-                else None
-            ),
+            x=(str(suggestion["x"]) if suggestion.get("x") is not None else None),
+            y=(str(suggestion["y"]) if suggestion.get("y") is not None else None),
             title=(
                 str(suggestion["title"])
                 if suggestion.get("title") is not None

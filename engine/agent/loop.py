@@ -106,6 +106,7 @@ class _ExecutionState:
     completed_turn_count: int
     last_result: ModelTurnResult = field(default_factory=ModelTurnResult)
     best_answer_result: ModelTurnResult = field(default_factory=ModelTurnResult)
+    transient_tool_outputs: dict[str, str] = field(default_factory=dict)
 
     @property
     def answer_result(self) -> ModelTurnResult:
@@ -138,12 +139,16 @@ class RunLoop:
         self,
         *,
         session_factory: Callable[[], Session],
-        model_factory: Callable[[ProviderSettings], ModelAdapter] = _default_model_factory,
+        model_factory: Callable[
+            [ProviderSettings], ModelAdapter
+        ] = _default_model_factory,
         registry: ToolRegistry | None = None,
         definition: AgentDefinition = DEFAULT_AGENT_DEFINITION,
         live_stream: LiveStreamHub = LIVE_STREAM_HUB,
         tool_executor: ToolExecutor | None = None,
-        pricing_resolver: Callable[[ProviderSettings], ModelPricing | None] | None = None,
+        pricing_resolver: (
+            Callable[[ProviderSettings], ModelPricing | None] | None
+        ) = None,
     ) -> None:
         self.session_factory = session_factory
         self.model_factory = model_factory
@@ -186,14 +191,18 @@ class RunLoop:
                     "当前模型未配置可核算价格，无法执行带费用上限的分析。",
                 )
             state.control.checkpoint()
-            self._execute_pending_invocations(lease, run_id, state.control)
+            self._execute_pending_invocations(lease, run_id, state)
 
             for turn_count in range(
                 state.completed_turn_count + 1,
                 self.definition.limits.max_turns + 1,
             ):
                 state.control.checkpoint()
-                prepared = self._prepare_turn(lease, run_id)
+                prepared = self._prepare_turn(
+                    lease,
+                    run_id,
+                    tool_output_overrides=state.transient_tool_outputs,
+                )
                 result = self._run_model_turn(
                     lease=lease,
                     run_id=run_id,
@@ -249,11 +258,13 @@ class RunLoop:
                     result,
                     disposition=(
                         CompletionDisposition.BOUNDED_PARTIAL
-                        if partial else CompletionDisposition.COMPLETE
+                        if partial
+                        else CompletionDisposition.COMPLETE
                     ),
                     limitation_codes=(
                         [CompletionLimitationCode.TURN_BUDGET_REACHED]
-                        if partial else []
+                        if partial
+                        else []
                     ),
                     evidence_artifact_ids=decision.evidence_artifact_ids,
                 )
@@ -308,11 +319,14 @@ class RunLoop:
         with self.session_factory() as db:
             run = RunRepository(db).get(run_id)
             tool_count = self.tool_dispatcher.tool_budget_usage(db, run_id)
-            completed_turn_count = int(db.scalar(
-                select(func.count()).select_from(AgentTurn).where(
-                    AgentTurn.run_id == run_id
+            completed_turn_count = int(
+                db.scalar(
+                    select(func.count())
+                    .select_from(AgentTurn)
+                    .where(AgentTurn.run_id == run_id)
                 )
-            ) or 0)
+                or 0
+            )
             best_answer_result = RunRepository(db).latest_completed_answer(run_id)
             provider_settings = ProviderSettings(
                 credential_id=str(run.llm_credential_id),
@@ -339,15 +353,19 @@ class RunLoop:
         self,
         lease: SessionLease,
         run_id: str,
-        control: LeaseAwareRunControl,
+        state: _ExecutionState,
     ) -> None:
         for invocation in self.tool_dispatcher.pending_invocations(run_id):
-            control.checkpoint()
-            self.tool_dispatcher.execute_requested(
+            state.control.checkpoint()
+            provider_output = self.tool_dispatcher.execute_requested(
                 lease,
                 invocation,
-                control=control,
+                control=state.control,
             )
+            if provider_output is not None:
+                state.transient_tool_outputs[provider_output.call_id] = (
+                    provider_output.output
+                )
 
     def _run_model_turn(
         self,
@@ -367,11 +385,11 @@ class RunLoop:
                     turn_id=prepared.turn_id,
                     control=state.control,
                     items=adapter.stream(
-                    messages=prepared.messages,
-                    tools=prepared.tools.provider_schemas(),
-                    timeout_seconds=state.control.remaining_seconds(),
-                    cancellation_probe=state.control.is_cancel_requested,
-                ),
+                        messages=prepared.messages,
+                        tools=prepared.tools.provider_schemas(),
+                        timeout_seconds=state.control.remaining_seconds(),
+                        cancellation_probe=state.control.is_cancel_requested,
+                    ),
                 )
             )
         except (LlmConfigurationError, LlmEndpointPolicyError) as exc:
@@ -439,7 +457,8 @@ class RunLoop:
                 result.usage.get(
                     "prompt_tokens",
                     result.usage.get("input_tokens", 0),
-                ) or 0
+                )
+                or 0
             ),
         )
         output_tokens = max(
@@ -448,7 +467,8 @@ class RunLoop:
                 result.usage.get(
                     "completion_tokens",
                     result.usage.get("output_tokens", 0),
-                ) or 0
+                )
+                or 0
             ),
         )
         total_tokens = max(
@@ -499,7 +519,7 @@ class RunLoop:
                     )
                 return True
 
-            outcome = self.tool_dispatcher.request_and_execute(
+            dispatch = self.tool_dispatcher.request_and_execute(
                 lease=lease,
                 run_id=run_id,
                 turn_id=prepared.turn_id,
@@ -507,9 +527,13 @@ class RunLoop:
                 materialization=prepared.tools,
                 control=state.control,
             )
+            if dispatch.provider_output is not None:
+                state.transient_tool_outputs[dispatch.provider_output.call_id] = (
+                    dispatch.provider_output.output
+                )
             if counts_toward_budget:
                 state.tool_count += 1
-            if outcome in {
+            if dispatch.outcome in {
                 ToolDispatchOutcome.WAITING_APPROVAL,
                 ToolDispatchOutcome.WAITING_INPUT,
             }:
@@ -544,7 +568,13 @@ class RunLoop:
         if self._owns_tool_executor:
             self.tool_executor.close(wait=False)
 
-    def _prepare_turn(self, lease: SessionLease, run_id: str) -> _PreparedTurn:
+    def _prepare_turn(
+        self,
+        lease: SessionLease,
+        run_id: str,
+        *,
+        tool_output_overrides: dict[str, str] | None = None,
+    ) -> _PreparedTurn:
         with self.session_factory() as db:
             # Steer inputs become durable Run-scoped messages at this boundary.
             # ContextAssembler reads the consumed inputs from the same transaction,
@@ -556,27 +586,36 @@ class RunLoop:
                 db,
                 self.definition,
             ).build(run)
-            groups = set(state.get("allowed_tool_groups") or self.definition.allowed_tool_groups)
+            groups = set(
+                state.get("allowed_tool_groups") or self.definition.allowed_tool_groups
+            )
             tools = materialize_tools(
-                self.registry, allowed_groups=groups, execution_mode=self.definition.execution_mode,
+                self.registry,
+                allowed_groups=groups,
+                execution_mode=self.definition.execution_mode,
             )
             tool_schemas = tools.provider_schemas()
             prompt = self.prompts.assemble(
                 definition=self.definition,
                 context=context,
                 tool_schemas=tool_schemas,
+                tool_output_overrides=tool_output_overrides,
             )
             turn = SessionRepository(db).start_turn(
-                lease=lease, run_id=run_id,
+                lease=lease,
+                run_id=run_id,
                 agent_definition_version=self.definition.version,
-                prompt_version=prompt.version, prompt_hash=prompt.hash,
+                prompt_version=prompt.version,
+                prompt_hash=prompt.hash,
                 context_snapshot={
                     **context.model_dump(mode="json"),
                     "prompt_budget": prompt.budget,
-                }, context_hash=context.hash,
+                },
+                context_hash=context.hash,
                 tool_materialization=tools.model_dump(mode="json"),
                 tool_materialization_hash=tools.hash,
-                provider="openai-responses", model_name=str(run.model_name or ""),
+                provider="openai-responses",
+                model_name=str(run.model_name or ""),
             )
             settings = ProviderSettings(
                 credential_id=str(run.llm_credential_id),
@@ -592,8 +631,13 @@ class RunLoop:
             )
 
     def _publish_stream(
-        self, *, lease: SessionLease, run_id: str, turn_id: str,
-        items: Iterable[TurnStreamItem], control: LeaseAwareRunControl,
+        self,
+        *,
+        lease: SessionLease,
+        run_id: str,
+        turn_id: str,
+        items: Iterable[TurnStreamItem],
+        control: LeaseAwareRunControl,
     ) -> Iterable[TurnStreamItem]:
         messages: dict[str, _StreamingMessageState] = {}
         stream_completed = False
@@ -631,17 +675,19 @@ class RunLoop:
                     durable_item_id = (
                         f"message:{run_id}:{turn_id}:{delta_state.output_index}"
                     )
-                    self.live_stream.publish(RunItemDelta(
-                        session_id=lease.session_id,
-                        run_id=run_id,
-                        turn_id=turn_id,
-                        item_id=durable_item_id,
-                        item_type=RunItemType.MESSAGE,
-                        field="content",
-                        revision=delta_state.live_revision,
-                        offset=offset,
-                        content=content,
-                    ))
+                    self.live_stream.publish(
+                        RunItemDelta(
+                            session_id=lease.session_id,
+                            run_id=run_id,
+                            turn_id=turn_id,
+                            item_id=durable_item_id,
+                            item_type=RunItemType.MESSAGE,
+                            field="content",
+                            revision=delta_state.live_revision,
+                            offset=offset,
+                            content=content,
+                        )
+                    )
                     current_bytes = len(delta_state.text.encode("utf-8"))
                     if delta_state.text and (
                         current_bytes - delta_state.flushed_bytes >= 1024
@@ -745,7 +791,10 @@ class RunLoop:
     def _cancellation_requested(self, run_id: str) -> bool:
         with self.session_factory() as db:
             run = RunRepository(db).get(run_id)
-            return bool(run.cancel_requested) or str(run.status) in {"cancelling", "cancelled"}
+            return bool(run.cancel_requested) or str(run.status) in {
+                "cancelling",
+                "cancelled",
+            }
 
     def _stop_if_stalled(
         self,
@@ -809,7 +858,9 @@ class RunLoop:
         )
         return True
 
-    def _has_usable_work(self, db: Session, run_id: str, result: ModelTurnResult) -> bool:
+    def _has_usable_work(
+        self, db: Session, run_id: str, result: ModelTurnResult
+    ) -> bool:
         context = ContextAssembler(db).build(run_id)
         return self.completion.has_usable_work(
             context=context,

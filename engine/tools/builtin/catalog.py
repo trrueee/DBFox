@@ -36,7 +36,73 @@ from engine.tools.runtime import (
     ToolSemanticCapability,
     ToolSemanticSpec,
 )
-from engine.tools.runtime.observation import safe_observation_facts
+from engine.json_codec import byte_size
+from engine.tools.runtime.observation import MAX_FACT_BYTES, safe_observation_facts
+
+
+def _bounded_schema_inspections(inspections: list[dict[str, Any]]) -> dict[str, Any]:
+    """Preserve every inspected object and as many complete columns as fit."""
+
+    bounded: list[dict[str, Any]] = []
+    original_columns: list[list[Any]] = []
+    for inspection in inspections:
+        details = dict(inspection.get("details") or {})
+        columns = list(details.pop("columns", []) or [])
+        for key in ("foreign_keys_out", "foreign_keys_in", "indexes"):
+            values = list(details.get(key) or [])
+            details[key] = values[:20]
+            if len(values) > 20:
+                details[f"{key}_count"] = len(values)
+                details[f"{key}_truncated"] = True
+        if isinstance(details.get("comment"), str):
+            details["comment"] = details["comment"][:2_000]
+        details.update(
+            {
+                "columns": [],
+                "column_count": len(columns),
+                "columns_truncated": bool(columns),
+            }
+        )
+        bounded.append(
+            {
+                "target": str(inspection.get("target") or ""),
+                "details": details,
+            }
+        )
+        original_columns.append(columns)
+
+    # Round-robin allocation prevents the first wide table from starving every
+    # later target. Only complete column objects are admitted.
+    positions = [0 for _ in bounded]
+    while True:
+        progressed = False
+        for index, entry in enumerate(bounded):
+            if positions[index] >= len(original_columns[index]):
+                continue
+            column = original_columns[index][positions[index]]
+            entry["details"]["columns"].append(column)
+            candidate = {
+                "inspections": bounded,
+                "inspection_count": len(inspections),
+            }
+            if byte_size(candidate) > MAX_FACT_BYTES - 512:
+                entry["details"]["columns"].pop()
+                continue
+            positions[index] += 1
+            progressed = True
+        if not progressed:
+            break
+
+    for index, entry in enumerate(bounded):
+        entry["details"]["columns_truncated"] = positions[index] < len(
+            original_columns[index]
+        )
+    return safe_observation_facts(
+        {
+            "inspections": bounded,
+            "inspection_count": len(inspections),
+        }
+    )
 
 
 class CatalogOverviewTool(BaseTool[EmptyInput, CatalogOverviewOutput]):
@@ -151,9 +217,7 @@ class CatalogRefreshTool(BaseTool[EmptyInput, CatalogRefreshOutput]):
             or 0
         )
         schema_count = (
-            db.query(
-                func.count(func.distinct(SchemaTable.table_schema))
-            )
+            db.query(func.count(func.distinct(SchemaTable.table_schema)))
             .filter(SchemaTable.data_source_id == datasource_id)
             .scalar()
             or 0
@@ -210,9 +274,7 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
         capabilities=("metadata_read",),
         concurrency="parallel_safe",
     )
-    semantics = ToolSemanticSpec(
-        produces=(ToolSemanticCapability.SCHEMA_METADATA,)
-    )
+    semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SCHEMA_METADATA,))
 
     def run(
         self,
@@ -221,9 +283,7 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
     ) -> SchemaListOutput:
         db = context.require_database()
         request = context.require_request()
-        filters: list[Any] = [
-            SchemaTable.data_source_id == request.datasource_id
-        ]
+        filters: list[Any] = [SchemaTable.data_source_id == request.datasource_id]
         if tool_input.cursor:
             cursor = tool_input.cursor
             filters.append(
@@ -241,9 +301,7 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
                 )
             )
         if tool_input.name_filter:
-            filters.append(
-                SchemaTable.table_name.ilike(f"%{tool_input.name_filter}%")
-            )
+            filters.append(SchemaTable.table_name.ilike(f"%{tool_input.name_filter}%"))
         rows = (
             db.query(
                 SchemaTable.id,
@@ -292,9 +350,7 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
                 ),
                 table_type=str(row.table_type or "table"),
                 comment=(
-                    str(row.table_comment)
-                    if row.table_comment is not None
-                    else None
+                    str(row.table_comment) if row.table_comment is not None else None
                 ),
             )
             for row in page
@@ -352,9 +408,7 @@ class SchemaSearchTool(BaseTool[SchemaSearchInput, SchemaSearchOutput]):
         capabilities=("metadata_read",),
         concurrency="parallel_safe",
     )
-    semantics = ToolSemanticSpec(
-        produces=(ToolSemanticCapability.SCHEMA_METADATA,)
-    )
+    semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SCHEMA_METADATA,))
 
     def run(
         self,
@@ -450,9 +504,7 @@ class SchemaInspectTool(BaseTool[SchemaInspectInput, SchemaInspectOutput]):
         capabilities=("metadata_read",),
         concurrency="parallel_safe",
     )
-    semantics = ToolSemanticSpec(
-        produces=(ToolSemanticCapability.SCHEMA_METADATA,)
-    )
+    semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SCHEMA_METADATA,))
 
     def run(
         self,
@@ -486,5 +538,5 @@ class SchemaInspectTool(BaseTool[SchemaInspectInput, SchemaInspectOutput]):
         inspections = list(output.get("inspections") or [])
         return ToolObservationProjection(
             summary=f"已检查 {len(inspections)} 个数据库对象。",
-            facts=safe_observation_facts({"inspections": inspections}),
+            facts=_bounded_schema_inspections(inspections),
         )

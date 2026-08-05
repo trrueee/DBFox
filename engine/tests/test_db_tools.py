@@ -9,6 +9,7 @@ from sqlalchemy import event
 from engine.errors import ToolInputError
 from engine.tools.builtin.catalog import (
     CatalogRefreshTool,
+    SchemaInspectTool,
     SchemaListTool,
     SchemaSearchTool,
 )
@@ -32,6 +33,7 @@ from engine.tools.db.sql_execution import sql_execute_readonly, sql_validate
 from engine.tools.runtime import ToolRunContext
 from engine.models import DomainTagRule, QueryHistory, SchemaSearchDoc, SchemaTable
 from engine.environment.schema_catalog_sync import ensure_catalog
+from engine.json_codec import byte_size
 
 
 def sync_schema(db_session, datasource_id: str):
@@ -53,7 +55,11 @@ def _ensure_default_rules(db_session, datasource_id: str) -> None:
     ]
     for tag, needles in default_patterns:
         for needle in needles:
-            db_session.add(DomainTagRule(data_source_id=datasource_id, pattern=needle, tag=tag, priority=10))
+            db_session.add(
+                DomainTagRule(
+                    data_source_id=datasource_id, pattern=needle, tag=tag, priority=10
+                )
+            )
     db_session.commit()
 
 
@@ -71,7 +77,9 @@ def test_db_observe_returns_catalog_map(db_session, test_datasource) -> None:
     assert any(domain["label"] == "user" for domain in result["domains"])
 
 
-def test_db_observe_tables_mode_includes_connected_tables(db_session, test_datasource) -> None:
+def test_db_observe_tables_mode_includes_connected_tables(
+    db_session, test_datasource
+) -> None:
     sync_schema(db_session, test_datasource.id)
     result = db_observe(db_session, test_datasource.id)
     orders = next(t for t in result["schemas"][0]["tables"] if t["name"] == "orders")
@@ -79,7 +87,9 @@ def test_db_observe_tables_mode_includes_connected_tables(db_session, test_datas
     assert orders["primary_key"] == ["id"]
 
 
-def test_db_observe_catalog_context_is_per_call_and_immutable(db_session, test_datasource) -> None:
+def test_db_observe_catalog_context_is_per_call_and_immutable(
+    db_session, test_datasource
+) -> None:
     sync_schema(db_session, test_datasource.id)
     tables = list(test_datasource.tables)
 
@@ -115,7 +125,9 @@ def test_db_observe_large_catalog_does_not_load_column_graph(
     db_session.commit()
     statements: list[str] = []
 
-    def capture_select(_connection, _cursor, statement, _parameters, _context, _executemany):
+    def capture_select(
+        _connection, _cursor, statement, _parameters, _context, _executemany
+    ):
         if statement.lstrip().upper().startswith("SELECT"):
             statements.append(statement)
 
@@ -140,7 +152,9 @@ def test_schema_list_queries_only_requested_cursor_page(
     datasource_id = str(test_datasource.id)
     statements: list[str] = []
 
-    def capture_select(_connection, _cursor, statement, _parameters, _context, _executemany):
+    def capture_select(
+        _connection, _cursor, statement, _parameters, _context, _executemany
+    ):
         if statement.lstrip().upper().startswith("SELECT"):
             statements.append(statement)
 
@@ -284,7 +298,10 @@ def test_catalog_refresh_leaves_commit_to_tool_runtime(
     assert result.refreshed_at
     db_session.rollback()
     db_session.expire_all()
-    assert db_session.get(type(test_datasource), test_datasource.id).last_sync_at == original_sync_at
+    assert (
+        db_session.get(type(test_datasource), test_datasource.id).last_sync_at
+        == original_sync_at
+    )
 
 
 def test_chart_intent_uses_verified_result_columns() -> None:
@@ -324,14 +341,20 @@ def test_chart_intent_rejects_unverified_result_columns() -> None:
 
 
 def test_chart_auto_type_uses_values_instead_of_column_name_tokens() -> None:
-    assert _infer_chart_type(
-        "bucket",
-        [{"bucket": "2026-07-01"}, {"bucket": "2026-07-02"}],
-    ) == "line"
-    assert _infer_chart_type(
-        "month_name_but_categorical",
-        [{"month_name_but_categorical": "enterprise"}],
-    ) == "bar"
+    assert (
+        _infer_chart_type(
+            "bucket",
+            [{"bucket": "2026-07-01"}, {"bucket": "2026-07-02"}],
+        )
+        == "line"
+    )
+    assert (
+        _infer_chart_type(
+            "month_name_but_categorical",
+            [{"month_name_but_categorical": "enterprise"}],
+        )
+        == "bar"
+    )
     assert _infer_chart_type("axis", [{"axis": 1}, {"axis": 2}]) == "scatter"
 
 
@@ -372,7 +395,9 @@ def test_result_profile_contract_rejects_duplicate_columns() -> None:
         )
 
 
-def test_db_search_fallback_keyword_matches_table_and_column_names(db_session, test_datasource) -> None:
+def test_db_search_fallback_keyword_matches_table_and_column_names(
+    db_session, test_datasource
+) -> None:
     sync_schema(db_session, test_datasource.id)
     result = db_search(db_session, test_datasource.id, "users", 5)
     assert result["total_matches"] >= 1
@@ -381,7 +406,9 @@ def test_db_search_fallback_keyword_matches_table_and_column_names(db_session, t
     assert any(r.get("table_name") == "users" for r in result["results"])
 
 
-def test_db_search_fallback_keyword_returns_empty_for_no_match(db_session, test_datasource) -> None:
+def test_db_search_fallback_keyword_returns_empty_for_no_match(
+    db_session, test_datasource
+) -> None:
     sync_schema(db_session, test_datasource.id)
     result = db_search(db_session, test_datasource.id, "xyznonexistent12345", 5)
     assert result["total_matches"] == 0
@@ -414,7 +441,9 @@ def test_db_search_caps_model_generated_tokens() -> None:
     assert len(_tokenize_search_query(query)) == MAX_SEARCH_TOKENS
 
 
-def test_db_search_fallback_uses_schema_doc_ai_annotations(db_session, test_datasource) -> None:
+def test_db_search_fallback_uses_schema_doc_ai_annotations(
+    db_session, test_datasource
+) -> None:
     db_session.add(
         SchemaSearchDoc(
             datasource_id=test_datasource.id,
@@ -437,7 +466,9 @@ def test_db_search_fallback_uses_schema_doc_ai_annotations(db_session, test_data
     assert "ai_description_match:GMV" in result["results"][0]["reasons"]
 
 
-def test_db_search_fallback_uses_schema_doc_semantic_fields(db_session, test_datasource) -> None:
+def test_db_search_fallback_uses_schema_doc_semantic_fields(
+    db_session, test_datasource
+) -> None:
     db_session.add(
         SchemaSearchDoc(
             datasource_id=test_datasource.id,
@@ -460,7 +491,9 @@ def test_db_search_fallback_uses_schema_doc_semantic_fields(db_session, test_dat
         assert result["results"][0]["table_name"] == "orders"
 
 
-def test_db_search_returns_trace_fields_for_schema_discovery(db_session, test_datasource) -> None:
+def test_db_search_returns_trace_fields_for_schema_discovery(
+    db_session, test_datasource
+) -> None:
     db_session.add(
         SchemaSearchDoc(
             datasource_id=test_datasource.id,
@@ -487,7 +520,9 @@ def test_db_search_returns_trace_fields_for_schema_discovery(db_session, test_da
     assert result["results"][0]["matched_fields"] == ["semantic_tags"]
 
 
-def test_db_inspect_reads_live_sqlite_table_structure(db_session, test_datasource) -> None:
+def test_db_inspect_reads_live_sqlite_table_structure(
+    db_session, test_datasource
+) -> None:
     sync_schema(db_session, test_datasource.id)
     result = db_inspect(db_session, test_datasource.id, ["orders"])[0]
     assert result.object_type == "table"
@@ -498,7 +533,9 @@ def test_db_inspect_reads_live_sqlite_table_structure(db_session, test_datasourc
         and column.foreign_key.table == "users"
         for column in result.columns
     )
-    assert any(foreign_key.column == "user_id" for foreign_key in result.foreign_keys_out)
+    assert any(
+        foreign_key.column == "user_id" for foreign_key in result.foreign_keys_out
+    )
 
 
 def test_db_inspect_reads_live_sqlite_column(db_session, test_datasource) -> None:
@@ -514,26 +551,41 @@ def test_db_inspect_reads_live_sqlite_column(db_session, test_datasource) -> Non
     assert result.foreign_key.column == "id"
 
 
-def test_db_preview_limits_columns_rows_and_masks_sensitive_values(db_session, test_datasource) -> None:
+def test_db_preview_limits_columns_rows_and_masks_sensitive_values(
+    db_session, test_datasource
+) -> None:
     sync_schema(db_session, test_datasource.id)
-    result = db_preview(db_session, test_datasource.id, table="users", columns=["id", "email", "phone"], limit=50)
+    result = db_preview(
+        db_session,
+        test_datasource.id,
+        table="users",
+        columns=["id", "email", "phone"],
+        limit=50,
+    )
     assert result["table"] == "users"
     assert result["columns"] == ["id", "email", "phone"]
     assert result["limit_applied"] == 20
     assert result["returned_rows"] <= 20
     assert result["rows"][0]["email"] == "[REDACTED]"
     assert "column_summaries" in result
-    assert db_session.query(QueryHistory).filter(QueryHistory.data_source_id == test_datasource.id).count() == 1
+    assert (
+        db_session.query(QueryHistory)
+        .filter(QueryHistory.data_source_id == test_datasource.id)
+        .count()
+        == 1
+    )
 
 
-def test_db_preview_quotes_spider_style_column_names(db_session, test_datasource) -> None:
+def test_db_preview_quotes_spider_style_column_names(
+    db_session, test_datasource
+) -> None:
     conn = sqlite3.connect(test_datasource.database_name)
     try:
         conn.execute(
-            'CREATE TABLE spider_ratings ('
+            "CREATE TABLE spider_ratings ("
             '"18_49_Rating_Share" REAL, '
             '"Official_ratings_(millions)" REAL'
-            ')'
+            ")"
         )
         conn.execute(
             'INSERT INTO spider_ratings ("18_49_Rating_Share", "Official_ratings_(millions)") VALUES (?, ?)',
@@ -560,16 +612,76 @@ def test_db_preview_quotes_spider_style_column_names(db_session, test_datasource
     assert '"18_49_Rating_Share"' in result["safe_sql"]
 
 
-def test_db_preview_rejects_unknown_columns_before_query(db_session, test_datasource) -> None:
+def test_db_preview_rejects_unknown_columns_before_query(
+    db_session, test_datasource
+) -> None:
     sync_schema(db_session, test_datasource.id)
     with pytest.raises(ValueError, match="Unknown column"):
         db_preview(db_session, test_datasource.id, table="users", columns=["missing"])
     assert db_session.query(QueryHistory).count() == 0
 
 
-def test_sql_lifecycle_validates_and_executes_readonly_sql(db_session, test_datasource) -> None:
+def test_schema_inspection_budget_preserves_each_target_and_column_evidence() -> None:
+    inspections = [
+        {
+            "target": f"table_{table_index}",
+            "details": {
+                "object_type": "table",
+                "name": f"table_{table_index}",
+                "schema_name": "main",
+                "type": "table",
+                "dialect": "sqlite",
+                "columns": [
+                    {
+                        "name": f"column_{column_index}",
+                        "type": "TEXT",
+                        "nullable": True,
+                        "default": None,
+                        "primary_key": False,
+                        "foreign_key": None,
+                        "comment": "x" * 80,
+                    }
+                    for column_index in range(500)
+                ],
+                "primary_key": [],
+                "foreign_keys_out": [],
+                "foreign_keys_in": [],
+                "indexes": [],
+                "source": "live",
+            },
+        }
+        for table_index in range(5)
+    ]
+
+    facts = (
+        SchemaInspectTool()
+        .project_observation(
+            status="success",
+            output={"inspections": inspections},
+            artifacts=[],
+        )
+        .facts
+    )
+
+    assert byte_size(facts) <= 32_768
+    assert [item["target"] for item in facts["inspections"]] == [
+        f"table_{index}" for index in range(5)
+    ]
+    assert all(item["details"]["column_count"] == 500 for item in facts["inspections"])
+    assert all(item["details"]["columns"] for item in facts["inspections"])
+    assert all(item["details"]["columns_truncated"] for item in facts["inspections"])
+
+
+def test_sql_lifecycle_validates_and_executes_readonly_sql(
+    db_session, test_datasource
+) -> None:
     sync_schema(db_session, test_datasource.id)
-    safety = sql_validate(db_session, test_datasource.id, "SELECT id, email FROM users", question="count users")
+    safety = sql_validate(
+        db_session,
+        test_datasource.id,
+        "SELECT id, email FROM users",
+        question="count users",
+    )
     result = sql_execute_readonly(
         db_session,
         test_datasource.id,
@@ -584,7 +696,9 @@ def test_sql_lifecycle_validates_and_executes_readonly_sql(db_session, test_data
     assert "LIMIT" in result["safe_sql"].upper()
 
 
-def test_sql_lifecycle_blocks_writes_inside_execute_tool(db_session, test_datasource) -> None:
+def test_sql_lifecycle_blocks_writes_inside_execute_tool(
+    db_session, test_datasource
+) -> None:
     sync_schema(db_session, test_datasource.id)
     safety = sql_validate(db_session, test_datasource.id, "DELETE FROM users")
     with pytest.raises(RuntimeError):

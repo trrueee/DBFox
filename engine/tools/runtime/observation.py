@@ -8,18 +8,26 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from engine.json_codec import byte_size
+from engine.sql.row_serializer import serialize_rows
 
 
-RESULT_VALUE_KEYS = frozenset({
-    "rows",
-    "results",
-    "series",
-    "previewRows",
-    "preview_rows",
-})
+RESULT_VALUE_KEYS = frozenset(
+    {
+        "rows",
+        "results",
+        "series",
+        "previewRows",
+        "preview_rows",
+    }
+)
 MAX_FACT_BYTES = 32_768
+MAX_PROVIDER_PAYLOAD_BYTES = 65_536
+MODEL_RESULT_WINDOW_ROWS = 20
+MODEL_RESULT_WINDOW_COLUMNS = 50
+MODEL_RESULT_WINDOW_BYTES = 24_000
+MODEL_RESULT_CELL_CHARS = 2_000
 
 
 class ToolObservationProjection(BaseModel):
@@ -27,6 +35,15 @@ class ToolObservationProjection(BaseModel):
 
     summary: str
     facts: dict[str, Any] = Field(default_factory=dict)
+    provider_payload: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_provider_payload_budget(self) -> "ToolObservationProjection":
+        if byte_size(self.provider_payload) > MAX_PROVIDER_PAYLOAD_BYTES:
+            raise ValueError(
+                "Tool provider payload exceeds the bounded observation contract"
+            )
+        return self
 
 
 def safe_observation_facts(value: dict[str, Any]) -> dict[str, Any]:
@@ -56,6 +73,44 @@ def safe_observation_facts(value: dict[str, Any]) -> dict[str, Any]:
         if _encoded_size(candidate) <= MAX_FACT_BYTES:
             compact[str(key)] = summary
     return compact
+
+
+def bounded_tabular_provider_payload(
+    *,
+    facts: dict[str, Any],
+    columns: list[str],
+    rows: list[Any],
+    total_returned_rows: int,
+    source_truncated: bool = False,
+) -> dict[str, Any]:
+    """Return a structured model window without persisting or string-truncating rows."""
+
+    serialized = serialize_rows(
+        rows[:MODEL_RESULT_WINDOW_ROWS],
+        columns,
+        max_columns=MODEL_RESULT_WINDOW_COLUMNS,
+        max_cell_chars=MODEL_RESULT_CELL_CHARS,
+        max_response_bytes=MODEL_RESULT_WINDOW_BYTES,
+    )
+    return {
+        **facts,
+        "rows": serialized.rows,
+        "window": {
+            "returned_rows": len(serialized.rows),
+            "max_rows": MODEL_RESULT_WINDOW_ROWS,
+            "truncated": (
+                source_truncated
+                or total_returned_rows > len(serialized.rows)
+                or serialized.truncated
+            ),
+            "truncation_reasons": {
+                "rows": total_returned_rows > len(serialized.rows),
+                "columns": serialized.truncation.columns,
+                "response_bytes": serialized.truncation.response_bytes,
+                "cells": serialized.truncation.cells,
+            },
+        },
+    }
 
 
 def _encoded_size(value: Any) -> int:

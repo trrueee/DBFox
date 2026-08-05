@@ -9,9 +9,10 @@
 3. [功能模块与执行管线](../functional-modules-and-execution-pipelines.md)：模块职责、输入输出、状态变化和故障路径。
 4. [Agent Runtime](./agent-runtime.md)：Session、ReAct、工具、计划、记忆、事件和恢复的专题设计。
 5. [Agent Typed RunItem 协议](./agent-runtime-item-protocol.md)：中间摘要、计划、工具、审批、正式回答及 SSE 恢复的统一合同。
-6. [前后端与 Agent 深度评审](../reviews/frontend-backend-agent-architecture-deep-review.md)：当前设计符合度、开放风险和评审问题。
-7. [实施后全局核验](../reviews/architecture-global-verification.md)：修复前证据与实施后权威结论。
-8. [Runtime 基础能力 ADR](./runtime-foundation-decisions.md)：Sidecar 生命周期、Transport、错误、诊断、SQLite 发布门禁和自动更新边界。
+6. [Agent Tool、Context 与 Memory 边界合同](./agent-tool-context-memory-contract.md)：SQL 数据平面、有界模型观察、耐久恢复和证据型记忆合同。
+7. [前后端与 Agent 深度评审](../reviews/frontend-backend-agent-architecture-deep-review.md)：当前设计符合度、开放风险和评审问题。
+8. [实施后全局核验](../reviews/architecture-global-verification.md)：修复前证据与实施后权威结论。
+9. [Runtime 基础能力 ADR](./runtime-foundation-decisions.md)：Sidecar 生命周期、Transport、错误、诊断、SQLite 发布门禁和自动更新边界。
 
 以下文档属于历史决策材料，不可覆盖当前事实。历史术语不应被机械更新为当前协议：
 

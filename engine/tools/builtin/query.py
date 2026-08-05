@@ -29,7 +29,10 @@ from engine.tools.runtime import (
     ToolSemanticCapability,
     ToolSemanticSpec,
 )
-from engine.tools.runtime.observation import safe_observation_facts
+from engine.tools.runtime.observation import (
+    bounded_tabular_provider_payload,
+    safe_observation_facts,
+)
 
 
 def _result_observation(
@@ -50,9 +53,23 @@ def _result_observation(
         None,
     )
     artifact_id = str(getattr(result, "id", "") or "") or None
-    returned_rows = int(
-        output.get("returned_rows")
-        or len(output.get("rows") or [])
+    columns = [str(item) for item in output.get("columns") or []]
+    returned_rows = int(output.get("returned_rows") or len(output.get("rows") or []))
+    durable_facts = safe_observation_facts(
+        {
+            "artifact_id": artifact_id,
+            "evidence_kind": evidence_kind,
+            "row_count": output.get("row_count", returned_rows),
+            "returned_rows": returned_rows,
+            "columns": columns,
+            "column_count": len(columns),
+            "latency_ms": output.get("latency_ms"),
+            "truncated": bool(output.get("truncated")),
+            "recovery": (
+                "Use result_inspect with artifact_id to reload a bounded page "
+                "after process recovery or when more values are needed."
+            ),
+        }
     )
     return ToolObservationProjection(
         summary=(
@@ -60,16 +77,13 @@ def _result_observation(
             if evidence_kind == "sample_rows"
             else f"查询执行成功，返回 {returned_rows} 行。"
         ),
-        facts=safe_observation_facts(
-            {
-                "artifact_id": artifact_id,
-                "evidence_kind": evidence_kind,
-                "row_count": output.get("row_count", returned_rows),
-                "returned_rows": returned_rows,
-                "column_count": len(output.get("columns") or []),
-                "latency_ms": output.get("latency_ms"),
-                "truncated": bool(output.get("truncated")),
-            }
+        facts=durable_facts,
+        provider_payload=bounded_tabular_provider_payload(
+            facts=durable_facts,
+            columns=columns,
+            rows=list(output.get("rows") or []),
+            total_returned_rows=returned_rows,
+            source_truncated=bool(output.get("truncated")),
         ),
     )
 
@@ -90,9 +104,7 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
     )
-    semantics = ToolSemanticSpec(
-        produces=(ToolSemanticCapability.SAMPLE_ROWS,)
-    )
+    semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SAMPLE_ROWS,))
 
     def run(
         self,
@@ -113,10 +125,7 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
                     if tool_input.where
                     else None
                 ),
-                order_by=[
-                    item.model_dump(mode="json")
-                    for item in tool_input.order_by
-                ]
+                order_by=[item.model_dump(mode="json") for item in tool_input.order_by]
                 or None,
             )
         )
@@ -179,9 +188,7 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
             safe_sql=str(raw.get("safe_sql") or ""),
             original_sql=str(raw.get("original_sql") or tool_input.sql),
             risk_level=str(raw.get("risk_level") or "safe"),
-            blocked_reasons=[
-                str(item) for item in raw.get("blocked_reasons") or []
-            ],
+            blocked_reasons=[str(item) for item in raw.get("blocked_reasons") or []],
             messages=[str(item) for item in raw.get("messages") or []],
             execution_safety_decision=raw.get("execution_safety_decision") or {},
         )
@@ -208,17 +215,11 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
         artifact_id = str(getattr(sql_artifact, "id", "") or "") or None
         can_execute = bool(output.get("can_execute"))
         return ToolObservationProjection(
-            summary=(
-                "SQL 已通过安全检查。"
-                if can_execute
-                else "SQL 未通过安全检查。"
-            ),
+            summary=("SQL 已通过安全检查。" if can_execute else "SQL 未通过安全检查。"),
             facts=safe_observation_facts(
                 {
                     "can_execute": can_execute,
-                    "requires_confirmation": bool(
-                        output.get("requires_confirmation")
-                    ),
+                    "requires_confirmation": bool(output.get("requires_confirmation")),
                     "validation_artifact_id": artifact_id,
                     "risk_level": output.get("risk_level"),
                     "blocked_reasons": output.get("blocked_reasons") or [],
@@ -228,9 +229,7 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
         )
 
 
-class SqlExecuteReadonlyTool(
-    BaseTool[SqlExecuteReadonlyInput, QueryResultOutput]
-):
+class SqlExecuteReadonlyTool(BaseTool[SqlExecuteReadonlyInput, QueryResultOutput]):
     name = "sql_execute_readonly"
     group = "query"
     description = (
@@ -246,9 +245,7 @@ class SqlExecuteReadonlyTool(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
     )
-    semantics = ToolSemanticSpec(
-        produces=(ToolSemanticCapability.QUERY_RESULT,)
-    )
+    semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.QUERY_RESULT,))
 
     def run(
         self,
@@ -290,9 +287,7 @@ class SqlExecuteReadonlyTool(
             success=True,
             row_count=int(raw.get("rowCount") or 0),
             columns=[str(item) for item in raw.get("columns") or []],
-            column_types=[
-                str(item) for item in raw.get("column_types") or []
-            ],
+            column_types=[str(item) for item in raw.get("column_types") or []],
             returned_rows=int(raw.get("returned_rows") or 0),
             truncated=bool(raw.get("truncated")),
             rows=list(raw.get("rows") or []),

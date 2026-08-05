@@ -159,14 +159,19 @@ def _serialize_value(val: Any) -> str | None:
     return str(val)
 
 
-def _process_rows(
+def serialize_rows(
     raw_rows: list[Any],
     columns: list[str],
     max_columns: int = MAX_COLUMNS,
     max_cell_chars: int = MAX_CELL_CHARS,
     max_response_bytes: int = MAX_RESPONSE_BYTES,
 ) -> SerializedRows:
-    """Serialize rows while enforcing independently-reportable transport limits."""
+    """Serialize rows while enforcing independently-reportable transport limits.
+
+    This is the shared public boundary for database responses and bounded Agent
+    observations.  Callers choose their own smaller limits; no caller should
+    truncate an already-rendered JSON string.
+    """
     if max_columns < 0:
         raise ValueError("max_columns must be non-negative")
     if max_cell_chars < 0:
@@ -208,3 +213,8 @@ def _process_rows(
         truncation=truncation,
         response_bytes=response_bytes,
     )
+
+
+# Kept private inside this module so existing database-driver paths remain
+# readable while all external callers use the public, tested contract above.
+_process_rows = serialize_rows

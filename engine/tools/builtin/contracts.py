@@ -161,9 +161,21 @@ FilterScalar = Annotated[str, Field(max_length=4_000)] | int | float | bool | No
 class PreviewFilterInput(ToolInputModel):
     column: Identifier
     op: Literal[
-        "=", "!=", "<>", "<", ">", "<=", ">=",
-        "LIKE", "NOT LIKE", "ILIKE", "NOT ILIKE",
-        "IN", "NOT IN", "IS", "IS NOT",
+        "=",
+        "!=",
+        "<>",
+        "<",
+        ">",
+        "<=",
+        ">=",
+        "LIKE",
+        "NOT LIKE",
+        "ILIKE",
+        "NOT ILIKE",
+        "IN",
+        "NOT IN",
+        "IS",
+        "IS NOT",
     ] = "="
     value: FilterScalar | Annotated[list[FilterScalar], Field(max_length=100)] = None
 
@@ -240,7 +252,15 @@ class QueryResultOutput(ToolOutputModel):
 class ResultInspectInput(ToolInputModel):
     result_artifact_id: ArtifactId
     page: int = Field(default=1, ge=1, le=1_000_000)
-    page_size: int = Field(default=50, ge=1, le=50)
+    page_size: int = Field(
+        default=20,
+        ge=1,
+        le=20,
+        description=(
+            "Bounded model observation page. Use a smaller page_size when the "
+            "returned window reports response-byte truncation."
+        ),
+    )
 
 
 class ResultInspectOutput(ToolOutputModel):

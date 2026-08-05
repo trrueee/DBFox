@@ -57,7 +57,7 @@ Assistant `message.phase` 是 Provider 提供的可选提示；非空时只允�
 1. `function_call` 持久化模型给出的 `call_id`、规范工具名、Contract 版本、严格验证后的 arguments 和展示元数据；
 2. 执行完成后写入 Observation，并产生使用同一 `call_id` 的 `function_call_output`。
 
-输出 Item 的 `output` 是回传给模型的 JSON 文本，`summary` 是用户可读摘要，较大结果通过 `artifact_refs` 引用。工具不得绕过 Registry、Policy、审批、超时、幂等和 Contract 指纹。SQL 执行必须引用已验证的 SQL Artifact，不接受新的裸 SQL。
+耐久输出 Item 的 `output` 是可恢复的 JSON 摘要，`summary` 是用户可读摘要，较大结果通过 `artifact_refs` 引用。数据工具还可以为当前 Run 生成一个有硬上限的瞬时观察窗口；Prompt 组装时以相同 `call_id` 将它回传给模型，但不得把行值写入 Observation、Artifact、Turn snapshot 或 Session Memory。进程恢复后模型通过 Artifact ID 和 `result_inspect` 重新读取所需页。完整边界见 [Agent Tool、Context 与 Memory 边界合同](./agent-tool-context-memory-contract.md)。工具不得绕过 Registry、Policy、审批、超时、幂等和 Contract 指纹。SQL 执行必须引用已验证的 SQL Artifact，不接受新的裸 SQL。
 
 `request_clarification` 与 `update_plan` 是 Runtime Control Command：它们分别写 Question 和 Plan 状态，不伪装成普通数据库工具。
 

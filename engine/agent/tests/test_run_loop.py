@@ -27,7 +27,8 @@ from engine.tools.builtin.query import SqlExecuteReadonlyTool, SqlValidateTool
 from engine.tools.builtin.artifacts import query_result_draft, sql_validation_drafts
 from engine.tools.builtin.contracts import QueryResultOutput, SqlValidateOutput
 from engine.tools.runtime import (
-    ToolOutcome, ToolRegistry,
+    ToolOutcome,
+    ToolRegistry,
 )
 
 
@@ -112,11 +113,13 @@ def test_model_configuration_failure_settles_turn_and_fails_run(
     db_session,
     test_datasource,
 ) -> None:
-    db_session.add(AgentSession(
-        id="session_missing_llm_credential",
-        datasource_id=str(test_datasource.id),
-        title="Missing credential",
-    ))
+    db_session.add(
+        AgentSession(
+            id="session_missing_llm_credential",
+            datasource_id=str(test_datasource.id),
+            title="Missing credential",
+        )
+    )
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
@@ -158,9 +161,7 @@ def test_model_configuration_failure_settles_turn_and_fails_run(
     db_session.expire_all()
     run = db_session.get(AgentRun, admission.run_id)
     turn = (
-        db_session.query(AgentTurn)
-        .filter(AgentTurn.run_id == admission.run_id)
-        .one()
+        db_session.query(AgentTurn).filter(AgentTurn.run_id == admission.run_id).one()
     )
     expected_message = fixed_error_message(FixedErrorCode.LLM_CREDENTIAL_NOT_FOUND)
     assert run is not None
@@ -212,14 +213,22 @@ class ScriptedModel:
                     "content": "先验证并执行聚合查询。",
                 },
             )
-            for index, (call_id, name, arguments) in enumerate([
-                ("validate", "sql_validate", {"sql": "select count(*) as total from orders"}),
-            ]):
+            for index, (call_id, name, arguments) in enumerate(
+                [
+                    (
+                        "validate",
+                        "sql_validate",
+                        {"sql": "select count(*) as total from orders"},
+                    ),
+                ]
+            ):
                 yield TurnStreamItem(
                     kind=TurnStreamKind.TOOL_CALL_START,
                     item_id=f"tool:{index}",
                     revision=1,
-                    tool_call_index=index, tool_call_id=call_id, tool_name=name,
+                    tool_call_index=index,
+                    tool_call_id=call_id,
+                    tool_name=name,
                     arguments_delta=json.dumps(arguments),
                 )
                 yield TurnStreamItem(
@@ -257,10 +266,14 @@ class ScriptedModel:
                 kind=TurnStreamKind.TOOL_CALL_START,
                 item_id="tool:0",
                 revision=1,
-                tool_call_index=0, tool_call_id="execute", tool_name="sql_execute_readonly",
-                arguments_delta=json.dumps({
-                    "validation_artifact_id": validation_match.group(1),
-                }),
+                tool_call_index=0,
+                tool_call_id="execute",
+                tool_name="sql_execute_readonly",
+                arguments_delta=json.dumps(
+                    {
+                        "validation_artifact_id": validation_match.group(1),
+                    }
+                ),
             )
             yield TurnStreamItem(
                 kind=TurnStreamKind.TOOL_CALL_END,
@@ -292,6 +305,15 @@ class ScriptedModel:
         else:
             prompt_content = json.dumps(messages, ensure_ascii=False)
             assert re.search(r"artifact_[A-Za-z0-9_-]+", prompt_content)
+            execute_output = next(
+                item
+                for item in messages
+                if item.get("type") == "function_call_output"
+                and item.get("call_id") == "execute"
+            )
+            assert json.loads(execute_output["output"])["facts"]["rows"] == [
+                {"total": "42"}
+            ]
             yield TurnStreamItem(
                 kind=TurnStreamKind.ANSWER_START,
                 item_id="commentary",
@@ -369,7 +391,9 @@ class ToolBudgetModel:
             kind=TurnStreamKind.TOOL_CALL_START,
             item_id="tool:0",
             revision=1,
-            tool_call_index=0, tool_call_id="repeat-validate", tool_name="sql_validate",
+            tool_call_index=0,
+            tool_call_id="repeat-validate",
+            tool_name="sql_validate",
             arguments_delta=json.dumps({"sql": "select count(*) as total from orders"}),
         )
         yield TurnStreamItem(
@@ -541,11 +565,13 @@ def test_native_assistant_commentary_precedes_durable_question_tool_call(
     db_session,
     test_datasource,
 ):
-    db_session.add(AgentSession(
-        id="session_commentary",
-        datasource_id=str(test_datasource.id),
-        title="Commentary",
-    ))
+    db_session.add(
+        AgentSession(
+            id="session_commentary",
+            datasource_id=str(test_datasource.id),
+            title="Commentary",
+        )
+    )
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
@@ -559,7 +585,9 @@ def test_native_assistant_commentary_precedes_durable_question_tool_call(
         model_name="test",
         request_payload={},
     )
-    lease = sessions.claim(session_id="session_commentary", owner="worker", ttl_seconds=120)
+    lease = sessions.claim(
+        session_id="session_commentary", owner="worker", ttl_seconds=120
+    )
     assert lease is not None
     sessions.promote_next_input(lease=lease)
     db_session.commit()
@@ -587,9 +615,9 @@ def test_native_assistant_commentary_precedes_durable_question_tool_call(
         for item in item_payloads
     )
     assert run.status == "waiting_input"
-    invocation = db_session.query(AgentToolInvocation).filter_by(
-        run_id=admission.run_id
-    ).one()
+    invocation = (
+        db_session.query(AgentToolInvocation).filter_by(run_id=admission.run_id).one()
+    )
     assert invocation.provider_call_id == "question"
     assert invocation.tool_name == "request_clarification"
     assert invocation.status == "waiting_input"
@@ -602,14 +630,26 @@ def test_native_assistant_commentary_precedes_durable_question_tool_call(
     )
 
 
-def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(db_session, test_datasource):
-    db_session.add(AgentSession(id="session_loop", datasource_id=str(test_datasource.id), title="Loop"))
+def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(
+    db_session, test_datasource
+):
+    db_session.add(
+        AgentSession(
+            id="session_loop", datasource_id=str(test_datasource.id), title="Loop"
+        )
+    )
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
-        session_id="session_loop", datasource_id=str(test_datasource.id), datasource_generation=1,
-        content="统计订单数量", idempotency_key="loop", llm_credential_id="credential",
-        api_base=None, model_name="test", request_payload={},
+        session_id="session_loop",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="统计订单数量",
+        idempotency_key="loop",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
     )
     lease = sessions.claim(session_id="session_loop", owner="worker", ttl_seconds=120)
     assert lease is not None
@@ -617,6 +657,7 @@ def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(db_ses
     db_session.commit()
 
     calls = {"count": 0}
+
     def model_factory(_settings):
         calls["count"] += 1
         return ScriptedModel(calls["count"])
@@ -626,7 +667,10 @@ def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(db_ses
     live = LiveStreamHub()
     subscription = live.subscribe(admission.run_id)
     RunLoop(
-        session_factory=factory, model_factory=model_factory, registry=registry, live_stream=live,
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=registry,
+        live_stream=live,
     ).execute(lease=lease, run_id=admission.run_id)
 
     db_session.expire_all()
@@ -636,6 +680,14 @@ def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(db_ses
     assert answer.content.startswith("共有 42 条订单。\n\n来源：{{cite:artifact_")
     assert db_session.query(AgentEvidenceRecord).filter_by(run_id=run.id).count() == 1
     assert calls["count"] == 3
+    assert all(
+        '"total":"42"' not in str(turn.context_snapshot_json)
+        for turn in db_session.query(AgentTurn).filter_by(run_id=run.id)
+    )
+    assert all(
+        '"total":"42"' not in str(row.model_output_json)
+        for row in db_session.query(AgentObservationRecord).filter_by(run_id=run.id)
+    )
     timeline = [
         json.loads(str(row.item_json))
         for row in db_session.query(AgentRunItemRecord)
@@ -659,13 +711,12 @@ def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(db_ses
     recovered = RunRepository(db_session).latest_completed_answer(str(run.id))
     assert [message.phase for message in recovered.messages] == ["commentary", None]
     assert recovered.answer_text == "共有 42 条订单。"
-    assert (
-        timeline[2]["payload"]["call_id"]
-        == timeline[3]["payload"]["call_id"]
-    )
+    assert timeline[2]["payload"]["call_id"] == timeline[3]["payload"]["call_id"]
     assert subscription.receive(timeout=0.01).content == "先验证并执行聚合查询。"
     assert subscription.receive(timeout=0.01).content == "正在整理可验证结论。"
     assert subscription.receive(timeout=0.01).content == "共有 42 条订单。"
+
+
 def test_result_rows_are_transient_and_never_enter_durable_facts() -> None:
     secret = "transient-sensitive-cell"
     output = {
@@ -675,19 +726,23 @@ def test_result_rows_are_transient_and_never_enter_durable_facts() -> None:
         "rowCount": 1,
         "safe_sql": "SELECT token FROM secrets",
     }
-    durable = SqlExecuteReadonlyTool().project_observation(
+    projection = SqlExecuteReadonlyTool().project_observation(
         status="success",
         output=output,
         artifacts=[],
-    ).facts
+    )
+    durable = projection.facts
     assert secret not in json.dumps(durable)
+    assert secret in json.dumps(projection.provider_payload)
     assert durable["row_count"] == 1
     assert durable["column_count"] == 1
-    assert "columns" not in durable
+    assert durable["columns"] == ["token"]
     assert "safe_sql" not in durable
 
 
-def test_sql_validation_keeps_execution_authority_in_artifacts_not_observation_facts() -> None:
+def test_sql_validation_keeps_execution_authority_in_artifacts_not_observation_facts() -> (
+    None
+):
     decision = {
         "decision_id": "safety-1",
         "datasource_id": "ds-1",
@@ -705,20 +760,24 @@ def test_sql_validation_keeps_execution_authority_in_artifacts_not_observation_f
         "messages": [],
         "created_at": "2026-07-25T00:00:00Z",
     }
-    durable = SqlValidateTool().project_observation(
-        status="success",
-        output={
-            "can_execute": True,
-            "requires_confirmation": False,
-            "safe_sql": decision["safe_sql"],
-            "original_sql": decision["original_sql"],
-            "risk_level": "safe",
-            "blocked_reasons": [],
-            "messages": [],
-            "execution_safety_decision": decision,
-        },
-        artifacts=[],
-    ).facts
+    durable = (
+        SqlValidateTool()
+        .project_observation(
+            status="success",
+            output={
+                "can_execute": True,
+                "requires_confirmation": False,
+                "safe_sql": decision["safe_sql"],
+                "original_sql": decision["original_sql"],
+                "risk_level": "safe",
+                "blocked_reasons": [],
+                "messages": [],
+                "execution_safety_decision": decision,
+            },
+            artifacts=[],
+        )
+        .facts
+    )
 
     assert durable["can_execute"] is True
     assert "execution_safety_decision" not in durable
@@ -790,20 +849,37 @@ def test_failed_tool_does_not_publish_capabilities_or_progress(
     assert observation.contributes_progress is False
 
 
-def test_tool_budget_returns_bounded_partial_when_verified_result_exists(db_session, test_datasource):
-    db_session.add(AgentSession(id="session_tool_budget", datasource_id=str(test_datasource.id), title="Budget"))
+def test_tool_budget_returns_bounded_partial_when_verified_result_exists(
+    db_session, test_datasource
+):
+    db_session.add(
+        AgentSession(
+            id="session_tool_budget",
+            datasource_id=str(test_datasource.id),
+            title="Budget",
+        )
+    )
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
-        session_id="session_tool_budget", datasource_id=str(test_datasource.id), datasource_generation=1,
-        content="统计订单数量", idempotency_key="tool-budget", llm_credential_id="credential",
-        api_base=None, model_name="test", request_payload={},
+        session_id="session_tool_budget",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="统计订单数量",
+        idempotency_key="tool-budget",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
     )
-    lease = sessions.claim(session_id="session_tool_budget", owner="worker", ttl_seconds=120)
+    lease = sessions.claim(
+        session_id="session_tool_budget", owner="worker", ttl_seconds=120
+    )
     sessions.promote_next_input(lease=lease)
     db_session.commit()
 
     calls = {"count": 0}
+
     def model_factory(_settings):
         calls["count"] += 1
         return ToolBudgetModel(calls["count"])
@@ -827,11 +903,13 @@ def test_tool_budget_returns_bounded_partial_when_verified_result_exists(db_sess
 
 
 def test_token_budget_preserves_the_settled_final_answer(db_session, test_datasource):
-    db_session.add(AgentSession(
-        id="session_token_budget",
-        datasource_id=str(test_datasource.id),
-        title="Token Budget",
-    ))
+    db_session.add(
+        AgentSession(
+            id="session_token_budget",
+            datasource_id=str(test_datasource.id),
+            title="Token Budget",
+        )
+    )
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(

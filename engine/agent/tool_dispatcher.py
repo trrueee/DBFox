@@ -17,7 +17,11 @@ from engine.agent.execution_authority import (
     ApprovalAuthorityError,
     ApprovalAuthorityVerifier,
 )
-from engine.agent.observation import ObservationStatus
+from engine.agent.observation import (
+    Observation,
+    ObservationStatus,
+    serialize_model_observation,
+)
 from engine.agent.repositories.approval import ApprovalRepository
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.run import RunRepository
@@ -68,6 +72,20 @@ class ToolDispatchOutcome(StrEnum):
 
 
 @dataclass(frozen=True)
+class TransientToolOutput:
+    """Provider input retained only in RunLoop memory for the current Run."""
+
+    call_id: str
+    output: str
+
+
+@dataclass(frozen=True)
+class ToolDispatchResult:
+    outcome: ToolDispatchOutcome
+    provider_output: TransientToolOutput | None = None
+
+
+@dataclass(frozen=True)
 class _PreparedToolExecution:
     tool: BaseTool
     state: dict[str, Any]
@@ -102,7 +120,7 @@ class ToolDispatcher:
         call: ModelToolCall,
         materialization: ToolMaterialization,
         control: LeaseAwareRunControl,
-    ) -> ToolDispatchOutcome:
+    ) -> ToolDispatchResult:
         materialization.require(call.name)
         registered_function = self.registry.require(call.name)
         with self.session_factory() as db:
@@ -139,7 +157,7 @@ class ToolDispatcher:
                     tool_name=invocation.tool_name,
                     input_hash=invocation.authorized_input_hash,
                 ):
-                    invocations.settle(
+                    observation = invocations.settle(
                         lease=lease,
                         invocation_id=invocation.id,
                         status=ObservationStatus.REJECTED,
@@ -152,7 +170,7 @@ class ToolDispatcher:
                         error_message="The exact action was already rejected by the user.",
                     )
                     db.commit()
-                    return ToolDispatchOutcome.SETTLED
+                    return self._settled_result(call.id, observation)
                 approvals.request(
                     lease=lease,
                     invocation_id=invocation.id,
@@ -160,9 +178,9 @@ class ToolDispatcher:
                 )
                 SessionRepository(db).release(lease=lease)
                 db.commit()
-                return ToolDispatchOutcome.WAITING_APPROVAL
+                return ToolDispatchResult(ToolDispatchOutcome.WAITING_APPROVAL)
             if invocation.status.value == "rejected":
-                invocations.settle(
+                observation = invocations.settle(
                     lease=lease,
                     invocation_id=invocation.id,
                     status=ObservationStatus.REJECTED,
@@ -173,7 +191,7 @@ class ToolDispatcher:
                     error_message="Tool request rejected.",
                 )
                 db.commit()
-                return ToolDispatchOutcome.SETTLED
+                return self._settled_result(call.id, observation)
             if isinstance(registered_function, ControlCommand):
                 parsed = registered_function.input_model.model_validate(
                     invocation.authorized_input
@@ -188,13 +206,10 @@ class ToolDispatcher:
                         invocation_id=invocation.id,
                     ),
                 )
-                if (
-                    command_result.disposition
-                    is ControlDisposition.WAITING_INPUT
-                ):
+                if command_result.disposition is ControlDisposition.WAITING_INPUT:
                     SessionRepository(db).release(lease=lease)
                     db.commit()
-                    return ToolDispatchOutcome.WAITING_INPUT
+                    return ToolDispatchResult(ToolDispatchOutcome.WAITING_INPUT)
                 if command_result.output is None:
                     raise RuntimeError(
                         f"Control command {call.name} settled without output"
@@ -202,7 +217,7 @@ class ToolDispatcher:
                 output = registered_function.output_model.model_validate(
                     command_result.output
                 ).model_dump(mode="json")
-                invocations.settle(
+                observation = invocations.settle(
                     lease=lease,
                     invocation_id=invocation.id,
                     status=ObservationStatus.SUCCEEDED,
@@ -214,11 +229,18 @@ class ToolDispatcher:
                     contributes_progress=False,
                 )
                 db.commit()
-                return ToolDispatchOutcome.SETTLED
+                return self._settled_result(call.id, observation)
             db.commit()
 
-        self.execute_requested(lease, invocation, control=control)
-        return ToolDispatchOutcome.SETTLED
+        provider_output = self.execute_requested(
+            lease,
+            invocation,
+            control=control,
+        )
+        return ToolDispatchResult(
+            ToolDispatchOutcome.SETTLED,
+            provider_output=provider_output,
+        )
 
     def execute_requested(
         self,
@@ -226,10 +248,10 @@ class ToolDispatcher:
         invocation: ToolInvocation,
         *,
         control: LeaseAwareRunControl,
-    ) -> None:
+    ) -> TransientToolOutput | None:
         prepared = self._prepare_execution(lease, invocation)
         if prepared is None:
-            return
+            return None
         result = self._run_prepared_execution(
             lease,
             invocation,
@@ -237,8 +259,8 @@ class ToolDispatcher:
             control=control,
         )
         if result is None:
-            return
-        self._settle_execution_result(
+            return None
+        provider_output = self._settle_execution_result(
             lease,
             invocation,
             tool=prepared.tool,
@@ -246,6 +268,7 @@ class ToolDispatcher:
             needs_reconciliation=prepared.needs_reconciliation,
         )
         control.checkpoint()
+        return provider_output
 
     def _prepare_execution(
         self,
@@ -387,6 +410,7 @@ class ToolDispatcher:
 
         result: ToolResult | None = None
         if prepared.needs_reconciliation:
+
             def reconcile_leaf(tool_control: ToolExecutionControl) -> ToolResult:
                 with self.session_factory() as leaf_db:
                     reconciled = ToolRuntime(self.registry).reconcile(
@@ -436,15 +460,13 @@ class ToolDispatcher:
                         db,
                         self.definition,
                     ).build(run)
-                    authorized, execution_authority = (
-                        self._authorize_and_mark_running(
-                            db,
-                            lease=lease,
-                            invocation=invocation,
-                            run=run,
-                            state=state,
-                            interrupted_outcome_unresolved=False,
-                        )
+                    authorized, execution_authority = self._authorize_and_mark_running(
+                        db,
+                        lease=lease,
+                        invocation=invocation,
+                        run=run,
+                        state=state,
+                        interrupted_outcome_unresolved=False,
                     )
                     if not authorized:
                         db.commit()
@@ -486,7 +508,7 @@ class ToolDispatcher:
         tool: BaseTool,
         result: ToolResult,
         needs_reconciliation: bool,
-    ) -> None:
+    ) -> TransientToolOutput:
         with self.session_factory() as db:
             artifacts = []
             output = result.output or {}
@@ -518,6 +540,17 @@ class ToolDispatcher:
                 needs_reconciliation=needs_reconciliation,
             )
             succeeded = status is ObservationStatus.SUCCEEDED
+            retryable = (
+                result.status != "success"
+                and tool.execution.recovery is ToolRecoveryPolicy.RETRY_SAFE
+                and tool.execution.retryable
+                and result.error_code not in {"TOOL_CANCELLED", "TOOL_TIMEOUT"}
+            )
+            error_code = (
+                None
+                if result.status == "success"
+                else (result.error_code or "TOOL_EXECUTION_FAILED")
+            )
             ToolInvocationRepository(db).settle(
                 lease=lease,
                 invocation_id=invocation.id,
@@ -535,20 +568,41 @@ class ToolDispatcher:
                 contributes_progress=(
                     succeeded and tool.spec.semantics.contributes_progress
                 ),
-                error_code=(
-                    None
-                    if result.status == "success"
-                    else (result.error_code or "TOOL_EXECUTION_FAILED")
-                ),
+                error_code=error_code,
                 error_message=result.error,
-                retryable=(
-                    result.status != "success"
-                    and tool.execution.recovery is ToolRecoveryPolicy.RETRY_SAFE
-                    and tool.execution.retryable
-                    and result.error_code not in {"TOOL_CANCELLED", "TOOL_TIMEOUT"}
-                ),
+                retryable=retryable,
             )
             db.commit()
+            provider_facts = (
+                observation.provider_payload
+                if succeeded and observation.provider_payload
+                else observation.facts
+            )
+            return TransientToolOutput(
+                call_id=str(invocation.provider_call_id),
+                output=serialize_model_observation(
+                    status=status.value,
+                    summary=observation.summary,
+                    facts=provider_facts,
+                    artifact_ids=artifact_ids,
+                    retryable=retryable,
+                    error_code=error_code,
+                    error_message=result.error,
+                ),
+            )
+
+    @staticmethod
+    def _settled_result(
+        call_id: str,
+        observation: Observation,
+    ) -> ToolDispatchResult:
+        return ToolDispatchResult(
+            ToolDispatchOutcome.SETTLED,
+            provider_output=TransientToolOutput(
+                call_id=call_id,
+                output=observation.model_output,
+            ),
+        )
 
     @staticmethod
     def _observation_status(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 
 from pydantic import BaseModel, ConfigDict
 
@@ -41,6 +42,7 @@ class PromptAssembler:
         definition: AgentDefinition,
         context: ContextSnapshot,
         tool_schemas: list[dict] | None = None,
+        tool_output_overrides: Mapping[str, str] | None = None,
     ) -> PromptBundle:
         system = build_system_prompt()
         system += (
@@ -62,7 +64,7 @@ class PromptAssembler:
         omitted_response_batches = 0
         while True:
             response_items = [
-                item
+                _provider_response_item(item, tool_output_overrides or {})
                 for batch in response_batches
                 for item in batch.items
             ]
@@ -105,6 +107,12 @@ class PromptAssembler:
             *response_items,
         ]
         rendered_messages = canonical_dumps(messages)
+        used_transient_outputs = [
+            item
+            for item in response_items
+            if item.get("type") == "function_call_output"
+            and str(item.get("call_id") or "") in (tool_output_overrides or {})
+        ]
         digest = hashlib.sha256(
             (
                 PROMPT_VERSION
@@ -129,6 +137,11 @@ class PromptAssembler:
                 "evidence_ledger_tokens": ledger_tokens,
                 "omitted_response_items": omitted_response_items,
                 "omitted_response_batches": omitted_response_batches,
+                "transient_tool_output_count": len(used_transient_outputs),
+                "transient_tool_output_bytes": sum(
+                    len(str(item.get("output") or "").encode("utf-8"))
+                    for item in used_transient_outputs
+                ),
             },
             hash=digest,
         )
@@ -173,3 +186,18 @@ def _evidence_ledger_message(
             + "\n</dbfox_context>"
         ),
     }
+
+
+def _provider_response_item(
+    item: dict,
+    tool_output_overrides: Mapping[str, str],
+) -> dict:
+    """Overlay one current-Run transient tool output without mutating ContextSnapshot."""
+
+    if item.get("type") != "function_call_output":
+        return dict(item)
+    call_id = str(item.get("call_id") or "")
+    output = tool_output_overrides.get(call_id)
+    if output is None:
+        return dict(item)
+    return {**item, "output": output}
