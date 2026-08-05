@@ -79,7 +79,7 @@
   },
   "schema_version": 2,
   "sidecar_filename": "dbfox-engine-x86_64-pc-windows-msvc.exe",
-  "sidecar_sha256": "4110ac69176ab0a4723982e65a097b081b2d46ce1eda8be6a2aad3a353bd0af5",
+  "sidecar_sha256": "b3bd3b5a2d9841ed041c6c87cf70cbb254bb84e4095453788c2a73ec99620f0d",
   "target_sqlite_version": "3.53.4",
   "target_triplet": "x86_64-pc-windows-msvc"
 }
