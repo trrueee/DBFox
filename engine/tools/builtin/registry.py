@@ -11,6 +11,7 @@ from engine.tools.builtin.control import (
     RequestClarificationCommand,
     UpdatePlanCommand,
 )
+from engine.tools.builtin.conversation import ConversationReadTool, ConversationSearchTool
 from engine.tools.builtin.query import (
     DataPreviewTool,
     SqlExecuteReadonlyTool,
@@ -30,6 +31,8 @@ def register_dbfox_tools() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(RequestClarificationCommand())
     registry.register(UpdatePlanCommand())
+    registry.register(ConversationSearchTool())
+    registry.register(ConversationReadTool())
     registry.register(CatalogOverviewTool())
     registry.register(CatalogRefreshTool())
     registry.register(SchemaListTool())

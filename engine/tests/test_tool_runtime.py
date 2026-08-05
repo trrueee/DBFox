@@ -301,6 +301,8 @@ def test_product_registry_contains_the_analysis_toolset():
         "catalog_overview",
         "catalog_refresh",
         "chart_create",
+        "conversation_read",
+        "conversation_search",
         "data_preview",
         "request_clarification",
         "result_inspect",

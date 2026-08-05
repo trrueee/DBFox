@@ -50,6 +50,7 @@ class ContextSegmentKind(StrEnum):
     SELECTED_ARTIFACT = "selected_artifact"
     WORKSPACE_CONTEXT = "workspace_context"
     SESSION_MEMORY = "session_memory"
+    CONVERSATION_ARCHIVE = "conversation_archive"
     FACTUAL_CONTEXT = "factual_context"
     HISTORY = "history"
 
@@ -62,6 +63,7 @@ class ContextPriority(IntEnum):
     SELECTED_ARTIFACT = 850
     WORKSPACE_CONTEXT = 840
     FACTUAL_CONTEXT = 775
+    CONVERSATION_ARCHIVE = 760
     SESSION_MEMORY = 750
     HISTORY = 100
 

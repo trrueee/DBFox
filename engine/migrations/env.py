@@ -32,7 +32,7 @@ if config.config_file_name is not None:
 # Set target metadata for autogenerate support
 target_metadata = _models.Base.metadata
 
-_FTS_VIRTUAL_TABLES = {"schema_search_fts", "query_history_fts"}
+_FTS_VIRTUAL_TABLES = {"schema_search_fts", "query_history_fts", "agent_message_fts"}
 _FTS_SHADOW_SUFFIXES = {"data", "idx", "content", "docsize", "config"}
 _DEFAULT_ALEMBIC_URL = "driver://user:pass@localhost/dbname"
 _OFFLINE_MIGRATION_ERROR = (

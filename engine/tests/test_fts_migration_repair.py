@@ -58,10 +58,11 @@ def test_fts_repair_migration_restores_a_schema_that_was_historically_stamped_he
                     text("SELECT name FROM sqlite_master WHERE type IN ('table', 'trigger')")
                 )
             }
-            assert {"schema_search_fts", "query_history_fts"}.issubset(objects)
+            assert {"schema_search_fts", "query_history_fts", "agent_message_fts"}.issubset(objects)
             assert _TRIGGERS.issubset(objects)
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == ScriptDirectory.from_config(config).get_current_head()
             connection.execute(text("SELECT search_text FROM schema_search_fts LIMIT 0"))
             connection.execute(text("SELECT search_text FROM query_history_fts LIMIT 0"))
+            connection.execute(text("SELECT search_text FROM agent_message_fts LIMIT 0"))
     finally:
         engine.dispose()

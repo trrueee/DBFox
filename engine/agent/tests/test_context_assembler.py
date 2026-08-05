@@ -81,6 +81,15 @@ def test_next_run_reads_durable_history_and_selected_artifact(
         "共有 42 条订单。",
     ]
     assert snapshot.current_request == "按地区拆分刚才结果"
+    assert snapshot.conversation_archive == {
+        "message_count": 3,
+        "oldest_sequence": 1,
+        "newest_sequence": 3,
+        "loaded_message_count": 3,
+        "omitted_message_count": 0,
+        "search_available": True,
+        "scope": "current_session_only",
+    }
     assert snapshot.selected_artifacts[0].id == artifact.id
     assert snapshot.selected_artifacts[0].descriptor == {
         "sourceSqlArtifactId": "artifact_sql_42",

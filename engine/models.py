@@ -470,6 +470,34 @@ class AgentMessage(Base):  # type: ignore[misc,valid-type]
     session = relationship("AgentSession", back_populates="messages")
 
 
+class AgentMessageSearchDoc(Base):  # type: ignore[misc,valid-type]
+    """Derived, rebuildable projection used by SQLite FTS5 conversation recall."""
+
+    __tablename__ = "agent_message_search_docs"
+    __table_args__ = (
+        Index("ix_agent_message_search_docs_session_sequence", "session_id", "sequence"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    message_id = Column(
+        String,
+        ForeignKey("agent_messages.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    session_id = Column(
+        String,
+        ForeignKey("agent_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sequence = Column(Integer, nullable=False)
+    role = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+    search_text = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
 class AgentSessionMemory(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "agent_session_memories"
     __table_args__ = (

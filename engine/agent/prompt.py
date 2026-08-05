@@ -18,7 +18,7 @@ from engine.agent.model.system_prompt import build_system_prompt
 from engine.json_codec import canonical_dumps
 
 
-PROMPT_VERSION = "3.2"
+PROMPT_VERSION = "3.3"
 MAX_EVIDENCE_LEDGER_OBSERVATIONS = 8
 MAX_EVIDENCE_LEDGER_FACT_CHARS = 512
 

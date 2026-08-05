@@ -19,7 +19,13 @@ from sqlalchemy.orm import sessionmaker
 
 from engine.db import Base
 from engine.migrations.sqlite_mutex import SQLITE_MIGRATION_LOCKED, sqlite_migration_mutex
-from engine.models import FoundationRuntimeState
+from engine.models import (
+    AgentMessage,
+    AgentSession,
+    DataSource,
+    FoundationRuntimeState,
+    Project,
+)
 from engine.security.credential_lease import CredentialLeaseSaga
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 
@@ -28,7 +34,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "12ab34cd56ef"
+FOUNDATION_HEAD_REVISION = "13bc45de67f0"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -36,6 +42,14 @@ _QUERY_HISTORY_FTS_TRIGGERS = {
     "query_history_search_docs_ai",
     "query_history_search_docs_ad",
     "query_history_search_docs_au",
+}
+_AGENT_MESSAGE_RECALL_TRIGGERS = {
+    "agent_message_search_docs_ai",
+    "agent_message_search_docs_ad",
+    "agent_message_search_docs_au",
+    "agent_messages_recall_ai",
+    "agent_messages_recall_ad",
+    "agent_messages_recall_au",
 }
 _OFFLINE_FAILURE = "DBFOX_ALEMBIC_OFFLINE_UNSUPPORTED"
 
@@ -317,7 +331,8 @@ def _assert_final_contract(engine) -> None:
         for fk in schema_column_fks
     )
 
-    assert {"schema_search_fts", "query_history_fts"}.issubset(tables)
+    assert {"schema_search_fts", "query_history_fts", "agent_message_fts"}.issubset(tables)
+    assert "agent_message_search_docs" in tables
 
 
 def test_fresh_upgrade_has_the_complete_foundation_v2_contract(monkeypatch, tmp_path: Path) -> None:
@@ -332,6 +347,80 @@ def test_fresh_upgrade_has_the_complete_foundation_v2_contract(monkeypatch, tmp_
             assert connection.execute(text("SELECT COUNT(*) FROM foundation_runtime_state")).scalar_one() == 0
         _assert_final_contract(engine)
         command.check(_alembic_config(database_url))
+    finally:
+        engine.dispose()
+
+
+def test_agent_message_recall_migration_backfills_and_downgrade_keeps_transcript(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "conversation-recall.db")
+    _upgrade(monkeypatch, database_url, "12ab34cd56ef")
+    engine = create_engine(database_url)
+    session = sessionmaker(bind=engine)()
+    try:
+        session.add(Project(id="recall-project", name="Recall Project"))
+        session.add(
+            DataSource(
+                id="recall-datasource",
+                project_id="recall-project",
+                name="Recall Datasource",
+                db_type="sqlite",
+                database_name="recall.sqlite",
+            )
+        )
+        session.add(
+            AgentSession(
+                id="recall-session",
+                datasource_id="recall-datasource",
+                title="Recall",
+            )
+        )
+        session.add(
+            AgentMessage(
+                id="recall-message",
+                session_id="recall-session",
+                role="user",
+                status="completed",
+                sequence=1,
+                content="historicalrecalltoken",
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            assert connection.execute(
+                text(
+                    """
+                    SELECT COUNT(*) FROM agent_message_fts
+                    WHERE agent_message_fts MATCH 'historicalrecalltoken'
+                    """
+                )
+            ).scalar_one() == 1
+    finally:
+        engine.dispose()
+
+    command.downgrade(_alembic_config(database_url), "12ab34cd56ef")
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT COUNT(*) FROM agent_messages")).scalar_one() == 1
+            objects = {
+                row[0]
+                for row in connection.execute(
+                    text("SELECT name FROM sqlite_master WHERE type IN ('table', 'trigger')")
+                )
+            }
+            assert "agent_message_fts" not in objects
+            assert "agent_message_search_docs" not in objects
+            assert not _AGENT_MESSAGE_RECALL_TRIGGERS & objects
     finally:
         engine.dispose()
 
@@ -1291,7 +1380,7 @@ def test_real_historical_create_all_then_stamp_2b_restores_fts_contract(
     engine = create_engine(database_url)
     try:
         historical_tables = set(inspect(engine).get_table_names())
-        assert not {"schema_search_fts", "query_history_fts"} & historical_tables
+        assert not {"schema_search_fts", "query_history_fts", "agent_message_fts"} & historical_tables
         with engine.connect() as connection:
             historical_triggers = {
                 row[0]
@@ -1315,8 +1404,10 @@ def test_real_historical_create_all_then_stamp_2b_restores_fts_contract(
                 )
             }
             assert _QUERY_HISTORY_FTS_TRIGGERS <= trigger_names
+            assert _AGENT_MESSAGE_RECALL_TRIGGERS <= trigger_names
             connection.execute(text("SELECT search_text FROM schema_search_fts LIMIT 0"))
             connection.execute(text("SELECT search_text FROM query_history_fts LIMIT 0"))
+            connection.execute(text("SELECT search_text FROM agent_message_fts LIMIT 0"))
             assert connection.execute(
                 text(
                     """

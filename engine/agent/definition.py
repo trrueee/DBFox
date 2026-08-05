@@ -14,10 +14,11 @@ class AgentDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: str = "dbfox.data_analyst"
-    version: str = "3.0"
+    version: str = "3.1"
     behavior: str = "autonomous_evidence_grounded_analysis"
     allowed_tool_groups: tuple[str, ...] = (
         "control",
+        "conversation",
         "catalog",
         "query",
         "result",

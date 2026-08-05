@@ -216,6 +216,8 @@ def test_dbfox_tool_capabilities_are_the_single_resource_access_contract() -> No
         "database_read",
     )
     assert registry.require("schema_inspect").execution.capabilities == ("metadata_read",)
+    assert registry.require("conversation_search").execution.capabilities == ("metadata_read",)
+    assert registry.require("conversation_read").execution.capabilities == ("metadata_read",)
     assert registry.require("data_preview").execution.capabilities == (
         "metadata_read",
         "database_read",
