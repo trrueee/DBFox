@@ -212,7 +212,7 @@ def test_table_result_export_streams_schema_table_source(monkeypatch, db_session
     _add_table_result_source(db_session)
     executed_sql: dict[str, str] = {}
 
-    def fake_stream_rows(_self, datasource_id, sql, safety_decision, chunk_size=1000):
+    def fake_stream_rows(_self, datasource_id, sql, safety_decision, chunk_size=1000, **_kwargs):
         executed_sql["datasource_id"] = datasource_id
         executed_sql["sql"] = sql
         assert safety_decision.can_execute is True
@@ -530,7 +530,7 @@ def test_result_export_streams_all_matching_rows(monkeypatch, db_session):
     )
     executed_sql: dict[str, str] = {}
 
-    def fake_stream_rows(_self, datasource_id, sql, safety_decision, chunk_size=1000):
+    def fake_stream_rows(_self, datasource_id, sql, safety_decision, chunk_size=1000, **_kwargs):
         executed_sql["datasource_id"] = datasource_id
         executed_sql["sql"] = sql
         assert safety_decision.can_execute is True

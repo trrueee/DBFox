@@ -164,7 +164,7 @@ def test_trust_gate_execution_decision_dry_runs_guardrail_safe_sql(
             "message": "ok",
         }, parse_one(safe_sql, read=dialect))
 
-    def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
+    def fake_dry_run(_db, _datasource_id: str, sql: str, **_kwargs) -> DryRunResult:
         dry_run_sql.append(sql)
         return DryRunResult(True)
 
@@ -201,7 +201,7 @@ def test_trust_gate_execution_decision_original_sql_does_not_drive_dry_run_resul
             "message": "ok",
         }, parse_one(safe_sql, read=dialect))
 
-    def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
+    def fake_dry_run(_db, _datasource_id: str, sql: str, **_kwargs) -> DryRunResult:
         if sql != safe_sql:
             return DryRunResult(False, "syntax_error", "original SQL should not be dry-run")
         return DryRunResult(True)
@@ -245,7 +245,7 @@ def test_trust_gate_auto_limit_warning_is_executable_without_confirmation_on_dev
             "message": "LIMIT 1000 was appended automatically.",
         }, parse_one(safe_sql, read=dialect))
 
-    def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
+    def fake_dry_run(_db, _datasource_id: str, sql: str, **_kwargs) -> DryRunResult:
         assert sql == safe_sql
         return DryRunResult(True)
 
@@ -275,7 +275,7 @@ def test_trust_gate_prod_confirmation_is_approval_not_hard_block(
     test_datasource_module.env = "prod"
     db_session_module.commit()
 
-    def fake_dry_run(_db, _datasource_id: str, _sql: str) -> DryRunResult:
+    def fake_dry_run(_db, _datasource_id: str, _sql: str, **_kwargs) -> DryRunResult:
         return DryRunResult(True)
 
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
@@ -315,7 +315,7 @@ def test_trust_gate_execution_decision_blocks_when_safe_sql_dry_run_fails(
             "message": "ok",
         }, parse_one(safe_sql, read=dialect))
 
-    def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
+    def fake_dry_run(_db, _datasource_id: str, sql: str, **_kwargs) -> DryRunResult:
         dry_run_sql.append(sql)
         if sql == safe_sql:
             return DryRunResult(False, "schema_error", "no such column: missing_column")
@@ -355,7 +355,7 @@ def test_trust_gate_execution_decision_skips_dry_run_when_guardrail_rejects(
             "message": "blocked",
         }, parse_one(sql, read=dialect))
 
-    def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
+    def fake_dry_run(_db, _datasource_id: str, sql: str, **_kwargs) -> DryRunResult:
         dry_run_sql.append(sql)
         return DryRunResult(True)
 
@@ -391,7 +391,7 @@ def test_trust_gate_execution_decision_skips_dry_run_when_safe_sql_is_empty(
             "message": "ok",
         }, parse_one(sql, read=dialect))
 
-    def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
+    def fake_dry_run(_db, _datasource_id: str, sql: str, **_kwargs) -> DryRunResult:
         dry_run_sql.append(sql)
         return DryRunResult(True)
 

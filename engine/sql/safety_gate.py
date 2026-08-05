@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from typing import Any, cast
 
 import sqlglot
@@ -119,6 +120,7 @@ def _resolve_execution_safety_decision(
     bypass_guardrail: bool,
     safety_decision: ExecutionSafetyDecision | dict[str, Any] | None,
     policy: ExecutionPolicy = "readonly",
+    parameters: Mapping[str, Any] | None = None,
 ) -> ExecutionSafetyDecision:
     if safety_decision is not None:
         decision = (
@@ -148,6 +150,12 @@ def _resolve_execution_safety_decision(
                     "level": "reject",
                     "message": "The supplied safety decision was created for different SQL text.",
                 }],
+            )
+        from engine.sql.bound_parameters import parameter_fingerprint
+        if decision.parameter_fingerprint != parameter_fingerprint(parameters):
+            raise GuardrailValidationError(
+                "TrustGate decision parameters do not match the requested execution.",
+                checks=[{"rule": "safety_decision_parameter_mismatch", "level": "reject", "message": "The supplied safety decision was created for different bound parameters."}],
             )
         return _block_unconfirmed_execution(decision)
 
@@ -212,7 +220,9 @@ def _resolve_execution_safety_decision(
 
     ctx = DialectContext.from_datasource_id(db, datasource_id)
     return _block_unconfirmed_execution(
-        SqlSafetyService(db).build_execution_decision(sql_str, ctx, policy=policy)
+        SqlSafetyService(db).build_execution_decision(
+            sql_str, ctx, policy=policy, parameters=parameters
+        )
     )
 
 

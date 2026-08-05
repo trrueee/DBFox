@@ -257,6 +257,7 @@ def test_db_preview_tool_passes_explicit_safety_decision(
         ctx: DialectContext,
         *,
         policy: str = "readonly",
+        parameters=None,
     ) -> ExecutionSafetyDecision:
         built.append((sql, ctx.datasource_id, policy))
         return decision

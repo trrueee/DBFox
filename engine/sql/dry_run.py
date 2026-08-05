@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
+from collections.abc import Mapping
 
 from sqlalchemy.orm import Session
 
@@ -30,6 +31,7 @@ def dry_run_query(
     sql: str,
     *,
     connection_factory: ConnectionFactory | None = None,
+    parameters: Mapping[str, Any] | None = None,
 ) -> DryRunResult:
     """Validate approved SQL with a read-only connection-factory scope."""
 
@@ -40,13 +42,15 @@ def dry_run_query(
     factory = connection_factory or ConnectionFactory()
     try:
         profile = ConnectionProfile.from_mapping(datasource_connection_dict(datasource))
+        from engine.sql.bound_parameters import render_dbapi_sql
+        executable_sql, bound = render_dbapi_sql(sql, profile.dialect, parameters)
         if profile.dialect == "sqlite":
-            return _dry_run_sqlite(profile, sql, factory)
+            return _dry_run_sqlite(profile, executable_sql, bound, factory)
         if profile.dialect == "duckdb":
-            return _dry_run_duckdb(profile, sql, factory)
+            return _dry_run_duckdb(profile, executable_sql, bound, factory)
         if profile.dialect == "postgresql":
-            return _dry_run_postgres(profile, sql, factory)
-        return _dry_run_mysql(profile, sql, factory)
+            return _dry_run_postgres(profile, executable_sql, bound, factory)
+        return _dry_run_mysql(profile, executable_sql, bound, factory)
     except Exception as exc:
         from engine.policy.error_sanitizer import sanitize_error_message
 
@@ -56,7 +60,7 @@ def dry_run_query(
 def _dry_run_sqlite(
     profile: ConnectionProfile,
     sql: str,
-    factory: ConnectionFactory,
+    parameters: Mapping[str, Any], factory: ConnectionFactory,
 ) -> DryRunResult:
     _validate_explain_sql(sql, "sqlite")
     with factory.connection_scope(
@@ -64,14 +68,14 @@ def _dry_run_sqlite(
         purpose=ConnectionPurpose.DRY_RUN,
         read_only=True,
     ) as conn:
-        conn.execute(f"EXPLAIN QUERY PLAN {sql}")
+        conn.execute(f"EXPLAIN QUERY PLAN {sql}", parameters)
     return DryRunResult(True)
 
 
 def _dry_run_duckdb(
     profile: ConnectionProfile,
     sql: str,
-    factory: ConnectionFactory,
+    parameters: Mapping[str, Any], factory: ConnectionFactory,
 ) -> DryRunResult:
     _validate_explain_sql(sql, "duckdb")
     with factory.connection_scope(
@@ -79,14 +83,14 @@ def _dry_run_duckdb(
         purpose=ConnectionPurpose.DRY_RUN,
         read_only=True,
     ) as conn:
-        conn.execute(f"EXPLAIN {sql}")
+        conn.execute(f"EXPLAIN {sql}", parameters)
     return DryRunResult(True)
 
 
 def _dry_run_mysql(
     profile: ConnectionProfile,
     sql: str,
-    factory: ConnectionFactory,
+    parameters: Mapping[str, Any], factory: ConnectionFactory,
 ) -> DryRunResult:
     _validate_explain_sql(sql, "mysql")
     with factory.connection_scope(
@@ -95,14 +99,14 @@ def _dry_run_mysql(
         read_only=True,
     ) as conn:
         with conn.cursor() as cursor:
-            cursor.execute(f"EXPLAIN {sql}")
+            cursor.execute(f"EXPLAIN {sql}", parameters)
     return DryRunResult(True)
 
 
 def _dry_run_postgres(
     profile: ConnectionProfile,
     sql: str,
-    factory: ConnectionFactory,
+    parameters: Mapping[str, Any], factory: ConnectionFactory,
 ) -> DryRunResult:
     _validate_explain_sql(sql, "postgres")
     with factory.connection_scope(
@@ -111,7 +115,7 @@ def _dry_run_postgres(
         read_only=True,
     ) as conn:
         with conn.cursor() as cursor:
-            cursor.execute(f"EXPLAIN {sql}")
+            cursor.execute(f"EXPLAIN {sql}", parameters)
     return DryRunResult(True)
 
 

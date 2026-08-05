@@ -68,7 +68,7 @@ def db_preview(
 
     requested_limit = _clamp(int(limit), 1, MAX_PREVIEW_ROWS)
     dialect = _resolve_dialect(db, datasource_id)
-    sql = _build_preview_sql(
+    sql, parameters = _build_preview_sql(
         table_name,
         requested,
         requested_limit,
@@ -79,7 +79,9 @@ def db_preview(
 
     try:
         ctx = DialectContext.from_datasource_id(db, datasource_id)
-        decision = SqlSafetyService(db).build_execution_decision(sql, ctx, policy="table_preview")
+        decision = SqlSafetyService(db).build_execution_decision(
+            sql, ctx, policy="table_preview", parameters=parameters
+        )
         result = execute_query(
             db,
             datasource_id,
@@ -87,6 +89,7 @@ def db_preview(
             question=f"Preview table {table_name}",
             safety_decision=decision,
             safety_policy="table_preview",
+            parameters=parameters,
             redact=True,
         )
     except Exception as exc:
@@ -102,6 +105,7 @@ def db_preview(
         "limit_applied": requested_limit,
         "rows": rows,
         "safe_sql": safe_sql,
+        "parameters": parameters,
         "truncated": bool(result.get("truncated")),
         "warnings": result.get("warnings") or [],
         "column_summaries": [_column_summary_preview(available[n]) for n in requested],
@@ -141,7 +145,7 @@ def _build_preview_sql(
     dialect: str,
     *,
     catalog_validated_identifiers: bool = False,
-) -> str:
+) -> tuple[str, dict[str, Any]]:
     from engine.sql.builder import build_select
     return build_select(
         table=table_name,

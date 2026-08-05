@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
+from collections.abc import Mapping
+from typing import Any
 from sqlglot import exp
 
 from engine.sql.dialect_context import DialectContext
@@ -41,6 +43,7 @@ class SqlSafetyService:
         ctx: DialectContext,
         *,
         policy: ExecutionPolicy = "readonly",
+        parameters: Mapping[str, Any] | None = None,
     ) -> ExecutionSafetyDecision:
         if self.db is None:
             raise ValueError("SqlSafetyService requires a database session to build execution decisions.")
@@ -54,6 +57,7 @@ class SqlSafetyService:
             ctx.datasource_id,
             sql,
             policy=policy,
+            parameters=parameters,
         )
 
     def _validate_readonly_sql(

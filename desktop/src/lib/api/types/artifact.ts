@@ -69,6 +69,7 @@ export interface AgentSqlArtifactPayload {
   safeSql: string;
   dialect: string;
   queryFingerprint: string;
+  parameters?: Record<string, unknown>;
 }
 
 export type AgentSafetyArtifactPayload = AgentArtifactPayloadCommon & {

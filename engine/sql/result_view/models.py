@@ -98,6 +98,7 @@ class VerifiedResultSource(BaseModel):
     datasource_id: str
     source_sql_artifact_id: str
     safe_sql: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
     dialect: str
     columns: list[ResultColumn]
     fingerprint: str

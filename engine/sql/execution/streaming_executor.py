@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import uuid
 from contextlib import contextmanager
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from threading import Timer
 from time import monotonic
 from typing import Any
@@ -194,6 +194,7 @@ class StreamingQueryExecutor:
         datasource_id: str,
         sql: str,
         decision: ExecutionSafetyDecision | dict[str, Any],
+        parameters: Mapping[str, Any] | None = None,
         chunk_size: int = 1000,
         timeout_ms: int | None = None,
     ) -> Iterator[dict[str, Any]]:
@@ -204,6 +205,7 @@ class StreamingQueryExecutor:
             bypass_guardrail=False,
             safety_decision=decision,
             policy="export",
+            parameters=parameters,
         )
         if not resolved.can_execute or not str(resolved.safe_sql or "").strip():
             raise GuardrailValidationError("Export SQL is blocked by safety rules.")
@@ -215,15 +217,19 @@ class StreamingQueryExecutor:
         safe_sql = str(resolved.safe_sql or "").strip()
         sensitivity = self._load_sensitivity(datasource_id)
         profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
+        from engine.sql.bound_parameters import render_dbapi_sql
+        executable_sql, bound_parameters = render_dbapi_sql(
+            safe_sql, profile.dialect, parameters
+        )
         deadline = _ExportDeadline(timeout_ms if timeout_ms is not None else self.timeout_ms)
         if profile.dialect == "sqlite":
-            yield from self._stream_sqlite(profile, safe_sql, chunk_size, sensitivity, deadline)
+            yield from self._stream_sqlite(profile, executable_sql, bound_parameters, chunk_size, sensitivity, deadline)
         elif profile.dialect == "duckdb":
-            yield from self._stream_duckdb(profile, safe_sql, chunk_size, sensitivity, deadline)
+            yield from self._stream_duckdb(profile, executable_sql, bound_parameters, chunk_size, sensitivity, deadline)
         elif profile.dialect == "postgresql":
-            yield from self._stream_postgres(profile, safe_sql, chunk_size, sensitivity, deadline)
+            yield from self._stream_postgres(profile, executable_sql, bound_parameters, chunk_size, sensitivity, deadline)
         else:
-            yield from self._stream_mysql(profile, safe_sql, chunk_size, sensitivity, deadline)
+            yield from self._stream_mysql(profile, executable_sql, bound_parameters, chunk_size, sensitivity, deadline)
 
     def _load_sensitivity(self, datasource_id: str) -> Any:
         try:
@@ -241,6 +247,7 @@ class StreamingQueryExecutor:
         self,
         profile: ConnectionProfile,
         sql: str,
+        parameters: Mapping[str, Any],
         chunk_size: int,
         sensitivity: Any,
         deadline: _ExportDeadline,
@@ -256,7 +263,7 @@ class StreamingQueryExecutor:
                 with _deadline_watchdog(conn, deadline):
                     deadline.check()
                     cursor = conn.cursor()
-                    cursor.execute(sql)
+                    cursor.execute(sql, dict(parameters))
                     deadline.check()
                     yield from self._yield_rows(cursor, chunk_size, sensitivity, deadline)
             except SQLQueryTimeoutError:
@@ -272,6 +279,7 @@ class StreamingQueryExecutor:
         self,
         profile: ConnectionProfile,
         sql: str,
+        parameters: Mapping[str, Any],
         chunk_size: int,
         sensitivity: Any,
         deadline: _ExportDeadline,
@@ -286,7 +294,7 @@ class StreamingQueryExecutor:
                 with _deadline_watchdog(conn, deadline):
                     deadline.check()
                     cursor = conn.cursor()
-                    cursor.execute(sql)
+                    cursor.execute(sql, dict(parameters))
                     deadline.check()
                     yield from self._yield_rows(cursor, chunk_size, sensitivity, deadline)
             except SQLQueryTimeoutError:
@@ -301,6 +309,7 @@ class StreamingQueryExecutor:
         self,
         profile: ConnectionProfile,
         sql: str,
+        parameters: Mapping[str, Any],
         chunk_size: int,
         sensitivity: Any,
         deadline: _ExportDeadline,
@@ -317,7 +326,7 @@ class StreamingQueryExecutor:
                     _configure_postgres_timeout(conn, deadline.timeout_ms)
                     cursor = conn.cursor(name=f"dbfox_export_{uuid.uuid4().hex}")
                     cursor.itersize = chunk_size
-                    cursor.execute(sql)
+                    cursor.execute(sql, dict(parameters))
                     deadline.check()
                     yield from self._yield_rows(cursor, chunk_size, sensitivity, deadline)
             except SQLQueryTimeoutError:
@@ -332,6 +341,7 @@ class StreamingQueryExecutor:
         self,
         profile: ConnectionProfile,
         sql: str,
+        parameters: Mapping[str, Any],
         chunk_size: int,
         sensitivity: Any,
         deadline: _ExportDeadline,
@@ -349,7 +359,7 @@ class StreamingQueryExecutor:
                     deadline.check()
                     _configure_mysql_timeout(conn, deadline.timeout_ms)
                     cursor = conn.cursor(pymysql.cursors.SSCursor)
-                    cursor.execute(sql)
+                    cursor.execute(sql, dict(parameters))
                     deadline.check()
                     yield from self._yield_rows(cursor, chunk_size, sensitivity, deadline)
             except SQLQueryTimeoutError:

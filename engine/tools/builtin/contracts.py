@@ -200,6 +200,7 @@ class DataPreviewOutput(ToolOutputModel):
     limit_applied: int = Field(ge=1, le=MAX_PREVIEW_ROWS)
     rows: list[JsonObject]
     safe_sql: str
+    parameters: JsonObject = Field(default_factory=dict, exclude=True)
     truncated: bool
     warnings: list[str] = Field(default_factory=list)
     column_summaries: list[JsonObject] = Field(default_factory=list)

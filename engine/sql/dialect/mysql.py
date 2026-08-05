@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Mapping
 from typing import Any
 
 import pymysql
@@ -26,6 +27,7 @@ def _execute_on_mysql_profiled(
     execution_id: str | None = None,
     *,
     connection_factory: ConnectionFactory | None = None,
+    parameters: Mapping[str, Any] | None = None,
 ) -> QueryExecutionResult:
     """Execute approved SQL via the factory's server-enforced read-only scope."""
 
@@ -69,7 +71,10 @@ def _execute_on_mysql_profiled(
 
                 t_exec_start = time.perf_counter()
                 try:
-                    cursor.execute(safe_sql)
+                    if parameters:
+                        cursor.execute(safe_sql, dict(parameters))
+                    else:
+                        cursor.execute(safe_sql)
                 except pymysql.err.OperationalError as exc:
                     code = exc.args[0] if exc.args else None
                     if execution_id and QUERY_REGISTRY.is_cancelled(execution_id):

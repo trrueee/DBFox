@@ -120,6 +120,6 @@ def test_sqlite_streaming_export_interrupts_a_real_long_running_query() -> None:
     )
     try:
         with pytest.raises(SQLQueryTimeoutError, match="Streaming export timed out"):
-            list(executor._stream_sqlite(object(), sql, 100, object(), _ExportDeadline(1)))
+            list(executor._stream_sqlite(object(), sql, {}, 100, object(), _ExportDeadline(1)))
     finally:
         connection.close()

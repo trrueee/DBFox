@@ -75,7 +75,9 @@ def preview_drafts(
     datasource_generation: int | None,
     output: DataPreviewOutput,
 ) -> tuple[ArtifactDraft, ...]:
-    dialect, fingerprint = _query_identity(db, datasource_id, output.safe_sql)
+    dialect, fingerprint = _query_identity(
+        db, datasource_id, output.safe_sql, output.parameters
+    )
     source = ArtifactDraft(
         key="preview_sql",
         type=ArtifactType.SQL,
@@ -87,6 +89,7 @@ def preview_drafts(
             "safeSql": output.safe_sql,
             "dialect": dialect,
             "queryFingerprint": fingerprint,
+            "parameters": output.parameters,
         },
     )
     result = ArtifactDraft(
@@ -159,13 +162,14 @@ def _query_identity(
     db: Session,
     datasource_id: str,
     sql: str,
+    parameters: dict[str, object] | None = None,
 ) -> tuple[str, str]:
     if not sql.strip():
         return "", ""
     context = DialectContext.from_datasource_id(db, datasource_id)
     return (
         context.sqlglot_dialect,
-        result_source_fingerprint(sql, context.sqlglot_dialect),
+        result_source_fingerprint(sql, context.sqlglot_dialect, parameters),
     )
 
 

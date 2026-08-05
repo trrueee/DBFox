@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 import sqlite3
+from collections.abc import Mapping
 
 from engine.connectivity.factory import ConnectionFactory
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
@@ -21,6 +22,7 @@ def _execute_on_sqlite_profiled(
     execution_id: str | None = None,
     datasource_id: str = "",
     connection_factory: ConnectionFactory | None = None,
+    parameters: Mapping[str, Any] | None = None,
 ) -> QueryExecutionResult:
     """Execute read-only SQLite SQL through the shared connection factory."""
 
@@ -53,7 +55,10 @@ def _execute_on_sqlite_profiled(
 
             t_exec_start = time.perf_counter()
             try:
-                cursor.execute(safe_sql)
+                if parameters:
+                    cursor.execute(safe_sql, dict(parameters))
+                else:
+                    cursor.execute(safe_sql)
             except sqlite3.OperationalError as exc:
                 if execution_id and QUERY_REGISTRY.is_cancelled(execution_id):
                     raise SQLQueryCancelledError("SQL query cancelled by user") from exc

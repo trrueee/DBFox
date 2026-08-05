@@ -11,6 +11,8 @@ def normalize_dialect(dialect_name: str | None) -> str:
         return "postgres"
     if "sqlite" in dialect_lower:
         return "sqlite"
+    if "duckdb" in dialect_lower:
+        return "duckdb"
     return "mysql"
 
 @lru_cache(maxsize=256)

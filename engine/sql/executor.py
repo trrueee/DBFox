@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -109,6 +110,7 @@ def _run_approved_query(
     guard_checks_json: str,
     redact: bool = True,
     expected_connection_generation: int | None = None,
+    parameters: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute safety-approved SQL on the target datasource and record history.
 
@@ -138,13 +140,19 @@ def _run_approved_query(
         _assert_expected_connection_generation(ds, expected_connection_generation)
         profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
         factory = ConnectionFactory()
+        from engine.sql.bound_parameters import render_dbapi_sql
+
+        executable_sql, bound_parameters = render_dbapi_sql(
+            safe_sql, profile.dialect, parameters
+        )
         if profile.dialect == "sqlite":
             execution_result = _execute_on_sqlite_profiled(
-                safe_sql,
+                executable_sql,
                 profile=profile,
                 execution_id=execution_id,
                 datasource_id=datasource_id,
                 connection_factory=factory,
+                parameters=bound_parameters,
             )
         elif profile.dialect == "duckdb":
             from engine.sql.dialect.duckdb import _execute_on_duckdb_profiled
@@ -152,25 +160,28 @@ def _run_approved_query(
             execution_result = _execute_on_duckdb_profiled(
                 datasource_id,
                 profile,
-                safe_sql,
+                executable_sql,
                 execution_id=execution_id,
                 connection_factory=factory,
+                parameters=bound_parameters,
             )
         elif profile.dialect == "postgresql":
             execution_result = _execute_on_postgres_profiled(
                 datasource_id,
                 profile,
-                safe_sql,
+                executable_sql,
                 execution_id=execution_id,
                 connection_factory=factory,
+                parameters=bound_parameters,
             )
         else:
             execution_result = _execute_on_mysql_profiled(
                 datasource_id,
                 profile,
-                safe_sql,
+                executable_sql,
                 execution_id=execution_id,
                 connection_factory=factory,
+                parameters=bound_parameters,
             )
         rows = execution_result.rows
         columns = execution_result.columns
@@ -327,6 +338,7 @@ def execute_query(
     safety_policy: ExecutionPolicy = "readonly",
     redact: bool = True,
     expected_connection_generation: int | None = None,
+    parameters: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     execution_id = execution_id or f"exec-{uuid.uuid4()}"
     QUERY_REGISTRY.reserve(execution_id, datasource_id)
@@ -341,6 +353,7 @@ def execute_query(
             safety_policy=safety_policy,
             redact=redact,
             expected_connection_generation=expected_connection_generation,
+            parameters=parameters,
         )
     finally:
         QUERY_REGISTRY.unregister(execution_id)
@@ -356,6 +369,7 @@ def _execute_reserved_query(
     safety_policy: ExecutionPolicy = "readonly",
     redact: bool = True,
     expected_connection_generation: int | None = None,
+    parameters: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Resolve policy and execute an already-registered query."""
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
@@ -371,6 +385,7 @@ def _execute_reserved_query(
         bypass_guardrail=False,
         safety_decision=safety_decision,
         policy=safety_policy,
+        parameters=parameters,
     )
     guard_res = decision.guardrail
     guardrail_ms = int((time.perf_counter() - t_guard_start) * 1000)
@@ -418,6 +433,7 @@ def _execute_reserved_query(
         guard_checks_json=guard_checks_json,
         redact=redact,
         expected_connection_generation=expected_connection_generation,
+        parameters=parameters,
     )
     result["safetyDecision"] = decision.model_dump(mode="json")
     return result

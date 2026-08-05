@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Mapping
+from typing import Any
 
 from engine.connectivity.factory import ConnectionFactory
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
@@ -23,6 +25,7 @@ def _execute_on_postgres_profiled(
     execution_id: str | None = None,
     *,
     connection_factory: ConnectionFactory | None = None,
+    parameters: Mapping[str, Any] | None = None,
 ) -> QueryExecutionResult:
     """Execute approved SQL through a native read-only factory scope."""
 
@@ -57,7 +60,10 @@ def _execute_on_postgres_profiled(
 
                 t_exec_start = time.perf_counter()
                 try:
-                    cursor.execute(safe_sql)
+                    if parameters:
+                        cursor.execute(safe_sql, dict(parameters))
+                    else:
+                        cursor.execute(safe_sql)
                 except Exception as exc:
                     if execution_id and QUERY_REGISTRY.is_cancelled(execution_id):
                         raise SQLQueryCancelledError("SQL query cancelled by user") from exc

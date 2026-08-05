@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from typing import Any
 
 from engine.connectivity.factory import ConnectionFactory
@@ -19,6 +20,7 @@ def _execute_on_duckdb_profiled(
     execution_id: str | None = None,
     *,
     connection_factory: ConnectionFactory | None = None,
+    parameters: Mapping[str, Any] | None = None,
 ) -> QueryExecutionResult:
     """Execute a guarded DuckDB query on a factory-owned read-only connection.
 
@@ -45,7 +47,10 @@ def _execute_on_duckdb_profiled(
             cursor = conn.cursor()
             t_exec_start = time.perf_counter()
             try:
-                cursor.execute(safe_sql)
+                if parameters:
+                    cursor.execute(safe_sql, dict(parameters))
+                else:
+                    cursor.execute(safe_sql)
             except Exception as exc:
                 if execution_id and QUERY_REGISTRY.is_cancelled(execution_id):
                     raise SQLQueryCancelledError("SQL query cancelled by user") from exc

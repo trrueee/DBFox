@@ -47,29 +47,34 @@ def _normalize_where_op(op: str, dialect: str) -> str:
         return op.replace("ILIKE", "LIKE")
     return op
 
-def build_where_clause(where: dict[str, Any], dialect: str, *, catalog_validated: bool = False) -> str | None:
+def build_where_clause(
+    where: dict[str, Any],
+    dialect: str,
+    *,
+    catalog_validated: bool = False,
+) -> tuple[str | None, dict[str, Any]]:
     """Build a safe WHERE clause, validating columns and operator safety."""
     col = str(where.get("column") or "")
     op = str(where.get("op") or "=").strip().upper()
     value = where.get("value")
     if not col:
-        return None
+        return None, {}
     if op not in _SAFE_OPS:
         raise ValueError(f"Unsafe operator in WHERE clause: {op}")
     op = _normalize_where_op(op, dialect)
     
     safe_col = _safe_or_catalog_identifier(col, dialect, catalog_validated)
     if value is None:
-        return f"{safe_col} IS NULL"
-    if isinstance(value, (int, float)):
-        return f"{safe_col} {op} {value}"
-    if isinstance(value, bool):
-        return f"{safe_col} {op} {1 if value else 0}"
+        return f"{safe_col} IS NULL", {}
+    if op in ("IN", "NOT IN") and not isinstance(value, list):
+        raise ValueError(f"{op} requires a list value")
     if op in ("IN", "NOT IN") and isinstance(value, list):
-        escaped = ", ".join(f"'{str(v).replace(chr(39), chr(39)+chr(39))}'" for v in value)
-        return f"{safe_col} {op} ({escaped})"
-    escaped = str(value).replace("'", "''")
-    return f"{safe_col} {op} '{escaped}'"
+        if not value:
+            raise ValueError(f"{op} requires at least one value")
+        parameters = {f"dbfox_p{index}": item for index, item in enumerate(value)}
+        placeholders = ", ".join(f":{name}" for name in parameters)
+        return f"{safe_col} {op} ({placeholders})", parameters
+    return f"{safe_col} {op} :dbfox_p0", {"dbfox_p0": value}
 
 def build_order_clause(order: dict[str, Any], dialect: str, *, catalog_validated: bool = False) -> str | None:
     """Build a safe ORDER BY expression validating columns."""
@@ -90,7 +95,7 @@ def build_select(
     limit: int | None,
     dialect: str,
     catalog_validated_identifiers: bool = False,
-) -> str:
+) -> tuple[str, dict[str, Any]]:
     """Build a complete SELECT query with strict parameter validation."""
     safe_table = _safe_or_catalog_identifier(table, dialect, catalog_validated_identifiers)
     if not columns:
@@ -103,9 +108,11 @@ def build_select(
     
     sql = f"SELECT {safe_cols} FROM {safe_table}"
     if where:
-        cond = build_where_clause(where, dialect, catalog_validated=catalog_validated_identifiers)
+        cond, parameters = build_where_clause(where, dialect, catalog_validated=catalog_validated_identifiers)
         if cond:
             sql += f" WHERE {cond}"
+    else:
+        parameters = {}
     
     if order:
         if isinstance(order, dict):
@@ -129,4 +136,4 @@ def build_select(
                 
     if limit is not None:
         sql += f" LIMIT {limit}"
-    return sql
+    return sql, parameters

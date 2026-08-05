@@ -105,6 +105,7 @@ class SqlArtifactPayload(BaseModel):
     safe_sql: str = Field(alias="safeSql")
     dialect: str
     query_fingerprint: str = Field(alias="queryFingerprint")
+    parameters: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class SafetyArtifactPayload(BaseModel):

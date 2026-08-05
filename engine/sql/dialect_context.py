@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from engine.models import DataSource
 
 
-SqlDialect = Literal["mysql", "postgresql", "sqlite"]
+SqlDialect = Literal["mysql", "postgresql", "sqlite", "duckdb"]
 
 
 def canonical_sql_dialect(value: str | None) -> SqlDialect:
@@ -17,6 +17,8 @@ def canonical_sql_dialect(value: str | None) -> SqlDialect:
         return "postgresql"
     if raw == "sqlite":
         return "sqlite"
+    if raw == "duckdb":
+        return "duckdb"
     return "mysql"
 
 

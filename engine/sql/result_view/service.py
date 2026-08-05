@@ -64,11 +64,22 @@ class ResultViewService:
 
         payload = _artifact_payload(source)
         persisted_safe_sql = _safe_sql_from_payload(payload)
+        parameters = _parameters_from_payload(payload)
         if not persisted_safe_sql:
             raise ResultViewError("SOURCE_SQL_MISSING", "Source artifact does not contain safe SQL.")
 
         artifact_dialect = str(payload.get("dialect") or ctx.dialect)
-        persisted_fp = _artifact_fingerprint(payload, persisted_safe_sql, artifact_dialect)
+        persisted_fp = _artifact_fingerprint(
+            payload, persisted_safe_sql, artifact_dialect, parameters
+        )
+        computed_fp = result_source_fingerprint(
+            persisted_safe_sql, artifact_dialect, parameters
+        )
+        if persisted_fp != computed_fp:
+            raise ResultViewError(
+                "SOURCE_SQL_MISMATCH",
+                "Source SQL artifact fingerprint does not match its bound query.",
+            )
         descriptor = _artifact_payload(result)
         descriptor_fp = str(descriptor.get("queryFingerprint") or "").strip()
         if descriptor_fp and persisted_fp != descriptor_fp:
@@ -87,6 +98,7 @@ class ResultViewService:
             datasource_id=datasource_id,
             source_sql_artifact_id=str(source.id),
             safe_sql=persisted_safe_sql,
+            parameters=parameters,
             dialect=artifact_dialect,
             columns=columns,
             fingerprint=persisted_fp,
@@ -237,13 +249,14 @@ class ResultViewService:
         ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
         page_sql = self.compiler.build_page_sql(query, source, ctx)
         self._validate_derived_sql(page_sql, ctx)
-        page_decision = self._result_view_decision(source.datasource_id, source.safe_sql, page_sql, scope="page")
+        page_decision = self._result_view_decision(source.datasource_id, source.safe_sql, page_sql, scope="page", parameters=source.parameters)
         res = self._execute_query(
             self.db,
             source.datasource_id,
             page_sql,
             safety_decision=page_decision,
             safety_policy="readonly",
+            parameters=source.parameters,
         )
 
         rows = list(res.get("rows") or [])
@@ -266,6 +279,7 @@ class ResultViewService:
                     count_sql,
                     safety_decision=count_decision,
                     safety_policy="readonly",
+                    parameters=source.parameters,
                 )
                 count_rows = list(count_res.get("rows") or [])
                 if count_rows and count_rows[0]:
@@ -302,12 +316,13 @@ class ResultViewService:
         ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
         export_sql = self.compiler.build_export_sql(query, source, ctx)
         self._validate_derived_sql(export_sql, ctx)
-        decision = self._result_view_decision(source.datasource_id, source.safe_sql, export_sql, scope="export")
+        decision = self._result_view_decision(source.datasource_id, source.safe_sql, export_sql, scope="export", parameters=source.parameters)
         columns = source.column_names
         rows = self.streaming_executor.stream_rows(
             source.datasource_id,
             export_sql,
             decision,
+            parameters=source.parameters,
             chunk_size=chunk_size,
         )
         return CsvExportService.stream_csv(rows, columns), columns
@@ -335,6 +350,7 @@ class ResultViewService:
             source.safe_sql,
             source.safe_sql,
             scope="chart",
+            parameters=source.parameters,
         )
         rows: list[dict[str, Any]] = []
         truncated = False
@@ -342,6 +358,7 @@ class ResultViewService:
             source.datasource_id,
             source.safe_sql,
             decision,
+            parameters=source.parameters,
             chunk_size=min(max_rows + 1, 1_000),
         )
         try:
@@ -450,6 +467,7 @@ class ResultViewService:
         safe_sql: str,
         *,
         scope: str,
+        parameters: dict[str, Any] | None = None,
     ) -> ExecutionSafetyDecision:
         guardrail: GuardrailResult = {
             "result": "pass",
@@ -458,6 +476,7 @@ class ResultViewService:
             "checks": [],
             "message": "Result view SQL derived from persisted safe SQL artifact.",
         }
+        from engine.sql.bound_parameters import parameter_fingerprint
         return ExecutionSafetyDecision(
             datasource_id=datasource_id,
             policy="export" if scope == "export" else "readonly",
@@ -470,6 +489,7 @@ class ResultViewService:
             schema_warnings=[],
             scope_state={"source": f"result_view:{scope}"},
             messages=[],
+            parameter_fingerprint=parameter_fingerprint(parameters),
         )
 
 
@@ -540,11 +560,21 @@ def _normalize_result_column_name(column: str) -> str:
     return column.strip().strip('`"[]').lower()
 
 
-def _artifact_fingerprint(payload: dict[str, object], safe_sql: str, dialect: str) -> str:
+def _artifact_fingerprint(
+    payload: dict[str, object],
+    safe_sql: str,
+    dialect: str,
+    parameters: dict[str, Any] | None = None,
+) -> str:
     raw = payload.get("queryFingerprint")
     if isinstance(raw, str) and raw.strip():
         return raw.strip()
-    return result_source_fingerprint(safe_sql, dialect)
+    return result_source_fingerprint(safe_sql, dialect, parameters)
+
+
+def _parameters_from_payload(payload: dict[str, object]) -> dict[str, Any]:
+    raw = payload.get("parameters")
+    return dict(raw) if isinstance(raw, dict) else {}
 
 
 def _qualified_table_identifier(schema: str | None, table: str, dialect: str) -> str:

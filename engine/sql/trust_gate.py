@@ -53,6 +53,7 @@ class ExecutionSafetyDecision(BaseModel):
     scope_state: dict[str, Any] = Field(default_factory=dict)
     blocked_reasons: list[str] = Field(default_factory=list)
     messages: list[str] = Field(default_factory=list)
+    parameter_fingerprint: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -135,6 +136,7 @@ class TrustGate:
         datasource_id: str,
         sql: str,
         policy: ExecutionPolicy = "readonly",
+        parameters: Mapping[str, Any] | None = None,
     ) -> ExecutionSafetyDecision:
         datasource = self.db.query(DataSource).filter(DataSource.id == datasource_id).first()
         trust_gate = self.evaluate(datasource_id, sql, policy=policy, datasource=datasource)
@@ -175,7 +177,9 @@ class TrustGate:
             and candidate_safe_sql
         ):
             try:
-                dry_run = dry_run_query(self.db, datasource_id, candidate_safe_sql)
+                dry_run = dry_run_query(
+                    self.db, datasource_id, candidate_safe_sql, parameters=parameters
+                )
             except Exception as exc:
                 dry_run = None
                 messages.append(f"EXPLAIN dry-run warning (execution allowed): {exc}")
@@ -193,6 +197,8 @@ class TrustGate:
         blocked_reasons = list(dict.fromkeys(blocked_reasons))
         can_execute = not blocked_reasons
         safe_sql = candidate_safe_sql if can_execute else None
+
+        from engine.sql.bound_parameters import parameter_fingerprint
 
         return ExecutionSafetyDecision(
             datasource_id=datasource_id,
@@ -215,6 +221,7 @@ class TrustGate:
             },
             blocked_reasons=blocked_reasons,
             messages=messages,
+            parameter_fingerprint=parameter_fingerprint(parameters),
         )
 
 
