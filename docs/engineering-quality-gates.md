@@ -4,11 +4,16 @@
 
 1. Python 编译、生产代码 mypy、全仓 Python pyflakes、空数据库 Alembic upgrade/check；
 2. 不依赖外部服务或真实 LLM 凭据的核心后端与 Agent 运行时回归；
-3. 在独立 `.build_venv` 中执行完整 PyInstaller sidecar 构建；
-4. 前端的 `npm ci`、ESLint、Vitest、TypeScript/Vite build；
-5. Rust 的锁文件验证、fmt、Clippy（警告即失败）和单元测试。
+3. 使用 `.sidecar-python-version` 指定的生产解释器，重新运行完整确定性后端合同；
+4. 在独立 `.build_venv` 中执行完整 PyInstaller sidecar 构建；
+5. 前端的 `npm ci`、ESLint、Vitest、TypeScript/Vite build；
+6. Rust 的锁文件验证、fmt、Clippy（警告即失败）和单元测试。
 
 CI 只授予 `contents: read`，每个第三方 GitHub Action 固定到完整提交 SHA，且 checkout 不保留凭据。真实 LLM、外部集成和端到端测试保留给受控环境，不作为普通 PR 的隐式依赖。
+
+`production-python-compatibility` 使用 `requirements-dev.lock` 提供测试工具，但与生产
+Sidecar 的 `.build_venv` 完全分离。这样既能证明生产解释器可运行完整确定性合同，也不会
+把 pytest、mypy 等开发依赖带入 Frozen Sidecar。
 
 ## 本地执行
 

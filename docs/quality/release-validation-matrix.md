@@ -13,6 +13,7 @@
 | PyInstaller Engine Sidecar | 必须 | 必须 | 必须 |
 | Frontend TypeScript/Vite build | 必须 | 必须 | 必须 |
 | Tauri Rust compile (`--no-bundle`) | 必须 | 必须 | 必须 |
+| Tauri GUI 启动与主流程 smoke | 发布候选 | 发布候选 | 发布候选 |
 | OS 原生 Keyring 实机检查 | 发布候选 | 发布候选 | 发布候选 |
 | 安装、覆盖升级、卸载 | 发布候选 | 发布候选 | 发布候选 |
 | Sidecar crash / sleep-resume / 端口重占用 | 发布候选 | 发布候选 | 发布候选 |
@@ -30,6 +31,10 @@ Schema、只读查询、Result Artifact、耐久多 Run 和重启重载；runtim
 
 截至 2026-08-04 的本地证据仅覆盖 Windows x64；macOS/Linux 的结论必须以对应
 远程 Runner 结果另行更新，当前文档不声称这两个平台已通过。
+
+当前自动门禁尚未包含 Tauri GUI WebDriver。Rust 编译、Frozen Sidecar smoke 和前端
+组件测试不能替代真实 WebView 启动证据；在经过独立依赖安全审查的 GUI 自动化落地前，
+该项继续由发布候选人工证据覆盖，不得据此声称已自动验证。
 
 供应链门禁由 `scripts/dependency_governance.py` 执行：
 

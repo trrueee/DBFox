@@ -72,6 +72,8 @@ def test_ci_enforces_the_required_layered_quality_gates() -> None:
         "python -m mypy --no-warn-unused-configs --follow-imports=skip",
         "engine build_sidecar.py",
         "python -m pytest engine/agent/tests",
+        "production-python-compatibility:",
+        "Run all deterministic backend contracts on the production interpreter",
         "build_sidecar.py",
         "npm run lint",
         "npm test -- --maxWorkers=1",
@@ -174,7 +176,7 @@ def test_ci_installs_only_hash_checked_python_locks() -> None:
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
     assert "PIP_REQUIRE_HASHES: \"1\"" in workflow
-    assert workflow.count("--require-hashes -r requirements-dev.lock") == 5
+    assert workflow.count("--require-hashes -r requirements-dev.lock") == 6
     assert "uv pip sync requirements-dev.lock" in workflow
     assert "python-version-file: .sidecar-python-version" in workflow
     assert "SIDECAR_PYTHON_VERSION" not in workflow
@@ -188,7 +190,7 @@ def test_sidecar_build_uses_one_exact_python_version_source() -> None:
     builder = (ROOT / "build_sidecar.py").read_text(encoding="utf-8")
 
     assert re.fullmatch(r"\d+\.\d+\.\d+", version)
-    assert workflow.count("python-version-file: .sidecar-python-version") == 2
+    assert workflow.count("python-version-file: .sidecar-python-version") == 3
     assert version not in workflow
     assert "SIDECAR_PYTHON_VERSION_PATH" in builder
 

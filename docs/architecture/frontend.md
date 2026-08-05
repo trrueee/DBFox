@@ -247,7 +247,8 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 - security：CSP、sanitize、外部导航、secret-safe error；
 - engineering：TypeScript、ESLint、production build、bundle budget。
 
-最后一次完整回归为 68 files / 341 tests passed；production build 和 bundle budget 通过。
+具体通过数量会随测试增长而变化，不在架构事实文档中固化。当前结果以绑定 commit 的 CI
+记录为准；权威命令和门禁范围见 `docs/engineering-quality-gates.md`。
 
 ## 14. 关键文件
 

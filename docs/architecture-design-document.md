@@ -327,18 +327,14 @@ Python sidecar 由 `build_sidecar.py` 构建，前端由 TypeScript/Vite 构建�
 - Windows/macOS/Linux 候选构建矩阵；
 - Alembic 单一 head 与完整迁移链测试。
 
-本机当前只有 Windows GNU Rust toolchain 且缺 `dlltool.exe`，而项目要求 Windows MSVC。因此本机不能提供最终 Tauri Clippy/test 发布证据；正确做法是由 Windows MSVC CI 验证，不放宽工具链契约。
+Windows 打包只接受 `x86_64-pc-windows-msvc`；GNU target 不作为失败回退。具体候选版本的
+Clippy、test 与 Tauri 构建结论必须来自绑定 commit 的 Windows MSVC 本地或 CI 证据。
 
 ## 14. 测试与当前证据
 
-最后一次完整回归：
-
-- Backend：881 passed，2 skipped；
-- Frontend：68 files / 341 tests passed；
-- mypy：250 source files / 0 issues；
-- ESLint、production build、bundle budget：通过；
-- Alembic：单一 head `c2d3e4f5a608`；
-- `git diff --check`：通过。
+架构事实文档不固化会随提交增长的测试数量。可审计证据必须绑定具体 commit、CI
+workflow/job 和原始输出；权威命令与分层门禁见 `docs/engineering-quality-gates.md`，
+发布候选的跨平台证据要求见 `docs/quality/release-validation-matrix.md`。
 
 测试覆盖正常路径、事务并发、lease fencing、事件 gap、provider contract、取消、工具预算、Artifact 数据边界、CSP、前端 reducer、Activity/Approval/Result 交互和供应链合同。
 
