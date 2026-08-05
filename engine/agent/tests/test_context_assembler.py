@@ -5,11 +5,17 @@ import json
 from engine.agent.context import ContextAssembler
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.session import DeliveryMode
-from engine.models import AgentArtifactRecord, AgentMessage, AgentSession
+from engine.models import AgentArtifactRecord, AgentMessage, AgentRun, AgentSession
 
 
-def test_next_run_reads_durable_history_and_selected_artifact(db_session, test_datasource) -> None:
-    db_session.add(AgentSession(id="session_context", datasource_id=str(test_datasource.id), title="Context"))
+def test_next_run_reads_durable_history_and_selected_artifact(
+    db_session, test_datasource
+) -> None:
+    db_session.add(
+        AgentSession(
+            id="session_context", datasource_id=str(test_datasource.id), title="Context"
+        )
+    )
     db_session.commit()
     repository = SessionRepository(db_session)
     first = repository.admit(
@@ -34,12 +40,14 @@ def test_next_run_reads_durable_history_and_selected_artifact(db_session, test_d
         semantic_id="orders-count",
         type="result_view",
         title="订单数量",
-        payload_json=json.dumps({
-            "sourceSqlArtifactId": "artifact_sql_42",
-            "queryFingerprint": "query-42",
-            "rowCount": 1,
-            "previewRows": [{"secret": "sensitive-cell-value"}],
-        }),
+        payload_json=json.dumps(
+            {
+                "sourceSqlArtifactId": "artifact_sql_42",
+                "queryFingerprint": "query-42",
+                "rowCount": 1,
+                "previewRows": [{"secret": "sensitive-cell-value"}],
+            }
+        ),
         presentation_json="{}",
         refs_json="{}",
         provenance_json="{}",
@@ -83,11 +91,17 @@ def test_next_run_reads_durable_history_and_selected_artifact(db_session, test_d
     assert snapshot.hash == ContextAssembler(db_session).build(second.run_id).hash
 
 
-def test_context_never_resolves_artifact_from_another_session(db_session, test_datasource) -> None:
+def test_context_never_resolves_artifact_from_another_session(
+    db_session, test_datasource
+) -> None:
     db_session.add_all(
         [
-            AgentSession(id="session_a", datasource_id=str(test_datasource.id), title="A"),
-            AgentSession(id="session_b", datasource_id=str(test_datasource.id), title="B"),
+            AgentSession(
+                id="session_a", datasource_id=str(test_datasource.id), title="A"
+            ),
+            AgentSession(
+                id="session_b", datasource_id=str(test_datasource.id), title="B"
+            ),
         ]
     )
     db_session.commit()
@@ -139,11 +153,13 @@ def test_context_never_resolves_artifact_from_another_session(db_session, test_d
 def test_context_includes_consumed_steer_without_leaking_queued_input(
     db_session, test_datasource
 ) -> None:
-    db_session.add(AgentSession(
-        id="session_steer_context",
-        datasource_id=str(test_datasource.id),
-        title="Steer context",
-    ))
+    db_session.add(
+        AgentSession(
+            id="session_steer_context",
+            datasource_id=str(test_datasource.id),
+            title="Steer context",
+        )
+    )
     db_session.commit()
     repository = SessionRepository(db_session)
     active = repository.admit(
@@ -194,3 +210,59 @@ def test_context_includes_consumed_steer_without_leaking_queued_input(
         "分析所有地区的退款率\n\nIn-run user responses:\n补充：只看华东区"
     )
     assert "下一项任务：分析客单价" not in snapshot.current_request
+
+
+def test_next_run_receives_failed_outcome_without_failed_assistant_draft(
+    db_session,
+    test_datasource,
+) -> None:
+    db_session.add(
+        AgentSession(
+            id="session_failed_context",
+            datasource_id=str(test_datasource.id),
+            title="Failed context",
+        )
+    )
+    db_session.commit()
+    repository = SessionRepository(db_session)
+    first = repository.admit(
+        session_id="session_failed_context",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="分析数据库",
+        idempotency_key="failed-first",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    failed_run = db_session.get(AgentRun, first.run_id)
+    failed_run.status = "failed"
+    failed_run.error_code = "AGENT_NO_PROGRESS"
+    failed_run.error_message = "private provider payload must not be reused"
+    failed_draft = db_session.get(AgentMessage, first.assistant_message_id)
+    failed_draft.content = "我正在猜测一个尚未验证的结论。"
+    failed_draft.status = "failed"
+    db_session.commit()
+
+    second = repository.admit(
+        session_id="session_failed_context",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="为什么会失败？",
+        idempotency_key="failed-second",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    db_session.commit()
+
+    snapshot = ContextAssembler(db_session).build(second.run_id)
+
+    assert snapshot.previous_run_outcome["status"] == "failed"
+    assert snapshot.previous_run_outcome["error_code"] == "AGENT_NO_PROGRESS"
+    assert "连续多轮" in snapshot.previous_run_outcome["public_message"]
+    rendered = json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False)
+    assert "private provider payload" not in rendered
+    assert "我正在猜测一个尚未验证的结论" not in rendered

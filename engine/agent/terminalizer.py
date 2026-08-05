@@ -32,6 +32,7 @@ from engine.agent.response import (
 from engine.agent.session import SessionLease
 from engine.agent.plan import PlanStatus
 from engine.agent.turn import ModelTurnResult
+from engine.app.safe_errors import fixed_error_detail
 
 
 class Terminalizer:
@@ -57,11 +58,11 @@ class Terminalizer:
         with self.session_factory() as db:
             partial = disposition is CompletionDisposition.BOUNDED_PARTIAL
             artifacts = ArtifactRepository(db).list_for_run(run_id)
-            result_artifacts = [item for item in artifacts if item.type is ArtifactType.RESULT_VIEW]
+            result_artifacts = [
+                item for item in artifacts if item.type is ArtifactType.RESULT_VIEW
+            ]
             final_text = (
-                result.answer_text
-                if result.has_completed_answer_candidate
-                else ""
+                result.answer_text if result.has_completed_answer_candidate else ""
             )
             text = final_text or (
                 "分析已完成，但仅得到部分结果。" if partial else "分析已完成。"
@@ -77,7 +78,8 @@ class Terminalizer:
                 bound_artifact_ids = [result_artifacts[-1].id]
             cited_ids = {item_id for item_id, _, _ in references}
             missing_citations = [
-                artifact_id for artifact_id in bound_artifact_ids
+                artifact_id
+                for artifact_id in bound_artifact_ids
                 if artifact_id not in cited_ids
             ]
             if missing_citations:
@@ -91,7 +93,9 @@ class Terminalizer:
             )
             references = citation_references(text)
             evidence = []
-            for citation_index, (artifact_id, start, end) in enumerate(references, start=1):
+            for citation_index, (artifact_id, start, end) in enumerate(
+                references, start=1
+            ):
                 item = result_by_id[artifact_id]
                 claim = str(
                     _claim_text_for_citation(text, start, end)
@@ -105,27 +109,32 @@ class Terminalizer:
                     "answer_start": start,
                     "answer_end": end,
                 }
-                evidence.append(Evidence(
-                    id=f"evidence_{uuid4().hex}",
-                    session_id=lease.session_id,
-                    run_id=run_id,
-                    claim_id=f"claim:{run_id}:{citation_index}:{item.id}",
-                    artifact_id=item.id,
-                    label=claim,
-                    query_fingerprint=str(item.payload.get("queryFingerprint") or ""),
-                    observed_at=_observed_at(item.payload.get("executedAt")),
-                    locator=EvidenceLocator(
-                        kind="artifact",
-                        value=locator_value,
-                    ),
-                    value=None,
-                ))
+                evidence.append(
+                    Evidence(
+                        id=f"evidence_{uuid4().hex}",
+                        session_id=lease.session_id,
+                        run_id=run_id,
+                        claim_id=f"claim:{run_id}:{citation_index}:{item.id}",
+                        artifact_id=item.id,
+                        label=claim,
+                        query_fingerprint=str(
+                            item.payload.get("queryFingerprint") or ""
+                        ),
+                        observed_at=_observed_at(item.payload.get("executedAt")),
+                        locator=EvidenceLocator(
+                            kind="artifact",
+                            value=locator_value,
+                        ),
+                        value=None,
+                    )
+                )
             answer = AnswerCandidate(
                 text=text,
                 evidence=evidence,
                 caveats=(
                     [_limitation_caveat(code) for code in limitation_codes]
-                    if partial else []
+                    if partial
+                    else []
                 ),
             )
             suggestion = (
@@ -133,7 +142,8 @@ class Terminalizer:
                     artifact_id=result_artifacts[-1].id,
                     reason="本次分析的主要查询结果",
                 )
-                if result_artifacts else None
+                if result_artifacts
+                else None
             )
             response = self.responses.compose(
                 session_id=lease.session_id,
@@ -155,13 +165,11 @@ class Terminalizer:
                 ),
                 plan_status=PlanStatus.PARTIAL if partial else PlanStatus.COMPLETED,
                 memory_delta={
-                    "verified_claims": [
+                    "evidence_references": [
                         {
-                            "claim_id": item.claim_id,
-                            "claim": item.label,
+                            "evidence_id": item.id,
                             "artifact_id": item.artifact_id,
                             "query_fingerprint": item.query_fingerprint,
-                            "locator": item.locator.model_dump(mode="json"),
                             "observed_at": item.observed_at.isoformat(),
                             "run_id": run_id,
                         }
@@ -184,7 +192,9 @@ class Terminalizer:
         """Atomically settle the Plan and persist the canonical terminal response."""
 
         if plan_status not in {PlanStatus.COMPLETED, PlanStatus.PARTIAL}:
-            raise ValueError("Successful Run terminalization requires a completed or partial Plan")
+            raise ValueError(
+                "Successful Run terminalization requires a completed or partial Plan"
+            )
         PlanRepository(db).terminalize(
             lease=lease,
             run_id=response.run_id,
@@ -239,6 +249,7 @@ class Terminalizer:
     ) -> None:
         """Atomically settle every durable child before failing a Run."""
 
+        public_error = fixed_error_detail(code)
         ApprovalRepository(db).cancel_pending_for_run(
             lease=lease,
             run_id=run_id,
@@ -255,13 +266,13 @@ class Terminalizer:
             lease=lease,
             run_id=run_id,
             status=PlanStatus.FAILED,
-            summary=message,
+            summary=public_error["message"],
         )
         RunRepository(db).fail(
             lease=lease,
             run_id=run_id,
-            error_code=code,
-            message=message,
+            error_code=public_error["code"],
+            message=public_error["message"],
         )
 
     def fail(self, lease: SessionLease, run_id: str, code: str, message: str) -> None:
@@ -269,11 +280,15 @@ class Terminalizer:
             self.fail_in_session(db, lease, run_id, code, message)
             db.commit()
 
+
 def _claim_text_for_citation(text: str, start: int, end: int) -> str:
-    left = max(
-        text.rfind(marker, 0, start)
-        for marker in ("\n", "。", "！", "？", ".", "!", "?")
-    ) + 1
+    left = (
+        max(
+            text.rfind(marker, 0, start)
+            for marker in ("\n", "。", "！", "？", ".", "!", "?")
+        )
+        + 1
+    )
     right_candidates = [
         position
         for marker in ("\n", "。", "！", "？", ".", "!", "?")

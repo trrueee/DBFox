@@ -54,6 +54,20 @@ class FixedErrorCode(str, Enum):
     SQL_SEMANTIC_PARSE_FAILED = "SQL_SEMANTIC_PARSE_FAILED"
     TEST_DATA_FAILED = "TEST_DATA_FAILED"
     AGENT_CONTEXT_UNAVAILABLE = "AGENT_CONTEXT_UNAVAILABLE"
+    AGENT_CANCELLED = "AGENT_CANCELLED"
+    AGENT_LEASE_LOST = "AGENT_LEASE_LOST"
+    AGENT_USAGE_UNAVAILABLE = "AGENT_USAGE_UNAVAILABLE"
+    AGENT_TOKEN_BUDGET = "AGENT_TOKEN_BUDGET"
+    AGENT_COST_PRICING_UNAVAILABLE = "AGENT_COST_PRICING_UNAVAILABLE"
+    AGENT_COST_BUDGET = "AGENT_COST_BUDGET"
+    AGENT_PROVIDER_RETRY_BUDGET = "AGENT_PROVIDER_RETRY_BUDGET"
+    AGENT_REPAIR_BUDGET = "AGENT_REPAIR_BUDGET"
+    AGENT_DEADLINE_EXCEEDED = "AGENT_DEADLINE_EXCEEDED"
+    AGENT_INCOMPLETE = "AGENT_INCOMPLETE"
+    AGENT_TURN_BUDGET = "AGENT_TURN_BUDGET"
+    AGENT_TOOL_BUDGET = "AGENT_TOOL_BUDGET"
+    AGENT_NO_PROGRESS = "AGENT_NO_PROGRESS"
+    AGENT_QUESTION_EXPIRED = "AGENT_QUESTION_EXPIRED"
     CONNECTION_FAILED = "CONNECTION_FAILED"
     GUARDRAIL_BLOCKED = "GUARDRAIL_BLOCKED"
     SQL_QUERY_TIMEOUT = "SQL_QUERY_TIMEOUT"
@@ -132,6 +146,20 @@ _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
     FixedErrorCode.SQL_SEMANTIC_PARSE_FAILED: "SQL could not be parsed.",
     FixedErrorCode.TEST_DATA_FAILED: "Test data could not be generated.",
     FixedErrorCode.AGENT_CONTEXT_UNAVAILABLE: "Agent context is temporarily unavailable.",
+    FixedErrorCode.AGENT_CANCELLED: "分析已取消。",
+    FixedErrorCode.AGENT_LEASE_LOST: "分析执行权已转移。",
+    FixedErrorCode.AGENT_USAGE_UNAVAILABLE: "模型未返回可核算的用量信息。",
+    FixedErrorCode.AGENT_TOKEN_BUDGET: "分析已达到本次 Token 预算。",
+    FixedErrorCode.AGENT_COST_PRICING_UNAVAILABLE: "当前模型未配置可核算价格。",
+    FixedErrorCode.AGENT_COST_BUDGET: "分析已达到本次费用预算。",
+    FixedErrorCode.AGENT_PROVIDER_RETRY_BUDGET: "模型服务连续失败，已停止重试。",
+    FixedErrorCode.AGENT_REPAIR_BUDGET: "分析修复次数已达到上限。",
+    FixedErrorCode.AGENT_DEADLINE_EXCEEDED: "分析已达到本次运行时限。",
+    FixedErrorCode.AGENT_INCOMPLETE: "模型未能完成当前分析。",
+    FixedErrorCode.AGENT_TURN_BUDGET: "分析已达到轮次上限。",
+    FixedErrorCode.AGENT_TOOL_BUDGET: "工具调用已达到本次分析上限。",
+    FixedErrorCode.AGENT_NO_PROGRESS: "连续多轮没有产生新的可验证结果，已停止重复尝试。",
+    FixedErrorCode.AGENT_QUESTION_EXPIRED: "等待补充信息已超时，请重新发起分析。",
     FixedErrorCode.CONNECTION_FAILED: "The datasource connection could not be established.",
     FixedErrorCode.GUARDRAIL_BLOCKED: "The requested SQL operation was blocked by the safety policy.",
     FixedErrorCode.SQL_QUERY_TIMEOUT: "The SQL query exceeded its execution deadline.",

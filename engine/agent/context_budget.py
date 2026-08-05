@@ -46,6 +46,7 @@ class ContextSegmentKind(StrEnum):
     SYSTEM = "system"
     CURRENT_REQUEST = "current_request"
     RUN_FOCUS = "run_focus"
+    PREVIOUS_RUN_OUTCOME = "previous_run_outcome"
     SELECTED_ARTIFACT = "selected_artifact"
     WORKSPACE_CONTEXT = "workspace_context"
     SESSION_MEMORY = "session_memory"
@@ -57,6 +58,7 @@ class ContextPriority(IntEnum):
     SYSTEM = 1_000
     CURRENT_REQUEST = 950
     RUN_FOCUS = 875
+    PREVIOUS_RUN_OUTCOME = 865
     SELECTED_ARTIFACT = 850
     WORKSPACE_CONTEXT = 840
     FACTUAL_CONTEXT = 775

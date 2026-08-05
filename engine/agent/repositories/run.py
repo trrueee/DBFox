@@ -121,7 +121,9 @@ class RunRepository:
                     event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
                     run_id=str(run.id),
                     turn_id=str(run.current_turn_id) if run.current_turn_id else None,
-                    payload={"item": dump_run_item(final_answer_item(assistant, run=run))},
+                    payload={
+                        "item": dump_run_item(final_answer_item(assistant, run=run))
+                    },
                 )
         self.sessions.events.append(
             lease=lease,
@@ -155,7 +157,9 @@ class RunRepository:
         if turn.status != "running":
             raise ValueError(f"Turn cannot settle from status {turn.status}")
         turn.reasoning_summary = result.reasoning_summary
-        turn.tool_calls_json = _json([item.model_dump(mode="json") for item in result.tool_calls])
+        turn.tool_calls_json = _json(
+            [item.model_dump(mode="json") for item in result.tool_calls]
+        )
         turn.response_items_json = _json(result.output_items)
         turn.usage_json = _json(result.usage)
         turn.termination = result.termination.value if result.termination else None
@@ -163,8 +167,12 @@ class RunRepository:
         turn.error_message = error_message
         turn.status = "failed" if error_code else "completed"
         turn.completed_at = _utcnow()
-        run.consumed_input_tokens = int(run.consumed_input_tokens or 0) + max(0, input_tokens)
-        run.consumed_output_tokens = int(run.consumed_output_tokens or 0) + max(0, output_tokens)
+        run.consumed_input_tokens = int(run.consumed_input_tokens or 0) + max(
+            0, input_tokens
+        )
+        run.consumed_output_tokens = int(run.consumed_output_tokens or 0) + max(
+            0, output_tokens
+        )
         run.consumed_tokens = int(run.consumed_tokens or 0) + max(0, total_tokens)
         run.consumed_cost_usd = float(run.consumed_cost_usd or 0.0) + max(0.0, cost_usd)
         if error_code and error_code.startswith("MODEL_PROVIDER_"):
@@ -198,30 +206,46 @@ class RunRepository:
             select(AgentRun).where(AgentRun.id == run_id).with_for_update()
         ).scalar_one()
         self._require_lease(run, lease)
-        turns = self.session.execute(
-            select(AgentTurn).where(
-                AgentTurn.run_id == run_id,
-                AgentTurn.status == "running",
-            ).order_by(AgentTurn.sequence).with_for_update()
-        ).scalars().all()
+        turns = (
+            self.session.execute(
+                select(AgentTurn)
+                .where(
+                    AgentTurn.run_id == run_id,
+                    AgentTurn.status == "running",
+                )
+                .order_by(AgentTurn.sequence)
+                .with_for_update()
+            )
+            .scalars()
+            .all()
+        )
         if not turns:
             return 0
         now = _utcnow()
         for turn in turns:
-            active_messages = self.session.execute(
-                select(AgentRunItemRecord).where(
-                    AgentRunItemRecord.turn_id == str(turn.id),
-                    AgentRunItemRecord.item_type == RunItemType.MESSAGE.value,
-                    AgentRunItemRecord.status == RunItemStatus.IN_PROGRESS.value,
-                ).order_by(AgentRunItemRecord.sequence).with_for_update()
-            ).scalars().all()
+            active_messages = (
+                self.session.execute(
+                    select(AgentRunItemRecord)
+                    .where(
+                        AgentRunItemRecord.turn_id == str(turn.id),
+                        AgentRunItemRecord.item_type == RunItemType.MESSAGE.value,
+                        AgentRunItemRecord.status == RunItemStatus.IN_PROGRESS.value,
+                    )
+                    .order_by(AgentRunItemRecord.sequence)
+                    .with_for_update()
+                )
+                .scalars()
+                .all()
+            )
             for record in active_messages:
                 item = MessageItem.model_validate(loads(str(record.item_json or "{}")))
-                cancelled = item.model_copy(update={
-                    "revision": int(item.revision) + 1,
-                    "status": RunItemStatus.CANCELLED,
-                    "completed_at": now,
-                })
+                cancelled = item.model_copy(
+                    update={
+                        "revision": int(item.revision) + 1,
+                        "status": RunItemStatus.CANCELLED,
+                        "completed_at": now,
+                    }
+                )
                 self.sessions.events.append(
                     lease=lease,
                     event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
@@ -268,7 +292,8 @@ class RunRepository:
         created_at = existing.created_at if existing is not None else now
         completed_at = (
             now
-            if status in {
+            if status
+            in {
                 RunItemStatus.COMPLETED,
                 RunItemStatus.FAILED,
                 RunItemStatus.CANCELLED,
@@ -317,42 +342,53 @@ class RunRepository:
         """Restore the latest eligible answer from canonical Turn and RunItem state."""
 
         turn = self.session.execute(
-            select(AgentTurn).where(
+            select(AgentTurn)
+            .where(
                 AgentTurn.run_id == run_id,
                 AgentTurn.status == "completed",
                 AgentTurn.error_code.is_(None),
                 AgentTurn.tool_calls_json == "[]",
                 AgentTurn.termination == TurnTermination.COMPLETED.value,
-            ).order_by(AgentTurn.sequence.desc()).limit(1)
+            )
+            .order_by(AgentTurn.sequence.desc())
+            .limit(1)
         ).scalar_one_or_none()
         if turn is None:
             return ModelTurnResult()
         prefix = f"message:{run_id}:{turn.id}:"
-        records = self.session.execute(
-            select(AgentRunItemRecord).where(
-                AgentRunItemRecord.run_id == run_id,
-                AgentRunItemRecord.turn_id == str(turn.id),
-                AgentRunItemRecord.item_type == RunItemType.MESSAGE.value,
-                AgentRunItemRecord.status == RunItemStatus.COMPLETED.value,
-            ).order_by(AgentRunItemRecord.sequence)
-        ).scalars().all()
+        records = (
+            self.session.execute(
+                select(AgentRunItemRecord)
+                .where(
+                    AgentRunItemRecord.run_id == run_id,
+                    AgentRunItemRecord.turn_id == str(turn.id),
+                    AgentRunItemRecord.item_type == RunItemType.MESSAGE.value,
+                    AgentRunItemRecord.status == RunItemStatus.COMPLETED.value,
+                )
+                .order_by(AgentRunItemRecord.sequence)
+            )
+            .scalars()
+            .all()
+        )
         messages: list[TurnAssistantMessage] = []
         for record in records:
             if not str(record.id).startswith(prefix):
                 continue
-            output_index_text = str(record.id)[len(prefix):]
+            output_index_text = str(record.id)[len(prefix) :]
             if not output_index_text.isdigit():
                 continue
             item = MessageItem.model_validate(loads(str(record.item_json or "{}")))
             if item.payload.role != "assistant":
                 continue
-            messages.append(TurnAssistantMessage(
-                item_id=str(record.id),
-                output_index=int(output_index_text),
-                phase=item.payload.phase,
-                status="completed",
-                text=item.payload.content,
-            ))
+            messages.append(
+                TurnAssistantMessage(
+                    item_id=str(record.id),
+                    output_index=int(output_index_text),
+                    phase=item.payload.phase,
+                    status="completed",
+                    text=item.payload.content,
+                )
+            )
         return ModelTurnResult(
             messages=messages,
             reasoning_summary=str(turn.reasoning_summary or ""),
@@ -444,7 +480,9 @@ class RunRepository:
         message = self.session.get(AgentMessage, run.assistant_message_id)
         admitted = self.session.get(AgentSessionInput, run.input_id)
         aggregate = self.session.execute(
-            select(AgentSession).where(AgentSession.id == run.session_id).with_for_update()
+            select(AgentSession)
+            .where(AgentSession.id == run.session_id)
+            .with_for_update()
         ).scalar_one()
         if message is None or admitted is None:
             raise RuntimeError("Run terminal projection is incomplete")
@@ -480,42 +518,50 @@ class RunRepository:
                 raise RuntimeError("Terminal assistant RunItem is missing")
             loaded_item = loads(str(terminal_record.item_json or "{}"))
             terminal_item = MessageItem.model_validate(loaded_item)
-            terminal_item = terminal_item.model_copy(update={
-                "revision": int(terminal_item.revision) + 1,
-                "status": RunItemStatus.COMPLETED,
-                "completed_at": now,
-                "payload": terminal_item.payload.model_copy(update={
-                    "evidence": [
-                        evidence_reference(value) for value in response.answer.evidence
-                    ],
-                    "artifact_refs": [
-                        ArtifactReference(artifact_id=artifact_id)
-                        for artifact_id in response.referenced_artifact_ids
-                    ],
-                    "completion_disposition": response.completion_disposition,
-                    "limitation_codes": list(response.limitation_codes),
-                }),
-            })
+            terminal_item = terminal_item.model_copy(
+                update={
+                    "revision": int(terminal_item.revision) + 1,
+                    "status": RunItemStatus.COMPLETED,
+                    "completed_at": now,
+                    "payload": terminal_item.payload.model_copy(
+                        update={
+                            "evidence": [
+                                evidence_reference(value)
+                                for value in response.answer.evidence
+                            ],
+                            "artifact_refs": [
+                                ArtifactReference(artifact_id=artifact_id)
+                                for artifact_id in response.referenced_artifact_ids
+                            ],
+                            "completion_disposition": response.completion_disposition,
+                            "limitation_codes": list(response.limitation_codes),
+                        }
+                    ),
+                }
+            )
         self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=str(run.id),
             turn_id=str(run.current_turn_id) if run.current_turn_id else None,
-            payload={"item": dump_run_item(
-                terminal_item
-                if terminal_item is not None
-                else final_answer_item(
-                    message,
-                    run=run,
-                    evidence=[
-                        evidence_reference(value) for value in response.answer.evidence
-                    ],
-                    artifact_refs=[
-                        ArtifactReference(artifact_id=artifact_id)
-                        for artifact_id in response.referenced_artifact_ids
-                    ],
+            payload={
+                "item": dump_run_item(
+                    terminal_item
+                    if terminal_item is not None
+                    else final_answer_item(
+                        message,
+                        run=run,
+                        evidence=[
+                            evidence_reference(value)
+                            for value in response.answer.evidence
+                        ],
+                        artifact_refs=[
+                            ArtifactReference(artifact_id=artifact_id)
+                            for artifact_id in response.referenced_artifact_ids
+                        ],
+                    )
                 )
-            )},
+            },
         )
         self.sessions.events.append(
             lease=lease,
@@ -524,7 +570,9 @@ class RunRepository:
             payload={"run": project_run(run)},
         )
 
-    def fail(self, *, lease: SessionLease, run_id: str, error_code: str, message: str) -> None:
+    def fail(
+        self, *, lease: SessionLease, run_id: str, error_code: str, message: str
+    ) -> None:
         begin_agent_write(self.session)
         run = self.session.execute(
             select(AgentRun).where(AgentRun.id == run_id).with_for_update()
@@ -571,7 +619,9 @@ class RunRepository:
         delta: dict[str, Any],
     ) -> None:
         row = self.session.execute(
-            select(AgentSessionMemory).where(AgentSessionMemory.session_id == aggregate.id)
+            select(AgentSessionMemory).where(
+                AgentSessionMemory.session_id == aggregate.id
+            )
         ).scalar_one_or_none()
         previous: dict[str, Any] = {}
         if row is not None:
@@ -593,49 +643,55 @@ class RunRepository:
             and item.get("datasource_id") == current_datasource_id
             and item.get("datasource_generation") == current_generation
         ]
-        recent_runs.append({
-            "run_id": str(run.id),
-            "question": str(run.question or "")[:1_000],
-            "answer_summary": response.answer.text[:1_200],
-            "referenced_artifact_ids": response.referenced_artifact_ids,
-            "datasource_id": current_datasource_id,
-            "datasource_generation": current_generation,
-            "completed_at": _utcnow().isoformat(),
-        })
+        recent_runs.append(
+            {
+                "run_id": str(run.id),
+                "question": str(run.question or "")[:1_000],
+                "answer_summary": response.answer.text[:1_200],
+                "referenced_artifact_ids": response.referenced_artifact_ids,
+                "datasource_id": current_datasource_id,
+                "datasource_generation": current_generation,
+                "completed_at": _utcnow().isoformat(),
+            }
+        )
         recent_runs = recent_runs[-8:]
         previous_stable = (
-            dict(previous.get("stable_context") or {})
-            if same_generation
-            else {}
+            dict(previous.get("stable_context") or {}) if same_generation else {}
         )
-        previous_claims = [
+        previous_evidence = [
             item
-            for item in list(previous_stable.pop("verified_claims", []))
+            for item in list(previous_stable.pop("evidence_references", []))
             if isinstance(item, dict)
-            and item.get("claim_id")
+            and item.get("artifact_id")
             and item.get("datasource_id") == current_datasource_id
             and item.get("datasource_generation") == current_generation
         ]
-        incoming_claims = [
+        # Legacy model-authored verified_claims remain inert in old records.
+        # Citation establishes provenance, not the truth of the model's prose.
+        previous_stable.pop("verified_claims", None)
+        incoming_evidence = [
             {
                 **item,
                 "datasource_id": current_datasource_id,
                 "datasource_generation": current_generation,
             }
-            for item in list(delta.get("verified_claims") or [])
-            if isinstance(item, dict) and item.get("claim_id")
+            for item in list(delta.get("evidence_references") or [])
+            if isinstance(item, dict) and item.get("artifact_id")
         ]
-        claims_by_id = {
-            str(item["claim_id"]): item
-            for item in [*previous_claims, *incoming_claims]
+        evidence_by_key = {
+            (
+                str(item["artifact_id"]),
+                str(item.get("query_fingerprint") or ""),
+            ): item
+            for item in [*previous_evidence, *incoming_evidence]
         }
         stable_delta = {
             key: value
             for key, value in delta.items()
-            if key != "verified_claims"
+            if key not in {"verified_claims", "evidence_references"}
         }
         memory = {
-            "version": 1,
+            "version": 2,
             "datasource_id": current_datasource_id,
             "recent_runs": recent_runs,
             "working_set": {
@@ -643,7 +699,8 @@ class RunRepository:
                 "datasource_generation": current_generation,
                 "selected_artifact_id": (
                     response.selection_suggestion.artifact_id
-                    if response.selection_suggestion else aggregate.selected_artifact_id
+                    if response.selection_suggestion
+                    else aggregate.selected_artifact_id
                 ),
                 "referenced_artifact_ids": response.referenced_artifact_ids,
                 "open_questions": response.answer.follow_up_questions[:5],
@@ -651,15 +708,18 @@ class RunRepository:
             "stable_context": {
                 **previous_stable,
                 **stable_delta,
-                "verified_claims": list(claims_by_id.values())[-32:],
+                "evidence_references": list(evidence_by_key.values())[-32:],
             },
             "datasource_generation": current_generation,
         }
         if row is None:
-            self.session.add(AgentSessionMemory(
-                session_id=str(aggregate.id), datasource_id=str(aggregate.datasource_id),
-                memory_json=_json(memory),
-            ))
+            self.session.add(
+                AgentSessionMemory(
+                    session_id=str(aggregate.id),
+                    datasource_id=str(aggregate.datasource_id),
+                    memory_json=_json(memory),
+                )
+            )
         else:
             row.memory_json = _json(memory)
             row.updated_at = _utcnow()
@@ -667,5 +727,8 @@ class RunRepository:
 
     @staticmethod
     def _require_lease(run: AgentRun, lease: SessionLease) -> None:
-        if str(run.session_id) != lease.session_id or int(run.lease_token or 0) != lease.token:
+        if (
+            str(run.session_id) != lease.session_id
+            or int(run.lease_token or 0) != lease.token
+        ):
             raise SessionLeaseConflict("Run is fenced by a different Session lease")
