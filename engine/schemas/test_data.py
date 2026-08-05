@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class TestDataGenerateRequest(BaseModel):
+    __test__ = False
     model_config = ConfigDict(str_strip_whitespace=True)
 
     datasource_id: str = Field(min_length=1, max_length=128)

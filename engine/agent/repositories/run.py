@@ -517,13 +517,13 @@ class RunRepository:
             if terminal_record is None:
                 raise RuntimeError("Terminal assistant RunItem is missing")
             loaded_item = loads(str(terminal_record.item_json or "{}"))
-            terminal_item = MessageItem.model_validate(loaded_item)
-            terminal_item = terminal_item.model_copy(
+            validated_terminal_item = MessageItem.model_validate(loaded_item)
+            terminal_item = validated_terminal_item.model_copy(
                 update={
-                    "revision": int(terminal_item.revision) + 1,
+                    "revision": int(validated_terminal_item.revision) + 1,
                     "status": RunItemStatus.COMPLETED,
                     "completed_at": now,
-                    "payload": terminal_item.payload.model_copy(
+                    "payload": validated_terminal_item.payload.model_copy(
                         update={
                             "evidence": [
                                 evidence_reference(value)

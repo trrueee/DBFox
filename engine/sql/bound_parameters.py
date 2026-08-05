@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import sqlglot
-from sqlglot import Dialect, exp
+from sqlglot import exp
 from sqlglot.dialects.mysql import MySQL
 from sqlglot.dialects.duckdb import DuckDB
 

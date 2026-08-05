@@ -26,7 +26,6 @@ from engine.errors import (
 from engine.json_codec import dumps
 from engine.models import DataSource, QueryHistory
 from engine.policy.redactor import DataRedactor
-from engine.policy.sensitivity import _SENSITIVE_FALLBACK
 from engine.persistence.search_index import SearchIndexService
 from engine.query_registry import QUERY_REGISTRY
 from engine.sql.dialect.mysql import _execute_on_mysql_profiled

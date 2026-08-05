@@ -70,6 +70,7 @@ class BackupPrecheckResponse(BaseModel):
 
 
 class TestDataGeneratedResponse(BaseModel):
+    __test__ = False
     model_config = ConfigDict(extra="forbid")
 
     success: Literal[True] = True
