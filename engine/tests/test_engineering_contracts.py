@@ -174,7 +174,7 @@ def test_ci_installs_only_hash_checked_python_locks() -> None:
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
     assert "PIP_REQUIRE_HASHES: \"1\"" in workflow
-    assert workflow.count("--require-hashes -r requirements-dev.lock") == 4
+    assert workflow.count("--require-hashes -r requirements-dev.lock") == 5
     assert "uv pip sync requirements-dev.lock" in workflow
     assert "python-version-file: .sidecar-python-version" in workflow
     assert "SIDECAR_PYTHON_VERSION" not in workflow
