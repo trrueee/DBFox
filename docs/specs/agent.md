@@ -1,14 +1,16 @@
 # DBFox Agent 产品与运行规范
 
-状态：设计基线
-适用范围：桌面端、Web、Agent Runtime、工具、持久化与评测
+> 状态：当前规范
+> 最后核验：2026-08-06
+> 适用范围：桌面端、Web、Agent Runtime、工具、持久化与评测
 
 关联文档：
 
-- [技术设计](../designs/agent.md)
-- [实施任务](../plans/agent.md)
-- [架构链路评审](../reviews/agent-architecture-review.md)
-- [能力资产清单](../reviews/agent-capability-inventory.md)
+- [当前 Agent Runtime](../architecture/agent-runtime.md)
+- [Tool、Context 与 Memory 合同](../architecture/agent-tool-context-memory-contract.md)
+- [会话档案检索合同](../architecture/agent-conversation-recall-contract.md)
+- [历史技术设计](../archive/designs/2026-07-21-agent-technical-design.md)
+- [历史架构评审](../archive/reviews/2026-07-19-agent-architecture-review.md)
 
 ## 1. 目标
 

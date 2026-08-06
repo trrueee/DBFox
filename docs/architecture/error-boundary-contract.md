@@ -1,5 +1,9 @@
 # Error Boundary Contract
 
+> 状态：当前事实
+> 最后核验：2026-08-06
+> 代码事实源：`engine/app/safe_errors.py`
+
 ## Goal
 
 No untrusted exception text may cross into an HTTP/SSE response, browser

@@ -1,7 +1,7 @@
 # DBFox Agent Runtime 架构
 
-> 文档状态：当前 Agent 专题事实源
-> 最后核验：2026-07-26
+> 状态：当前事实
+> 最后核验：2026-08-06
 > 代码边界：`engine/agent/`、`engine/tools/runtime/`、`engine/agent/repositories/`
 >
 > RunItem、SSE、Snapshot 与前端状态的重构目标只在

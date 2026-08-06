@@ -1,220 +1,188 @@
 # DBFox
 
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
+[![Python dev 3.12](https://img.shields.io/badge/Python%20dev-3.12-blue)](https://www.python.org/)
+[![Frozen sidecar 3.14.6](https://img.shields.io/badge/Frozen%20sidecar-3.14.6-blue)](./.sidecar-python-version)
 [![Node.js 20.19+](https://img.shields.io/badge/Node.js-20.19%2B-green)](https://nodejs.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2.x-24C8DB)](https://tauri.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-DBFox 是一个本地优先的 AI 数据库桌面客户端，面向数据库浏览、SQL 分析、自然语言问数和结果可视化等工作流。它将 Tauri 桌面壳、React 前端和 Python FastAPI 引擎组合在一起，帮助用户在同一个应用中完成数据源管理、Schema 探索、SQL 执行和 AI 辅助分析。
+DBFox 是一个本地优先的 AI 数据库桌面工作台，用于数据源管理、Schema 探索、SQL 分析、自然语言问数和结果可视化。Tauri/Rust 是桌面宿主和 Sidecar 生命周期权威，React 提供工作区界面，FastAPI 引擎承载 Agent、工具、安全策略和持久化。
 
 ![DBFox 演示图](docs/images/dbfox-demo.png)
 
-## 功能特性
+## 当前能力
 
-- 数据源管理：支持 MySQL、PostgreSQL、SQLite，提供连接测试、Schema 同步、SSH/SSL 配置和只读模式。
-- 智能问数：通过对话式 AI Agent 理解数据库结构、生成 SQL、执行分析并汇总结果。
-- SQL 工作台：提供 SQL 编辑、语法校验、查询执行、结果查看和历史记录。
-- 可视化建议：根据查询结果推荐折线图、柱状图等图表形式，并支持结果导出。
-- 安全控制：包含本地鉴权、SQL 安全检查、只读执行、高风险操作确认和敏感信息脱敏。
-- 本地优先：核心服务运行在本机，默认使用本地运行时目录和本地元数据库保存配置与状态。
+- 数据源：MySQL、PostgreSQL、SQLite、DuckDB，支持连接测试、SSH/TLS、只读策略和 Catalog 同步。
+- SQL 工作台：编辑、校验、只读执行、分页结果、分析、图表和导出。
+- AI Agent：provider-neutral 的显式 ReAct 循环、原生 function calling、计划/审批/取消、耐久事件和证据型回答。
+- 上下文与记忆：区分当前请求、已消费 steer、历史消息、工具观察、结果 Artifact、会话记忆和可检索对话归档。
+- 安全边界：每次启动生成的 loopback Token、OS credential vault、SQL guardrail、参数绑定、结果血缘脱敏和 RFC 9457 Problem Details。
+- 故障恢复：Rust Runtime Supervisor、运行时 generation、数据库耐久队列、会话串行化、租约恢复和 SSE cursor/snapshot。
+
+## 系统边界
+
+```text
+Tauri 2 / Rust Runtime Supervisor
+  ├─ 启动并监管 Frozen Python Sidecar
+  ├─ 生成随机端口、Token 和 generation
+  └─ 通过 IPC 向 React 暴露当前运行时配置
+                    │
+                    ▼
+React 19 / TypeScript ── authenticated HTTP + SSE ── FastAPI Engine
+                                                        ├─ Agent Harness
+                                                        ├─ Tool Runtime / SQL Safety
+                                                        ├─ Session Coordinator
+                                                        └─ SQLite metadata + external datasources
+```
+
+生产模式没有固定端口或开发 Token；桌面端只使用 Rust 提供的当前 generation 配置。开发脚本使用固定的 `18625` 后端端口，并为本次启动生成共享的本地 Token。
+
+更完整的当前事实见[文档索引](./docs/README.md)和[系统架构](./docs/architecture/system-overview.md)。
 
 ## 技术栈
 
-| 模块 | 技术 |
+| 层 | 当前实现 |
 | --- | --- |
-| 桌面端 | Tauri 2, Rust |
-| 前端 | React 19, TypeScript, Vite, Zustand, Tailwind CSS, Radix UI |
-| 编辑器与图表 | Monaco Editor, ECharts |
-| 后端引擎 | Python 3.12, FastAPI, Uvicorn, SQLAlchemy, Alembic |
-| AI 能力 | 自有 ReAct Runtime、OpenAI-compatible API、持久化事件流 |
-| 数据库驱动 | PyMySQL, psycopg2, SQLite |
-| 测试与质量 | pytest, pyflakes, mypy, Vitest, ESLint |
+| 桌面宿主 | Tauri 2、Rust 1.95、`tauri-plugin-shell`、`tauri-plugin-log` |
+| 前端 | React 19、TypeScript、Vite、Zustand、TanStack Query/Table/Virtual、Radix UI |
+| 数据与图形 | ECharts、XYFlow、项目内 SQL 编辑器 |
+| 引擎 | Python 3.12（开发/测试）、FastAPI、Uvicorn、SQLAlchemy、Alembic |
+| 正式 Sidecar | `.sidecar-python-version` 固定 Python 3.14.6，PyInstaller 冻结 |
+| Agent | provider-neutral ReAct Harness、OpenAI-compatible Responses API、原生工具调用 |
+| 数据源 | PyMySQL、psycopg、SQLite、DuckDB |
+| 质量 | pytest、pyflakes、mypy、Vitest、ESLint、Cargo test/clippy、OSV/npm/RustSec 审计 |
 
-## 环境要求
+## 平台支持
 
-- Python 3.12+
-- Node.js 20.19+
-- npm
-- Rust stable（仅在运行或打包 Tauri 桌面应用时需要）
+- Windows x64 是当前经过真实 Sidecar、MSI/NSIS 和安装态验收的发布目标。
+- macOS/Linux 保留静态构建合同；没有对应 Runner、产物和运行证据时，不视为已验证发布平台。
+- macOS 签名/公证、Gatekeeper，以及 Linux 安装、桌面启动和动态依赖必须在真实平台单独验收。
 
-## 安装
+## 开发环境
 
-克隆项目后进入仓库根目录：
+需要 Python 3.12、Node.js 20.19+、npm。构建桌面应用还需要仓库固定的 Rust 1.95 工具链和对应平台的 Tauri 系统依赖。
 
-```bash
+```powershell
 git clone <your-repo-url>
-cd DBFox
-```
+Set-Location DBFox
 
-安装 Python 依赖：
-
-```bash
 python -m venv .venv
-
-# Windows PowerShell
 .\.venv\Scripts\Activate.ps1
-
-# macOS / Linux
-source .venv/bin/activate
-
 python -m pip install --require-hashes -r requirements-dev.lock
 python -m pip check
-```
 
-安装前端依赖：
-
-```bash
-cd desktop
+Set-Location desktop
 npm ci
 ```
 
-生产 sidecar 构建使用独立环境和运行时锁文件：
-
-```bash
-python -m pip install --require-hashes -r requirements.lock
-```
-
-## 环境变量
-
-项目提供了 `.env.example` 作为安全的非敏感调优模板：
-
-```bash
-cp .env.example .env  # 仅端口、连接池和导出上限等白名单参数
-```
-
-常用配置如下：
-
-| 变量 | 必填 | 说明 |
-| --- | --- | --- |
-| LLM 凭据 | 否 | 通过设置页写入 OS credential vault；不要放入 `.env`、环境变量或源码文件 |
-| LLM endpoint/model | 否 | 以不透明 credential ID 配置；远程 endpoint 仅允许 HTTPS，loopback HTTP 必须显式启用 |
-| `DBFOX_ENGINE_PORT` | 否 | 本地后端端口，默认 `18625` |
-| `DBFOX_RUNTIME_DIR` | 否 | 仅由受控的父进程环境注入；不能从 `.env` 读取 |
-| `DBFOX_DATABASE_URL` | 否 | 仅由受控的父进程环境注入；可能携带凭据，绝不能写入 `.env` |
-| `DBFOX_MYSQL_CLIENT_DIR` | 仅原生 MySQL 备份需要 | 由受控父进程注入的绝对目录；其中必须存在非链接、普通文件形式的 `mysqldump`（Windows 为 `mysqldump.exe`），不能从 `.env` 读取 |
-
-`.env` 采用严格白名单，未知变量、Provider 设置、凭据、token、数据库 URL、运行时路径和安全绕过开关都会被忽略。部署或 CI 如需设置受限配置，应由受控的服务管理器/CI 直接注入进程环境。
-
-> 数据库原地恢复已被禁用：逻辑 SQL dump 无法对既有目标提供原子恢复保证。`POST /backups/{id}/restore` 会固定返回 `409 RESTORE_REQUIRES_ISOLATED_TARGET`，直到实现“隔离目标恢复 + 可审计切换”的持久化恢复设计。
-
-桌面打包运行时由 Tauri IPC 将每次启动生成的引擎端口和令牌交给前端；后端不会在运行时写入源码工作区。源码调试脚本通过 `scripts/dev_environment.py` 生成同一个一次性令牌，将它注入后端进程并写入已忽略的 `desktop/.env.local` 供 Vite 使用。
+macOS/Linux 激活虚拟环境时使用 `source .venv/bin/activate`。
 
 ## 启动
 
-Windows PowerShell：
+推荐使用根目录脚本，它们会生成开发 Token，并保持前后端配置一致：
 
 ```powershell
-./dev.ps1
+./dev.ps1                 # backend + frontend
 ./dev.ps1 backend
 ./dev.ps1 frontend
 ./dev.ps1 -NoReload
 ```
 
-macOS / Linux / Git Bash：
-
 ```bash
-./dev.sh
+./dev.sh                  # backend + frontend
 ./dev.sh backend
 ./dev.sh frontend
 ```
 
-也可以手动分别启动后端和前端：
-
-```bash
-# 终端 1：后端引擎
-python -m engine.main
-
-# 终端 2：前端开发服务
-cd desktop
-npm run dev
-```
-
-运行 Tauri 桌面应用：
+运行完整 Tauri 桌面开发模式：
 
 ```bash
 cd desktop
 npm run tauri -- dev
 ```
 
-构建桌面安装包：
+只调试前端时可运行 `npm run dev`，但仍需先启动引擎。不要手工编写 `desktop/.env.local`；`scripts/dev_environment.py` 是该文件的唯一写入者。
 
-```bash
-cd desktop
+## 配置与凭据
+
+- LLM API Key、数据库密码和 SSH 秘密写入操作系统 credential vault，不写入 `.env`、日志或业务数据库。
+- `.env.example` 只包含允许从 dotenv 读取的非敏感调优项。未知项、Provider 配置、Token、数据库 URL、运行时目录和安全绕过开关会被忽略。
+- `DBFOX_RUNTIME_DIR`、`DBFOX_DATABASE_URL`、运行时 Token 等受限值只能由受控父进程直接注入。
+- 远程 LLM endpoint 只允许 HTTPS；loopback HTTP 必须显式启用。
+
+```powershell
+Copy-Item .env.example .env
+```
+
+## 测试与质量门禁
+
+```powershell
+# Python
+python -m pytest -q --tb=short
+python -m pyflakes engine build_sidecar.py
+python -m mypy engine build_sidecar.py
+
+# Frontend
+Set-Location desktop
+npm run lint
+npm run typecheck:test
+npm test -- --maxWorkers=1
+npm run build
+
+# Rust
+npm run test:rust
+```
+
+供应链与锁文件合同：
+
+```powershell
+python -m pytest engine/tests/test_engineering_contracts.py -q
+```
+
+完整发布门禁、真实 Provider 合同测试和平台验收均为显式 opt-in；不要用单元测试结果替代正式产物验证。详见[工程质量与发布门禁](./docs/quality/engineering-gates.md)。
+
+## 构建正式产物
+
+Tauri 构建会按官方 `externalBin` 合同准备 Frozen Sidecar：
+
+```powershell
+Set-Location desktop
 npm run tauri -- build
 ```
 
-## 使用示例
+只构建或验证 Sidecar 时：
 
-1. 启动 DBFox。
-2. 在左侧数据源面板中添加 MySQL、PostgreSQL 或 SQLite 数据源。
-3. 点击连接测试，确认配置可用。
-4. 同步数据库结构，可按需启用 AI 语义增强。
-5. 在智能问数面板输入自然语言问题，例如：
-
-```text
-统计最近 7 天 AI 工具调用量，并生成趋势图。
+```powershell
+python build_sidecar.py
+Set-Location desktop
+npm run test:sidecar
 ```
 
-也可以在 SQL 工作台直接执行查询：
+Sidecar 构建使用 `.sidecar-python-version`、`requirements.lock` 和独立构建环境；不要把开发虚拟环境当作正式产物来源。
 
-```sql
-SELECT
-  DATE(created_at) AS date,
-  COUNT(*) AS daily_invocations
-FROM ai_tool_invocations
-GROUP BY DATE(created_at)
-ORDER BY date;
-```
-
-查询结果可在结果视图中查看，并可根据字段类型生成图表建议。
-
-## 项目结构
+## 仓库结构
 
 ```text
 DBFox/
-|-- engine/                 # Python 后端引擎，包含 API、Agent、SQL、安全和评估模块
-|-- desktop/                # React 前端与 Tauri 桌面壳
-|   |-- src/                # 前端页面、组件、状态和 API 客户端
-|   `-- src-tauri/          # Tauri/Rust 配置、入口和打包资源
-|-- docs/                   # 项目文档与演示资源
-|-- build_sidecar.py        # 后端 sidecar 构建脚本
-|-- dev.ps1                 # Windows 开发启动脚本
-|-- dev.sh                  # Unix/macOS/Git Bash 开发启动脚本
-|-- requirements.txt        # Python 运行依赖
-|-- requirements-dev.txt    # Python 开发依赖
-|-- pyproject.toml          # pytest 与 mypy 配置
-`-- LICENSE
+├─ engine/                 # FastAPI、Agent、工具、SQL、安全、持久化和迁移
+├─ desktop/
+│  ├─ src/                 # React 工作区、功能模块、状态和生成的 API 类型
+│  └─ src-tauri/           # Rust Runtime Supervisor、Tauri 配置和打包资源
+├─ docs/                   # 当前事实、规格、质量记录、设计、计划与审查证据
+├─ scripts/                # 开发环境与验证脚本
+├─ build_sidecar.py        # Frozen Sidecar 构建入口
+├─ dev.ps1 / dev.sh        # 统一开发启动入口
+└─ requirements*.lock      # 已哈希的 Python 依赖事实源
 ```
 
-## 常用命令
+## 已知边界
 
-```bash
-# 后端测试
-pytest engine -q
+数据库原地恢复被明确禁用：逻辑 SQL dump 不能为既有目标提供原子恢复保证。恢复接口在隔离目标恢复与可审计切换完成前保持 fail closed。
 
-# Python 类型检查
-mypy engine
+## 贡献与文档
 
-# Python 静态 lint
-python -m pyflakes engine build_sidecar.py
-
-# 前端测试
-cd desktop
-npm test
-
-# 前端 lint
-cd desktop
-npm run lint
-
-# 前端构建
-cd desktop
-npm run build
-```
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request。建议在提交前先运行相关测试与 lint，并尽量让改动保持聚焦、可 review。
+提交前请运行与改动范围匹配的门禁。架构事实、实施计划和历史审查不能混作同一种文档；新增或更新文档前先阅读[文档体系](./docs/README.md)。
 
 ## 许可证
 
-本项目基于 [MIT License](./LICENSE) 开源。
+DBFox 基于 [MIT License](./LICENSE) 开源。

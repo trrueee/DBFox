@@ -1,6 +1,9 @@
 # Agent Runtime Item 协议
 
-本文描述 DBFox 当前生产实现。历史方案见 `docs/designs/`，不得作为运行时合同。
+> 状态：当前事实
+> 最后核验：2026-08-06
+
+本文描述 DBFox 当前生产实现。历史方案见[历史设计](../archive/designs/README.md)，不得作为运行时合同。
 
 ## 1. 权威数据链路
 

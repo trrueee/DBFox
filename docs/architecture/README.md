@@ -1,23 +1,50 @@
-# DBFox 架构文档索引
+# DBFox 架构导航
 
-> 当前事实口径：2026-07-20
+> 状态：当前事实入口
+> 最后核验：2026-08-06
+> 事实源：当前源码、迁移、锁文件、协议测试和绑定目标 commit 的运行证据
 
-建议 AI 或评审者按以下顺序阅读：
+架构文档按由外到内的顺序组织。系统上下文和运行容器是稳定视图；只有在确实有帮助时才下钻到组件和代码入口，避免维护与源码重复的类图。
 
-1. [当前系统架构](../architecture-design-document.md)：部署、前端、后端、持久化、安全、发布的总事实源。
-2. [前端架构](./frontend.md) 与 [后端架构](./backend.md)：两个技术面的状态、边界、性能、安全和测试细节。
-3. [功能模块与执行管线](../functional-modules-and-execution-pipelines.md)：模块职责、输入输出、状态变化和故障路径。
-4. [Agent Runtime](./agent-runtime.md)：Session、ReAct、工具、计划、记忆、事件和恢复的专题设计。
-5. [Agent Typed RunItem 协议](./agent-runtime-item-protocol.md)：中间摘要、计划、工具、审批、正式回答及 SSE 恢复的统一合同。
-6. [Agent Tool、Context 与 Memory 边界合同](./agent-tool-context-memory-contract.md)：SQL 数据平面、有界模型观察、耐久恢复和证据型记忆合同。
-7. [前后端与 Agent 深度评审](../reviews/frontend-backend-agent-architecture-deep-review.md)：当前设计符合度、开放风险和评审问题。
-8. [实施后全局核验](../reviews/architecture-global-verification.md)：修复前证据与实施后权威结论。
-9. [Runtime 基础能力 ADR](./runtime-foundation-decisions.md)：Sidecar 生命周期、Transport、错误、诊断、SQLite 发布门禁和自动更新边界。
+## 1. 系统和约束
 
-以下文档属于历史决策材料，不可覆盖当前事实。历史术语不应被机械更新为当前协议：
+1. [系统总览](./system-overview.md)：产品目标、核心不变量、外部系统、部署拓扑、质量属性和事实层级。
+2. [Runtime 基础能力 ADR](./runtime-foundation-decisions.md)：Sidecar、单实例、Transport、诊断、SQLite、更新和官方 Tauri 插件决定。
 
-- `docs/designs/` 与 `docs/plans/` 中的旧 LangGraph/Graph/Checkpoint 方案；
-- `agent-architecture-review.md` 中的修复前链路分析；
-- v1.0.1 对照材料。
+## 2. 运行容器
 
-识别历史设计的原则：如果文档把 `engine/agent/graph/`、`engine/agent_runtime/`、LangGraph thread/state/checkpoint、Result `previewRows` 或前端旧 RunTrace 作为当前实现，应视为过时描述。
+| 容器 | 文档 | 所有权 |
+| --- | --- | --- |
+| Tauri/Rust Host | [系统总览](./system-overview.md#3-部署拓扑)、[Runtime ADR](./runtime-foundation-decisions.md) | 进程、窗口、端口、Token、generation、ACL、打包 |
+| React WebView | [前端架构](./frontend.md) | 工作区、交互、投影、查询缓存和恢复呈现 |
+| FastAPI Sidecar | [后端架构](./backend.md) | API、Agent、工具、数据源、SQL、持久化和事件 |
+| SQLite metadata | [后端架构](./backend.md#6-持久化与事务边界) | 迁移、会话、事件、租约、配置和审计事实 |
+| 外部数据源 | [数据、SQL 与结果链](./data-sql-results.md) | MySQL、PostgreSQL、SQLite、DuckDB 数据平面 |
+
+## 3. 组件和动态流程
+
+1. [实现地图](./implementation-map.md)：启动、数据源、Schema、Agent、审批、SSE、Result、取消和恢复的端到端调用链。
+2. [数据、SQL 与结果链](./data-sql-results.md)：连接、Catalog、只读 SQL、安全决策、参数绑定、Artifact 和大结果回源。
+3. [Agent Runtime](./agent-runtime.md)：SessionCoordinator、显式 ReAct、状态机、工具、事件和恢复。
+
+## 4. Agent 协议下钻
+
+1. [Runtime Item 协议](./agent-runtime-item-protocol.md)：Provider Items 到耐久 RunItem、事件和前端投影。
+2. [Tool、Context 与 Memory 边界](./agent-tool-context-memory-contract.md)：数据平面、观察平面和耐久记忆平面。
+3. [Conversation Recall 合同](./agent-conversation-recall-contract.md)：对话档案、FTS5、检索/读取工具和上下文预算。
+4. [错误边界合同](./error-boundary-contract.md)：Provider、Tool、HTTP/SSE、持久化和 UI 的错误可信度。
+5. [Agent 产品与运行规范](../specs/agent.md)：用户可见行为、领域词汇和验收场景。
+
+## 5. 当前核心不变量
+
+- Rust Runtime Supervisor 是生产 Sidecar 的唯一生命周期权威；React 不猜测端口、Token 或进程状态。
+- FastAPI 对 loopback HTTP/SSE 统一鉴权，公开错误使用固定 catalog 和 RFC 9457 Problem Details。
+- SQLite 是会话、事件和调度的耐久事实源；内存只保存有界 wake hints，不是第二队列。
+- Agent Harness 使用 provider-neutral 原生 function calling；完成、取消、异常和工具等待具有显式终止语义。
+- SQL 使用唯一验证/执行链、参数绑定、只读边界和有界结果；模型上下文不承载完整结果集。
+- Artifact 是可解析引用，Observation/Memory 是有界摘要；完整会话通过受控检索回源。
+- 事件先持久化再发布，客户端以 cursor/snapshot 恢复，Zustand 不是业务事实源。
+
+## 6. 历史边界
+
+旧 LangGraph/Graph/Checkpoint、`engine/agent_runtime`、旧 RunTrace、`previewRows` 持久化、Monaco、Playwright 和遗留启动器只存在于[历史归档](../archive/README.md)的原始记录中。不得依据这些材料新增兼容层或第二套运行链。

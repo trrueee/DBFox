@@ -1,8 +1,8 @@
 # DBFox 前端架构
 
-> 文档状态：当前前端专题事实源
+> 状态：当前事实
 >
-> 最后核验：2026-07-31
+> 最后核验：2026-08-06
 
 ## 1. 设计目标
 
@@ -248,7 +248,7 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 - engineering：TypeScript、ESLint、production build、bundle budget。
 
 具体通过数量会随测试增长而变化，不在架构事实文档中固化。当前结果以绑定 commit 的 CI
-记录为准；权威命令和门禁范围见 `docs/engineering-quality-gates.md`。
+记录为准；权威命令和门禁范围见[工程质量门禁](../quality/engineering-gates.md)。
 
 ## 14. 关键文件
 
