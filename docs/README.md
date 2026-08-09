@@ -1,83 +1,108 @@
 # DBFox 文档中心
 
-> 状态：当前文档导航
-> 最后整理：2026-08-06
+> 状态：Current
+>
+> 最近整理：2026-08-09
+>
+> 适用范围：当前生产实现与后续合并版本
 
-这里是 DBFox 文档的唯一入口。文档采用“当前事实与历史证据分离”的结构，并借鉴 Diátaxis 对解释、操作、参考的区分，以及 C4/arc42 的自顶向下架构视角；项目不会为了套模板而复制第二份事实源。
+这里是 DBFox 技术文档的唯一导航入口。根目录 [`README.md`](../README.md) 面向第一次接触项目的读者；[`CONTRIBUTING.md`](../CONTRIBUTING.md) 面向准备修改代码的贡献者；本目录解释系统为何这样设计、代码在哪里实现，以及如何验证这些合同。
 
-## 目录结构
+## 文档层级
 
-```text
-docs/
-├─ architecture/   当前系统设计、运行视图、实现地图、协议与 ADR
-├─ specs/          当前产品行为和验收规范
-├─ quality/        CI、依赖、发布门禁和候选版本证据
-├─ archive/        已完成、已取代或仅绑定旧基线的历史材料
-└─ images/         README 和文档资源
-```
-
-旧 `designs/`、`plans/`、`reviews/` 和工具生成材料已经归入 `archive/`。它们不会被删除或机械改写，因为仍有考古价值；但不得再作为当前实现依据。
-
-## 从哪里开始
-
-### 了解产品和系统
-
-1. [根 README](../README.md)：产品能力、支持平台、开发和构建入口。
-2. [架构导航](./architecture/README.md)：按系统、容器、组件和运行管线逐层阅读。
-3. [系统总览](./architecture/system-overview.md)：目标、约束、部署拓扑和核心不变量。
-4. [实现地图](./architecture/implementation-map.md)：从入口到状态、副作用、持久化和用户反馈。
-
-### 开发或修改功能
-
-1. 阅读对应的 `architecture/` 专题，确定唯一所有者和边界。
-2. 阅读 [Agent 规范](./specs/agent.md) 或其他适用规范。
-3. 使用 [工程质量门禁](./quality/engineering-gates.md) 选择验证命令。
-4. 涉及正式产物时，再检查 [发布验证矩阵](./quality/release-validation-matrix.md)。
-
-### 调查历史决定
-
-从[历史归档](./archive/README.md)进入。归档文档中的旧目录、协议、库和测试结果只对原基线有效。
-
-## 事实优先级
-
-发生冲突时按以下顺序判断：
-
-1. 当前源码、数据库迁移、OpenAPI、Tauri/Cargo/npm/Python 锁文件和 CI 配置；
-2. 绑定当前 commit、平台和正式产物的可复现测试证据；
-3. `architecture/` 当前事实和已实施 ADR；
-4. `specs/` 当前产品合同；
-5. `quality/` 中明确限定范围的验证结果；
-6. `archive/` 历史材料。
-
-Windows 验收不能证明 macOS/Linux 已通过，单元测试也不能替代 Frozen Sidecar、安装包、签名、公证或真实 GUI 验收。
-
-## 文档类型和写法
-
-| 类型 | 回答的问题 | 放置位置 | 更新规则 |
+| 层级 | 目录 | 内容 | 是否描述当前事实 |
 | --- | --- | --- | --- |
-| 系统解释 | 为什么这样设计、有哪些约束 | `architecture/` | 生产合同变化时同步 |
-| 技术参考 | 模块、状态机、协议、文件入口 | `architecture/` | 与类型、迁移和协议测试同步 |
-| 产品规范 | 用户可见行为和验收条件 | `specs/` | 产品语义变化时同步 |
-| 操作指南 | 如何开发、构建、验证 | 根 README、Desktop README、`quality/` | 命令或平台合同变化时同步 |
-| 决策记录 | 采用什么方案、为什么 | `architecture/*-decisions.md` | 决定改变时追加或标记 superseded |
-| 历史证据 | 当时的设计、计划、评审和报告 | `archive/` | 不追赶当前源码，只补状态和替代链接 |
+| 产品入口 | [`../README.md`](../README.md) | 项目价值、能力、快速开始与平台边界 | 是 |
+| 贡献指南 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | 开发流程、变更约束、质量检查与提交要求 | 是 |
+| 架构 | [`architecture/`](architecture/README.md) | 系统边界、运行时、前后端、数据、Agent、工具与记忆 | 是 |
+| 规范 | [`specs/`](specs/README.md) | 对外和跨模块合同、状态机、协议与约束 | 是 |
+| 质量 | [`quality/`](quality/README.md) | 测试、供应链、发布合同与平台验证 | 是 |
+| 历史档案 | [`archive/`](archive/README.md) | 旧方案、实施计划、审查记录和生成报告 | 否，仅供追溯 |
+| 图片 | [`images/`](images/) | README 和文档引用的受控图片资源 | 仅资源 |
 
-## 命名与状态
+## 推荐阅读路线
 
-- 当前文档使用稳定的语义名，例如 `system-overview.md`、`implementation-map.md`、`agent-runtime.md`。
-- 历史材料保留日期前缀和原主题，避免丢失时间上下文。
-- 当前文档在标题后注明 `状态` 和 `最后核验`；验证报告还必须注明 commit、平台、产物和命令。
-- 允许的状态：`当前事实`、`当前规范`、`已接受决策`、`草案`、`历史归档`、`已取代`。
-- 文件名只表达一个主题，不添加 `final`、`new`、`latest`、`v2-final` 等失去时间语义的后缀。
+### 第一次了解 DBFox
 
-## 维护规则
+1. [`../README.md`](../README.md)
+2. [`architecture/system-overview.md`](architecture/system-overview.md)
+3. [`architecture/implementation-map.md`](architecture/implementation-map.md)
+4. [`quality/engineering-gates.md`](quality/engineering-gates.md)
 
-生产合同变化时，同一提交优先同步：
+### 修改桌面启动、Sidecar 或鉴权
 
-1. 对应源码类型、迁移、OpenAPI 或配置；
-2. 契约和回归测试；
-3. 对应架构专题或 ADR；
-4. 根 README/分类 README 的入口；
-5. 发布矩阵中的适用范围。
+1. [`architecture/runtime-foundation-decisions.md`](architecture/runtime-foundation-decisions.md)
+2. [`architecture/system-overview.md`](architecture/system-overview.md)
+3. [`architecture/error-boundary-contract.md`](architecture/error-boundary-contract.md)
+4. [`quality/release-validation-matrix.md`](quality/release-validation-matrix.md)
 
-不要新增重复 README、字段映射表或兼容说明来掩盖上下游合同不一致。应修正唯一事实源，在真实边界只做一次必要转换，并更新指向它的文档入口。
+### 修改 Agent、工具或上下文
+
+1. [`architecture/agent-runtime.md`](architecture/agent-runtime.md)
+2. [`architecture/agent-runtime-item-protocol.md`](architecture/agent-runtime-item-protocol.md)
+3. [`architecture/agent-tool-context-memory-contract.md`](architecture/agent-tool-context-memory-contract.md)
+4. [`architecture/agent-conversation-recall-contract.md`](architecture/agent-conversation-recall-contract.md)
+5. [`specs/agent.md`](specs/agent.md)
+
+### 修改 SQL、结果或数据源能力
+
+1. [`architecture/data-sql-results.md`](architecture/data-sql-results.md)
+2. [`architecture/backend.md`](architecture/backend.md)
+3. [`architecture/implementation-map.md`](architecture/implementation-map.md)
+4. [`quality/engineering-gates.md`](quality/engineering-gates.md)
+
+### 准备提交或发布
+
+1. [`../CONTRIBUTING.md`](../CONTRIBUTING.md)
+2. [`quality/engineering-gates.md`](quality/engineering-gates.md)
+3. [`quality/supply-chain-security.md`](quality/supply-chain-security.md)
+4. [`quality/release-validation-matrix.md`](quality/release-validation-matrix.md)
+
+## 当前架构文档
+
+| 文档 | 主要问题 |
+| --- | --- |
+| [`architecture/system-overview.md`](architecture/system-overview.md) | 系统由哪些进程组成，谁拥有状态，哪些是不变量？ |
+| [`architecture/implementation-map.md`](architecture/implementation-map.md) | 一项能力具体落在哪些 Symbol、表和测试中？ |
+| [`architecture/frontend.md`](architecture/frontend.md) | React 工作区、Transport、状态与交互边界如何划分？ |
+| [`architecture/backend.md`](architecture/backend.md) | FastAPI、Service、Repository 与运行时怎样协作？ |
+| [`architecture/data-sql-results.md`](architecture/data-sql-results.md) | SQL 如何校验、执行、分页、持久化并形成制品？ |
+| [`architecture/agent-runtime.md`](architecture/agent-runtime.md) | Agent Turn 如何完成、取消、重试和恢复？ |
+| [`architecture/agent-runtime-item-protocol.md`](architecture/agent-runtime-item-protocol.md) | Provider item、消息、工具调用和事件如何表达？ |
+| [`architecture/agent-tool-context-memory-contract.md`](architecture/agent-tool-context-memory-contract.md) | 工具、上下文预算、记忆与数据边界如何协同？ |
+| [`architecture/agent-conversation-recall-contract.md`](architecture/agent-conversation-recall-contract.md) | 历史会话如何检索、授权、注入和审计？ |
+| [`architecture/error-boundary-contract.md`](architecture/error-boundary-contract.md) | 内部错误如何变成可信、可展示、可脱敏的公开错误？ |
+| [`architecture/runtime-foundation-decisions.md`](architecture/runtime-foundation-decisions.md) | 已收敛的 Runtime、Token、Transport、SQLite 与发布决策是什么？ |
+
+## 文档优先级
+
+当资料冲突时，按以下顺序判断：
+
+1. 当前生产代码、迁移和自动化测试；
+2. `docs/architecture/` 与 `docs/specs/` 中标记为 **Current** 的文档；
+3. `docs/quality/` 中当前执行的工程与发布合同；
+4. 根目录贡献与运行说明；
+5. `docs/archive/` 中的历史材料。
+
+历史文档不能覆盖当前实现。若历史设计重新生效，应先形成新的 Current 文档或 ADR，并同时更新实现和测试。
+
+## 写作与维护规则
+
+- 文档先说明状态、适用范围和事实来源，再描述设计。
+- 当前事实使用现在时；计划、建议和未验证内容必须明确标记。
+- 架构文档从职责与数据流写到具体 Symbol，不复制大段源码。
+- 协议、状态枚举、安全边界和发布承诺必须能由测试或产物证据验证。
+- 新设计优先更新现有权威文档；不要为同一主题创建第二份“最终版”。
+- 已失效文档移动到 `archive/`，保留背景和 superseded-by 指向，不静默删除决策历史。
+- 文件名使用小写 kebab-case；图片放在 `images/`，避免散落二进制资源。
+- 修改代码导致架构、合同、命令或支持范围变化时，文档必须在同一提交或紧随其后的独立文档提交中更新。
+
+## 新增文档前检查
+
+1. 现有文档是否已经覆盖该主题？
+2. 内容是当前事实、规范、质量证据，还是历史材料？
+3. 是否有真实实现、测试、官方资料或决策记录作为依据？
+4. 是否会制造第二份事实来源或重复导航？
+5. 是否需要同步更新根 README、实现地图或贡献指南？
+
+如果不能确定归类，先在现有文档中增加小节；只有存在清晰、长期稳定的独立主题时才新增文件。
