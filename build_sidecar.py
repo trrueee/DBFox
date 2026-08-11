@@ -35,6 +35,7 @@ BINARIES_DIR = DESKTOP_DIR / "src-tauri" / "binaries"
 BUILD_VENV = ROOT / ".build_venv"
 BUILD_LOCK = ROOT / "requirements-build.lock"
 SIDECAR_PYTHON_VERSION_PATH = ROOT / ".sidecar-python-version"
+SIDECAR_PYTHON_BUILD_PATH = ROOT / ".sidecar-python-build"
 RUNTIME_MANIFEST_PATH = BINARIES_DIR / "dbfox-engine-runtime-manifest.json"
 BUILD_PROVENANCE_FILENAME = "_build_provenance.json"
 ARTIFACT_MANIFEST_SCHEMA_VERSION = 3
@@ -86,6 +87,19 @@ def sidecar_python_version() -> str:
     if len(parts) != 3 or not all(part.isdigit() for part in parts):
         raise RuntimeError("Sidecar Python version must be an exact X.Y.Z version")
     return version
+
+
+def sidecar_python_build() -> str:
+    """Return the pinned python-build-standalone build date used by uv."""
+
+    if not SIDECAR_PYTHON_BUILD_PATH.is_file():
+        raise RuntimeError(
+            f"Sidecar Python build file is missing: {SIDECAR_PYTHON_BUILD_PATH}"
+        )
+    build = SIDECAR_PYTHON_BUILD_PATH.read_text(encoding="utf-8").strip()
+    if len(build) != 8 or not build.isdigit():
+        raise RuntimeError("Sidecar Python build must be an exact YYYYMMDD value")
+    return build
 
 # Must match the dependencies in requirements.txt that PyInstaller
 # cannot auto-detect (lazy imports, dynamic loaders, etc.)
@@ -260,9 +274,13 @@ def _build_environment_facts(python_exe: str) -> dict[str, object]:
         python_exe,
         "-c",
         (
-            "import importlib.metadata as metadata, json, platform; "
+            "import importlib.metadata as metadata, json, platform, sys; "
+            "from pathlib import Path; "
             f"names = {package_literal}; "
+            "build_path = Path(sys.base_prefix) / 'BUILD'; "
             "print(json.dumps({'python_version': platform.python_version(), "
+            "'python_build': build_path.read_text(encoding='utf-8').strip() "
+            "if build_path.is_file() else None, "
             "'packages': {name: metadata.version(name) for name in names}}, "
             "sort_keys=True))"
         ),
@@ -286,6 +304,7 @@ def collect_build_provenance(python_exe: str) -> dict[str, object]:
     """Bind the exact interpreter and lock used by the PyInstaller build."""
 
     expected_python = sidecar_python_version()
+    expected_build = sidecar_python_build()
     facts = _build_environment_facts(python_exe)
     actual_python = str(facts.get("python_version") or "")
     if actual_python != expected_python:
@@ -293,11 +312,19 @@ def collect_build_provenance(python_exe: str) -> dict[str, object]:
             "Sidecar build interpreter does not match the production pin: "
             f"expected {expected_python}, got {actual_python or 'unknown'}"
         )
+    actual_build = str(facts.get("python_build") or "")
+    if actual_build != expected_build:
+        raise RuntimeError(
+            "Sidecar build interpreter does not match the pinned "
+            "python-build-standalone build: "
+            f"expected {expected_build}, got {actual_build or 'unreported'}"
+        )
     if not BUILD_LOCK.is_file():
         raise RuntimeError(f"Build lock file not found: {BUILD_LOCK}")
     return {
         "schema_version": 2,
         "python_version": actual_python,
+        "python_build": actual_build,
         "lock_file": BUILD_LOCK.name,
         "lock_sha256": _sha256(BUILD_LOCK),
         "packages": facts["packages"],
@@ -456,6 +483,11 @@ def validate_runtime_manifest(manifest: dict[str, object]) -> None:
         )
     if manifest.get("build_python_version") != expected_python:
         raise RuntimeError("Release sidecar build provenance has the wrong Python version")
+    if manifest.get("build_python_build") != sidecar_python_build():
+        raise RuntimeError(
+            "Release sidecar build provenance has the wrong "
+            "python-build-standalone build"
+        )
     if manifest.get("build_lock_file") != BUILD_LOCK.name:
         raise RuntimeError("Release sidecar build provenance has the wrong lock file")
     if manifest.get("build_lock_sha256") != _sha256(BUILD_LOCK):

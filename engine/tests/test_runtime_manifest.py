@@ -22,6 +22,7 @@ def test_runtime_manifest_reports_loaded_sqlite_library() -> None:
     assert manifest["python_version"]
     assert isinstance(manifest["frozen"], bool)
     assert manifest["build_python_version"] is None
+    assert manifest["build_python_build"] is None
     assert manifest["build_lock_file"] is None
     assert manifest["build_lock_sha256"] is None
     assert manifest["build_packages"] == {}

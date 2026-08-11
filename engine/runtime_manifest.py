@@ -52,6 +52,7 @@ def collect_runtime_manifest() -> dict[str, Any]:
         "machine": platform.machine(),
         "frozen": bool(getattr(sys, "frozen", False)),
         "build_python_version": provenance.get("python_version"),
+        "build_python_build": provenance.get("python_build"),
         "build_lock_file": provenance.get("lock_file"),
         "build_lock_sha256": provenance.get("lock_sha256"),
         "build_packages": provenance.get("packages", {}),

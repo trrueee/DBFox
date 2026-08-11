@@ -56,6 +56,7 @@ def _runtime_manifest(version: tuple[int, int, int]) -> dict[str, object]:
         "frozen": True,
         "python_version": build_sidecar.sidecar_python_version(),
         "build_python_version": build_sidecar.sidecar_python_version(),
+        "build_python_build": build_sidecar.sidecar_python_build(),
         "build_lock_file": build_sidecar.BUILD_LOCK.name,
         "build_lock_sha256": build_sidecar._sha256(build_sidecar.BUILD_LOCK),
         "build_packages": {
@@ -456,6 +457,12 @@ def test_sidecar_python_version_is_an_exact_repository_pin() -> None:
     assert re.fullmatch(r"\d+\.\d+\.\d+", version)
 
 
+def test_sidecar_python_build_is_an_exact_repository_pin() -> None:
+    build = build_sidecar.sidecar_python_build()
+
+    assert re.fullmatch(r"\d{8}", build)
+
+
 def test_build_provenance_rejects_a_different_interpreter(
     monkeypatch,
     tmp_path,
@@ -468,6 +475,7 @@ def test_build_provenance_rejects_a_different_interpreter(
         "_build_environment_facts",
         lambda _python: {
             "python_version": "0.0.0",
+            "python_build": build_sidecar.sidecar_python_build(),
             "packages": {name: "1" for name in build_sidecar.KEY_BUILD_PACKAGES},
         },
     )
@@ -476,10 +484,32 @@ def test_build_provenance_rejects_a_different_interpreter(
         build_sidecar.collect_build_provenance("wrong-python")
 
 
+def test_build_provenance_rejects_a_different_managed_python_build(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    lock = tmp_path / "requirements-build.lock"
+    lock.write_text("locked", encoding="utf-8")
+    monkeypatch.setattr(build_sidecar, "BUILD_LOCK", lock)
+    monkeypatch.setattr(
+        build_sidecar,
+        "_build_environment_facts",
+        lambda _python: {
+            "python_version": build_sidecar.sidecar_python_version(),
+            "python_build": "19000101",
+            "packages": {name: "1" for name in build_sidecar.KEY_BUILD_PACKAGES},
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="python-build-standalone build"):
+        build_sidecar.collect_build_provenance("wrong-python-build")
+
+
 def test_staged_engine_contains_build_provenance(tmp_path) -> None:
     provenance = {
         "schema_version": 2,
         "python_version": build_sidecar.sidecar_python_version(),
+        "python_build": build_sidecar.sidecar_python_build(),
         "lock_file": "requirements-build.lock",
         "lock_sha256": "a" * 64,
         "packages": {name: "1" for name in build_sidecar.KEY_BUILD_PACKAGES},

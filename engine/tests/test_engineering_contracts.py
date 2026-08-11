@@ -27,6 +27,7 @@ PYTHON_LOCKS = {
     "requirements-build.txt": "requirements-build.lock",
 }
 SIDECAR_PYTHON_VERSION_FILE = ROOT / ".sidecar-python-version"
+SIDECAR_PYTHON_BUILD_FILE = ROOT / ".sidecar-python-build"
 
 
 def _normalise_package_name(name: str) -> str:
@@ -197,24 +198,30 @@ def test_ci_installs_only_hash_checked_python_locks() -> None:
     # PIP_REQUIRE_HASHES leaks into setup-python and PEP 517 build-isolation
     # subprocesses, where bootstrap tools are intentionally outside our lock.
     assert "PIP_REQUIRE_HASHES" not in all_python_workflows
-    assert workflow.count("--require-hashes -r requirements-dev.lock") == 5
+    assert workflow.count("--require-hashes -r requirements-dev.lock") == 4
     assert agent_evaluation.count("--require-hashes -r requirements-dev.lock") == 3
-    assert "uv pip sync requirements-dev.lock" in workflow
+    assert workflow.count("uv pip sync requirements-dev.lock") == 4
     assert "python-version-file: .sidecar-python-version" in workflow
     assert "SIDECAR_PYTHON_VERSION" not in workflow
     assert "python -m pip install -r requirements-dev.txt" not in all_python_workflows
     assert "python -m pip install -r requirements-build.txt" not in all_python_workflows
 
 
-def test_sidecar_build_uses_one_exact_python_version_source() -> None:
+def test_sidecar_build_uses_exact_python_distribution_sources() -> None:
     version = SIDECAR_PYTHON_VERSION_FILE.read_text(encoding="utf-8").strip()
+    build = SIDECAR_PYTHON_BUILD_FILE.read_text(encoding="utf-8").strip()
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
     builder = (ROOT / "build_sidecar.py").read_text(encoding="utf-8")
 
     assert re.fullmatch(r"\d+\.\d+\.\d+", version)
-    assert workflow.count("python-version-file: .sidecar-python-version") == 3
+    assert re.fullmatch(r"\d{8}", build)
+    assert workflow.count("python-version-file: .sidecar-python-version") == 1
     assert version not in workflow
+    assert build not in workflow
     assert "SIDECAR_PYTHON_VERSION_PATH" in builder
+    assert "SIDECAR_PYTHON_BUILD_PATH" in builder
+    assert workflow.count("uv venv --managed-python") == 3
+    assert workflow.count("UV_PYTHON_CPYTHON_BUILD") == 3
 
 
 def test_npm_lock_is_registry_resolved_and_integrity_verified() -> None:
