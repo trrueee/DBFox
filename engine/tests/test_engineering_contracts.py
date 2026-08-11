@@ -193,8 +193,10 @@ def test_ci_installs_only_hash_checked_python_locks() -> None:
     agent_evaluation = AGENT_EVALUATION_WORKFLOW.read_text(encoding="utf-8")
     all_python_workflows = workflow + agent_evaluation
 
-    assert "PIP_REQUIRE_HASHES: \"1\"" in workflow
-    assert "PIP_REQUIRE_HASHES: \"1\"" in agent_evaluation
+    # Hash checking belongs to each repository dependency install.  A global
+    # PIP_REQUIRE_HASHES leaks into setup-python and PEP 517 build-isolation
+    # subprocesses, where bootstrap tools are intentionally outside our lock.
+    assert "PIP_REQUIRE_HASHES" not in all_python_workflows
     assert workflow.count("--require-hashes -r requirements-dev.lock") == 5
     assert agent_evaluation.count("--require-hashes -r requirements-dev.lock") == 3
     assert "uv pip sync requirements-dev.lock" in workflow

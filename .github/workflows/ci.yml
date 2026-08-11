@@ -28,7 +28,6 @@ env:
   UV_VERSION: "0.11.23"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PIP_NO_INPUT: "1"
-  PIP_REQUIRE_HASHES: "1"
 
 jobs:
   migration-and-python-quality:
