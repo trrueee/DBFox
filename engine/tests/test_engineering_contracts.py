@@ -86,6 +86,21 @@ def test_ci_enforces_the_required_layered_quality_gates() -> None:
         assert command in workflow
 
 
+def test_ci_only_uses_runner_context_after_a_job_reaches_its_runner() -> None:
+    for workflow_path in (CI_WORKFLOW, AGENT_EVALUATION_WORKFLOW):
+        in_job_env = False
+        for line in workflow_path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("    env:"):
+                in_job_env = True
+                continue
+            if in_job_env and line.startswith("    ") and not line.startswith("      "):
+                in_job_env = False
+            if in_job_env:
+                assert "${{ runner." not in line, (
+                    f"{workflow_path.name}: runner context is unavailable in jobs.<job_id>.env: {line}"
+                )
+
+
 def test_rust_toolchain_and_lockfile_are_explicit() -> None:
     manifest = (ROOT / "desktop" / "src-tauri" / "Cargo.toml").read_text(encoding="utf-8")
     toolchain = (ROOT / "desktop" / "src-tauri" / "rust-toolchain.toml").read_text(

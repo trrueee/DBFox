@@ -35,10 +35,13 @@ jobs:
     name: Migration contract and Python quality
     runs-on: ubuntu-24.04
     env:
-      DBFOX_DATABASE_URL: sqlite:///${{ runner.temp }}/dbfox-migration-ci.db
       DBFOX_MIGRATE_ONLY: "1"
-      DBFOX_RUNTIME_DIR: ${{ runner.temp }}/dbfox-runtime
     steps:
+      - name: Configure runner-local paths
+        run: |
+          echo "DBFOX_DATABASE_URL=sqlite:///$RUNNER_TEMP/dbfox-migration-ci.db" >> "$GITHUB_ENV"
+          echo "DBFOX_RUNTIME_DIR=$RUNNER_TEMP/dbfox-runtime" >> "$GITHUB_ENV"
+
       # v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -91,9 +94,10 @@ jobs:
     name: Backend core regression
     needs: migration-and-python-quality
     runs-on: ubuntu-24.04
-    env:
-      DBFOX_RUNTIME_DIR: ${{ runner.temp }}/dbfox-runtime
     steps:
+      - name: Configure runner-local paths
+        run: echo "DBFOX_RUNTIME_DIR=$RUNNER_TEMP/dbfox-runtime" >> "$GITHUB_ENV"
+
       # v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -122,9 +126,10 @@ jobs:
     name: Production Python compatibility regression
     needs: migration-and-python-quality
     runs-on: ubuntu-24.04
-    env:
-      DBFOX_RUNTIME_DIR: ${{ runner.temp }}/dbfox-runtime
     steps:
+      - name: Configure runner-local paths
+        run: echo "DBFOX_RUNTIME_DIR=$RUNNER_TEMP/dbfox-runtime" >> "$GITHUB_ENV"
+
       # v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -155,9 +160,10 @@ jobs:
     name: Agent runtime regression
     needs: migration-and-python-quality
     runs-on: ubuntu-24.04
-    env:
-      DBFOX_RUNTIME_DIR: ${{ runner.temp }}/dbfox-runtime
     steps:
+      - name: Configure runner-local paths
+        run: echo "DBFOX_RUNTIME_DIR=$RUNNER_TEMP/dbfox-runtime" >> "$GITHUB_ENV"
+
       # v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -236,12 +242,14 @@ jobs:
     env:
       # Audit only committed lockfiles.  No lifecycle scripts or dependency
       # resolver is allowed to execute while collecting vulnerability metadata.
-      CARGO_HOME: ${{ runner.temp }}/cargo-home
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       GIT_TERMINAL_PROMPT: "0"
       npm_config_fetch_retries: "2"
       npm_config_fetch_timeout: "30000"
     steps:
+      - name: Configure runner-local paths
+        run: echo "CARGO_HOME=$RUNNER_TEMP/cargo-home" >> "$GITHUB_ENV"
+
       # v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
