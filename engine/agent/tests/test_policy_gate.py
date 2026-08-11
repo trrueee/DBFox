@@ -92,6 +92,33 @@ def test_input_contract_is_enforced_before_policy_rules(db_session):
     assert "input contract" in decision.reason
 
 
+def test_input_contract_reason_names_schema_locations_without_reflecting_values(
+    db_session,
+):
+    registry = ToolRegistry().register(PolicyTestTool())
+    decision = PolicyGate(registry, db_session).check(
+        _state(),
+        "policy_test",
+        {"value": "TOP_SECRET_SENTINEL"},
+    )
+
+    assert decision.status == "blocked"
+    assert "value (int_parsing)" in decision.reason
+    assert "TOP_SECRET_SENTINEL" not in decision.reason
+
+
+def test_update_plan_empty_call_reports_missing_required_fields(db_session):
+    decision = PolicyGate(register_dbfox_tools(), db_session).check(
+        _state(allowed_tool_groups=["manage"]),
+        "update_plan",
+        {},
+    )
+
+    assert decision.status == "blocked"
+    assert "objective (missing)" in decision.reason
+    assert "steps (missing)" in decision.reason
+
+
 def test_schema_list_empty_arguments_apply_canonical_model_defaults(db_session):
     decision = PolicyGate(register_dbfox_tools(), db_session).check(
         _state(allowed_tool_groups=["catalog"]),

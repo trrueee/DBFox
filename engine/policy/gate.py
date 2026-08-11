@@ -20,6 +20,26 @@ class PolicyDecision(BaseModel):
     approval: dict[str, Any] | None = None
 
 
+def _safe_input_contract_reason(
+    tool_name: str,
+    error: ValidationError,
+) -> str:
+    """Project Pydantic failures without reflecting model-authored values."""
+
+    issues: list[str] = []
+    for item in error.errors(include_url=False, include_input=False):
+        location = ".".join(str(part) for part in item.get("loc") or ()) or "root"
+        issue_type = str(item.get("type") or "invalid")
+        issue = f"{location} ({issue_type})"
+        if issue not in issues:
+            issues.append(issue)
+    summary = ", ".join(issues[:8]) or "arguments (invalid)"
+    return (
+        f"Tool {tool_name} arguments violate its declared input contract. "
+        f"Correct these schema locations and submit a complete call: {summary}."
+    )
+
+
 # ── Rule chain infrastructure ────────────────────────────────────────────────────
 #
 # Each rule receives (gate, state, tool_name, args, execution_mode, tool, policy)
@@ -295,10 +315,10 @@ class PolicyGate:
                     mode="json",
                     exclude_none=True,
                 )
-            except ValidationError:
+            except ValidationError as exc:
                 return PolicyDecision(
                     status="blocked",
-                    reason=f"Tool {tool_name} arguments violate its declared input contract.",
+                    reason=_safe_input_contract_reason(tool_name, exc),
                     risk_level="danger",
                 )
 
