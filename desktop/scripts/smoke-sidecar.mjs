@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
@@ -17,7 +16,14 @@ if (!existsSync(sidecarPath)) {
   throw new Error(`Packaged sidecar not found: ${sidecarPath}`);
 }
 
-const runtimeDir = await mkdtemp(join(tmpdir(), "dbfox-sidecar-smoke-"));
+// Keep the smoke runtime beneath the checked-out repository. On macOS,
+// os.tmpdir() commonly returns a lexical /var/... path, while /var is a
+// symlink to /private/var. The production runtime deliberately rejects any
+// symlinked ancestor before destructive legacy cleanup, so using os.tmpdir()
+// tested an impossible production path and made the frozen smoke fail before
+// health. The checkout is a normal, private directory on every CI runner and
+// exercises the same no-link runtime-root contract as the installed app.
+const runtimeDir = await mkdtemp(join(process.cwd(), ".dbfox-sidecar-smoke-"));
 const sourceDatabase = process.env.DBFOX_SMOKE_SOURCE_DATABASE;
 if (sourceDatabase) {
   if (!existsSync(sourceDatabase)) {

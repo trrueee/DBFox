@@ -253,6 +253,16 @@ def test_frozen_smoke_covers_schema_result_artifact_and_restart_contracts() -> N
         assert contract in source
 
 
+def test_frozen_smoke_runtime_uses_a_non_symlinked_checkout_parent() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "desktop" / "scripts" / "smoke-sidecar.mjs").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'mkdtemp(join(process.cwd(), ".dbfox-sidecar-smoke-"))' in source
+    assert 'from "node:os"' not in source
+
+
 def test_packaged_sidecar_preserves_control_stream_without_showing_a_window() -> None:
     root = Path(__file__).resolve().parents[2]
     builder_source = Path(build_sidecar.__file__).read_text(encoding="utf-8")
