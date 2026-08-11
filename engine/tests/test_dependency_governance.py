@@ -1,3 +1,4 @@
+from email.message import Message
 from pathlib import Path
 
 from packaging.markers import default_environment
@@ -6,8 +7,10 @@ from scripts.dependency_governance import (
     Component,
     _python_lock_versions,
     node_components,
+    python_components,
     validate_licenses,
 )
+from scripts import dependency_governance
 
 
 def test_node_lock_has_only_declared_non_denied_licenses() -> None:
@@ -53,3 +56,29 @@ def test_python_lock_inventory_honors_standard_environment_markers(tmp_path: Pat
     assert set(
         _python_lock_versions(lock, marker_environment=linux_environment)
     ) == {"common", "posix-only"}
+
+
+def test_python_inventory_uses_pep_503_canonical_distribution_names(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    (tmp_path / "requirements.lock").write_text(
+        "jaraco-classes==3.4.0 \\\n"
+        "    --hash=sha256:" + "a" * 64 + "\n",
+        encoding="utf-8",
+    )
+    metadata = Message()
+    metadata["Name"] = "jaraco.classes"
+    metadata["Version"] = "3.4.0"
+    metadata["License-Expression"] = "MIT"
+    distribution = type("Distribution", (), {"metadata": metadata})()
+    monkeypatch.setattr(dependency_governance, "ROOT", tmp_path)
+    monkeypatch.setattr(
+        dependency_governance.importlib.metadata,
+        "distributions",
+        lambda: [distribution],
+    )
+
+    assert python_components() == [
+        Component("python", "jaraco-classes", "3.4.0", "MIT")
+    ]

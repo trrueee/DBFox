@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Iterable, Mapping
 
 from packaging.markers import Marker, default_environment
+from packaging.utils import canonicalize_name
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +49,10 @@ def node_components() -> list[Component]:
 def python_components() -> list[Component]:
     locked = _python_lock_versions(ROOT / "requirements.lock")
     result: list[Component] = []
-    installed = {distribution.metadata["Name"].lower().replace("_", "-"): distribution for distribution in importlib.metadata.distributions()}
+    installed = {
+        canonicalize_name(distribution.metadata["Name"]): distribution
+        for distribution in importlib.metadata.distributions()
+    }
     for normalized_name, (name, version) in locked.items():
         distribution = installed.get(normalized_name)
         if distribution is None:
@@ -104,7 +108,7 @@ def _python_lock_versions(
             environment=environment
         ):
             continue
-        result[name.lower().replace("_", "-")] = (name, version)
+        result[str(canonicalize_name(name))] = (name, version)
     return result
 
 
