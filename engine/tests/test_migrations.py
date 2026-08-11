@@ -6,7 +6,6 @@ import os
 import sqlite3
 import subprocess
 import sys
-import tarfile
 import warnings
 from pathlib import Path
 
@@ -67,21 +66,15 @@ def _alembic_config(database_url: str) -> Config:
 
 
 def _create_real_historical_create_all_schema(database_url: str, tmp_path: Path) -> None:
-    """Build the exact pre-v2 ORM shape from the committed baseline archive."""
+    """Build the exact pre-v2 ORM shape from its committed source fixture."""
     root = Path(__file__).resolve().parents[2]
-    archive_path = tmp_path / f"models-{HISTORICAL_MODELS_REVISION}.tar"
-    archive_root = tmp_path / "historical-models"
-    with archive_path.open("wb") as archive_file:
-        subprocess.run(
-            ["git", "archive", "--format=tar", HISTORICAL_MODELS_REVISION, "engine/models.py"],
-            cwd=root,
-            check=True,
-            stdout=archive_file,
-        )
-    with tarfile.open(archive_path) as archive:
-        archive.extract(archive.getmember("engine/models.py"), archive_root, filter="data")
-
-    historical_models = archive_root / "engine" / "models.py"
+    historical_models = (
+        root
+        / "engine"
+        / "tests"
+        / "fixtures"
+        / f"historical_models_{HISTORICAL_MODELS_REVISION}.py"
+    )
     script = '''
 import importlib.util
 import sys

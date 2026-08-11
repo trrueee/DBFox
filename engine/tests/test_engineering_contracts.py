@@ -64,13 +64,21 @@ def test_ci_actions_are_pinned_to_full_commit_shas() -> None:
         assert re.fullmatch(r"[0-9a-f]{40}", revision), action
 
 
-def test_migration_ci_fetches_history_required_by_archaeology_fixture() -> None:
-    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
-    migration_job = workflow.split("  migration-and-python-quality:", 1)[1].split(
-        "\n  backend-core:", 1
-    )[0]
+def test_migration_archaeology_uses_a_committed_fixture_not_git_history() -> None:
+    root = Path(__file__).resolve().parents[2]
+    migration_tests = (root / "engine" / "tests" / "test_migrations.py").read_text(
+        encoding="utf-8"
+    )
+    fixture = (
+        root
+        / "engine"
+        / "tests"
+        / "fixtures"
+        / "historical_models_918ea80d.py"
+    )
 
-    assert "fetch-depth: 0" in migration_job
+    assert fixture.is_file()
+    assert "git archive" not in migration_tests
 
 
 def test_ci_enforces_the_required_layered_quality_gates() -> None:
