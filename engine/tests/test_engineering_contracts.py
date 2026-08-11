@@ -218,12 +218,17 @@ def test_sidecar_build_uses_one_exact_python_version_source() -> None:
 
 
 def test_npm_lock_is_registry_resolved_and_integrity_verified() -> None:
+    package = json.loads((ROOT / "desktop" / "package.json").read_text(encoding="utf-8"))
     lock = json.loads(NPM_LOCK.read_text(encoding="utf-8"))
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
     assert lock["lockfileVersion"] == 3
     assert lock["requires"] is True
     packages = lock["packages"]
     assert isinstance(packages, dict) and packages
+    assert package["engines"]["node"] == ">=22.18.0"
+    assert packages[""]["engines"]["node"] == package["engines"]["node"]
+    assert 'NODE_VERSION: "22.18.0"' in workflow
 
     for package_path, package in packages.items():
         if not package_path:
