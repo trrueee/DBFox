@@ -480,6 +480,10 @@ jobs:
         working-directory: desktop
         env:
           VITE_LOCAL_ENGINE_TOKEN: ${{ env.DBFOX_RELEASE_TOKEN_SENTINEL }}
+          # linuxdeploy strips ELF files by default. A PyInstaller one-file
+          # Sidecar is already finalized and hash-bound to its runtime manifest;
+          # mutating it during AppImage assembly breaks that integrity contract.
+          NO_STRIP: ${{ runner.os == 'Linux' && '1' || '' }}
         run: npm run tauri build
 
       - name: Run the authenticated frozen Sidecar smoke

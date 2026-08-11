@@ -104,6 +104,16 @@ def test_ci_enforces_the_required_layered_quality_gates() -> None:
         assert command in workflow
 
 
+def test_linux_appimage_does_not_mutate_the_manifest_bound_sidecar() -> None:
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+    build_step = workflow.split(
+        "- name: Build final desktop installers and probe the frozen sidecar",
+        1,
+    )[1].split("- name: Run the authenticated frozen Sidecar smoke", 1)[0]
+
+    assert "NO_STRIP: ${{ runner.os == 'Linux' && '1' || '' }}" in build_step
+
+
 def test_ci_only_uses_runner_context_after_a_job_reaches_its_runner() -> None:
     for workflow_path in (CI_WORKFLOW, AGENT_EVALUATION_WORKFLOW):
         in_job_env = False
