@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import sys
 from typing import Iterable
 
 from sqlalchemy.engine import Connection, Engine, make_url
@@ -767,6 +768,9 @@ def _remove_posix_directory(root_fd: int, runtime_root: Path, directory: Path) -
 
 def _remove_external_files_windows(plan: _CleanupPlan) -> None:
     """Delete fixed runtime files by handle, never by a mutable Win32 path."""
+    if sys.platform != "win32":
+        raise RuntimeResetPathError()
+
     import ctypes
     import ntpath
     from ctypes import wintypes

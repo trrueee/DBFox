@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import math
 import os
 from pathlib import Path
+import sys
 import time
 from typing import Iterator
 from urllib.parse import unquote, urlencode, urlparse
@@ -73,7 +74,7 @@ def _lock_timeout_seconds() -> float:
 
 
 def _try_lock(lock_file) -> bool:
-    if os.name == "nt":
+    if sys.platform == "win32":
         import msvcrt
 
         lock_file.seek(0)
@@ -93,7 +94,7 @@ def _try_lock(lock_file) -> bool:
 
 
 def _unlock(lock_file) -> None:
-    if os.name == "nt":
+    if sys.platform == "win32":
         import msvcrt
 
         lock_file.seek(0)
