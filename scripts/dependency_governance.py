@@ -10,7 +10,9 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
+
+from packaging.markers import Marker, default_environment
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,10 +88,22 @@ def rust_components() -> list[Component]:
     return result
 
 
-def _python_lock_versions(path: Path) -> dict[str, tuple[str, str]]:
+def _python_lock_versions(
+    path: Path,
+    *,
+    marker_environment: Mapping[str, str] | None = None,
+) -> dict[str, tuple[str, str]]:
     result: dict[str, tuple[str, str]] = {}
-    for match in re.finditer(r"(?m)^([A-Za-z0-9_.-]+)==([^\s\\;]+)", path.read_text(encoding="utf-8")):
-        name, version = match.groups()
+    environment = dict(marker_environment or default_environment())
+    requirement_pattern = re.compile(
+        r"(?m)^([A-Za-z0-9_.-]+)==([^\s\\;]+)(?:\s*;\s*([^\\\n]+))?"
+    )
+    for match in requirement_pattern.finditer(path.read_text(encoding="utf-8")):
+        name, version, marker_text = match.groups()
+        if marker_text is not None and not Marker(marker_text.strip()).evaluate(
+            environment=environment
+        ):
+            continue
         result[name.lower().replace("_", "-")] = (name, version)
     return result
 
