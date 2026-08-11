@@ -4,6 +4,8 @@
 > 最后核验：2026-08-06
 
 - [工程质量门禁](./engineering-gates.md)：本地与 CI 的 Python、前端、Rust、迁移、Frozen Sidecar 和依赖策略。
+- [Agent 生产评测方法](./agent-evaluation-methodology.md)：分层 Harness、数据集角色、Grader、统计门禁与脱敏 Trace 合同。
+- [DBFox AgentBench](./agentbench-implementation.md)：60 场景数据集、评分器校准、真实 RunLoop、故障注入、CLI 和 CI。
 - [供应链安全](./supply-chain-security.md)：锁文件、OSV、npm audit、RustSec、SBOM 和许可证边界。
 - [发布验证矩阵](./release-validation-matrix.md)：平台、Runner、产物和人工验收的证据要求。
 
