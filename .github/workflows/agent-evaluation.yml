@@ -1,0 +1,191 @@
+name: Agent evaluation
+
+on:
+  schedule:
+    - cron: "25 2 * * 1-6"
+    - cron: "25 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Evaluation profile
+        required: true
+        default: nightly
+        type: choice
+        options: [nightly, weekly]
+      repetitions:
+        description: Repetitions (1-5; blank uses the profile default)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-evaluation-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.12.8"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+  PIP_REQUIRE_HASHES: "1"
+
+jobs:
+  evaluator-contract:
+    name: Calibrate evaluator and run deterministic Harness
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+      - name: Install locked development dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip check
+      - name: Validate the versioned sixty-case dataset
+        run: python -m scripts.agentbench validate
+      - name: Calibrate deterministic graders
+        run: >-
+          python -m scripts.agentbench calibrate
+          --output output/agent-evaluation/calibration
+      - name: Run deterministic SQLite, memory and fault-injection scenarios
+        run: >-
+          python -m pytest engine/agent/tests/harness
+          engine/agent/tests/test_conversation_recall_harness.py
+          -q --tb=short
+          --junitxml=output/agent-evaluation/deterministic-harness.xml
+      - name: Upload deterministic evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: agentbench-contract-${{ github.run_id }}
+          path: output/agent-evaluation/
+          if-no-files-found: error
+          retention-days: 30
+
+  mysql-contract:
+    name: Production Harness against isolated MySQL
+    needs: evaluator-contract
+    runs-on: ubuntu-24.04
+    services:
+      mysql:
+        image: mysql:8.4@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
+        env:
+          MYSQL_DATABASE: agentbench
+          MYSQL_USER: agentbench
+          MYSQL_PASSWORD: agentbench-contract-password
+          MYSQL_ROOT_PASSWORD: agentbench-root-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      DBFOX_RUN_MYSQL_CONTRACT: "1"
+      DBFOX_AGENTBENCH_MYSQL_HOST: 127.0.0.1
+      DBFOX_AGENTBENCH_MYSQL_PORT: "3306"
+      DBFOX_AGENTBENCH_MYSQL_USER: agentbench
+      DBFOX_AGENTBENCH_MYSQL_PASSWORD: agentbench-contract-password
+      DBFOX_AGENTBENCH_MYSQL_DATABASE: agentbench
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+      - name: Install locked development dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip check
+      - name: Run the production Agent and MySQL connection contract
+        run: |
+          mkdir -p output/agent-evaluation
+          python -m pytest \
+            engine/agent/tests/harness/test_mysql_contract.py \
+            -q --tb=short \
+            --junitxml=output/agent-evaluation/mysql-contract.xml
+      - name: Upload MySQL contract evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: agentbench-mysql-${{ github.run_id }}
+          path: output/agent-evaluation/
+          if-no-files-found: error
+          retention-days: 30
+
+  real-provider:
+    name: Opt-in real Responses closed-loop evaluation
+    if: vars.DBFOX_RUN_REAL_LLM == 'true'
+    needs: evaluator-contract
+    runs-on: ubuntu-24.04
+    env:
+      DBFOX_RUN_REAL_LLM: "1"
+      DBFOX_REAL_LLM_API_KEY: ${{ secrets.DBFOX_REAL_LLM_API_KEY }}
+      DBFOX_REAL_LLM_API_BASE: ${{ vars.DBFOX_REAL_LLM_API_BASE }}
+      DBFOX_REAL_LLM_MODEL: ${{ vars.DBFOX_REAL_LLM_MODEL }}
+      DBFOX_ALLOW_REAL_LLM_ENV_KEY: "1"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+      - name: Install locked development dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip check
+      - name: Require the opt-in Provider configuration
+        shell: bash
+        run: |
+          test -n "$DBFOX_REAL_LLM_API_KEY"
+          test -n "$DBFOX_REAL_LLM_MODEL"
+      - name: Select the nightly or weekly profile
+        id: profile
+        shell: bash
+        env:
+          DISPATCH_PROFILE: ${{ inputs.profile }}
+          DISPATCH_REPETITIONS: ${{ inputs.repetitions }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          profile="${DISPATCH_PROFILE:-nightly}"
+          if [[ "$SCHEDULE" == "25 2 * * 0" ]]; then profile="weekly"; fi
+          repetitions="$DISPATCH_REPETITIONS"
+          if [[ -z "$repetitions" ]]; then
+            if [[ "$profile" == "weekly" ]]; then repetitions=5; else repetitions=3; fi
+          fi
+          if [[ ! "$repetitions" =~ ^[1-5]$ ]]; then
+            echo "repetitions must be between 1 and 5" >&2
+            exit 2
+          fi
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
+          echo "repetitions=$repetitions" >> "$GITHUB_OUTPUT"
+      - name: Run the production RunLoop against the real Provider
+        shell: bash
+        env:
+          PROFILE: ${{ steps.profile.outputs.profile }}
+          REPETITIONS: ${{ steps.profile.outputs.repetitions }}
+        run: |
+          args=(--tag real_provider --repetitions "$REPETITIONS" --output output/agent-evaluation/real-provider)
+          if [[ "$PROFILE" == "nightly" ]]; then args+=(--tag nightly); fi
+          python -m scripts.agentbench real "${args[@]}"
+      - name: Upload real-provider evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: agentbench-real-${{ github.run_id }}
+          path: output/agent-evaluation/
+          if-no-files-found: error
+          retention-days: 30

@@ -17,6 +17,7 @@ pytestmark = pytest.mark.engineering_contract
 
 ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+AGENT_EVALUATION_WORKFLOW = ROOT / ".github" / "workflows" / "agent-evaluation.yml"
 NPM_LOCK = ROOT / "desktop" / "package-lock.json"
 NPM_MANIFEST = ROOT / "desktop" / "package.json"
 CARGO_LOCK = ROOT / "desktop" / "src-tauri" / "Cargo.lock"
@@ -174,14 +175,18 @@ def test_python_dependency_locks_cover_all_direct_inputs_and_have_hashes() -> No
 
 def test_ci_installs_only_hash_checked_python_locks() -> None:
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+    agent_evaluation = AGENT_EVALUATION_WORKFLOW.read_text(encoding="utf-8")
+    all_python_workflows = workflow + agent_evaluation
 
     assert "PIP_REQUIRE_HASHES: \"1\"" in workflow
-    assert workflow.count("--require-hashes -r requirements-dev.lock") == 6
+    assert "PIP_REQUIRE_HASHES: \"1\"" in agent_evaluation
+    assert workflow.count("--require-hashes -r requirements-dev.lock") == 5
+    assert agent_evaluation.count("--require-hashes -r requirements-dev.lock") == 3
     assert "uv pip sync requirements-dev.lock" in workflow
     assert "python-version-file: .sidecar-python-version" in workflow
     assert "SIDECAR_PYTHON_VERSION" not in workflow
-    assert "python -m pip install -r requirements-dev.txt" not in workflow
-    assert "python -m pip install -r requirements-build.txt" not in workflow
+    assert "python -m pip install -r requirements-dev.txt" not in all_python_workflows
+    assert "python -m pip install -r requirements-build.txt" not in all_python_workflows
 
 
 def test_sidecar_build_uses_one_exact_python_version_source() -> None:
