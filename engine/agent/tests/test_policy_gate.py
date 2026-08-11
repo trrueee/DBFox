@@ -68,6 +68,7 @@ def test_unknown_function_is_blocked(db_session):
         {},
     )
     assert decision.status == "blocked"
+    assert decision.error_code is None
 
 
 def test_safe_metadata_tool_is_allowed(db_session):
@@ -89,6 +90,7 @@ def test_input_contract_is_enforced_before_policy_rules(db_session):
         {"unexpected": True},
     )
     assert decision.status == "blocked"
+    assert decision.error_code == "TOOL_INPUT_INVALID"
     assert "input contract" in decision.reason
 
 

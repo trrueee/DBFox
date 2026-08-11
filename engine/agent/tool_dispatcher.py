@@ -129,16 +129,13 @@ class ToolDispatcher:
                 db,
                 self.definition,
             ).build(run)
-            decision = (
-                PolicyGate(self.registry, db)
-                .check(
-                    state,
-                    call.name,
-                    call.arguments,
-                    self.definition.execution_mode,
-                )
-                .model_dump(mode="json")
+            policy_decision = PolicyGate(self.registry, db).check(
+                state,
+                call.name,
+                call.arguments,
+                self.definition.execution_mode,
             )
+            decision = policy_decision.model_dump(mode="json")
             invocations = ToolInvocationRepository(db)
             invocation = invocations.request(
                 lease=lease,
@@ -187,7 +184,9 @@ class ToolDispatcher:
                     model_visible_summary=str(
                         decision.get("reason") or "Tool request rejected."
                     ),
-                    error_code="TOOL_POLICY_REJECTED",
+                    error_code=(
+                        policy_decision.error_code or "TOOL_POLICY_REJECTED"
+                    ),
                     error_message="Tool request rejected.",
                 )
                 db.commit()

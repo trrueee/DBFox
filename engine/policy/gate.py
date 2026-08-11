@@ -18,6 +18,7 @@ class PolicyDecision(BaseModel):
     safe_args: dict[str, Any] = Field(default_factory=dict)
     risk_level: Literal["safe", "warning", "danger"] = "safe"
     approval: dict[str, Any] | None = None
+    error_code: Literal["TOOL_INPUT_INVALID"] | None = None
 
 
 def _safe_input_contract_reason(
@@ -320,6 +321,7 @@ class PolicyGate:
                     status="blocked",
                     reason=_safe_input_contract_reason(tool_name, exc),
                     risk_level="danger",
+                    error_code="TOOL_INPUT_INVALID",
                 )
 
         for rule in _RULES:
