@@ -37,10 +37,11 @@ BUILD_LOCK = ROOT / "requirements-build.lock"
 SIDECAR_PYTHON_VERSION_PATH = ROOT / ".sidecar-python-version"
 RUNTIME_MANIFEST_PATH = BINARIES_DIR / "dbfox-engine-runtime-manifest.json"
 BUILD_PROVENANCE_FILENAME = "_build_provenance.json"
-ARTIFACT_MANIFEST_SCHEMA_VERSION = 2
+ARTIFACT_MANIFEST_SCHEMA_VERSION = 3
 MINIMUM_SQLITE_VERSION = (3, 51, 3)
 TARGET_SQLITE_VERSION = "3.53.4"
 RUNTIME_MANIFEST_MARKER = "DBFOX_RUNTIME_MANIFEST "
+RELEASE_CONTRACTS_MARKER = "DBFOX_RELEASE_CONTRACTS "
 KEY_BUILD_PACKAGES = (
     "alembic",
     "fastapi",
@@ -199,6 +200,60 @@ def _ignore_sidecar_runtime(src: str, names: list[str]) -> set[str]:
     return ignored
 
 
+def _source_tree_sha256(root: Path) -> str:
+    """Hash the exact runtime source set copied into the frozen Sidecar."""
+
+    digest = hashlib.sha256()
+    files: list[tuple[str, Path]] = []
+    for source_path in root.rglob("*"):
+        if not source_path.is_file():
+            continue
+        relative = source_path.relative_to(root)
+        if any(part in SIDECAR_RUNTIME_EXCLUDED_DIRS for part in relative.parts[:-1]):
+            continue
+        if source_path.name == BUILD_PROVENANCE_FILENAME:
+            continue
+        if source_path.name.endswith(SIDECAR_RUNTIME_EXCLUDED_FILE_SUFFIXES):
+            continue
+        files.append((relative.as_posix(), source_path))
+    for relative_name, source_path in sorted(files):
+        digest.update(relative_name.encode("utf-8"))
+        digest.update(b"\0")
+        with source_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _git_source_facts() -> dict[str, object]:
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    status = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=normal"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    revision = commit.stdout.strip().lower()
+    if commit.returncode != 0 or len(revision) != 40 or any(
+        character not in "0123456789abcdef" for character in revision
+    ):
+        raise RuntimeError("Unable to resolve the Git commit for Sidecar provenance")
+    if status.returncode != 0:
+        raise RuntimeError("Unable to inspect the Git worktree for Sidecar provenance")
+    return {
+        "source_git_commit": revision,
+        "source_git_dirty": bool(status.stdout.strip()),
+    }
+
+
 def _build_environment_facts(python_exe: str) -> dict[str, object]:
     package_literal = json.dumps(KEY_BUILD_PACKAGES)
     command = [
@@ -241,11 +296,13 @@ def collect_build_provenance(python_exe: str) -> dict[str, object]:
     if not BUILD_LOCK.is_file():
         raise RuntimeError(f"Build lock file not found: {BUILD_LOCK}")
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "python_version": actual_python,
         "lock_file": BUILD_LOCK.name,
         "lock_sha256": _sha256(BUILD_LOCK),
         "packages": facts["packages"],
+        **_git_source_facts(),
+        "engine_source_sha256": _source_tree_sha256(ENGINE_DIR),
     }
 
 
@@ -324,14 +381,19 @@ def install_sidecar(binary: Path) -> Path:
     return dest
 
 
-def probe_sidecar_runtime(binary: Path) -> dict[str, object]:
-    """Ask the final executable—not the build interpreter—what it loaded."""
+def _probe_sidecar_json(
+    binary: Path,
+    *,
+    argument: str,
+    marker: str,
+    label: str,
+) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="dbfox-sidecar-probe-") as runtime_dir:
         env = os.environ.copy()
         env["DBFOX_ENGINE_TOKEN"] = generate_token()
         env["DBFOX_RUNTIME_DIR"] = runtime_dir
         result = subprocess.run(
-            [str(binary), "--runtime-manifest"],
+            [str(binary), argument],
             cwd=str(binary.parent),
             env=env,
             capture_output=True,
@@ -340,23 +402,46 @@ def probe_sidecar_runtime(binary: Path) -> dict[str, object]:
         )
     if result.returncode != 0:
         raise RuntimeError(
-            "Frozen sidecar runtime probe failed "
+            f"Frozen sidecar {label} probe failed "
             f"(exit={result.returncode}): {result.stderr[-2000:]}"
         )
-    manifest_line = next(
-        (line for line in reversed(result.stdout.splitlines()) if line.startswith(RUNTIME_MANIFEST_MARKER)),
+    payload_line = next(
+        (line for line in reversed(result.stdout.splitlines()) if line.startswith(marker)),
         None,
     )
-    if manifest_line is None:
-        raise RuntimeError("Frozen sidecar did not emit DBFOX_RUNTIME_MANIFEST")
+    if payload_line is None:
+        raise RuntimeError(f"Frozen sidecar did not emit {marker.strip()}")
     try:
-        manifest = json.loads(manifest_line[len(RUNTIME_MANIFEST_MARKER):])
+        payload = json.loads(payload_line[len(marker):])
     except json.JSONDecodeError as error:
-        raise RuntimeError(f"Frozen sidecar emitted invalid runtime manifest: {error}") from error
-    if not isinstance(manifest, dict):
-        raise RuntimeError("Frozen sidecar runtime manifest must be a JSON object")
+        raise RuntimeError(f"Frozen sidecar emitted invalid {label}: {error}") from error
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Frozen sidecar {label} must be a JSON object")
+    return payload
+
+
+def probe_sidecar_runtime(binary: Path) -> dict[str, object]:
+    """Ask the final executable—not the build interpreter—what it loaded."""
+
+    manifest = _probe_sidecar_json(
+        binary,
+        argument="--runtime-manifest",
+        marker=RUNTIME_MANIFEST_MARKER,
+        label="runtime manifest",
+    )
     validate_runtime_manifest(manifest)
     return manifest
+
+
+def probe_sidecar_release_contracts(binary: Path) -> dict[str, object]:
+    contracts = _probe_sidecar_json(
+        binary,
+        argument="--release-contracts",
+        marker=RELEASE_CONTRACTS_MARKER,
+        label="release contracts",
+    )
+    validate_release_contracts(contracts)
+    return contracts
 
 
 def validate_runtime_manifest(manifest: dict[str, object]) -> None:
@@ -381,6 +466,18 @@ def validate_runtime_manifest(manifest: dict[str, object]) -> None:
         for name in KEY_BUILD_PACKAGES
     ):
         raise RuntimeError("Release sidecar build provenance is missing package versions")
+    revision = manifest.get("source_git_commit")
+    if not isinstance(revision, str) or len(revision) != 40 or any(
+        character not in "0123456789abcdef" for character in revision
+    ):
+        raise RuntimeError("Release sidecar build provenance has no valid Git commit")
+    if not isinstance(manifest.get("source_git_dirty"), bool):
+        raise RuntimeError("Release sidecar build provenance has no worktree state")
+    source_digest = manifest.get("engine_source_sha256")
+    if not isinstance(source_digest, str) or len(source_digest) != 64 or any(
+        character not in "0123456789abcdef" for character in source_digest
+    ):
+        raise RuntimeError("Release sidecar build provenance has no valid engine source hash")
     version_raw = manifest.get("sqlite_version_info")
     if not isinstance(version_raw, list) or len(version_raw) < 3:
         raise RuntimeError("Sidecar runtime manifest has no valid SQLite version tuple")
@@ -399,6 +496,29 @@ def validate_runtime_manifest(manifest: dict[str, object]) -> None:
         raise RuntimeError("Sidecar runtime manifest is missing SQLite provenance")
 
 
+def validate_current_source_provenance(manifest: dict[str, object]) -> None:
+    """Bind a newly built Sidecar to the source tree that invoked the build."""
+
+    if manifest.get("engine_source_sha256") != _source_tree_sha256(ENGINE_DIR):
+        raise RuntimeError(
+            "Release sidecar engine source hash differs from the current source tree"
+        )
+
+
+def validate_release_contracts(contracts: dict[str, object]) -> None:
+    if contracts.get("schema_version") != 1:
+        raise RuntimeError("Unsupported Sidecar release-contract schema")
+    schema_list = contracts.get("schema_list_empty_arguments")
+    if not isinstance(schema_list, dict) or schema_list != {
+        "status": "allowed",
+        "safe_args": {"limit": 20},
+    }:
+        raise RuntimeError(
+            "Release blocked: final Sidecar rejects schema_list empty arguments "
+            "instead of applying canonical defaults"
+        )
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -407,7 +527,11 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def write_artifact_manifest(binary: Path, runtime: dict[str, object]) -> Path:
+def write_artifact_manifest(
+    binary: Path,
+    runtime: dict[str, object],
+    release_contracts: dict[str, object],
+) -> Path:
     artifact = {
         "schema_version": ARTIFACT_MANIFEST_SCHEMA_VERSION,
         "target_triplet": get_target_triplet(),
@@ -416,6 +540,7 @@ def write_artifact_manifest(binary: Path, runtime: dict[str, object]) -> Path:
         "minimum_sqlite_version": ".".join(str(part) for part in MINIMUM_SQLITE_VERSION),
         "target_sqlite_version": TARGET_SQLITE_VERSION,
         "runtime": runtime,
+        "release_contracts": release_contracts,
     }
     RUNTIME_MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
     temporary = RUNTIME_MANIFEST_PATH.with_suffix(".json.tmp")
@@ -462,10 +587,12 @@ def main() -> None:
     print("\n[3/4] Install to Tauri binaries")
     dest = install_sidecar(binary)
 
-    print("\n[4/4] Probe final sidecar and enforce SQLite release policy")
+    print("\n[4/4] Probe final sidecar and enforce release contracts")
     try:
         runtime_manifest = probe_sidecar_runtime(dest)
-        write_artifact_manifest(dest, runtime_manifest)
+        validate_current_source_provenance(runtime_manifest)
+        release_contracts = probe_sidecar_release_contracts(dest)
+        write_artifact_manifest(dest, runtime_manifest, release_contracts)
     except Exception as error:
         dest.unlink(missing_ok=True)
         print(f"  [FAIL] {error}", file=sys.stderr)

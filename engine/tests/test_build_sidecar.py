@@ -61,10 +61,25 @@ def _runtime_manifest(version: tuple[int, int, int]) -> dict[str, object]:
         "build_packages": {
             name: "test-version" for name in build_sidecar.KEY_BUILD_PACKAGES
         },
+        "source_git_commit": "a" * 40,
+        "source_git_dirty": False,
+        "engine_source_sha256": build_sidecar._source_tree_sha256(
+            build_sidecar.ENGINE_DIR
+        ),
         "sqlite_version": ".".join(map(str, version)),
         "sqlite_version_info": list(version),
         "sqlite_source_id": f"{'.'.join(map(str, version))} source-id",
         "sqlite_compile_options": ["THREADSAFE=1"],
+    }
+
+
+def _release_contracts() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "schema_list_empty_arguments": {
+            "status": "allowed",
+            "safe_args": {"limit": 20},
+        },
     }
 
 
@@ -77,6 +92,14 @@ def test_runtime_manifest_gate_accepts_fixed_sqlite() -> None:
     build_sidecar.validate_runtime_manifest(_runtime_manifest((3, 51, 3)))
 
 
+def test_new_sidecar_must_match_the_current_engine_source_tree() -> None:
+    manifest = _runtime_manifest((3, 53, 4))
+    manifest["engine_source_sha256"] = "0" * 64
+
+    with pytest.raises(RuntimeError, match="differs from the current source tree"):
+        build_sidecar.validate_current_source_provenance(manifest)
+
+
 def test_artifact_manifest_binds_runtime_to_sidecar_hash(tmp_path, monkeypatch) -> None:
     binary = tmp_path / "dbfox-engine-test"
     binary.write_bytes(b"final-sidecar")
@@ -84,7 +107,11 @@ def test_artifact_manifest_binds_runtime_to_sidecar_hash(tmp_path, monkeypatch) 
     monkeypatch.setattr(build_sidecar, "RUNTIME_MANIFEST_PATH", output)
     monkeypatch.setattr(build_sidecar, "get_target_triplet", lambda: "test-triplet")
 
-    result = build_sidecar.write_artifact_manifest(binary, _runtime_manifest((3, 53, 4)))
+    result = build_sidecar.write_artifact_manifest(
+        binary,
+        _runtime_manifest((3, 53, 4)),
+        _release_contracts(),
+    )
     manifest = json.loads(result.read_text(encoding="utf-8"))
 
     assert manifest["target_triplet"] == "test-triplet"
@@ -93,6 +120,7 @@ def test_artifact_manifest_binds_runtime_to_sidecar_hash(tmp_path, monkeypatch) 
     assert manifest["minimum_sqlite_version"] == "3.51.3"
     assert manifest["target_sqlite_version"] == "3.53.4"
     assert manifest["schema_version"] == build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION
+    assert manifest["release_contracts"] == _release_contracts()
 
 
 def test_extracted_installer_must_match_manifest_hash_and_runtime(tmp_path, monkeypatch) -> None:
@@ -106,6 +134,7 @@ def test_extracted_installer_must_match_manifest_hash_and_runtime(tmp_path, monk
         "target_triplet": "test-triplet",
         "sidecar_sha256": build_sidecar._sha256(sidecar),
         "runtime": runtime,
+        "release_contracts": _release_contracts(),
     }
     expected_manifest = tmp_path / "expected.json"
     expected_manifest.write_text(json.dumps(manifest), encoding="utf-8")
@@ -114,6 +143,11 @@ def test_extracted_installer_must_match_manifest_hash_and_runtime(tmp_path, monk
         encoding="utf-8",
     )
     monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _path: runtime)
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_release_contracts",
+        lambda _path: _release_contracts(),
+    )
 
     result = verify_release_artifact.verify_extracted_tree(root, expected_manifest)
 
@@ -136,6 +170,7 @@ def test_extracted_installer_rejects_release_token_sentinel(tmp_path, monkeypatc
         "target_triplet": "test-triplet",
         "sidecar_sha256": build_sidecar._sha256(sidecar),
         "runtime": runtime,
+        "release_contracts": _release_contracts(),
     }
     expected_manifest = tmp_path / "expected.json"
     expected_manifest.write_text(json.dumps(manifest), encoding="utf-8")
@@ -145,6 +180,11 @@ def test_extracted_installer_rejects_release_token_sentinel(tmp_path, monkeypatc
     )
     (root / "frontend.js").write_bytes(b"prefix-dbfox-release-sentinel-1234567890-suffix")
     monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _path: runtime)
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_release_contracts",
+        lambda _path: _release_contracts(),
+    )
 
     with pytest.raises(RuntimeError, match="forbidden production value"):
         verify_release_artifact.verify_extracted_tree(
@@ -165,6 +205,7 @@ def test_extracted_installer_rejects_development_files(tmp_path, monkeypatch) ->
         "target_triplet": "test-triplet",
         "sidecar_sha256": build_sidecar._sha256(sidecar),
         "runtime": runtime,
+        "release_contracts": _release_contracts(),
     }
     expected_manifest = tmp_path / "expected.json"
     expected_manifest.write_text(json.dumps(manifest), encoding="utf-8")
@@ -174,6 +215,11 @@ def test_extracted_installer_rejects_development_files(tmp_path, monkeypatch) ->
     )
     (root / ".env.local").write_text("VITE_LOCAL_ENGINE_TOKEN=forbidden", encoding="utf-8")
     monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _path: runtime)
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_release_contracts",
+        lambda _path: _release_contracts(),
+    )
 
     with pytest.raises(RuntimeError, match="forbidden development files"):
         verify_release_artifact.verify_extracted_tree(root, expected_manifest)
@@ -432,11 +478,14 @@ def test_build_provenance_rejects_a_different_interpreter(
 
 def test_staged_engine_contains_build_provenance(tmp_path) -> None:
     provenance = {
-        "schema_version": 1,
+        "schema_version": 2,
         "python_version": build_sidecar.sidecar_python_version(),
         "lock_file": "requirements-build.lock",
         "lock_sha256": "a" * 64,
         "packages": {name: "1" for name in build_sidecar.KEY_BUILD_PACKAGES},
+        "source_git_commit": "a" * 40,
+        "source_git_dirty": False,
+        "engine_source_sha256": "b" * 64,
     }
 
     staged = build_sidecar.prepare_sidecar_engine_tree(tmp_path, provenance)
@@ -455,6 +504,11 @@ def test_release_build_never_writes_frontend_dev_token(monkeypatch, tmp_path) ->
     monkeypatch.setattr(build_sidecar, "build_pyinstaller", lambda _python: binary)
     monkeypatch.setattr(build_sidecar, "install_sidecar", lambda source: source)
     monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _binary: _runtime_manifest((3, 53, 4)))
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_release_contracts",
+        lambda _binary: _release_contracts(),
+    )
     monkeypatch.setattr(build_sidecar, "write_artifact_manifest", lambda *_args: tmp_path / "manifest.json")
     monkeypatch.setattr(
         build_sidecar,

@@ -122,6 +122,9 @@ def verify_extracted_tree(
     runtime = build_sidecar.probe_sidecar_runtime(sidecar)
     if runtime != expected.get("runtime"):
         raise RuntimeError("Extracted installer sidecar runtime differs from its artifact manifest")
+    release_contracts = build_sidecar.probe_sidecar_release_contracts(sidecar)
+    if release_contracts != expected.get("release_contracts"):
+        raise RuntimeError("Extracted installer Sidecar release contracts differ from its artifact manifest")
     package_files = [path for path in root.rglob("*") if path.is_file()]
     forbidden_files = [
         path

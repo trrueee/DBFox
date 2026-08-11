@@ -55,4 +55,42 @@ def collect_runtime_manifest() -> dict[str, Any]:
         "build_lock_file": provenance.get("lock_file"),
         "build_lock_sha256": provenance.get("lock_sha256"),
         "build_packages": provenance.get("packages", {}),
+        "source_git_commit": provenance.get("source_git_commit"),
+        "source_git_dirty": provenance.get("source_git_dirty"),
+        "engine_source_sha256": provenance.get("engine_source_sha256"),
+    }
+
+
+def collect_release_contracts() -> dict[str, Any]:
+    """Execute small provider-neutral contracts inside the final frozen process."""
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from engine.policy.gate import PolicyGate
+    from engine.tools.builtin.registry import register_dbfox_tools
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    try:
+        with Session(engine) as db:
+            decision = PolicyGate(register_dbfox_tools(), db).check(
+                {
+                    "session_id": "release-contract",
+                    "run_id": "release-contract",
+                    "datasource_id": "release-contract",
+                    "datasource_generation": 1,
+                    "environment_profile": {"env": "test"},
+                    "allowed_tool_groups": ["catalog"],
+                },
+                "schema_list",
+                {},
+            )
+    finally:
+        engine.dispose()
+    return {
+        "schema_version": 1,
+        "schema_list_empty_arguments": {
+            "status": decision.status,
+            "safe_args": decision.safe_args,
+        },
     }

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import _sqlite3
 
-from engine.runtime_manifest import collect_runtime_manifest
+from engine.runtime_manifest import collect_release_contracts, collect_runtime_manifest
 
 
 def test_runtime_manifest_reports_loaded_sqlite_library() -> None:
@@ -25,3 +25,16 @@ def test_runtime_manifest_reports_loaded_sqlite_library() -> None:
     assert manifest["build_lock_file"] is None
     assert manifest["build_lock_sha256"] is None
     assert manifest["build_packages"] == {}
+    assert manifest["source_git_commit"] is None
+    assert manifest["source_git_dirty"] is None
+    assert manifest["engine_source_sha256"] is None
+
+
+def test_release_contracts_apply_schema_list_canonical_defaults() -> None:
+    assert collect_release_contracts() == {
+        "schema_version": 1,
+        "schema_list_empty_arguments": {
+            "status": "allowed",
+            "safe_args": {"limit": 20},
+        },
+    }

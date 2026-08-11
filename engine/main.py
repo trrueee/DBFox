@@ -424,11 +424,24 @@ if __name__ == "__main__":
         action="store_true",
         help="Print final Python/SQLite runtime facts and exit",
     )
+    parser.add_argument(
+        "--release-contracts",
+        action="store_true",
+        help="Execute frozen provider-neutral release contracts and exit",
+    )
     args = parser.parse_args()
     if args.runtime_manifest:
         from engine.runtime_manifest import collect_runtime_manifest
 
         print(f"DBFOX_RUNTIME_MANIFEST {dumps(collect_runtime_manifest())}", flush=True)
+        raise SystemExit(0)
+    if args.release_contracts:
+        from engine.runtime_manifest import collect_release_contracts
+
+        print(
+            f"DBFOX_RELEASE_CONTRACTS {dumps(collect_release_contracts())}",
+            flush=True,
+        )
         raise SystemExit(0)
     run_engine_server(reload=args.reload)
 
