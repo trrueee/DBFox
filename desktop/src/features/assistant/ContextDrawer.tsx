@@ -10,10 +10,9 @@ interface ContextDrawerProps {
   type: "ai-suggest" | "props";
   activeTab: WorkspaceTab;
   onClose: () => void;
-  onGenerateIndexSql: () => void;
 }
 
-export function ContextDrawer({ open, type, activeTab, onClose, onGenerateIndexSql }: ContextDrawerProps) {
+export function ContextDrawer({ open, type, activeTab, onClose }: ContextDrawerProps) {
   const contextTables = useWorkspaceStore((s) => s.contextTables);
 
   return (
@@ -30,16 +29,14 @@ export function ContextDrawer({ open, type, activeTab, onClose, onGenerateIndexS
         </div>
 
         <div className="context-drawer__body">
-          {type === "ai-suggest" ? <AiSuggest onGenerateIndexSql={onGenerateIndexSql} /> : <PropsPanel activeTab={activeTab} contextTables={contextTables} />}
+          {type === "ai-suggest" ? <AiSuggest /> : <PropsPanel activeTab={activeTab} contextTables={contextTables} />}
         </div>
       </div>
     </section>
   );
 }
 
-function AiSuggest({ onGenerateIndexSql }: { onGenerateIndexSql: () => void }) {
-  // Keep onGenerateIndexSql to satisfy any potential callbacks, but display a premium empty state instead of hardcoded demo data
-  void onGenerateIndexSql;
+function AiSuggest() {
   return (
     <div className="context-drawer__stack">
       <span className="context-drawer__eyebrow">数据库诊断建议</span>

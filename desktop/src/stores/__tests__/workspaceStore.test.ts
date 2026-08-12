@@ -51,6 +51,19 @@ describe("workspaceStore — tabs", () => {
     expect(s.sqlConsoleState["sql-1"]).toBeUndefined();
   });
 
+  it("ignores late SQL state writes after a tab is closed", () => {
+    const store = useWorkspaceStore.getState();
+    store.openSqlConsole("SELECT 1");
+    useWorkspaceStore.getState().closeTab("sql-1");
+
+    useWorkspaceStore.getState().patchSqlConsoleState("sql-1", { running: false });
+    useWorkspaceStore.getState().appendSqlConsoleEntries("sql-1", [
+      { id: 1, kind: "info", text: "late", time: "00:00" },
+    ]);
+
+    expect(useWorkspaceStore.getState().sqlConsoleState["sql-1"]).toBeUndefined();
+  });
+
   it("closeTab restores the default tab when all tabs are gone", () => {
     useWorkspaceStore.getState().closeTab("smart-query");
     const s = useWorkspaceStore.getState();

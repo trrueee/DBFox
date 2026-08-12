@@ -271,7 +271,6 @@ export default function App() {
                 type={rightDrawerType}
                 activeTab={activeTab}
                 onClose={() => setRightDrawerOpen(false)}
-                onGenerateIndexSql={() => openSqlConsole("ALTER TABLE comment_infos ADD INDEX idx_user_id (user_id);")}
               />
             </Suspense>
           )}

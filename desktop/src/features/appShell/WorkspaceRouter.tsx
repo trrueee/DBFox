@@ -173,22 +173,17 @@ function TableWorkspaceTab({ activeTab, showToast }: { activeTab: WorkspaceTab; 
 function SqlConsoleTab({ activeTab, showToast }: { activeTab: WorkspaceTab; showToast: WorkspaceRouterProps["showToast"] }) {
   const { datasources, activeDatasourceId } = useDatasourceState();
   const sqlConsoleState = useWorkspaceStore((s) => s.sqlConsoleState);
+  const patchSqlConsoleState = useWorkspaceStore((s) => s.patchSqlConsoleState);
+  const appendSqlConsoleEntries = useWorkspaceStore((s) => s.appendSqlConsoleEntries);
   const tabState = sqlConsoleState[activeTab.id] ?? { draftSql: defaultSql, entries: [], running: false };
   const datasourceId = activeTab.datasourceId || activeDatasourceId;
 
   const onPatchState = (id: string, patch: Record<string, unknown>) => {
-    useWorkspaceStore.setState((s) => ({
-      sqlConsoleState: { ...s.sqlConsoleState, [id]: { ...s.sqlConsoleState[id], ...patch } },
-    }));
+    patchSqlConsoleState(id, patch);
   };
 
   const onAppendEntries = (id: string, newEntries: ConsoleEntry[]) => {
-    useWorkspaceStore.setState((s) => ({
-      sqlConsoleState: {
-        ...s.sqlConsoleState,
-        [id]: { ...s.sqlConsoleState[id], entries: [...(s.sqlConsoleState[id]?.entries ?? []), ...newEntries] },
-      },
-    }));
+    appendSqlConsoleEntries(id, newEntries);
   };
 
   return (

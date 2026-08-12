@@ -1,6 +1,12 @@
 import { Database, Eye, EyeOff, FileCode2, Network, Server, ShieldCheck, Sparkles } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
-import { useForm, useWatch, type FieldErrors } from "react-hook-form";
+import {
+  useForm,
+  useWatch,
+  type FieldErrors,
+  type FieldPath,
+  type FieldPathValue,
+} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import {
@@ -29,6 +35,13 @@ interface DataSourceFormProps {
   onSubmit: (form: DatasourceFormState) => void;
   onCancel: () => void;
 }
+
+type KeysWithValue<T, Value> = {
+  [Key in keyof T]-?: T[Key] extends Value ? Key : never;
+}[keyof T];
+
+type StringFieldKey = KeysWithValue<DatasourceFormState, string>;
+type NumberFieldKey = KeysWithValue<DatasourceFormState, number>;
 
 const dbTypeOptions: ReadonlyArray<{
   id: DatasourceFormState["db_type"];
@@ -74,28 +87,31 @@ export const DataSourceForm = ({
   const isMysql = values.db_type === "mysql";
   const [visibleSecrets, setVisibleSecrets] = useState<Record<string, boolean>>({});
 
-  const setField = <K extends keyof DatasourceFormState>(key: K, value: DatasourceFormState[K]) => {
-    setValue(key, value as never, { shouldDirty: true, shouldTouch: true });
+  const setField = <K extends FieldPath<DatasourceFormState>>(
+    key: K,
+    value: FieldPathValue<DatasourceFormState, K>,
+  ) => {
+    setValue(key, value, { shouldDirty: true, shouldTouch: true });
     updateForm(key, value);
   };
 
-  const inputProps = (key: keyof DatasourceFormState) => {
+  const inputProps = (key: StringFieldKey) => {
     const field = register(key);
     return {
       ...field,
       value: String(values[key] ?? ""),
-      onChange: (event: ChangeEvent<HTMLInputElement>) => setField(key, event.target.value as never),
+      onChange: (event: ChangeEvent<HTMLInputElement>) => setField(key, event.target.value),
     };
   };
 
-  const numberInputProps = (key: keyof DatasourceFormState, fallback: number) => {
+  const numberInputProps = (key: NumberFieldKey, fallback: number) => {
     const field = register(key, { valueAsNumber: true });
     return {
       ...field,
       value: Number(values[key] ?? fallback),
       onChange: (event: ChangeEvent<HTMLInputElement>) => {
         const nextValue = Number(event.target.value);
-        setField(key, (Number.isFinite(nextValue) ? nextValue : fallback) as never);
+        setField(key, Number.isFinite(nextValue) ? nextValue : fallback);
       },
     };
   };
@@ -109,7 +125,7 @@ export const DataSourceForm = ({
   };
 
   const secretInput = (
-    key: keyof DatasourceFormState,
+    key: StringFieldKey,
     id: string,
     placeholder?: string,
   ) => {

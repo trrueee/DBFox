@@ -99,9 +99,11 @@ describe("SQL Console tab state isolation", () => {
     expect(tabsHook).toMatch(/openSqlConsole:\s*\(initialSql/);
   });
 
-  it("ContextDrawer onGenerateIndexSql passes SQL directly to openSqlConsole", () => {
+  it("ContextDrawer does not ship a hardcoded demo mutation", () => {
     const app = read("App.tsx");
+    const drawer = read("features/assistant/ContextDrawer.tsx");
 
-    expect(app).toContain("openSqlConsole(\"ALTER TABLE comment_infos ADD INDEX idx_user_id (user_id);\")");
+    expect(app).not.toContain("ALTER TABLE comment_infos");
+    expect(drawer).not.toContain("onGenerateIndexSql");
   });
 });

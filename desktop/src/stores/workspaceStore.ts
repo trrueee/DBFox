@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { WorkspaceTab } from "../types/workspace";
 import { defaultSql } from "../features/workspace/defaultSql";
-import type { SqlConsoleTabState } from "../features/workspace/SqlConsoleWorkspace";
+import type { ConsoleEntry, SqlConsoleTabState } from "../features/workspace/SqlConsoleWorkspace";
 import type { ConversationSummary } from "../types/conversation";
 import type { ResultViewArtifact } from "../types/agentArtifact";
 import type { AppSettingsSection } from "../types/settings";
@@ -27,6 +27,8 @@ interface WorkspaceActions {
   setActiveTabId: (id: string) => void;
   setTabs: (updater: WorkspaceTab[] | ((prev: WorkspaceTab[]) => WorkspaceTab[])) => void;
   closeTab: (tabId: string) => void;
+  patchSqlConsoleState: (tabId: string, patch: Partial<SqlConsoleTabState>) => void;
+  appendSqlConsoleEntries: (tabId: string, entries: ConsoleEntry[]) => void;
   openSqlConsole: (initialSql?: string, datasourceId?: string, datasourceDbType?: string | null) => void;
   openSettings: (section?: AppSettingsSection) => void;
   closeSettings: () => void;
@@ -92,6 +94,32 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
       };
     });
   },
+
+  patchSqlConsoleState: (tabId, patch) =>
+    set((state) => {
+      if (!state.tabs.some((tab) => tab.id === tabId && tab.type === "sql")) return state;
+      const current = state.sqlConsoleState[tabId];
+      if (!current) return state;
+      return {
+        sqlConsoleState: {
+          ...state.sqlConsoleState,
+          [tabId]: { ...current, ...patch },
+        },
+      };
+    }),
+
+  appendSqlConsoleEntries: (tabId, entries) =>
+    set((state) => {
+      if (!state.tabs.some((tab) => tab.id === tabId && tab.type === "sql")) return state;
+      const current = state.sqlConsoleState[tabId];
+      if (!current) return state;
+      return {
+        sqlConsoleState: {
+          ...state.sqlConsoleState,
+          [tabId]: { ...current, entries: [...current.entries, ...entries] },
+        },
+      };
+    }),
 
   openSqlConsole: (initialSql, datasourceId, datasourceDbType) => {
     set((state) => {

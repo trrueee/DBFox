@@ -1,4 +1,5 @@
 import type { AgentArtifactPayload } from "../lib/api/types/artifact";
+import type { RunProjection } from "../lib/api/generated/types.gen";
 
 /**
  * Product projection types consumed by the timeline and artifact workspace.
@@ -6,16 +7,7 @@ import type { AgentArtifactPayload } from "../lib/api/types/artifact";
  * conversationWireSchema is the only boundary that normalizes API defaults
  * into these stricter UI invariants.
  */
-export type AgentRunStatus =
-  | "created"
-  | "queued"
-  | "running"
-  | "waiting_approval"
-  | "waiting_input"
-  | "cancelling"
-  | "completed"
-  | "failed"
-  | "cancelled";
+export type AgentRunStatus = RunProjection["status"];
 
 export type CompletionDisposition = "complete" | "bounded_partial";
 export type CompletionLimitationCode =
