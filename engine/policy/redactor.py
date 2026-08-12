@@ -20,8 +20,13 @@ class DataRedactor:
     
     # Matches assignment of credential values in SQL (e.g. password = 'value' or SET PASSWORD = 'value')
     # It dynamically captures typical credential keyword names and masks the string literals.
-    CREDENTIAL_ASSIGN_REGEX = re.compile(
-        r"(?i)\b(password|passwd|secret|token|api_key|apikey|credential|passphrase|private_key|privatekey)\b\s*=\s*'[^']+'"
+    CREDENTIAL_QUOTED_ASSIGN_REGEX = re.compile(
+        r"(?i)\b(password|passwd|secret|token|api_key|apikey|credential|passphrase|private_key|privatekey)\b"
+        r"(\s*=\s*)([\"'])(.*?)\3"
+    )
+    CREDENTIAL_UNQUOTED_ASSIGN_REGEX = re.compile(
+        r"(?i)\b(password|passwd|secret|token|api_key|apikey|credential|passphrase|private_key|privatekey)\b"
+        r"(\s*=\s*)(?![\"']|\[REDACTED(?:_[A-Z_]+)?\])([^\s,;}\]]+)"
     )
     CREDENTIAL_DEFAULT_REGEX = re.compile(
         r"(?i)\b(password|passwd|secret|token|api_key|apikey|credential|passphrase|private_key|privatekey)\b"
@@ -36,6 +41,7 @@ class DataRedactor:
     RAW_API_KEY_REGEX = re.compile(
         r"(?<![A-Za-z0-9_-])(?:sk-[A-Za-z0-9_-]{8,}|AKIA[0-9A-Z]{16}|LTAI[A-Za-z0-9]{12,})(?![A-Za-z0-9_-])"
     )
+    URL_PASSWORD_REGEX = re.compile(r"(://[^:/@\s]+:)([^@/\s]+)(@)")
 
     @staticmethod
     def _luhn_valid(digits: str) -> bool:
@@ -63,11 +69,20 @@ class DataRedactor:
             return ""
 
         # 1. Mask credential assignments like: password = 'abc' => password = '[REDACTED_SECURE]'
-        def replace_cred_assign(match: re.Match[str]) -> str:
-            keyword = match.group(1)
-            return f"{keyword} = '[REDACTED_SECURE]'"
+        def replace_quoted_cred_assign(match: re.Match[str]) -> str:
+            return (
+                f"{match.group(1)}{match.group(2)}{match.group(3)}"
+                f"[REDACTED_SECURE]{match.group(3)}"
+            )
 
-        scrubbed = DataRedactor.CREDENTIAL_ASSIGN_REGEX.sub(replace_cred_assign, sql_str)
+        scrubbed = DataRedactor.CREDENTIAL_QUOTED_ASSIGN_REGEX.sub(
+            replace_quoted_cred_assign,
+            sql_str,
+        )
+        scrubbed = DataRedactor.CREDENTIAL_UNQUOTED_ASSIGN_REGEX.sub(
+            lambda match: f"{match.group(1)}{match.group(2)}[REDACTED_SECURE]",
+            scrubbed,
+        )
 
         # 2. Mask credential defaults in DDL, e.g. password TEXT DEFAULT 'abc'.
         def replace_cred_default(match: re.Match[str]) -> str:
@@ -85,6 +100,10 @@ class DataRedactor:
             scrubbed,
         )
         scrubbed = DataRedactor.RAW_API_KEY_REGEX.sub("[REDACTED_API_KEY]", scrubbed)
+        scrubbed = DataRedactor.URL_PASSWORD_REGEX.sub(
+            r"\1[REDACTED]\3",
+            scrubbed,
+        )
 
         # 4. Redact Emails
         scrubbed = DataRedactor.EMAIL_REGEX.sub("[REDACTED_EMAIL]", scrubbed)

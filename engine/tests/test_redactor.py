@@ -65,6 +65,31 @@ def test_data_redactor_masks_api_key_assignments_without_key_shaped_fixtures() -
     assert "api_key = '[REDACTED_SECURE]'" in redacted
 
 
+def test_data_redactor_masks_unquoted_credentials_and_url_passwords() -> None:
+    message = (
+        "connection failed password=plain-secret "
+        "dsn=postgresql://analyst:url-secret@db.example.test/app"
+    )
+
+    redacted = DataRedactor.redact_sql(message)
+
+    assert "plain-secret" not in redacted
+    assert "url-secret" not in redacted
+    assert "password=[REDACTED_SECURE]" in redacted
+    assert "postgresql://analyst:[REDACTED]@db.example.test/app" in redacted
+
+
+def test_data_redactor_preserves_quoted_assignment_style() -> None:
+    message = 'password = "double quoted secret" and token = \'single quoted secret\''
+
+    redacted = DataRedactor.redact_sql(message)
+
+    assert 'password = "[REDACTED_SECURE]"' in redacted
+    assert "token = '[REDACTED_SECURE]'" in redacted
+    assert "double quoted secret" not in redacted
+    assert "single quoted secret" not in redacted
+
+
 def test_sensitive_columns_mask_entire_values_not_only_recognizable_pii() -> None:
     secret = "opaque-value-that-does-not-look-like-a-credential"
 
