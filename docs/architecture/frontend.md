@@ -1,8 +1,12 @@
 # DBFox 前端架构
 
-> 状态：当前事实
+> 文档类型：架构说明
 >
-> 最后核验：2026-08-06
+> 状态：当前
+>
+> 最后核验：2026-08-09
+>
+> 适用范围：`desktop/src/` 的工作区、传输、状态和用户交互
 
 ## 1. 设计目标
 
@@ -187,6 +191,7 @@ Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecute
 | 状态类型 | 所有者 | 示例 |
 |---|---|---|
 | 导航状态 | `workspaceStore` | 活动标签、标签顺序、工件区布局 |
+| 本机外观偏好 | `ThemeProvider` + localStorage | 主题模式、受控色板、分区字号 |
 | 数据源导航状态 | `datasourceStore` | 当前数据源、Schema 树、同步状态 |
 | 会话公共投影 | `conversationStore` | Run、Run Item、Artifact、Approval、Question、Plan |
 | 组合视图 | `useConversationViewModel` | 当前 Run、排序后的消息和工件 |
@@ -212,6 +217,27 @@ Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecute
 - disabled 必须说明原因，不能只有低透明度；
 - loading 使用产品动作描述，不暴露内部健康检查或技术码；
 - 点击区域至少 28–32px，辅助文字不低于 12px。
+
+### 9.1 外观偏好合同
+
+外观设置由 `ThemeProvider` 作为进程内唯一权威，版本化偏好只保存在本机
+`dbfox-appearance-v1`。它不进入数据库、会话、诊断包或模型上下文。启动时只对旧的
+`dbfox-theme` 明暗值执行一次单向迁移，不保留新旧双写。
+
+- 主题模式为 `system | light | dark`；`system` 通过 React 外部状态订阅跟随操作系统。
+- 强调色和中性色来自经过浅色/深色校准的封闭枚举；不接受任意 CSS 或十六进制输入，避免破坏对比度、状态色和焦点环。
+- 字号按 UI、数据表、SQL/代码、Agent 对话四个真实阅读场景独立设置，使用受控整数 px：UI 11–16、数据 10–18、代码 11–22、Agent 13–24；组件继续引用语义字号 Token，不保存逐组件覆盖。
+- 密度使用 `compact | standard | comfortable` 统一控制工具栏、按钮和主要留白；UI、数据、代码字体家族分别选择受控的本机字体栈。
+- Agent 与 SQL/代码行高独立；数据表可配置默认行高、网格线、斑马纹、NULL 呈现和默认主键冻结，不改变手动列固定能力。
+- 高对比度、减少动效同时支持显式设置和系统媒体查询；系统 DPI 交给 Tauri WebView，不叠加 CSS zoom。
+- 数据源侧栏与 Agent 工件面板把拖拽结果写回同一偏好文档；原生窗口位置与尺寸由官方 Window State 插件独占，不保存第二份窗口坐标。
+- 导入/导出使用同一严格 schema，拒绝未知字段与超大文件；结构上不包含 Token、密码、DSN、SQL、会话或日志。
+- `ThemeProvider` 只把规范偏好投影为根元素的 `data-*` 属性；`tokens.css` 是色彩和字号的唯一视觉事实来源。
+- 设置即时预览并自动保存；重置恢复系统主题、紫色强调、冷灰中性色和标准字号。
+- ECharts 在外观投影提交后重新读取同一组 CSS Token，不维护第二份图表主题配置。
+
+这个边界参考成熟桌面工具的“用户设置 + 即时预览”模式和主题系统的受控参数设计，
+没有引入新的主题库、任意颜色解析器、兼容 mapper 或组件级持久化。
 
 ## 10. 可访问性
 
@@ -263,3 +289,5 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 | Artifact Dock | `desktop/src/features/conversation/workspace/ArtifactDock.tsx` |
 | Result state | `desktop/src/features/workspace/sqlBacked/useSqlBackedDataView.ts` |
 | Tokens | `desktop/src/styles/tokens.css` |
+| Appearance contract | `desktop/src/lib/appearance.ts`、`desktop/src/hooks/useTheme.tsx` |
+| Appearance settings | `desktop/src/features/settings/AppearanceSettingsPanel.tsx` |

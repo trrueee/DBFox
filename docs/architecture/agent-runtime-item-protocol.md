@@ -1,7 +1,12 @@
 # Agent Runtime Item 协议
 
-> 状态：当前事实
+> 文档类型：规范参考
+>
+> 状态：当前
+>
 > 最后核验：2026-08-06
+>
+> 适用范围：Provider 响应项、Agent 运行项、SSE 事件和前端投影
 
 本文描述 DBFox 当前生产实现。历史方案见[历史设计](../archive/designs/README.md)，不得作为运行时合同。
 

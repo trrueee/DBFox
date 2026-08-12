@@ -1,7 +1,12 @@
 # 供应链安全与锁文件审计
 
-> 状态：当前操作与参考
+> 文档类型：安全与质量参考
+>
+> 状态：当前
+>
 > 最后核验：2026-08-06
+>
+> 适用范围：Python、npm、Rust 锁文件与持续集成安全审计
 
 `main`、每个 Pull Request 和每周一 03:17 UTC 的计划任务都会执行
 `.github/workflows/ci.yml` 的 `Locked dependency security audit`。该任务只读取提交到

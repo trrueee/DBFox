@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import re
 import tomllib
+import xml.etree.ElementTree as ET
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 
@@ -18,6 +20,9 @@ pytestmark = pytest.mark.engineering_contract
 ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 AGENT_EVALUATION_WORKFLOW = ROOT / ".github" / "workflows" / "agent-evaluation.yml"
+WINDOWS_SIGNED_RELEASE_WORKFLOW = (
+    ROOT / ".github" / "workflows" / "windows-signed-release.yml"
+)
 NPM_LOCK = ROOT / "desktop" / "package-lock.json"
 NPM_MANIFEST = ROOT / "desktop" / "package.json"
 CARGO_LOCK = ROOT / "desktop" / "src-tauri" / "Cargo.lock"
@@ -54,14 +59,15 @@ def _locked_package_names(path: Path) -> set[str]:
 
 
 def test_ci_actions_are_pinned_to_full_commit_shas() -> None:
-    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
-    actions = re.findall(r"^\s*- uses: ([^\s]+)$", workflow, flags=re.MULTILINE)
+    for workflow_path in (CI_WORKFLOW, WINDOWS_SIGNED_RELEASE_WORKFLOW):
+        workflow = workflow_path.read_text(encoding="utf-8")
+        actions = re.findall(r"^\s*- uses: ([^\s]+)$", workflow, flags=re.MULTILINE)
 
-    assert actions
-    for action in actions:
-        owner_and_repo, separator, revision = action.partition("@")
-        assert separator and owner_and_repo
-        assert re.fullmatch(r"[0-9a-f]{40}", revision), action
+        assert actions, workflow_path.name
+        for action in actions:
+            owner_and_repo, separator, revision = action.partition("@")
+            assert separator and owner_and_repo
+            assert re.fullmatch(r"[0-9a-f]{40}", revision), action
 
 
 def test_migration_archaeology_uses_a_committed_fixture_not_git_history() -> None:
@@ -234,6 +240,18 @@ def test_ci_installs_only_hash_checked_python_locks() -> None:
     assert "python -m pip install -r requirements-build.txt" not in all_python_workflows
 
 
+def test_windows_release_uses_repository_toolchain_and_hash_contracts() -> None:
+    workflow = WINDOWS_SIGNED_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+
+    assert 'NODE_VERSION: "22.18.0"' in workflow
+    assert 'RUST_VERSION: "1.95.0"' in workflow
+    assert "python-version-file: .sidecar-python-version" in workflow
+    assert "PIP_REQUIRE_HASHES" not in workflow
+    assert "uv pip sync --require-hashes requirements-dev.lock" in workflow
+    assert "releaseDraft: true" in workflow
+    assert "refs/heads/main" in workflow
+
+
 def test_sidecar_build_uses_exact_python_distribution_sources() -> None:
     version = SIDECAR_PYTHON_VERSION_FILE.read_text(encoding="utf-8").strip()
     build = SIDECAR_PYTHON_BUILD_FILE.read_text(encoding="utf-8").strip()
@@ -325,3 +343,87 @@ def test_test_fixtures_do_not_use_llm_key_shaped_literals() -> None:
     ]
 
     assert not offenders, offenders
+
+
+def _current_documentation_files() -> list[Path]:
+    docs_root = ROOT / "docs"
+    return sorted(
+        path
+        for path in docs_root.rglob("*.md")
+        if "archive" not in path.relative_to(docs_root).parts
+    )
+
+
+def test_current_documentation_uses_the_shared_header_contract() -> None:
+    allowed_states = {"当前", "已接受", "草案"}
+    errors: list[str] = []
+
+    for path in _current_documentation_files():
+        relative = path.relative_to(ROOT).as_posix()
+        header = "\n".join(path.read_text(encoding="utf-8").splitlines()[:24])
+        document_types = re.findall(r"^> 文档类型：(.+?)\s*$", header, re.MULTILINE)
+        statuses = re.findall(r"^> 状态：(.+?)\s*$", header, re.MULTILINE)
+        verified_dates = re.findall(
+            r"^> 最后核验：(\d{4}-\d{2}-\d{2})\s*$",
+            header,
+            re.MULTILINE,
+        )
+
+        if len(document_types) != 1:
+            errors.append(f"{relative}: expected one document type")
+        if len(statuses) != 1 or statuses[0] not in allowed_states:
+            errors.append(f"{relative}: invalid status {statuses!r}")
+        if len(verified_dates) != 1:
+            errors.append(f"{relative}: expected one last-verified date")
+
+    assert not errors, errors
+
+
+def test_documentation_file_names_are_stable_and_portable() -> None:
+    invalid: list[str] = []
+    for path in (ROOT / "docs").rglob("*"):
+        if not path.is_file() or path.name == "README.md":
+            continue
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*\.(?:md|png|svg)", path.name):
+            invalid.append(path.relative_to(ROOT).as_posix())
+
+    assert not invalid, invalid
+
+
+def test_current_documentation_relative_links_resolve() -> None:
+    sources = [ROOT / "README.md", ROOT / "CONTRIBUTING.md", *_current_documentation_files()]
+    markdown_link = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
+    html_link = re.compile(r"(?:href|src)=\"([^\"]+)\"")
+    broken: list[str] = []
+
+    for source in sources:
+        text = source.read_text(encoding="utf-8")
+        targets = [*markdown_link.findall(text), *html_link.findall(text)]
+        for raw_target in targets:
+            target = raw_target.strip().strip("<>")
+            if not target or target.startswith(("#", "http://", "https://", "mailto:")):
+                continue
+            path_text = unquote(target.split("#", 1)[0])
+            if not path_text:
+                continue
+            destination = (source.parent / path_text).resolve()
+            try:
+                destination.relative_to(ROOT.resolve())
+            except ValueError:
+                broken.append(f"{source.relative_to(ROOT).as_posix()}: escapes repository: {target}")
+                continue
+            if not destination.exists():
+                broken.append(f"{source.relative_to(ROOT).as_posix()}: {target}")
+
+    assert not broken, broken
+
+
+def test_readme_architecture_diagram_is_a_valid_local_svg() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    diagram = ROOT / "docs" / "images" / "system-architecture.svg"
+
+    assert "![DBFox 系统架构](docs/images/system-architecture.svg)" in readme
+    assert "```mermaid" not in readme
+    root = ET.parse(diagram).getroot()
+    assert root.tag == "{http://www.w3.org/2000/svg}svg"
+    assert root.attrib.get("viewBox")

@@ -1,14 +1,19 @@
 # DBFox Runtime 基础能力 ADR
 
-> 状态：已接受决策
+> 文档类型：架构决定
+>
+> 状态：已接受
+>
 > 最后核验：2026-08-06
+>
+> 适用范围：Sidecar、单实例、诊断、HTTP/SSE、版本握手、SQLite 和更新
 
 本文记录第二轮反证验证后已实施的决定；“暂缓”不是缺陷确认。
 
 ## ADR-01：Rust 是 Runtime 生命周期唯一权威
 
 - 标题：由 Rust `RuntimeSupervisor` 独占 Sidecar 生命周期事实
-- 状态：Accepted / Implemented
+- 状态：已接受并实施
 - 上下文：WebView 无法可靠持有原生 Child 状态，旧配置也不能代表进程仍存活。
 - 必须满足的约束：Ready 后持续观察退出；旧 session 立即失效；generation 单调递增；60 秒内只允许三次自动重启；关闭应用不得触发重启。
 - 候选方案：前端管理；Rust 只负责启动；Rust Supervisor。
@@ -22,7 +27,7 @@
 ## ADR-02：Release 强制单实例
 
 - 标题：正式桌面应用只允许一个 Host 实例
-- 状态：Accepted / Implemented
+- 状态：已接受并实施
 - 上下文：产品只有一个本地 Runtime 和共享元数据库，多实例没有独立工作区语义。
 - 必须满足的约束：插件必须最先注册；第二进程不得进入 setup、启动 Sidecar 或迁移；已有窗口被显示、取消最小化并聚焦。
 - 候选方案：允许多实例；靠 SQLite 锁失败；Release 单实例。
@@ -36,7 +41,7 @@
 ## ADR-03：诊断包由 Rust 组装
 
 - 标题：Rust 汇总各组件提供的脱敏诊断 fragment
-- 状态：Accepted / Implemented
+- 状态：已接受并实施
 - 上下文：Python、Host、WebView 分别拥有不同日志和运行状态，任一组件单独导出都不完整。
 - 必须满足的约束：二次脱敏；输入、单字符串、Host 日志及总包有界；不包含凭据、数据库内容或查询结果；只读取普通文件；ZIP 原子发布。
 - 候选方案：Python 组装；WebView 组装；独立工具；Rust 组装。
@@ -50,7 +55,7 @@
 ## ADR-04：采用 RFC 9457 Problem Details
 
 - 标题：HTTP 错误统一为 `application/problem+json`
-- 状态：Accepted / Implemented
+- 状态：已接受并实施
 - 上下文：原有字符串、`detail` envelope 和自定义对象并存，客户端无法稳定分类。
 - 必须满足的约束：包含 type/title/status/detail/instance；扩展 code/request_id/checks/errors；验证错误不得回显 input；未知异常使用固定公共消息。
 - 候选方案：保留多格式；自定义 envelope；RFC 9457。
@@ -64,7 +69,7 @@
 ## ADR-05：HTTP 与 SSE 共用 Runtime Transport
 
 - 标题：保留 HTTP+SSE，但共享不可变 `RuntimeSession`
-- 状态：Accepted / Implemented
+- 状态：已接受并实施
 - 上下文：SSE 曾直接捕获全局端口和 Token，Sidecar 换端口后与普通请求行为分叉。
 - 必须满足的约束：generation/port/token 同步切换；重建 URL；GET/HEAD/OPTIONS 最多恢复一次；非幂等请求在响应未知时不自动重放；SSE 保留 cursor/snapshot。
 - 候选方案：继续两套实现；改 WebSocket；统一逻辑 Transport。
@@ -78,7 +83,7 @@
 ## ADR-06：现在引入最小运行时握手
 
 - 标题：IPC 返回 protocol、serverInfo、generation 和 capabilities
-- 状态：Accepted / Implemented
+- 状态：已接受并实施
 - 上下文：即使暂无自动更新，Host 与 Sidecar 仍可能因开发、残留进程或安装失败形成版本错配。
 - 必须满足的约束：按协议和能力判断兼容性；不使用软件版本猜测功能；不兼容时在请求前失败。
 - 候选方案：无握手；只比 semver；协议版本加能力集合。
@@ -92,7 +97,7 @@
 ## ADR-07：SQLite 采用产物门禁
 
 - 标题：最低 SQLite 3.51.3，当前升级目标 3.53.4
-- 状态：Accepted / Implemented gate；Runtime upgrade 受构建解释器约束
+- 状态：已接受；产物门禁已实施，运行库升级受构建解释器约束
 - 上下文：依赖 hash lock 不约束 CPython 自带 SQLite；原 Windows 构建证据为 3.45.3，最终验收产物已升级为 CPython 3.14.6 / SQLite 3.53.1。
 - 必须满足的约束：执行最终 frozen Sidecar；记录 Python/SQLite/version tuple/source_id/compile options；manifest 绑定 Sidecar SHA-256 与 target triplet；从最终安装包再次提取、执行并比对。
 - 候选方案：信任构建机；固定旧 Python；最低版本门禁。
@@ -103,24 +108,24 @@
 - 可逆性：门禁阈值可提高；降低必须有新的官方证据和 ADR。
 - 何时重新评估：SQLite 官方发布新的数据完整性公告，或 Python 链接策略变化时。
 
-## ADR-08：暂不引入自动更新
+## ADR-08：采用签名自动检查、用户确认安装
 
-- 标题：自动安装更新延后，未来从 check-only 开始
-- 状态：Deferred
-- 上下文：当前尚未完成稳定发布渠道、签名密钥托管、回滚和分阶段发布流程。
-- 必须满足的约束：更新包强签名；密钥轮换；失败回滚；灰度与渠道隔离；用户可理解的版本信息。
-- 候选方案：立即静默更新；只检查更新；暂不提供。
-- 方案比较：自动安装扩大供应链和可用性风险；check-only 可在渠道成熟后先验证元数据链路。
-- 决定：本轮不安装 updater 插件，不把“缺少自动更新”列为当前缺陷。
-- 决定理由：先完成可验证的安装产物和发布门禁，避免把未成熟发布链路接入客户端。
-- 负面影响：已安装版本需要用户手动升级。
-- 可逆性：高。
-- 何时重新评估：签名、密钥托管、回滚演练和正式发布渠道全部就绪时。
+- 标题：使用官方 Tauri Updater 建立单一签名更新通道
+- 状态：已接受并实施；等待发布凭据激活
+- 上下文：Windows x64 已是当前正式发布范围，仓库已有最终安装包与 Frozen Sidecar 验证；原 Deferred 条件中的发布工作流、强制签名合同和回滚规则现已落成。真实证书与私钥仍是外部发布凭据，不能由源码伪造。
+- 必须满足的约束：固定 HTTPS 端点；更新包强签名且不可关闭；Windows 安装器独立 Authenticode 签名；私钥只在受保护 CI；默认不降级；安装前停止 Sidecar 并清除正常退出标记；用户理解版本与退出影响。
+- 候选方案：静默下载安装；自动检查后用户确认；仅打开下载网页；继续不提供。
+- 方案比较：静默安装会中断正在运行的查询/Agent；网页下载割裂签名安装链；继续不提供会让安全补丁到达率依赖人工。自动检查、确认安装兼顾到达率、任务安全和用户控制。
+- 决定：Rust 通过官方 `tauri-plugin-updater` 固定 stable endpoint 并持有待安装 `Update`；启动延迟检查，只提示不下载；用户确认后由官方插件下载、验签和安装。公钥作为可审计发布配置嵌入 Release 构建，Debug 构建明确禁用，不存在 fallback。
+- 决定理由：复用 Tauri 的平台安装、minisign 验证和退出语义；WebView 不接触更新 URL、密钥或安装器。
+- 负面影响：需要维护 minisign 与 Authenticode 两套独立密钥；运行中的用户仍需选择安装时机；当前发布工作流仅覆盖 Windows x64。
+- 可逆性：可关闭自动检查或撤下 endpoint；不得通过关闭签名校验回退。客户端回滚使用更高版本修复包，不开放降级。
+- 何时重新评估：引入 macOS 正式发布、企业管理更新、强制安全更新或多发布通道时。
 
 ## ADR-09：Sidecar 底层进程适配迁移到官方 Shell 插件
 
 - 标题：使用官方 Shell 统一 Sidecar 解析、输出事件和退出观察
-- 状态：Accepted / Implemented
+- 状态：已接受并实施
 - 上下文：Tauri 官方 `tauri-plugin-shell` 2.3 提供 `externalBin` 路径解析、stdout/stderr 事件、`CommandEvent::Terminated` 和 `CommandChild`。迁移实验最初使用的未跟踪 Frozen 二进制只输出 `{"port":...}`，缺少当前协议要求的 `protocolVersion/serverInfo/capabilities`，因此被 Host 正确拒绝；使用当前源码隔离构建的 Frozen 二进制后，插件事件路径在 Windows x64 正常完成 Ready、health、异常退出观察、自动重启和关闭清理。
 - 必须满足的约束：保留 Supervisor 状态机、generation、一次性 Token、Ready/health 握手、崩溃强度、关闭竞态和 Windows process-tree 清理；不得让插件事件与手写轮询长期并存；不得向 WebView 暴露 shell spawn 权限。
 - 候选方案：完整采用插件事件；继续全部手写；只采用插件路径解析并保留标准进程事件。
@@ -134,7 +139,7 @@
 ## ADR-10：外部资源只通过 Rust 策略边界交给官方 Opener
 
 - 标题：系统浏览器和诊断目录统一使用 `tauri-plugin-opener`
-- 状态：Accepted / Implemented
+- 状态：已接受并实施
 - 上下文：数据库内容属于不可信输入；`window.open` 属于 WebView 新窗口机制，手写 `explorer/open/xdg-open` 又重复平台适配。正式 CSP 同时禁止任意 HTTPS 图片内联加载。
 - 必须满足的约束：只响应直接用户操作；外部 URL 必须为绝对 HTTPS、包含主机且无 userinfo；Rust 必须重复校验；不得向 WebView 授予通用 `opener:*` 权限；不得通过放宽 CSP 或新增图片代理绕过边界。
 - 候选方案：继续 `window.open`；WebView 直接使用 opener Guest API；Rust 窄 command 调用官方 opener。
@@ -148,7 +153,7 @@
 ## ADR-11：Sidecar 日志复用官方轮转，DBFox 保留脱敏所有权
 
 - 标题：`tauri-plugin-log` 独占 Host/Sidecar 日志写入和轮转
-- 状态：Accepted / Implemented
+- 状态：已接受并实施
 - 上下文：多个 `SidecarLog` 实例曾各自持有独立 mutex，却操作同一个文件，手动重启和监控线程可能并发轮转。
 - 必须满足的约束：写入和轮转只有一个实现；Sidecar 日志与普通 Host 日志分文件；秘密在进入 logger 前完成脱敏；单条消息和文件大小有界；诊断包只收集官方 active/dated rotation 命名且二次脱敏。
 - 候选方案：全局共享自写锁；继续每实例文件写入；现有日志插件的过滤 Target。

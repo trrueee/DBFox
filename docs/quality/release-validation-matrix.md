@@ -1,7 +1,12 @@
 # DBFox 发布验证矩阵
 
-> 状态：当前发布合同
-> 最后核验：2026-08-06
+> 文档类型：发布参考
+>
+> 状态：当前
+>
+> 最后核验：2026-08-10
+>
+> 适用范围：Windows、macOS、Linux 候选产物和发布证据
 
 本矩阵是发布门禁，不是“理论支持”列表。定时 CI 与人工发布前检查必须在三个目标系统上执行相同的锁定依赖、Sidecar 和 Tauri 编译链。
 
@@ -25,7 +30,9 @@
 
 ## 自动门禁
 
-`.github/workflows/ci.yml` 的 `release-platform-contract` 在每周定时任务和手工触发时运行三平台矩阵。任何平台失败都阻止标记发布候选。
+`.github/workflows/ci.yml` 的 `release-platform-contract` 在每周定时任务和手工触发时运行三平台矩阵。任何平台失败都阻止把对应结果标记为跨平台发布合同通过，但不把 Windows 证据外推给其他平台。
+
+`.github/workflows/windows-signed-release.yml` 是当前唯一正式发布工作流，只允许从 `main` 手工触发并只覆盖 Windows x64。它要求 updater minisign 与 Windows Authenticode 两类独立凭据，使用官方 `tauri-action` 创建未公开 Draft Release，并在发布前验证最终 MSI/NSIS、Frozen Sidecar、publisher signature、updater `.sig`，以及 MSI 首装/可用前序版本升级/卸载。缺少密钥或证书时必须失败，不能生成未签名候选或跳过门禁。
 
 生产 Sidecar 的解释器唯一来源为仓库根目录 `.sidecar-python-version`，构建依赖唯一
 来源为 `requirements-build.lock`。Frozen smoke 必须从最终可执行文件验证鉴权、

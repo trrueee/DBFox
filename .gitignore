@@ -164,5 +164,6 @@ Thumbs.db
 .agents/
 .superpowers/
 .worktrees/
+.workbuddy/
 docs/skills/
 .mimocode/.cron-lock

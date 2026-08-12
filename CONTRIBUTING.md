@@ -1,4 +1,4 @@
-# Contributing to DBFox
+# 参与 DBFox 开发
 
 感谢你改进 DBFox。这个项目同时包含桌面 Runtime、Web UI、Python API、Agent Harness 和数据库工具链；小改动也可能跨越安全或状态边界。请在编码前先确认真实调用链，并让实现、测试和文档保持一致。
 
@@ -8,13 +8,14 @@
 2. 从 [`docs/README.md`](docs/README.md) 选择对应阅读路线。
 3. 使用 [`docs/architecture/implementation-map.md`](docs/architecture/implementation-map.md) 定位权威实现与测试。
 4. 检查项目、标准库、框架和官方组件是否已有成熟能力，再决定复用、最小适配或自研。
+5. 修改文档前阅读 [`docs/documentation-style-guide.md`](docs/documentation-style-guide.md)，并复用 [`docs/glossary.md`](docs/glossary.md) 中的统一术语。
 
 当前正式验证平台是 Windows x64。没有真实 Runner、构建产物和 smoke 证据时，不要声称 macOS 或 Linux 已通过。
 
 ## 开发环境
 
 - Python 3.12
-- Node.js 20.19 或更高版本
+- Node.js 22.18 或更高版本
 - Rust 1.95（桌面壳与 Rust 测试）
 - Git
 
@@ -102,7 +103,7 @@ git diff --check
 - 先建立基线和可复现证据，再修改生产源码。
 - 修复权威路径，并为失败路径增加回归测试；不要只在 UI 或 Adapter 末端遮蔽问题。
 - 保持提交独立、可测试、可回滚，不混入无关格式化或用户本地文件。
-- 行为、架构、命令、配置或支持范围变化时，同步更新 Current 文档。
+- 行为、架构、命令、配置或支持范围变化时，同步更新标记为“当前”的文档。
 - 新依赖必须说明适配度、维护状态、安全、许可证、体积、锁定与退出成本。
 - 不降低鉴权、SQL、安全、capability、供应链或发布门禁来让测试通过。
 
@@ -135,8 +136,10 @@ docs: refine project onboarding and navigation
 - 旧方案和完成后的阶段报告移动到 `docs/archive/` 并标明替代关系。
 - 不创建 `final-v2`、`latest-new` 等重复事实来源；优先更新已有权威文档。
 - 所有相对链接、命令、文件名和平台结论都必须在提交前核对。
+- 文档状态只使用“当前”“已接受”“草案”“历史”；不要混用 `Current`、`Implemented` 或自定义状态。
+- 中文说明优先使用通俗、统一的词；代码名和协议字段保留原文，并在首次出现时解释。
 
-详细规则见 [`docs/README.md`](docs/README.md)。
+详细规则见[文档中心](docs/README.md)和[文档编写与维护规范](docs/documentation-style-guide.md)。
 
 ## Pull Request
 

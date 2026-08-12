@@ -1,7 +1,13 @@
 # DBFox 数据、SQL 与结果链
 
-> 状态：当前事实
+> 文档类型：架构说明
+>
+> 状态：当前
+>
 > 最后核验：2026-08-06
+>
+> 适用范围：数据源连接、目录、SQL 安全、执行、分页和结果制品
+>
 > 代码边界：`engine/connectivity/`、`engine/environment/`、`engine/sql/`、`engine/tools/db/`、`engine/api/agent_results.py`
 
 ## 1. 目标和边界

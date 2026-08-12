@@ -1,6 +1,10 @@
 # DBFox AgentBench：实现、运行与判定
 
-> 状态：Current / Quality infrastructure
+> 文档类型：质量工具
+>
+> 状态：当前
+>
+> 最后核验：2026-08-12
 >
 > 适用范围：Agent Harness、工具闭环、上下文与记忆、数据分析正确性、安全与稳定性
 >
