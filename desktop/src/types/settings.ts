@@ -1,1 +1,1 @@
-export type AppSettingsSection = "model" | "diagnostics";
+export type AppSettingsSection = "appearance" | "model" | "diagnostics";

@@ -52,6 +52,7 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/ui";
 import { copyText, downloadBlobFile } from "../artifacts/artifactActions";
+import { useTheme } from "../../../hooks/themeContext";
 import {
   useTablePreviewData,
   type TableFilterOperator,
@@ -95,6 +96,7 @@ export function TablePreviewPane({
   onOpenSqlConsole,
   onToast,
 }: TablePreviewPaneProps) {
+  const { appearance } = useTheme();
   const [filterColumn, setFilterColumn] = useState("");
   const [filterOperator, setFilterOperator] = useState<TableFilterOperator>("contains");
   const [filterValue, setFilterValue] = useState("");
@@ -154,10 +156,10 @@ export function TablePreviewPane({
   const defaultPinnedColumn = columns.find((column) => columnDetails.get(column)?.isPrimaryKey) ?? columns[0];
 
   useEffect(() => {
-    setColumnPinning(defaultPinnedColumn ? { left: [defaultPinnedColumn] } : { left: [] });
+    setColumnPinning(appearance.freezePrimaryKey && defaultPinnedColumn ? { left: [defaultPinnedColumn] } : { left: [] });
     setColumnVisibility({});
     setColumnSizing({});
-  }, [datasourceId, defaultPinnedColumn, tableId]);
+  }, [appearance.freezePrimaryKey, datasourceId, defaultPinnedColumn, tableId]);
 
   useEffect(() => {
     const handleSearchShortcut = (event: KeyboardEvent) => {

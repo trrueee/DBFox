@@ -36,8 +36,10 @@ describe("SettingsSidebar", () => {
     );
 
     expect(screen.queryByRole("searchbox")).toBeNull();
-    expect(screen.getByRole("navigation").querySelectorAll("button")).toHaveLength(2);
+    expect(screen.getByRole("navigation").querySelectorAll("button")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "外观与字号" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "模型服务" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "更新与恢复" })).toBeNull();
     expect(screen.getByRole("button", { name: "诊断与日志" })).toBeTruthy();
   });
 });

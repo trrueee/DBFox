@@ -110,20 +110,21 @@
     @apply w-full border-collapse;
     font-family: "Fira Code", "JetBrains Mono", monospace;
     font-variant-numeric: tabular-nums;
-    font-size: var(--ui-font-control);
+    font-size: var(--ui-font-data);
   }
   .dbfox-table thead { @apply sticky top-0 z-10; }
   .dbfox-table th {
     @apply bg-[hsl(var(--secondary))] border-b-2 border-[hsl(var(--border))]
-           px-3 py-1.5 text-left font-semibold text-[12px]
+           px-3 py-1.5 text-left font-semibold
            text-[hsl(var(--muted-foreground))] whitespace-nowrap select-none;
+    font-size: var(--ui-font-data);
   }
   .dbfox-table td {
     @apply px-3 py-1 border-b border-[hsl(var(--border)/0.7)]
            text-[hsl(var(--foreground))];
   }
   .dbfox-table tbody tr:hover td { @apply bg-[hsl(var(--primary)/0.04)]; }
-  .dbfox-table .cell-null { @apply text-[hsl(var(--muted-foreground))] italic text-[12px]; }
+  .dbfox-table .cell-null { @apply text-[hsl(var(--muted-foreground))] italic; }
   .dbfox-table .cell-number { @apply text-right; }
 
   /* ── Status badges ── */

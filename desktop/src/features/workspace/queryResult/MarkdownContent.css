@@ -61,7 +61,7 @@
   background: var(--surface-panel-muted);
   color: var(--color-text-secondary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: var(--ui-font-input);
+  font-size: var(--ui-font-code);
   padding: 1px 4px;
 }
 

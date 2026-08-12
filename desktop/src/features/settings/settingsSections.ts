@@ -1,4 +1,4 @@
-import { Bug, Cpu, type LucideIcon } from "lucide-react";
+import { Bug, Cpu, Palette, type LucideIcon } from "lucide-react";
 
 import type { AppSettingsSection } from "../../types/settings";
 
@@ -9,6 +9,11 @@ export interface SettingsSectionDefinition {
 }
 
 export const SETTINGS_SECTIONS: readonly SettingsSectionDefinition[] = [
+  {
+    id: "appearance",
+    title: "外观与字号",
+    icon: Palette,
+  },
   {
     id: "model",
     title: "模型服务",

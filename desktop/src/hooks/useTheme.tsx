@@ -1,45 +1,97 @@
-import { useEffect, useState, useCallback } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
+
+import {
+  DEFAULT_APPEARANCE,
+  applyAppearanceToRoot,
+  loadAppearancePreferences,
+  resolveTheme,
+  saveAppearancePreferences,
+  type AppearancePreferencePatch,
+  type ResolvedTheme,
+  type ThemeMode,
+} from "../lib/appearance";
 import { ThemeContext, type Theme } from "./themeContext";
 
-const STORAGE_KEY = "dbfox-theme";
+const SYSTEM_DARK_QUERY = "(prefers-color-scheme: dark)";
 
-function getInitialTheme(): Theme {
+function getStorage(): Storage | null {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light" || stored === "dark") return stored;
+    return typeof localStorage === "undefined" ? null : localStorage;
   } catch {
-    // Ignore storage access errors in restricted browser contexts.
+    return null;
   }
-  // Prefer system preference
-  if (window.matchMedia?.("(prefers-color-scheme: light)").matches) return "light";
-  return "dark";
 }
+
+function getSystemTheme(): ResolvedTheme {
+  return typeof window !== "undefined" && window.matchMedia?.(SYSTEM_DARK_QUERY).matches
+    ? "dark"
+    : "light";
+}
+
+function subscribeToSystemTheme(onStoreChange: () => void): () => void {
+  const query = window.matchMedia?.(SYSTEM_DARK_QUERY);
+  if (!query) return () => undefined;
+  query.addEventListener("change", onStoreChange);
+  return () => query.removeEventListener("change", onStoreChange);
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+  const [appearance, setAppearance] = useState(() =>
+    loadAppearancePreferences(getStorage()),
+  );
+  const systemTheme = useSyncExternalStore<ResolvedTheme>(
+    subscribeToSystemTheme,
+    getSystemTheme,
+    (): ResolvedTheme => "light",
+  );
+  const theme = resolveTheme(appearance.themeMode, systemTheme);
 
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-    try {
-      localStorage.setItem(STORAGE_KEY, theme);
-    } catch {
-      // Ignore storage access errors in restricted browser contexts.
-    }
-  }, [theme]);
+  useLayoutEffect(() => {
+    applyAppearanceToRoot(document.documentElement, appearance, theme);
+    saveAppearancePreferences(getStorage(), appearance);
+  }, [appearance, theme]);
 
-  const toggle = useCallback(() => {
-    setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
+  const updateAppearance = useCallback((patch: AppearancePreferencePatch) => {
+    setAppearance((current) => ({ ...current, ...patch, version: 1 }));
   }, []);
 
-  const setTheme = useCallback((t: Theme) => setThemeState(t), []);
+  const setThemeMode = useCallback((mode: ThemeMode) => {
+    updateAppearance({ themeMode: mode });
+  }, [updateAppearance]);
 
-  return (
-    <ThemeContext.Provider value={{ theme, toggle, setTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  const setTheme = useCallback((nextTheme: Theme) => {
+    updateAppearance({ themeMode: nextTheme });
+  }, [updateAppearance]);
+
+  const toggle = useCallback(() => {
+    updateAppearance({ themeMode: theme === "dark" ? "light" : "dark" });
+  }, [theme, updateAppearance]);
+
+  const resetAppearance = useCallback(() => {
+    setAppearance({ ...DEFAULT_APPEARANCE });
+  }, []);
+
+  const replaceAppearance = useCallback((preferences: typeof appearance) => {
+    setAppearance({ ...preferences });
+  }, []);
+
+  const value = useMemo(() => ({
+    theme,
+    mode: appearance.themeMode,
+    appearance,
+    toggle,
+    setTheme,
+    setThemeMode,
+    updateAppearance,
+    replaceAppearance,
+    resetAppearance,
+  }), [appearance, replaceAppearance, resetAppearance, setTheme, setThemeMode, theme, toggle, updateAppearance]);
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

@@ -1,4 +1,6 @@
 .artifact-table-grid {
+  --ui-font-caption: var(--ui-font-data);
+  --ui-font-label: var(--ui-font-data);
   min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;

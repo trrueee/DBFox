@@ -5,8 +5,9 @@ import {
   Panel,
   Separator as PanelResizeHandle,
   usePanelRef,
-  type Layout,
 } from "react-resizable-panels";
+import { useTheme } from "../../../hooks/themeContext";
+import { APPEARANCE_RANGES } from "../../../lib/appearance";
 import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import type { ApprovalItem } from "../../../types/conversation";
 import { Composer } from "./Composer";
@@ -17,8 +18,6 @@ import { MessageList } from "./MessageList";
 import { useConversationViewModel } from "./useConversationViewModel";
 import { isPrimaryConversationArtifact } from "./conversationArtifactModels";
 import "./conversationWorkspace.css";
-
-const ARTIFACT_LAYOUT_KEY = "dbfox.conversation.artifact-layout.v1";
 
 export function ConversationWorkspace({
   conversationId,
@@ -33,6 +32,7 @@ export function ConversationWorkspace({
   onOpenResultTab: (artifact: ResultViewArtifact) => void;
   onDelete: () => void;
 }) {
+  const { appearance, updateAppearance } = useTheme();
   const {
     detail,
     items,
@@ -58,10 +58,11 @@ export function ConversationWorkspace({
   } = useConversationViewModel(conversationId);
   const artifactPanelRef = usePanelRef();
   const pendingRevealArtifactIdRef = useRef<string | null>(null);
-  const initialLayout = useMemo(() => readArtifactLayout(), []);
-  const [artifactCollapsed, setArtifactCollapsed] = useState(
-    () => Boolean(initialLayout && initialLayout.artifacts <= 0.01),
-  );
+  const initialLayout = useMemo(() => ({
+    conversation: 100 - appearance.artifactDockWidth,
+    artifacts: appearance.artifactDockWidth,
+  }), [appearance.artifactDockWidth]);
+  const [artifactCollapsed, setArtifactCollapsed] = useState(false);
 
   useEffect(() => {
     if (!detail && conversationId) void openConversation(conversationId);
@@ -101,6 +102,11 @@ export function ConversationWorkspace({
 
   const primaryArtifacts = artifacts.filter(isPrimaryConversationArtifact);
   const hasArtifacts = primaryArtifacts.length > 0;
+  useEffect(() => {
+    if (hasArtifacts && !artifactCollapsed) {
+      artifactPanelRef.current?.resize(`${appearance.artifactDockWidth}%`);
+    }
+  }, [appearance.artifactDockWidth, artifactCollapsed, artifactPanelRef, hasArtifacts]);
   useEffect(() => {
     const artifactId = pendingRevealArtifactIdRef.current;
     if (!artifactId || !primaryArtifacts.some((artifact) => artifact.id === artifactId)) return;
@@ -202,12 +208,26 @@ export function ConversationWorkspace({
           className="conv-artifact-panel-group"
           defaultLayout={initialLayout}
           resizeTargetMinimumSize={{ coarse: 24, fine: 12 }}
-          onLayoutChanged={(layout) => {
-            writeArtifactLayout(layout);
-            setArtifactCollapsed(layout.artifacts <= 0.01);
+          onLayoutChanged={(layout, meta) => {
+            const collapsed = layout.artifacts <= 0.01;
+            setArtifactCollapsed(collapsed);
+            if (!meta.isUserInteraction || collapsed) return;
+            const range = APPEARANCE_RANGES.artifactDockWidth;
+            const artifactDockWidth = Math.min(
+              range.max,
+              Math.max(range.min, Math.round(layout.artifacts)),
+            );
+            if (artifactDockWidth !== appearance.artifactDockWidth) {
+              updateAppearance({ artifactDockWidth });
+            }
           }}
         >
-          <Panel id="conversation" className="conv-artifact-main-panel" defaultSize="72%" minSize="38%">
+          <Panel
+            id="conversation"
+            className="conv-artifact-main-panel"
+            defaultSize={`${100 - appearance.artifactDockWidth}%`}
+            minSize="38%"
+          >
             {conversationPane}
             {artifactCollapsed && (
               <button
@@ -227,7 +247,7 @@ export function ConversationWorkspace({
             id="artifacts"
             panelRef={artifactPanelRef}
             className="conv-artifact-dock-panel"
-            defaultSize="28%"
+            defaultSize={`${appearance.artifactDockWidth}%`}
             minSize="22%"
             collapsible
             collapsedSize={0}
@@ -240,24 +260,4 @@ export function ConversationWorkspace({
       )}
     </div>
   );
-}
-
-function readArtifactLayout(): Layout | undefined {
-  try {
-    const raw = globalThis.localStorage?.getItem(ARTIFACT_LAYOUT_KEY);
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof parsed.conversation !== "number" || typeof parsed.artifacts !== "number") return undefined;
-    return { conversation: parsed.conversation, artifacts: parsed.artifacts };
-  } catch {
-    return undefined;
-  }
-}
-
-function writeArtifactLayout(layout: Layout): void {
-  try {
-    globalThis.localStorage?.setItem(ARTIFACT_LAYOUT_KEY, JSON.stringify(layout));
-  } catch {
-    // Layout persistence is a convenience and must never block the workspace.
-  }
 }

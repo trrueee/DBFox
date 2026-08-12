@@ -19,13 +19,22 @@
         "minHeight": 680,
         "resizable": true,
         "fullscreen": false,
-        "decorations": false
+        "decorations": false,
+        "visible": false
       }
     ],
     "security": {
       "csp": "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self'; script-src-attr 'none'; style-src 'self'; style-src-attr 'none'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data:; font-src 'self'",
       "devCsp": null,
       "dangerousDisableAssetCspModification": false
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFFRkJFNTZEOTIyMUMzOUYKUldTZnd5R1NiZVg3SHVxNjNIdkkwblp3eXdjcGN0Nzc0dXlRRGJOek8yRFd4N2FuNnMyS2QvU3gK",
+      "endpoints": [
+        "https://github.com/trrueee/DBFox/releases/latest/download/latest.json"
+      ]
     }
   },
   "bundle": {

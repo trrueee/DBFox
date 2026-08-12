@@ -47,9 +47,9 @@
   overflow: auto;
   padding: 12px 14px;
   color: var(--sql-code-text);
-  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-  font-size: var(--ui-font-control);
-  line-height: 1.6;
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-code);
+  line-height: var(--code-line-height);
 }
 
 .sql-console-status {
@@ -190,7 +190,7 @@
   flex-shrink: 0;
   color: var(--color-success);
   font-weight: 600;
-  line-height: 1.6;
+  line-height: var(--code-line-height);
   user-select: none;
 }
 

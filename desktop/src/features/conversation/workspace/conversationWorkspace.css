@@ -174,7 +174,7 @@
 
 .conv-message-body {
   font-size: var(--agent-font-body);
-  line-height: 1.72;
+  line-height: var(--agent-line-height);
   color: var(--agent-text-secondary);
   letter-spacing: 0;
 }
@@ -194,7 +194,7 @@
 .conv-message-user .conv-message-body .hifi-md-p {
   margin: 0;
   font-size: var(--agent-font-body);
-  line-height: 1.65;
+  line-height: var(--agent-line-height);
 }
 
 .conv-message-body p,
@@ -204,7 +204,7 @@
 
 .conv-answer-document {
   font-size: var(--agent-font-body);
-  line-height: 1.72;
+  line-height: var(--agent-line-height);
   color: var(--agent-text-secondary);
 }
 
@@ -288,7 +288,7 @@
 .conv-answer-document .hifi-md-table th,
 .conv-answer-document .hifi-md-table td {
   font-size: var(--agent-font-body);
-  line-height: 1.72;
+  line-height: var(--agent-line-height);
   color: var(--agent-text-secondary);
 }
 
@@ -1232,7 +1232,7 @@
   border-radius: 0;
   padding: 0 4px 0 0;
   font-size: var(--agent-font-input);
-  line-height: 1.55;
+  line-height: var(--agent-line-height);
   font-family: inherit;
   color: var(--agent-text);
   background: transparent;
@@ -1325,7 +1325,7 @@
   width: 100%;
   color: var(--text-primary);
   font-size: var(--agent-font-body);
-  line-height: 1.72;
+  line-height: var(--agent-line-height);
   overflow-wrap: anywhere;
 }
 
@@ -1363,6 +1363,10 @@
   cursor: pointer;
   list-style: none;
   transition: background-color 180ms ease, color 180ms ease;
+}
+
+.conv-agent-message .hifi-markdown-content {
+  line-height: var(--agent-line-height);
 }
 
 .conv-agent-tool > summary::-webkit-details-marker,

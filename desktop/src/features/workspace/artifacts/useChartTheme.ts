@@ -1,3 +1,7 @@
+import { useEffect, useReducer } from "react";
+
+import { useTheme } from "../../../hooks/themeContext";
+
 export interface ChartTheme {
   textColor: string;
   textMuted: string;
@@ -34,6 +38,15 @@ function readFontSize(name: string, fallback: number): number {
 }
 
 export function useChartTheme(): ChartTheme {
+  const { appearance, theme } = useTheme();
+  const [, markApplied] = useReducer((value: number) => value + 1, 0);
+
+  useEffect(() => {
+    // ThemeProvider writes document tokens in a layout effect. Re-read them once
+    // that commit has completed so visible charts update without being remounted.
+    markApplied();
+  }, [appearance, theme]);
+
   return {
     textColor: readToken("--color-text-primary", "currentColor"),
     textMuted: readToken("--color-text-muted", "currentColor"),

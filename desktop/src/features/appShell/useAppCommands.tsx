@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Sparkles, Cpu, Database, FileText, Terminal, Bug, MessageSquare } from "lucide-react";
+import { Sparkles, Cpu, Database, FileText, Terminal, Bug, MessageSquare, Palette } from "lucide-react";
 import type { CommandItem } from "../../components/CommandPalette";
 import type { EngineSchemaTable } from "../../lib/api/schema";
 import type { ConversationSummary } from "../../types/conversation";
@@ -59,6 +59,13 @@ export function useAppCommands({
         category: "快捷入口",
         icon: <MessageSquare size={13} />,
         action: () => openConversationHistoryTab(),
+      },
+      {
+        id: "appearance-settings",
+        name: "外观与字号设置",
+        category: "设置",
+        icon: <Palette size={13} />,
+        action: () => openSettings("appearance"),
       },
       {
         id: "llm-config",

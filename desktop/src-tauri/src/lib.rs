@@ -9,10 +9,16 @@ use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 
+mod app_updates;
+mod crash_recovery;
 mod diagnostic_bundle;
 mod sidecar_log;
 mod sidecar_process;
 
+use app_updates::{
+    check_for_app_update, get_update_configuration, install_pending_app_update, PendingUpdate,
+};
+use crash_recovery::{get_launch_recovery_status, CrashRecoveryState};
 use diagnostic_bundle::{
     export_bundle, DiagnosticBundlePayload, DiagnosticBundleResult, HostDiagnosticSnapshot,
 };
@@ -615,6 +621,14 @@ pub fn run() {
         }
     }));
 
+    // Restore native geometry through Tauri's official plugin. The configured
+    // window starts hidden so the restored bounds are applied before first paint.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
+
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
     #[cfg(desktop)]
     let builder = builder.plugin(
         tauri_plugin_log::Builder::new()
@@ -662,6 +676,9 @@ pub fn run() {
     builder
         .setup(|app| {
             retire_legacy_temp_sidecar_log().map_err(std::io::Error::other)?;
+            let recovery = CrashRecoveryState::initialize(app.handle())?;
+            app.manage(recovery);
+            app.manage(PendingUpdate::default());
             let sidecar_log = SidecarLog;
             let engine = PythonEngine::starting();
             app.manage(engine.clone());
@@ -675,7 +692,11 @@ pub fn run() {
             restart_python_engine,
             open_diagnostic_logs,
             open_external_https_url,
-            export_diagnostic_bundle
+            export_diagnostic_bundle,
+            get_launch_recovery_status,
+            get_update_configuration,
+            check_for_app_update,
+            install_pending_app_update
         ])
         .on_window_event(|window, event| {
             if matches!(
@@ -684,6 +705,9 @@ pub fn run() {
             ) {
                 if let Some(engine) = window.try_state::<PythonEngine>() {
                     stop_python_engine(&engine);
+                }
+                if let Some(recovery) = window.try_state::<CrashRecoveryState>() {
+                    recovery.clear();
                 }
             }
         })

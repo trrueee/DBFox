@@ -10,7 +10,7 @@ const INITIAL = {
   contextTables: [],
   tableSubTabs: {},
   settingsOpen: false,
-  settingsSection: "model" as const,
+  settingsSection: "appearance" as const,
   _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
 };
 
@@ -83,6 +83,14 @@ describe("workspaceStore — tabs", () => {
 
     useWorkspaceStore.getState().closeSettings();
     expect(useWorkspaceStore.getState().settingsOpen).toBe(false);
+  });
+
+  it("opens appearance settings by default", () => {
+    useWorkspaceStore.getState().openSettings();
+    expect(useWorkspaceStore.getState()).toMatchObject({
+      settingsOpen: true,
+      settingsSection: "appearance",
+    });
   });
 
   it("returns to the workspace when a workspace action is opened", () => {

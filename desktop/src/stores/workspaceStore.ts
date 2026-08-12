@@ -68,7 +68,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   contextTables: [],
   tableSubTabs: {},
   settingsOpen: false,
-  settingsSection: "model",
+  settingsSection: "appearance",
   _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
 
   setActiveTabId: (id) => set({ activeTabId: id, settingsOpen: false }),
@@ -118,7 +118,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     });
   },
 
-  openSettings: (section = "model") => set({ settingsOpen: true, settingsSection: section }),
+  openSettings: (section = "appearance") => set({ settingsOpen: true, settingsSection: section }),
 
   closeSettings: () => set({ settingsOpen: false }),
 

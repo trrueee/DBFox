@@ -1,0 +1,43 @@
+.update-release {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-subtle);
+}
+
+.update-release > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.update-release strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+}
+
+.update-release span,
+.update-release p,
+.update-security-list {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+.update-release p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.update-release .dbfox-button {
+  justify-self: start;
+}
+
+.update-security-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}

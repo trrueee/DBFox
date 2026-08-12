@@ -9,6 +9,11 @@ const ModelSettingsPanel = lazy(async () => {
   return { default: module.ModelSettingsPanel };
 });
 
+const AppearanceSettingsPanel = lazy(async () => {
+  const module = await import("./AppearanceSettingsPanel");
+  return { default: module.AppearanceSettingsPanel };
+});
+
 const DiagnosticsPage = lazy(async () => {
   const module = await import("../../pages/DiagnosticsPage");
   return { default: module.DiagnosticsPage };
@@ -30,7 +35,9 @@ export function SettingsPage({ section, showToast }: SettingsPageProps) {
         </header>
         <div className="settings-page__content">
           <Suspense fallback={<div className="settings-page__loading">正在加载设置…</div>}>
-            {section === "model" ? (
+            {section === "appearance" ? (
+              <AppearanceSettingsPanel showToast={showToast} />
+            ) : section === "model" ? (
               <ModelSettingsPanel showToast={showToast} />
             ) : (
               <DiagnosticsPage onToast={showToast} chrome="workspace" />

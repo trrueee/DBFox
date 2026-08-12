@@ -15,6 +15,7 @@ import { useDatasourceState } from "./features/datasource/useDatasourceState";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 import { useConversationStore } from "./stores/conversationStore";
 import { Search } from "lucide-react";
+import { DesktopLifecycleMonitor } from "./features/appShell/DesktopLifecycleMonitor";
 
 const AppCommandPalette = lazy(() =>
   import("./features/appShell/AppCommandPalette").then((module) => ({
@@ -113,7 +114,7 @@ export default function App() {
   const toggleSidebarCollapse = useCallback(() => setSidebarCollapsed((value) => !value), []);
   const handleOpenSettings = useCallback(() => {
     setSidebarCollapsed(false);
-    openSettings("model");
+    openSettings("appearance");
   }, [openSettings]);
 
   useEffect(() => {
@@ -185,6 +186,7 @@ export default function App() {
         className="app-shell-inner"
         ref={useCallback((el: HTMLDivElement | null) => { setDialogContainer(el); setToastRoot(el); }, [])}
       >
+        <DesktopLifecycleMonitor showToast={toast} />
         <Suspense fallback={null}>
           <TitleBar />
         </Suspense>
