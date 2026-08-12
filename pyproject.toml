@@ -11,6 +11,16 @@ exclude = [
 ]
 
 [tool.pytest.ini_options]
+norecursedirs = [
+    ".build_venv",
+    ".git",
+    ".venv",
+    "desktop/node_modules",
+    "desktop/src-tauri/target",
+    "output",
+    "pyinstaller_build",
+    "pyinstaller_dist",
+]
 markers = [
     "e2e: end-to-end tests that require a real DBFox runtime and external services",
     "engineering_contract: repository and dependency governance contracts",

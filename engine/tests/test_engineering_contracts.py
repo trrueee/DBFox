@@ -345,6 +345,21 @@ def test_test_fixtures_do_not_use_llm_key_shaped_literals() -> None:
     assert not offenders, offenders
 
 
+def test_pytest_does_not_collect_generated_or_vendored_test_suites() -> None:
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    excluded = set(config["tool"]["pytest"]["ini_options"]["norecursedirs"])
+
+    assert {
+        ".build_venv",
+        ".venv",
+        "desktop/node_modules",
+        "desktop/src-tauri/target",
+        "output",
+        "pyinstaller_build",
+        "pyinstaller_dist",
+    } <= excluded
+
+
 def _current_documentation_files() -> list[Path]:
     docs_root = ROOT / "docs"
     return sorted(
