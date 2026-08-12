@@ -60,11 +60,11 @@ DBFox 目前处于持续开发阶段。**Windows x64 是当前完成真实构建
 ## 系统架构
 
 ```mermaid
-flowchart TB
+flowchart LR
     USER["用户"]
 
     subgraph DESKTOP["DBFox 桌面应用"]
-        direction TB
+        direction LR
         UI["React 工作区"]
         HOST["Tauri / Rust Host"]
         ENGINE["FastAPI Sidecar"]
@@ -75,7 +75,7 @@ flowchart TB
     end
 
     subgraph SERVICES["数据与外部服务"]
-        direction LR
+        direction TB
         META[("本地 SQLite")]
         DATA[("用户数据库")]
         MODEL["模型服务"]

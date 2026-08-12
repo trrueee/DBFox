@@ -438,7 +438,7 @@ def test_readme_architecture_diagram_is_inline_mermaid() -> None:
 
     assert "```mermaid" in readme
     assert "system-architecture.svg" not in readme
-    assert "flowchart TB" in diagram
+    assert "flowchart LR" in diagram
     assert "<br" not in diagram
     assert "Tauri / Rust Host" in diagram
     assert "FastAPI Sidecar" in diagram
