@@ -10,6 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from engine.agent.events import RuntimeEvent, RuntimeEventType, validate_runtime_event_payload
+from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.run import SessionLeaseConflict
 from engine.agent.session import SessionLease
 from engine.json_codec import canonical_dumps, load_object
@@ -248,6 +249,7 @@ class EventRepository:
         aggregate.event_floor_sequence = next_floor
 
     def _session_for_update(self, session_id: str) -> AgentSession:
+        begin_agent_write(self.session)
         aggregate = self.session.execute(
             select(AgentSession).where(AgentSession.id == session_id).with_for_update()
         ).scalar_one_or_none()

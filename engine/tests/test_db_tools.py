@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import event
 
-from engine.errors import ToolInputError
+from engine.errors import GuardrailValidationError, ToolInputError
 from engine.tools.builtin.catalog import (
     CatalogRefreshTool,
     SchemaInspectTool,
@@ -773,7 +773,7 @@ def test_sql_lifecycle_blocks_writes_inside_execute_tool(
 ) -> None:
     sync_schema(db_session, test_datasource.id)
     safety = sql_validate(db_session, test_datasource.id, "DELETE FROM users")
-    with pytest.raises(RuntimeError):
+    with pytest.raises(GuardrailValidationError):
         sql_execute_readonly(
             db_session,
             test_datasource.id,

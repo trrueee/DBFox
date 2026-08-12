@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from engine.errors import GuardrailValidationError
 from engine.agent.execution_authority import (
     ApprovalAuthorityError,
     ApprovalAuthorityVerifier,
@@ -163,7 +164,7 @@ def test_sql_leaf_rejects_authority_from_another_generation() -> None:
         datasource_generation=3,
     )
 
-    with pytest.raises(RuntimeError, match="manual approval"):
+    with pytest.raises(GuardrailValidationError, match="approval workflow"):
         sql_execute_readonly(
             db=SimpleNamespace(),
             datasource_id="datasource-1",

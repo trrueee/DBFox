@@ -86,23 +86,20 @@ def db_preview(
         catalog_validated_identifiers=True,
     )
 
-    try:
-        ctx = DialectContext.from_datasource_id(db, datasource_id)
-        decision = SqlSafetyService(db).build_execution_decision(
-            sql, ctx, policy="table_preview", parameters=parameters
-        )
-        result = execute_query(
-            db,
-            datasource_id,
-            sql,
-            question=f"Preview table {table_name}",
-            safety_decision=decision,
-            safety_policy="table_preview",
-            parameters=parameters,
-            redact=True,
-        )
-    except Exception as exc:
-        raise RuntimeError(f"db_preview execution failed: {exc}") from exc
+    ctx = DialectContext.from_datasource_id(db, datasource_id)
+    decision = SqlSafetyService(db).build_execution_decision(
+        sql, ctx, policy="table_preview", parameters=parameters
+    )
+    result = execute_query(
+        db,
+        datasource_id,
+        sql,
+        question=f"Preview table {table_name}",
+        safety_decision=decision,
+        safety_policy="table_preview",
+        parameters=parameters,
+        redact=True,
+    )
 
     rows = result.get("rows") or []
     safe_sql = str((result.get("safetyDecision") or {}).get("safe_sql") or result.get("safe_sql") or sql)

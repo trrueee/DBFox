@@ -81,6 +81,7 @@ class ProviderSettings(BaseModel):
 @dataclass(frozen=True)
 class _PreparedTurn:
     turn_id: str
+    context: ContextSnapshot
     messages: list[dict[str, Any]]
     tools: ToolMaterialization
     provider_settings: ProviderSettings
@@ -274,10 +275,8 @@ class RunLoop:
                         return
                     continue
 
-                with self.session_factory() as db:
-                    context = ContextAssembler(db).build(run_id)
                 decision = self.completion.evaluate(
-                    context=context,
+                    context=prepared.context,
                     model_result=result,
                     turn_count=turn_count,
                     max_turns=self.definition.limits.max_turns,
@@ -288,6 +287,7 @@ class RunLoop:
                         lease,
                         run_id,
                         state.answer_result,
+                        context=prepared.context,
                     ):
                         return
                     if decision.kind is CompletionKind.REPAIR:
@@ -555,6 +555,7 @@ class RunLoop:
                     run_id,
                     state.answer_result,
                     code=CompletionLimitationCode.TOOL_BUDGET_REACHED,
+                    context=prepared.context,
                 ):
                     self._fail(
                         lease,
@@ -671,6 +672,7 @@ class RunLoop:
             db.commit()
             return _PreparedTurn(
                 turn_id=str(turn.id),
+                context=context,
                 messages=list(prompt.messages),
                 tools=tools,
                 provider_settings=settings,
@@ -847,11 +849,18 @@ class RunLoop:
         lease: SessionLease,
         run_id: str,
         result: ModelTurnResult,
+        *,
+        context: ContextSnapshot | None = None,
     ) -> bool:
         with self.session_factory() as db:
             guard = ProgressGuard(db)
             fingerprint = guard.fingerprint(run_id)
-            usable = self._has_usable_work(db, run_id, result)
+            snapshot = context or ContextAssembler(db).build(run_id)
+            decision = self.completion.evaluate_bounded_partial(
+                context=snapshot,
+                model_result=result,
+                reason="The run reached its no-progress limit with usable durable work.",
+            )
             repository = RunRepository(db)
             stalled_turns = repository.record_progress(
                 lease=lease,
@@ -859,19 +868,17 @@ class RunLoop:
                 fingerprint=fingerprint,
             )
             reached_limit = stalled_turns >= self.definition.limits.max_stalled_turns
-            if reached_limit:
-                repository.record_no_progress(lease=lease, run_id=run_id)
             db.commit()
         if not reached_limit:
             return False
-        if usable:
+        if decision.kind is CompletionKind.PARTIAL:
             self._complete(
                 lease,
                 run_id,
                 result,
                 disposition=CompletionDisposition.BOUNDED_PARTIAL,
                 limitation_codes=[CompletionLimitationCode.NO_PROGRESS],
-                evidence_artifact_ids=[],
+                evidence_artifact_ids=decision.evidence_artifact_ids,
             )
         else:
             self._fail(
@@ -889,10 +896,16 @@ class RunLoop:
         result: ModelTurnResult,
         *,
         code: CompletionLimitationCode,
+        context: ContextSnapshot | None = None,
     ) -> bool:
         with self.session_factory() as db:
-            usable = self._has_usable_work(db, run_id, result)
-        if not usable:
+            snapshot = context or ContextAssembler(db).build(run_id)
+            decision = self.completion.evaluate_bounded_partial(
+                context=snapshot,
+                model_result=result,
+                reason=f"The run stopped at the {code.value} boundary with usable durable work.",
+            )
+        if decision.kind is not CompletionKind.PARTIAL:
             return False
         self._complete(
             lease,
@@ -900,18 +913,9 @@ class RunLoop:
             result,
             disposition=CompletionDisposition.BOUNDED_PARTIAL,
             limitation_codes=[code],
-            evidence_artifact_ids=[],
+            evidence_artifact_ids=decision.evidence_artifact_ids,
         )
         return True
-
-    def _has_usable_work(
-        self, db: Session, run_id: str, result: ModelTurnResult
-    ) -> bool:
-        context = ContextAssembler(db).build(run_id)
-        return self.completion.has_usable_work(
-            context=context,
-            model_result=result,
-        )
 
     def _fail(self, lease: SessionLease, run_id: str, code: str, message: str) -> None:
         self.terminalizer.fail(lease, run_id, code, message)

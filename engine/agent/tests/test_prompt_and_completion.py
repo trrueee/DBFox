@@ -297,6 +297,53 @@ def test_turn_budget_fails_without_an_answer_candidate():
     assert decision.missing == ["answer"]
 
 
+def test_bounded_partial_accepts_settled_query_result_without_answer_text():
+    result = ContextObservation(
+        id="obs-result",
+        tool_name="sql_execute_readonly",
+        status="succeeded",
+        summary="Returned verified rows.",
+        artifact_ids=["artifact_result"],
+        capabilities=(ToolSemanticCapability.QUERY_RESULT.value,),
+    )
+
+    decision = CompletionPolicy().evaluate_bounded_partial(
+        context=_context(observations=[result]),
+        model_result=ModelTurnResult(),
+        reason="bounded",
+    )
+
+    assert decision.kind is CompletionKind.PARTIAL
+    assert decision.evidence_artifact_ids == ["artifact_result"]
+
+
+def test_bounded_partial_rejects_unfinished_text_and_non_result_artifact():
+    metadata = ContextObservation(
+        id="obs-metadata",
+        tool_name="schema_inspect",
+        status="succeeded",
+        summary="Observed metadata.",
+        artifact_ids=["artifact_metadata"],
+        capabilities=(ToolSemanticCapability.SCHEMA_METADATA.value,),
+    )
+    unfinished = ModelTurnResult(messages=[TurnAssistantMessage(
+        item_id="message:0",
+        output_index=0,
+        phase=None,
+        status="incomplete",
+        text="partial text",
+    )])
+
+    decision = CompletionPolicy().evaluate_bounded_partial(
+        context=_context(observations=[metadata]),
+        model_result=unfinished,
+        reason="bounded",
+    )
+
+    assert decision.kind is CompletionKind.FAIL
+    assert decision.missing == ["usable_partial_result"]
+
+
 def test_commentary_without_tools_cannot_become_the_final_answer():
     decision = CompletionPolicy().evaluate(
         context=_context(),

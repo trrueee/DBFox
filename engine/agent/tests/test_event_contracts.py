@@ -118,6 +118,30 @@ def test_security_audit_redacts_secret_values(db_session) -> None:
     assert "cell-value" not in stored.details_json
 
 
+def test_security_audit_redacts_composite_keys_and_secrets_inside_text(db_session) -> None:
+    sentinel = "audit-secret-sentinel"
+    record = SecurityAuditService(db_session).record(
+        action="diagnostic.event",
+        outcome="failed",
+        resource_type="datasource",
+        details={
+            "database_url": f"mysql://root:{sentinel}@localhost/prod",
+            "client-secret-value": sentinel,
+            "message": f"authorization=Bearer {sentinel}",
+        },
+    )
+    db_session.commit()
+
+    stored = db_session.get(SecurityAuditRecord, record.id)
+    assert stored is not None
+    assert sentinel not in stored.details_json
+    assert json.loads(stored.details_json) == {
+        "client-secret-value": "[REDACTED]",
+        "database_url": "[REDACTED]",
+        "message": "authorization=Bearer [REDACTED]",
+    }
+
+
 def test_security_audit_retention_is_bounded_by_age_and_count(db_session) -> None:
     service = SecurityAuditService(db_session)
     for index in range(4):

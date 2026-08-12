@@ -8,11 +8,19 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 
 from engine.agent.events import RuntimeEventType
-from engine.agent.repositories.events import EventHistoryGap
+from engine.agent.repositories.events import EventHistoryGap, EventRepository
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.run import RunStatus, SessionLeaseConflict
 from engine.agent.session import DeliveryMode
-from engine.models import AgentMessage, AgentRun, AgentSession, AgentSessionInput, AgentTurn
+from engine.models import (
+    AgentEventRecord,
+    AgentMessage,
+    AgentRun,
+    AgentSession,
+    AgentSessionInput,
+    AgentTurn,
+)
 
 
 def _session(db_session, datasource_id: str) -> AgentSession:
@@ -80,6 +88,69 @@ def test_concurrent_admission_serializes_sqlite_aggregate_writes(db_session, tes
     assert int(aggregate.event_sequence) == worker_count * 2
     assert sorted(item.input_sequence for item in admissions) == list(range(1, worker_count + 1))
     assert db_session.query(AgentSessionInput).count() == worker_count
+
+
+def test_begin_agent_write_tracks_the_physical_sqlite_transaction(db_session) -> None:
+    connection = db_session.connection()
+    driver_connection = connection.connection.driver_connection
+
+    # SQLAlchemy autobegin owns a logical transaction as soon as the Session
+    # acquires a Connection.  SQLite has not acquired its writer lock yet.
+    assert db_session.in_transaction()
+    assert not driver_connection.in_transaction
+
+    begin_agent_write(db_session)
+    assert driver_connection.in_transaction
+
+    # Repository methods compose inside one physical writer transaction.
+    begin_agent_write(db_session)
+    assert driver_connection.in_transaction
+
+    db_session.rollback()
+    assert not driver_connection.in_transaction
+
+
+def test_direct_event_append_serializes_sqlite_sequence_writes(db_session, test_datasource) -> None:
+    datasource_id = str(test_datasource.id)
+    _session(db_session, datasource_id)
+    repository = SessionRepository(db_session)
+    lease = repository.claim(session_id="session_1", owner="worker")
+    assert lease is not None
+    db_session.commit()
+
+    session_factory = sessionmaker(bind=db_session.get_bind(), autoflush=False)
+    worker_count = 8
+    barrier = Barrier(worker_count)
+
+    def append_event(index: int) -> int:
+        with session_factory() as session:
+            barrier.wait(timeout=5)
+            sequence = EventRepository(session).append(
+                lease=lease,
+                event_type=RuntimeEventType.RUN_UPDATED,
+                run_id=None,
+                payload={"worker": index},
+            )
+            session.commit()
+            return sequence
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        sequences = list(executor.map(append_event, range(worker_count)))
+
+    db_session.expire_all()
+    aggregate = db_session.get(AgentSession, "session_1")
+    assert aggregate is not None
+    assert sorted(sequences) == list(range(1, worker_count + 1))
+    assert int(aggregate.event_sequence) == worker_count
+    stored_sequences = [
+        int(record.sequence)
+        for record in (
+            db_session.query(AgentEventRecord)
+            .filter(AgentEventRecord.session_id == "session_1")
+            .order_by(AgentEventRecord.sequence)
+        )
+    ]
+    assert stored_sequences == list(range(1, worker_count + 1))
 
 
 def test_concurrent_idempotent_admission_returns_one_run(db_session, test_datasource) -> None:

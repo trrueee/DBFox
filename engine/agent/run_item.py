@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from engine.agent.plan import PlanStep
 from engine.agent.response import CompletionDisposition, CompletionLimitationCode
+from engine.agent.run import RunStatus
 from engine.json_codec import load_array, load_object
 from engine.tools.runtime.base import RiskLevel, ToolPresentation
 
@@ -200,19 +201,6 @@ RunItem = Annotated[
 ]
 
 
-AgentRunStatus = Literal[
-    "created",
-    "queued",
-    "running",
-    "waiting_approval",
-    "waiting_input",
-    "cancelling",
-    "completed",
-    "failed",
-    "cancelled",
-]
-
-
 class RunError(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -232,7 +220,7 @@ class RunProjection(BaseModel):
     user_message_id: str
     datasource_id: str
     question: str
-    status: AgentRunStatus
+    status: RunStatus
     version: int = Field(ge=0)
     current_turn_id: str | None = None
     cancel_requested: bool

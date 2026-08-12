@@ -541,14 +541,6 @@ class RunRepository:
         self.session.flush()
         return stalled_turns
 
-    def record_no_progress(self, *, lease: SessionLease, run_id: str) -> None:
-        begin_agent_write(self.session)
-        run = self.session.execute(
-            select(AgentRun).where(AgentRun.id == run_id).with_for_update()
-        ).scalar_one()
-        self._require_lease(run, lease)
-        self.session.flush()
-
     @staticmethod
     def _working_result(run: AgentRun) -> dict[str, Any]:
         try:

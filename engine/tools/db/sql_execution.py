@@ -6,6 +6,7 @@ import time
 from typing import Any
 from sqlalchemy.orm import Session
 
+from engine.errors import GuardrailValidationError, ToolInputError
 from engine.policy.authority import ExecutionAuthority
 from engine.sql.dialect_context import DialectContext
 from engine.sql.executor import execute_query
@@ -46,7 +47,9 @@ def sql_execute_readonly(
     """Execute a read-only SELECT SQL statement using the pre-validated safety decision."""
     start = time.perf_counter()
     if not safety:
-        raise RuntimeError("SQL execution requires a previous successful sql_validate result.")
+        raise ToolInputError(
+            "Run sql_validate successfully before calling sql_execute_readonly."
+        )
 
     original_sql = str(safety.get("original_sql") or "").strip()
     safe_sql = str(safety.get("safe_sql") or "").strip()
@@ -54,10 +57,22 @@ def sql_execute_readonly(
     blocked_reasons = list(safety.get("blocked_reasons") or [])
     hard_blockers = [r for r in blocked_reasons if r != "requires_confirmation"]
     if hard_blockers:
-        raise RuntimeError(f"SQL execution is blocked by safety rules: {hard_blockers}")
+        raise GuardrailValidationError(
+            "SQL execution was blocked by the validated safety decision.",
+            checks=[
+                {
+                    "rule": str(reason),
+                    "level": "reject",
+                    "message": "The validated SQL safety decision blocks execution.",
+                }
+                for reason in hard_blockers
+            ],
+        )
 
     if not bool(safety.get("can_execute")) or not safe_sql:
-        raise RuntimeError("SQL execution requires a previous successful sql_validate result.")
+        raise ToolInputError(
+            "The sql_validate result is not executable; correct the SQL and validate it again."
+        )
 
     approval_granted = bool(
         execution_authority
@@ -68,7 +83,14 @@ def sql_execute_readonly(
         )
     )
     if safety.get("requires_confirmation") and not approval_granted:
-        raise RuntimeError("SQL execution requires manual approval.")
+        raise GuardrailValidationError(
+            "SQL execution requires approval through the Agent approval workflow.",
+            checks=[{
+                "rule": "requires_confirmation",
+                "level": "reject",
+                "message": "Execution authority was not present.",
+            }],
+        )
 
     result = execute_query(
         db,

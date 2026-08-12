@@ -144,6 +144,51 @@ class CompletionPolicy:
             ),
         )
 
+    def evaluate_bounded_partial(
+        self,
+        *,
+        context: ContextSnapshot,
+        model_result: ModelTurnResult,
+        reason: str,
+    ) -> CompletionDecision:
+        """Decide whether a forced stop has durable, safe work to return.
+
+        A completed answer candidate still passes the normal evidence and
+        citation policy. Without an answer, only a settled query-result
+        Artifact can support the generic bounded-partial response composed by
+        Terminalizer. Arbitrary artifacts and interrupted text are not enough.
+        """
+
+        if model_result.has_completed_answer_candidate:
+            decision = self.evaluate(
+                context=context,
+                model_result=model_result,
+                turn_count=1,
+                max_turns=1,
+            )
+            if decision.kind is CompletionKind.PARTIAL:
+                return decision.model_copy(update={"reason": reason})
+            return decision
+
+        result_artifact_ids = [
+            artifact_id
+            for observation in context.observations
+            if observation.status == "succeeded"
+            and ToolSemanticCapability.QUERY_RESULT.value in observation.capabilities
+            for artifact_id in observation.artifact_ids
+        ]
+        if result_artifact_ids:
+            return CompletionDecision(
+                kind=CompletionKind.PARTIAL,
+                reason=reason,
+                evidence_artifact_ids=[result_artifact_ids[-1]],
+            )
+        return CompletionDecision(
+            kind=CompletionKind.FAIL,
+            reason="The forced stop has no completed answer or durable query result.",
+            missing=["usable_partial_result"],
+        )
+
 
 class CompletionGate:
     """Owns terminal eligibility independently from orchestration."""
@@ -166,15 +211,15 @@ class CompletionGate:
             max_turns=max_turns,
         )
 
-    @staticmethod
-    def has_usable_work(
+    def evaluate_bounded_partial(
+        self,
         *,
         context: ContextSnapshot,
         model_result: ModelTurnResult,
-    ) -> bool:
-        successes = [item for item in context.observations if item.status == "succeeded"]
-        return (
-            model_result.has_completed_answer_candidate
-        ) or any(
-            bool(item.artifact_ids) for item in successes
+        reason: str,
+    ) -> CompletionDecision:
+        return self.policy.evaluate_bounded_partial(
+            context=context,
+            model_result=model_result,
+            reason=reason,
         )

@@ -9,6 +9,7 @@ from uuid import uuid4
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from engine.diagnostics.logs import redact_sensitive_text
 from engine.json_codec import JsonCodecError, canonical_dumps, load_object
 from engine.models import SecurityAuditRecord, utcnow
 
@@ -18,11 +19,22 @@ AUDIT_RETENTION_DAYS = 90
 AUDIT_MAX_RECORDS = 20_000
 AUDIT_DIAGNOSTIC_WINDOW_DAYS = 7
 AUDIT_DIAGNOSTIC_MAX_RECORDS = 500
-_SECRET_KEYS = frozenset({
-    "password", "secret", "api_key", "apiKey", "token", "private_key",
-    "passphrase", "credential", "credential_value",
+_NORMALIZED_SECRET_KEYS = frozenset({
+    "password",
+    "secret",
+    "apikey",
+    "token",
+    "privatekey",
+    "passphrase",
+    "credential",
+    "credentialvalue",
+    "authorization",
+    "dsn",
+    "databaseurl",
+    "connectionstring",
+    "clientsecret",
+    "clientsecretvalue",
 })
-_NORMALIZED_SECRET_KEYS = frozenset(item.lower() for item in _SECRET_KEYS)
 _RESULT_KEYS = frozenset({"rows", "previewrows", "preview_rows", "series", "results"})
 
 
@@ -128,7 +140,7 @@ def _sanitize(value: Any) -> Any:
         return {
             str(key): (
                 "[REDACTED]"
-                if str(key).lower() in _NORMALIZED_SECRET_KEYS
+                if _normalized_key(key) in _NORMALIZED_SECRET_KEYS
                 else "[OMITTED_RESULT_DATA]"
                 if str(key).lower() in _RESULT_KEYS
                 else _sanitize(child)
@@ -137,9 +149,15 @@ def _sanitize(value: Any) -> Any:
         }
     if isinstance(value, list):
         return [_sanitize(item) for item in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
+    if isinstance(value, str):
+        return redact_sensitive_text(value)
+    if isinstance(value, (int, float, bool)) or value is None:
         return value
     return str(type(value).__name__)
+
+
+def _normalized_key(value: object) -> str:
+    return "".join(character for character in str(value).lower() if character.isalnum())
 
 
 def _export_record(record: SecurityAuditRecord) -> dict[str, Any]:
