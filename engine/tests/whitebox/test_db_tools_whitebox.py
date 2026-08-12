@@ -39,6 +39,22 @@ def test_preview7_empty_columns():
     assert sql == ("SELECT * FROM `normal_table` LIMIT 10", {})
 
 
+def test_preview8_mysql_qualified_table_quotes_each_catalog_segment():
+    sql = _build_preview_sql(
+        "xhs_notes",
+        ["id", "created_at"],
+        5,
+        {},
+        "mysql",
+        schema_name="creatorhub",
+        catalog_validated_identifiers=True,
+    )
+    assert sql == (
+        "SELECT `id`, `created_at` FROM `creatorhub`.`xhs_notes` LIMIT 5",
+        {},
+    )
+
+
 # covers: WHERE-1 op="=" value=None
 def test_where1_null():
     res = build_where_clause({"column": "id", "op": "=", "value": None}, "mysql")

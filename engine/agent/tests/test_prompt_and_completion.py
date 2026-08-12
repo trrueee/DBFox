@@ -43,7 +43,7 @@ def test_prompt_keeps_user_and_database_context_out_of_system_role():
         definition=DEFAULT_AGENT_DEFINITION,
         context=_context(),
     ).hash
-    assert bundle.version == "3.3"
+    assert bundle.version == "3.4"
     assert "metric, dimensions, filters" in bundle.system_prompt
     assert "result_profile" in bundle.system_prompt
 
@@ -89,6 +89,7 @@ def test_prompt_budget_reserves_space_for_tool_schemas():
     )
 
     assert bundle.budget["reserved_tokens"] > 0
+    assert bundle.budget["tool_schema_count"] == len(tool_schemas)
     assert bundle.budget["estimated_prompt_tokens"] == (
         bundle.budget["message_tokens"] + bundle.budget["reserved_tokens"]
     )
@@ -229,6 +230,31 @@ def test_database_task_rejects_fabricated_inline_evidence():
         turn_count=3, max_turns=8,
     )
     assert decision.kind is CompletionKind.CONTINUE
+    assert decision.missing == ["valid_inline_evidence"]
+
+
+def test_database_task_rejects_malformed_placeholder_citation():
+    observation = ContextObservation(
+        id="obs-1", tool_name="catalog_overview", status="succeeded",
+        summary="Observed four tables.", artifact_ids=[],
+        capabilities=(ToolSemanticCapability.SCHEMA_METADATA.value,),
+    )
+    decision = CompletionPolicy().evaluate(
+        context=_context(observations=[observation]),
+        model_result=_final("共有 4 张表。{{cite:artifact_result_???}}"),
+        turn_count=1, max_turns=8,
+    )
+    assert decision.kind is CompletionKind.CONTINUE
+    assert decision.missing == ["valid_inline_evidence"]
+
+
+def test_malformed_citation_fails_closed_at_turn_budget():
+    decision = CompletionPolicy().evaluate(
+        context=_context(),
+        model_result=_final("答案。{{cite:artifact_unfinished"),
+        turn_count=8, max_turns=8,
+    )
+    assert decision.kind is CompletionKind.FAIL
     assert decision.missing == ["valid_inline_evidence"]
 
 

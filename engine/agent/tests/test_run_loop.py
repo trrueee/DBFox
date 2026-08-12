@@ -3,9 +3,10 @@ import re
 
 from sqlalchemy.orm import sessionmaker
 
+from engine.agent.context import ContextArtifact, ContextObservation, ContextSnapshot
 from engine.agent.events import LiveStreamHub
 from engine.agent.definition import AgentDefinition
-from engine.agent.loop import RunLoop
+from engine.agent.loop import RunLoop, _relevant_tool_groups
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
@@ -30,6 +31,132 @@ from engine.tools.runtime import (
     ToolOutcome,
     ToolRegistry,
 )
+from engine.tools.runtime.semantics import ToolSemanticCapability
+
+
+def _tool_context(**updates):
+    values = {
+        "session_id": "session",
+        "run_id": "run",
+        "context_epoch": 0,
+        "messages": [],
+        "sources": [],
+        "hash": "hash",
+    }
+    values.update(updates)
+    return ContextSnapshot(**values)
+
+
+def test_tool_disclosure_only_hides_result_without_durable_prerequisites():
+    configured = {"control", "conversation", "catalog", "query", "result"}
+    assert _relevant_tool_groups(configured, _tool_context()) == {
+        "control",
+        "conversation",
+        "catalog",
+        "query",
+    }
+
+
+def test_tool_disclosure_restores_recall_and_result_groups_from_context():
+    configured = {"control", "conversation", "catalog", "query", "result"}
+    context = _tool_context(
+        conversation_archive={"omitted_message_count": 3},
+        selected_artifacts=[
+            ContextArtifact(
+                id="artifact_result",
+                type="result_view",
+                title="Result",
+            )
+        ],
+    )
+    assert _relevant_tool_groups(configured, context) == configured
+
+
+def test_tool_disclosure_keeps_catalog_after_executable_validation():
+    configured = {"control", "conversation", "catalog", "query", "result"}
+    context = _tool_context(
+        observations=[
+            ContextObservation(
+                id="observation",
+                tool_name="sql_validate",
+                status="succeeded",
+                summary="Validated",
+                facts={"can_execute": True},
+                capabilities=(ToolSemanticCapability.VALIDATED_QUERY.value,),
+            )
+        ]
+    )
+    assert _relevant_tool_groups(configured, context) == {
+        "control",
+        "conversation",
+        "catalog",
+        "query",
+    }
+
+
+def test_tool_disclosure_restores_result_from_session_memory():
+    configured = {"control", "conversation", "catalog", "query", "result"}
+    context = _tool_context(
+        session_memory={
+            "stable_context": {
+                "evidence_references": [
+                    {"artifact_id": "artifact_result_from_previous_run"}
+                ]
+            }
+        }
+    )
+
+    assert _relevant_tool_groups(configured, context) == configured
+
+
+def test_tool_disclosure_restores_result_for_failed_run_recovery():
+    configured = {"control", "conversation", "catalog", "query", "result"}
+    context = _tool_context(
+        previous_run_outcome={
+            "status": "failed",
+            "tool_outcomes": [
+                {
+                    "tool": "sql_execute_readonly",
+                    "status": "succeeded",
+                    "artifact_ids": ["artifact_result_before_failure"],
+                    "artifacts": [
+                        {
+                            "id": "artifact_result_before_failure",
+                            "type": "result_view",
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert _relevant_tool_groups(configured, context) == configured
+
+
+def test_tool_disclosure_does_not_treat_non_result_artifact_as_result():
+    configured = {"control", "conversation", "catalog", "query", "result"}
+    context = _tool_context(
+        previous_run_outcome={
+            "status": "failed",
+            "tool_outcomes": [
+                {
+                    "tool": "sql_validate",
+                    "status": "succeeded",
+                    "artifact_ids": ["artifact_sql_only"],
+                    "artifacts": [
+                        {"id": "artifact_sql_only", "type": "sql"},
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert _relevant_tool_groups(configured, context) == {
+        "control",
+        "conversation",
+        "catalog",
+        "query",
+    }
 
 
 class ValidateTool(SqlValidateTool):
@@ -478,6 +605,57 @@ class BudgetAnswerModel:
         )
 
 
+class MalformedCitationRepairModel:
+    def __init__(self, call_number: int) -> None:
+        self.call_number = call_number
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        content = (
+            "当前数据源包含 4 张表。{{cite:artifact_result_???}}"
+            if self.call_number == 1
+            else "当前数据源包含 4 张表。"
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_START,
+            item_id="answer",
+            revision=1,
+            output_index=0,
+            phase="final_answer",
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_DELTA,
+            item_id="answer",
+            revision=2,
+            content=content,
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_END,
+            item_id="answer",
+            revision=3,
+            output_index=0,
+            phase="final_answer",
+            message_status="completed",
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
+            item_id="answer",
+            revision=4,
+            output_index=0,
+            model_output_item={
+                "type": "message",
+                "role": "assistant",
+                "phase": "final_answer",
+                "content": content,
+            },
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.FINISH,
+            item_id="finish",
+            revision=1,
+            termination=TurnTermination.COMPLETED,
+        )
+
+
 class CommentaryAndQuestionModel:
     def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
         yield TurnStreamItem(
@@ -715,6 +893,60 @@ def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(
     assert subscription.receive(timeout=0.01).content == "先验证并执行聚合查询。"
     assert subscription.receive(timeout=0.01).content == "正在整理可验证结论。"
     assert subscription.receive(timeout=0.01).content == "共有 42 条订单。"
+
+
+def test_run_loop_repairs_malformed_citation_before_terminal_commit(
+    db_session, test_datasource
+):
+    db_session.add(
+        AgentSession(
+            id="session_citation_repair",
+            datasource_id=str(test_datasource.id),
+            title="Citation repair",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session_citation_repair",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="当前数据源有多少张表？",
+        idempotency_key="citation-repair",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(
+        session_id="session_citation_repair", owner="worker", ttl_seconds=120
+    )
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    calls = {"count": 0}
+
+    def model_factory(_settings):
+        calls["count"] += 1
+        return MalformedCitationRepairModel(calls["count"])
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=ToolRegistry(),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    answer = db_session.get(AgentMessage, admission.assistant_message_id)
+    assert run is not None and run.status == "completed"
+    assert answer is not None and answer.content == "当前数据源包含 4 张表。"
+    assert "{{cite:" not in answer.content
+    assert calls["count"] == 2
+    assert db_session.query(AgentTurn).filter_by(run_id=run.id).count() == 2
 
 
 def test_result_rows_are_transient_and_never_enter_durable_facts() -> None:

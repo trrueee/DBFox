@@ -15,14 +15,18 @@ from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.terminalizer import Terminalizer
 from engine.agent.plan import PlanStep, PlanStepStatus
 from engine.agent.projection import conversation_snapshot
+from engine.agent.run_item import RunItemStatus
+from engine.agent.turn import TurnTermination
 from engine.agent.tool import ToolInvocationStatus
 from engine.models import (
     AgentApproval,
     AgentQuestionRequest,
     AgentRun,
+    AgentRunItemRecord,
     AgentSession,
     AgentTaskPlanRecord,
     AgentToolInvocation,
+    AgentTurn,
 )
 from engine.tools.builtin import register_dbfox_tools
 from engine.tools.materialization import ToolMaterialization, materialize_tools
@@ -272,6 +276,53 @@ def test_cancellation_terminalizes_the_visible_plan(
     assert plan_item["completed_at"] is not None
 
 
+def test_cancellation_terminalizes_the_active_turn_and_partial_message(
+    db_session,
+    test_datasource,
+) -> None:
+    sessions, admission, lease, turn = _start_run(
+        db_session,
+        test_datasource,
+        session_id="session_cancel_turn",
+    )
+    item_id = RunRepository(db_session).persist_turn_message(
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(turn.id),
+        output_index=0,
+        revision=1,
+        phase=None,
+        content="尚未完成的部分回答",
+        status=RunItemStatus.IN_PROGRESS,
+    )
+    db_session.commit()
+
+    _cancel_with_terminalizer(
+        db_session,
+        sessions=sessions,
+        admission=admission,
+        lease=lease,
+    )
+
+    run = db_session.get(AgentRun, admission.run_id)
+    cancelled_turn = db_session.get(AgentTurn, turn.id)
+    message_item = db_session.get(AgentRunItemRecord, item_id)
+    assert run is not None and run.status == "cancelled"
+    assert run.current_turn_id is None
+    assert cancelled_turn is not None and cancelled_turn.status == "cancelled"
+    assert cancelled_turn.termination == TurnTermination.CANCELLED.value
+    assert cancelled_turn.error_code is None
+    assert cancelled_turn.completed_at is not None
+    assert message_item is not None
+    assert message_item.status == RunItemStatus.CANCELLED.value
+    assert message_item.completed_at is not None
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    assert Terminalizer(session_factory=factory).cancelled(lease, admission.run_id) is True
+    db_session.expire_all()
+    assert db_session.get(AgentTurn, turn.id).status == "cancelled"
+
+
 def test_failure_terminalizes_pending_children_in_one_transaction(
     db_session,
     test_datasource,
@@ -330,6 +381,11 @@ def test_failure_terminalizes_pending_children_in_one_transaction(
     db_session.expire_all()
 
     assert db_session.get(AgentRun, admission.run_id).status == "failed"
+    failed_turn = db_session.get(AgentTurn, turn.id)
+    assert failed_turn is not None and failed_turn.status == "failed"
+    assert failed_turn.termination == TurnTermination.FAILED.value
+    assert failed_turn.error_code == "AGENT_RUNTIME_ERROR"
+    assert failed_turn.completed_at is not None
     assert db_session.get(AgentApproval, approval.id).status == ApprovalStatus.CANCELLED.value
     assert db_session.get(AgentToolInvocation, invocation.id).status == ToolInvocationStatus.CANCELLED.value
     assert db_session.query(AgentTaskPlanRecord).filter_by(run_id=admission.run_id).one().status == "failed"

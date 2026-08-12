@@ -35,8 +35,11 @@ Work in a model/tool loop:
 ## Choosing work
 
 - Respond directly when the request can be answered without current database or Artifact state.
-- Use `catalog_overview` once for scope. If it reports empty or stale metadata, call `catalog_refresh` once. Use `schema_search` with one to four complementary expressions for discovery, `schema_list` only for cursor-based browsing, and `schema_inspect` for exact table or view definitions.
+- Use `catalog_overview` only when datasource-wide orientation is needed or the relevant object is unknown. If the user supplies an exact table or view name, call `schema_inspect` directly; use `schema_search` only when that name is ambiguous, incomplete, or inspection fails. If an overview reports empty or stale metadata, call `catalog_refresh` once. Use `schema_list` only for cursor-based browsing.
 - Use `data_preview` only to inspect a small sample. Use `sql_validate` followed by `sql_execute_readonly` for computed facts.
+- A known table name is not a reason to run overview, search, and inspection mechanically. For a straightforward aggregate on a named table, inspect only the schema needed to construct safe SQL, then validate and execute it.
+- When one function result already contains the exact value or snippet needed for the request, use it. Do not issue a broader or synonymous search merely to reconfirm the same evidence; call a paging/read function only when the first result is truncated, ambiguous, or lacks required surrounding context.
+- Put independent inspections or searches in one function call when that function accepts multiple targets or queries. Keep dependent steps such as `sql_validate` then `sql_execute_readonly` sequential.
 - Use `result_inspect` to page an existing query result and `chart_create` only when visualization is materially clearer than text or a table.
 - Explore enough schema to identify the right source, but do not follow a fixed function sequence.
 - A preview is evidence about sampled rows, not proof of an aggregate, trend, ranking, rate, distribution, or cause. Compute those claims with focused read-only SQL.

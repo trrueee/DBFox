@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from engine.errors import ToolInputError
 from engine.models import DataSource, SchemaColumn, SchemaTable
 from engine.policy.sensitivity import _SENSITIVE_FALLBACK
 
@@ -23,14 +24,29 @@ def _datasource(db: Session, datasource_id: str) -> DataSource:
 
 
 def _catalog_table(db: Session, datasource_id: str, name: str) -> SchemaTable | None:
-    return (
+    parts = [part.strip() for part in name.split(".") if part.strip()]
+    if len(parts) == 1:
+        filters = [SchemaTable.table_name == parts[0]]
+    elif len(parts) == 2:
+        filters = [
+            SchemaTable.table_schema == parts[0],
+            SchemaTable.table_name == parts[1],
+        ]
+    else:
+        raise ToolInputError(f"Invalid catalog table name: {name}")
+
+    matches = (
         db.query(SchemaTable)
-        .filter(
-            SchemaTable.data_source_id == datasource_id,
-            SchemaTable.table_name == name,
-        )
-        .first()
+        .filter(SchemaTable.data_source_id == datasource_id, *filters)
+        .order_by(SchemaTable.table_schema, SchemaTable.table_name, SchemaTable.id)
+        .limit(2)
+        .all()
     )
+    if len(matches) > 1:
+        raise ToolInputError(
+            f"Ambiguous table name: {name}. Use the qualified_name returned by schema_list."
+        )
+    return matches[0] if matches else None
 
 
 def _ordered_columns(table: SchemaTable) -> list[SchemaColumn]:

@@ -133,6 +133,127 @@ class RunRepository:
         )
         self.session.flush()
 
+    def cancel_active_turns(self, *, lease: SessionLease, run_id: str) -> int:
+        """Settle every open model Turn before its Run becomes cancelled."""
+
+        return self._terminalize_active_turns(
+            lease=lease,
+            run_id=run_id,
+            status="cancelled",
+            termination=TurnTermination.CANCELLED,
+            error_code=None,
+            error_message=None,
+        )
+
+    def fail_active_turns(
+        self,
+        *,
+        lease: SessionLease,
+        run_id: str,
+        error_code: str,
+        error_message: str,
+    ) -> int:
+        """Settle every open model Turn before its Run becomes failed."""
+
+        return self._terminalize_active_turns(
+            lease=lease,
+            run_id=run_id,
+            status="failed",
+            termination=TurnTermination.FAILED,
+            error_code=error_code,
+            error_message=error_message,
+        )
+
+    def _terminalize_active_turns(
+        self,
+        *,
+        lease: SessionLease,
+        run_id: str,
+        status: Literal["cancelled", "failed"],
+        termination: TurnTermination,
+        error_code: str | None,
+        error_message: str | None,
+    ) -> int:
+        begin_agent_write(self.session)
+        run = self.session.execute(
+            select(AgentRun).where(AgentRun.id == run_id).with_for_update()
+        ).scalar_one()
+        self._require_lease(run, lease)
+        turns = (
+            self.session.execute(
+                select(AgentTurn)
+                .where(
+                    AgentTurn.run_id == run_id,
+                    AgentTurn.status == "running",
+                )
+                .order_by(AgentTurn.sequence)
+                .with_for_update()
+            )
+            .scalars()
+            .all()
+        )
+        if not turns:
+            return 0
+
+        now = _utcnow()
+        for turn in turns:
+            self._cancel_in_progress_turn_messages(
+                lease=lease,
+                run_id=run_id,
+                turn=turn,
+                now=now,
+            )
+            turn.status = status
+            turn.termination = termination.value
+            turn.error_code = error_code
+            turn.error_message = error_message
+            turn.completed_at = now
+
+        run.current_turn_id = None
+        run.version = int(run.version or 0) + 1
+        run.updated_at = now
+        self.session.flush()
+        return len(turns)
+
+    def _cancel_in_progress_turn_messages(
+        self,
+        *,
+        lease: SessionLease,
+        run_id: str,
+        turn: AgentTurn,
+        now: datetime,
+    ) -> None:
+        active_messages = (
+            self.session.execute(
+                select(AgentRunItemRecord)
+                .where(
+                    AgentRunItemRecord.turn_id == str(turn.id),
+                    AgentRunItemRecord.item_type == RunItemType.MESSAGE.value,
+                    AgentRunItemRecord.status == RunItemStatus.IN_PROGRESS.value,
+                )
+                .order_by(AgentRunItemRecord.sequence)
+                .with_for_update()
+            )
+            .scalars()
+            .all()
+        )
+        for record in active_messages:
+            item = MessageItem.model_validate(loads(str(record.item_json or "{}")))
+            cancelled = item.model_copy(
+                update={
+                    "revision": int(item.revision) + 1,
+                    "status": RunItemStatus.CANCELLED,
+                    "completed_at": now,
+                }
+            )
+            self.sessions.events.append(
+                lease=lease,
+                event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
+                run_id=run_id,
+                turn_id=str(turn.id),
+                payload={"item": dump_run_item(cancelled)},
+            )
+
     def settle_turn(
         self,
         *,
@@ -223,36 +344,12 @@ class RunRepository:
             return 0
         now = _utcnow()
         for turn in turns:
-            active_messages = (
-                self.session.execute(
-                    select(AgentRunItemRecord)
-                    .where(
-                        AgentRunItemRecord.turn_id == str(turn.id),
-                        AgentRunItemRecord.item_type == RunItemType.MESSAGE.value,
-                        AgentRunItemRecord.status == RunItemStatus.IN_PROGRESS.value,
-                    )
-                    .order_by(AgentRunItemRecord.sequence)
-                    .with_for_update()
-                )
-                .scalars()
-                .all()
+            self._cancel_in_progress_turn_messages(
+                lease=lease,
+                run_id=run_id,
+                turn=turn,
+                now=now,
             )
-            for record in active_messages:
-                item = MessageItem.model_validate(loads(str(record.item_json or "{}")))
-                cancelled = item.model_copy(
-                    update={
-                        "revision": int(item.revision) + 1,
-                        "status": RunItemStatus.CANCELLED,
-                        "completed_at": now,
-                    }
-                )
-                self.sessions.events.append(
-                    lease=lease,
-                    event_type=RuntimeEventType.RUN_ITEM_CANCELLED,
-                    run_id=run_id,
-                    turn_id=str(turn.id),
-                    payload={"item": dump_run_item(cancelled)},
-                )
             turn.status = "failed"
             turn.error_code = "MODEL_STREAM_INTERRUPTED"
             turn.error_message = "模型响应在完成前中断，Runtime 已从持久状态继续。"

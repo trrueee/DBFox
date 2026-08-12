@@ -7,7 +7,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.agent.context import ContextSnapshot
-from engine.agent.evidence import citation_references
+from engine.agent.evidence import citation_references, has_invalid_citation_syntax
 from engine.agent.turn import ModelTurnResult
 from engine.tools.runtime.semantics import ToolSemanticCapability
 
@@ -92,6 +92,15 @@ class CompletionPolicy:
                     "The model text is not a completed answer for the active request."
                 ),
                 missing=["completed_answer"],
+            )
+
+        if has_invalid_citation_syntax(model_result.answer_text):
+            return CompletionDecision(
+                kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
+                reason=(
+                    "The answer contains malformed or unresolved DBFox citation markup."
+                ),
+                missing=["valid_inline_evidence"],
             )
 
         observed_artifact_ids = {

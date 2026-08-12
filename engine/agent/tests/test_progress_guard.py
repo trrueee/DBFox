@@ -1,6 +1,6 @@
 import json
 
-from engine.agent.progress_guard import ProgressGuard
+from engine.agent.progress_guard import ProgressGuard, observation_evidence_signatures
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.models import AgentArtifactRecord, AgentRun, AgentSession
@@ -131,3 +131,82 @@ def test_progress_fingerprint_ignores_procedural_sql_and_safety_artifacts(db_ses
     db_session.commit()
 
     assert ProgressGuard(db_session).fingerprint(admission.run_id) == first
+
+
+def _signatures(tool_name: str, facts: dict):
+    return observation_evidence_signatures(
+        tool_name=tool_name,
+        status="succeeded",
+        facts=facts,
+        error_code="",
+    )
+
+
+def test_empty_catalog_queries_have_one_stable_evidence_signature() -> None:
+    first = _signatures("schema_search", {"returned_count": 0, "candidates": []})
+    synonym = _signatures(
+        "schema_search",
+        {"returned_count": 0, "candidates": []},
+    )
+
+    assert first == synonym
+
+
+def test_catalog_candidate_score_and_matched_query_do_not_fake_progress() -> None:
+    first = _signatures(
+        "schema_search",
+        {
+            "candidates": [
+                {
+                    "type": "table",
+                    "schema_name": "main",
+                    "table_name": "orders",
+                    "score": 1.0,
+                    "matched_queries": ["order"],
+                }
+            ]
+        },
+    )
+    synonym = _signatures(
+        "schema_search",
+        {
+            "candidates": [
+                {
+                    "type": "table",
+                    "schema_name": "main",
+                    "table_name": "orders",
+                    "score": 0.72,
+                    "matched_queries": ["purchase"],
+                }
+            ]
+        },
+    )
+
+    assert first == synonym
+
+
+def test_new_catalog_identity_is_meaningful_progress() -> None:
+    orders = _signatures(
+        "schema_list",
+        {"tables": [{"schema_name": "main", "table_name": "orders"}]},
+    )
+    customers = _signatures(
+        "schema_list",
+        {"tables": [{"schema_name": "main", "table_name": "customers"}]},
+    )
+
+    assert orders != customers
+
+
+def test_non_catalog_result_remains_an_atomic_observation() -> None:
+    first = _signatures("sql_execute_readonly", {"row_count": 1, "total": 42})
+    changed = _signatures("sql_execute_readonly", {"row_count": 1, "total": 43})
+
+    assert first != changed
+
+
+def test_non_catalog_score_remains_meaningful() -> None:
+    first = _signatures("result_profile", {"quality_score": 0.8, "score": 10})
+    changed = _signatures("result_profile", {"quality_score": 0.8, "score": 11})
+
+    assert first != changed

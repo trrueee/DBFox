@@ -203,6 +203,12 @@ def test_dbfox_tools_publish_openai_strict_schemas() -> None:
     assert search_properties["limit_per_query"]["minimum"] == 1
     assert search_properties["limit_per_query"]["maximum"] == 20
 
+    update_plan = materialization.require("update_plan")
+    assert "complete current objective and complete steps array" in (
+        update_plan.description
+    )
+    assert {"objective", "steps"} <= set(update_plan.input_schema["required"])
+
 
 def test_dbfox_tool_capabilities_are_the_single_resource_access_contract() -> None:
     registry = register_dbfox_tools()

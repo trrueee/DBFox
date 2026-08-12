@@ -15,6 +15,7 @@ from engine.agent.evidence import (
     Evidence,
     EvidenceLocator,
     citation_references,
+    has_invalid_citation_syntax,
 )
 from engine.agent.repositories.approval import ApprovalRepository
 from engine.agent.repositories.question import QuestionRepository
@@ -67,6 +68,10 @@ class Terminalizer:
             text = final_text or (
                 "分析已完成，但仅得到部分结果。" if partial else "分析已完成。"
             )
+            if has_invalid_citation_syntax(text):
+                raise ValueError(
+                    "Terminal answer contains malformed DBFox citation markup"
+                )
             result_by_id = {item.id: item for item in result_artifacts}
             references = citation_references(text)
             bound_artifact_ids = [
@@ -223,12 +228,14 @@ class Terminalizer:
             lease=lease,
             run_id=run_id,
         )
+        runs = RunRepository(db)
+        runs.cancel_active_turns(lease=lease, run_id=run_id)
         PlanRepository(db).terminalize(
             lease=lease,
             run_id=run_id,
             status=PlanStatus.CANCELLED,
         )
-        RunRepository(db).cancel(lease=lease, run_id=run_id)
+        runs.cancel(lease=lease, run_id=run_id)
 
     def cancelled(self, lease: SessionLease, run_id: str) -> bool:
         with self.session_factory() as db:
@@ -262,13 +269,20 @@ class Terminalizer:
             lease=lease,
             run_id=run_id,
         )
+        runs = RunRepository(db)
+        runs.fail_active_turns(
+            lease=lease,
+            run_id=run_id,
+            error_code=public_error["code"],
+            error_message=public_error["message"],
+        )
         PlanRepository(db).terminalize(
             lease=lease,
             run_id=run_id,
             status=PlanStatus.FAILED,
             summary=public_error["message"],
         )
-        RunRepository(db).fail(
+        runs.fail(
             lease=lease,
             run_id=run_id,
             error_code=public_error["code"],

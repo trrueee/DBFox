@@ -55,8 +55,10 @@ class ConversationSearchTool(
     description = (
         "Search only the durable user and completed-assistant messages in the current "
         "conversation. Use this when older wording or decisions may have fallen outside "
-        "the active context window. Results are redacted snippets; use conversation_read "
-        "with a returned sequence to inspect the surrounding canonical messages."
+        "the active context window. Results are redacted snippets. If an untruncated "
+        "snippet answers the request exactly, do not repeat the search. Use "
+        "conversation_read with a returned sequence only when surrounding canonical "
+        "messages are required."
     )
     input_model = ConversationSearchInput
     output_model = ConversationSearchOutput

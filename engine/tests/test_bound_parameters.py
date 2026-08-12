@@ -35,6 +35,29 @@ def test_internal_filter_value_is_bound_not_concatenated(
     assert bound == {"dbfox_p0": attack}
 
 
+def test_qualified_catalog_table_keeps_filter_value_bound() -> None:
+    attack = "x' OR 1=1 --"
+    sql, parameters = build_select(
+        table="users",
+        table_schema="creatorhub",
+        columns=["id"],
+        where={"column": "name", "op": "=", "value": attack},
+        order=None,
+        limit=10,
+        dialect="mysql",
+        catalog_validated_identifiers=True,
+    )
+
+    assert "FROM `creatorhub`.`users`" in sql
+    assert attack not in sql
+    rendered, bound = render_dbapi_sql(sql, "mysql", parameters)
+    assert attack not in rendered
+    assert "FROM `creatorhub`.`users`" in rendered
+    assert '"creatorhub"."users"' not in rendered
+    assert "%(dbfox_p0)s" in rendered
+    assert bound == {"dbfox_p0": attack}
+
+
 def test_placeholder_parameter_mismatch_is_rejected() -> None:
     with pytest.raises(ValueError, match="do not match"):
         render_dbapi_sql(

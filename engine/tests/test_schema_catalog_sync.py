@@ -32,6 +32,42 @@ def test_sync_tables(db_session, test_datasource) -> None:
     assert len(tables) == 20
 
 
+def test_catalog_sync_preserves_unknown_and_known_zero_row_estimates(
+    db_session, test_datasource
+) -> None:
+    inventory = SchemaInventory(
+        datasource_id=test_datasource.id,
+        dialect="mysql",
+        database_name="creatorhub",
+        tables=[
+            TableInventory(
+                table_schema="creatorhub",
+                table_name="unknown_size",
+                row_count_estimate=None,
+            ),
+            TableInventory(
+                table_schema="creatorhub",
+                table_name="known_empty",
+                row_count_estimate=0,
+            ),
+        ],
+    )
+
+    SchemaCatalogSync().sync_authoritative(
+        db_session,
+        AuthoritativeInventory.from_completed_inventory(inventory),
+    )
+
+    tables = {
+        table.table_name: table
+        for table in db_session.query(SchemaTable)
+        .filter(SchemaTable.data_source_id == test_datasource.id)
+        .all()
+    }
+    assert tables["unknown_size"].row_count_estimate is None
+    assert tables["known_empty"].row_count_estimate == 0
+
+
 
 
 def test_sync_columns(db_session, test_datasource) -> None:

@@ -51,14 +51,20 @@ def render_dbapi_sql(
         raise ValueError("SQL placeholders and bound parameters do not match.")
     if not names:
         if bound:
-            raise ValueError("Bound parameters were supplied for SQL without placeholders.")
+            raise ValueError(
+                "Bound parameters were supplied for SQL without placeholders."
+            )
         return sql, {}
 
-    canonical = "duckdb" if dialect.strip().lower() == "duckdb" else canonical_sql_dialect(dialect)
+    canonical = (
+        "duckdb"
+        if dialect.strip().lower() == "duckdb"
+        else canonical_sql_dialect(dialect)
+    )
     if canonical == "mysql":
-        rendered = _MySQLBoundGenerator().generate(expression)
+        rendered = _MySQLBoundGenerator(dialect="mysql").generate(expression)
     elif canonical == "duckdb":
-        rendered = _DuckDBBoundGenerator().generate(expression)
+        rendered = _DuckDBBoundGenerator(dialect="duckdb").generate(expression)
     else:
         target = "postgres" if canonical == "postgresql" else canonical
         rendered = expression.sql(dialect=target)
@@ -66,5 +72,9 @@ def render_dbapi_sql(
 
 
 def _sqlglot_dialect(dialect: str) -> str:
-    canonical = "duckdb" if dialect.strip().lower() == "duckdb" else canonical_sql_dialect(dialect)
+    canonical = (
+        "duckdb"
+        if dialect.strip().lower() == "duckdb"
+        else canonical_sql_dialect(dialect)
+    )
     return "postgres" if canonical == "postgresql" else canonical

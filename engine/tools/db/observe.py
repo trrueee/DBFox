@@ -236,7 +236,7 @@ def _schema_table_summary(
         "type": str(table.table_type or "table"),
         "comment": str(table.table_comment or ""),
         "columns": len(table.columns or []),
-        "row_estimate": table.row_count_estimate or 0,
+        "row_estimate": table.row_count_estimate,
         "primary_key": [str(c.column_name) for c in _ordered_columns(table) if c.is_primary_key],
         "tags": _table_tags(context, table),
         "connected_tables": sorted(_connected_table_names(context, table)),

@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from engine.errors import ToolInputError
 from engine.models import SchemaColumn
 from engine.sql.dialect_context import DialectContext
 from engine.sql.executor import execute_query
@@ -37,18 +38,21 @@ def db_preview(
     Safety: column whitelist, LIMIT ≤ 20, TrustGate, timeout, redaction.
     """
     if where is not None and not isinstance(where, dict):
-        raise ValueError("WHERE must be a dictionary")
+        raise ToolInputError("WHERE must be a structured filter object.")
     if order_by is not None and not isinstance(order_by, (dict, list)):
-        raise ValueError("ORDER BY must be a dictionary or list of dictionaries")
+        raise ToolInputError("ORDER BY must be a structured order object or list.")
 
     start = time.perf_counter()
     table_name = table.strip()
     if not table_name:
-        raise ValueError("table is required.")
+        raise ToolInputError("A non-empty catalog table name is required.")
 
     catalog_table = _catalog_table(db, datasource_id, table_name)
     if catalog_table is None:
-        raise ValueError(f"Unknown table: {table_name}")
+        raise ToolInputError(
+            f"Table not found in the current catalog: {table_name}. "
+            "Use schema_list or schema_search and retry with its qualified_name."
+        )
 
     available = {str(c.column_name): c for c in _ordered_columns(catalog_table)}
     args: dict[str, Any] = {"table": table_name, "limit": limit}
@@ -64,16 +68,21 @@ def db_preview(
     unknown = [n for n in requested if n not in available]
     unknown.extend(n for n in requested_for_validation if n not in available and n not in unknown)
     if unknown:
-        raise ValueError(f"Unknown column(s) for {table_name}: {', '.join(unknown)}")
+        available_names = ", ".join(list(available)[:30])
+        raise ToolInputError(
+            f"Column(s) not found in {table_name}: {', '.join(unknown)}. "
+            f"Available columns: {available_names}."
+        )
 
     requested_limit = _clamp(int(limit), 1, MAX_PREVIEW_ROWS)
     dialect = _resolve_dialect(db, datasource_id)
     sql, parameters = _build_preview_sql(
-        table_name,
+        str(catalog_table.table_name),
         requested,
         requested_limit,
         args,
         dialect,
+        schema_name=str(catalog_table.table_schema or "") or None,
         catalog_validated_identifiers=True,
     )
 
@@ -144,6 +153,7 @@ def _build_preview_sql(
     args: dict[str, Any],
     dialect: str,
     *,
+    schema_name: str | None = None,
     catalog_validated_identifiers: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     from engine.sql.builder import build_select
@@ -155,6 +165,7 @@ def _build_preview_sql(
         limit=limit,
         dialect=dialect,
         catalog_validated_identifiers=catalog_validated_identifiers,
+        table_schema=schema_name,
     )
 
 

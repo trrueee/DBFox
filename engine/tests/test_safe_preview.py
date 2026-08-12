@@ -2,6 +2,7 @@
 
 import pytest
 
+from engine.errors import ToolInputError
 from engine.tools.builtin.contracts import DataPreviewInput
 from engine.tools.db.preview import db_preview
 
@@ -42,7 +43,7 @@ def test_preview_input_accepts_structured_order_by() -> None:
 
 
 def test_safe_preview_wrapper_rejects_raw_where_before_db_access() -> None:
-    with pytest.raises(ValueError, match="WHERE"):
+    with pytest.raises(ToolInputError, match="WHERE"):
         db_preview(
             None,  # type: ignore[arg-type]
             "ds-1",
@@ -52,7 +53,7 @@ def test_safe_preview_wrapper_rejects_raw_where_before_db_access() -> None:
 
 
 def test_safe_preview_wrapper_rejects_raw_order_by_before_db_access() -> None:
-    with pytest.raises(ValueError, match="ORDER BY"):
+    with pytest.raises(ToolInputError, match="ORDER BY"):
         db_preview(
             None,  # type: ignore[arg-type]
             "ds-1",

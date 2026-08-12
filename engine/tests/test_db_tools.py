@@ -13,6 +13,7 @@ from engine.tools.builtin.catalog import (
     SchemaListTool,
     SchemaSearchTool,
 )
+from engine.tools.builtin.registry import register_dbfox_tools
 from engine.tools.builtin.contracts import (
     ChartCreateInput,
     EmptyInput,
@@ -30,7 +31,7 @@ from engine.tools.db.observe import _build_observation_context, db_observe
 from engine.tools.db.preview import db_preview
 from engine.tools.db.search import MAX_SEARCH_TOKENS, _tokenize_search_query, db_search
 from engine.tools.db.sql_execution import sql_execute_readonly, sql_validate
-from engine.tools.runtime import ToolRunContext
+from engine.tools.runtime import ToolRunContext, ToolRuntime
 from engine.models import DomainTagRule, QueryHistory, SchemaSearchDoc, SchemaTable
 from engine.environment.schema_catalog_sync import ensure_catalog
 from engine.json_codec import byte_size
@@ -576,6 +577,48 @@ def test_db_preview_limits_columns_rows_and_masks_sensitive_values(
     )
 
 
+def test_db_preview_accepts_schema_list_qualified_table_name(
+    db_session, test_datasource
+) -> None:
+    sync_schema(db_session, test_datasource.id)
+
+    result = db_preview(
+        db_session,
+        test_datasource.id,
+        table="main.users",
+        columns=["id"],
+        limit=5,
+    )
+
+    assert result["table"] == "main.users"
+    assert result["returned_rows"] > 0
+    assert 'FROM "main"."users"' in result["safe_sql"]
+
+
+def test_db_preview_rejects_ambiguous_unqualified_table_name(
+    db_session, test_datasource
+) -> None:
+    sync_schema(db_session, test_datasource.id)
+    db_session.add(
+        SchemaTable(
+            data_source_id=test_datasource.id,
+            table_schema="shadow",
+            table_name="users",
+            table_type="table",
+        )
+    )
+    db_session.flush()
+
+    with pytest.raises(ToolInputError, match="Ambiguous table name"):
+        db_preview(
+            db_session,
+            test_datasource.id,
+            table="users",
+            columns=["id"],
+            limit=5,
+        )
+
+
 def test_db_preview_quotes_spider_style_column_names(
     db_session, test_datasource
 ) -> None:
@@ -616,8 +659,37 @@ def test_db_preview_rejects_unknown_columns_before_query(
     db_session, test_datasource
 ) -> None:
     sync_schema(db_session, test_datasource.id)
-    with pytest.raises(ValueError, match="Unknown column"):
+    with pytest.raises(ToolInputError, match=r"Column\(s\) not found"):
         db_preview(db_session, test_datasource.id, table="users", columns=["missing"])
+    assert db_session.query(QueryHistory).count() == 0
+
+
+def test_data_preview_runtime_returns_actionable_safe_input_error(
+    db_session, test_datasource
+) -> None:
+    sync_schema(db_session, test_datasource.id)
+
+    result = ToolRuntime(register_dbfox_tools()).invoke(
+        tool_name="data_preview",
+        raw_input={"table": "main.users", "columns": ["missing"], "limit": 5},
+        request=SimpleNamespace(
+            datasource_id=str(test_datasource.id),
+            datasource_generation=1,
+        ),
+        db=db_session,
+        idempotency_key="preview-invalid-column",
+    )
+
+    assert result.status == "failed"
+    assert result.error_code == "TOOL_INPUT_ERROR"
+    assert result.output is not None
+    assert result.output["status"] == "failed"
+    assert result.output["error_code"] == "TOOL_INPUT_ERROR"
+    safe_message = str(result.output["safe_message"])
+    assert safe_message.startswith("Column(s) not found in main.users: missing.")
+    assert "Available columns:" in safe_message
+    assert "id" in safe_message
+    assert "Column(s) not found" in str(result.error)
     assert db_session.query(QueryHistory).count() == 0
 
 

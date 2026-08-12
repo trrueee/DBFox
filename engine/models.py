@@ -246,7 +246,7 @@ class SchemaTable(Base):  # type: ignore[misc,valid-type]
     table_name = Column(String, nullable=False)
     table_comment = Column(String, nullable=True)
     table_type = Column(String, nullable=True)
-    row_count_estimate = Column(Integer, nullable=True, default=0)
+    row_count_estimate = Column(Integer, nullable=True)
     engine_name = Column(String, nullable=True)
     schema_hash = Column(String, nullable=True)
 

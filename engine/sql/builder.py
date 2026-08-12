@@ -25,6 +25,18 @@ def catalog_identifier(name: str, dialect: str) -> str:
         raise ToolInputError(f"Invalid SQL identifier: {name!r}")
     return escape_identifier(name, dialect)
 
+
+def catalog_table_identifier(
+    schema: str | None,
+    table: str,
+    dialect: str,
+) -> str:
+    """Quote each catalog-validated table-name segment independently."""
+    table_sql = catalog_identifier(table, dialect)
+    if not schema:
+        return table_sql
+    return f"{catalog_identifier(schema, dialect)}.{table_sql}"
+
 def _safe_or_catalog_identifier(name: str, dialect: str, catalog_validated: bool) -> str:
     if catalog_validated:
         return catalog_identifier(name, dialect)
@@ -95,9 +107,21 @@ def build_select(
     limit: int | None,
     dialect: str,
     catalog_validated_identifiers: bool = False,
+    table_schema: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Build a complete SELECT query with strict parameter validation."""
-    safe_table = _safe_or_catalog_identifier(table, dialect, catalog_validated_identifiers)
+    if table_schema is not None:
+        table_sql = (
+            catalog_table_identifier(table_schema, table, dialect)
+            if catalog_validated_identifiers
+            else safe_table(table_schema, table, dialect)
+        )
+    else:
+        table_sql = _safe_or_catalog_identifier(
+            table,
+            dialect,
+            catalog_validated_identifiers,
+        )
     if not columns:
         safe_cols = "*"
     else:
@@ -106,7 +130,7 @@ def build_select(
             for c in columns
         )
     
-    sql = f"SELECT {safe_cols} FROM {safe_table}"
+    sql = f"SELECT {safe_cols} FROM {table_sql}"
     if where:
         cond, parameters = build_where_clause(where, dialect, catalog_validated=catalog_validated_identifiers)
         if cond:

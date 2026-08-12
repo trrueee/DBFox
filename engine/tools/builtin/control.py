@@ -70,7 +70,9 @@ class UpdatePlanCommand(ControlCommand[UpdatePlanInput, UpdatePlanOutput]):
     description = (
         "Create or materially update the visible plan for a genuinely multi-part "
         "analysis. Keep step IDs stable, allow at most one in-progress step, and "
-        "attach exact Artifact IDs to completed evidence-required steps."
+        "attach exact Artifact IDs to completed evidence-required steps. Every call "
+        "must send the complete current objective and complete steps array; never "
+        "call this function with empty arguments or a partial patch."
     )
     input_model = UpdatePlanInput
     output_model = UpdatePlanOutput

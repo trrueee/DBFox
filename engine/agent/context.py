@@ -297,14 +297,20 @@ class ContextAssembler:
 
         sources: list[ContextSource] = []
         messages, current_request, consumed_steers = self._messages(run, sources)
-        archive_stats = ConversationRecallService(self.session).archive_stats(str(run.session_id))
-        loaded_messages = len(messages) + (1 if current_request else 0) + len(consumed_steers)
+        archive_stats = ConversationRecallService(self.session).archive_stats(
+            str(run.session_id)
+        )
+        loaded_messages = (
+            len(messages) + (1 if current_request else 0) + len(consumed_steers)
+        )
         conversation_archive = {
             "message_count": archive_stats.message_count,
             "oldest_sequence": archive_stats.oldest_sequence,
             "newest_sequence": archive_stats.newest_sequence,
             "loaded_message_count": loaded_messages,
-            "omitted_message_count": max(archive_stats.message_count - loaded_messages, 0),
+            "omitted_message_count": max(
+                archive_stats.message_count - loaded_messages, 0
+            ),
             "search_available": True,
             "scope": "current_session_only",
         }
@@ -430,6 +436,25 @@ class ContextAssembler:
             ).all()
         )
         settled.reverse()
+        settled_artifact_ids = {
+            artifact_id
+            for _invocation, observation in settled
+            for artifact_id in _json_strings(observation.artifact_ids_json)[:8]
+        }
+        artifact_types = (
+            {
+                str(artifact.id): str(artifact.type)
+                for artifact in self.session.execute(
+                    select(AgentArtifactRecord).where(
+                        AgentArtifactRecord.id.in_(settled_artifact_ids)
+                    )
+                )
+                .scalars()
+                .all()
+            }
+            if settled_artifact_ids
+            else {}
+        )
         tool_outcomes = [
             {
                 "tool": str(invocation.tool_name),
@@ -440,6 +465,10 @@ class ContextAssembler:
                 ),
                 "retryable": bool(observation.retryable),
                 "artifact_ids": _json_strings(observation.artifact_ids_json)[:8],
+                "artifacts": [
+                    {"id": artifact_id, "type": artifact_types.get(artifact_id, "")}
+                    for artifact_id in _json_strings(observation.artifact_ids_json)[:8]
+                ],
             }
             for invocation, observation in settled
         ]

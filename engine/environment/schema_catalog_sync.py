@@ -330,7 +330,7 @@ class SchemaCatalogSync:
                     table_name=table_inv.table_name,
                     table_comment=table_inv.comment,
                     table_type=table_inv.table_type,
-                    row_count_estimate=table_inv.row_count_estimate or 0,
+                    row_count_estimate=table_inv.row_count_estimate,
                     engine_name=inventory.dialect,
                     created_at=_utcnow(),
                     updated_at=_utcnow(),
@@ -342,7 +342,7 @@ class SchemaCatalogSync:
                 schema_table.table_name = table_inv.table_name
                 schema_table.table_comment = table_inv.comment
                 schema_table.table_type = table_inv.table_type
-                schema_table.row_count_estimate = table_inv.row_count_estimate or 0
+                schema_table.row_count_estimate = table_inv.row_count_estimate
                 schema_table.engine_name = inventory.dialect
                 schema_table.updated_at = _utcnow()
                 result.tables_updated += 1
