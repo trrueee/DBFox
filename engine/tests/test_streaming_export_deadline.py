@@ -64,6 +64,32 @@ def test_postgres_and_mysql_receive_server_side_statement_limits() -> None:
     assert mysql.cursors[0].closed is True
 
 
+def test_mysql_timeout_reset_discards_connection_when_reset_fails() -> None:
+    from engine.sql.execution.streaming_executor import _reset_mysql_timeout
+
+    class Cursor:
+        def execute(self, _sql: str) -> None:
+            raise RuntimeError("driver detail must not escape")
+
+        def close(self) -> None:
+            return None
+
+    class Connection:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+        def close(self) -> None:
+            self.closed = True
+
+    connection = Connection()
+
+    assert _reset_mysql_timeout(connection) is False
+    assert connection.closed is True
+
+
 def test_sqlite_progress_handler_and_watchdog_interrupt_an_expired_export() -> None:
     from engine.sql.execution.streaming_executor import (
         _ExportDeadline,

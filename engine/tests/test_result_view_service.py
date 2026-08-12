@@ -133,6 +133,7 @@ def _add_table_source(
     table_id: str = "schema-table-orders",
     table_name: str = "orders",
     table_schema: str = "dbfox",
+    row_count_estimate: int | None = None,
 ) -> None:
     datasource = db_session.get(DataSource, datasource_id) or DataSource(
         id=datasource_id,
@@ -149,6 +150,7 @@ def _add_table_source(
         table_schema=table_schema,
         table_name=table_name,
         table_type="BASE TABLE",
+        row_count_estimate=row_count_estimate,
     )
     columns = [
         SchemaColumn(id=f"{table_id}-col-id", table_id=table_id, column_name="id", data_type="integer", ordinal_position=1),
@@ -403,6 +405,47 @@ def test_result_view_service_uses_table_id_to_disambiguate_same_named_tables(db_
     assert page.rows == [{"id": 1, "created_at": "2026-06-01", "status": "paid"}]
     assert "FROM `analytics`.`orders`" in executed_sql[0]
     assert "FROM `public`.`orders`" not in executed_sql[0]
+
+
+def test_result_view_service_uses_catalog_estimate_only_for_unfiltered_table(db_session) -> None:
+    _add_table_source(db_session, row_count_estimate=321)
+
+    def fake_execute_query(_db, _datasource_id, _sql, **_kwargs):
+        return {
+            "columns": ["id"],
+            "rows": [{"id": 1}],
+            "latencyMs": 1,
+            "warnings": [],
+            "notices": [],
+        }
+
+    service = ResultViewService(db_session, row_executor=fake_execute_query)
+    source = TableSourceRef(
+        datasource_id="ds-table-service",
+        table_id="schema-table-orders",
+        table_name="orders",
+    )
+
+    estimated = service.page_table(
+        result_view_models.TablePageQuery(
+            source=source,
+            page=1,
+            page_size=20,
+            count_mode="estimate",
+        )
+    )
+    filtered = service.page_table(
+        result_view_models.TablePageQuery(
+            source=source,
+            filters=[ResultFilter(column="status", operator="equals", value="paid")],
+            page=1,
+            page_size=20,
+            count_mode="estimate",
+        )
+    )
+
+    assert estimated.row_count == 321
+    assert filtered.row_count is None
 
 
 def test_result_view_service_rejects_result_view_as_source_sql_artifact(db_session) -> None:

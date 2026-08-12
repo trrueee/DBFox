@@ -4,7 +4,7 @@ import pytest
 
 from engine.errors import GuardrailValidationError
 from engine.sql.dialect_context import DialectContext
-from engine.sql.dry_run import dry_run_query
+from engine.sql.dry_run import _classify_dry_run_error, dry_run_query
 from engine.sql.explain_validator import validate_explain_sql
 from engine.sql.guardrail import guardrail_check
 from engine.sql.readonly_query import (
@@ -109,6 +109,20 @@ def test_sqlite_dry_run_accepts_canonical_readonly_shapes(
 
     assert result.ok is True
     assert result.blocked_reason is None
+
+
+def test_dry_run_error_classification_uses_driver_contracts() -> None:
+    class PostgresError(Exception):
+        pgcode = "42P01"
+
+    class CatalogException(Exception):
+        pass
+
+    assert _classify_dry_run_error(PostgresError("localized"), "postgresql") == "schema_error"
+    assert _classify_dry_run_error(Exception(1064, "localized"), "mysql") == "syntax_error"
+    assert _classify_dry_run_error(CatalogException("localized"), "duckdb") == "schema_error"
+    assert _classify_dry_run_error(Exception("no such column: missing"), "sqlite") == "schema_error"
+    assert _classify_dry_run_error(Exception("localized"), "mysql") == "explain_unavailable"
 
 
 @pytest.mark.parametrize(

@@ -196,6 +196,20 @@ def test_delim13():
     assert count_statement_delimiters("SELECT /*+ INDEX(t) ; */ 1;") == 1
 
 
+def test_single_statement_with_trailing_comment_is_not_rejected():
+    for sql in (
+        "SELECT 1; -- trailing comment",
+        "SELECT 1; # trailing comment",
+        "SELECT 1; /* trailing comment */",
+    ):
+        result = guardrail_check(sql, "mysql")
+        assert result["result"] != "reject", result
+        assert not any(
+            check["rule"] == "multi_statement"
+            for check in result["checks"]
+        )
+
+
 def test_legal_sql_golden_set():
     import os
     base_dir = os.path.dirname(os.path.dirname(__file__))

@@ -21,45 +21,6 @@ from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
 
 logger = logging.getLogger("dbfox.sql.executor")
 
-class DerivedSqlError(Exception):
-    pass
-
-def build_derived_sql(
-    base_sql: str,
-    dialect: str = "mysql",
-    limit: int | None = None,
-    offset: int | None = None,
-    sorts: list[dict[str, str]] | None = None,
-) -> str:
-    """Build a derived SQL for pagination/sorting over a safe base query."""
-    try:
-        parsed_base = sqlglot.parse_one(base_sql, read=dialect)
-    except Exception as e:
-        raise DerivedSqlError("Failed to parse base SQL.") from e
-    if not isinstance(parsed_base, exp.Select):
-        raise DerivedSqlError("Base SQL must be a SELECT statement.")
-    base_expr = cast(exp.Select, parsed_base)
-        
-    query = sqlglot.select("*").from_(base_expr.subquery("dbfox_result"))
-    
-    if sorts:
-        for sort in sorts:
-            col = sort.get("column")
-            direction = sort.get("direction", "asc").lower()
-            if not col:
-                continue
-            if direction not in ("asc", "desc"):
-                direction = "asc"
-            # To be strictly safe against injection in column names, use identifier
-            query = query.order_by(exp.Ordered(this=exp.Identifier(this=col, quoted=True), desc=(direction == "desc")))
-            
-    if limit is not None:
-        query = query.limit(limit)
-    if offset is not None:
-        query = query.offset(offset)
-        
-    return query.sql(dialect=dialect)
-
 def validate_pagination_base_sql(base_sql: str, dialect: str = "mysql") -> list[str]:
     """Validate the persisted source SQL before deriving a paginated query."""
     from engine.sql.dialect_context import DialectContext, canonical_sql_dialect

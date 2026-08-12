@@ -72,6 +72,14 @@ class TestProcessRows:
         result = _process_rows(raw, ["price"])
         assert result.rows[0]["price"] == "9.99"
 
+    def test_decimal_is_bounded_after_serialization(self) -> None:
+        raw = [{"price": decimal.Decimal("9" * 100)}]
+
+        result = _process_rows(raw, ["price"], max_cell_chars=10)
+
+        assert result.rows == [{"price": "9999999999..."}]
+        assert result.truncation.cells is True
+
     def test_none_value_remains_none(self) -> None:
         raw = [{"col": None}]
         result = _process_rows(raw, ["col"])

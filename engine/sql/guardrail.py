@@ -239,10 +239,11 @@ def _preflight_rejection(sql_str: str) -> GuardrailResult | None:
         )
 
     semicolons = count_statement_delimiters(sql_str)
-    has_multiple_statements = (
-        semicolons > 1
-        or (semicolons == 1 and not sql_str.endswith(";"))
-    )
+    # SQLGlot below is the authority for statement count. A single delimiter
+    # followed by a comment is still one statement; checking the raw string's
+    # final character incorrectly rejected valid SQL such as
+    # ``SELECT 1; -- explanation``.
+    has_multiple_statements = semicolons > 1
     if has_multiple_statements:
         return _reject(
             sql_str,

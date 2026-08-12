@@ -211,6 +211,17 @@ class ResultViewService:
                     fingerprint_subject=f"{query.source.datasource_id}\x00{source.fingerprint}\x00{type(exc).__name__}\x00{exc}",
                     level="warning",
                 )
+        elif query.count_mode == "estimate" and not query.filters and query.search is None:
+            # Catalog estimates are meaningful only for the unfiltered base
+            # table. A filtered/search view has no trustworthy cheap estimate,
+            # so its best-effort count remains unknown instead of being guessed.
+            table = self._load_schema_table(
+                query.source.datasource_id,
+                query.source.table_id,
+                query.source.table_name,
+            )
+            if table is not None and table.row_count_estimate is not None:
+                row_count = int(table.row_count_estimate)
 
         return ResultPage(
             columns=list(res.get("columns") or []),

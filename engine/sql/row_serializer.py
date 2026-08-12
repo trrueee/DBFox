@@ -191,11 +191,11 @@ def serialize_rows(
     for r in raw_rows:
         row_dict: dict[str, Any] = {}
         for col in columns:
-            val = r[col]
-            if isinstance(val, str) and len(val) > max_cell_chars:
-                val = val[:max_cell_chars] + TRUNCATION_SUFFIX
+            serialized = _serialize_value(r[col])
+            if isinstance(serialized, str) and len(serialized) > max_cell_chars:
+                serialized = serialized[:max_cell_chars] + TRUNCATION_SUFFIX
                 truncation = replace(truncation, cells=True)
-            row_dict[col] = _serialize_value(val)
+            row_dict[col] = serialized
 
         row_bytes = byte_size(row_dict)
         # Compact JSON arrays contribute one comma between rows.

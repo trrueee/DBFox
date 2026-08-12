@@ -198,9 +198,14 @@ def _run_approved_query(
         execution_status = "timeout"
         error_message = _sql_execution_failure_message()
         raise SQLQueryTimeoutError(error_message) from None
-    except Exception:
+    except Exception as exc:
         execution_status = "failed"
         error_message = _sql_execution_failure_message()
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.DB_TOOL_EXECUTION,
+            exc=exc,
+        )
         raise SQLExecutionError(error_message) from None
 
     finally:

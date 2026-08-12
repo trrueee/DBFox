@@ -223,6 +223,70 @@ def test_executor_redacts_sensitive_projection_hidden_by_alias(
     assert "secret@example.test" not in str(result)
 
 
+def test_streaming_executor_redacts_sensitive_projection_hidden_by_alias(
+    db_session,
+    test_datasource,
+) -> None:
+    from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
+    from engine.sql.dialect_context import DialectContext
+    from engine.sql.execution.streaming_executor import StreamingQueryExecutor
+    from engine.sql.safety.service import SqlSafetyService
+
+    sync_schema(db_session, test_datasource.id)
+    sql = "SELECT email AS public_value FROM users ORDER BY id LIMIT 1"
+    ctx = DialectContext.from_datasource_id(db_session, test_datasource.id)
+    decision = SqlSafetyService(db_session).build_execution_decision(
+        sql,
+        ctx,
+        policy="export",
+    )
+
+    rows = list(
+        StreamingQueryExecutor(db_session).stream_rows(
+            test_datasource.id,
+            sql,
+            decision,
+        )
+    )
+
+    assert rows == [{"public_value": "[REDACTED]"}]
+    assert "alice@example.com" not in str(rows)
+
+
+def test_streaming_executor_fails_closed_when_projection_lineage_is_unavailable(
+    db_session,
+    test_datasource,
+    monkeypatch,
+) -> None:
+    from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
+    from engine.sql.dialect_context import DialectContext
+    from engine.sql.execution.streaming_executor import StreamingQueryExecutor
+    from engine.sql.safety.service import SqlSafetyService
+
+    sync_schema(db_session, test_datasource.id)
+    sql = "SELECT username AS public_value FROM users ORDER BY id LIMIT 1"
+    ctx = DialectContext.from_datasource_id(db_session, test_datasource.id)
+    decision = SqlSafetyService(db_session).build_execution_decision(
+        sql,
+        ctx,
+        policy="export",
+    )
+    monkeypatch.setattr(
+        "engine.sql.execution.streaming_executor.projection_sensitivity_mask",
+        lambda *_args, **_kwargs: None,
+    )
+
+    rows = list(
+        StreamingQueryExecutor(db_session).stream_rows(
+            test_datasource.id,
+            sql,
+            decision,
+        )
+    )
+
+    assert rows == [{"public_value": "[REDACTED]"}]
+
+
 def test_executor_redacts_sensitive_queries(db_session, test_datasource) -> None:
     from engine.tests.support.executor import execute_query_for_test
     from engine.models import QueryHistory

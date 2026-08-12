@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from contextlib import contextmanager
@@ -10,12 +11,18 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.connectivity.factory import ConnectionFactory
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 from engine.datasource import datasource_connection_dict
 from engine.errors import GuardrailValidationError, SQLExecutionError, SQLQueryTimeoutError
 from engine.models import DataSource
-from engine.policy.sensitivity import _SENSITIVE_FALLBACK, load_sensitivity, redact_row
+from engine.policy.sensitivity import (
+    _SENSITIVE_FALLBACK,
+    load_sensitivity,
+    projection_sensitivity_mask,
+    redact_row,
+)
 from engine.sql.row_serializer import _serialize_value
 from engine.sql.safety_gate import _resolve_execution_safety_decision
 from engine.sql.trust_gate import ExecutionSafetyDecision
@@ -24,6 +31,8 @@ from engine.sql.trust_gate import ExecutionSafetyDecision
 DEFAULT_EXPORT_MAX_ROWS = 100_000
 DEFAULT_EXPORT_TIMEOUT_MS = 30_000
 MAX_EXPORT_TIMEOUT_MS = 300_000
+
+logger = logging.getLogger("dbfox.sql.streaming_export")
 
 
 def export_max_rows_from_env() -> int:
@@ -103,19 +112,44 @@ def _configure_mysql_timeout(connection: Any, timeout_ms: int) -> None:
             cursor.close()
 
 
-def _reset_mysql_timeout(connection: Any) -> None:
+def _reset_mysql_timeout(connection: Any) -> bool:
     """Do not leak an export-only timeout into a pooled connection's next use."""
     cursor: Any | None = None
+    reset_error: Exception | None = None
     try:
         cursor = connection.cursor()
         cursor.execute("SET SESSION MAX_EXECUTION_TIME = 0")
-    except Exception:
-        # The connection is about to leave the export scope.  A reset failure
-        # must not mask the original query result or reveal a driver message.
-        return
+    except Exception as exc:
+        reset_error = exc
     finally:
         if cursor is not None:
-            cursor.close()
+            try:
+                cursor.close()
+            except Exception as exc:
+                reset_error = reset_error or exc
+
+    if reset_error is None:
+        return True
+
+    log_unexpected_exception(
+        logger,
+        operation=SafeLogOperation.SQL_MYSQL_TIMEOUT_ENFORCEMENT,
+        exc=reset_error,
+        level="warning",
+    )
+    # A session variable reset failure makes this physical connection unsafe
+    # to reuse. Closing the DBAPI connection lets the owning SQLAlchemy pool
+    # discard it instead of leaking the export timeout into the next checkout.
+    try:
+        connection.close()
+    except Exception as close_error:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.SQL_MYSQL_TIMEOUT_ENFORCEMENT,
+            exc=close_error,
+            level="warning",
+        )
+    return False
 
 
 def _install_sqlite_progress_handler(connection: Any, deadline: _ExportDeadline):
@@ -217,19 +251,58 @@ class StreamingQueryExecutor:
         safe_sql = str(resolved.safe_sql or "").strip()
         sensitivity = self._load_sensitivity(datasource_id)
         profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
+        projection_mask = projection_sensitivity_mask(
+            self.db,
+            datasource_id,
+            safe_sql,
+            profile.dialect,
+            sensitivity,
+        )
         from engine.sql.bound_parameters import render_dbapi_sql
         executable_sql, bound_parameters = render_dbapi_sql(
             safe_sql, profile.dialect, parameters
         )
         deadline = _ExportDeadline(timeout_ms if timeout_ms is not None else self.timeout_ms)
         if profile.dialect == "sqlite":
-            yield from self._stream_sqlite(profile, executable_sql, bound_parameters, chunk_size, sensitivity, deadline)
+            yield from self._stream_sqlite(
+                profile,
+                executable_sql,
+                bound_parameters,
+                chunk_size,
+                sensitivity,
+                deadline,
+                projection_mask=projection_mask,
+            )
         elif profile.dialect == "duckdb":
-            yield from self._stream_duckdb(profile, executable_sql, bound_parameters, chunk_size, sensitivity, deadline)
+            yield from self._stream_duckdb(
+                profile,
+                executable_sql,
+                bound_parameters,
+                chunk_size,
+                sensitivity,
+                deadline,
+                projection_mask=projection_mask,
+            )
         elif profile.dialect == "postgresql":
-            yield from self._stream_postgres(profile, executable_sql, bound_parameters, chunk_size, sensitivity, deadline)
+            yield from self._stream_postgres(
+                profile,
+                executable_sql,
+                bound_parameters,
+                chunk_size,
+                sensitivity,
+                deadline,
+                projection_mask=projection_mask,
+            )
         else:
-            yield from self._stream_mysql(profile, executable_sql, bound_parameters, chunk_size, sensitivity, deadline)
+            yield from self._stream_mysql(
+                profile,
+                executable_sql,
+                bound_parameters,
+                chunk_size,
+                sensitivity,
+                deadline,
+                projection_mask=projection_mask,
+            )
 
     def _load_sensitivity(self, datasource_id: str) -> Any:
         try:
@@ -237,11 +310,25 @@ class StreamingQueryExecutor:
         except Exception:
             return _SENSITIVE_FALLBACK
 
-    def _redact(self, row: dict[str, Any], sensitivity: Any) -> dict[str, Any]:
+    def _redact(
+        self,
+        row: dict[str, Any],
+        sensitivity: Any,
+        *,
+        sensitive_columns: set[str],
+    ) -> dict[str, Any]:
         try:
-            return redact_row(row, sensitivity)
+            return redact_row(
+                row,
+                sensitivity,
+                sensitive_columns=sensitive_columns,
+            )
         except Exception:
-            return redact_row(row, _SENSITIVE_FALLBACK)
+            return redact_row(
+                row,
+                _SENSITIVE_FALLBACK,
+                sensitive_columns=set(row),
+            )
 
     def _stream_sqlite(
         self,
@@ -251,6 +338,8 @@ class StreamingQueryExecutor:
         chunk_size: int,
         sensitivity: Any,
         deadline: _ExportDeadline,
+        *,
+        projection_mask: tuple[bool, ...] | None = None,
     ) -> Iterator[dict[str, Any]]:
         with self.connection_factory.connection_scope(
             profile,
@@ -265,7 +354,13 @@ class StreamingQueryExecutor:
                     cursor = conn.cursor()
                     cursor.execute(sql, dict(parameters))
                     deadline.check()
-                    yield from self._yield_rows(cursor, chunk_size, sensitivity, deadline)
+                    yield from self._yield_rows(
+                        cursor,
+                        chunk_size,
+                        sensitivity,
+                        deadline,
+                        projection_mask=projection_mask,
+                    )
             except SQLQueryTimeoutError:
                 raise
             except Exception as exc:
@@ -283,6 +378,8 @@ class StreamingQueryExecutor:
         chunk_size: int,
         sensitivity: Any,
         deadline: _ExportDeadline,
+        *,
+        projection_mask: tuple[bool, ...] | None = None,
     ) -> Iterator[dict[str, Any]]:
         with self.connection_factory.connection_scope(
             profile,
@@ -296,7 +393,13 @@ class StreamingQueryExecutor:
                     cursor = conn.cursor()
                     cursor.execute(sql, dict(parameters))
                     deadline.check()
-                    yield from self._yield_rows(cursor, chunk_size, sensitivity, deadline)
+                    yield from self._yield_rows(
+                        cursor,
+                        chunk_size,
+                        sensitivity,
+                        deadline,
+                        projection_mask=projection_mask,
+                    )
             except SQLQueryTimeoutError:
                 raise
             except Exception as exc:
@@ -313,6 +416,8 @@ class StreamingQueryExecutor:
         chunk_size: int,
         sensitivity: Any,
         deadline: _ExportDeadline,
+        *,
+        projection_mask: tuple[bool, ...] | None = None,
     ) -> Iterator[dict[str, Any]]:
         with self.connection_factory.connection_scope(
             profile,
@@ -328,7 +433,13 @@ class StreamingQueryExecutor:
                     cursor.itersize = chunk_size
                     cursor.execute(sql, dict(parameters))
                     deadline.check()
-                    yield from self._yield_rows(cursor, chunk_size, sensitivity, deadline)
+                    yield from self._yield_rows(
+                        cursor,
+                        chunk_size,
+                        sensitivity,
+                        deadline,
+                        projection_mask=projection_mask,
+                    )
             except SQLQueryTimeoutError:
                 raise
             except Exception as exc:
@@ -345,6 +456,8 @@ class StreamingQueryExecutor:
         chunk_size: int,
         sensitivity: Any,
         deadline: _ExportDeadline,
+        *,
+        projection_mask: tuple[bool, ...] | None = None,
     ) -> Iterator[dict[str, Any]]:
         import pymysql
 
@@ -361,7 +474,13 @@ class StreamingQueryExecutor:
                     cursor = conn.cursor(pymysql.cursors.SSCursor)
                     cursor.execute(sql, dict(parameters))
                     deadline.check()
-                    yield from self._yield_rows(cursor, chunk_size, sensitivity, deadline)
+                    yield from self._yield_rows(
+                        cursor,
+                        chunk_size,
+                        sensitivity,
+                        deadline,
+                        projection_mask=projection_mask,
+                    )
             except SQLQueryTimeoutError:
                 raise
             except Exception as exc:
@@ -377,8 +496,20 @@ class StreamingQueryExecutor:
         chunk_size: int,
         sensitivity: Any,
         deadline: _ExportDeadline,
+        *,
+        projection_mask: tuple[bool, ...] | None = None,
     ) -> Iterator[dict[str, Any]]:
         columns = [item[0] for item in cursor.description or []]
+        if projection_mask is None or len(projection_mask) != len(columns):
+            # Output aliases are caller-controlled. If lineage cannot prove the
+            # projection safe, fail closed rather than falling back to key names.
+            sensitive_columns = set(columns)
+        else:
+            sensitive_columns = {
+                column
+                for index, column in enumerate(columns)
+                if projection_mask[index]
+            }
         yielded = 0
         while yielded < self.max_rows:
             deadline.check()
@@ -394,7 +525,11 @@ class StreamingQueryExecutor:
                         column: _serialize_value(value)
                         for column, value in zip(columns, raw)
                     }
-                yield self._redact(row, sensitivity)
+                yield self._redact(
+                    row,
+                    sensitivity,
+                    sensitive_columns=sensitive_columns,
+                )
                 yielded += 1
                 if yielded >= self.max_rows:
                     break
