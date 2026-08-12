@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import re
 import tomllib
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -433,12 +432,11 @@ def test_current_documentation_relative_links_resolve() -> None:
     assert not broken, broken
 
 
-def test_readme_architecture_diagram_is_a_valid_local_svg() -> None:
+def test_readme_architecture_diagram_is_inline_mermaid() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    diagram = ROOT / "docs" / "images" / "system-architecture.svg"
 
-    assert "![DBFox 系统架构](docs/images/system-architecture.svg)" in readme
-    assert "```mermaid" not in readme
-    root = ET.parse(diagram).getroot()
-    assert root.tag == "{http://www.w3.org/2000/svg}svg"
-    assert root.attrib.get("viewBox")
+    assert "```mermaid" in readme
+    assert "system-architecture.svg" not in readme
+    assert "Tauri / Rust Host" in readme
+    assert "FastAPI Sidecar" in readme
+    assert "本地 SQLite" in readme
