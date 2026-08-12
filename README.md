@@ -60,18 +60,31 @@ DBFox 目前处于持续开发阶段。**Windows x64 是当前完成真实构建
 ## 系统架构
 
 ```mermaid
-flowchart LR
-    USER["用户"] --> UI["React 工作区<br/>界面与用户交互"]
+flowchart TB
+    USER["用户"]
 
     subgraph DESKTOP["DBFox 桌面应用"]
-        UI <-->|"Tauri IPC"| HOST["Tauri / Rust Host<br/>窗口与系统能力<br/>Sidecar 生命周期"]
-        HOST -->|"启动、监控、停止"| ENGINE["FastAPI Sidecar<br/>业务 API、Agent、工具与 SQL"]
-        UI <-->|"HTTP + SSE<br/>运行时令牌"| ENGINE
+        direction TB
+        UI["React 工作区"]
+        HOST["Tauri / Rust Host"]
+        ENGINE["FastAPI Sidecar"]
+
+        UI <-->|"Tauri IPC"| HOST
+        HOST -->|"进程生命周期"| ENGINE
+        UI <-->|"HTTP / SSE"| ENGINE
     end
 
-    ENGINE <-->|"会话、事件、Artifact"| META[("本地 SQLite")]
-    ENGINE <-->|"受约束的只读查询"| DATA[("用户数据库")]
-    ENGINE <-->|"Responses API<br/>流式输出与工具调用"| MODEL["模型服务"]
+    subgraph SERVICES["数据与外部服务"]
+        direction LR
+        META[("本地 SQLite")]
+        DATA[("用户数据库")]
+        MODEL["模型服务"]
+    end
+
+    USER --> UI
+    ENGINE <-->|"业务状态"| META
+    ENGINE <-->|"只读 SQL"| DATA
+    ENGINE <-->|"Responses API"| MODEL
 ```
 
 ### 职责边界

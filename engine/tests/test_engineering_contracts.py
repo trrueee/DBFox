@@ -434,9 +434,12 @@ def test_current_documentation_relative_links_resolve() -> None:
 
 def test_readme_architecture_diagram_is_inline_mermaid() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    diagram = readme.split("```mermaid", 1)[1].split("```", 1)[0]
 
     assert "```mermaid" in readme
     assert "system-architecture.svg" not in readme
-    assert "Tauri / Rust Host" in readme
-    assert "FastAPI Sidecar" in readme
-    assert "本地 SQLite" in readme
+    assert "flowchart TB" in diagram
+    assert "<br" not in diagram
+    assert "Tauri / Rust Host" in diagram
+    assert "FastAPI Sidecar" in diagram
+    assert "本地 SQLite" in diagram
