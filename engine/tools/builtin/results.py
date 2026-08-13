@@ -586,10 +586,6 @@ class ChartCreateTool(BaseTool[ChartCreateInput, ChartCreateOutput]):
                         "y": [output.y] if output.y else [],
                         "aggregation": output.aggregation,
                         "title": output.title,
-                        "intent": output.intent,
-                        "queryFingerprint": output.query_fingerprint,
-                        "sampleSize": output.sample_size,
-                        "sampleTruncated": output.sample_truncated,
                     },
                     relations=(
                         ArtifactRelationDraft(
@@ -638,6 +634,8 @@ class ChartCreateTool(BaseTool[ChartCreateInput, ChartCreateOutput]):
                     "y": output.get("y"),
                     "title": output.get("title"),
                     "reason": output.get("reason"),
+                    "sample_size": output.get("sample_size"),
+                    "sample_truncated": output.get("sample_truncated"),
                 }
             ),
         )

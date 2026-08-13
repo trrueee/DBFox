@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from engine.agent.artifact import (
@@ -7,7 +9,10 @@ from engine.agent.artifact import (
     ArtifactType,
     ArtifactVisibility,
 )
-from engine.agent.repositories.artifact import ArtifactRepository
+from engine.agent.repositories.artifact import (
+    ArtifactDraftContractError,
+    ArtifactRepository,
+)
 from engine.agent.repositories.session import SessionRepository
 from engine.models import AgentArtifactRecord, AgentSession
 from engine.tools.builtin.artifacts import (
@@ -16,10 +21,13 @@ from engine.tools.builtin.artifacts import (
     sql_validation_drafts,
 )
 from engine.tools.builtin.contracts import (
+    ChartCreateInput,
     DataPreviewOutput,
     QueryResultOutput,
     SqlValidateOutput,
 )
+from engine.tools.builtin.results import ChartCreateTool
+from engine.tools.runtime import ToolRunContext
 
 
 def _active_run(db_session, test_datasource, session_id: str):
@@ -64,6 +72,7 @@ def _active_run(db_session, test_datasource, session_id: str):
 def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
     db_session,
     test_datasource,
+    monkeypatch,
 ):
     admission, lease, turn = _active_run(
         db_session,
@@ -178,34 +187,53 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
     )
     sample = next(item for item in preview if item.type is ArtifactType.RESULT_VIEW)
 
+    monkeypatch.setattr(
+        "engine.tools.builtin.results.ResultViewService.load_verified_source",
+        lambda _service, _source: SimpleNamespace(
+            fingerprint="query-fingerprint",
+        ),
+    )
+    monkeypatch.setattr(
+        "engine.tools.builtin.results.ResultViewService.page",
+        lambda _service, _query: SimpleNamespace(
+            columns=["bucket", "total"],
+            rows=[{"bucket": "paid", "total": 42}],
+            has_next_page=True,
+        ),
+    )
+    chart_tool = ChartCreateTool()
+    chart_outcome = chart_tool.run(
+        ChartCreateInput(
+            result_artifact_id=result.id,
+            intent="Compare paid orders by status",
+            chart_type="bar",
+            x="bucket",
+            y="total",
+            title="订单合计",
+        ),
+        ToolRunContext.for_invocation(
+            request=SimpleNamespace(
+                datasource_id=str(test_datasource.id),
+                session_id=lease.session_id,
+                run_id=admission.run_id,
+            ),
+            db=db_session,
+            idempotency_key="chart-create-test",
+        ),
+    )
     chart = repository.persist_drafts(
         lease=lease,
         run_id=admission.run_id,
         turn_id=str(turn.id),
         invocation_id="invocation_chart",
         tool_name="chart_create",
-        drafts=[
-            ArtifactDraft(
-                key="chart",
-                type=ArtifactType.CHART,
-                title="订单合计",
-                payload={
-                    "sourceResultArtifactId": result.id,
-                    "chartType": "bar",
-                    "x": "id",
-                    "y": ["total"],
-                    "aggregation": "sum",
-                    "title": "订单合计",
-                },
-                relations=(
-                    ArtifactRelationDraft(
-                        relation=ArtifactRelationType.DERIVED_FROM,
-                        artifact_id=result.id,
-                    ),
-                ),
-            )
-        ],
+        drafts=list(chart_outcome.artifacts),
     )[0]
+    chart_observation = chart_tool.project_observation(
+        status="success",
+        output=chart_outcome.output.model_dump(mode="json"),
+        artifacts=[chart],
+    )
     db_session.commit()
 
     persisted_sql = next(
@@ -225,6 +253,19 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
     )
     assert result.relations[0].artifact_id == sql_artifact.id
     assert chart.relations[0].artifact_id == result.id
+    assert chart.payload == {
+        "sourceResultArtifactId": result.id,
+        "chartType": "bar",
+        "x": "bucket",
+        "y": ["total"],
+        "aggregation": "sum",
+        "title": "订单合计",
+    }
+    assert chart_outcome.output.intent == "Compare paid orders by status"
+    assert chart_outcome.output.query_fingerprint == "query-fingerprint"
+    assert chart_observation.facts["sample_size"] == 1
+    assert chart_observation.facts["sample_truncated"] is True
+    assert chart_observation.facts["chart_artifact_id"] == chart.id
     durable = "".join(
         str(row.payload_json)
         for row in db_session.query(AgentArtifactRecord)
@@ -233,6 +274,112 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
     )
     assert secret not in durable
     assert "previewRows" not in durable
+
+
+@pytest.mark.parametrize(
+    "drafts",
+    [
+        [
+            ArtifactDraft(
+                key="valid_sql",
+                type=ArtifactType.SQL,
+                title="Valid SQL",
+                payload={
+                    "sql": "SELECT 1",
+                    "safeSql": "SELECT 1",
+                    "dialect": "sqlite",
+                    "queryFingerprint": "fingerprint",
+                },
+            ),
+            ArtifactDraft(
+                key="invalid_chart",
+                type=ArtifactType.CHART,
+                title="Invalid chart",
+                payload={
+                    "sourceResultArtifactId": "artifact_result",
+                    "chartType": "bar",
+                    "x": "day",
+                    "y": ["total"],
+                    "aggregation": "none",
+                    "title": "Daily total",
+                    "unexpected": "not allowed",
+                },
+            ),
+        ],
+        [
+            ArtifactDraft(
+                key="invalid_payload_ref",
+                type=ArtifactType.RESULT_VIEW,
+                title="Invalid result reference",
+                payload={
+                    "sourceSqlArtifactId": "",
+                    "queryFingerprint": "fingerprint",
+                    "datasourceGeneration": 1,
+                    "columns": ["total"],
+                    "rowCount": 1,
+                    "returnedRows": 1,
+                    "latencyMs": 1,
+                    "executedAt": "2026-08-14T00:00:00Z",
+                    "truncated": False,
+                    "evidenceKind": "query_result",
+                },
+                payload_draft_refs={"sourceSqlArtifactId": "missing_sql"},
+            )
+        ],
+        [
+            ArtifactDraft(
+                key="invalid_relation",
+                type=ArtifactType.SQL,
+                title="Invalid relation",
+                payload={
+                    "sql": "SELECT 1",
+                    "safeSql": "SELECT 1",
+                    "dialect": "sqlite",
+                    "queryFingerprint": "fingerprint",
+                },
+                relations=(
+                    ArtifactRelationDraft(
+                        relation=ArtifactRelationType.DERIVED_FROM,
+                        draft_key="missing_source",
+                    ),
+                ),
+            )
+        ],
+    ],
+    ids=["payload", "payload-draft-reference", "relation-draft-reference"],
+)
+def test_artifact_batch_contract_failure_precedes_every_write(
+    db_session,
+    test_datasource,
+    drafts,
+):
+    admission, lease, turn = _active_run(
+        db_session,
+        test_datasource,
+        "session_invalid_artifact_batch",
+    )
+    before = (
+        db_session.query(AgentArtifactRecord)
+        .filter_by(run_id=admission.run_id)
+        .count()
+    )
+
+    with pytest.raises(ArtifactDraftContractError):
+        ArtifactRepository(db_session).persist_drafts(
+            lease=lease,
+            run_id=admission.run_id,
+            turn_id=str(turn.id),
+            invocation_id="invocation_invalid_batch",
+            tool_name="invalid_artifact_tool",
+            drafts=drafts,
+        )
+
+    assert (
+        db_session.query(AgentArtifactRecord)
+        .filter_by(run_id=admission.run_id)
+        .count()
+        == before
+    )
 
 
 def test_result_artifact_rejects_embedded_rows_before_persistence(

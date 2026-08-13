@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -23,7 +24,10 @@ from engine.agent.observation import (
     serialize_model_observation,
 )
 from engine.agent.repositories.approval import ApprovalRepository
-from engine.agent.repositories.artifact import ArtifactRepository
+from engine.agent.repositories.artifact import (
+    ArtifactDraftContractError,
+    ArtifactRepository,
+)
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
@@ -31,6 +35,7 @@ from engine.agent.session import SessionLease
 from engine.agent.tool import ToolInvocation
 from engine.agent.turn import ModelToolCall
 from engine.agent.working_state import RunWorkingStateAssembler
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.models import AgentApproval, AgentRun, AgentToolInvocation, AgentTurn
 from engine.policy.authority import ExecutionAuthority
 from engine.policy.gate import PolicyGate
@@ -41,6 +46,7 @@ from engine.tools.materialization import (
     require_current_tool,
     require_reconciliation_tool,
 )
+from engine.tools.runtime import ToolExecutor, ToolRegistry, ToolRuntime
 from engine.tools.runtime.base import (
     BaseTool,
     ControlCommand,
@@ -48,9 +54,14 @@ from engine.tools.runtime.base import (
     ControlDisposition,
     ToolRecoveryPolicy,
 )
-from engine.tools.runtime import ToolExecutor, ToolRegistry, ToolRuntime
 from engine.tools.runtime.executor import ToolExecutionControl
+from engine.tools.runtime.observation import ToolObservationProjection
 from engine.tools.runtime.result import ToolResult
+
+
+logger = logging.getLogger("dbfox.agent.tool_dispatcher")
+_OUTPUT_CONTRACT_ERROR = "Tool output did not match its declared contract."
+_OUTPUT_CONTRACT_SUMMARY = "工具输出未通过合同校验。"
 
 
 class ToolRequest(BaseModel):
@@ -259,13 +270,43 @@ class ToolDispatcher:
         )
         if result is None:
             return None
-        provider_output = self._settle_execution_result(
-            lease,
-            invocation,
-            tool=prepared.tool,
-            result=result,
-            needs_reconciliation=prepared.needs_reconciliation,
-        )
+        try:
+            provider_output = self._settle_execution_result(
+                lease,
+                invocation,
+                tool=prepared.tool,
+                result=result,
+                needs_reconciliation=prepared.needs_reconciliation,
+            )
+        except ArtifactDraftContractError as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.TOOL_RUNTIME_OUTPUT_CONTRACT_FAILED,
+                exc=exc,
+                fingerprint_subject={
+                    "tool": invocation.tool_name,
+                    "version": invocation.tool_version,
+                    "error_type": type(exc).__name__,
+                },
+            )
+            provider_output = self._settle_execution_result(
+                lease,
+                invocation,
+                tool=prepared.tool,
+                result=result.model_copy(
+                    update={
+                        "status": "failed",
+                        "output": {
+                            "status": "failed",
+                            "error_code": "TOOL_OUTPUT_CONTRACT_FAILED",
+                        },
+                        "artifact_drafts": [],
+                        "error": _OUTPUT_CONTRACT_ERROR,
+                        "error_code": "TOOL_OUTPUT_CONTRACT_FAILED",
+                    }
+                ),
+                needs_reconciliation=prepared.needs_reconciliation,
+            )
         control.checkpoint()
         return provider_output
 
@@ -512,14 +553,18 @@ class ToolDispatcher:
             artifacts = []
             output = result.output or {}
             if result.status == "success":
-                artifacts = ArtifactRepository(db).persist_drafts(
-                    lease=lease,
-                    run_id=invocation.run_id,
-                    turn_id=invocation.turn_id,
-                    invocation_id=invocation.id,
-                    tool_name=invocation.tool_name,
-                    drafts=result.artifact_drafts,
-                )
+                try:
+                    artifacts = ArtifactRepository(db).persist_drafts(
+                        lease=lease,
+                        run_id=invocation.run_id,
+                        turn_id=invocation.turn_id,
+                        invocation_id=invocation.id,
+                        tool_name=invocation.tool_name,
+                        drafts=result.artifact_drafts,
+                    )
+                except ArtifactDraftContractError:
+                    db.rollback()
+                    raise
             artifact_ids = [item.id for item in artifacts]
             if (
                 tool.spec.semantics.publishes_artifact_references
@@ -529,10 +574,14 @@ class ToolDispatcher:
                     value = str(referenced_id).strip()
                     if value and value not in artifact_ids:
                         artifact_ids.append(value)
-            observation = tool.project_observation(
-                status=result.status,
-                output=output,
-                artifacts=artifacts,
+            observation = (
+                ToolObservationProjection(summary=_OUTPUT_CONTRACT_SUMMARY)
+                if result.error_code == "TOOL_OUTPUT_CONTRACT_FAILED"
+                else tool.project_observation(
+                    status=result.status,
+                    output=output,
+                    artifacts=artifacts,
+                )
             )
             status = self._observation_status(
                 result,
@@ -543,7 +592,12 @@ class ToolDispatcher:
                 result.status != "success"
                 and tool.execution.recovery is ToolRecoveryPolicy.RETRY_SAFE
                 and tool.execution.retryable
-                and result.error_code not in {"TOOL_CANCELLED", "TOOL_TIMEOUT"}
+                and result.error_code
+                not in {
+                    "TOOL_CANCELLED",
+                    "TOOL_TIMEOUT",
+                    "TOOL_OUTPUT_CONTRACT_FAILED",
+                }
             )
             error_code = (
                 None

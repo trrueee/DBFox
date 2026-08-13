@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -41,6 +42,18 @@ class ValidatedSqlArtifact:
     original_sql: str
     safe_sql: str
     safety: dict[str, Any]
+
+
+class ArtifactDraftContractError(ValueError):
+    """A tool emitted an Artifact batch that cannot satisfy the durable contract."""
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedArtifactDraft:
+    draft: ArtifactDraft
+    artifact_id: str
+    payload: dict[str, Any]
+    relations: tuple[ArtifactRelation, ...]
 
 
 class ArtifactRepository:
@@ -117,48 +130,25 @@ class ArtifactRepository:
 
         if not drafts:
             return []
-        keys = [draft.key for draft in drafts]
-        if len(set(keys)) != len(keys):
-            raise ValueError("Artifact draft keys must be unique within one tool outcome")
-
-        ids = {key: f"artifact_{uuid4().hex}" for key in keys}
+        prepared = self._prepare_drafts(
+            lease=lease,
+            drafts=drafts,
+        )
         created: list[Artifact] = []
         provenance = {
             "tool_invocation_id": invocation_id,
             "tool_name": tool_name,
         }
-        for draft in drafts:
-            payload = dict(draft.payload)
-            for field_name, draft_key in draft.payload_draft_refs.items():
-                if draft_key not in ids:
-                    raise ValueError(
-                        f"Artifact payload references unknown draft key: {draft_key}"
-                    )
-                payload[field_name] = ids[draft_key]
-            relations = []
-            for relation in draft.relations:
-                target_id = relation.artifact_id
-                if relation.draft_key:
-                    target_id = ids.get(relation.draft_key)
-                    if target_id is None:
-                        raise ValueError(
-                            "Artifact relation references unknown draft key: "
-                            f"{relation.draft_key}"
-                        )
-                relations.append(
-                    ArtifactRelation(
-                        relation=relation.relation,
-                        artifact_id=str(target_id),
-                    )
-                )
+        for item in prepared:
+            draft = item.draft
             artifact = self.create(
                 lease=lease,
                 run_id=run_id,
                 turn_id=turn_id,
-                artifact_id=ids[draft.key],
+                artifact_id=item.artifact_id,
                 artifact_type=draft.type,
                 title=draft.title,
-                payload=payload,
+                payload=item.payload,
                 summary=draft.summary,
                 semantic_key=(
                     draft.semantic_key
@@ -166,7 +156,7 @@ class ArtifactRepository:
                 ),
                 payload_ref=draft.payload_ref,
                 provenance=provenance,
-                relations=relations,
+                relations=list(item.relations),
                 visibility=draft.visibility,
             )
             created.append(artifact)
@@ -179,6 +169,96 @@ class ArtifactRepository:
                         selected_by="agent",
                     )
         return created
+
+    def _prepare_drafts(
+        self,
+        *,
+        lease: SessionLease,
+        drafts: list[ArtifactDraft],
+    ) -> tuple[_PreparedArtifactDraft, ...]:
+        """Resolve and validate one complete draft batch before the first write."""
+
+        keys = [draft.key for draft in drafts]
+        if len(set(keys)) != len(keys):
+            raise ArtifactDraftContractError(
+                "Artifact draft keys must be unique within one tool outcome"
+            )
+
+        ids = {key: f"artifact_{uuid4().hex}" for key in keys}
+        prepared: list[_PreparedArtifactDraft] = []
+        external_relation_ids: set[str] = set()
+        try:
+            for draft in drafts:
+                payload = dict(draft.payload)
+                for field_name, draft_key in draft.payload_draft_refs.items():
+                    target_id = ids.get(draft_key)
+                    if target_id is None:
+                        raise ArtifactDraftContractError(
+                            "Artifact payload references an unknown draft key"
+                        )
+                    payload[field_name] = target_id
+
+                relations: list[ArtifactRelation] = []
+                for relation in draft.relations:
+                    target_id = relation.artifact_id
+                    if relation.draft_key:
+                        target_id = ids.get(relation.draft_key)
+                        if target_id is None:
+                            raise ArtifactDraftContractError(
+                                "Artifact relation references an unknown draft key"
+                            )
+                    target = str(target_id or "").strip()
+                    if not target:
+                        raise ArtifactDraftContractError(
+                            "Artifact relation target is empty"
+                        )
+                    if target == ids[draft.key]:
+                        raise ArtifactDraftContractError(
+                            "Artifact cannot relate to itself"
+                        )
+                    if target not in ids.values():
+                        external_relation_ids.add(target)
+                    relations.append(
+                        ArtifactRelation(
+                            relation=relation.relation,
+                            artifact_id=target,
+                        )
+                    )
+
+                prepared.append(
+                    _PreparedArtifactDraft(
+                        draft=draft,
+                        artifact_id=ids[draft.key],
+                        payload=validate_artifact_payload(draft.type, payload),
+                        relations=tuple(relations),
+                    )
+                )
+        except ArtifactDraftContractError:
+            raise
+        except (ValidationError, ValueError) as exc:
+            raise ArtifactDraftContractError(
+                "Artifact draft payload or relation does not match its contract"
+            ) from exc
+
+        if external_relation_ids:
+            rows = self.session.execute(
+                select(AgentArtifactRecord.id, AgentArtifactRecord.session_id).where(
+                    AgentArtifactRecord.id.in_(external_relation_ids)
+                )
+            ).all()
+            visible_ids = {
+                str(artifact_id)
+                for artifact_id, session_id in rows
+                if str(session_id) == lease.session_id
+            }
+            if visible_ids != external_relation_ids:
+                raise ArtifactDraftContractError(
+                    "Artifact relation target is unavailable in this Session"
+                )
+
+        # Run ownership is enforced by the lease on writes. Relation targets may
+        # intentionally refer to earlier Artifacts in the same Session.
+        return tuple(prepared)
 
     def require_validated_sql(
         self,

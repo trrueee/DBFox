@@ -1,9 +1,11 @@
 import json
 import re
 
+import pytest
 from sqlalchemy.orm import sessionmaker
 
 from engine.agent.context import ContextArtifact, ContextObservation, ContextSnapshot
+from engine.agent.artifact import ArtifactDraft, ArtifactType
 from engine.agent.events import LiveStreamHub
 from engine.agent.definition import AgentDefinition
 from engine.agent.loop import RunLoop, _relevant_tool_groups
@@ -15,6 +17,7 @@ from engine.agent.turn import TurnStreamItem, TurnStreamKind, TurnTermination
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.llm.config import LlmConfigurationError
 from engine.models import (
+    AgentArtifactRecord,
     AgentEvidenceRecord,
     AgentMessage,
     AgentObservationRecord,
@@ -28,9 +31,14 @@ from engine.tools.builtin.query import SqlExecuteReadonlyTool, SqlValidateTool
 from engine.tools.builtin.artifacts import query_result_draft, sql_validation_drafts
 from engine.tools.builtin.contracts import QueryResultOutput, SqlValidateOutput
 from engine.tools.runtime import (
+    BaseTool,
+    ToolInputModel,
+    ToolOutputModel,
     ToolOutcome,
+    ToolPresentation,
     ToolRegistry,
 )
+from engine.tools.runtime.observation import ToolObservationProjection
 from engine.tools.runtime.semantics import ToolSemanticCapability
 
 
@@ -234,6 +242,64 @@ class ExecuteTool(SqlExecuteReadonlyTool):
 class FailingExecuteTool(ExecuteTool):
     def run(self, tool_input, context):
         raise RuntimeError("execution failed")
+
+
+class InvalidArtifactInput(ToolInputModel):
+    pass
+
+
+class InvalidArtifactOutput(ToolOutputModel):
+    status: str
+
+
+class InvalidArtifactTool(BaseTool[InvalidArtifactInput, InvalidArtifactOutput]):
+    name = "invalid_artifact"
+    group = "query"
+    description = "Emit an invalid Artifact draft for settlement contract testing."
+    input_model = InvalidArtifactInput
+    output_model = InvalidArtifactOutput
+    presentation = ToolPresentation(
+        title="Create invalid Artifact",
+        category="visualize",
+        visibility="summary",
+    )
+
+    def run(self, tool_input, context):
+        return ToolOutcome(
+            output=InvalidArtifactOutput(status="generated"),
+            artifacts=(
+                ArtifactDraft(
+                    key="valid_sql",
+                    type=ArtifactType.SQL,
+                    title="Valid SQL",
+                    payload={
+                        "sql": "SELECT 1",
+                        "safeSql": "SELECT 1",
+                        "dialect": "sqlite",
+                        "queryFingerprint": "fingerprint",
+                    },
+                ),
+                ArtifactDraft(
+                    key="invalid_chart",
+                    type=ArtifactType.CHART,
+                    title="Invalid chart",
+                    payload={
+                        "sourceResultArtifactId": "artifact_result",
+                        "chartType": "bar",
+                        "x": "day",
+                        "y": ["total"],
+                        "aggregation": "none",
+                        "title": "Daily total",
+                        "unexpected": "not allowed",
+                    },
+                ),
+            ),
+        )
+
+    def project_observation(self, *, status, output, artifacts):
+        if status != "success":
+            return ToolObservationProjection(summary="图表产物合同校验失败。")
+        return ToolObservationProjection(summary="图表产物已生成。")
 
 
 def test_model_configuration_failure_settles_turn_and_fails_run(
@@ -499,6 +565,96 @@ class ScriptedModel:
                 revision=1,
                 termination=TurnTermination.COMPLETED,
             )
+
+
+class InvalidArtifactContractModel:
+    def __init__(self, call_number: int):
+        self.call_number = call_number
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        if self.call_number == 1:
+            arguments = {}
+            yield TurnStreamItem(
+                kind=TurnStreamKind.TOOL_CALL_START,
+                item_id="tool:invalid",
+                revision=1,
+                tool_call_index=0,
+                tool_call_id="invalid-artifact-call",
+                tool_name="invalid_artifact",
+                arguments_delta=json.dumps(arguments),
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.TOOL_CALL_END,
+                item_id="tool:invalid",
+                revision=2,
+                tool_call_index=0,
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
+                item_id="tool:invalid",
+                revision=3,
+                output_index=0,
+                model_output_item={
+                    "type": "function_call",
+                    "call_id": "invalid-artifact-call",
+                    "name": "invalid_artifact",
+                    "arguments": json.dumps(arguments),
+                },
+            )
+        else:
+            function_output = next(
+                item
+                for item in messages
+                if item.get("type") == "function_call_output"
+                and item.get("call_id") == "invalid-artifact-call"
+            )
+            observation = json.loads(function_output["output"])
+            assert observation == {
+                "status": "failed",
+                "summary": "工具输出未通过合同校验。",
+                "facts": {},
+                "artifact_ids": [],
+                "retryable": False,
+                "error_code": "TOOL_OUTPUT_CONTRACT_FAILED",
+                "error_message": "Tool output did not match its declared contract.",
+            }
+            content = "图表未能生成，但本轮仍可继续处理。"
+            yield TurnStreamItem(
+                kind=TurnStreamKind.ANSWER_START,
+                item_id="answer",
+                revision=1,
+                output_index=0,
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.ANSWER_DELTA,
+                item_id="answer",
+                revision=2,
+                content=content,
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.ANSWER_END,
+                item_id="answer",
+                revision=3,
+                output_index=0,
+                message_status="completed",
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
+                item_id="answer",
+                revision=4,
+                output_index=0,
+                model_output_item={
+                    "type": "message",
+                    "role": "assistant",
+                    "content": content,
+                },
+            )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.FINISH,
+            item_id="finish",
+            revision=1,
+            termination=TurnTermination.COMPLETED,
+        )
 
 
 class ToolBudgetModel:
@@ -893,6 +1049,132 @@ def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(
     assert subscription.receive(timeout=0.01).content == "先验证并执行聚合查询。"
     assert subscription.receive(timeout=0.01).content == "正在整理可验证结论。"
     assert subscription.receive(timeout=0.01).content == "共有 42 条订单。"
+
+
+def test_invalid_artifact_batch_settles_as_tool_contract_failure_without_failing_run(
+    db_session,
+    test_datasource,
+):
+    db_session.add(
+        AgentSession(
+            id="session_invalid_artifact_contract",
+            datasource_id=str(test_datasource.id),
+            title="Invalid Artifact Contract",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session_invalid_artifact_contract",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="生成图表",
+        idempotency_key="invalid-artifact-contract",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(
+        session_id="session_invalid_artifact_contract",
+        owner="worker",
+        ttl_seconds=120,
+    )
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    calls = {"count": 0}
+
+    def model_factory(_settings):
+        calls["count"] += 1
+        return InvalidArtifactContractModel(calls["count"])
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=ToolRegistry().register(InvalidArtifactTool()),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    answer = db_session.get(AgentMessage, admission.assistant_message_id)
+    invocation = (
+        db_session.query(AgentToolInvocation)
+        .filter_by(run_id=admission.run_id)
+        .one()
+    )
+    observation = (
+        db_session.query(AgentObservationRecord)
+        .filter_by(tool_invocation_id=invocation.id)
+        .one()
+    )
+
+    assert run is not None and run.status == "completed"
+    assert answer is not None
+    assert answer.content == "图表未能生成，但本轮仍可继续处理。"
+    assert invocation.status == "failed"
+    assert invocation.error_code == "TOOL_OUTPUT_CONTRACT_FAILED"
+    assert observation.status == "failed"
+    assert observation.error_code == "TOOL_OUTPUT_CONTRACT_FAILED"
+    assert json.loads(observation.artifact_ids_json) == []
+    assert (
+        db_session.query(AgentArtifactRecord)
+        .filter_by(run_id=admission.run_id)
+        .count()
+        == 0
+    )
+    assert calls["count"] == 2
+
+
+def test_unexpected_artifact_persistence_failure_still_escapes_run_loop(
+    db_session,
+    test_datasource,
+    monkeypatch,
+):
+    db_session.add(
+        AgentSession(
+            id="session_artifact_storage_failure",
+            datasource_id=str(test_datasource.id),
+            title="Artifact Storage Failure",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session_artifact_storage_failure",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="生成图表",
+        idempotency_key="artifact-storage-failure",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(
+        session_id="session_artifact_storage_failure",
+        owner="worker",
+        ttl_seconds=120,
+    )
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    def fail_storage(*_args, **_kwargs):
+        raise RuntimeError("database write unavailable")
+
+    monkeypatch.setattr(ArtifactRepository, "persist_drafts", fail_storage)
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    with pytest.raises(RuntimeError, match="database write unavailable"):
+        RunLoop(
+            session_factory=factory,
+            model_factory=lambda _settings: InvalidArtifactContractModel(1),
+            registry=ToolRegistry().register(InvalidArtifactTool()),
+            live_stream=LiveStreamHub(),
+        ).execute(lease=lease, run_id=admission.run_id)
 
 
 def test_run_loop_repairs_malformed_citation_before_terminal_commit(
