@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AssistantMessageItem,
+  ConversationArtifact,
   ConversationRun,
   ConversationRunItem,
   FunctionCallItem,
@@ -63,18 +64,95 @@ describe("AgentTimeline", () => {
     expect(screen.getByText("这是最终答案。")).toBeTruthy();
     expect(container.querySelector(".conv-answer-document")).toBeTruthy();
   });
+
+  it("distinguishes a tool terminated by run failure from user cancellation", () => {
+    const failedCall = call(1);
+    failedCall.status = "cancelled";
+    const failedOutput = output(2);
+    failedOutput.status = "cancelled";
+    renderTimeline([failedCall, failedOutput], {
+      status: "failed",
+      error: { code: "AGENT_RUNTIME_ERROR", message: "本次分析未完成，请重试。" },
+    });
+
+    expect(screen.getByText("因任务失败终止")).toBeTruthy();
+    expect(screen.queryByText("已取消")).toBeNull();
+  });
+
+  it("keeps the cancelled label when the run was cancelled", () => {
+    const cancelledCall = call(1);
+    cancelledCall.status = "cancelled";
+    const cancelledOutput = output(2);
+    cancelledOutput.status = "cancelled";
+    renderTimeline([cancelledCall, cancelledOutput], { status: "cancelled" });
+
+    expect(screen.getByText("已取消")).toBeTruthy();
+    expect(screen.queryByText("因任务失败终止")).toBeNull();
+  });
+
+  it("exposes completed query results when a later step fails", () => {
+    const onSelectArtifact = vi.fn();
+    renderTimeline(
+      [call(1), output(2)],
+      {
+        status: "failed",
+        error: { code: "AGENT_RUNTIME_ERROR", message: "本次分析未完成，请重试。" },
+      },
+      [resultArtifact("result-1"), resultArtifact("result-2"), resultArtifact("result-3")],
+      onSelectArtifact,
+    );
+
+    expect(
+      screen.getByText("分析未完成，但已保留 3 个查询结果，可在工件区查看。"),
+    ).toBeTruthy();
+    expect(screen.getByText("数据来源")).toBeTruthy();
+    fireEvent.click(screen.getByText("查询结果 result-1"));
+    expect(onSelectArtifact).toHaveBeenCalledWith("result-1");
+  });
 });
 
-function renderTimeline(items: ConversationRunItem[]) {
+function renderTimeline(
+  items: ConversationRunItem[],
+  runOverride: Partial<ConversationRun> = {},
+  artifacts: ConversationArtifact[] = [],
+  onSelectArtifact = vi.fn(),
+) {
   return render(
     <AgentTimeline
-      run={run()}
+      run={{ ...run(), ...runOverride }}
       items={items}
-      artifacts={[]}
+      artifacts={artifacts}
       onOpenSqlConsole={vi.fn()}
-      onSelectArtifact={vi.fn()}
+      onSelectArtifact={onSelectArtifact}
     />,
   );
+}
+
+function resultArtifact(id: string): ConversationArtifact {
+  return {
+    id,
+    session_id: "session-1",
+    run_id: "run-1",
+    turn_id: "turn-1",
+    version: 1,
+    type: "result_view",
+    title: `查询结果 ${id}`,
+    status: "completed",
+    visibility: "primary",
+    payload: {
+      sourceSqlArtifactId: "sql-1",
+      queryFingerprint: "fingerprint",
+      datasourceGeneration: 1,
+      columns: ["total"],
+      rowCount: 1,
+      returnedRows: 1,
+      latencyMs: 1,
+      executedAt: "2026-08-14T00:00:00Z",
+      truncated: false,
+    },
+    provenance: {},
+    relations: [],
+  };
 }
 
 function run(): ConversationRun {

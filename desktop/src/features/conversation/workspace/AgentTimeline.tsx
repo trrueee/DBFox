@@ -28,7 +28,10 @@ import { getUserErrorMessage } from "../../../lib/api/client";
 import { completionLimitationLabel } from "../../../lib/presentation";
 import { MarkdownContent } from "../../workspace/queryResult/MarkdownContent";
 import { ApprovalAuditCard } from "./ApprovalCard";
-import { isPrimaryConversationArtifact } from "./conversationArtifactModels";
+import {
+  isPrimaryConversationArtifact,
+  isSqlBackedResultViewArtifact,
+} from "./conversationArtifactModels";
 import { DataReferencePanel } from "./DataReferencePanel";
 import { QuestionCard } from "./QuestionCard";
 
@@ -63,6 +66,9 @@ export function AgentTimeline({
       .map((item) => [item.payload.call_id, item]),
   );
   const primaryArtifacts = artifacts.filter(isPrimaryConversationArtifact);
+  const preservedResults = primaryArtifacts.filter(
+    (artifact) => artifact.status === "completed" && isSqlBackedResultViewArtifact(artifact),
+  );
   const currentItem = activeItem(items);
   const hasFinalAnswer = items.some(
     (item) => item.type === "message"
@@ -93,6 +99,7 @@ export function AgentTimeline({
               key={item.id}
               item={item}
               output={outputs.get(item.payload.call_id)}
+              runStatus={run.status}
               onSelectArtifact={onSelectArtifact}
             />
           );
@@ -124,7 +131,16 @@ export function AgentTimeline({
 
       {run.error && (
         <div className="conv-error-card" role="alert">
-          {getUserErrorMessage(run.error.message, "本次分析未完成，请重试。")}
+          {preservedResults.length > 0 ? (
+            <>
+              <strong>
+                分析未完成，但已保留 {preservedResults.length} 个查询结果，可在工件区查看。
+              </strong>
+              <span>{getUserErrorMessage(run.error.message, "本次分析未完成，请重试。")}</span>
+            </>
+          ) : (
+            getUserErrorMessage(run.error.message, "本次分析未完成，请重试。")
+          )}
         </div>
       )}
       {run.status === "cancelled" && (
@@ -142,9 +158,9 @@ export function AgentTimeline({
           </span>
         </div>
       )}
-      {hasFinalAnswer && primaryArtifacts.length > 0 && (
+      {((hasFinalAnswer && primaryArtifacts.length > 0) || preservedResults.length > 0) && (
         <DataReferencePanel
-          artifacts={primaryArtifacts}
+          artifacts={hasFinalAnswer ? primaryArtifacts : preservedResults}
           onSelectArtifact={onSelectArtifact}
         />
       )}
@@ -196,10 +212,12 @@ function AssistantMessage({
 function FunctionCall({
   item,
   output,
+  runStatus,
   onSelectArtifact,
 }: {
   item: FunctionCallItem;
   output?: FunctionCallOutputItem;
+  runStatus: ConversationRun["status"];
   onSelectArtifact?: (artifactId: string) => void;
 }) {
   if (item.payload.presentation.visibility === "developer") return null;
@@ -218,7 +236,7 @@ function FunctionCall({
         <span className="conv-agent-tool-copy">
           <span className="conv-agent-tool-title">
             <span className={`conv-agent-tool-status is-${status}`}>
-              {toolStatusLabel(status)}
+              {toolStatusLabel(status, runStatus)}
             </span>
             <span>{item.payload.presentation.title}</span>
           </span>
@@ -329,9 +347,13 @@ function PlanStepIcon({ status }: { status: PlanItem["payload"]["steps"][number]
   return <Circle size={13} aria-label="待处理" />;
 }
 
-function toolStatusLabel(status: ConversationRunItem["status"]): string {
+function toolStatusLabel(
+  status: ConversationRunItem["status"],
+  runStatus?: ConversationRun["status"],
+): string {
   if (status === "in_progress" || status === "pending") return "运行中";
   if (status === "failed") return "失败";
+  if (status === "cancelled" && runStatus === "failed") return "因任务失败终止";
   if (status === "cancelled") return "已取消";
   if (status === "waiting") return "等待授权";
   return "已完成";
