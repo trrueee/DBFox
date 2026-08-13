@@ -4,7 +4,11 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-06
+> 最后核验：2026-08-14
+
+## 当前整改
+
+- [2026-08-14 系统级工程审查整改计划](2026-08-14-system-review-remediation.md)：记录当前 P1/P2 修复设计、验收标准和 P3 反证核验清单。
 
 - [工程质量门禁](./engineering-gates.md)：本地与 CI 的 Python、前端、Rust、迁移、Frozen Sidecar 和依赖策略。
 - [Agent 生产评测方法](./agent-evaluation-methodology.md)：分层 Harness、数据集角色、Grader、统计门禁与脱敏 Trace 合同。
