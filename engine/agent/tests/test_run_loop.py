@@ -1043,6 +1043,7 @@ def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(
     assert timeline[-1]["payload"]["phase"] is None
     assert timeline[-1]["payload"]["completion_disposition"] == "complete"
     recovered = RunRepository(db_session).latest_completed_answer(str(run.id))
+    assert recovered.turn_id is not None
     assert [message.phase for message in recovered.messages] == ["commentary", None]
     assert recovered.answer_text == "共有 42 条订单。"
     assert timeline[2]["payload"]["call_id"] == timeline[3]["payload"]["call_id"]

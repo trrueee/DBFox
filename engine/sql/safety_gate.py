@@ -17,6 +17,7 @@ from engine.app.safe_errors import (
 )
 from engine.errors import GuardrailValidationError
 from engine.models import DataSource, SchemaTable
+from engine.policy.authority import ExecutionAuthority
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
 
 logger = logging.getLogger("dbfox.sql.executor")
@@ -82,6 +83,8 @@ def _resolve_execution_safety_decision(
     safety_decision: ExecutionSafetyDecision | dict[str, Any] | None,
     policy: ExecutionPolicy = "readonly",
     parameters: Mapping[str, Any] | None = None,
+    execution_authority: ExecutionAuthority | None = None,
+    expected_connection_generation: int | None = None,
 ) -> ExecutionSafetyDecision:
     if safety_decision is not None:
         decision = (
@@ -118,7 +121,16 @@ def _resolve_execution_safety_decision(
                 "TrustGate decision parameters do not match the requested execution.",
                 checks=[{"rule": "safety_decision_parameter_mismatch", "level": "reject", "message": "The supplied safety decision was created for different bound parameters."}],
             )
-        return _block_unconfirmed_execution(decision)
+        confirmation_authorized = bool(
+            execution_authority
+            and isinstance(safety_decision, dict)
+            and execution_authority.authorizes_safety(
+                tool_name="sql_execute_readonly",
+                safety=safety_decision,
+                datasource_generation=expected_connection_generation,
+            )
+        )
+        return decision if confirmation_authorized else _block_unconfirmed_execution(decision)
 
     if bypass_guardrail:
         if not guardrail_bypass_allowed():

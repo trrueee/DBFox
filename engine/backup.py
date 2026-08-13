@@ -359,7 +359,10 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None) -> 
         created_at=started,
     )
     db.add(record)
-    db.flush()
+    # The native dump is external I/O and may run for minutes. Persist the
+    # durable running marker first, then release SQLite's write lock before
+    # entering the subprocess boundary.
+    db.commit()
 
     start_time = time.monotonic()
     try:
@@ -376,6 +379,7 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None) -> 
         setattr(record, "file_size_bytes", file_size)
         setattr(record, "checksum_sha256", _sha256_file(output_path))
         setattr(record, "error_message", None)
+        db.commit()
     except Exception:
         _remove_regular_file_if_owned(output_path)
         completed = datetime.now(UTC)
@@ -387,6 +391,7 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None) -> 
         db.commit()  # Preserve the failed audit record independently of API rollback.
         raise
 
+    db.refresh(record)
     return record
 
 

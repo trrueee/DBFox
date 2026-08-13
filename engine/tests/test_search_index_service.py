@@ -87,3 +87,54 @@ def test_rebuild_query_history_index_backfills_existing_history(db_session) -> N
     db_session.commit()
 
     assert service.search_query_history("margin", datasource_id="ds-rebuild", limit=10) == ["hist-rebuild"]
+
+
+def test_query_history_trigram_search_supports_chinese_substrings(db_session) -> None:
+    _datasource(db_session, "ds-chinese")
+    history = _history(
+        db_session,
+        "hist-chinese",
+        "ds-chinese",
+        "分析数据库订单趋势",
+        "SELECT * FROM billing_orders",
+    )
+    service = SearchIndexService(db_session)
+    service.index_query_history(history)
+    db_session.commit()
+
+    assert service.search_query_history("数据库", datasource_id="ds-chinese") == [
+        "hist-chinese"
+    ]
+    assert service.search_query_history("订单", datasource_id="ds-chinese") == [
+        "hist-chinese"
+    ]
+    assert service.search_query_history("趋势", datasource_id="ds-chinese") == [
+        "hist-chinese"
+    ]
+    assert service.search_query_history("订单", datasource_id=None) == []
+
+
+def test_query_history_trigram_triggers_follow_update_and_delete(db_session) -> None:
+    _datasource(db_session, "ds-chinese-sync")
+    history = _history(
+        db_session,
+        "hist-chinese-sync",
+        "ds-chinese-sync",
+        "分析数据库订单趋势",
+        "SELECT 1",
+    )
+    service = SearchIndexService(db_session)
+    service.index_query_history(history)
+    db_session.commit()
+
+    history.question = "分析数据库退款趋势"
+    service.index_query_history(history)
+    db_session.commit()
+    assert service.search_query_history("订单", datasource_id="ds-chinese-sync") == []
+    assert service.search_query_history("退款", datasource_id="ds-chinese-sync") == [
+        "hist-chinese-sync"
+    ]
+
+    service.delete_query_history(history.id)
+    db_session.commit()
+    assert service.search_query_history("退款", datasource_id="ds-chinese-sync") == []

@@ -8,6 +8,7 @@ from engine.agent.question import QuestionAnswer, QuestionConflict, QuestionStat
 from engine.agent.context import ContextAssembler
 from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.run import SessionLeaseConflict
 from engine.models import (
     AgentMessage,
     AgentQuestionRequest,
@@ -219,7 +220,13 @@ def test_expired_question_terminalizes_the_waiting_run(db_session, test_datasour
     sessions.release(lease=lease)
     db_session.commit()
 
-    recovery_lease = sessions.claim(session_id="session_expired_question", owner="recovery")
+    stale_lease = sessions.claim(session_id="session_expired_question", owner="recovery")
+    sessions.release(lease=stale_lease)
+    recovery_lease = sessions.claim(session_id="session_expired_question", owner="replacement")
+    db_session.commit()
+    with pytest.raises(SessionLeaseConflict):
+        QuestionRepository(db_session).expire_pending(lease=stale_lease)
+    db_session.rollback()
     expired = QuestionRepository(db_session).expire_pending(lease=recovery_lease)
     db_session.commit()
 

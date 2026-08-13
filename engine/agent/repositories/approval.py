@@ -155,6 +155,7 @@ class ApprovalRepository:
         as an explicit rejection so the next Turn can choose a safe alternative.
         """
         begin_agent_write(self.session)
+        self.sessions.require_lease(lease=lease)
         current_time = now or _utcnow()
         rows = self.session.execute(
             select(AgentApproval).where(

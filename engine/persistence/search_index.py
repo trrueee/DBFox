@@ -19,8 +19,31 @@ def assert_query_history_search_schema(bind: Any) -> None:
     try:
         bind.execute(sa_text("SELECT search_text FROM query_history_fts LIMIT 0"))
         bind.execute(sa_text("SELECT 1 FROM query_history_search_docs LIMIT 0"))
+        definition = bind.execute(
+            sa_text(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type = 'table' AND name = 'query_history_fts'"
+            )
+        ).scalar_one_or_none()
+        triggers = set(
+            bind.execute(
+                sa_text(
+                    "SELECT name FROM sqlite_master WHERE type = 'trigger' "
+                    "AND name IN ('query_history_search_docs_ai', "
+                    "'query_history_search_docs_ad', 'query_history_search_docs_au')"
+                )
+            ).scalars()
+        )
     except OperationalError as exc:
         raise RuntimeError("DBFOX_METADATA_FTS_CONTRACT_MISSING") from exc
+    normalized_definition = str(definition or "").replace(" ", "").lower()
+    expected_triggers = {
+        "query_history_search_docs_ai",
+        "query_history_search_docs_ad",
+        "query_history_search_docs_au",
+    }
+    if "tokenize='trigram'" not in normalized_definition or triggers != expected_triggers:
+        raise RuntimeError("DBFOX_METADATA_FTS_CONTRACT_MISSING")
 
 
 class SearchIndexService:
@@ -132,6 +155,30 @@ class SearchIndexService:
         term = search.strip()
         if not term:
             return []
+        if len(term) < 3:
+            if not datasource_id:
+                # Trigram cannot match fewer than three Unicode characters.
+                # A short literal scan is allowed only inside one indexed
+                # datasource partition and remains bounded by the caller limit.
+                return []
+            rows = self.db.execute(
+                sa_text(
+                    """
+                    SELECT history_id
+                    FROM query_history_search_docs
+                    WHERE datasource_id = :datasource_id
+                      AND instr(lower(search_text), lower(:literal_query)) > 0
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT :limit
+                    """
+                ),
+                {
+                    "datasource_id": datasource_id,
+                    "literal_query": term,
+                    "limit": limit,
+                },
+            ).fetchall()
+            return [str(row[0]) for row in rows]
         fts_query = f'"{term.replace(chr(34), chr(34) + chr(34))}"'
         sql = """
             SELECT d.history_id

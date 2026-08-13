@@ -46,6 +46,7 @@ from engine.sql.safety_gate import (
     _resolve_execution_safety_decision,
 )
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
+from engine.policy.authority import ExecutionAuthority
 
 
 def _sql_execution_failure_message() -> str:
@@ -343,6 +344,7 @@ def execute_query(
     redact: bool = True,
     expected_connection_generation: int | None = None,
     parameters: Mapping[str, Any] | None = None,
+    execution_authority: ExecutionAuthority | None = None,
 ) -> dict[str, Any]:
     execution_id = execution_id or f"exec-{uuid.uuid4()}"
     QUERY_REGISTRY.reserve(execution_id, datasource_id)
@@ -358,6 +360,7 @@ def execute_query(
             redact=redact,
             expected_connection_generation=expected_connection_generation,
             parameters=parameters,
+            execution_authority=execution_authority,
         )
     finally:
         QUERY_REGISTRY.unregister(execution_id)
@@ -374,6 +377,7 @@ def _execute_reserved_query(
     redact: bool = True,
     expected_connection_generation: int | None = None,
     parameters: Mapping[str, Any] | None = None,
+    execution_authority: ExecutionAuthority | None = None,
 ) -> dict[str, Any]:
     """Resolve policy and execute an already-registered query."""
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
@@ -390,6 +394,8 @@ def _execute_reserved_query(
         safety_decision=safety_decision,
         policy=safety_policy,
         parameters=parameters,
+        execution_authority=execution_authority,
+        expected_connection_generation=expected_connection_generation,
     )
     guard_res = decision.guardrail
     guardrail_ms = int((time.perf_counter() - t_guard_start) * 1000)

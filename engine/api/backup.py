@@ -54,8 +54,6 @@ def api_create_backup(req: BackupCreateRequest, db: Session = Depends(get_db)) -
     """Create and persist a logical backup."""
     try:
         record = create_backup(db, req.datasource_id, req.label)
-        db.commit()
-        db.refresh(record)
         return _backup_to_dict(record)
     except Exception:
         # create_backup already committed the failed status — no rollback.

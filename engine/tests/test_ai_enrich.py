@@ -206,7 +206,7 @@ def test_sync_api_replaces_unexpected_sync_error_with_a_fixed_public_message(
             db_session,
         )
 
-    assert exc_info.value.code == "SYNC_FAILED"
+    assert exc_info.value.code == "SCHEMA_SYNC_FAILED"
     assert exc_info.value.message == "Schema synchronization failed."
     assert exc_info.value.__cause__ is None
     assert SENTINEL not in repr(exc_info.value)
@@ -227,7 +227,7 @@ def test_schema_list_auto_sync_uses_the_fixed_public_failure_message(
     with pytest.raises(DBFoxError) as exc_info:
         schema_api.api_list_tables("ds-schema-sync-test", db_session)
 
-    assert exc_info.value.code == "SYNC_FAILED"
+    assert exc_info.value.code == "SCHEMA_SYNC_FAILED"
     assert exc_info.value.message == "Schema synchronization failed."
     assert exc_info.value.__cause__ is None
     assert SENTINEL not in repr(exc_info.value)

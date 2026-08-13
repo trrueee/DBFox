@@ -5,7 +5,8 @@ import logging
 
 from starlette.requests import Request
 
-from engine.errors import DBFoxError
+from engine.app.safe_errors import FixedErrorCode
+from engine.errors import DBFoxError, NotFoundError, SQLExecutionError
 from engine.main import dbfox_error_handler, global_unhandled_exception_handler
 from engine.security.credential_vault import CredentialVaultUnavailableError
 
@@ -73,13 +74,69 @@ def test_dbfox_error_handler_never_echoes_or_logs_an_untrusted_message(
         response = asyncio.run(dbfox_error_handler(request, error))
 
         payload = response.body.decode()
-        assert response.status_code == 400
-        assert "DBFOX_ERROR" in payload
+        assert response.status_code == 500
+        assert "INTERNAL_ERROR" in payload
+        assert "SAFE_TEST_ERROR" not in payload
         assert SENTINEL not in payload
         assert SENTINEL not in caplog.text
         assert "DBFoxError" in caplog.text
-        assert "DBFOX_ERROR" in caplog.text
+        assert "INTERNAL_ERROR" in caplog.text
         assert "POST /api/v1/dbfox-error-boundary" in caplog.text
+    finally:
+        logger.removeHandler(caplog.handler)
+
+
+def test_dbfox_error_handler_uses_catalog_message_for_registered_code(
+    caplog,
+    monkeypatch,
+) -> None:
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/query",
+            "headers": [],
+        }
+    )
+    logger = _isolated_main_logger(caplog, monkeypatch, level=logging.WARNING)
+    try:
+        response = asyncio.run(dbfox_error_handler(request, SQLExecutionError(SENTINEL)))
+
+        payload = response.body.decode()
+        assert response.status_code == 400
+        assert "SQL_EXECUTION_FAILED" in payload
+        assert "The SQL request could not be completed." in payload
+        assert SENTINEL not in payload
+        assert SENTINEL not in caplog.text
+    finally:
+        logger.removeHandler(caplog.handler)
+
+
+def test_dbfox_not_found_preserves_status_only_for_registered_code(
+    caplog,
+    monkeypatch,
+) -> None:
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/datasources/missing",
+            "headers": [],
+        }
+    )
+    logger = _isolated_main_logger(caplog, monkeypatch, level=logging.WARNING)
+    try:
+        response = asyncio.run(
+            dbfox_error_handler(
+                request,
+                NotFoundError(SENTINEL, code=FixedErrorCode.DATASOURCE_NOT_FOUND.value),
+            )
+        )
+
+        payload = response.body.decode()
+        assert response.status_code == 404
+        assert "DATASOURCE_NOT_FOUND" in payload
+        assert SENTINEL not in payload
     finally:
         logger.removeHandler(caplog.handler)
 

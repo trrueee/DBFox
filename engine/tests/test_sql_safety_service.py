@@ -10,6 +10,7 @@ from engine.sql.dialect_context import DialectContext
 from engine.sql.safety.service import SqlSafetyService
 from engine.sql.safety_gate import validate_derived_sql, validate_pagination_base_sql
 from engine.sql.trust_gate import ExecutionSafetyDecision
+from engine.policy.authority import ExecutionAuthority, canonical_hash, safety_fingerprint
 
 
 def test_dialect_context_canonicalizes_datasource_dialect(test_datasource_module) -> None:
@@ -196,6 +197,55 @@ def test_execute_query_rejects_unconfirmed_safety_decision(db_session, test_data
 
     assert exc_info.value.code == "GUARDRAIL_BLOCKED"
     assert any(check["rule"] == "requires_confirmation" for check in exc_info.value.checks)
+
+
+def test_execute_query_accepts_matching_scoped_execution_authority(
+    db_session,
+    test_datasource,
+) -> None:
+    guardrail: GuardrailResult = {
+        "result": "pass",
+        "originalSql": "SELECT id FROM users LIMIT 3",
+        "safeSql": "SELECT id FROM users LIMIT 3",
+        "checks": [],
+        "message": "ok",
+    }
+    decision = ExecutionSafetyDecision(
+        datasource_id=test_datasource.id,
+        policy="agent_readonly",
+        original_sql="SELECT id FROM users LIMIT 3",
+        safe_sql="SELECT id FROM users LIMIT 3",
+        passed=True,
+        can_execute=True,
+        requires_confirmation=True,
+        blocked_reasons=["requires_confirmation"],
+        guardrail=guardrail,
+    )
+    safety = decision.model_dump(mode="json")
+    authority = ExecutionAuthority(
+        approval_id="approval-1",
+        invocation_id="invocation-1",
+        tool_name="sql_execute_readonly",
+        authorized_input_hash=canonical_hash(
+            {"validation_artifact_id": "artifact-1"}
+        ),
+        policy_fingerprint="policy-1",
+        safety_fingerprint=safety_fingerprint(safety),
+        datasource_generation=test_datasource.connection_generation,
+    )
+
+    result = execute_query(
+        db_session,
+        test_datasource.id,
+        decision.safe_sql or "",
+        safety_decision=safety,
+        safety_policy="agent_readonly",
+        expected_connection_generation=test_datasource.connection_generation,
+        execution_authority=authority,
+    )
+
+    assert result["success"] is True
+    assert result["rows"]
 
 
 def test_execute_readonly_tool_passes_explicit_safety_decision(

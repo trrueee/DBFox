@@ -164,6 +164,33 @@ def collect_diagnostic_logs(
     }
 
 
+def clear_diagnostic_log_source(path: Path) -> bool:
+    """Clear one log while preserving active Python FileHandler semantics."""
+    resolved = path.resolve()
+    for handler in logging.getLogger("dbfox").handlers:
+        base_filename = getattr(handler, "baseFilename", None)
+        if base_filename is None or Path(base_filename).resolve() != resolved:
+            continue
+        handler.acquire()
+        try:
+            stream = getattr(handler, "stream", None)
+            if stream is not None:
+                stream.flush()
+                stream.close()
+            path.write_bytes(b"")
+            handler.stream = handler._open()  # type: ignore[attr-defined]
+            return True
+        except OSError:
+            return False
+        finally:
+            handler.release()
+    try:
+        path.write_bytes(b"")
+        return True
+    except OSError:
+        return False
+
+
 def _bounded_max_lines(max_lines: int) -> int:
     return max(1, min(int(max_lines), MAX_MAX_LINES))
 

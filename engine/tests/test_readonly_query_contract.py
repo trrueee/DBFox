@@ -64,6 +64,11 @@ def test_canonical_contract_accepts_readonly_query_shapes(sql: str) -> None:
         ("SELECT pg_advisory_lock(42)", "postgres"),
         ("SELECT GET_LOCK('dbfox', 1)", "mysql"),
         ("SELECT RELEASE_LOCK('dbfox')", "mysql"),
+        ("SELECT pg_read_binary_file('/etc/passwd')", "postgres"),
+        ("SELECT PG_TERMINATE_BACKEND(42)", "postgres"),
+        ("SELECT pg_catalog.pg_cancel_backend(42)", "postgres"),
+        ("SELECT coalesce(pg_reload_conf(), false)", "postgres"),
+        ("SELECT public.dblink_exec('remote', 'DELETE FROM events')", "postgres"),
     ],
 )
 def test_canonical_contract_rejects_writes_locks_and_stateful_functions(
@@ -142,3 +147,22 @@ def test_guardrail_reports_stateful_query_functions(
 
     assert result["result"] == "reject"
     assert any(check["rule"] == expected_rule for check in result["checks"])
+
+
+@pytest.mark.parametrize(
+    "function_name",
+    [
+        "pg_read_binary_file",
+        "pg_terminate_backend",
+        "pg_cancel_backend",
+        "pg_reload_conf",
+        "dblink_exec",
+    ],
+)
+def test_postgres_security_functions_are_not_globally_blocked_for_mysql(
+    function_name: str,
+) -> None:
+    sql = f"SELECT {function_name}('value')"
+
+    assert parse_single_readonly_query(sql, "mysql") is not None
+    assert guardrail_check(sql, dialect="mysql")["result"] != "reject"

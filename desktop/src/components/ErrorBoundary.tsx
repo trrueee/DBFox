@@ -7,17 +7,16 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  error: Error | null;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(): State {
+    return { hasError: true };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -25,7 +24,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null });
+    this.setState({ hasError: false });
   };
 
   render() {
@@ -40,11 +39,6 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="app-error-boundary-message">
             应用初始化时发生了未预期的错误。请尝试重启应用。
           </p>
-          {this.state.error && (
-            <pre className="app-error-boundary-detail">
-              {this.state.error.message}
-            </pre>
-          )}
           <button className="app-error-boundary-reset" onClick={this.handleReset}>
             重新加载
           </button>

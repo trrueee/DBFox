@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import pytest
 from sqlalchemy.orm import sessionmaker
 
@@ -8,7 +9,8 @@ from engine.agent.definition import AgentDefinition
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.run import RunLimits
-from engine.agent.tool_dispatcher import ToolDispatcher
+from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
+from engine.agent.turn import ModelToolCall
 from engine.models import (
     AgentObservationRecord,
     AgentRun,
@@ -29,6 +31,111 @@ from engine.tools.runtime import (
     ToolRegistry,
     ToolRunContext,
 )
+
+
+def test_unknown_provider_tool_is_durably_rejected_without_failing_the_run(
+    db_session, test_datasource
+) -> None:
+    db_session.add(
+        AgentSession(
+            id="session_unknown_tool",
+            datasource_id=str(test_datasource.id),
+            title="Unknown tool",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session_unknown_tool",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="call a tool",
+        idempotency_key="request_unknown_tool",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id="session_unknown_tool", owner="worker")
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    registry = ToolRegistry()
+    definition = AgentDefinition(
+        allowed_tool_groups=(),
+        execution_mode="user_requested_read",
+    )
+    tools = materialize_tools(
+        registry,
+        allowed_groups=set(),
+        execution_mode=definition.execution_mode,
+    )
+    turn = sessions.start_turn(
+        lease=lease,
+        run_id=admission.run_id,
+        agent_definition_version=definition.version,
+        prompt_version="test",
+        prompt_hash="prompt",
+        context_snapshot={},
+        context_hash="context",
+        tool_materialization=tools.model_dump(mode="json"),
+        tool_materialization_hash=tools.hash,
+        provider="test",
+        model_name="test",
+    )
+    db_session.commit()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    executor = ToolExecutor(max_workers=1)
+    dispatcher = ToolDispatcher(
+        session_factory=factory,
+        registry=registry,
+        definition=definition,
+        executor=executor,
+    )
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None
+    control = LeaseAwareRunControl(
+        run=run,
+        limits=RunLimits(),
+        cancellation_probe=lambda: False,
+        lease_lost_probe=lambda: False,
+    )
+    call = ModelToolCall(
+        id="call_unknown",
+        name="not_a_real_tool",
+        arguments={"untrusted": "not persisted"},
+    )
+    try:
+        first = dispatcher.request_and_execute(
+            lease=lease,
+            run_id=admission.run_id,
+            turn_id=str(turn.id),
+            call=call,
+            materialization=tools,
+            control=control,
+        )
+        repeated = dispatcher.request_and_execute(
+            lease=lease,
+            run_id=admission.run_id,
+            turn_id=str(turn.id),
+            call=call,
+            materialization=tools,
+            control=control,
+        )
+    finally:
+        executor.close(wait=False)
+
+    assert first.outcome is ToolDispatchOutcome.SETTLED
+    assert repeated.outcome is ToolDispatchOutcome.SETTLED
+    assert first.provider_output is not None
+    payload = json.loads(first.provider_output.output)
+    assert payload["status"] == "rejected"
+    assert payload["error_code"] == "UNKNOWN_TOOL"
+    db_session.expire_all()
+    assert db_session.query(AgentToolInvocation).count() == 1
+    assert db_session.query(AgentObservationRecord).count() == 1
+    invocation = db_session.query(AgentToolInvocation).one()
+    assert invocation.input_json == "{}"
+    assert db_session.get(AgentRun, admission.run_id).status == "running"
 
 
 class _RecoveryInput(ToolInputModel):

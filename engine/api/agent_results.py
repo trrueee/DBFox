@@ -362,6 +362,14 @@ def api_agent_table_result_export(
             status_code=500,
             detail=fixed_error_detail(FixedErrorCode.TABLE_RESULT_EXPORT_ERROR),
         ) from None
+    SecurityAuditService(db).record(
+        action="table.result.export",
+        outcome="requested",
+        resource_type="schema_table",
+        resource_id=request.tableId,
+        details={"format": "csv", "datasource_id": request.datasourceId},
+    )
+    db.commit()
     return StreamingResponse(
         stream,
         media_type="text/csv",

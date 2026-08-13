@@ -1,6 +1,7 @@
-import pytest
 import os
-import socket
+from pathlib import Path
+
+import pytest
 import engine.datasource as datasource_module
 from engine.datasource import test_connection as run_test_connection
 from engine.errors import DataSourceConnectionError
@@ -10,34 +11,36 @@ from engine.security.credential_vault import CredentialKind, InMemoryCredentialV
 @pytest.mark.integration
 @pytest.mark.slow
 def test_mysql_ssl_connection_e2e(monkeypatch) -> None:
-
-    # Probe if the local test container on port 3308 is up and listening
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(1.0)
-    try:
-        s.connect(("127.0.0.1", 3308))
-        docker_available = True
-    except Exception:
-        docker_available = False
-    finally:
-        s.close()
-
-    if not docker_available:
-        pytest.skip("Docker MySQL SSL test container is not active on port 3308.")
+    if os.getenv("DBFOX_RUN_MYSQL_SSL_E2E") != "1":
+        pytest.skip("set DBFOX_RUN_MYSQL_SSL_E2E=1 with the documented isolated fixture")
+    required = {
+        name: os.getenv(name, "").strip()
+        for name in (
+            "DBFOX_MYSQL_SSL_HOST",
+            "DBFOX_MYSQL_SSL_PORT",
+            "DBFOX_MYSQL_SSL_DATABASE",
+            "DBFOX_MYSQL_SSL_USER",
+            "DBFOX_MYSQL_SSL_PASSWORD",
+            "DBFOX_MYSQL_SSL_CA_PATH",
+        )
+    }
+    missing = [name for name, value in required.items() if not value]
+    assert not missing, f"missing opted-in MySQL SSL fixture settings: {missing}"
+    ca_path = Path(required["DBFOX_MYSQL_SSL_CA_PATH"]).resolve(strict=True)
 
     vault = InMemoryCredentialVault()
     password_credential_id = vault.put(
         kind=CredentialKind.DATASOURCE_PASSWORD,
-        secret="readonly_pass",
+        secret=required["DBFOX_MYSQL_SSL_PASSWORD"],
     )
     monkeypatch.setattr(datasource_module, "get_credential_vault", lambda: vault)
 
     # 1. Verify Non-SSL connection triggers connection error under REQUIRE SSL policy
     config_no_ssl = {
-        "host": "127.0.0.1",
-        "port": 3308,
-        "database_name": "dbfox_ssl",
-        "username": "dbfox_readonly",
+        "host": required["DBFOX_MYSQL_SSL_HOST"],
+        "port": int(required["DBFOX_MYSQL_SSL_PORT"]),
+        "database_name": required["DBFOX_MYSQL_SSL_DATABASE"],
+        "username": required["DBFOX_MYSQL_SSL_USER"],
         "password_credential_id": password_credential_id,
         "ssl_enabled": False,
     }
@@ -47,15 +50,14 @@ def test_mysql_ssl_connection_e2e(monkeypatch) -> None:
     assert "无法建立数据库连接" in str(exc_info.value) or "Access denied" in str(exc_info.value)
 
     # 2. Verify CA-enabled connection establishes successfully, registers tables count, and marks user as readonly
-    ca_path = os.path.abspath(r"d:\Project\DBFox\dbfox-mysql-ssl-test\certs\ca.pem")
     config_ssl = {
-        "host": "127.0.0.1",
-        "port": 3308,
-        "database_name": "dbfox_ssl",
-        "username": "dbfox_readonly",
+        "host": required["DBFOX_MYSQL_SSL_HOST"],
+        "port": int(required["DBFOX_MYSQL_SSL_PORT"]),
+        "database_name": required["DBFOX_MYSQL_SSL_DATABASE"],
+        "username": required["DBFOX_MYSQL_SSL_USER"],
         "password_credential_id": password_credential_id,
         "ssl_enabled": True,
-        "ssl_ca_path": ca_path,
+        "ssl_ca_path": str(ca_path),
         "ssl_verify_identity": True,
     }
 

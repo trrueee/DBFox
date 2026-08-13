@@ -19,6 +19,7 @@ from engine.tools.runtime.base import BaseTool
 
 logger = logging.getLogger("dbfox.tools.runtime")
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
+_MAX_TOOL_INPUT_ERROR_CHARS: Final[int] = 1_024
 
 ToolFailureCode = Literal[
     "TOOL_INPUT_CONTRACT_FAILED",
@@ -117,7 +118,12 @@ class ToolRuntime:
                     latency_ms=int((time.perf_counter() - start) * 1_000),
                 )
         except ToolInputError as exc:
-            logger.info("%s rejected invalid input: %s", tool_name, exc.message)
+            safe_message = exc.message.strip()
+            if len(safe_message) > _MAX_TOOL_INPUT_ERROR_CHARS:
+                safe_message = safe_message[:_MAX_TOOL_INPUT_ERROR_CHARS] + "…"
+            if not safe_message:
+                safe_message = fixed_error_detail(exc.code)["message"]
+            logger.info("%s rejected invalid input code=%s", tool_name, exc.code)
             return ToolResult(
                 name=tool_name,
                 status="failed",
@@ -125,9 +131,9 @@ class ToolRuntime:
                 output={
                     "status": "failed",
                     "error_code": exc.code,
-                    "safe_message": exc.message,
+                    "safe_message": safe_message,
                 },
-                error=exc.message,
+                error=safe_message,
                 error_code=exc.code,
                 latency_ms=int((time.perf_counter() - start) * 1000),
             )

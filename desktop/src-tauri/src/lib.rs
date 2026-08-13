@@ -577,7 +577,17 @@ impl EngineSupervisor {
         if self.state != EngineStartupState::Ready {
             return None;
         }
-        let status = self.child.as_mut()?.try_wait().ok()??;
+        let observation = self.child.as_mut()?.try_wait();
+        let message = match observation {
+            Ok(Some(status)) => format!("Python engine exited unexpectedly: {status}"),
+            Ok(None) => return None,
+            Err(error) => {
+                if let Some(child) = self.child.take() {
+                    child.stop();
+                }
+                format!("Python engine exit monitoring failed: {error}")
+            }
+        };
         self.child.take();
         self.port = None;
         self.token.clear();
@@ -586,7 +596,6 @@ impl EngineSupervisor {
         self.capabilities.clear();
         self.state = EngineStartupState::Restarting;
         self.stage = Some("restarting".to_string());
-        let message = format!("Python engine exited unexpectedly: {status}");
         self.error = Some(message.clone());
         Some(message)
     }
@@ -1081,6 +1090,36 @@ mod tests {
         assert!(restart_allowed(2));
         assert!(restart_allowed(3));
         assert!(!restart_allowed(4));
+    }
+
+    #[test]
+    fn exit_channel_failure_is_observable_and_invalidates_ready_config() {
+        let (child, sender) = EngineChild::test_running();
+        let mut supervisor = EngineSupervisor {
+            child: Some(child),
+            port: Some(18731),
+            token: "test-token".to_string(),
+            state: EngineStartupState::Ready,
+            error: None,
+            stage: Some("ready".to_string()),
+            generation: 1,
+            restart_count: 0,
+            protocol_version: Some(ENGINE_PROTOCOL_VERSION),
+            server_info: None,
+            capabilities: vec![],
+        };
+        sender
+            .send(Err("event channel disconnected".to_string()))
+            .expect("test channel should accept terminal error");
+
+        let message = supervisor
+            .observe_unexpected_exit()
+            .expect("monitor failure must be observable");
+
+        assert!(message.contains("exit monitoring failed"));
+        assert_eq!(supervisor.state, EngineStartupState::Restarting);
+        assert!(supervisor.engine_config().is_err());
+        assert!(supervisor.token.is_empty());
     }
 
     #[test]

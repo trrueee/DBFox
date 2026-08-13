@@ -7,11 +7,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
-from engine.backup import BackupError, _backup_path, _run_mysqldump, execute_restore
-from engine.main import LOCAL_SECURE_TOKEN, SAFE_DBFOX_ERROR_MESSAGE
+from engine.backup import BackupError, _backup_path, _run_mysqldump, create_backup, execute_restore
+from engine.main import LOCAL_SECURE_TOKEN
 from engine.models import DEFAULT_PROJECT_ID, BackupRecord, DataSource, Project, RestoreOperation
 
 
@@ -22,8 +22,8 @@ def _headers() -> dict[str, str]:
 def _assert_fixed_dbfox_error(response) -> None:
     assert response.status_code == 400
     problem = response.json()
-    assert problem["code"] == "DBFOX_ERROR"
-    assert problem["detail"] == SAFE_DBFOX_ERROR_MESSAGE
+    assert problem["code"] == FixedErrorCode.BACKUP_OPERATION_FAILED.value
+    assert problem["detail"] == fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED)
 
 
 def _runtime_dir(name: str) -> Path:
@@ -103,6 +103,37 @@ def test_create_list_and_precheck_backup_uses_private_relative_path(client, db_s
     assert precheck["ok"] is True
     assert precheck["restoreAvailable"] is True
     assert precheck["warnings"] == []
+
+
+def test_create_backup_releases_metadata_write_lock_before_native_dump(
+    db_session,
+    monkeypatch,
+) -> None:
+    runtime_dir = _runtime_dir("backup-short-transaction")
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))
+    datasource = _create_mysql_datasource(db_session)
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+
+    def dump_after_concurrent_metadata_write(_: DataSource, output_path: Path) -> None:
+        with factory() as concurrent_db:
+            concurrent_db.add(
+                Project(
+                    id="backup-concurrent-writer",
+                    name="Concurrent metadata writer",
+                )
+            )
+            concurrent_db.commit()
+        output_path.write_text("-- MySQL dump\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "engine.backup._run_mysqldump",
+        dump_after_concurrent_metadata_write,
+    )
+
+    record = create_backup(db_session, str(datasource.id), "short transaction")
+
+    assert record.status == "success"
+    assert db_session.get(Project, "backup-concurrent-writer") is not None
 
 
 def test_restore_endpoint_requires_explicit_generation_and_confirmation(

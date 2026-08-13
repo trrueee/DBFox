@@ -6,6 +6,7 @@ from engine.agent.approval import ApprovalConflict, ApprovalStatus
 from engine.agent.repositories.approval import ApprovalRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
+from engine.agent.run import SessionLeaseConflict
 from engine.agent.tool import ToolInvocationStatus
 from engine.models import AgentApproval, AgentRun, AgentSession, AgentSessionInput, AgentToolInvocation
 from engine.models import AgentObservationRecord
@@ -221,7 +222,13 @@ def test_expired_approval_is_durably_rejected_and_run_resumes(db_session, test_d
     sessions.release(lease=lease)
     db_session.commit()
 
-    recovery_lease = sessions.claim(session_id="session_expired_approval", owner="recovery")
+    stale_lease = sessions.claim(session_id="session_expired_approval", owner="recovery")
+    sessions.release(lease=stale_lease)
+    recovery_lease = sessions.claim(session_id="session_expired_approval", owner="replacement")
+    db_session.commit()
+    with pytest.raises(SessionLeaseConflict):
+        ApprovalRepository(db_session).expire_pending(lease=stale_lease)
+    db_session.rollback()
     expired = ApprovalRepository(db_session).expire_pending(lease=recovery_lease)
     db_session.commit()
 

@@ -22,6 +22,13 @@ def test_public_error_uses_only_fixed_catalog_entries() -> None:
     assert fixed_error_message(FixedErrorCode.SQL_EMPTY) == "SQL cannot be empty."
 
 
+def test_every_fixed_error_code_has_a_nonempty_catalog_message() -> None:
+    details = [fixed_error_detail(code) for code in FixedErrorCode]
+
+    assert {detail["code"] for detail in details} == {code.value for code in FixedErrorCode}
+    assert all(detail["message"].strip() for detail in details)
+
+
 def test_public_error_unknown_value_falls_back_without_rendering_input() -> None:
     sentinel = "public-error-secret-sentinel"
 

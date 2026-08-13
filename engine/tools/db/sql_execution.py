@@ -102,6 +102,7 @@ def sql_execute_readonly(
         redact=True,
         execution_id=execution_id,
         expected_connection_generation=expected_connection_generation,
+        execution_authority=execution_authority,
     )
 
     rows = result.get("rows") or []

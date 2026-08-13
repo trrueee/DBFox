@@ -67,6 +67,19 @@ def test_run_alembic_upgrade_creates_and_verifies_a_fresh_metadata_database(tmp_
         engine.dispose()
 
 
+def test_verify_metadata_database_requires_agent_recall_fts(tmp_path: Path) -> None:
+    metadata_url = _sqlite_url(tmp_path / "metadata.db")
+    run_alembic_upgrade(metadata_url)
+    engine = build_metadata_engine(metadata_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("DROP TABLE agent_message_fts"))
+        with pytest.raises(RuntimeError, match="DBFOX_METADATA_FTS_CONTRACT_MISSING"):
+            verify_metadata_database(metadata_url)
+    finally:
+        engine.dispose()
+
+
 def test_run_alembic_upgrade_propagates_migration_failure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

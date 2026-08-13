@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from engine.errors import DBFoxError
+from engine.errors import DBFoxError, ToolInputError
 from engine.tools.runtime.base import (
     BaseTool,
     ToolExecutionSpec,
@@ -251,6 +251,29 @@ def test_runtime_collapses_unregistered_domain_error_to_internal_error() -> None
         "safe_message": "The request could not be completed.",
     }
     assert "secret://" not in str(result.model_dump(mode="json"))
+
+
+def test_runtime_bounds_explicitly_public_tool_input_errors() -> None:
+    class InvalidInputTool(EchoTool):
+        name = "test_bounded_tool_input_error"
+
+        def run(self, _tool_input: EchoInput, _context: ToolRunContext) -> dict[str, Any]:
+            raise ToolInputError("x" * 10_000)
+
+    result = ToolRuntime(ToolRegistry().register(InvalidInputTool())).invoke(
+        tool_name="test_bounded_tool_input_error",
+        raw_input={"value": "x"},
+        request=None,
+        db=None,
+        idempotency_key="invocation-bounded-input-error",
+    )
+
+    assert result.status == "failed"
+    assert result.error_code == "TOOL_INPUT_ERROR"
+    assert result.error is not None
+    assert len(result.error) == 1_025
+    assert result.error.endswith("…")
+    assert result.output["safe_message"] == result.error
 
 
 def test_validation_error_raised_inside_tool_is_an_execution_failure():

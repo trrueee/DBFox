@@ -161,12 +161,30 @@ function reduceLiveDelta(
     if (
       !cursor
       || delta.revision !== cursor.revision + 1
-      || delta.offset !== cursor.offset
-      || codePointLength(current) !== delta.offset
     ) {
       return state;
     }
-    value = current + delta.content;
+    if (delta.offset === cursor.offset && codePointLength(current) === delta.offset) {
+      value = current + delta.content;
+    } else {
+      const currentPoints = [...current];
+      const deltaPoints = [...delta.content];
+      const covered = currentPoints.slice(
+        delta.offset,
+        delta.offset + deltaPoints.length,
+      );
+      if (
+        delta.offset !== cursor.offset
+        || covered.length !== deltaPoints.length
+        || covered.some((point, index) => point !== deltaPoints[index])
+      ) {
+        return state;
+      }
+      // A durable committed snapshot can overtake an ephemeral delta in the
+      // browser queue.  Consume that exact sequential delta without appending
+      // it twice, then let later deltas continue from the authoritative text.
+      value = current;
+    }
   }
 
   const patched = patchDeltaField(item, delta.field, value);

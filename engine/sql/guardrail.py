@@ -9,8 +9,8 @@ from sqlglot import exp
 from engine.sql.parser import normalize_dialect as _sqlglot_dialect, parse_sql
 from engine.sql.readonly_query import (
     READONLY_FORBIDDEN_TYPES,
-    READONLY_SIDE_EFFECT_FUNCTIONS,
     is_readonly_query,
+    readonly_side_effect_functions,
 )
 from engine.sql.result_limits import MAX_ROWS
 
@@ -52,7 +52,7 @@ DANGEROUS_FUNCTIONS = {
     "sleep", "benchmark", "load_file", "database", "user", "current_user", "version",
     "pg_sleep", "pg_read_file", "pg_write_file", "lo_import", "lo_export", "query_to_xml",
     "sys_eval", "sys_exec", "xp_cmdshell"
-} | READONLY_SIDE_EFFECT_FUNCTIONS
+}
 
 # sqlglot normalizes some MySQL functions into dedicated expression types, so
 # string-based function-name checks are not enough for these security rules.
@@ -302,14 +302,16 @@ def _parse_guarded_expression(
         )
 
 
-def _ast_rejection_checks(expression: exp.Expression) -> list[GuardrailCheck]:
+def _ast_rejection_checks(
+    expression: exp.Expression, dialect: str
+) -> list[GuardrailCheck]:
     checks: list[GuardrailCheck] = []
     if (
         not isinstance(
             expression,
             (exp.Select, exp.Union, exp.Intersect, exp.Except, exp.Subquery, exp.With),
         )
-        or not is_readonly_query(expression)
+        or not is_readonly_query(expression, dialect)
     ):
         checks.append({
             "rule": "select_only",
@@ -386,7 +388,9 @@ def _ast_rejection_checks(expression: exp.Expression) -> list[GuardrailCheck]:
             })
         elif isinstance(node, (exp.Anonymous, exp.Func)):
             func_name = node.name.lower() if node.name else ""
-            if func_name in DANGEROUS_FUNCTIONS:
+            if func_name in (
+                DANGEROUS_FUNCTIONS | readonly_side_effect_functions(dialect)
+            ):
                 checks.append({
                     "rule": "dangerous_function",
                     "level": "reject",
@@ -541,7 +545,7 @@ def _evaluate_guardrail(
             message="拒绝执行：SQL 安全检查未能完成。",
         ), None
 
-    checks.extend(_ast_rejection_checks(expression))
+    checks.extend(_ast_rejection_checks(expression, dialect))
     if any(check["level"] == "reject" for check in checks):
         return _reject(
             sql_str,

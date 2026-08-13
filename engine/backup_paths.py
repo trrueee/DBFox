@@ -18,7 +18,11 @@ _BACKUP_ROOT_NAME = "backups"
 
 
 class BackupError(DBFoxError):
-    def __init__(self, message: str, code: str = "BACKUP_FAILED") -> None:
+    def __init__(
+        self,
+        message: str,
+        code: str = FixedErrorCode.BACKUP_OPERATION_FAILED.value,
+    ) -> None:
         super().__init__(message, code=code)
 
 

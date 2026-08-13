@@ -134,6 +134,7 @@ class QuestionRepository:
     ) -> list[QuestionRequest]:
         """Terminalize expired clarification requests in a claimed Session."""
         begin_agent_write(self.session)
+        self.sessions.require_lease(lease=lease)
         current_time = now or _utcnow()
         rows = self.session.execute(
             select(AgentQuestionRequest).where(

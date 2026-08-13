@@ -55,7 +55,7 @@ class Terminalizer:
         disposition: CompletionDisposition,
         limitation_codes: list[CompletionLimitationCode],
         evidence_artifact_ids: list[str],
-    ) -> None:
+    ) -> bool:
         with self.session_factory() as db:
             partial = disposition is CompletionDisposition.BOUNDED_PARTIAL
             artifacts = ArtifactRepository(db).list_for_run(run_id)
@@ -159,10 +159,13 @@ class Terminalizer:
                 artifacts=artifacts,
                 selection_suggestion=suggestion,
             )
-            self.complete_in_session(
+            completed = self.complete_in_session(
                 db,
                 lease,
                 response,
+                terminal_turn_id=(
+                    result.turn_id if result.completed_answer_messages else None
+                ),
                 terminal_output_index=(
                     result.completed_answer_messages[-1].output_index
                     if result.completed_answer_messages
@@ -183,6 +186,7 @@ class Terminalizer:
                 },
             )
             db.commit()
+            return completed
 
     @staticmethod
     def complete_in_session(
@@ -190,27 +194,33 @@ class Terminalizer:
         lease: SessionLease,
         response: ComposedResponse,
         *,
+        terminal_turn_id: str | None = None,
         terminal_output_index: int | None = None,
         plan_status: PlanStatus = PlanStatus.COMPLETED,
         memory_delta: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> bool:
         """Atomically settle the Plan and persist the canonical terminal response."""
 
         if plan_status not in {PlanStatus.COMPLETED, PlanStatus.PARTIAL}:
             raise ValueError(
                 "Successful Run terminalization requires a completed or partial Plan"
             )
+        runs = RunRepository(db)
+        if runs.has_pending_steering_inputs(lease=lease, run_id=response.run_id):
+            return False
         PlanRepository(db).terminalize(
             lease=lease,
             run_id=response.run_id,
             status=plan_status,
         )
-        RunRepository(db).complete(
+        runs.complete(
             lease=lease,
             response=response,
+            terminal_turn_id=terminal_turn_id,
             terminal_output_index=terminal_output_index,
             memory_delta=memory_delta or {},
         )
+        return True
 
     @staticmethod
     def cancel_in_session(db: Session, lease: SessionLease, run_id: str) -> None:
@@ -256,6 +266,10 @@ class Terminalizer:
     ) -> None:
         """Atomically settle every durable child before failing a Run."""
 
+        runs = RunRepository(db)
+        if runs.cancellation_requested(lease=lease, run_id=run_id):
+            Terminalizer.cancel_in_session(db, lease, run_id)
+            return
         public_error = fixed_error_detail(code)
         ApprovalRepository(db).cancel_pending_for_run(
             lease=lease,
@@ -269,7 +283,6 @@ class Terminalizer:
             lease=lease,
             run_id=run_id,
         )
-        runs = RunRepository(db)
         runs.fail_active_turns(
             lease=lease,
             run_id=run_id,

@@ -183,6 +183,8 @@ class SessionRepository:
             return self._admission_from_input(existing)
 
         aggregate = self._session_for_update(session_id)
+        if aggregate.deleted_at is not None:
+            raise ValueError("Cannot admit input to a deleted Session")
         if str(aggregate.datasource_id) != datasource_id:
             raise ValueError("Session datasource does not match admitted input")
 
@@ -399,6 +401,11 @@ class SessionRepository:
         self.session.flush()
         return lease.model_copy(update={"expires_at": _aware(aggregate.lease_expires_at)})
 
+    def require_lease(self, *, lease: SessionLease) -> None:
+        """Fence a repository operation that acts across the claimed Session."""
+        aggregate = self._session_for_update(lease.session_id)
+        self._require_lease(aggregate, lease)
+
     def release(self, *, lease: SessionLease) -> None:
         aggregate = self._session_for_update(lease.session_id)
         self._require_lease(aggregate, lease)
@@ -426,7 +433,7 @@ class SessionRepository:
     def promote_next_input(self, *, lease: SessionLease) -> str | None:
         aggregate = self._session_for_update(lease.session_id)
         self._require_lease(aggregate, lease)
-        admitted = self.session.execute(
+        admitted_rows = self.session.execute(
             select(AgentSessionInput)
             .where(
                 AgentSessionInput.session_id == lease.session_id,
@@ -434,28 +441,39 @@ class SessionRepository:
             )
             .order_by(AgentSessionInput.sequence)
             .with_for_update()
-        ).scalars().first()
-        if admitted is None:
-            return None
-        run = self.session.get(AgentRun, admitted.run_id)
-        if run is None:
-            raise RuntimeError("Admitted SessionInput has no Run")
-        now = _utcnow()
-        admitted.status = SessionInputStatus.PROMOTED.value
-        run.status = RunStatus.RUNNING.value
-        run.version = int(run.version or 0) + 1
-        run.lease_token = lease.token
-        run.started_at = now
-        run.updated_at = now
-        self.events.append_locked(
-            aggregate,
-            RuntimeEventType.RUN_UPDATED,
-            run_id=str(run.id),
-            payload={"run": project_run(run)},
-            now=now,
-        )
+        ).scalars().all()
+        for admitted in admitted_rows:
+            run = self.session.get(AgentRun, admitted.run_id)
+            if run is None:
+                raise RuntimeError("Admitted SessionInput has no Run")
+            now = _utcnow()
+            if RunStatus(str(run.status)) in TERMINAL_RUN_STATUSES:
+                # A steer belongs to the Run that accepted it. If that Run was
+                # terminalized by a concurrent failure/cancellation, the input
+                # must not revive it. Successful terminalization separately
+                # checks for pending steer inputs before committing.
+                admitted.status = SessionInputStatus.CANCELLED.value
+                admitted.consumed_at = now
+                continue
+            if run.status != RunStatus.QUEUED.value:
+                continue
+            admitted.status = SessionInputStatus.PROMOTED.value
+            run.status = RunStatus.RUNNING.value
+            run.version = int(run.version or 0) + 1
+            run.lease_token = lease.token
+            run.started_at = now
+            run.updated_at = now
+            self.events.append_locked(
+                aggregate,
+                RuntimeEventType.RUN_UPDATED,
+                run_id=str(run.id),
+                payload={"run": project_run(run)},
+                now=now,
+            )
+            self.session.flush()
+            return str(run.id)
         self.session.flush()
-        return str(run.id)
+        return None
 
     def start_turn(
         self,

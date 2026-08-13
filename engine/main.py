@@ -16,6 +16,7 @@ import secrets
 import sys
 from contextlib import asynccontextmanager
 from typing import Any
+from urllib.parse import urlsplit
 
 from engine import __version__
 from engine.runtime_env import load_runtime_env
@@ -36,13 +37,13 @@ from engine.db import SessionLocal, initialize_metadata_database
 from engine.agent.coordinator import SessionCoordinator
 from engine.agent.loop import RunLoop
 from engine.app.request_limits import AgentInputRequestBodyLimitMiddleware
+from engine.app.safe_errors import FixedErrorCode, fixed_error_detail
 from engine.diagnostics.logs import configure_diagnostic_logging
 from engine.errors import BackupSourceMismatchError, DBFoxError, NotFoundError
 from engine.engine_runtime.credentials import RuntimeCredentialPolicy
 from engine.problem_details import REQUEST_ID_HEADER, new_request_id, problem_response
 from engine.schemas import ProblemDetails
 from engine.runtime_paths import private_runtime_file
-from engine.security.credential_vault import CredentialVaultUnavailableError
 
 # 创建当前模块的日志记录器
 logger = logging.getLogger("dbfox.main")
@@ -60,19 +61,6 @@ def _emit_startup_stage(stage: str) -> None:
 
 
 DIAGNOSTIC_LOG_FILE = configure_diagnostic_logging()
-SAFE_DBFOX_ERROR_MESSAGE = "Request could not be completed."
-_SAFE_DBFOX_ERROR_CODES: tuple[tuple[type[DBFoxError], str], ...] = (
-    (CredentialVaultUnavailableError, "CREDENTIAL_VAULT_UNAVAILABLE"),
-    (BackupSourceMismatchError, "BACKUP_SOURCE_MISMATCH"),
-)
-
-
-def _safe_dbfox_error_code(exc: DBFoxError) -> str:
-    """Map only static, type-owned error codes; never trust instance values."""
-    for error_type, code in _SAFE_DBFOX_ERROR_CODES:
-        if isinstance(exc, error_type):
-            return code
-    return "DBFOX_ERROR"
 
 TOKEN_FILE = private_runtime_file("auth", ".local_token")
 is_frozen = getattr(sys, "frozen", False)
@@ -171,6 +159,22 @@ app = FastAPI(
 
 app.add_middleware(AgentInputRequestBodyLimitMiddleware)
 
+
+def _is_allowed_local_referer(value: str) -> bool:
+    """Validate a frozen WebView Referer structurally, not by string prefix."""
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    if parsed.username is not None or parsed.password is not None:
+        return False
+    if parsed.scheme == "tauri":
+        return parsed.hostname == "localhost" and parsed.port is None
+    return (
+        parsed.scheme in {"http", "https"}
+        and parsed.hostname in {"127.0.0.1", "localhost", "tauri.localhost"}
+    )
+
 @app.middleware("http")
 async def verify_local_access_token(request: Request, call_next):  # type: ignore[no-untyped-def]
     """Enforce local token and trusted-origin policy."""
@@ -184,19 +188,7 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
             # 某些 WebView 请求可能不发送 Origin 头（如 redirect、no-cors），
             # 此时检查 Referer 是否为已知合法来源，避免误杀合理请求。
             referer = request.headers.get("referer", "")
-            is_local_referer = any(
-                referer.startswith(prefix)
-                for prefix in (
-                    "http://127.0.0.1",
-                    "http://localhost",
-                    "https://127.0.0.1",
-                    "https://localhost",
-                    "tauri://localhost",
-                    "http://tauri.localhost",
-                    "https://tauri.localhost",
-                )
-            )
-            if not is_local_referer:
+            if not _is_allowed_local_referer(referer):
                 logger.warning(
                     "拦截到缺失 Origin 且 Referer 非本地的请求，Referer: %s", referer
                 )
@@ -322,10 +314,12 @@ async def request_validation_error_handler(request: Request, exc: RequestValidat
 
 @app.exception_handler(DBFoxError)
 async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse:
-    """Map trusted domain error classes to fixed public responses."""
+    """Map domain errors through the single fixed public-error catalog."""
     # DBFoxError instances may wrap arbitrary provider or driver exceptions,
-    # so neither their message nor caller-supplied code is trusted here.
-    code = _safe_dbfox_error_code(exc)
+    # so neither their message nor an unregistered caller-supplied code is
+    # trusted here.  ``fixed_error_detail`` fails closed to INTERNAL_ERROR.
+    detail = fixed_error_detail(exc.code)
+    code = detail["code"]
     logger.warning(
         "DBFoxError (%s) at %s %s code=%s",
         type(exc).__name__,
@@ -333,18 +327,16 @@ async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse
         request.url.path,
         code,
     )
-    status = (
-        404
-        if isinstance(exc, NotFoundError)
-        else 409
-        if isinstance(exc, BackupSourceMismatchError)
-        else 400
-    )
+    status = 500 if code == FixedErrorCode.INTERNAL_ERROR.value else 400
+    if isinstance(exc, NotFoundError) and status != 500:
+        status = 404
+    elif isinstance(exc, BackupSourceMismatchError):
+        status = 409
     return problem_response(
         request,
         status=status,
         code=code,
-        detail=SAFE_DBFOX_ERROR_MESSAGE,
+        detail=detail["message"],
     )
 
 

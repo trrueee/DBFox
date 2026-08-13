@@ -297,7 +297,7 @@ class RunLoop:
                     self._fail(lease, run_id, "AGENT_INCOMPLETE", decision.reason)
                     return
                 partial = decision.kind is CompletionKind.PARTIAL
-                self._complete(
+                if self._complete(
                     lease,
                     run_id,
                     result,
@@ -312,8 +312,9 @@ class RunLoop:
                         else []
                     ),
                     evidence_artifact_ids=decision.evidence_artifact_ids,
-                )
-                return
+                ):
+                    return
+                continue
             if not self._complete_for_limit(
                 lease,
                 run_id,
@@ -437,6 +438,7 @@ class RunLoop:
                     ),
                 )
             )
+            result = result.model_copy(update={"turn_id": prepared.turn_id})
         except (LlmConfigurationError, LlmEndpointPolicyError) as exc:
             detail = fixed_error_detail(exc.code)
             with self.session_factory() as db:
@@ -823,8 +825,8 @@ class RunLoop:
         disposition: CompletionDisposition,
         limitation_codes: list[CompletionLimitationCode],
         evidence_artifact_ids: list[str],
-    ) -> None:
-        self.terminalizer.complete(
+    ) -> bool:
+        return self.terminalizer.complete(
             lease,
             run_id,
             result,
@@ -872,7 +874,7 @@ class RunLoop:
         if not reached_limit:
             return False
         if decision.kind is CompletionKind.PARTIAL:
-            self._complete(
+            return self._complete(
                 lease,
                 run_id,
                 result,
@@ -907,7 +909,7 @@ class RunLoop:
             )
         if decision.kind is not CompletionKind.PARTIAL:
             return False
-        self._complete(
+        return self._complete(
             lease,
             run_id,
             result,
@@ -915,7 +917,6 @@ class RunLoop:
             limitation_codes=[code],
             evidence_artifact_ids=decision.evidence_artifact_ids,
         )
-        return True
 
     def _fail(self, lease: SessionLease, run_id: str, code: str, message: str) -> None:
         self.terminalizer.fail(lease, run_id, code, message)

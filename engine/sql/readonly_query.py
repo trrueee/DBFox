@@ -45,27 +45,50 @@ READONLY_FORBIDDEN_TYPES = (
 # session state.  Keep the list at the canonical read-only boundary so every
 # consumer (Guardrail, EXPLAIN, safety validation, and SQL-backed views) makes
 # the same decision.
-READONLY_SIDE_EFFECT_FUNCTIONS = frozenset({
-    # PostgreSQL sequence state.  nextval/setval changes are not rolled back.
-    "nextval",
-    "setval",
-    # PostgreSQL session/transaction advisory-lock state.
-    "pg_advisory_lock",
-    "pg_advisory_lock_shared",
-    "pg_advisory_xact_lock",
-    "pg_advisory_xact_lock_shared",
-    "pg_try_advisory_lock",
-    "pg_try_advisory_lock_shared",
-    "pg_try_advisory_xact_lock",
-    "pg_try_advisory_xact_lock_shared",
-    "pg_advisory_unlock",
-    "pg_advisory_unlock_shared",
-    "pg_advisory_unlock_all",
-    # MySQL user-level lock state.
-    "get_lock",
-    "release_lock",
-    "release_all_locks",
-})
+READONLY_SIDE_EFFECT_FUNCTIONS_BY_DIALECT = {
+    "postgres": frozenset({
+        # Sequence state. nextval/setval changes are not rolled back.
+        "nextval",
+        "setval",
+        # Session/transaction advisory-lock state.
+        "pg_advisory_lock",
+        "pg_advisory_lock_shared",
+        "pg_advisory_xact_lock",
+        "pg_advisory_xact_lock_shared",
+        "pg_try_advisory_lock",
+        "pg_try_advisory_lock_shared",
+        "pg_try_advisory_xact_lock",
+        "pg_try_advisory_xact_lock_shared",
+        "pg_advisory_unlock",
+        "pg_advisory_unlock_shared",
+        "pg_advisory_unlock_all",
+        # Server control, server-file access and extension-backed remote writes.
+        "pg_read_binary_file",
+        "pg_terminate_backend",
+        "pg_cancel_backend",
+        "pg_reload_conf",
+        "dblink_exec",
+    }),
+    "mysql": frozenset({
+        # MySQL user-level lock state.
+        "get_lock",
+        "release_lock",
+        "release_all_locks",
+    }),
+}
+
+_ALL_READONLY_SIDE_EFFECT_FUNCTIONS = frozenset().union(
+    *READONLY_SIDE_EFFECT_FUNCTIONS_BY_DIALECT.values()
+)
+
+
+def readonly_side_effect_functions(dialect: str | None) -> frozenset[str]:
+    normalized = str(dialect or "").strip().lower()
+    if normalized == "postgresql":
+        normalized = "postgres"
+    if not normalized:
+        return _ALL_READONLY_SIDE_EFFECT_FUNCTIONS
+    return READONLY_SIDE_EFFECT_FUNCTIONS_BY_DIALECT.get(normalized, frozenset())
 
 
 def _function_name(node: exp.Expression) -> str:
@@ -74,7 +97,7 @@ def _function_name(node: exp.Expression) -> str:
     return str(node.name or "").strip().lower()
 
 
-def is_readonly_query(node: exp.Expression) -> bool:
+def is_readonly_query(node: exp.Expression, dialect: str | None = None) -> bool:
     """Return whether the complete AST is a side-effect-free query."""
 
     if not isinstance(node, exp.Query):
@@ -82,7 +105,7 @@ def is_readonly_query(node: exp.Expression) -> bool:
     for descendant in node.walk():
         if isinstance(descendant, READONLY_FORBIDDEN_TYPES):
             return False
-        if _function_name(descendant) in READONLY_SIDE_EFFECT_FUNCTIONS:
+        if _function_name(descendant) in readonly_side_effect_functions(dialect):
             return False
     return True
 
@@ -108,7 +131,7 @@ def parse_single_readonly_query(sql: str, dialect: str) -> exp.Query:
             "SQL query must contain exactly one statement.",
         )
     expression = expressions[0]
-    if not is_readonly_query(expression):
+    if not is_readonly_query(expression, dialect):
         raise ReadonlyQueryError(
             ReadonlyQueryErrorReason.NOT_READONLY,
             "SQL query must be a side-effect-free query statement.",

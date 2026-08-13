@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from engine.app.safe_errors import FixedErrorCode
 from engine.api.datasources.common import schema_column_to_dict, schema_table_to_dict
 from engine.db import get_db
 from engine.environment.er_diagram import build_er_diagram
@@ -100,7 +101,10 @@ def api_sync_schema(
     except Exception as exc:
         _rollback_sync_failure(db)
         logger.warning("Schema synchronization failed (%s)", type(exc).__name__)
-        raise DBFoxError(code="SYNC_FAILED", message=SCHEMA_SYNC_FAILED_MESSAGE) from None
+        raise DBFoxError(
+            code=FixedErrorCode.SCHEMA_SYNC_FAILED.value,
+            message=SCHEMA_SYNC_FAILED_MESSAGE,
+        ) from None
 
 
 @router.get("/schema/tables", response_model=list[SchemaTableResponse])
@@ -117,7 +121,7 @@ def api_list_tables(
             logger.warning("Auto schema sync before listing tables failed for %s", datasource_id)
             raise DBFoxError(
                 message=SCHEMA_SYNC_FAILED_MESSAGE,
-                code="SYNC_FAILED",
+                code=FixedErrorCode.SCHEMA_SYNC_FAILED.value,
             ) from None
         else:
             tables = load_schema_tables(db, datasource_id)

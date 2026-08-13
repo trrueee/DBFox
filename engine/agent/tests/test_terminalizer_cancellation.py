@@ -389,3 +389,31 @@ def test_failure_terminalizes_pending_children_in_one_transaction(
     assert db_session.get(AgentApproval, approval.id).status == ApprovalStatus.CANCELLED.value
     assert db_session.get(AgentToolInvocation, invocation.id).status == ToolInvocationStatus.CANCELLED.value
     assert db_session.query(AgentTaskPlanRecord).filter_by(run_id=admission.run_id).one().status == "failed"
+
+
+def test_failure_terminalization_preserves_a_concurrent_cancel_request(
+    db_session, test_datasource
+) -> None:
+    _, admission, lease, turn = _start_run(
+        db_session,
+        test_datasource,
+        session_id="session_cancel_wins_failure",
+    )
+    RunRepository(db_session).request_cancel(run_id=admission.run_id)
+    db_session.commit()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+
+    Terminalizer(session_factory=factory).fail(
+        lease,
+        admission.run_id,
+        "AGENT_RUNTIME_ERROR",
+        "分析未能完成，请重试。",
+    )
+    db_session.expire_all()
+
+    run = db_session.get(AgentRun, admission.run_id)
+    stored_turn = db_session.get(AgentTurn, turn.id)
+    assert run is not None and run.status == "cancelled"
+    assert run.error_code is None
+    assert stored_turn is not None and stored_turn.status == "cancelled"
+    assert stored_turn.termination == TurnTermination.CANCELLED.value

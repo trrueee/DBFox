@@ -82,6 +82,7 @@ class TurnAssistantMessage(BaseModel):
 class ModelTurnResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    turn_id: str | None = None
     messages: list[TurnAssistantMessage] = Field(default_factory=list)
     reasoning_summary: str = ""
     tool_calls: list[ModelToolCall] = Field(default_factory=list)

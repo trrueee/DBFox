@@ -90,6 +90,32 @@ def test_frozen_engine_allows_tauri_localhost_origins(monkeypatch) -> None:
             assert response.headers.get("access-control-allow-origin") == origin
 
 
+def test_frozen_engine_parses_referer_host_instead_of_accepting_prefix_spoof(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(main_module, "is_frozen", True)
+
+    with TestClient(app) as client:
+        accepted = client.get(
+            "/api/v1/health",
+            headers={
+                "Referer": "http://localhost:1420/workspace",
+                "X-Local-Token": LOCAL_SECURE_TOKEN,
+            },
+        )
+        rejected = client.get(
+            "/api/v1/health",
+            headers={
+                "Referer": "http://localhost.attacker.invalid/workspace",
+                "X-Local-Token": LOCAL_SECURE_TOKEN,
+            },
+        )
+
+    assert accepted.status_code != 403
+    assert rejected.status_code == 403
+    assert rejected.json()["code"] == "FORBIDDEN_ORIGIN"
+
+
 def test_frozen_health_uses_the_same_origin_and_token_policy(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "is_frozen", True)
 

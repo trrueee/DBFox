@@ -132,8 +132,35 @@ class ToolDispatcher:
         materialization: ToolMaterialization,
         control: LeaseAwareRunControl,
     ) -> ToolDispatchResult:
-        materialization.require(call.name)
-        registered_function = self.registry.require(call.name)
+        try:
+            materialization.require(call.name)
+        except KeyError:
+            return self._reject_unavailable_call(
+                lease=lease,
+                run_id=run_id,
+                turn_id=turn_id,
+                call=call,
+                materialization=materialization,
+                error_code="UNKNOWN_TOOL",
+                summary=(
+                    "The requested tool is not available in this Turn. Use only a "
+                    "tool from the supplied function definitions."
+                ),
+            )
+        registered_function = self.registry.get(call.name)
+        if registered_function is None:
+            return self._reject_unavailable_call(
+                lease=lease,
+                run_id=run_id,
+                turn_id=turn_id,
+                call=call,
+                materialization=materialization,
+                error_code="TOOL_VERSION_CHANGED",
+                summary=(
+                    "The frozen tool implementation is no longer installed. Plan a "
+                    "new call using the currently supplied function definitions."
+                ),
+            )
         with self.session_factory() as db:
             run = RunRepository(db).get(run_id)
             state = RunWorkingStateAssembler(
@@ -251,6 +278,31 @@ class ToolDispatcher:
             ToolDispatchOutcome.SETTLED,
             provider_output=provider_output,
         )
+
+    def _reject_unavailable_call(
+        self,
+        *,
+        lease: SessionLease,
+        run_id: str,
+        turn_id: str,
+        call: ModelToolCall,
+        materialization: ToolMaterialization,
+        error_code: str,
+        summary: str,
+    ) -> ToolDispatchResult:
+        with self.session_factory() as db:
+            observation = ToolInvocationRepository(db).reject_unmaterialized(
+                lease=lease,
+                run_id=run_id,
+                turn_id=turn_id,
+                provider_call_id=call.id,
+                tool_name=call.name,
+                materialization=materialization,
+                error_code=error_code,
+                model_visible_summary=summary,
+            )
+            db.commit()
+        return self._settled_result(call.id, observation)
 
     def execute_requested(
         self,

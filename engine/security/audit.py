@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from itertools import count
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -19,6 +20,8 @@ AUDIT_RETENTION_DAYS = 90
 AUDIT_MAX_RECORDS = 20_000
 AUDIT_DIAGNOSTIC_WINDOW_DAYS = 7
 AUDIT_DIAGNOSTIC_MAX_RECORDS = 500
+AUDIT_RETENTION_MAINTENANCE_INTERVAL = 256
+_audit_record_sequence = count(1)
 _NORMALIZED_SECRET_KEYS = frozenset({
     "password",
     "secret",
@@ -71,6 +74,12 @@ class SecurityAuditService:
             details_json=canonical_dumps(sanitized),
         )
         self.session.add(record)
+        # Startup remains the first repair boundary.  During a long-running
+        # desktop process, amortize the same indexed retention operation across
+        # audit writes so the store cannot grow without bound until restart.
+        if next(_audit_record_sequence) % AUDIT_RETENTION_MAINTENANCE_INTERVAL == 0:
+            self.session.flush()
+            self.enforce_retention()
         return record
 
     def enforce_retention(

@@ -190,7 +190,7 @@ def test_list_tables_reports_auto_sync_failure(client, db_session, monkeypatch):
 
     assert resp.status_code == 400, resp.json()
     problem = resp.json()
-    assert problem["code"] == "DBFOX_ERROR"
+    assert problem["code"] == "SCHEMA_SYNC_FAILED"
     assert "secret" not in problem["detail"]
     assert "mysql://root" not in problem["detail"]
 
@@ -258,7 +258,7 @@ def test_console_execute_response_is_artifact_backed(client, test_datasource):
 
 @pytest.mark.parametrize("endpoint,payload,expected_code", [
     ("/api/v1/agent/console/execute", {"datasourceId": "non-existent-ds", "sql": "SELECT 1"}, "DATASOURCE_NOT_FOUND"),
-    ("/api/v1/datasources/non-existent/health", None, "DBFOX_ERROR"),
+    ("/api/v1/datasources/non-existent/health", None, "NOT_FOUND"),
 ])
 def test_error_response_is_problem_details(client, test_datasource, endpoint, payload, expected_code):
     if payload is not None:

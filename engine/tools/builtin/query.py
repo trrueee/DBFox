@@ -30,9 +30,14 @@ from engine.tools.runtime import (
     ToolSemanticSpec,
 )
 from engine.tools.runtime.observation import (
+    MODEL_RESULT_CELL_CHARS,
+    MODEL_RESULT_WINDOW_BYTES,
+    MODEL_RESULT_WINDOW_COLUMNS,
+    MODEL_RESULT_WINDOW_ROWS,
     bounded_tabular_provider_payload,
     safe_observation_facts,
 )
+from engine.sql.row_serializer import serialize_rows
 
 
 def _result_observation(
@@ -302,17 +307,40 @@ class SqlExecuteReadonlyTool(BaseTool[SqlExecuteReadonlyInput, QueryResultOutput
             audit=raw.get("audit") or {},
             latency_ms=int(raw.get("latency_ms") or 0),
         )
+        result_draft = query_result_draft(
+            db,
+            request.datasource_id,
+            tool_input.validation_artifact_id,
+            request.datasource_generation,
+            output,
+        )
+        model_window = serialize_rows(
+            output.rows[:MODEL_RESULT_WINDOW_ROWS],
+            output.columns,
+            max_columns=MODEL_RESULT_WINDOW_COLUMNS,
+            max_cell_chars=MODEL_RESULT_CELL_CHARS,
+            max_response_bytes=MODEL_RESULT_WINDOW_BYTES,
+        )
+        bounded_output = output.model_copy(
+            update={
+                "columns": model_window.columns,
+                "column_types": output.column_types[: len(model_window.columns)],
+                "rows": model_window.rows,
+                # The durable Result Artifact and query-history payload are the
+                # source of truth. The immediate function result is only the
+                # bounded model window used by project_observation().
+                "safe_sql": "",
+                "explain_plan": None,
+                "warnings": [],
+                "audit": {
+                    "history_id": output.audit.get("history_id"),
+                    "execution_id": output.audit.get("execution_id"),
+                },
+            }
+        )
         return ToolOutcome(
-            output=output,
-            artifacts=(
-                query_result_draft(
-                    db,
-                    request.datasource_id,
-                    tool_input.validation_artifact_id,
-                    request.datasource_generation,
-                    output,
-                ),
-            ),
+            output=bounded_output,
+            artifacts=(result_draft,),
         )
 
     def project_observation(self, *, status, output, artifacts):

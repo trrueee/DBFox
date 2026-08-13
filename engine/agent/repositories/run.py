@@ -25,7 +25,7 @@ from engine.agent.run_item import (
     evidence_reference,
     project_run,
 )
-from engine.agent.session import SessionInputStatus, SessionLease
+from engine.agent.session import DeliveryMode, SessionInputStatus, SessionLease
 from engine.agent.turn import ModelTurnResult, TurnAssistantMessage, TurnTermination
 from engine.json_codec import JsonCodecError, canonical_dumps as _json, loads
 from engine.models import (
@@ -63,6 +63,25 @@ class RunRepository:
             RunStatus.CANCELLING.value,
             RunStatus.CANCELLED.value,
         }
+
+    def has_pending_steering_inputs(
+        self, *, lease: SessionLease, run_id: str
+    ) -> bool:
+        """Check the successful-terminalization barrier under the Run lock."""
+
+        begin_agent_write(self.session)
+        run = self.session.execute(
+            select(AgentRun).where(AgentRun.id == run_id).with_for_update()
+        ).scalar_one()
+        self._require_lease(run, lease)
+        pending = self.session.execute(
+            select(AgentSessionInput.id).where(
+                AgentSessionInput.run_id == run_id,
+                AgentSessionInput.delivery_mode == DeliveryMode.STEER.value,
+                AgentSessionInput.status == SessionInputStatus.ADMITTED.value,
+            ).limit(1)
+        ).scalar_one_or_none()
+        return pending is not None
 
     def request_cancel(self, *, run_id: str) -> AgentRun:
         begin_agent_write(self.session)
@@ -487,6 +506,7 @@ class RunRepository:
                 )
             )
         return ModelTurnResult(
+            turn_id=str(turn.id),
             messages=messages,
             reasoning_summary=str(turn.reasoning_summary or ""),
             termination=TurnTermination.COMPLETED,
@@ -554,6 +574,7 @@ class RunRepository:
         *,
         lease: SessionLease,
         response: ComposedResponse,
+        terminal_turn_id: str | None = None,
         terminal_output_index: int | None = None,
         memory_delta: dict[str, Any] | None = None,
     ) -> None:
@@ -598,9 +619,9 @@ class RunRepository:
         self._write_memory(aggregate, run, response, memory_delta or {})
         self.session.flush()
         terminal_item: MessageItem | None = None
-        if terminal_output_index is not None and run.current_turn_id:
+        if terminal_output_index is not None and terminal_turn_id:
             terminal_item_id = (
-                f"message:{run.id}:{run.current_turn_id}:{terminal_output_index}"
+                f"message:{run.id}:{terminal_turn_id}:{terminal_output_index}"
             )
             terminal_record = self.session.get(AgentRunItemRecord, terminal_item_id)
             if terminal_record is None:
@@ -632,7 +653,7 @@ class RunRepository:
             lease=lease,
             event_type=RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=str(run.id),
-            turn_id=str(run.current_turn_id) if run.current_turn_id else None,
+            turn_id=terminal_turn_id,
             payload={
                 "item": dump_run_item(
                     terminal_item

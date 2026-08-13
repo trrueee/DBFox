@@ -9,7 +9,15 @@ from pydantic import ValidationError
 
 import engine.api.agent_results as result_module
 from engine.api.agent_results import ResultPageRequest
-from engine.models import AgentArtifactRecord, AgentRun, AgentSession, DataSource, SchemaColumn, SchemaTable
+from engine.models import (
+    AgentArtifactRecord,
+    AgentRun,
+    AgentSession,
+    DataSource,
+    SchemaColumn,
+    SchemaTable,
+    SecurityAuditRecord,
+)
 from engine.sql.result_view.fingerprint import result_source_fingerprint
 from engine.sql.result_view.models import ResultFilter, ResultSort
 
@@ -246,6 +254,12 @@ def test_table_result_export_streams_schema_table_source(monkeypatch, db_session
     assert "LIKE '%paid%'" in executed_sql["sql"]
     assert "ORDER BY `amount` DESC" in executed_sql["sql"]
     assert "LIMIT" not in executed_sql["sql"].upper()
+    audit = db_session.query(SecurityAuditRecord).filter_by(
+        action="table.result.export",
+        resource_id="schema-table-page-orders",
+    ).one()
+    assert audit.outcome == "requested"
+    assert "paid" not in audit.details_json
 
 
 def test_table_result_page_returns_structured_datasource_not_found_error(db_session):

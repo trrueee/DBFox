@@ -20,6 +20,9 @@ from engine.agent.response import (
     ResponseComposer,
 )
 from engine.agent.run_item import RunItemStatus
+from engine.agent.session import DeliveryMode
+from engine.agent.terminalizer import Terminalizer
+from engine.agent.turn import ModelTurnResult, TurnAssistantMessage, TurnTermination
 from engine.models import (
     AgentEvidenceRecord,
     AgentMessage,
@@ -28,6 +31,62 @@ from engine.models import (
     AgentSession,
     AgentSessionMemory,
 )
+
+
+def test_successful_terminalization_yields_to_pending_steer(
+    db_session, test_datasource
+) -> None:
+    db_session.add(
+        AgentSession(
+            id="session_pending_steer",
+            datasource_id=str(test_datasource.id),
+            title="Pending steer",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session_pending_steer",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="先分析订单",
+        idempotency_key="pending-steer-start",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id="session_pending_steer", owner="worker")
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    sessions.admit(
+        session_id="session_pending_steer",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="只看华东",
+        idempotency_key="pending-steer-input",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+        delivery_mode=DeliveryMode.STEER,
+    )
+    response = ResponseComposer().compose(
+        session_id="session_pending_steer",
+        run_id=admission.run_id,
+        completion_disposition=CompletionDisposition.COMPLETE,
+        limitation_codes=[],
+        answer=AnswerCandidate(text="初步完成。"),
+        artifacts=[],
+        selection_suggestion=None,
+    )
+
+    assert Terminalizer.complete_in_session(db_session, lease, response) is False
+    db_session.commit()
+    db_session.expire_all()
+
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None and run.status == "running"
 
 
 def test_answer_evidence_memory_and_terminal_state_commit_together(
@@ -250,6 +309,114 @@ def test_terminal_transaction_rolls_back_as_a_unit(db_session, test_datasource):
     db_session.rollback()
     assert db_session.get(AgentRun, admission.run_id).status == "running"
     assert db_session.get(AgentMessage, admission.assistant_message_id).content == ""
+
+
+def test_terminal_response_uses_the_answer_candidates_own_turn(
+    db_session,
+    test_datasource,
+):
+    db_session.add(
+        AgentSession(
+            id="session_cross_turn_terminal",
+            datasource_id=str(test_datasource.id),
+            title="Cross-turn terminal",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session_cross_turn_terminal",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="保留早期答案",
+        idempotency_key="cross-turn-terminal",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id="session_cross_turn_terminal", owner="worker")
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    first_turn = sessions.start_turn(
+        lease=lease,
+        run_id=admission.run_id,
+        agent_definition_version="1",
+        prompt_version="1",
+        prompt_hash="prompt-1",
+        context_snapshot={},
+        context_hash="context-1",
+        tool_materialization={},
+        tool_materialization_hash="tools-1",
+        provider="test",
+        model_name="test",
+    )
+    runs = RunRepository(db_session)
+    runs.persist_turn_message(
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(first_turn.id),
+        output_index=0,
+        revision=1,
+        phase=None,
+        content="早期轮最终答案",
+        status=RunItemStatus.COMPLETED,
+    )
+    first_result = ModelTurnResult(
+        turn_id=str(first_turn.id),
+        messages=[
+            TurnAssistantMessage(
+                item_id="provider-message-1",
+                output_index=0,
+                phase=None,
+                status="completed",
+                text="早期轮最终答案",
+            )
+        ],
+        termination=TurnTermination.COMPLETED,
+    )
+    runs.settle_turn(lease=lease, turn_id=str(first_turn.id), result=first_result)
+    second_turn = sessions.start_turn(
+        lease=lease,
+        run_id=admission.run_id,
+        agent_definition_version="1",
+        prompt_version="1",
+        prompt_hash="prompt-2",
+        context_snapshot={},
+        context_hash="context-2",
+        tool_materialization={},
+        tool_materialization_hash="tools-2",
+        provider="test",
+        model_name="test",
+    )
+    assert str(second_turn.id) != str(first_turn.id)
+
+    response = ResponseComposer().compose(
+        session_id="session_cross_turn_terminal",
+        run_id=admission.run_id,
+        completion_disposition=CompletionDisposition.BOUNDED_PARTIAL,
+        limitation_codes=["TURN_BUDGET_REACHED"],
+        answer=AnswerCandidate(text="早期轮最终答案", evidence=[]),
+        artifacts=[],
+        selection_suggestion=None,
+    )
+    runs.complete(
+        lease=lease,
+        response=response,
+        terminal_turn_id=first_result.turn_id,
+        terminal_output_index=0,
+    )
+    db_session.commit()
+
+    record = db_session.get(
+        AgentRunItemRecord,
+        f"message:{admission.run_id}:{first_turn.id}:0",
+    )
+    assert record is not None
+    item = json.loads(str(record.item_json))
+    assert item["turn_id"] == str(first_turn.id)
+    assert item["payload"]["content"] == "早期轮最终答案"
+    assert db_session.get(AgentRun, admission.run_id).status == "completed"
 
 
 def test_interrupted_model_turn_is_closed_before_run_recovery(

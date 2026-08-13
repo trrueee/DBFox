@@ -1,5 +1,6 @@
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -115,6 +116,29 @@ def test_read_log_source_returns_only_tail_and_redacts(tmp_path: Path) -> None:
     assert source["exists"] is True
     assert source["content"] == "line 2 password=[REDACTED]\nline 3"
     assert "secret-password" not in source["content"]
+
+
+def test_clear_active_diagnostic_log_reopens_handler_without_sparse_gap(tmp_path: Path) -> None:
+    from engine.diagnostics.logs import clear_diagnostic_log_source
+
+    path = tmp_path / "active.log"
+    logger = logging.getLogger("dbfox.test.active-clear")
+    logger.propagate = True
+    root = logging.getLogger("dbfox")
+    handler = RotatingFileHandler(path, maxBytes=1024, backupCount=1, encoding="utf-8")
+    root.addHandler(handler)
+    try:
+        logger.warning("before-clear")
+        assert clear_diagnostic_log_source(path) is True
+        logger.warning("after-clear")
+        handler.flush()
+        content = path.read_bytes()
+        assert b"before-clear" not in content
+        assert b"after-clear" in content
+        assert b"\x00" not in content
+    finally:
+        root.removeHandler(handler)
+        handler.close()
 
 
 def test_diagnostic_log_paths_stay_under_the_private_runtime_root(

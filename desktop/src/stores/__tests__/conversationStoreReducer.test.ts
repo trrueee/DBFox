@@ -83,6 +83,47 @@ describe("conversationStoreReducer", () => {
     });
   });
 
+  it("advances across deltas already covered by a newer committed snapshot", () => {
+    const first = reduceStreamEvent(state(), {
+      kind: "delta",
+      delta: delta(1, 0, "你"),
+    });
+    const committed: RuntimeEventEnvelope = {
+      event_id: "event-committed-snapshot",
+      event_type: "run.item.updated",
+      event_version: 1,
+      session_id: "session-1",
+      run_id: "run-1",
+      turn_id: "turn-1",
+      sequence: 2,
+      timestamp: "2026-07-26T00:00:01Z",
+      payload: {
+        item: {
+          ...answer(),
+          revision: 2,
+          payload: { ...answer().payload, content: "你好" },
+        },
+      },
+    };
+    const snapshotted = reduceStreamEvent(first, { kind: "event", event: committed });
+
+    const covered = reduceStreamEvent(snapshotted, {
+      kind: "delta",
+      delta: delta(2, 1, "好"),
+    });
+    expect(answerText(covered)).toBe("你好");
+    expect(covered.liveFieldsById["run-1:message:run-1:turn-1:content"]).toEqual({
+      revision: 2,
+      offset: 2,
+    });
+
+    const continued = reduceStreamEvent(covered, {
+      kind: "delta",
+      delta: delta(3, 2, "！"),
+    });
+    expect(answerText(continued)).toBe("你好！");
+  });
+
   it("projects canonical run and item payloads and deduplicates by session cursor", () => {
     const completedRun = { ...run(), status: "completed" as const, version: 2 };
     const completedAnswer = {

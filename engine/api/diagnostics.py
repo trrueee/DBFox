@@ -7,6 +7,7 @@ from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.db import get_db
 from engine.diagnostics.logs import (
     DEFAULT_MAX_LINES,
+    clear_diagnostic_log_source,
     collect_diagnostic_logs,
     diagnostic_log_paths,
 )
@@ -51,12 +52,8 @@ def clear_diagnostic_logs() -> dict[str, object]:
     cleared: list[str] = []
     for name, path in diagnostic_log_paths():
         if path.exists():
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    f.truncate(0)
+            if clear_diagnostic_log_source(path):
                 cleared.append(name)
-            except OSError:
-                pass
     return {"cleared": len(cleared) > 0, "sources_cleared": cleared}
 
 

@@ -17,6 +17,7 @@ from typing import Final, Literal
 
 class FixedErrorCode(str, Enum):
     INTERNAL_ERROR = "INTERNAL_ERROR"
+    NOT_FOUND = "NOT_FOUND"
     DATASOURCE_POOL_RELEASE_FAILED = "DATASOURCE_POOL_RELEASE_FAILED"
     DATASOURCE_CONNECTION_FAILED = "DATASOURCE_CONNECTION_FAILED"
     DATASOURCE_NOT_FOUND = "DATASOURCE_NOT_FOUND"
@@ -44,6 +45,7 @@ class FixedErrorCode(str, Enum):
     SQL_EMPTY = "SQL_EMPTY"
     BACKUP_OPERATION_FAILED = "BACKUP_OPERATION_FAILED"
     BACKUP_CLIENT_NOT_FOUND = "BACKUP_CLIENT_NOT_FOUND"
+    BACKUP_SOURCE_MISMATCH = "BACKUP_SOURCE_MISMATCH"
     RESTORE_REQUIRES_ISOLATED_TARGET = "RESTORE_REQUIRES_ISOLATED_TARGET"
     RESTORE_OPERATION_FAILED = "RESTORE_OPERATION_FAILED"
     RESTORE_VERSION_CONFLICT = "RESTORE_VERSION_CONFLICT"
@@ -88,6 +90,8 @@ class FixedErrorCode(str, Enum):
     LLM_CONFIG_ERROR = "LLM_CONFIG_ERROR"
     LLM_CREDENTIAL_NOT_FOUND = "LLM_CREDENTIAL_NOT_FOUND"
     LLM_ENDPOINT_NOT_ALLOWED = "LLM_ENDPOINT_NOT_ALLOWED"
+    AI_TRANSLATION_FAILED = "AI_TRANSLATION_FAILED"
+    CREDENTIAL_VAULT_UNAVAILABLE = "CREDENTIAL_VAULT_UNAVAILABLE"
     MODEL_PROVIDER_TIMEOUT = "MODEL_PROVIDER_TIMEOUT"
     MODEL_PROVIDER_UNAVAILABLE = "MODEL_PROVIDER_UNAVAILABLE"
     MODEL_PROVIDER_RATE_LIMITED = "MODEL_PROVIDER_RATE_LIMITED"
@@ -105,6 +109,7 @@ class FixedErrorCode(str, Enum):
 
 _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
     FixedErrorCode.INTERNAL_ERROR: "The request could not be completed.",
+    FixedErrorCode.NOT_FOUND: "The requested resource was not found.",
     FixedErrorCode.DATASOURCE_POOL_RELEASE_FAILED: "Datasource connection pool could not be released.",
     FixedErrorCode.DATASOURCE_CONNECTION_FAILED: "数据库连接健康检查失败，请检查连接配置。",
     FixedErrorCode.DATASOURCE_NOT_FOUND: "Datasource not found.",
@@ -132,6 +137,7 @@ _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
     FixedErrorCode.SQL_EMPTY: "SQL cannot be empty.",
     FixedErrorCode.BACKUP_OPERATION_FAILED: "The backup operation could not be completed.",
     FixedErrorCode.BACKUP_CLIENT_NOT_FOUND: "The database backup client is unavailable.",
+    FixedErrorCode.BACKUP_SOURCE_MISMATCH: "The backup no longer matches this datasource.",
     FixedErrorCode.RESTORE_REQUIRES_ISOLATED_TARGET: (
         "Database restore is unavailable until an isolated target-and-switch recovery workflow is configured."
     ),
@@ -186,6 +192,8 @@ _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
         "模型凭据已不可用，请在设置中重新选择或保存凭据。"
     ),
     FixedErrorCode.LLM_ENDPOINT_NOT_ALLOWED: "不允许连接该模型服务地址，请检查端点配置。",
+    FixedErrorCode.AI_TRANSLATION_FAILED: "The AI translation request could not be completed.",
+    FixedErrorCode.CREDENTIAL_VAULT_UNAVAILABLE: "The credential vault is unavailable.",
     FixedErrorCode.MODEL_PROVIDER_TIMEOUT: "模型服务响应超时。",
     FixedErrorCode.MODEL_PROVIDER_UNAVAILABLE: "模型服务暂时不可用，请稍后重试。",
     FixedErrorCode.MODEL_PROVIDER_RATE_LIMITED: "模型服务请求过于频繁，请稍后重试。",

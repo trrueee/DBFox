@@ -260,6 +260,18 @@ def test_turn_snapshot_is_frozen_under_the_session_lease(db_session, test_dataso
     assert repository.events.list("session_1") == events_before_turn
 
 
+def test_admit_rejects_a_soft_deleted_session_at_the_domain_boundary(
+    db_session,
+    test_datasource,
+) -> None:
+    session = _session(db_session, str(test_datasource.id))
+    session.deleted_at = datetime.now(UTC)
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="deleted Session"):
+        _admit(SessionRepository(db_session), str(test_datasource.id))
+
+
 def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(
     db_session, test_datasource
 ) -> None:
@@ -291,6 +303,44 @@ def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(
     db_session.commit()
     stored = db_session.get(AgentSessionInput, steered.input_id)
     assert stored.status == "consumed"
+
+
+def test_orphaned_steer_cannot_revive_a_terminal_run(
+    db_session, test_datasource
+) -> None:
+    _session(db_session, str(test_datasource.id))
+    repository = SessionRepository(db_session)
+    original = _admit(repository, str(test_datasource.id))
+    lease = repository.claim(session_id="session_1", owner="worker")
+    assert lease is not None
+    assert repository.promote_next_input(lease=lease) == original.run_id
+    steered = repository.admit(
+        session_id="session_1",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="改成按地区统计",
+        idempotency_key="request-orphan-steer",
+        llm_credential_id="credential_1",
+        api_base=None,
+        model_name="model-test",
+        request_payload={},
+        delivery_mode=DeliveryMode.STEER,
+    )
+    run = db_session.get(AgentRun, original.run_id)
+    assert run is not None
+    run.status = RunStatus.COMPLETED.value
+    run.completed_at = datetime.now(UTC)
+    db_session.commit()
+
+    assert repository.promote_next_input(lease=lease) is None
+    db_session.commit()
+    db_session.expire_all()
+
+    stored_run = db_session.get(AgentRun, original.run_id)
+    stored_input = db_session.get(AgentSessionInput, steered.input_id)
+    assert stored_run is not None and stored_run.status == RunStatus.COMPLETED.value
+    assert stored_input is not None
+    assert stored_input.status == "cancelled"
 
 
 def test_cancel_and_replace_requests_cancellation_before_admitting_one_new_run(

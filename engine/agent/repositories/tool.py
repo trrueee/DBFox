@@ -28,7 +28,7 @@ from engine.agent.tool import ToolInvocation, ToolInvocationStatus
 from engine.json_codec import canonical_dumps as _json, load_array, load_object
 from engine.models import AgentObservationRecord, AgentToolInvocation, AgentTurn
 from engine.tools.materialization import ToolMaterialization
-from engine.tools.runtime.base import ToolRecoveryPolicy
+from engine.tools.runtime.base import ToolPresentation, ToolRecoveryPolicy
 
 
 def _utcnow() -> datetime:
@@ -129,6 +129,109 @@ class ToolInvocationRepository:
             payload={"item": dump_run_item(function_call_item(row))},
         )
         return self._domain(row)
+
+    def reject_unmaterialized(
+        self,
+        *,
+        lease: SessionLease,
+        run_id: str,
+        turn_id: str,
+        provider_call_id: str,
+        tool_name: str,
+        materialization: ToolMaterialization,
+        error_code: str,
+        model_visible_summary: str,
+    ) -> Observation:
+        """Durably reject a provider call that has no executable frozen contract."""
+
+        begin_agent_write(self.session)
+        turn = self.session.get(AgentTurn, turn_id)
+        if (
+            turn is None
+            or str(turn.run_id) != run_id
+            or str(turn.session_id) != lease.session_id
+        ):
+            raise ValueError("Tool call is outside the active Turn")
+        if str(turn.tool_materialization_hash) != materialization.hash:
+            raise ValueError("Tool materialization does not match the frozen Turn snapshot")
+        existing = self.session.execute(
+            select(AgentToolInvocation).where(
+                AgentToolInvocation.turn_id == turn_id,
+                AgentToolInvocation.provider_call_id == provider_call_id,
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            observation = self.session.execute(
+                select(AgentObservationRecord).where(
+                    AgentObservationRecord.tool_invocation_id == existing.id
+                )
+            ).scalar_one_or_none()
+            if observation is not None:
+                return self._observation(observation, existing)
+            row = existing
+        else:
+            empty_input_hash = _hash({})
+            row = AgentToolInvocation(
+                id=f"invocation_{uuid4().hex}",
+                session_id=lease.session_id,
+                run_id=run_id,
+                turn_id=turn_id,
+                provider_call_id=provider_call_id,
+                tool_name=tool_name,
+                tool_version="unmaterialized",
+                # Unknown tools have no trusted input contract. Do not persist
+                # model-authored arguments that could contain arbitrary data.
+                input_json=_json({}),
+                input_hash=empty_input_hash,
+                idempotency_key=_hash(
+                    {
+                        "run_id": run_id,
+                        "turn_id": turn_id,
+                        "provider_call_id": provider_call_id,
+                        "tool": tool_name,
+                        "version": "unmaterialized",
+                    }
+                ),
+                status=ToolInvocationStatus.REJECTED.value,
+                policy_json=_json(
+                    {
+                        "status": "blocked",
+                        "reason": model_visible_summary,
+                        "error_code": error_code,
+                        "safe_args": {},
+                    }
+                ),
+                presentation_json=_json(
+                    ToolPresentation(
+                        title="未知工具调用",
+                        category="manage",
+                        visibility="developer",
+                        progress="none",
+                    ).model_dump(mode="json")
+                ),
+                recovery_policy=ToolRecoveryPolicy.NEVER_RETRY.value,
+                attempt_count=0,
+                created_at=_utcnow(),
+            )
+            self.session.add(row)
+            self.session.flush()
+            self.sessions.events.append(
+                lease=lease,
+                event_type=RuntimeEventType.RUN_ITEM_FAILED,
+                run_id=run_id,
+                turn_id=turn_id,
+                payload={"item": dump_run_item(function_call_item(row))},
+            )
+        return self.settle(
+            lease=lease,
+            invocation_id=str(row.id),
+            status=ObservationStatus.REJECTED,
+            model_visible_summary=model_visible_summary,
+            error_code=error_code,
+            error_message="Tool call is not available in the current Turn.",
+            contributes_progress=False,
+            retryable=False,
+        )
 
     def mark_running(self, *, lease: SessionLease, invocation_id: str) -> ToolInvocation:
         begin_agent_write(self.session)
