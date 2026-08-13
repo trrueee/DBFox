@@ -25,7 +25,7 @@ vi.mock("../../../../lib/api/agent", () => ({
   agentApi: { fetchArtifactChartData: chartDataMock.fetch },
 }));
 
-vi.mock("echarts-for-react/lib/core", async () => {
+vi.mock("echarts-for-react/esm/core", async () => {
   const React = await import("react");
 
   return {

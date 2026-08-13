@@ -17,7 +17,7 @@ const echartsMock = vi.hoisted(() => ({
   options: [] as unknown[],
 }));
 
-vi.mock("echarts-for-react/lib/core", () => ({
+vi.mock("echarts-for-react/esm/core", () => ({
   default: ({ option, style }: { option: unknown; style?: CSSProperties }) => {
     echartsMock.options.push(option);
     return <div data-testid="echarts-mock" style={style} />;

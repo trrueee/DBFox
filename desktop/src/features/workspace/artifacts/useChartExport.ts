@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import type { RefObject } from "react";
-import type ReactEChartsCore from "echarts-for-react/lib/core";
+import type ReactEChartsCore from "echarts-for-react/esm/core";
 
 export function useChartExport(
   chartRef: RefObject<ReactEChartsCore | null>,

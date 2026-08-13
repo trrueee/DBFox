@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import ReactEChartsCore from "echarts-for-react/lib/core";
+import ReactEChartsCore from "echarts-for-react/esm/core";
 import { BarChart3, Download, LineChart, Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "../../../components/ui";
 import { agentApi } from "../../../lib/api/agent";
