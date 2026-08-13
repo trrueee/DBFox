@@ -101,6 +101,21 @@ def observation_evidence_signatures(
     if status != "succeeded":
         return {_canonical({**base, "facts": _meaningful(facts)})}
 
+    if tool_name == "sql_validate":
+        # SQL text, messages and Artifact identity are procedural details. The
+        # only durable state transition for loop progress is whether validation
+        # produced an executable hand-off for sql_execute_readonly. This admits
+        # one repair transition while repeated query rewrites remain stalled.
+        return {
+            _canonical(
+                {
+                    **base,
+                    "evidence_kind": "validation_readiness",
+                    "can_execute": bool(facts.get("can_execute")),
+                }
+            )
+        }
+
     collection_key = _CATALOG_COLLECTION_BY_TOOL.get(tool_name)
     if collection_key is not None:
         raw_items = facts.get(collection_key)

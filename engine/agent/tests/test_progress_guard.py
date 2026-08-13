@@ -4,6 +4,7 @@ from engine.agent.progress_guard import ProgressGuard, observation_evidence_sign
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.models import AgentArtifactRecord, AgentRun, AgentSession
+from engine.tools.builtin.query import SqlValidateTool
 
 
 def _admit(db_session, test_datasource, session_id: str):
@@ -210,3 +211,44 @@ def test_non_catalog_score_remains_meaningful() -> None:
     changed = _signatures("result_profile", {"quality_score": 0.8, "score": 11})
 
     assert first != changed
+
+
+def test_sql_validation_progress_is_bounded_to_readiness_transitions() -> None:
+    assert SqlValidateTool.semantics.contributes_progress is True
+
+    first_rejection = _signatures(
+        "sql_validate",
+        {
+            "can_execute": False,
+            "blocked_reasons": ["unsupported_cte"],
+            "messages": ["Rewrite the query."],
+        },
+    )
+    rewritten_rejection = _signatures(
+        "sql_validate",
+        {
+            "can_execute": False,
+            "blocked_reasons": ["unsupported_window"],
+            "messages": ["Try another SQL shape."],
+        },
+    )
+    executable = _signatures(
+        "sql_validate",
+        {
+            "can_execute": True,
+            "validation_artifact_id": "artifact_sql_ready",
+            "messages": [],
+        },
+    )
+    another_executable = _signatures(
+        "sql_validate",
+        {
+            "can_execute": True,
+            "validation_artifact_id": "artifact_sql_also_ready",
+            "messages": ["EXPLAIN completed."],
+        },
+    )
+
+    assert first_rejection == rewritten_rejection
+    assert executable == another_executable
+    assert executable != first_rejection

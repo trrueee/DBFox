@@ -166,7 +166,11 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
     )
     semantics = ToolSemanticSpec(
         produces=(ToolSemanticCapability.VALIDATED_QUERY,),
-        contributes_progress=False,
+        # Validation is the required hand-off into execution. ProgressGuard
+        # collapses repeated validations to the bounded readiness states, so a
+        # newly executable query gets one continuation without making SQL churn
+        # an unlimited source of progress.
+        contributes_progress=True,
     )
 
     def run(
