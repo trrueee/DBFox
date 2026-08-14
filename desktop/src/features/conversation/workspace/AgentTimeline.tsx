@@ -69,6 +69,17 @@ export function AgentTimeline({
   const preservedResults = primaryArtifacts.filter(
     (artifact) => artifact.status === "completed" && isSqlBackedResultViewArtifact(artifact),
   );
+  const evidenceArtifactIds = new Set(
+    items
+      .filter(
+        (item): item is AssistantMessageItem =>
+          item.type === "message" && item.payload.role === "assistant",
+      )
+      .flatMap((item) => item.payload.evidence.map((evidence) => evidence.artifact_id)),
+  );
+  const evidenceArtifacts = primaryArtifacts.filter((artifact) =>
+    evidenceArtifactIds.has(artifact.id),
+  );
   const currentItem = activeItem(items);
   const hasFinalAnswer = items.some(
     (item) => item.type === "message"
@@ -158,9 +169,16 @@ export function AgentTimeline({
           </span>
         </div>
       )}
-      {((hasFinalAnswer && primaryArtifacts.length > 0) || preservedResults.length > 0) && (
+      {hasFinalAnswer && evidenceArtifacts.length > 0 && (
         <DataReferencePanel
-          artifacts={hasFinalAnswer ? primaryArtifacts : preservedResults}
+          artifacts={evidenceArtifacts}
+          onSelectArtifact={onSelectArtifact}
+        />
+      )}
+      {evidenceArtifacts.length === 0 && preservedResults.length > 0 && (
+        <DataReferencePanel
+          artifacts={preservedResults}
+          kind="saved"
           onSelectArtifact={onSelectArtifact}
         />
       )}

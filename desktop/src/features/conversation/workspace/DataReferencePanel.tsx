@@ -5,16 +5,22 @@ import { buildDataReferences, referenceKey, referenceTitle } from "./dataReferen
 
 interface DataReferencePanelProps {
   artifacts: ConversationArtifact[];
+  kind?: "evidence" | "saved";
   onSelectArtifact?: (artifactId: string) => void;
 }
 
-export function DataReferencePanel({ artifacts, onSelectArtifact }: DataReferencePanelProps) {
+export function DataReferencePanel({
+  artifacts,
+  kind = "evidence",
+  onSelectArtifact,
+}: DataReferencePanelProps) {
   const references = buildDataReferences(artifacts);
   if (references.length === 0) return null;
+  const label = kind === "evidence" ? "引用的数据来源" : "已保存结果";
 
   return (
-    <div className="conv-data-refs" aria-label="Data references">
-      <span className="conv-data-refs-label">数据来源</span>
+    <div className="conv-data-refs" aria-label={label} data-reference-kind={kind}>
+      <span className="conv-data-refs-label">{label}</span>
       <div className="conv-data-ref-list">
         {references.map((reference) => (
           <button

@@ -135,9 +135,36 @@ describe("AgentTimeline", () => {
     expect(
       screen.getByText("分析未完成，但已保留 3 个查询结果，可在工件区查看。"),
     ).toBeTruthy();
-    expect(screen.getByText("数据来源")).toBeTruthy();
+    expect(screen.getByText("已保存结果")).toBeTruthy();
+    expect(screen.queryByText("引用的数据来源")).toBeNull();
     fireEvent.click(screen.getByText("查询结果 result-1"));
     expect(onSelectArtifact).toHaveBeenCalledWith("result-1");
+  });
+
+  it("shows only explicitly cited artifacts as data sources", () => {
+    const answer = assistant("共有 42 条订单。", "final_answer", 1);
+    answer.payload.evidence = [
+      {
+        id: "evidence-1",
+        claim_id: "claim-1",
+        artifact_id: "result-2",
+        label: "共有 42 条订单",
+        query_fingerprint: "fingerprint",
+        observed_at: "2026-08-15T00:00:00Z",
+        locator: {},
+      },
+    ];
+
+    renderTimeline(
+      [answer],
+      {},
+      [resultArtifact("result-1"), resultArtifact("result-2")],
+    );
+
+    expect(screen.getByText("引用的数据来源")).toBeTruthy();
+    expect(screen.getByText("查询结果 result-2")).toBeTruthy();
+    expect(screen.queryByText("查询结果 result-1")).toBeNull();
+    expect(screen.queryByText("已保存结果")).toBeNull();
   });
 });
 

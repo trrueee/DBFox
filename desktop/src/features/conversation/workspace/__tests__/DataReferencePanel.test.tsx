@@ -77,11 +77,18 @@ describe("DataReferencePanel", () => {
   it("derives clickable data reference chips from artifacts", () => {
     render(<DataReferencePanel artifacts={artifacts()} />);
 
-    expect(screen.getByText("数据来源")).toBeTruthy();
+    expect(screen.getByText("引用的数据来源")).toBeTruthy();
     expect(screen.queryByText("SQL: 趋势分析")).toBeNull();
     expect(screen.getByText("分页结果")).toBeTruthy();
     expect(screen.getByText("趋势图")).toBeTruthy();
     expect(screen.queryByText("orders.amount")).toBeNull();
+  });
+
+  it("labels uncited artifacts as saved results rather than evidence", () => {
+    render(<DataReferencePanel artifacts={artifacts()} kind="saved" />);
+
+    expect(screen.getByText("已保存结果")).toBeTruthy();
+    expect(screen.queryByText("引用的数据来源")).toBeNull();
   });
 
   it("selects artifact references for the dock when a selector is provided", () => {
