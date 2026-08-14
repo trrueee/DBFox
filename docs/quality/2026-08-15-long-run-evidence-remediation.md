@@ -2,7 +2,7 @@
 
 > 文档类型：质量整改记录
 >
-> 状态：已接受
+> 状态：当前
 >
 > 最后核验：2026-08-15
 >
@@ -144,3 +144,17 @@ git diff --check
 
 真实 Provider 评测保持 opt-in，不能用 scripted Provider 的结果声称模型服务已通过。Windows 安装包必须记录文件名、大小和 SHA-256；本轮不声称 macOS/Linux 已验证。
 
+## 7. 实施记录
+
+| 批次 | Commit | 已验证结果 |
+| --- | --- | --- |
+| 方案基线 | `f00eaa7f` | 设计、不变量、验收标准和回滚边界已记录 |
+| A | `eaf0091f` | Plan/Artifact/Tool 输入错误定向测试 11 项通过 |
+| B | `18e88cd9` | RunLoop、收尾预算、进度保护与工具物化测试 46 项通过 |
+| C | `d902db8c` | Completion、Terminalizer、Evidence 与 RunLoop 测试 46 项通过 |
+| D | `3f8a9310` | Conversation 来源/保存结果组件测试 12 项通过；TypeScript 测试合同通过 |
+| 工程合同 | `3160b8f3` | pytest 不再扫描 `.cache/.tmp` 中的依赖与历史产物；npm 锁恢复官方注册源；文档状态恢复统一枚举 |
+
+最终回归结果：Python `1096 passed, 4 skipped`；前端 `80 files / 350 tests`；生产构建、ESLint、设计合同和测试 TypeScript 均通过；Rust `27 passed`，Clippy `-D warnings` 与 rustfmt 通过。npm 官方审计的 production 依赖为 `0` 个已知漏洞；真实 Provider 场景仍保持 opt-in，本轮未消耗模型额度。
+
+上述 Commit 均可独立回滚；未新增 Provider 兼容层、第二套 Agent Runtime、第二套 Artifact 模型或自然语言 Run 分类器。Windows 安装包在本记录提交后由干净工作树构建，其文件名、大小和 SHA-256 作为本轮交付证据单独记录；macOS/Linux 未验证。
