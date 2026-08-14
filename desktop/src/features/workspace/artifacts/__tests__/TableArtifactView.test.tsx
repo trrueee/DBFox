@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { agentApi } from "../../../../lib/api/agent";
-import type { ResultViewArtifact } from "../../../../types/agentArtifact";
+import type { ResultViewArtifact, SqlArtifact } from "../../../../types/agentArtifact";
 import { TableArtifactView } from "../TableArtifactView";
 
 vi.mock("../../../../lib/api/agent", () => ({
@@ -49,6 +49,18 @@ function makeSqlBackedArtifact(): ResultViewArtifact {
     returnedRows: 1,
     latencyMs: 42,
     truncated: false,
+  };
+}
+
+function makeSourceSqlArtifact(): SqlArtifact {
+  return {
+    id: "sql-artifact-1",
+    type: "sql",
+    title: "来源 SQL",
+    sql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
+    dialect: "mysql",
+    validationStatus: "passed",
+    executionStatus: "completed",
   };
 }
 
@@ -117,12 +129,55 @@ describe("TableArtifactView", () => {
     expect(screen.queryByText("2026-06-11")).toBeNull();
   });
 
-  it("marks numeric cells and preserves empty null values", async () => {
+  it("marks numeric cells and preserves SQL null as a distinct value", async () => {
     render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
 
     await screen.findByText("2026-06-10");
     expect(screen.getByText("10").closest("td")?.className).toContain("is-numeric");
-    expect(screen.getAllByTitle("点击复制单元格").some((cell) => cell.textContent === "")).toBe(true);
+    const nullCell = screen.getByText("NULL").closest("td");
+    expect(nullCell?.className).toContain("is-null");
+    expect(nullCell?.querySelector(".dbfox-cell-null")).toBeTruthy();
+  });
+
+  it("switches one result artifact between its table and exact source SQL views", async () => {
+    const onToast = vi.fn();
+    const onOpenSqlConsole = vi.fn();
+    render(
+      <TableArtifactView
+        artifact={makeSqlBackedArtifact()}
+        sourceSqlArtifact={makeSourceSqlArtifact()}
+        onOpenSqlConsole={onOpenSqlConsole}
+        onToast={onToast}
+      />,
+    );
+
+    await screen.findByText("2026-06-01");
+    expect(screen.getByRole("tab", { name: "表格" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByLabelText("SQL-backed result 来源 SQL")).toBeNull();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "SQL" }), { button: 0, ctrlKey: false });
+
+    const sql = screen.getByLabelText("SQL-backed result 来源 SQL");
+    expect(sql.textContent).toContain("SELECT\n  day,\n  COUNT(*) AS order_count\nFROM\n  orders\nGROUP BY\n  day");
+    expect(screen.queryByPlaceholderText("搜索结果")).toBeNull();
+    expect(agentApi.fetchArtifactPage).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "复制 SQL" }));
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith("已复制 SQL"));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(makeSourceSqlArtifact().sql);
+    fireEvent.click(screen.getByRole("button", { name: "在 SQL 控制台打开" }));
+    expect(onOpenSqlConsole).toHaveBeenCalledWith(makeSourceSqlArtifact().sql);
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "表格" }), { button: 0, ctrlKey: false });
+    expect(screen.getByPlaceholderText("搜索结果")).toBeTruthy();
+  });
+
+  it("does not offer a SQL view when the result source artifact is unavailable", async () => {
+    render(<TableArtifactView artifact={makeSqlBackedArtifact()} onToast={vi.fn()} />);
+
+    await screen.findByText("2026-06-01");
+    expect(screen.queryByRole("tablist", { name: "查询结果显示方式" })).toBeNull();
+    expect(screen.getByText("结果表")).toBeTruthy();
   });
 
   it("shows column type indicators for typed result columns", async () => {
@@ -150,13 +205,16 @@ describe("TableArtifactView", () => {
     render(<TableArtifactView artifact={makeArtifact()} onToast={onToast} />);
 
     await screen.findByText("2026-06-10");
-    fireEvent.click(screen.getByText("row-3"));
+    const cell = screen.getByText("row-3").closest("td");
+    if (!cell) throw new Error("Expected result cell");
+    fireEvent.click(cell);
+    fireEvent.keyDown(cell, { key: "c", ctrlKey: true });
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("row-3");
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已复制单元格"));
   });
 
-  it("uses the shared long-cell preview without breaking cell copy", async () => {
+  it("uses the shared long-cell viewer and copies through its explicit action", async () => {
     const longValue = "payload=" + "segment-".repeat(14);
     vi.mocked(agentApi.fetchArtifactPage).mockResolvedValueOnce({
       columns: ["note"], rows: [{ note: longValue }], page: 1, pageSize: 10,
@@ -179,7 +237,8 @@ describe("TableArtifactView", () => {
     expect(trigger.className).toContain("dbfox-cell-preview-trigger");
     expect(screen.getByText("键值").className).toContain("dbfox-cell-preview-kind");
 
-    fireEvent.click(trigger.closest("td")!);
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole("button", { name: "复制值" }));
 
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(longValue));
   });

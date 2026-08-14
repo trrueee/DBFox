@@ -24,7 +24,7 @@ export interface SqlBackedDataViewState {
   filters: ResultFilter[];
   setFilters: (value: ResultFilter[]) => void;
   data: SqlBackedPageResponse | null;
-  rows: string[][];
+  rows: unknown[][];
   columns: string[];
   rowCount: number | null | undefined;
   hasNextPage: boolean;
@@ -152,7 +152,7 @@ export function useSqlBackedDataView({
   }, [enabled, load]);
 
   const handleExportAll = useCallback(async () => {
-    if (!enabled) throw new Error("SQL-backed data view is disabled");
+    if (!enabled) throw new Error("当前数据视图尚未就绪");
     const req: SqlBackedExportRequest = {
       source,
       sort: sort.length ? sort : undefined,
@@ -169,7 +169,7 @@ export function useSqlBackedDataView({
 
   const columns = data?.columns ?? source.columns;
   const rows = useMemo(
-    () => (data?.rows ?? []).map((row) => columns.map((column) => stringifyCell(row[column]))),
+    () => (data?.rows ?? []).map((row) => columns.map((column) => row[column])),
     [columns, data?.rows],
   );
 
@@ -203,12 +203,6 @@ export function useSqlBackedDataView({
     refresh,
     exportAll: handleExportAll,
   };
-}
-
-function stringifyCell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
 }
 
 function isAbortError(error: unknown): boolean {

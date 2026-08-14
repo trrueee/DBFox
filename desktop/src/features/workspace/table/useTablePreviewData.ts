@@ -8,6 +8,7 @@ import type {
   SqlBackedPageRequest,
 } from "../sqlBacked/sqlBackedTypes";
 import { useSqlBackedDataView } from "../sqlBacked/useSqlBackedDataView";
+import { databaseTypeLabel } from "../databaseTypeLabel";
 
 interface TableMetadata {
   tableId: string;
@@ -49,7 +50,7 @@ export function useTablePreviewData({
   const metadataRequest = useRef(0);
   const metadata = metadataState.scopeKey === scopeKey ? metadataState.value : null;
   const metadataError = !datasourceId
-    ? "Cannot preview table without an active datasource."
+    ? "没有可用的数据源，无法预览表数据。"
     : metadataState.scopeKey === scopeKey
       ? metadataState.error
       : "";
@@ -69,7 +70,7 @@ export function useTablePreviewData({
         const columnTypes = new Map<string, string>();
         const columnDetails = new Map<string, TableColumnDetail>();
         columns.forEach((column: EngineColumn) => {
-          columnTypes.set(column.column_name, column.data_type || "");
+          columnTypes.set(column.column_name, databaseTypeLabel(column.data_type || column.column_type));
           columnDetails.set(column.column_name, {
             isPrimaryKey: column.is_primary_key,
             isForeignKey: column.is_foreign_key,
@@ -113,7 +114,7 @@ export function useTablePreviewData({
 
   const fetchPage = useCallback(async (request: SqlBackedPageRequest) => {
     if (request.source.kind !== "database-table" || !request.source.tableId) {
-      throw new Error("Table metadata is unavailable");
+      throw new Error("表结构尚未就绪，请先同步表结构。");
     }
     return agentApi.fetchTableResultPage({
       datasourceId: request.source.datasourceId,
@@ -130,7 +131,7 @@ export function useTablePreviewData({
 
   const exportAll = useCallback(async (request: SqlBackedExportRequest) => {
     if (request.source.kind !== "database-table" || !request.source.tableId) {
-      throw new Error("Table metadata is unavailable");
+      throw new Error("表结构尚未就绪，请先同步表结构。");
     }
     return agentApi.exportTableResultCsv({
       datasourceId: request.source.datasourceId,

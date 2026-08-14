@@ -7,7 +7,8 @@ interface ArtifactCardProps {
   className?: string;
   icon?: ReactNode;
   title: string;
-  badge: string;
+  badge?: string;
+  headerAccessory?: ReactNode;
   tone?: ArtifactTone;
   description?: string;
   meta?: ReactNode;
@@ -21,6 +22,7 @@ export function ArtifactCard({
   icon,
   title,
   badge,
+  headerAccessory,
   tone = "default",
   description,
   meta,
@@ -42,7 +44,10 @@ export function ArtifactCard({
           {icon}
           <span>{title}</span>
         </div>
-        <span className="artifact-card-badge">{badge}</span>
+        <div className="artifact-card-header-end">
+          {badge && <span className="artifact-card-badge">{badge}</span>}
+          {headerAccessory}
+        </div>
       </header>
       {description && <p className="artifact-card-desc">{description}</p>}
       {meta && <div className="artifact-card-meta">{meta}</div>}

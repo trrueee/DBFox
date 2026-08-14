@@ -32,3 +32,188 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.hifi-img-hover-card {
+  width: 292px;
+  padding: 7px;
+}
+
+.hifi-img-hover-stage {
+  position: relative;
+  display: grid;
+  width: 276px;
+  height: 184px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  background: var(--bg-secondary);
+}
+
+.hifi-img-hover-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.hifi-img-hover-stage[data-state="loading"] .hifi-img-hover-image,
+.hifi-img-hover-stage[data-state="failed"] .hifi-img-hover-image {
+  visibility: hidden;
+}
+
+.hifi-img-hover-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: var(--ui-font-caption);
+}
+
+.hifi-img-hover-status.is-error {
+  color: var(--destructive);
+}
+
+.hifi-img-hover-hint {
+  padding: 6px 2px 1px;
+  color: var(--text-muted);
+  font-size: var(--ui-font-caption);
+  text-align: center;
+}
+
+.hifi-img-lightbox {
+  width: min(920px, calc(100vw - 48px));
+  max-width: min(920px, calc(100vw - 48px));
+  max-height: min(780px, calc(100vh - 48px));
+  grid-template-rows: auto auto minmax(240px, 1fr) auto;
+  gap: 10px;
+  padding: 14px;
+  border-color: var(--border-medium);
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+
+.hifi-img-lightbox-title {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.hifi-img-lightbox-description {
+  max-width: calc(100% - 40px);
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--ui-font-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hifi-img-lightbox-stage {
+  position: relative;
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: 9px;
+  background:
+    linear-gradient(45deg, color-mix(in srgb, var(--text-muted) 5%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--text-muted) 5%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--text-muted) 5%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--text-muted) 5%, transparent) 75%);
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background-size: 12px 12px;
+}
+
+.hifi-img-lightbox-image {
+  display: block;
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+}
+
+.hifi-img-lightbox-stage[data-state="loading"] .hifi-img-lightbox-image,
+.hifi-img-lightbox-stage[data-state="failed"] .hifi-img-lightbox-image {
+  visibility: hidden;
+}
+
+.hifi-img-lightbox-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--ui-font-label);
+}
+
+.hifi-img-lightbox-status.is-error {
+  color: var(--destructive);
+}
+
+.hifi-img-loading-icon {
+  animation: hifi-img-spin 0.9s linear infinite;
+}
+
+.hifi-img-lightbox-bar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.hifi-img-lightbox-url {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hifi-img-lightbox-bar button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--border-medium);
+  border-radius: 7px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: var(--ui-font-label);
+}
+
+.hifi-img-lightbox-bar button:hover {
+  border-color: color-mix(in srgb, var(--accent-indigo) 42%, var(--border-medium));
+  color: var(--accent-indigo);
+}
+
+.hifi-img-lightbox-bar button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.hifi-img-save-error {
+  color: var(--destructive);
+  font-size: var(--ui-font-caption);
+}
+
+@keyframes hifi-img-spin {
+  to { transform: rotate(360deg); }
+}

@@ -12,6 +12,7 @@ use tauri_plugin_opener::OpenerExt;
 mod app_updates;
 mod crash_recovery;
 mod diagnostic_bundle;
+mod external_image;
 mod sidecar_log;
 mod sidecar_process;
 
@@ -22,6 +23,7 @@ use crash_recovery::{get_launch_recovery_status, CrashRecoveryState};
 use diagnostic_bundle::{
     export_bundle, DiagnosticBundlePayload, DiagnosticBundleResult, HostDiagnosticSnapshot,
 };
+use external_image::save_external_image;
 use sidecar_log::{retire_legacy_temp_sidecar_log, SidecarLog, SIDECAR_LOG_TARGET};
 use sidecar_process::{spawn_python_engine, EngineChild};
 
@@ -682,6 +684,9 @@ pub fn run() {
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_opener::init());
 
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+
     builder
         .setup(|app| {
             retire_legacy_temp_sidecar_log().map_err(std::io::Error::other)?;
@@ -701,6 +706,7 @@ pub fn run() {
             restart_python_engine,
             open_diagnostic_logs,
             open_external_https_url,
+            save_external_image,
             export_diagnostic_bundle,
             get_launch_recovery_status,
             get_update_configuration,

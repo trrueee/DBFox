@@ -93,7 +93,7 @@ export function downloadBlobFile(filename: string, blob: Blob) {
   }
 }
 
-export function toCsv(columns: string[], rows: string[][]) {
+export function toCsv(columns: string[], rows: unknown[][]) {
   const quote = (value: unknown) => `"${escapeCsvCell(value).replaceAll('"', '""')}"`;
   return [columns.map(quote).join(","), ...rows.map((row) => row.map(quote).join(","))].join("\n");
 }

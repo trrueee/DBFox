@@ -1,7 +1,21 @@
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "../ui";
+import { useState } from "react";
+import { Copy, ExternalLink } from "lucide-react";
+import { ImageCell } from "../ImageCell";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "../ui";
+import {
+  openUserConfirmedExternalHttpsUrl,
+} from "../../lib/externalNavigation";
 import { JsonTree } from "./json";
-import { compactJsonPreview, type JsonValue } from "./jsonValue";
-import { cellValueToText, getCellPreviewJson } from "./cellValue";
+import { type JsonValue } from "./jsonValue";
+import { classifyCellValue } from "./cellValue";
 import "./CellValuePreview.css";
 
 interface CellValuePreviewProps {
@@ -10,42 +24,187 @@ interface CellValuePreviewProps {
   detailHint?: string;
   triggerClassName?: string;
   cardClassName?: string;
+  dataType?: string;
+  columnName?: string;
+  onCopyValue?: (value: string) => void;
 }
 
 export function CellValuePreview({
   value,
-  displayValue = cellValueToText(value),
+  displayValue,
   detailHint,
   triggerClassName,
   cardClassName,
+  dataType,
+  columnName,
+  onCopyValue,
 }: CellValuePreviewProps) {
-  const parsedJson = getCellPreviewJson(value, displayValue);
-  const isJson = parsedJson !== null;
-  const previewable = isJson || displayValue.length > 40 || displayValue.includes("\n");
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const presentation = classifyCellValue(value, { dataType });
+  const resolvedDisplayValue = displayValue ?? presentation.displayText;
+  const isJson = presentation.kind === "json";
+  const parsedJson = presentation.parsedJson;
 
-  if (!previewable) {
-    return <span className={joinClassNames("dbfox-cell-preview-text", triggerClassName)}>{displayValue}</span>;
+  if (presentation.kind === "null") {
+    return <span className={joinClassNames("dbfox-cell-null", triggerClassName)}>NULL</span>;
   }
 
-  const triggerContent = isJson && parsedJson ? (
-    <span className="dbfox-cell-preview-json-pill">JSON · {compactJsonPreview(parsedJson)}</span>
+  if (presentation.kind === "boolean") {
+    return (
+      <span className={joinClassNames("dbfox-cell-boolean", presentation.displayText === "TRUE" ? "is-true" : "is-false", triggerClassName)}>
+        {presentation.displayText}
+      </span>
+    );
+  }
+
+  if (presentation.kind === "image-url") {
+    return <ImageCell url={presentation.rawText} onCopyValue={onCopyValue} />;
+  }
+
+  if (presentation.kind === "url") {
+    return (
+      <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
+        <button
+          type="button"
+          data-cell-value-trigger
+          className={joinClassNames("dbfox-cell-preview-link", triggerClassName)}
+          title={presentation.rawText}
+          aria-label={`查看链接 ${presentation.rawText}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            setViewerOpen(true);
+          }}
+        >
+          <ExternalLink size={13} aria-hidden="true" />
+          <span>{resolvedDisplayValue}</span>
+        </button>
+        <ValueViewerDialog
+          title={columnName ? `链接 · ${columnName}` : "链接"}
+          description={dataType ? `数据库类型 ${dataType}` : "HTTPS 链接"}
+          presentation={presentation}
+          detailHint={detailHint}
+          onCopyValue={onCopyValue}
+          onOpenExternal={() => void openUserConfirmedExternalHttpsUrl(presentation.rawText)}
+        />
+      </Dialog>
+    );
+  }
+
+  if (!presentation.previewable) {
+    return <span className={joinClassNames("dbfox-cell-preview-text", triggerClassName)}>{resolvedDisplayValue}</span>;
+  }
+
+  const triggerContent = isJson ? (
+    <span className="dbfox-cell-preview-json-pill">{presentation.displayText}</span>
+  ) : presentation.kind === "binary-placeholder" ? (
+    <span className="dbfox-cell-preview-long-summary">
+      <span className="dbfox-cell-preview-kind">BINARY</span>
+      <span className="dbfox-cell-preview-snippet">原始字节未加载</span>
+    </span>
   ) : (
-    <span className="dbfox-cell-preview-long-summary" aria-label={displayValue}>
-      <span className="dbfox-cell-preview-kind">{getTextPreviewKind(displayValue)}</span>
-      <span className="dbfox-cell-preview-snippet">{getTextPreviewSnippet(displayValue)}</span>
+    <span className="dbfox-cell-preview-long-summary" aria-label={resolvedDisplayValue}>
+      <span className="dbfox-cell-preview-kind">{getTextPreviewKind(resolvedDisplayValue)}</span>
+      <span className="dbfox-cell-preview-snippet">{getTextPreviewSnippet(resolvedDisplayValue)}</span>
     </span>
   );
 
   return (
-    <HoverCard openDelay={180} closeDelay={80}>
-      <HoverCardTrigger asChild>
-        <span className={joinClassNames("dbfox-cell-preview-trigger", triggerClassName)}>{triggerContent}</span>
-      </HoverCardTrigger>
-      <HoverCardContent className={joinClassNames("dbfox-cell-preview-card", cardClassName)} side="bottom" align="start">
-        <CellPreviewPanel value={displayValue} isJson={isJson} parsedJson={parsedJson} detailHint={detailHint} />
-      </HoverCardContent>
-    </HoverCard>
+    <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
+      <HoverCard openDelay={180} closeDelay={80}>
+        <HoverCardTrigger asChild>
+          <button
+            type="button"
+            data-cell-value-trigger
+            className={joinClassNames("dbfox-cell-preview-trigger", triggerClassName)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setViewerOpen(true);
+            }}
+          >
+            {triggerContent}
+          </button>
+        </HoverCardTrigger>
+        <HoverCardContent className={joinClassNames("dbfox-cell-preview-card", cardClassName)} side="bottom" align="start">
+          <CellPreviewPanel
+            value={presentation.rawText}
+            isJson={isJson}
+            parsedJson={parsedJson}
+            detailHint="点击打开完整查看"
+            binaryPlaceholder={presentation.kind === "binary-placeholder"}
+            columnName={columnName}
+            dataType={dataType}
+          />
+        </HoverCardContent>
+      </HoverCard>
+      <ValueViewerDialog
+        title={columnName ? `${getViewerTitle(presentation.kind)} · ${columnName}` : getViewerTitle(presentation.kind)}
+        description={dataType ? `数据库类型 ${dataType}` : getViewerDescription(presentation.kind)}
+        presentation={presentation}
+        detailHint={detailHint}
+        onCopyValue={onCopyValue}
+      />
+    </Dialog>
   );
+}
+
+function ValueViewerDialog({
+  title,
+  description,
+  presentation,
+  detailHint,
+  onCopyValue,
+  onOpenExternal,
+}: {
+  title: string;
+  description: string;
+  presentation: ReturnType<typeof classifyCellValue>;
+  detailHint?: string;
+  onCopyValue?: (value: string) => void;
+  onOpenExternal?: () => void;
+}) {
+  return (
+    <DialogContent className="dbfox-cell-value-dialog">
+      <DialogTitle>{title}</DialogTitle>
+      <DialogDescription>{description}</DialogDescription>
+      <CellPreviewPanel
+        value={presentation.rawText}
+        isJson={presentation.kind === "json"}
+        parsedJson={presentation.parsedJson}
+        detailHint={detailHint}
+        binaryPlaceholder={presentation.kind === "binary-placeholder"}
+      />
+      <div className="dbfox-cell-value-actions">
+        <button
+          type="button"
+          onClick={() => {
+            if (onCopyValue) onCopyValue(presentation.copyText);
+            else void navigator.clipboard.writeText(presentation.copyText);
+          }}
+        >
+          <Copy size={13} aria-hidden="true" />
+          复制值
+        </button>
+        {onOpenExternal && (
+          <button type="button" onClick={onOpenExternal}>
+            <ExternalLink size={13} aria-hidden="true" />
+            在浏览器打开
+          </button>
+        )}
+      </div>
+    </DialogContent>
+  );
+}
+
+function getViewerTitle(kind: ReturnType<typeof classifyCellValue>["kind"]) {
+  if (kind === "json") return "JSON 值";
+  if (kind === "binary-placeholder") return "二进制值";
+  return "文本值";
+}
+
+function getViewerDescription(kind: ReturnType<typeof classifyCellValue>["kind"]) {
+  if (kind === "json") return "格式化查看结构化内容";
+  if (kind === "binary-placeholder") return "当前结果未包含原始二进制内容";
+  return "查看完整单元格内容";
 }
 
 function CellPreviewPanel({
@@ -53,21 +212,34 @@ function CellPreviewPanel({
   isJson,
   parsedJson,
   detailHint,
+  binaryPlaceholder,
+  columnName,
+  dataType,
 }: {
   value: string;
   isJson: boolean;
   parsedJson: JsonValue | null;
   detailHint?: string;
+  binaryPlaceholder: boolean;
+  columnName?: string;
+  dataType?: string;
 }) {
   const lineCount = value.length === 0 ? 0 : value.split(/\r\n|\r|\n/).length;
-  const title = isJson ? "JSON 结构" : getTextPreviewTitle(value);
+  const title = binaryPlaceholder ? "二进制内容" : isJson ? "JSON 结构" : getTextPreviewTitle(value);
 
   return (
     <div className="dbfox-cell-preview-panel">
       <div className="dbfox-cell-preview-header">
         <div className="dbfox-cell-preview-heading">
-          <span className="dbfox-cell-preview-title">{title}</span>
-          <span className="dbfox-cell-preview-subtitle">{isJson ? "可展开查看字段" : "保留原始换行和片段"}</span>
+          <span className="dbfox-cell-preview-title">{columnName ? `${title} · ${columnName}` : title}</span>
+          <span className="dbfox-cell-preview-subtitle">
+            {binaryPlaceholder
+              ? "当前结果合同未传输原始字节"
+              : isJson
+                ? parsedJson ? "可展开查看字段" : "内容无法完整解析"
+                : "保留原始换行和片段"}
+            {dataType ? ` · ${dataType}` : ""}
+          </span>
         </div>
         <div className="dbfox-cell-preview-stats" aria-label="内容统计">
           <span>{value.length} 字符</span>
@@ -75,7 +247,11 @@ function CellPreviewPanel({
         </div>
       </div>
       <div className="dbfox-cell-preview-body">
-        {isJson && parsedJson ? <JsonTree data={parsedJson} /> : <StructuredTextPreview value={value} />}
+        {binaryPlaceholder ? (
+          <div className="dbfox-cell-preview-binary-note">
+            数据库驱动只返回了二进制占位符。DBFox 不会把占位符伪装成可下载文件。
+          </div>
+        ) : isJson && parsedJson ? <JsonTree data={parsedJson} /> : <StructuredTextPreview value={value} />}
       </div>
       {detailHint && <div className="dbfox-cell-preview-footer">{detailHint}</div>}
     </div>

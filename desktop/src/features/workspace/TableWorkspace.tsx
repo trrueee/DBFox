@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { TableErPane } from "./table/TableErPane";
 import { TablePreviewPane } from "./table/TablePreviewPane";
 import { TableSchemaPane } from "./table/TableSchemaPane";
@@ -28,6 +29,15 @@ export function TableWorkspace({
   onOpenSqlConsole,
   onToast,
 }: TableWorkspaceProps) {
+  const [mountedSubTabs, setMountedSubTabs] = useState<Record<string, boolean>>({
+    [currentSubTab]: true,
+  });
+
+  const activateSubTab = (subTab: string) => {
+    setMountedSubTabs((current) => current[subTab] ? current : { ...current, [subTab]: true });
+    onSubTabChange(subTab);
+  };
+
   return (
     <div className="table-workspace">
       <div className="table-workspace__tabs" role="tablist" aria-label="表格工作区视图">
@@ -38,7 +48,8 @@ export function TableWorkspace({
             className={`table-workspace__tab ${currentSubTab === key ? "is-active" : ""}`}
             role="tab"
             aria-selected={currentSubTab === key}
-            onClick={() => onSubTabChange(key)}
+            aria-controls={`table-workspace-panel-${key}`}
+            onClick={() => activateSubTab(key)}
           >
             {label}
           </button>
@@ -46,18 +57,28 @@ export function TableWorkspace({
       </div>
 
       <div className="table-workspace__body">
-        {currentSubTab === "preview" && (
-          <TablePreviewPane
-            key={`${datasourceId}:${tableId}`}
-            tableId={tableId}
-            datasourceId={datasourceId}
-            datasourceDbType={datasourceDbType}
-            onOpenSqlConsole={onOpenSqlConsole}
-            onToast={onToast}
-          />
+        {(mountedSubTabs.preview || currentSubTab === "preview") && (
+          <div id="table-workspace-panel-preview" className="table-workspace__panel" role="tabpanel" hidden={currentSubTab !== "preview"}>
+            <TablePreviewPane
+              key={`${datasourceId}:${tableId}`}
+              tableId={tableId}
+              datasourceId={datasourceId}
+              datasourceDbType={datasourceDbType}
+              onOpenSqlConsole={onOpenSqlConsole}
+              onToast={onToast}
+            />
+          </div>
         )}
-        {currentSubTab === "schema" && <TableSchemaPane tableId={tableId} datasourceId={datasourceId} />}
-        {currentSubTab === "er" && <TableErPane tableId={tableId} datasourceId={datasourceId} />}
+        {(mountedSubTabs.schema || currentSubTab === "schema") && (
+          <div id="table-workspace-panel-schema" className="table-workspace__panel" role="tabpanel" hidden={currentSubTab !== "schema"}>
+            <TableSchemaPane tableId={tableId} datasourceId={datasourceId} />
+          </div>
+        )}
+        {(mountedSubTabs.er || currentSubTab === "er") && (
+          <div id="table-workspace-panel-er" className="table-workspace__panel" role="tabpanel" hidden={currentSubTab !== "er"}>
+            <TableErPane tableId={tableId} datasourceId={datasourceId} />
+          </div>
+        )}
       </div>
     </div>
   );

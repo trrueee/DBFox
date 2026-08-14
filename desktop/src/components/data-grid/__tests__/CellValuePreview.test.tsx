@@ -1,10 +1,24 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CellValuePreview } from "../CellValuePreview";
 import { cellValueToText, isCellValuePreviewable } from "../cellValue";
 
+const { invokeMock, isTauriMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn(),
+  isTauriMock: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: invokeMock,
+  isTauri: isTauriMock,
+}));
+
 describe("CellValuePreview", () => {
-  beforeEach(() => cleanup());
+  beforeEach(() => {
+    cleanup();
+    invokeMock.mockReset().mockResolvedValue(undefined);
+    isTauriMock.mockReset().mockReturnValue(true);
+  });
 
   it("renders long text through a bounded preview trigger", () => {
     const value = "payload=" + "segment-".repeat(12);
@@ -33,5 +47,41 @@ describe("CellValuePreview", () => {
     expect(screen.getByText("alpha").className).toContain("dbfox-cell-preview-text");
     expect(isCellValuePreviewable("alpha")).toBe(false);
     expect(cellValueToText(null)).toBe("");
+  });
+
+  it("routes image URLs through the shared on-demand image viewer", () => {
+    render(<CellValuePreview value="https://cdn.example.com/photo.webp" />);
+
+    expect(screen.getByRole("button", { name: "预览图片 https://cdn.example.com/photo.webp" })).toBeTruthy();
+    expect(screen.queryByRole("img")).toBeNull();
+  });
+
+  it("previews an ordinary HTTPS link before explicitly opening the browser", () => {
+    const { rerender } = render(<CellValuePreview value="https://example.com/report?id=7" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "查看链接 https://example.com/report?id=7" }));
+    expect(screen.getByRole("dialog", { name: "链接" })).toBeTruthy();
+    expect(invokeMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "在浏览器打开" }));
+    expect(invokeMock).toHaveBeenCalledWith("open_external_https_url", { url: "https://example.com/report?id=7" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    rerender(<CellValuePreview value="javascript:alert(1)" />);
+    expect(screen.queryByRole("button", { name: /查看链接/ })).toBeNull();
+    expect(screen.getByText("javascript:alert(1)").className).toContain("dbfox-cell-preview-text");
+  });
+
+  it("uses one viewer contract for JSON and binary placeholders", () => {
+    const { rerender } = render(
+      <CellValuePreview value={{ enabled: true }} dataType="jsonb" columnName="payload" />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /JSON · Object/ }));
+    expect(screen.getByRole("dialog", { name: "JSON 值 · payload" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    rerender(<CellValuePreview value="<binary>" dataType="blob" columnName="content" />);
+    fireEvent.click(screen.getByRole("button", { name: /原始字节未加载/ }));
+    expect(screen.getByRole("dialog", { name: "二进制值 · content" }).textContent).toContain("不会把占位符伪装成可下载文件");
   });
 });

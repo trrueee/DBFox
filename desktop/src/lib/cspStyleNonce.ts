@@ -1,9 +1,9 @@
 /**
  * The empty style anchor in index.html makes Tauri emit a fresh style nonce
- * and add it to the packaged CSP. Monaco creates style elements at runtime,
- * but does not propagate that nonce itself. Patch only the current document's
- * style-element factory so trusted framework-generated styles retain the host
- * nonce before insertion.
+ * and add it to the packaged CSP. Editor libraries such as CodeMirror create
+ * style elements at runtime but do not know Tauri's generated nonce. Patch only
+ * the current document's style-element factory so trusted framework-generated
+ * styles retain the host nonce before insertion.
  */
 const originalCreateElement = new WeakMap<Document, Document["createElement"]>();
 

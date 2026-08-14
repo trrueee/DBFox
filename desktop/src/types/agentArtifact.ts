@@ -27,6 +27,7 @@ export type RenderedChartArtifact = ChartArtifact & { series: ChartPoint[] };
 export type SqlArtifact = AgentArtifactBase & {
   type: "sql";
   sql: string;
+  dialect?: string;
   purpose?: string;
   usedTables?: string[];
   validationStatus?: string;

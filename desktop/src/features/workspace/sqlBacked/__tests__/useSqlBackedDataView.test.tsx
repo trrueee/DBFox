@@ -47,6 +47,33 @@ describe("useSqlBackedDataView", () => {
     expect(result.current.loadingMode).toBe("page");
   });
 
+  it("preserves null, empty text, booleans, numbers, and objects without string sentinels", async () => {
+    const typedSource = { ...source, columns: ["null_value", "empty_value", "label", "enabled", "count", "payload"] };
+    const fetchPage = vi.fn().mockResolvedValue({
+      ...pageResponse([], 1),
+      columns: typedSource.columns,
+      rows: [{
+        null_value: null,
+        empty_value: "",
+        label: "NULL",
+        enabled: false,
+        count: 0,
+        payload: { ok: true },
+      }],
+    });
+
+    const { result } = renderHook(() => useSqlBackedDataView({ source: typedSource, fetchPage, exportAll: vi.fn() }));
+
+    await waitFor(() => expect(result.current.rows).toEqual([[
+      null,
+      "",
+      "NULL",
+      false,
+      0,
+      { ok: true },
+    ]]));
+  });
+
   it("does not let an older response overwrite a newer response", async () => {
     const resolvers: Array<(value: SqlBackedPageResponse) => void> = [];
     const fetchPage = vi.fn(() => new Promise<SqlBackedPageResponse>((resolve) => resolvers.push(resolve)));

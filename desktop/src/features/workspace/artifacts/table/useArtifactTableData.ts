@@ -32,7 +32,7 @@ export interface ArtifactTableData {
   setPage: (updater: number | ((page: number) => number)) => void;
   pageSize: number;
   setPageSize: (value: number) => void;
-  visibleRows: string[][];
+  visibleRows: unknown[][];
   totalRows: number | undefined;
   returnedRows: number;
   warnings: string[];

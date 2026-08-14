@@ -1,7 +1,10 @@
-import { AlertCircle, AlertTriangle, Copy, Download, ExternalLink, RefreshCw } from "lucide-react";
-import { Button } from "../../../components/ui";
-import type { ResultViewArtifact } from "../../../types/agentArtifact";
+import { AlertCircle, AlertTriangle, Code2, Copy, Download, ExternalLink, RefreshCw, Table2, Terminal } from "lucide-react";
+import { useState } from "react";
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui";
+import { classifyCellValue } from "../../../components/data-grid/cellValue";
+import type { ResultViewArtifact, SqlArtifact } from "../../../types/agentArtifact";
 import { ArtifactCard } from "./ArtifactCard";
+import { SqlCodeBlock } from "./SqlCodeBlock";
 import { copyText, downloadBlobFile } from "./artifactActions";
 import { ArtifactTableFooter } from "./table/ArtifactTableFooter";
 import { ArtifactTableGrid } from "./table/ArtifactTableGrid";
@@ -13,11 +16,26 @@ interface TableArtifactViewProps {
   artifact: ResultViewArtifact;
   onToast: (message: string) => void;
   onOpenResultTab?: (artifact: ResultViewArtifact) => void;
+  sourceSqlArtifact?: SqlArtifact;
+  onOpenSqlConsole?: (sql?: string) => void;
   mode?: "inline" | "workspace";
 }
 
-export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "inline" }: TableArtifactViewProps) {
+export function TableArtifactView({
+  artifact,
+  onToast,
+  onOpenResultTab,
+  sourceSqlArtifact,
+  onOpenSqlConsole,
+  mode = "inline",
+}: TableArtifactViewProps) {
   const table = useArtifactTableData(artifact, mode);
+  const [viewState, setViewState] = useState<{
+    artifactId: string;
+    view: "table" | "sql";
+  }>({ artifactId: artifact.id, view: "table" });
+  const hasSourceSql = Boolean(sourceSqlArtifact?.sql.trim());
+  const activeView = hasSourceSql && viewState.artifactId === artifact.id ? viewState.view : "table";
 
   const handleCopy = async () => {
     const ok = await copyText(table.csv);
@@ -34,9 +52,15 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
     }
   };
 
-  const handleCellCopy = async (value: string) => {
-    const ok = await copyText(value);
+  const handleCellCopy = async (value: unknown, dataType?: string) => {
+    const ok = await copyText(classifyCellValue(value, { dataType }).copyText);
     onToast(ok ? "已复制单元格" : "复制失败，请手动选择复制");
+  };
+
+  const handleSqlCopy = async () => {
+    if (!sourceSqlArtifact) return;
+    const ok = await copyText(sourceSqlArtifact.sql);
+    onToast(ok ? "已复制 SQL" : "复制失败，请手动选择复制");
   };
 
   const toolbar = (
@@ -94,7 +118,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
             rows={table.visibleRows}
             sort={table.sort}
             onSort={table.setSortColumn}
-            onCopyCell={(value) => void handleCellCopy(value)}
+            onCopyCell={(value, dataType) => void handleCellCopy(value, dataType)}
             emptyLabel="无匹配结果"
           />
         </div>
@@ -118,57 +142,118 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
     );
   }
 
-  return (
+  const tableActions = (
+    <>
+      {onOpenResultTab && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="artifact-table-action-button"
+          onClick={() => onOpenResultTab(artifact)}
+        >
+          <ExternalLink size={10} />
+          打开为 Tab
+        </Button>
+      )}
+      <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={handleCopy}>
+        <Copy size={10} />
+        复制 CSV
+      </Button>
+      <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={() => void handleExport()}>
+        <Download size={10} />
+        导出 CSV
+      </Button>
+    </>
+  );
+
+  const sqlActions = sourceSqlArtifact ? (
+    <>
+      <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={() => void handleSqlCopy()}>
+        <Copy size={10} />
+        复制 SQL
+      </Button>
+      {onOpenSqlConsole && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="artifact-table-action-button"
+          onClick={() => onOpenSqlConsole(sourceSqlArtifact.sql)}
+        >
+          <Terminal size={10} />
+          在 SQL 控制台打开
+        </Button>
+      )}
+    </>
+  ) : undefined;
+
+  const card = (
     <ArtifactCard
       title={artifact.title}
-      badge="结果表"
+      badge={hasSourceSql ? undefined : "结果表"}
+      headerAccessory={hasSourceSql ? (
+        <TabsList className="artifact-result-view-switch" aria-label="查询结果显示方式">
+          <TabsTrigger value="table">
+            <Table2 size={12} aria-hidden="true" />
+            表格
+          </TabsTrigger>
+          <TabsTrigger value="sql">
+            <Code2 size={12} aria-hidden="true" />
+            SQL
+          </TabsTrigger>
+        </TabsList>
+      ) : undefined}
       tone="table"
       description={artifact.description}
       meta={<InlineTableMeta artifact={artifact} table={table} />}
-      actions={
-        <>
-          {onOpenResultTab && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="artifact-table-action-button"
-              onClick={() => onOpenResultTab(artifact)}
-            >
-              <ExternalLink size={10} />
-              打开为 Tab
-            </Button>
-          )}
-          <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={handleCopy}>
-            <Copy size={10} />
-            复制 CSV
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={() => void handleExport()}>
-            <Download size={10} />
-            导出 CSV
-          </Button>
-        </>
-      }
+      actions={activeView === "sql" ? sqlActions : tableActions}
     >
-      {toolbar}
-      {table.fetchError && (
-        <div className="artifact-table-inline-error">
-          <AlertCircle size={12} className="artifact-table-alert-icon" />
-          获取分页数据失败: {table.fetchError}
+      <TabsContent value="table" className="artifact-result-view-content">
+        {toolbar}
+        {table.fetchError && (
+          <div className="artifact-table-inline-error">
+            <AlertCircle size={12} className="artifact-table-alert-icon" />
+            获取分页数据失败: {table.fetchError}
+          </div>
+        )}
+        <div className="artifact-table-inline-table">
+          <ArtifactTableGrid
+            columns={table.columns}
+            columnTypes={table.columnTypes}
+            rows={table.visibleRows}
+            sort={table.sort}
+            onSort={table.setSortColumn}
+            onCopyCell={(value, dataType) => void handleCellCopy(value, dataType)}
+            emptyLabel="无匹配结果"
+          />
         </div>
+      </TabsContent>
+      {sourceSqlArtifact && (
+        <TabsContent value="sql" className="artifact-result-view-content">
+          <div className="sql-artifact__editor artifact-result-sql">
+            <SqlCodeBlock
+              sql={sourceSqlArtifact.sql}
+              dialect={sourceSqlArtifact.dialect}
+              ariaLabel={`${artifact.title} 来源 SQL`}
+            />
+          </div>
+        </TabsContent>
       )}
-      <div className="artifact-table-inline-table">
-        <ArtifactTableGrid
-          columns={table.columns}
-          columnTypes={table.columnTypes}
-          rows={table.visibleRows}
-          sort={table.sort}
-          onSort={table.setSortColumn}
-          onCopyCell={(value) => void handleCellCopy(value)}
-          emptyLabel="无匹配结果"
-        />
-      </div>
     </ArtifactCard>
+  );
+
+  return (
+    <Tabs
+      value={activeView}
+      onValueChange={(value) => setViewState({
+        artifactId: artifact.id,
+        view: value === "sql" ? "sql" : "table",
+      })}
+      className="artifact-result-view"
+    >
+      {card}
+    </Tabs>
   );
 }
 

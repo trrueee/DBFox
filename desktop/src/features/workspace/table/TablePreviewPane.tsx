@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   getCoreRowModel,
   useReactTable,
@@ -15,7 +15,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  CirclePlus,
   Code,
   Columns3,
   Copy,
@@ -24,27 +23,21 @@ import {
   EyeOff,
   Filter,
   KeyRound,
-  Link2,
   MoreHorizontal,
   Pin,
   PinOff,
   RefreshCw,
   Search,
-  Sparkles,
   X,
 } from "lucide-react";
-import { ImageCell } from "../../../components/ImageCell";
-import { isImageUrl } from "../../../components/imageUrl";
 import { CellValuePreview } from "../../../components/data-grid/CellValuePreview";
-import { JsonTree } from "../../../components/data-grid/json";
-import { getCellPreviewJson } from "../../../components/data-grid/cellValue";
+import {
+  classifyCellValue,
+  isNumericCellType,
+  isTemporalCellType,
+} from "../../../components/data-grid/cellValue";
 import { Button, Input, Popover, PopoverContent, PopoverTrigger, Select, Toolbar, ToolbarGroup } from "../../../components/ui";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -81,13 +74,8 @@ interface PreviewColumnMeta {
   comment: string;
 }
 
-interface DetailCell {
-  column: string;
-  displayValue: string;
-  json: ReturnType<typeof getCellPreviewJson>;
-}
-
 const EMPTY_PREVIEW_ROWS: Array<Record<string, unknown>> = [];
+const SEARCH_DEBOUNCE_MS = 300;
 
 export function TablePreviewPane({
   tableId,
@@ -109,9 +97,10 @@ export function TablePreviewPane({
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({ left: [] });
-  const [detailCell, setDetailCell] = useState<DetailCell | null>(null);
   const [pageJump, setPageJump] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
   const {
     data,
     columnTypes,
@@ -140,6 +129,16 @@ export function TablePreviewPane({
   });
   const activeFilter = filters[0] ?? null;
   const activeSort = sort[0] ?? null;
+
+  useEffect(() => {
+    setSearchDraft(search);
+  }, [search]);
+
+  useEffect(() => {
+    if (searchDraft === search) return undefined;
+    const timer = window.setTimeout(() => setSearch(searchDraft), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [search, searchDraft, setSearch]);
 
   useEffect(() => {
     setNoticeDismissed(false);
@@ -246,17 +245,69 @@ export function TablePreviewPane({
     setSort([]);
   };
 
-  const handleCellCopy = async (rowIndex: number, column: string, value: unknown, dataType?: string) => {
+  const selectCell = (rowIndex: number, column: string) => {
     setSelectedCell({ rowIndex, column });
     setSelectedRow(rowIndex);
-    const displayValue = cellDisplayText(value, dataType);
-    const json = getCellPreviewJson(value, displayValue);
-    if (json !== null) {
-      setDetailCell({ column, displayValue, json });
+  };
+
+  const copyCell = async (value: unknown, dataType?: string) => {
+    const copyValue = classifyCellValue(value, { dataType }).copyText;
+    const ok = await copyText(copyValue);
+    onToast(ok ? "已复制单元格" : "复制失败，请手动选择复制");
+  };
+
+  const openCell = async (
+    cellElement: HTMLTableCellElement,
+    rowIndex: number,
+    column: string,
+    value: unknown,
+    dataType?: string,
+  ) => {
+    selectCell(rowIndex, column);
+    const trigger = cellElement.querySelector<HTMLButtonElement>("[data-cell-value-trigger]");
+    if (trigger) {
+      trigger.click();
       return;
     }
-    const ok = await copyText(displayValue);
-    onToast(ok ? "已复制单元格" : "复制失败，请手动选择复制");
+    await copyCell(value, dataType);
+  };
+
+  const handleCellKeyDown = (
+    event: ReactKeyboardEvent<HTMLTableCellElement>,
+    rowIndex: number,
+    columnIndex: number,
+    column: string,
+    value: unknown,
+    dataType?: string,
+  ) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+      event.preventDefault();
+      void copyCell(value, dataType);
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void openCell(event.currentTarget, rowIndex, column, value, dataType);
+      return;
+    }
+    const movement: Record<string, [number, number]> = {
+      ArrowUp: [-1, 0],
+      ArrowDown: [1, 0],
+      ArrowLeft: [0, -1],
+      ArrowRight: [0, 1],
+    };
+    const delta = movement[event.key];
+    if (!delta) return;
+    const targetRow = rowIndex + delta[0];
+    const targetColumn = columnIndex + delta[1];
+    const target = tableRef.current?.querySelector<HTMLTableCellElement>(
+      `[data-row-index="${targetRow}"][data-column-index="${targetColumn}"]`,
+    );
+    if (!target) return;
+    event.preventDefault();
+    target.focus();
+    const nextColumn = target.dataset.column;
+    if (nextColumn) selectCell(targetRow, nextColumn);
   };
 
   const toggleColumnSort = (column: string) => {
@@ -413,16 +464,6 @@ export function TablePreviewPane({
               <Download className="hifi-preview-toolbar-icon" aria-hidden="true" />
               <span>导出</span>
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="hifi-preview-toolbar-btn hifi-preview-toolbar-btn--accent"
-              onClick={() => onToast("生成测试数据需要后端写入接口，当前只读预览不执行写入")}
-              title="生成少量测试记录"
-            >
-              <Sparkles className="hifi-preview-toolbar-icon is-accent" aria-hidden="true" />
-              <span>生成测试数据</span>
-            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" className="hifi-preview-toolbar-btn" title="管理显示字段">
@@ -446,22 +487,29 @@ export function TablePreviewPane({
               <Input
                 ref={searchInputRef}
                 className="hifi-preview-search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                value={searchDraft}
+                onChange={(event) => setSearchDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") setSearch(searchDraft);
+                  if (event.key === "Escape") {
+                    setSearchDraft("");
+                    setSearch("");
+                  }
+                }}
                 placeholder="搜索表数据..."
                 aria-label="搜索表数据"
               />
-              {search ? (
-                <button className="hifi-preview-search-clear" type="button" onClick={() => setSearch("")} aria-label="清除搜索">
+              {searchDraft ? (
+                <button className="hifi-preview-search-clear" type="button" onClick={() => { setSearchDraft(""); setSearch(""); }} aria-label="清除搜索">
                   <X size={13} />
                 </button>
               ) : (
                 <kbd className="hifi-preview-search-shortcut">Ctrl F</kbd>
               )}
             </div>
-            <Button size="sm" variant="ghost" className="hifi-preview-toolbar-link" onClick={() => onOpenSqlConsole()} title="在 SQL 控制台打开当前表">
+            <Button size="sm" variant="ghost" className="hifi-preview-toolbar-link" onClick={() => onOpenSqlConsole()} title="打开绑定到当前数据源的 SQL 控制台">
               <Code className="hifi-preview-toolbar-icon" aria-hidden="true" />
-              <span>在 SQL 运行</span>
+              <span>打开 SQL 控制台</span>
             </Button>
           </ToolbarGroup>
         </Toolbar>
@@ -496,7 +544,7 @@ export function TablePreviewPane({
 
         {data && columns.length > 0 && (
           <div className={refreshing ? "hifi-preview-refreshing" : ""}>
-            <table className="table-preview-grid">
+            <table ref={tableRef} className="table-preview-grid" role="grid" aria-label={`表 ${tableId} 的数据`}>
               <colgroup>
                 {previewTable.getVisibleLeafColumns().map((column) => (
                   <col key={column.id} width={column.getSize()} />
@@ -504,7 +552,7 @@ export function TablePreviewPane({
               </colgroup>
               <thead>
                 {previewTable.getHeaderGroups().map((headerGroup) => (
-                  <tr key={headerGroup.id} className="table-preview-row">
+                  <tr key={headerGroup.id} className="table-preview-row" role="row">
                     {headerGroup.headers.map((header) => {
                       const meta = header.column.columnDef.meta as PreviewColumnMeta;
                       const pinned = header.column.getIsPinned();
@@ -519,6 +567,7 @@ export function TablePreviewPane({
                         <th
                           key={header.id}
                           className={`table-preview-head ${pinned ? "is-pinned" : ""}`}
+                          role="columnheader"
                           aria-label={meta.dataType ? `${meta.column} ${meta.dataType}` : meta.column}
                           title={metadataHint}
                         >
@@ -562,51 +611,43 @@ export function TablePreviewPane({
               </thead>
               <tbody>
                 {previewTable.getRowModel().rows.map((row) => (
-                  <tr key={row.id} className={`table-preview-row ${selectedRow === row.original.rowIndex ? "is-selected" : ""}`}>
-                    {row.getVisibleCells().map((cell) => {
+                  <tr key={row.id} className={`table-preview-row ${selectedRow === row.original.rowIndex ? "is-selected" : ""}`} role="row">
+                    {row.getVisibleCells().map((cell, columnIndex) => {
                       const meta = cell.column.columnDef.meta as PreviewColumnMeta;
                       const value = cell.getValue();
                       const pinned = cell.column.getIsPinned();
-                      const isNull = value === null || value === undefined;
-                      const displayValue = cellDisplayText(value, meta.dataType);
+                      const presentation = classifyCellValue(value, { dataType: meta.dataType });
+                      const isNull = presentation.kind === "null";
+                      const displayValue = presentation.displayText;
                       const isSelected = selectedCell?.rowIndex === row.original.rowIndex && selectedCell.column === meta.column;
                       const cellClasses = ["table-preview-cell"];
                       if (isNull) cellClasses.push("is-null");
                       if (isSelected) cellClasses.push("is-selected");
                       if (pinned) cellClasses.push("is-pinned");
                       cellClasses.push(`is-${cellAlignment(value, meta.dataType)}`);
-                      if (typeof value === "string" && isImageUrl(value)) {
-                        return (
-                          <td
-                            key={cell.id}
-                            className={[...cellClasses, "table-preview-image-cell"].join(" ")}
-                            title={displayValue}
-                            width={cell.column.getSize()}
-                            aria-selected={isSelected ? "true" : undefined}
-                            onClick={() => void handleCellCopy(row.original.rowIndex, meta.column, value, meta.dataType)}
-                          >
-                            <ImageCell url={value} />
-                          </td>
-                        );
-                      }
                       return (
                         <td
                           key={cell.id}
                           className={cellClasses.join(" ")}
+                          role="gridcell"
                           title={displayValue}
                           width={cell.column.getSize()}
                           aria-selected={isSelected ? "true" : undefined}
-                          onClick={() => void handleCellCopy(row.original.rowIndex, meta.column, value, meta.dataType)}
+                          tabIndex={isSelected || (!selectedCell && row.original.rowIndex === 0 && columnIndex === 0) ? 0 : -1}
+                          data-row-index={row.original.rowIndex}
+                          data-column-index={columnIndex}
+                          data-column={meta.column}
+                          onClick={() => selectCell(row.original.rowIndex, meta.column)}
+                          onDoubleClick={(event) => void openCell(event.currentTarget, row.original.rowIndex, meta.column, value, meta.dataType)}
+                          onKeyDown={(event) => handleCellKeyDown(event, row.original.rowIndex, columnIndex, meta.column, value, meta.dataType)}
                         >
-                          {isNull ? (
-                            <span className="table-preview-null-pill">NULL</span>
-                          ) : typeof value === "boolean" ? (
-                            <span className={`table-preview-boolean ${value ? "is-true" : "is-false"}`}>{value ? "TRUE" : "FALSE"}</span>
-                          ) : typeof value === "string" && /^https?:\/\//i.test(value) ? (
-                            <span className="table-preview-link-value"><Link2 size={13} aria-hidden="true" />{displayValue}</span>
-                          ) : (
-                            <CellValuePreview value={value} displayValue={displayValue} detailHint="点击复制单元格" />
-                          )}
+                          <CellValuePreview
+                            value={value}
+                            dataType={meta.dataType}
+                            columnName={meta.column}
+                            detailHint="单击选择，Ctrl+C 复制"
+                            onCopyValue={(copyValue) => void copyText(copyValue).then((ok) => onToast(ok ? "已复制单元格" : "复制失败，请手动选择复制"))}
+                          />
                         </td>
                       );
                     })}
@@ -619,15 +660,13 @@ export function TablePreviewPane({
                 page={page}
                 onBackToFirstPage={() => setPage(1)}
                 onOpenSqlConsole={onOpenSqlConsole}
-                onGenerate={() => onToast("生成测试数据需要后端写入接口，当前只读预览不执行写入")}
-                onImport={() => onToast("数据导入入口将在导入功能启用后开放")}
               />
             )}
           </div>
         )}
 
         {data && columns.length === 0 && !error && !initialLoading && (
-          <EmptyTableState page={1} onBackToFirstPage={() => setPage(1)} onOpenSqlConsole={onOpenSqlConsole} onGenerate={() => onToast("生成测试数据需要后端写入接口，当前只读预览不执行写入")} onImport={() => onToast("数据导入入口将在导入功能启用后开放")} />
+          <EmptyTableState page={1} onBackToFirstPage={() => setPage(1)} onOpenSqlConsole={onOpenSqlConsole} />
         )}
       </div>
 
@@ -700,24 +739,6 @@ export function TablePreviewPane({
       </div>
       </section>
 
-      <Dialog open={detailCell !== null} onOpenChange={(open) => { if (!open) setDetailCell(null); }}>
-        <DialogContent className="table-preview-detail-drawer">
-          <DialogHeader>
-            <DialogTitle>JSON · {detailCell?.column}</DialogTitle>
-            <DialogDescription>格式化查看字段内容；关闭后仍停留在当前行。</DialogDescription>
-          </DialogHeader>
-          <div className="table-preview-detail-body">
-            {detailCell?.json ? <JsonTree data={detailCell.json} /> : null}
-          </div>
-          <div className="table-preview-detail-footer">
-            <span>{detailCell?.displayValue.length ?? 0} 字符</span>
-            <Button size="sm" variant="outline" onClick={() => detailCell && void copyText(detailCell.displayValue).then((ok) => onToast(ok ? "已复制 JSON" : "复制失败，请手动选择复制"))}>
-              <Copy size={14} />
-              复制 JSON
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -764,27 +785,22 @@ function EmptyTableState({
   page,
   onBackToFirstPage,
   onOpenSqlConsole,
-  onGenerate,
-  onImport,
 }: {
   page: number;
   onBackToFirstPage: () => void;
   onOpenSqlConsole: (initialSql?: string) => void;
-  onGenerate: () => void;
-  onImport: () => void;
 }) {
   const beyondFirstPage = page > 1;
   return (
     <div className="hifi-preview-empty">
       <div className="hifi-preview-empty-illustration" aria-hidden="true">
         <Database size={46} />
-        <span><CirclePlus size={22} /></span>
       </div>
       <div className="hifi-preview-empty-title">{beyondFirstPage ? "本页没有更多数据" : "这张表还没有数据"}</div>
       <div className="hifi-preview-empty-copy">
         {beyondFirstPage
           ? "已经翻到了数据末尾，可以回到第一页继续浏览。"
-          : "表结构已经创建，但目前还没有记录。你可以生成测试数据、执行 SQL，或从外部文件导入数据。"}
+          : "表结构已经创建，但目前还没有记录。你可以打开 SQL 控制台执行查询或写入语句。"}
       </div>
       <div className="hifi-preview-empty-actions">
         {beyondFirstPage ? (
@@ -792,60 +808,24 @@ function EmptyTableState({
             回到第一页
           </Button>
         ) : (
-          <>
-            <Button size="sm" className="hifi-preview-empty-primary" onClick={onGenerate}>
-              <Sparkles className="hifi-preview-toolbar-icon is-accent" aria-hidden="true" />
-              <span>生成测试数据</span>
-            </Button>
-            <Button size="sm" variant="outline" className="hifi-preview-toolbar-btn" onClick={() => onOpenSqlConsole()}>
-              <Code className="hifi-preview-toolbar-icon" aria-hidden="true" />
-              <span>打开 SQL 控制台</span>
-            </Button>
-          </>
+          <Button size="sm" className="hifi-preview-empty-primary" onClick={() => onOpenSqlConsole()}>
+            <Code className="hifi-preview-toolbar-icon" aria-hidden="true" />
+            <span>打开 SQL 控制台</span>
+          </Button>
         )}
       </div>
-      {!beyondFirstPage && (
-        <>
-          <button className="hifi-preview-empty-import" type="button" onClick={onImport}>
-            导入数据
-          </button>
-          <div className="hifi-preview-empty-hint">也可以使用 INSERT 语句添加第一条记录</div>
-        </>
-      )}
+      {!beyondFirstPage && <div className="hifi-preview-empty-hint">可以使用 INSERT 语句添加第一条记录</div>}
     </div>
   );
 }
 
 function cellDisplayText(value: unknown, dataType?: string) {
-  if (value === null || value === undefined) return "NULL";
-  const temporalDisplay = formatTemporalCell(value, dataType);
-  if (temporalDisplay) return temporalDisplay;
-  return cellToText(value);
-}
-
-function cellToText(value: unknown) {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
-function formatTemporalCell(value: unknown, dataType?: string) {
-  const text = value instanceof Date ? value.toISOString() : typeof value === "string" || typeof value === "number" ? String(value) : "";
-  if (!text) return "";
-  const temporalType = /\b(date|time|timestamp|datetime)\b/i.test(dataType ?? "");
-  const normalized = text.trim();
-  const match = normalized.match(
-    /^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}:\d{2}:\d{2})(?:\.(\d+))?(?:Z|[+-]\d{2}:?\d{2})?)?$/,
-  );
-  if (!match || (!temporalType && !normalized.includes("T"))) return "";
-  if (!match[2]) return match[1];
-  const fraction = (match[3] ?? "").slice(0, 3).replace(/0+$/, "");
-  return `${match[1]} ${match[2]}${fraction ? `.${fraction}` : ""}`;
+  return classifyCellValue(value, { dataType }).displayText;
 }
 
 function preferredColumnWidth(dataType?: string, isPrimaryKey = false) {
   const type = (dataType ?? "").toLowerCase();
-  if (isPrimaryKey || isNumericDataType(type)) return 112;
+  if (isPrimaryKey || isNumericCellType(type)) return 112;
   if (/\b(date|time|timestamp|datetime)\b/.test(type)) return 164;
   if (/\b(json|jsonb|text|blob|binary)\b/.test(type)) return 184;
   if (/\b(bool|boolean)\b/.test(type)) return 92;
@@ -854,11 +834,7 @@ function preferredColumnWidth(dataType?: string, isPrimaryKey = false) {
 
 function cellAlignment(value: unknown, dataType?: string) {
   const type = (dataType ?? "").toLowerCase();
-  if (typeof value === "number" || isNumericDataType(type)) return "numeric";
-  if (/\b(date|time|timestamp|datetime)\b/.test(type)) return "temporal";
+  if (typeof value === "number" || isNumericCellType(type)) return "numeric";
+  if (isTemporalCellType(type)) return "temporal";
   return "textual";
-}
-
-function isNumericDataType(dataType: string) {
-  return /\b(?:tiny|small|medium|big)?int(?:eger)?\b|\b(serial|numeric|decimal|float|double|real)\b/.test(dataType);
 }

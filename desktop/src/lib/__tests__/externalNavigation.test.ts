@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   canOpenExternalHttpsUrl,
+  canSaveExternalImage,
   openUserConfirmedExternalHttpsUrl,
   parseExternalHttpsUrl,
+  saveUserConfirmedExternalImage,
 } from "../externalNavigation";
 
 const { invokeMock, isTauriMock } = vi.hoisted(() => ({
@@ -54,6 +56,20 @@ describe("externalNavigation", () => {
     });
   });
 
+  it("delegates image saving to the dedicated Rust boundary", async () => {
+    invokeMock.mockResolvedValueOnce({ status: "saved", fileName: "image.png", byteCount: 12 });
+
+    await expect(saveUserConfirmedExternalImage("https://cdn.example.com/image.png")).resolves.toEqual({
+      status: "saved",
+      fileName: "image.png",
+      byteCount: 12,
+    });
+    expect(canSaveExternalImage("https://cdn.example.com/image.png")).toBe(true);
+    expect(invokeMock).toHaveBeenCalledWith("save_external_image", {
+      url: "https://cdn.example.com/image.png",
+    });
+  });
+
   it("never invokes the host for a rejected URL", async () => {
     await expect(openUserConfirmedExternalHttpsUrl("file:///C:/Users/Lenovo/private.png")).resolves.toBe(false);
 
@@ -64,6 +80,7 @@ describe("externalNavigation", () => {
     isTauriMock.mockReturnValue(false);
 
     await expect(openUserConfirmedExternalHttpsUrl("https://cdn.example.com/image.png")).resolves.toBe(false);
+    expect(canSaveExternalImage("https://cdn.example.com/image.png")).toBe(false);
     expect(invokeMock).not.toHaveBeenCalled();
   });
 });

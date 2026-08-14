@@ -115,6 +115,7 @@ describe("TablePreviewPane", () => {
 
     expect(await screen.findByText("amy")).toBeTruthy();
     fireEvent.change(screen.getByPlaceholderText("搜索表数据..."), { target: { value: "amy" } });
+    expect(agentApiMocks.fetchTableResultPage).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "筛选" }));
     chooseSelectOption("筛选列", "name");
     chooseSelectOption("筛选条件", "等于");
@@ -167,7 +168,7 @@ describe("TablePreviewPane", () => {
     expect(screen.getByRole("combobox", { name: "排序方向" }).className).toContain("hifi-preview-control-select");
   });
 
-  it("uses UI primitives for preview pagination and empty actions", async () => {
+  it("keeps only implemented actions in preview pagination and empty state", async () => {
     agentApiMocks.fetchTableResultPage.mockResolvedValue(pageResult([]));
 
     const { container } = render(
@@ -184,10 +185,11 @@ describe("TablePreviewPane", () => {
     const emptyActions = container.querySelector(".hifi-preview-empty-actions");
     expect(emptyActions?.querySelector(".hifi-toolbar-btn")).toBeNull();
     const emptyButtons = Array.from(emptyActions?.querySelectorAll("button") ?? []);
-    expect(emptyButtons).toHaveLength(2);
+    expect(emptyButtons).toHaveLength(1);
     expect(emptyButtons[0].className).toContain("dbfox-button");
-    expect(emptyButtons[1].className).toContain("dbfox-button");
-    expect(screen.getByRole("button", { name: "导入数据" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "打开 SQL 控制台" })).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "导入数据" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "生成测试数据" })).toBeNull();
   });
 
   it("exports the current matching table result without page limits", async () => {
@@ -211,7 +213,7 @@ describe("TablePreviewPane", () => {
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已导出 CSV"));
   });
 
-  it("copies and marks the clicked preview cell as selected", async () => {
+  it("selects on click and copies the selected cell with the standard shortcut", async () => {
     const onToast = vi.fn();
     agentApiMocks.fetchTableResultPage.mockResolvedValue(pageResult([{ id: "1", name: "amy" }]));
 
@@ -224,9 +226,11 @@ describe("TablePreviewPane", () => {
 
     fireEvent.click(cell);
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("amy");
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
     expect(cell.className).toContain("is-selected");
     expect(cell.getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(cell, { key: "c", ctrlKey: true });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("amy");
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已复制单元格"));
   });
 
@@ -242,11 +246,13 @@ describe("TablePreviewPane", () => {
     const cell = nullPill.closest("td");
     if (!cell) throw new Error("Expected null preview cell to be rendered");
 
-    expect(nullPill.className).toContain("table-preview-null-pill");
+    expect(nullPill.className).toContain("dbfox-cell-null");
     expect(cell.className).toContain("is-null");
 
     fireEvent.click(cell);
 
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+    fireEvent.keyDown(cell, { key: "c", ctrlKey: true });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("NULL");
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已复制单元格"));
   });
@@ -298,14 +304,14 @@ describe("TablePreviewPane", () => {
     const jsonSummary = await screen.findByText(/JSON ·/);
     const cell = jsonSummary.closest("td");
     if (!cell) throw new Error("Expected JSON preview cell");
-    fireEvent.click(cell);
+    fireEvent.doubleClick(cell);
 
     expect(await screen.findByRole("dialog")).toBeTruthy();
-    expect(screen.getByText("JSON · payload")).toBeTruthy();
+    expect(screen.getByText("JSON 值 · payload")).toBeTruthy();
     expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "复制 JSON" }));
+    fireEvent.click(screen.getByRole("button", { name: "复制值" }));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith('{"enabled":true,"count":2}'));
-    await waitFor(() => expect(onToast).toHaveBeenCalledWith("已复制 JSON"));
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith("已复制单元格"));
   });
 });
 

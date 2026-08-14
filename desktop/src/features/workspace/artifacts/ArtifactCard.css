@@ -38,6 +38,13 @@
   white-space: nowrap;
 }
 
+.artifact-card-header-end {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
 .artifact-card-badge {
   flex: 0 0 auto;
   border: 1px solid transparent;

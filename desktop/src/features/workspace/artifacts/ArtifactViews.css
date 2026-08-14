@@ -51,20 +51,48 @@
   background: transparent;
 }
 
+.artifact-result-view-switch.dbfox-tabs-list {
+  gap: 1px;
+  padding: 2px;
+  border: 1px solid var(--agent-border);
+  background: var(--agent-surface);
+}
+
+.artifact-result-view-switch .dbfox-tabs-trigger {
+  min-height: 26px;
+  gap: 5px;
+  padding-inline: 9px;
+  font-size: var(--ui-font-caption);
+}
+
+.artifact-result-view-content {
+  margin: 0;
+}
+
+.artifact-result-sql {
+  max-height: min(420px, 52vh);
+}
+
 .sql-code-block {
   margin: 0;
-  padding: 12px;
+  padding: 14px 16px;
   border: 1px solid var(--sql-code-border);
   border-radius: var(--radius-control);
   background: var(--sql-code-surface);
   color: var(--sql-code-text);
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   font-size: var(--ui-font-code);
-  line-height: 1.75;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  word-break: break-word;
+  line-height: 1.7;
+  overflow: auto;
+  overflow-wrap: normal;
+  white-space: pre;
+  word-break: normal;
   tab-size: 2;
+}
+
+.sql-code-block:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
 }
 
 .sql-token-keyword {

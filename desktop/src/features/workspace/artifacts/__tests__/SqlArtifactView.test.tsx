@@ -8,7 +8,8 @@ function makeSqlArtifact(): SqlArtifact {
     id: "sql-1",
     type: "sql",
     title: "执行的 SQL",
-    sql: "SELECT SUM(amount) FROM orders",
+    sql: "SELECT SUM(amount), COUNT(*) AS order_count FROM orders WHERE deleted_at IS NULL GROUP BY customer_id",
+    dialect: "mysql",
     purpose: "分析查询",
     usedTables: ["orders"],
     validationStatus: "passed",
@@ -42,5 +43,8 @@ describe("SqlArtifactView", () => {
     expect(container.querySelector(".sql-code-block")).toBeTruthy();
     expect(container.querySelector(".sql-token-keyword")?.textContent).toBe("SELECT");
     expect(container.querySelector(".sql-token-function")?.textContent).toBe("SUM");
+    expect(screen.getByLabelText("执行的 SQL SQL").textContent).toContain(
+      "SELECT\n  SUM(amount),\n  COUNT(*) AS order_count\nFROM\n  orders",
+    );
   });
 });

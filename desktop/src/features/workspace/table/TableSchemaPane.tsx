@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { findTableByName, listColumns, type EngineColumn } from "../../../lib/api/schema";
+import { databaseTypeLabel } from "../databaseTypeLabel";
 import "./TableSchemaPane.css";
 
 interface TableSchemaPaneProps {
@@ -69,7 +70,9 @@ export function TableSchemaPane({ tableId, datasourceId }: TableSchemaPaneProps)
             {columns.map((column) => (
               <tr key={column.id}>
                 <td>{column.column_name}</td>
-                <td className="table-schema-table__type">{column.column_type || column.data_type}</td>
+                <td className="table-schema-table__type" title={column.column_type || column.data_type || undefined}>
+                  {databaseTypeLabel(column.column_type || column.data_type)}
+                </td>
                 <td>
                   <span className="table-schema-constraints">
                     {column.is_primary_key && <span className="table-schema-constraint table-schema-constraint--primary">PK</span>}

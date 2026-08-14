@@ -33,6 +33,26 @@ export function canOpenExternalHttpsUrl(rawUrl: string): boolean {
   return parseExternalHttpsUrl(rawUrl) !== null;
 }
 
+export interface SaveExternalImageResult {
+  status: "saved" | "cancelled";
+  fileName?: string | null;
+  byteCount?: number | null;
+}
+
+export function canSaveExternalImage(rawUrl: string): boolean {
+  return isTauri() && parseExternalHttpsUrl(rawUrl) !== null;
+}
+
+/**
+ * Ask the Rust Host to validate, download and save an external image. The
+ * renderer never receives filesystem access or the downloaded bytes.
+ */
+export async function saveUserConfirmedExternalImage(rawUrl: string): Promise<SaveExternalImageResult> {
+  const url = parseExternalHttpsUrl(rawUrl);
+  if (!url || !isTauri()) throw new Error("当前环境无法安全保存该图片");
+  return invoke<SaveExternalImageResult>("save_external_image", { url: url.href });
+}
+
 /**
  * Open a URL in the operating system's default browser after a direct user
  * gesture. The Rust host repeats the policy validation before delegating to

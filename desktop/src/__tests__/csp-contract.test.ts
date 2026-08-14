@@ -21,4 +21,11 @@ describe("desktop CSP network boundary", () => {
     expect(csp).toContain("font-src 'self'");
     expect(csp).not.toMatch(/font-src[^;]*(?:googleapis|gstatic|loli)/i);
   });
+
+  it("permits explicit HTTPS image previews without opening general HTTPS fetches", () => {
+    const csp = tauriConfig.app.security.csp;
+
+    expect(csp).toContain("img-src 'self' data: https:");
+    expect(csp).not.toMatch(/connect-src[^;]*https:/i);
+  });
 });

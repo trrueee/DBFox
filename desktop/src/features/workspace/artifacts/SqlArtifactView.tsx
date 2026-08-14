@@ -67,7 +67,7 @@ export function SqlArtifactView({ artifact, onOpenSqlConsole, onToast }: SqlArti
       }
     >
       <div className="sql-artifact__editor">
-        <SqlCodeBlock sql={artifact.sql} ariaLabel={`${artifact.title} SQL`} />
+        <SqlCodeBlock sql={artifact.sql} dialect={artifact.dialect} ariaLabel={`${artifact.title} SQL`} />
       </div>
     </ArtifactCard>
   );

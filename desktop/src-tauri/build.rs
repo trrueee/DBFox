@@ -20,6 +20,7 @@ fn main() {
         "restart_python_engine",
         "open_diagnostic_logs",
         "open_external_https_url",
+        "save_external_image",
         "export_diagnostic_bundle",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(app_manifest))

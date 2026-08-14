@@ -60,10 +60,6 @@
   background: var(--agent-surface-subtle);
 }
 
-.artifact-table-grid tbody .artifact-table-row:hover .artifact-table-cell:first-child {
-  box-shadow: inset 2px 0 0 var(--agent-accent);
-}
-
 .artifact-table-head.is-numeric {
   text-align: right;
 }
@@ -135,7 +131,7 @@
 }
 
 .artifact-table-cell {
-  cursor: copy;
+  cursor: default;
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -155,18 +151,6 @@
   background: color-mix(in srgb, var(--agent-accent) 12%, var(--agent-surface));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agent-accent) 55%, transparent);
   color: var(--agent-text);
-}
-
-.artifact-table-null-pill {
-  display: inline-flex;
-  align-items: center;
-  border-radius: var(--radius-pill, 999px);
-  padding: 1px 6px;
-  border: 1px solid var(--agent-border);
-  background: var(--agent-surface-muted);
-  color: var(--agent-text-muted);
-  font-size: var(--ui-font-caption);
-  font-style: italic;
 }
 
 .artifact-table-empty {
