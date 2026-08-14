@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "PYSEC-2026-2858"
+ignoreUntil = 2026-11-15
+reason = "Paramiko has no patched release as of 2026-08-15. DBFox only acts as a client for explicitly configured SSH database tunnels; it does not expose an SSH server. The advisory is low severity but remains an accepted residual risk. Remove this exception when an upstream release contains paramiko/paramiko@a448945."

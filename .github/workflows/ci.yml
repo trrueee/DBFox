@@ -262,6 +262,7 @@ jobs:
       - name: Audit all committed Python hash locks against OSV
         run: |
           timeout 120s "$RUNNER_TEMP/osv-scanner" scan source --no-resolve --data-source=native --verbosity=warn \
+            --config=osv-scanner.toml \
             --lockfile=requirements.txt:requirements.lock \
             --lockfile=requirements.txt:requirements-dev.lock \
             --lockfile=requirements.txt:requirements-build.lock

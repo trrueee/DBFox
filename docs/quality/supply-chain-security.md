@@ -16,7 +16,7 @@
 
 | 生态 | 审计输入 | 工具与失败策略 |
 | --- | --- | --- |
-| Python | `requirements.lock`、`requirements-dev.lock`、`requirements-build.lock` | 下载并 SHA-256 校验 OSV Scanner `v2.3.8`，以 `--no-resolve --data-source=native` 扫描三个已哈希锁定的 requirements 文件；发现已知漏洞即失败。 |
+| Python | `requirements.lock`、`requirements-dev.lock`、`requirements-build.lock` | 下载并 SHA-256 校验 OSV Scanner `v2.3.8`，以 `--no-resolve --data-source=native` 扫描三个已哈希锁定的 requirements 文件；发现已知漏洞即失败。仅允许 `osv-scanner.toml` 中带理由和到期时间的已审查例外。 |
 | npm | `desktop/package-lock.json` | `npm audit --package-lock-only --ignore-scripts --audit-level=high`；仅高危或严重漏洞阻断，避免开发工具的低风险通报阻塞交付。 |
 | Rust | `desktop/src-tauri/Cargo.lock` | 下载并 SHA-256 校验 RustSec `cargo-audit v0.22.2`，审计已提交的锁文件；已知漏洞阻断，未维护状态和上游 GTK3 技术债会在日志中保留为告警，而不是伪装成漏洞失败。 |
 
@@ -47,9 +47,24 @@ npm audit --package-lock-only --ignore-scripts --audit-level=high --registry=htt
 ```
 
 在 Linux 或对应平台下载并校验 CI 指定的二进制后，按 CI 中的参数运行 OSV Scanner 和
-`cargo-audit`。不要使用 `npm audit fix --force`、未校验的 `curl | sh`，或通过
-`--ignore`/`--deny` 配置隐藏告警。若必须临时接受一个不可修复的告警，应在单独的安全
-决策记录中说明影响范围、到期时间和移除计划，而不是将它静默加入全局忽略列表。
+`cargo-audit`。不要使用 `npm audit fix --force`、未校验的 `curl | sh`，或无理由、无
+期限的全局忽略。若必须临时接受一个不可修复的告警，必须在根目录
+`osv-scanner.toml` 中逐项记录公告 ID、影响判断、到期时间和上游移除条件；CI 显式加载
+该配置，过期例外重新成为阻断项。
+
+## 当前 Python 漏洞例外
+
+`PYSEC-2026-2858` / `GHSA-r374-rxx8-8654` 影响 Paramiko 4.0.0 及以前版本，公告评级
+为低危，且截至 2026-08-15 没有已发布的修复版本。DBFox 只作为客户端连接用户明确
+配置的数据库 SSH 跳板，不提供 SSH 服务端；这会降低暴露面，但并未从实现上删除
+Paramiko 的 SHA-1 代码路径，因此仍按残余风险接受至 2026-11-15。例外只针对该公告，
+不忽略 Paramiko 包的其他漏洞。上游发布包含 `paramiko/paramiko@a448945` 的版本后，
+必须删除例外、升级约束并重新生成三份锁文件。
+
+`GHSA-g6cj-pr64-35w5` 影响 `cryptography` 44.0.0 至 49.x，官方修复版为 50.0.0。
+DBFox 不直接使用该库，而是由 Paramiko 传递引入，因此通过标准 `constraints.txt` 将三套
+依赖解析共同限制到 `cryptography>=50.0.0,<51.0.0`，避免为了安全版本约束重新制造一项
+虚假的直接运行时依赖。
 
 前端依赖事实以 `desktop/package.json` 和 `desktop/package-lock.json` 为准。当前项目不再
 依赖 Monaco，也没有为已删除依赖保留全局 npm override。新增或重新引入编辑器、HTML

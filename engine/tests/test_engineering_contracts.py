@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import tomllib
+from datetime import date
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -32,6 +33,7 @@ PYTHON_LOCKS = {
 }
 SIDECAR_PYTHON_VERSION_FILE = ROOT / ".sidecar-python-version"
 SIDECAR_PYTHON_BUILD_FILE = ROOT / ".sidecar-python-build"
+OSV_CONFIG = ROOT / "osv-scanner.toml"
 
 
 def _normalise_package_name(name: str) -> str:
@@ -42,7 +44,9 @@ def _direct_requirement_names(path: Path) -> set[str]:
     names: set[str] = set()
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
-        if not line or line.startswith(("#", "-r", "--requirement")):
+        if not line or line.startswith(
+            ("#", "-r", "--requirement", "-c", "--constraint")
+        ):
             continue
         match = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)", line)
         assert match, f"Unrecognised direct requirement in {path.name}: {line}"
@@ -330,6 +334,7 @@ def test_ci_runs_bounded_lockfile_vulnerability_audits() -> None:
     assert "bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc" in workflow
     assert "sha256sum --check --strict" in workflow
     assert "scan source --no-resolve --data-source=native --verbosity=warn" in workflow
+    assert "--config=osv-scanner.toml" in workflow
     assert "--lockfile=requirements.txt:requirements.lock" in workflow
     assert "--lockfile=requirements.txt:requirements-dev.lock" in workflow
     assert "--lockfile=requirements.txt:requirements-build.lock" in workflow
@@ -338,6 +343,29 @@ def test_ci_runs_bounded_lockfile_vulnerability_audits() -> None:
     assert "rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-x86_64-unknown-linux-gnu-v0.22.2.tgz" in workflow
     assert "ab28a1bdb54db4d5d8ad5981cf1f959410370b3d28250dbd35f6a44248620e39" in workflow
     assert '"$CARGO_AUDIT_BIN" audit --db "$RUNNER_TEMP/rustsec-advisory-db" --file Cargo.lock' in workflow
+
+
+def test_osv_exception_is_narrow_documented_and_expires() -> None:
+    config = tomllib.loads(OSV_CONFIG.read_text(encoding="utf-8"))
+    ignored = config.get("IgnoredVulns")
+
+    assert isinstance(ignored, list)
+    assert len(ignored) == 1
+    exception = ignored[0]
+    assert exception["id"] == "PYSEC-2026-2858"
+    assert exception["ignoreUntil"] == date(2026, 11, 15)
+    assert "no patched release" in exception["reason"]
+    assert "a448945" in exception["reason"]
+
+
+def test_cryptography_security_floor_is_locked_everywhere() -> None:
+    requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    constraints = (ROOT / "constraints.txt").read_text(encoding="utf-8")
+    assert "-c constraints.txt" in requirements
+    assert "cryptography>=50.0.0,<51.0.0" in constraints
+    for lock_name in PYTHON_LOCKS.values():
+        lock_text = (ROOT / lock_name).read_text(encoding="utf-8")
+        assert re.search(r"^cryptography==50\.0\.0\s+\\$", lock_text, re.MULTILINE), lock_name
 
 
 def test_test_fixtures_do_not_use_llm_key_shaped_literals() -> None:
