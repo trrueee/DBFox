@@ -185,10 +185,10 @@ function AssistantMessage({
 }) {
   if (item.status === "cancelled" || !item.payload.content) return null;
   const finalAnswer = item.payload.completion_disposition != null;
-  const presentationPhase = finalAnswer ? "final_answer" : "commentary";
   return (
     <article
-      className={`conv-agent-message is-${presentationPhase} ${finalAnswer ? "conv-answer-document" : ""}`}
+      className="conv-agent-message conv-answer-document"
+      data-streaming-reveal={item.status === "in_progress" ? "true" : undefined}
       aria-live={item.status === "in_progress" ? "polite" : undefined}
     >
       {finalAnswer && item.payload.completion_disposition === "bounded_partial" && (

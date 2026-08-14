@@ -6,7 +6,7 @@
   overflow: hidden;
   background: var(--color-panel);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
+  border-radius: 12px;
   box-shadow:
     0 20px 60px rgba(15, 23, 42, 0.14),
     0 0 0 1px rgba(15, 23, 42, 0.04);
@@ -17,7 +17,7 @@
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
-  background: var(--color-bg);
+  background: var(--color-panel);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -53,7 +53,7 @@
 
 .dbfox-command-list {
   flex: 1;
-  padding: 8px;
+  padding: 6px;
   overflow-y: auto;
 }
 
@@ -70,7 +70,7 @@
 
 .dbfox-command-category {
   display: block;
-  padding: 4px 12px 2px;
+  padding: 8px 10px 3px;
   color: var(--color-text-muted);
   font-size: var(--ui-font-caption);
   font-weight: 600;
@@ -82,8 +82,9 @@
   display: flex;
   align-items: center;
   width: 100%;
-  gap: 10px;
-  padding: 9px 12px;
+  min-height: 44px;
+  gap: 9px;
+  padding: 6px 9px;
   color: inherit;
   font-family: var(--font-family);
   text-align: left;
@@ -94,7 +95,7 @@
 
 .dbfox-command-item:hover,
 .dbfox-command-item[data-selected="true"] {
-  background: var(--color-primary-soft);
+  background: var(--control-bg-hover);
 }
 
 .dbfox-command-item-icon {
@@ -102,16 +103,16 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   color: var(--color-text-muted);
-  background: var(--color-bg);
+  background: transparent;
   border-radius: 6px;
 }
 
 .dbfox-command-item[data-selected="true"] .dbfox-command-item-icon {
   color: var(--color-primary);
-  background: var(--color-primary-soft);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 .dbfox-command-item-label {
@@ -136,6 +137,6 @@
 }
 
 .dbfox-command-item[data-selected="true"] .dbfox-command-item-label {
-  color: var(--color-primary);
-  font-weight: 600;
+  color: var(--color-text-primary);
+  font-weight: 550;
 }

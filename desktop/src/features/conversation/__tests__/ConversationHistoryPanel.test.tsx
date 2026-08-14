@@ -36,13 +36,18 @@ describe("ConversationHistoryPanel", () => {
     render(
       <ConversationHistoryPanel
         conversations={conversations}
+        datasourceLabels={{ "ds-1": "CreatorHub" }}
         activeConversationId="conv-1"
         onOpenConversation={onOpenConversation}
         onDeleteConversation={vi.fn()}
       />,
     );
 
-    expect(screen.getByText("2 条")).toBeTruthy();
+    expect(screen.getByText("CreatorHub")).toBeTruthy();
+    expect(screen.getByText("2 个对话", { selector: ".conversation-history__group-count" })).toBeTruthy();
+    expect(screen.getByText("3 条消息 · 2 个工件")).toBeTruthy();
+    expect(screen.getByText("1 条消息 · 上次运行失败")).toBeTruthy();
+    expect(screen.getAllByRole("button", { current: "page" })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "打开 统计订单趋势" }));
 
     expect(onOpenConversation).toHaveBeenCalledWith(conversations[0]);
@@ -63,6 +68,34 @@ describe("ConversationHistoryPanel", () => {
 
     expect(onDeleteConversation).toHaveBeenCalledWith("conv-1");
     expect(onOpenConversation).not.toHaveBeenCalled();
+  });
+
+  it("shows a bounded datasource group and expands the remaining conversations", () => {
+    const manyConversations = Array.from({ length: 9 }, (_, index): ConversationSummary => ({
+      ...conversations[0],
+      id: `conv-${index + 1}`,
+      title: `会话 ${index + 1}`,
+    }));
+
+    const { container } = render(
+      <ConversationHistoryPanel
+        conversations={manyConversations}
+        datasourceLabels={{ "ds-1": "CreatorHub" }}
+        onOpenConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector(".workspace-shell__header")).toBeNull();
+    expect(screen.getByText("会话 6")).toBeTruthy();
+    expect(screen.queryByText("会话 7")).toBeNull();
+
+    const expand = screen.getByRole("button", { name: "展开其余 3 个对话" });
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(expand);
+
+    expect(screen.getByText("会话 9")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "收起" }).getAttribute("aria-expanded")).toBe("true");
   });
 
   it("shows a shared empty state when no conversations exist", () => {

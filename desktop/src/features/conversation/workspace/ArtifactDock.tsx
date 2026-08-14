@@ -1,17 +1,19 @@
 import { BarChart3, FileText, PanelRightClose, Table2 } from "lucide-react";
 import { useMemo } from "react";
-import type { ResultViewArtifact } from "../../../types/agentArtifact";
+import type { ResultViewArtifact, SqlArtifact } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
 import { DeferredChartArtifactView } from "../../workspace/artifacts/DeferredChartArtifactView";
 import { MarkdownArtifactView } from "../../workspace/artifacts/MarkdownArtifactView";
 import { TableArtifactView } from "../../workspace/artifacts/TableArtifactView";
 import {
   isPrimaryConversationArtifact,
+  isSqlConversationArtifact,
   isSqlBackedResultViewArtifact,
   sortConversationArtifacts,
   toChartArtifactModel,
   toMarkdownArtifactModel,
   toResultViewArtifactModel,
+  toSqlArtifactModel,
 } from "./conversationArtifactModels";
 
 interface ArtifactDockProps {
@@ -19,6 +21,7 @@ interface ArtifactDockProps {
   selectedArtifactId?: string | null;
   onSelectArtifact?: (artifactId: string) => void;
   onOpenResultTab?: (artifact: ResultViewArtifact) => void;
+  onOpenSqlConsole?: (sql?: string) => void;
   onCollapse?: () => void;
 }
 
@@ -29,6 +32,7 @@ export function ArtifactDock({
   selectedArtifactId,
   onSelectArtifact,
   onOpenResultTab,
+  onOpenSqlConsole,
   onCollapse,
 }: ArtifactDockProps) {
   const orderedArtifacts = useMemo(
@@ -79,7 +83,9 @@ export function ArtifactDock({
           {activeArtifact ? (
             <DockArtifactPreview
               artifact={activeArtifact}
+              artifacts={artifacts}
               onOpenResultTab={onOpenResultTab}
+              onOpenSqlConsole={onOpenSqlConsole}
             />
           ) : (
             <div className="conv-artifact-dock-empty">选择一个工件查看详情</div>
@@ -118,16 +124,24 @@ function ArtifactIcon({ kind }: { kind: DockKind }) {
 
 function DockArtifactPreview({
   artifact,
+  artifacts,
   onOpenResultTab,
+  onOpenSqlConsole,
 }: {
   artifact: ConversationArtifact;
+  artifacts: ConversationArtifact[];
   onOpenResultTab?: (artifact: ResultViewArtifact) => void;
+  onOpenSqlConsole?: (sql?: string) => void;
 }) {
   if (isSqlBackedResultViewArtifact(artifact)) {
+    const resultArtifact = toResultViewArtifactModel(artifact);
+    const sourceSqlArtifact = resolveSourceSqlArtifact(resultArtifact, artifacts);
     return (
       <TableArtifactView
-        artifact={toResultViewArtifactModel(artifact)}
+        artifact={resultArtifact}
+        sourceSqlArtifact={sourceSqlArtifact}
         onOpenResultTab={onOpenResultTab}
+        onOpenSqlConsole={onOpenSqlConsole}
         onToast={() => undefined}
       />
     );
@@ -138,4 +152,17 @@ function DockArtifactPreview({
   }
 
   return <MarkdownArtifactView artifact={toMarkdownArtifactModel(artifact)} onToast={() => undefined} />;
+}
+
+function resolveSourceSqlArtifact(
+  resultArtifact: ResultViewArtifact,
+  artifacts: ConversationArtifact[],
+): SqlArtifact | undefined {
+  if (!resultArtifact.sourceSqlArtifactId) return undefined;
+  const source = artifacts.find((candidate) => (
+    candidate.id === resultArtifact.sourceSqlArtifactId && isSqlConversationArtifact(candidate)
+  ));
+  if (!source) return undefined;
+  const model = toSqlArtifactModel(source);
+  return model.sql.trim() ? model : undefined;
 }

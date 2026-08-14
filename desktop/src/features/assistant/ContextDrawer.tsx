@@ -1,6 +1,5 @@
 import { Info, Sparkles, X } from "lucide-react";
 import type { WorkspaceTab } from "../../types/workspace";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDatasourceState } from "../datasource/useDatasourceState";
 import { getStoredApiConfig } from "../../lib/llmConfig";
 import "./ContextDrawer.css";
@@ -13,8 +12,6 @@ interface ContextDrawerProps {
 }
 
 export function ContextDrawer({ open, type, activeTab, onClose }: ContextDrawerProps) {
-  const contextTables = useWorkspaceStore((s) => s.contextTables);
-
   return (
     <section className={`context-drawer ${open ? "is-open" : "is-closed"}`}>
       <div className="context-drawer__surface">
@@ -29,7 +26,7 @@ export function ContextDrawer({ open, type, activeTab, onClose }: ContextDrawerP
         </div>
 
         <div className="context-drawer__body">
-          {type === "ai-suggest" ? <AiSuggest /> : <PropsPanel activeTab={activeTab} contextTables={contextTables} />}
+          {type === "ai-suggest" ? <AiSuggest /> : <PropsPanel activeTab={activeTab} />}
         </div>
       </div>
     </section>
@@ -48,7 +45,7 @@ function AiSuggest() {
   );
 }
 
-function PropsPanel({ activeTab, contextTables }: { activeTab: WorkspaceTab; contextTables: string[] }) {
+function PropsPanel({ activeTab }: { activeTab: WorkspaceTab }) {
   const { tables, activeDatasource: activeDs } = useDatasourceState();
   const apiConfig = getStoredApiConfig();
 
@@ -94,7 +91,6 @@ function PropsPanel({ activeTab, contextTables }: { activeTab: WorkspaceTab; con
   return (
     <InfoList
       rows={[
-        ["上下文关联:", `${contextTables.length} 张表`],
         ["激活大模型:", apiConfig?.modelName || "—"],
         ["会话ID:", activeTab.conversationId || "—"],
       ]}

@@ -3,6 +3,7 @@ import type { ConversationArtifact, ConversationDetail } from "../../types/conve
 
 const mocks = vi.hoisted(() => ({
   admit: vi.fn(),
+  create: vi.fn(),
   getRunArtifacts: vi.fn(),
   follow: vi.fn(),
 }));
@@ -10,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../features/conversation/conversationRepository", () => ({
   admitConversationInput: mocks.admit,
   cancelConversationRun: vi.fn(),
-  createConversation: vi.fn(),
+  createConversation: mocks.create,
   deleteConversation: vi.fn(),
   getConversation: vi.fn(),
   getConversationHistory: vi.fn(),
@@ -61,6 +62,7 @@ const initialDetail: ConversationDetail = {
 describe("conversationStore admission projection", () => {
   beforeEach(() => {
     mocks.admit.mockReset();
+    mocks.create.mockReset();
     mocks.getRunArtifacts.mockReset();
     mocks.follow.mockReset().mockResolvedValue(undefined);
     useConversationStore.setState({
@@ -69,6 +71,21 @@ describe("conversationStore admission projection", () => {
       detailById: { [initialDetail.id]: initialDetail },
       artifactsById: {},
       liveFieldsById: {},
+    });
+  });
+
+  it("creates a conversation without the removed manual table context", async () => {
+    mocks.create.mockResolvedValue({
+      ...initialDetail,
+      context_tables: [],
+    });
+
+    await useConversationStore.getState().createAndOpenConversation("分析最近订单");
+
+    expect(mocks.create).toHaveBeenCalledWith({
+      datasource_id: "datasource-1",
+      title: "分析最近订单",
+      context_tables: [],
     });
   });
 

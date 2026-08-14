@@ -191,10 +191,11 @@ export function ConversationWorkspace({
 
   const artifactDock = hasArtifacts ? (
     <ArtifactDock
-      artifacts={primaryArtifacts}
+      artifacts={artifacts}
       selectedArtifactId={detail.selected_artifact_id}
       onSelectArtifact={handleSelectArtifact}
       onOpenResultTab={onOpenResultTab}
+      onOpenSqlConsole={onOpenSqlConsole}
       onCollapse={() => artifactPanelRef.current?.collapse()}
     />
   ) : null;

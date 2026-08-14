@@ -80,7 +80,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
               {items.map((command) => (
                 <CommandItem
                   key={command.id}
-                  value={`${command.name} ${command.category} ${command.shortcut || ""}`}
+                  value={command.id}
+                  keywords={[
+                    command.name,
+                    command.category,
+                    command.description || "",
+                    command.shortcut || "",
+                  ]}
                   onSelect={() => runCommand(command)}
                 >
                   <CommandItemIcon>

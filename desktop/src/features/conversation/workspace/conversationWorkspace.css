@@ -1332,24 +1332,15 @@
 
 .conv-agent-message {
   width: 100%;
+  margin: 8px 0 0;
   color: var(--text-primary);
   font-size: var(--agent-font-body);
   line-height: var(--agent-line-height);
   overflow-wrap: anywhere;
 }
 
-.conv-agent-message.is-commentary {
-  margin: 4px 0;
-}
-
-.conv-agent-message.is-commentary .hifi-markdown-content > :last-child,
-.conv-agent-message.is-final_answer .hifi-markdown-content > :last-child {
+.conv-agent-message .hifi-markdown-content > :last-child {
   margin-bottom: 0;
-}
-
-.conv-agent-message.is-final_answer {
-  margin-top: 8px;
-  color: var(--agent-text);
 }
 
 .conv-agent-tool,

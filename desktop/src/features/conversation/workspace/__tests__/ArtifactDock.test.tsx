@@ -146,6 +146,41 @@ describe("ArtifactDock", () => {
     expect(onSelectArtifact).toHaveBeenCalledWith("artifact-chart");
   });
 
+  it("resolves a result SQL view only through its recorded source artifact id", async () => {
+    const artifacts = trustedQueryArtifacts();
+    artifacts.push({
+      ...artifacts[0],
+      id: "artifact-sql-unrelated",
+      semantic_key: "sql_candidate_unrelated",
+      payload: {
+        sql: "SELECT secret FROM unrelated",
+        safeSql: "SELECT secret FROM unrelated",
+        dialect: "sqlite",
+        queryFingerprint: "sql-unrelated",
+      },
+    });
+    const onOpenSqlConsole = vi.fn();
+    render(
+      <ArtifactDock
+        artifacts={artifacts}
+        selectedArtifactId="artifact-result"
+        onOpenResultTab={vi.fn()}
+        onOpenSqlConsole={onOpenSqlConsole}
+      />,
+    );
+
+    await screen.findByText("本页 1 / 共 1 行");
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "SQL" }), { button: 0, ctrlKey: false });
+
+    const sql = screen.getByLabelText("Order result 来源 SQL");
+    expect(sql.textContent?.replace(/\s+/g, " ").trim()).toBe(
+      "SELECT id, amount FROM orders",
+    );
+    expect(sql.textContent).not.toContain("unrelated");
+    fireEvent.click(screen.getByRole("button", { name: "在 SQL 控制台打开" }));
+    expect(onOpenSqlConsole).toHaveBeenCalledWith("SELECT id, amount FROM orders");
+  });
+
   it("falls back to the latest primary artifact when selection points to supporting material", () => {
     const artifacts = trustedQueryArtifacts();
     const latestSql: ConversationArtifact = {

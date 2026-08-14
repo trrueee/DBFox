@@ -178,6 +178,7 @@ export function toSqlArtifactModel(artifact: ConversationArtifact): SqlArtifact 
     title: artifact.title,
     description: payloadString(artifact.payload, ["purpose", "description"]),
     sql: conversationSqlText(artifact),
+    dialect: payloadString(artifact.payload, ["dialect"]),
     purpose: payloadString(artifact.payload, ["purpose"]),
     validationStatus: payloadString(artifact.payload, ["validationStatus"]),
     executionStatus: payloadString(artifact.payload, ["executionStatus"]),

@@ -61,4 +61,18 @@ describe("CommandPalette", () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps duplicate conversation titles as distinct cmdk items", () => {
+    const duplicateCommands: CommandItem[] = [
+      { id: "conversation-a", name: "hello", category: "最近对话", action: vi.fn() },
+      { id: "conversation-b", name: "hello", category: "最近对话", action: vi.fn() },
+    ];
+
+    const { container } = render(
+      <CommandPalette open commands={duplicateCommands} onClose={vi.fn()} />,
+    );
+
+    expect(screen.getAllByText("hello")).toHaveLength(2);
+    expect(container.querySelectorAll('[data-selected="true"]')).toHaveLength(1);
+  });
 });

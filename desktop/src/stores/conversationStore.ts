@@ -60,7 +60,6 @@ export interface ConversationActions {
   loadOlderHistory: (conversationId: string) => Promise<boolean>;
   createAndOpenConversation: (
     question: string,
-    contextTables: string[],
   ) => Promise<ConversationDetail>;
   deleteConversationById: (conversationId: string) => Promise<void>;
   loadConversation: (detail: ConversationDetail) => void;
@@ -131,14 +130,14 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     return Boolean(page.pagination?.items.has_more || page.pagination?.runs.has_more);
   },
 
-  createAndOpenConversation: async (question, contextTables) => {
+  createAndOpenConversation: async (question) => {
     requireConversationLlmPayload();
     const datasourceId = useDatasourceSelectionStore.getState().activeDatasourceId;
     if (!datasourceId) throw new Error("Please select a datasource first.");
     const detail = await createConversation({
       datasource_id: datasourceId,
       title: question.slice(0, 80),
-      context_tables: contextTables,
+      context_tables: [],
     });
     get().loadConversation(detail);
     return detail;

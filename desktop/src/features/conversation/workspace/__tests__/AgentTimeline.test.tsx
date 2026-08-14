@@ -65,6 +65,36 @@ describe("AgentTimeline", () => {
     expect(container.querySelector(".conv-answer-document")).toBeTruthy();
   });
 
+  it("keeps one presentation contract while an assistant message becomes terminal", () => {
+    const streaming = assistant("## 分析结果\n\n订单保持增长。", null, 1);
+    streaming.status = "in_progress";
+    const { container, rerender } = renderTimeline([streaming], { status: "running" });
+
+    const streamingArticle = container.querySelector(".conv-agent-message");
+    expect(streamingArticle?.className).toBe("conv-agent-message conv-answer-document");
+    expect(streamingArticle?.getAttribute("data-streaming-reveal")).toBe("true");
+
+    const completed = {
+      ...streaming,
+      status: "completed" as const,
+      payload: { ...streaming.payload, completion_disposition: "complete" as const },
+    };
+    rerender(
+      <AgentTimeline
+        run={{ ...run(), status: "completed" }}
+        items={[completed]}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+        onSelectArtifact={vi.fn()}
+      />,
+    );
+
+    const completedArticle = container.querySelector(".conv-agent-message");
+    expect(completedArticle?.className).toBe("conv-agent-message conv-answer-document");
+    expect(completedArticle?.hasAttribute("data-streaming-reveal")).toBe(false);
+    expect(screen.getByRole("heading", { name: "分析结果" })).toBeTruthy();
+  });
+
   it("distinguishes a tool terminated by run failure from user cancellation", () => {
     const failedCall = call(1);
     failedCall.status = "cancelled";

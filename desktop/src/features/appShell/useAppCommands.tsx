@@ -101,7 +101,7 @@ export function useAppCommands({
       items.push({
         id: `conversation-${conversation.id}`,
         name: conversation.title || "新对话",
-        description: conversation.last_message || "继续这段对话",
+        description: conversationCommandDescription(conversation),
         category: "最近对话",
         icon: <MessageSquare size={13} />,
         action: () => openConversationResult(conversation),
@@ -134,4 +134,17 @@ export function useAppCommands({
   ]);
 
   return { commandItems };
+}
+
+function conversationCommandDescription(conversation: ConversationSummary) {
+  const lastMessage = conversation.last_message?.trim();
+  if (lastMessage && lastMessage !== conversation.title.trim()) return lastMessage;
+  const updatedAt = new Date(conversation.updated_at || "");
+  if (Number.isNaN(updatedAt.getTime())) return "继续这段对话";
+  return `上次更新于 ${updatedAt.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
 }
