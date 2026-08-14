@@ -15,7 +15,7 @@
 - [Agent 生产评测方法](./agent-evaluation-methodology.md)：分层 Harness、数据集角色、Grader、统计门禁与脱敏 Trace 合同。
 - [DBFox AgentBench](./agentbench-implementation.md)：60 场景数据集、评分器校准、真实 RunLoop、故障注入、CLI 和 CI。
 - [Agent Harness 设计、优化与评测复盘](./agent-harness-evolution-retrospective.md)：从真实故障、边界合同和关键提交理解当前 Harness 为什么这样设计，以及如何科学评价后续优化。
-- [供应链安全](./supply-chain-security.md)：锁文件、OSV、npm audit、RustSec、SBOM 和许可证边界。
+- [供应链安全](./supply-chain-security.md)：锁文件、依赖审计、提交签名和正式产物来源证明。
 - [发布验证矩阵](./release-validation-matrix.md)：平台、Runner、产物和人工验收的证据要求。
 
 质量文档中的“通过”只对注明的 commit、平台、产物和命令有效。未执行的真实 Provider、数据库、安装、签名、公证或 GUI 场景必须明确写为未验证。

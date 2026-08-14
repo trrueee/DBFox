@@ -66,6 +66,7 @@
 2. [`quality/engineering-gates.md`](quality/engineering-gates.md)
 3. [`quality/supply-chain-security.md`](quality/supply-chain-security.md)
 4. [`quality/release-validation-matrix.md`](quality/release-validation-matrix.md)
+5. [`../AUTHORS.md`](../AUTHORS.md)（作者、署名义务和正式产物来源）
 
 ## 当前架构文档
 

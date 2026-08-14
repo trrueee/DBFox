@@ -251,6 +251,19 @@ def test_windows_release_uses_repository_toolchain_and_hash_contracts() -> None:
     assert "refs/heads/main" in workflow
 
 
+def test_windows_release_requires_verified_source_and_attests_installers() -> None:
+    workflow = WINDOWS_SIGNED_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "id-token: write" in workflow
+    assert "attestations: write" in workflow
+    assert "Require a GitHub-verified source commit" in workflow
+    assert ".commit.verification.verified" in workflow
+    assert "actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d" in workflow
+    assert "desktop/src-tauri/target/release/bundle/msi/*.msi" in workflow
+    assert "desktop/src-tauri/target/release/bundle/nsis/*.exe" in workflow
+    assert "desktop/src-tauri/target/release/bundle/**/*.sig" in workflow
+
+
 def test_sidecar_build_uses_exact_python_distribution_sources() -> None:
     version = SIDECAR_PYTHON_VERSION_FILE.read_text(encoding="utf-8").strip()
     build = SIDECAR_PYTHON_BUILD_FILE.read_text(encoding="utf-8").strip()

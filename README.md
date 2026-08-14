@@ -22,7 +22,8 @@
   <a href="#系统架构">系统架构</a> ·
   <a href="#快速开始">快速开始</a> ·
   <a href="docs/README.md">文档中心</a> ·
-  <a href="CONTRIBUTING.md">参与贡献</a>
+  <a href="CONTRIBUTING.md">参与贡献</a> ·
+  <a href="AUTHORS.md">作者与正式来源</a>
 </p>
 
 ![DBFox 桌面工作区](docs/images/dbfox-demo.png)
@@ -227,6 +228,16 @@ Agent 质量不只通过单元测试判断。仓库同时维护确定性场景�
 
 具体候选版本必须以绑定 commit 的 CI、产物和 smoke 证据为准。源码中存在平台配置不等于该平台已经通过发布验收。
 
+## 正式来源与真伪校验
+
+DBFox 的规范仓库是 [`trrueee/DBFox`](https://github.com/trrueee/DBFox)，正式安装包只通过该仓库的 GitHub Releases 发布。正式 Windows 候选版本要求源提交已通过 GitHub 签名验证，并同时具备 Authenticode、Tauri updater 签名和 GitHub Artifact Attestation。下载后可以运行：
+
+```powershell
+gh attestation verify .\DBFox_1.0.3_x64_en-US.msi --repo trrueee/DBFox
+```
+
+该命令验证文件摘要是否与规范仓库发布工作流登记的构建来源一致；它不会把第三方 fork 或本地重打包文件认作正式产物。作者、署名义务、历史证明边界和完整校验方式见[作者与正式来源](AUTHORS.md)。
+
 ## 安全说明
 
 - 数据库密码、模型 API Key 和 SSH Secret 只进入系统凭据库；
@@ -245,4 +256,4 @@ Agent 质量不只通过单元测试判断。仓库同时维护确定性场景�
 
 ## License
 
-DBFox 使用 [MIT License](LICENSE)。
+DBFox 使用 [MIT License](LICENSE)。允许使用、修改、分发和商业化，但必须保留许可证中的版权与许可声明；MIT 授权不代表衍生版本由 DBFox 维护者发布或认可。项目作者和正式产物来源见 [AUTHORS.md](AUTHORS.md)。

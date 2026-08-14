@@ -5,6 +5,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: windows-signed-release
@@ -47,6 +49,17 @@ jobs:
             if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
               throw "Required release credential is missing: $name"
             }
+          }
+
+      - name: Require a GitHub-verified source commit
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $verified = gh api "/repos/${{ github.repository }}/commits/${{ github.sha }}" `
+            --jq '.commit.verification.verified'
+          if ($verified -ne 'true') {
+            throw 'The release source commit is not cryptographically verified by GitHub.'
           }
 
       # v5.6.0
@@ -162,6 +175,15 @@ jobs:
           if ($signatures.Count -lt 1) {
             throw 'Tauri updater signature artifacts are missing.'
           }
+
+      # actions/attest v4.2.1
+      - name: Attest official installer provenance
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: |
+            desktop/src-tauri/target/release/bundle/msi/*.msi
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/release/bundle/**/*.sig
 
       - name: Verify MSI fresh install, published-version upgrade, and uninstall
         shell: pwsh

@@ -130,6 +130,8 @@ fix: preserve provider-neutral completion semantics
 docs: refine project onboarding and navigation
 ```
 
+维护者提交和正式发布源提交必须使用已登记到 GitHub 账户的 SSH、GPG 或 S/MIME 密钥签名。普通贡献者建议签名；Release 工作流会拒绝 GitHub 未验证的源提交。不要改写已经公开的历史来补签，也不要共享私钥或将签名密钥放入仓库。正式产物的来源和校验合同见 [`AUTHORS.md`](AUTHORS.md)。
+
 ## 文档维护
 
 - 当前设计写入 `docs/architecture/`，跨模块合同写入 `docs/specs/`，质量与发布证据写入 `docs/quality/`。

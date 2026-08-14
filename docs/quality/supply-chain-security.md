@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-06
+> 最后核验：2026-08-15
 >
 > 适用范围：Python、npm、Rust 锁文件与持续集成安全审计
 
@@ -55,6 +55,28 @@ npm audit --package-lock-only --ignore-scripts --audit-level=high --registry=htt
 依赖 Monaco，也没有为已删除依赖保留全局 npm override。新增或重新引入编辑器、HTML
 渲染器等高风险 UI 依赖时，必须先评估其传递依赖、许可证和浏览器攻击面，再运行完整
 前端回归、锁文件合同测试和在线 `npm audit`；不得为绕过审计增加无到期条件的 override。
+
+## 作者身份与正式产物来源
+
+MIT License 允许复用和商业使用，因此供应链合同不把“禁止复制”作为目标。项目通过
+四层可验证记录区分规范来源和第三方副本：
+
+1. 规范仓库的公开提交图、Pull Request 和 Release 记录保留开发历史；
+2. 维护者使用 GitHub 已登记的 SSH、GPG 或 S/MIME 密钥签署后续提交；
+3. Windows 发布工作流只接受 `main` 上经 GitHub 验证的源提交，并继续校验
+   Authenticode 与 Tauri updater 签名；
+4. 工作流使用 GitHub 官方 `actions/attest` 为 MSI、NSIS 和 updater 签名文件生成
+   构建来源证明。
+
+用户可以使用 GitHub CLI 验证本地下载文件：
+
+```powershell
+gh attestation verify .\DBFox_1.0.3_x64_en-US.msi --repo trrueee/DBFox
+```
+
+验证成功只证明该文件由规范仓库的已记录工作流构建，不能替代 Windows 代码签名、
+安装态验收或漏洞扫描。旧提交不会通过重写历史补签；启用签名之前的原创时间线继续由
+既有公开历史证明。作者和正式来源说明见 [`../../AUTHORS.md`](../../AUTHORS.md)。
 
 ## 当前残余风险
 
