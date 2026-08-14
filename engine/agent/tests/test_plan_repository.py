@@ -6,11 +6,23 @@ from engine.agent.events import RuntimeEventType
 from engine.agent.plan import PlanStep, PlanStepStatus
 from engine.agent.repositories.plan import PlanRepository
 from engine.agent.repositories.session import SessionRepository
-from engine.models import AgentArtifactRecord, AgentSession
+from engine.models import (
+    AgentArtifactRecord,
+    AgentObservationRecord,
+    AgentRun,
+    AgentSession,
+    AgentToolInvocation,
+)
 
 
-def test_task_plan_is_versioned_and_replayed_as_a_public_event(db_session, test_datasource) -> None:
-    db_session.add(AgentSession(id="session-plan", datasource_id=str(test_datasource.id), title="Plan"))
+def test_task_plan_is_versioned_and_replayed_as_a_public_event(
+    db_session, test_datasource
+) -> None:
+    db_session.add(
+        AgentSession(
+            id="session-plan", datasource_id=str(test_datasource.id), title="Plan"
+        )
+    )
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
@@ -49,7 +61,9 @@ def test_task_plan_is_versioned_and_replayed_as_a_public_event(db_session, test_
         turn_id=str(turn.id),
         objective="分析订单增长并解释异常",
         steps=[
-            PlanStep(id="trend", title="确认增长趋势", status=PlanStepStatus.IN_PROGRESS),
+            PlanStep(
+                id="trend", title="确认增长趋势", status=PlanStepStatus.IN_PROGRESS
+            ),
             PlanStep(id="cause", title="定位异常原因", status=PlanStepStatus.PENDING),
         ],
         summary="先建立趋势基线。",
@@ -84,41 +98,214 @@ def test_task_plan_rejects_artifacts_from_another_run_in_the_same_session(
     db_session,
     test_datasource,
 ) -> None:
-    db_session.add(AgentSession(id="session-plan-scope", datasource_id=str(test_datasource.id), title="Plan"))
+    db_session.add(
+        AgentSession(
+            id="session-plan-scope", datasource_id=str(test_datasource.id), title="Plan"
+        )
+    )
     db_session.commit()
     sessions = SessionRepository(db_session)
     active = sessions.admit(
-        session_id="session-plan-scope", datasource_id=str(test_datasource.id), datasource_generation=1,
-        content="当前分析", idempotency_key="active", llm_credential_id="credential",
-        api_base=None, model_name="model", request_payload={},
+        session_id="session-plan-scope",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="当前分析",
+        idempotency_key="active",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
     )
     lease = sessions.claim(session_id="session-plan-scope", owner="worker-plan-scope")
     assert lease is not None
     sessions.promote_next_input(lease=lease)
     turn = sessions.start_turn(
-        lease=lease, run_id=active.run_id, agent_definition_version="analyst@2",
-        prompt_version="prompt@2", prompt_hash="prompt", context_snapshot={},
-        context_hash="context", tool_materialization={"tools": []},
-        tool_materialization_hash="tools", provider="provider", model_name="model",
+        lease=lease,
+        run_id=active.run_id,
+        agent_definition_version="analyst@2",
+        prompt_version="prompt@2",
+        prompt_hash="prompt",
+        context_snapshot={},
+        context_hash="context",
+        tool_materialization={"tools": []},
+        tool_materialization_hash="tools",
+        provider="provider",
+        model_name="model",
     )
     other = sessions.admit(
-        session_id="session-plan-scope", datasource_id=str(test_datasource.id), datasource_generation=1,
-        content="下一轮分析", idempotency_key="queued", llm_credential_id="credential",
-        api_base=None, model_name="model", request_payload={},
+        session_id="session-plan-scope",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="下一轮分析",
+        idempotency_key="queued",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
     )
-    db_session.add(AgentArtifactRecord(
-        id="artifact-other-run", run_id=other.run_id, session_id="session-plan-scope",
-        type="result_view", title="其他 Run 结果", payload_json="{}",
-        presentation_json="{}", provenance_json="{}", relations_json="[]",
-    ))
+    db_session.add(
+        AgentArtifactRecord(
+            id="artifact-other-run",
+            run_id=other.run_id,
+            session_id="session-plan-scope",
+            type="result_view",
+            title="其他 Run 结果",
+            payload_json="{}",
+            presentation_json="{}",
+            provenance_json="{}",
+            relations_json="[]",
+        )
+    )
     db_session.commit()
 
     with pytest.raises(ValueError, match="unavailable Artifacts"):
         PlanRepository(db_session).update(
-            lease=lease, run_id=active.run_id, turn_id=str(turn.id), objective="当前分析",
-            steps=[PlanStep(
-                id="evidence", title="使用证据", status=PlanStepStatus.COMPLETED,
-                evidence_required=True, artifact_ids=["artifact-other-run"],
-            )],
+            lease=lease,
+            run_id=active.run_id,
+            turn_id=str(turn.id),
+            objective="当前分析",
+            steps=[
+                PlanStep(
+                    id="evidence",
+                    title="使用证据",
+                    status=PlanStepStatus.COMPLETED,
+                    evidence_required=True,
+                    artifact_ids=["artifact-other-run"],
+                )
+            ],
             summary="不应接受其他 Run 的证据。",
         )
+
+
+def test_task_plan_accepts_a_prior_result_observed_by_the_current_run(
+    db_session,
+    test_datasource,
+) -> None:
+    session_id = "session-plan-observed-result"
+    db_session.add(
+        AgentSession(
+            id=session_id,
+            datasource_id=str(test_datasource.id),
+            title="Plan observed result",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    previous = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="先生成结果",
+        idempotency_key="plan-previous",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id=session_id, owner="worker-plan-observed")
+    assert lease is not None
+    assert sessions.promote_next_input(lease=lease) == previous.run_id
+    previous_run = db_session.get(AgentRun, previous.run_id)
+    assert previous_run is not None
+    previous_run.status = "completed"
+    db_session.add(
+        AgentArtifactRecord(
+            id="artifact-observed-result",
+            run_id=previous.run_id,
+            session_id=session_id,
+            type="result_view",
+            title="前序查询结果",
+            payload_json=(
+                '{"sourceSqlArtifactId":"artifact-sql","queryFingerprint":"fp",'
+                '"datasourceGeneration":1,"columns":["total"],"rowCount":1,'
+                '"returnedRows":1,"latencyMs":1,'
+                '"executedAt":"2026-08-15T00:00:00Z","truncated":false,'
+                '"evidenceKind":"query_result"}'
+            ),
+            presentation_json="{}",
+            provenance_json="{}",
+            relations_json="[]",
+        )
+    )
+    db_session.commit()
+
+    current = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="继续分析已保存结果",
+        idempotency_key="plan-current",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    assert sessions.promote_next_input(lease=lease) == current.run_id
+    turn = sessions.start_turn(
+        lease=lease,
+        run_id=current.run_id,
+        agent_definition_version="analyst@2",
+        prompt_version="prompt@2",
+        prompt_hash="prompt",
+        context_snapshot={},
+        context_hash="context",
+        tool_materialization={"tools": []},
+        tool_materialization_hash="tools",
+        provider="provider",
+        model_name="model",
+    )
+    db_session.add(
+        AgentToolInvocation(
+            id="invocation-observed-result",
+            session_id=session_id,
+            run_id=current.run_id,
+            turn_id=str(turn.id),
+            provider_call_id="inspect-prior-result",
+            tool_name="result_inspect",
+            tool_version="1",
+            input_json="{}",
+            input_hash="input-hash",
+            idempotency_key="inspect-prior-result",
+            status="succeeded",
+            policy_json="{}",
+            presentation_json="{}",
+            recovery_policy="retry_safe",
+        )
+    )
+    db_session.flush()
+    db_session.add(
+        AgentObservationRecord(
+            id="observation-observed-result",
+            session_id=session_id,
+            run_id=current.run_id,
+            turn_id=str(turn.id),
+            tool_invocation_id="invocation-observed-result",
+            sequence=1,
+            status="succeeded",
+            model_visible_summary="已读取前序查询结果。",
+            model_output_json="{}",
+            artifact_ids_json='["artifact-observed-result"]',
+            facts_json="{}",
+            semantic_capabilities_json="[]",
+        )
+    )
+    db_session.commit()
+
+    plan = PlanRepository(db_session).update(
+        lease=lease,
+        run_id=current.run_id,
+        turn_id=str(turn.id),
+        objective="继续分析已保存结果",
+        steps=[
+            PlanStep(
+                id="reuse",
+                title="复用前序查询结果",
+                status=PlanStepStatus.COMPLETED,
+                evidence_required=True,
+                artifact_ids=["artifact-observed-result"],
+            )
+        ],
+        summary="前序结果已在当前 Run 中重新观察。",
+    )
+
+    assert plan.steps[0].artifact_ids == ["artifact-observed-result"]

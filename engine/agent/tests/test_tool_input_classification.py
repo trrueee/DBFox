@@ -120,6 +120,44 @@ class _InvalidThenRecoverProvider:
         yield from _final_turn("参数不完整，已停止该工具调用。")
 
 
+class _UnavailablePlanArtifactThenRecoverProvider:
+    def __init__(self, turn: int) -> None:
+        self.turn = turn
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        del tools, timeout_seconds, cancellation_probe
+        if self.turn == 1:
+            yield from _tool_turn(
+                "unavailable-plan-artifact",
+                "update_plan",
+                {
+                    "objective": "复用尚未读取的结果",
+                    "steps": [
+                        {
+                            "id": "reuse",
+                            "title": "复用结果",
+                            "status": "completed",
+                            "evidence_required": True,
+                            "artifact_ids": ["artifact-not-observed"],
+                        }
+                    ],
+                },
+            )
+            return
+
+        output = next(
+            item
+            for item in messages
+            if item.get("type") == "function_call_output"
+            and item.get("call_id") == "unavailable-plan-artifact"
+        )
+        observation = json.loads(str(output["output"]))
+        assert observation["status"] == "rejected"
+        assert observation["error_code"] == "TOOL_INPUT_INVALID"
+        assert "Inspect the saved result" in observation["summary"]
+        yield from _final_turn("该结果尚未读取，因此没有写入分析计划。")
+
+
 def test_invalid_tool_arguments_have_a_distinct_durable_classification(
     db_session,
     test_datasource,
@@ -167,9 +205,7 @@ def test_invalid_tool_arguments_have_a_distinct_durable_classification(
     run = db_session.get(AgentRun, admission.run_id)
     answer = db_session.get(AgentMessage, admission.assistant_message_id)
     invocation = (
-        db_session.query(AgentToolInvocation)
-        .filter_by(run_id=admission.run_id)
-        .one()
+        db_session.query(AgentToolInvocation).filter_by(run_id=admission.run_id).one()
     )
     observation = (
         db_session.query(AgentObservationRecord)
@@ -184,3 +220,67 @@ def test_invalid_tool_arguments_have_a_distinct_durable_classification(
     assert invocation.error_code == "TOOL_INPUT_INVALID"
     assert observation.error_code == "TOOL_INPUT_INVALID"
     assert "objective (missing)" in str(observation.model_output_json)
+
+
+def test_control_command_domain_input_error_does_not_fail_the_run(
+    db_session,
+    test_datasource,
+) -> None:
+    session_id = "control-domain-input-invalid"
+    db_session.add(
+        AgentSession(
+            id=session_id,
+            datasource_id=str(test_datasource.id),
+            title="Control input classification",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="把之前的结果写入计划。",
+        idempotency_key="control-domain-input-invalid",
+        llm_credential_id="deterministic-fixture",
+        api_base=None,
+        model_name="scripted",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id=session_id, owner="test", ttl_seconds=120)
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    turn = {"value": 0}
+
+    def model_factory(_settings):
+        turn["value"] += 1
+        return _UnavailablePlanArtifactThenRecoverProvider(turn["value"])
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    answer = db_session.get(AgentMessage, admission.assistant_message_id)
+    invocation = (
+        db_session.query(AgentToolInvocation).filter_by(run_id=admission.run_id).one()
+    )
+    observation = (
+        db_session.query(AgentObservationRecord)
+        .filter_by(run_id=admission.run_id)
+        .one()
+    )
+
+    assert run is not None and run.status == "completed"
+    assert answer is not None
+    assert answer.content == "该结果尚未读取，因此没有写入分析计划。"
+    assert turn["value"] == 2
+    assert invocation.status == "rejected"
+    assert invocation.error_code == "TOOL_INPUT_INVALID"
+    assert observation.error_code == "TOOL_INPUT_INVALID"

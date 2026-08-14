@@ -36,6 +36,7 @@ from engine.agent.tool import ToolInvocation
 from engine.agent.turn import ModelToolCall
 from engine.agent.working_state import RunWorkingStateAssembler
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
+from engine.errors import ToolInputError
 from engine.models import AgentApproval, AgentRun, AgentToolInvocation, AgentTurn
 from engine.policy.authority import ExecutionAuthority
 from engine.policy.gate import PolicyGate
@@ -222,9 +223,7 @@ class ToolDispatcher:
                     model_visible_summary=str(
                         decision.get("reason") or "Tool request rejected."
                     ),
-                    error_code=(
-                        policy_decision.error_code or "TOOL_POLICY_REJECTED"
-                    ),
+                    error_code=(policy_decision.error_code or "TOOL_POLICY_REJECTED"),
                     error_message="Tool request rejected.",
                 )
                 db.commit()
@@ -233,16 +232,30 @@ class ToolDispatcher:
                 parsed = registered_function.input_model.model_validate(
                     invocation.authorized_input
                 )
-                command_result = registered_function.handle(
-                    parsed,
-                    ControlCommandContext(
-                        db=db,
+                try:
+                    command_result = registered_function.handle(
+                        parsed,
+                        ControlCommandContext(
+                            db=db,
+                            lease=lease,
+                            run_id=run_id,
+                            turn_id=turn_id,
+                            invocation_id=invocation.id,
+                        ),
+                    )
+                except ToolInputError as exc:
+                    safe_message = exc.message.strip() or "The tool input is invalid."
+                    observation = invocations.settle(
                         lease=lease,
-                        run_id=run_id,
-                        turn_id=turn_id,
                         invocation_id=invocation.id,
-                    ),
-                )
+                        status=ObservationStatus.REJECTED,
+                        model_visible_summary=safe_message,
+                        contributes_progress=False,
+                        error_code="TOOL_INPUT_INVALID",
+                        error_message="The tool input is invalid.",
+                    )
+                    db.commit()
+                    return self._settled_result(call.id, observation)
                 if command_result.disposition is ControlDisposition.WAITING_INPUT:
                     SessionRepository(db).release(lease=lease)
                     db.commit()

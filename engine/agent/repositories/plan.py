@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from engine.agent.events import RuntimeEventType
 from engine.agent.plan import PlanStatus, PlanStep, PlanStepStatus, TaskPlan
 from engine.agent.run_item import dump_run_item, plan_item
+from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.session import SessionLease
@@ -20,6 +21,10 @@ from engine.models import AgentArtifactRecord, AgentRun, AgentTaskPlanRecord
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+class PlanArtifactUnavailableError(ValueError):
+    """A Task Plan referenced an Artifact unavailable to the current Run."""
 
 
 class PlanRepository:
@@ -41,11 +46,16 @@ class PlanRepository:
         run = self.session.execute(
             select(AgentRun).where(AgentRun.id == run_id).with_for_update()
         ).scalar_one()
-        if str(run.session_id) != lease.session_id or int(run.lease_token or 0) != lease.token:
+        if (
+            str(run.session_id) != lease.session_id
+            or int(run.lease_token or 0) != lease.token
+        ):
             raise ValueError("Task Plan update is outside the active Session lease")
         self._validate_artifacts(lease.session_id, run_id, steps)
         row = self.session.execute(
-            select(AgentTaskPlanRecord).where(AgentTaskPlanRecord.run_id == run_id).with_for_update()
+            select(AgentTaskPlanRecord)
+            .where(AgentTaskPlanRecord.run_id == run_id)
+            .with_for_update()
         ).scalar_one_or_none()
         now = _utcnow()
         status = self._status(steps)
@@ -79,9 +89,11 @@ class PlanRepository:
             event_type=(
                 RuntimeEventType.RUN_ITEM_STARTED
                 if int(row.version) == 1
-                else RuntimeEventType.RUN_ITEM_COMPLETED
-                if status is PlanStatus.COMPLETED
-                else RuntimeEventType.RUN_ITEM_UPDATED
+                else (
+                    RuntimeEventType.RUN_ITEM_COMPLETED
+                    if status is PlanStatus.COMPLETED
+                    else RuntimeEventType.RUN_ITEM_UPDATED
+                )
             ),
             run_id=run_id,
             turn_id=turn_id,
@@ -103,8 +115,13 @@ class PlanRepository:
         run = self.session.execute(
             select(AgentRun).where(AgentRun.id == run_id).with_for_update()
         ).scalar_one()
-        if str(run.session_id) != lease.session_id or int(run.lease_token or 0) != lease.token:
-            raise ValueError("Task Plan terminalization is outside the active Session lease")
+        if (
+            str(run.session_id) != lease.session_id
+            or int(run.lease_token or 0) != lease.token
+        ):
+            raise ValueError(
+                "Task Plan terminalization is outside the active Session lease"
+            )
         row = self.session.execute(
             select(AgentTaskPlanRecord)
             .where(AgentTaskPlanRecord.run_id == run_id)
@@ -138,9 +155,11 @@ class PlanRepository:
             event_type=(
                 RuntimeEventType.RUN_ITEM_CANCELLED
                 if status is PlanStatus.CANCELLED
-                else RuntimeEventType.RUN_ITEM_FAILED
-                if status is PlanStatus.FAILED
-                else RuntimeEventType.RUN_ITEM_COMPLETED
+                else (
+                    RuntimeEventType.RUN_ITEM_FAILED
+                    if status is PlanStatus.FAILED
+                    else RuntimeEventType.RUN_ITEM_COMPLETED
+                )
             ),
             run_id=run_id,
             turn_id=str(row.turn_id),
@@ -148,24 +167,45 @@ class PlanRepository:
         )
         return plan
 
-    def _validate_artifacts(self, session_id: str, run_id: str, steps: list[PlanStep]) -> None:
-        artifact_ids = {artifact_id for step in steps for artifact_id in step.artifact_ids}
+    def _validate_artifacts(
+        self, session_id: str, run_id: str, steps: list[PlanStep]
+    ) -> None:
+        artifact_ids = {
+            artifact_id for step in steps for artifact_id in step.artifact_ids
+        }
         if not artifact_ids:
             return
-        rows = self.session.execute(
-            select(AgentArtifactRecord.id).where(
-                AgentArtifactRecord.session_id == session_id,
-                AgentArtifactRecord.run_id == run_id,
-                AgentArtifactRecord.id.in_(artifact_ids),
+        rows = (
+            self.session.execute(
+                select(AgentArtifactRecord.id).where(
+                    AgentArtifactRecord.session_id == session_id,
+                    AgentArtifactRecord.run_id == run_id,
+                    AgentArtifactRecord.id.in_(artifact_ids),
+                )
             )
-        ).scalars().all()
-        missing = artifact_ids - {str(value) for value in rows}
+            .scalars()
+            .all()
+        )
+        available_ids = {str(value) for value in rows}
+        available_ids.update(
+            artifact.id
+            for artifact in ArtifactRepository(self.session).referenced_results_for_run(
+                run_id
+            )
+        )
+        missing = artifact_ids - available_ids
         if missing:
-            raise ValueError(f"Task Plan references unavailable Artifacts: {', '.join(sorted(missing))}")
+            raise PlanArtifactUnavailableError(
+                "Task Plan references unavailable Artifacts: "
+                + ", ".join(sorted(missing))
+            )
 
     @staticmethod
     def _status(steps: list[PlanStep]) -> PlanStatus:
-        if all(step.status in {PlanStepStatus.COMPLETED, PlanStepStatus.SKIPPED} for step in steps):
+        if all(
+            step.status in {PlanStepStatus.COMPLETED, PlanStepStatus.SKIPPED}
+            for step in steps
+        ):
             return PlanStatus.COMPLETED
         if any(step.status is PlanStepStatus.BLOCKED for step in steps):
             return PlanStatus.BLOCKED
@@ -176,19 +216,24 @@ class PlanRepository:
         if step.status not in {PlanStepStatus.PENDING, PlanStepStatus.IN_PROGRESS}:
             return step
         if status is PlanStatus.FAILED and step.status is PlanStepStatus.IN_PROGRESS:
-            return step.model_copy(update={
-                "status": PlanStepStatus.BLOCKED,
-                "note": step.note or "运行失败，当前步骤未能完成。",
-            })
-        return step.model_copy(update={
-            "status": PlanStepStatus.SKIPPED,
-            "note": step.note or {
-                PlanStatus.COMPLETED: "运行已完成，此步骤不再需要。",
-                PlanStatus.PARTIAL: "运行以部分结果结束，此步骤未继续执行。",
-                PlanStatus.CANCELLED: "运行已取消，此步骤未继续执行。",
-                PlanStatus.FAILED: "运行失败，此步骤未执行。",
-            }[status],
-        })
+            return step.model_copy(
+                update={
+                    "status": PlanStepStatus.BLOCKED,
+                    "note": step.note or "运行失败，当前步骤未能完成。",
+                }
+            )
+        return step.model_copy(
+            update={
+                "status": PlanStepStatus.SKIPPED,
+                "note": step.note
+                or {
+                    PlanStatus.COMPLETED: "运行已完成，此步骤不再需要。",
+                    PlanStatus.PARTIAL: "运行以部分结果结束，此步骤未继续执行。",
+                    PlanStatus.CANCELLED: "运行已取消，此步骤未继续执行。",
+                    PlanStatus.FAILED: "运行失败，此步骤未执行。",
+                }[status],
+            }
+        )
 
     @staticmethod
     def _terminal_summary(status: PlanStatus) -> str:
@@ -208,7 +253,10 @@ class PlanRepository:
             turn_id=str(row.turn_id),
             version=int(row.version),
             objective=str(row.objective),
-            steps=[PlanStep.model_validate(value) for value in load_array(str(row.steps_json or "[]"))],
+            steps=[
+                PlanStep.model_validate(value)
+                for value in load_array(str(row.steps_json or "[]"))
+            ],
             status=PlanStatus(str(row.status)),
             summary=str(row.summary) if row.summary else None,
             created_at=row.created_at,

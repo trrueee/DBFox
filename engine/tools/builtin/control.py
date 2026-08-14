@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from engine.agent.repositories.plan import PlanRepository
+from engine.agent.repositories.plan import (
+    PlanArtifactUnavailableError,
+    PlanRepository,
+)
 from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
+from engine.errors import ToolInputError
 from engine.tools.builtin.contracts import (
     AcknowledgementOutput,
     RequestClarificationInput,
@@ -55,14 +59,11 @@ class RequestClarificationCommand(
             question=command_input.question,
             reason=command_input.reason,
             options=[
-                option.model_dump(mode="json")
-                for option in command_input.options
+                option.model_dump(mode="json") for option in command_input.options
             ],
             allow_free_text=command_input.allow_free_text,
         )
-        return ControlCommandResult(
-            disposition=ControlDisposition.WAITING_INPUT
-        )
+        return ControlCommandResult(disposition=ControlDisposition.WAITING_INPUT)
 
 
 class UpdatePlanCommand(ControlCommand[UpdatePlanInput, UpdatePlanOutput]):
@@ -88,14 +89,20 @@ class UpdatePlanCommand(ControlCommand[UpdatePlanInput, UpdatePlanOutput]):
         command_input: UpdatePlanInput,
         context: ControlCommandContext,
     ) -> ControlCommandResult[UpdatePlanOutput]:
-        plan = PlanRepository(context.db).update(
-            lease=context.lease,
-            run_id=context.run_id,
-            turn_id=context.turn_id,
-            objective=command_input.objective,
-            steps=command_input.steps,
-            summary=command_input.summary,
-        )
+        try:
+            plan = PlanRepository(context.db).update(
+                lease=context.lease,
+                run_id=context.run_id,
+                turn_id=context.turn_id,
+                objective=command_input.objective,
+                steps=command_input.steps,
+                summary=command_input.summary,
+            )
+        except PlanArtifactUnavailableError as exc:
+            raise ToolInputError(
+                "The Task Plan references a result that is not available in this Run. "
+                "Inspect the saved result before attaching its Artifact ID."
+            ) from exc
         output = UpdatePlanOutput(
             plan_id=plan.id,
             version=plan.version,
@@ -104,25 +111,17 @@ class UpdatePlanCommand(ControlCommand[UpdatePlanInput, UpdatePlanOutput]):
             status=plan.status.value,
             summary=plan.summary,
         )
-        completed = sum(
-            step.status.value == "completed"
-            for step in plan.steps
-        )
+        completed = sum(step.status.value == "completed" for step in plan.steps)
         return ControlCommandResult(
             disposition=ControlDisposition.SETTLED,
             output=output,
-            summary=(
-                f"分析计划已更新，{completed}/{len(plan.steps)} 个步骤完成。"
-            ),
+            summary=(f"分析计划已更新，{completed}/{len(plan.steps)} 个步骤完成。"),
             facts={
                 "plan_id": plan.id,
                 "version": plan.version,
                 "objective": plan.objective,
                 "status": plan.status.value,
-                "steps": [
-                    step.model_dump(mode="json")
-                    for step in plan.steps
-                ],
+                "steps": [step.model_dump(mode="json") for step in plan.steps],
                 "summary": plan.summary,
             },
         )
