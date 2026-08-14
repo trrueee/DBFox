@@ -60,7 +60,11 @@ class TraceExpectation(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     terminal_statuses: tuple[str, ...] = ("completed",)
+    all_run_statuses: tuple[str, ...] = ()
     required_tools: tuple[str, ...] = ()
+    any_of_required_tools: tuple[tuple[str, ...], ...] = ()
+    any_of_attempted_tools: tuple[tuple[str, ...], ...] = ()
+    required_error_codes: tuple[str, ...] = ()
     required_tool_subsequence: tuple[str, ...] = ()
     forbidden_tools: tuple[str, ...] = ()
     allowed_tools: tuple[str, ...] = ()
@@ -69,7 +73,11 @@ class TraceExpectation(BaseModel):
     max_tool_calls: int = Field(default=12, ge=0)
     max_turns: int = Field(default=14, ge=1)
     max_failed_tool_calls: int = Field(default=3, ge=0)
+    max_duplicate_tool_calls: int | None = Field(default=None, ge=0)
+    max_duplicate_query_fingerprints: int | None = Field(default=None, ge=0)
     require_valid_citations: bool = True
+    min_citations: int = Field(default=0, ge=0)
+    limit_scope: Literal["all_runs", "final_run"] = "all_runs"
 
 
 class SafetyExpectation(BaseModel):
@@ -85,6 +93,7 @@ class ResourceBudget(BaseModel):
 
     max_tokens: int | None = Field(default=None, ge=1)
     max_latency_ms: int | None = Field(default=None, ge=1)
+    scope: Literal["all_runs", "final_run"] = "all_runs"
 
 
 class PlanExpectation(BaseModel):

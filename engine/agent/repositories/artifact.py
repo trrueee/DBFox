@@ -25,7 +25,12 @@ from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.session import SessionLease
 from engine.json_codec import JsonCodecError, canonical_dumps as _json, loads
-from engine.models import AgentArtifactRecord, AgentSession
+from engine.models import (
+    AgentArtifactRecord,
+    AgentObservationRecord,
+    AgentRun,
+    AgentSession,
+)
 
 
 def _loads(value: str | None, fallback: Any) -> Any:
@@ -358,6 +363,80 @@ class ArtifactRepository:
             .order_by(AgentArtifactRecord.sequence, AgentArtifactRecord.created_at)
         ).scalars()
         return [self._domain(row) for row in rows]
+
+    def available_result(
+        self,
+        *,
+        current_run_id: str,
+        artifact_id: str,
+        session_id: str,
+        datasource_id: str,
+        datasource_generation: int,
+    ) -> Artifact | None:
+        """Resolve one Result Artifact within the durable Session/generation fence."""
+
+        current_run = self.session.get(AgentRun, current_run_id)
+        row = self.session.get(AgentArtifactRecord, artifact_id)
+        owner_run = (
+            self.session.get(AgentRun, str(row.run_id)) if row is not None else None
+        )
+        if (
+            current_run is None
+            or row is None
+            or owner_run is None
+            or str(row.type) != ArtifactType.RESULT_VIEW.value
+            or str(row.status) != ArtifactStatus.COMPLETED.value
+            or str(row.session_id) != session_id
+            or str(current_run.session_id) != session_id
+            or str(owner_run.session_id) != session_id
+            or str(current_run.datasource_id) != datasource_id
+            or str(owner_run.datasource_id) != datasource_id
+            or int(current_run.datasource_generation or 0) != datasource_generation
+            or int(owner_run.datasource_generation or 0) != datasource_generation
+        ):
+            return None
+        if str(owner_run.id) == str(current_run.id):
+            return self._domain(row)
+        if (
+            int(owner_run.session_sequence or 0)
+            >= int(current_run.session_sequence or 0)
+            or str(owner_run.status) not in {"completed", "failed", "cancelled"}
+        ):
+            return None
+        return self._domain(row)
+
+    def referenced_results_for_run(self, run_id: str) -> list[Artifact]:
+        """Return prior Result Artifacts explicitly observed by this Run."""
+
+        current_run = self.session.get(AgentRun, run_id)
+        if current_run is None:
+            return []
+        referenced_ids: list[str] = []
+        rows = self.session.execute(
+            select(AgentObservationRecord.artifact_ids_json)
+            .where(AgentObservationRecord.run_id == run_id)
+            .order_by(AgentObservationRecord.sequence)
+        ).scalars()
+        for encoded in rows:
+            values = _loads(str(encoded or "[]"), [])
+            if not isinstance(values, list):
+                continue
+            for value in values:
+                artifact_id = str(value).strip()
+                if artifact_id and artifact_id not in referenced_ids:
+                    referenced_ids.append(artifact_id)
+        artifacts: list[Artifact] = []
+        for artifact_id in referenced_ids:
+            artifact = self.available_result(
+                current_run_id=run_id,
+                artifact_id=artifact_id,
+                session_id=str(current_run.session_id),
+                datasource_id=str(current_run.datasource_id),
+                datasource_generation=int(current_run.datasource_generation or 0),
+            )
+            if artifact is not None and artifact.run_id != run_id:
+                artifacts.append(artifact)
+        return artifacts
 
     @staticmethod
     def _domain(row: AgentArtifactRecord) -> Artifact:

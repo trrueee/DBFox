@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.agent.artifact import ArtifactSelectionSuggestion, ArtifactType
@@ -18,9 +19,9 @@ from engine.agent.evidence import (
     has_invalid_citation_syntax,
 )
 from engine.agent.repositories.approval import ApprovalRepository
-from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.plan import PlanRepository
+from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.response import (
@@ -30,10 +31,12 @@ from engine.agent.response import (
     CompletionLimitationCode,
     ResponseComposer,
 )
-from engine.agent.session import SessionLease
 from engine.agent.plan import PlanStatus
+from engine.agent.session import SessionLease
 from engine.agent.turn import ModelTurnResult
 from engine.app.safe_errors import fixed_error_detail
+from engine.json_codec import load_array
+from engine.models import AgentTaskPlanRecord
 
 
 class Terminalizer:
@@ -58,15 +61,31 @@ class Terminalizer:
     ) -> bool:
         with self.session_factory() as db:
             partial = disposition is CompletionDisposition.BOUNDED_PARTIAL
-            artifacts = ArtifactRepository(db).list_for_run(run_id)
-            result_artifacts = [
+            artifact_repository = ArtifactRepository(db)
+            artifacts = artifact_repository.list_for_run(run_id)
+            referenced_result_artifacts = (
+                artifact_repository.referenced_results_for_run(run_id)
+            )
+            current_result_artifacts = [
                 item for item in artifacts if item.type is ArtifactType.RESULT_VIEW
+            ]
+            result_artifacts = [
+                item
+                for item in [*artifacts, *referenced_result_artifacts]
+                if item.type is ArtifactType.RESULT_VIEW
             ]
             final_text = (
                 result.answer_text if result.has_completed_answer_candidate else ""
             )
             text = final_text or (
-                "分析已完成，但仅得到部分结果。" if partial else "分析已完成。"
+                _bounded_partial_summary(
+                    db,
+                    run_id=run_id,
+                    result_artifact_count=len(result_artifacts),
+                    limitation_codes=limitation_codes,
+                )
+                if partial
+                else "分析已完成。"
             )
             if has_invalid_citation_syntax(text):
                 raise ValueError(
@@ -144,10 +163,10 @@ class Terminalizer:
             )
             suggestion = (
                 ArtifactSelectionSuggestion(
-                    artifact_id=result_artifacts[-1].id,
+                    artifact_id=current_result_artifacts[-1].id,
                     reason="本次分析的主要查询结果",
                 )
-                if result_artifacts
+                if current_result_artifacts
                 else None
             )
             response = self.responses.compose(
@@ -157,6 +176,7 @@ class Terminalizer:
                 limitation_codes=limitation_codes,
                 answer=answer,
                 artifacts=artifacts,
+                evidence_artifacts=referenced_result_artifacts,
                 selection_suggestion=suggestion,
             )
             completed = self.complete_in_session(
@@ -323,6 +343,54 @@ def _claim_text_for_citation(text: str, start: int, end: int) -> str:
     ]
     right = min(right_candidates) + 1 if right_candidates else len(text)
     return CITATION_PATTERN.sub("", text[left:right]).strip()[:1_000]
+
+
+def _bounded_partial_summary(
+    db: Session,
+    *,
+    run_id: str,
+    result_artifact_count: int,
+    limitation_codes: list[CompletionLimitationCode],
+) -> str:
+    """Project durable Run state into a useful, provider-neutral partial answer."""
+    plan = db.execute(
+        select(AgentTaskPlanRecord).where(AgentTaskPlanRecord.run_id == run_id)
+    ).scalar_one_or_none()
+    lines = ["分析以部分结果结束。"]
+    if plan is not None:
+        objective = str(plan.objective or "").strip()[:1_000]
+        steps = load_array(str(plan.steps_json or "[]"))[:12]
+        completed = [
+            str(step.get("title") or "").strip()[:240]
+            for step in steps
+            if isinstance(step, dict)
+            and step.get("status") == "completed"
+            and str(step.get("title") or "").strip()
+        ]
+        remaining = [
+            str(step.get("title") or "").strip()[:240]
+            for step in steps
+            if isinstance(step, dict)
+            and step.get("status") != "completed"
+            and str(step.get("title") or "").strip()
+        ]
+        if objective:
+            lines.append(f"目标：{objective}")
+        if completed:
+            lines.append("已完成：" + "；".join(completed))
+        if remaining:
+            lines.append("尚未完成：" + "；".join(remaining))
+    if result_artifact_count:
+        lines.append(
+            f"已保留 {result_artifact_count} 个查询结果，可在工件区查看并继续分析。"
+        )
+    if limitation_codes:
+        lines.append(
+            "停止原因："
+            + "；".join(_limitation_caveat(code) for code in limitation_codes)
+        )
+    lines.append("你可以直接继续提问；后续运行可以复用已有结果，无需从头开始。")
+    return "\n\n".join(lines)
 
 
 def _limitation_caveat(code: CompletionLimitationCode) -> str:

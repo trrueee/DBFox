@@ -14,7 +14,7 @@ from engine.agent.repositories.artifact import (
     ArtifactRepository,
 )
 from engine.agent.repositories.session import SessionRepository
-from engine.models import AgentArtifactRecord, AgentSession
+from engine.models import AgentArtifactRecord, AgentRun, AgentSession
 from engine.tools.builtin.artifacts import (
     preview_drafts,
     query_result_draft,
@@ -67,6 +67,81 @@ def _active_run(db_session, test_datasource, session_id: str):
         model_name="test",
     )
     return admission, lease, turn
+
+
+def test_previous_result_availability_is_fenced_by_session_generation_and_order(
+    db_session,
+    test_datasource,
+):
+    admission, lease, turn = _active_run(
+        db_session,
+        test_datasource,
+        "session_result_fence",
+    )
+    repository = ArtifactRepository(db_session)
+    result = repository.create(
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(turn.id),
+        artifact_type=ArtifactType.RESULT_VIEW,
+        title="订单结果",
+        payload={
+            "sourceSqlArtifactId": "artifact_sql",
+            "queryFingerprint": "fingerprint",
+            "datasourceGeneration": 1,
+            "columns": ["id"],
+            "rowCount": 1,
+            "returnedRows": 1,
+            "latencyMs": 10,
+            "executedAt": "2026-08-14T00:00:00Z",
+            "truncated": False,
+            "evidenceKind": "query_result",
+        },
+    )
+    owner_run = db_session.get(AgentRun, admission.run_id)
+    assert owner_run is not None
+    owner_run.status = "completed"
+    current_run = AgentRun(
+        id="run_result_consumer",
+        session_id="session_result_fence",
+        session_sequence=2,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        question="继续查看结果",
+        status="running",
+        request_json="{}",
+    )
+    db_session.add(current_run)
+    db_session.commit()
+
+    def resolve(**overrides):
+        return repository.available_result(
+            current_run_id=str(overrides.get("current_run_id", current_run.id)),
+            artifact_id=str(overrides.get("artifact_id", result.id)),
+            session_id=str(overrides.get("session_id", current_run.session_id)),
+            datasource_id=str(
+                overrides.get("datasource_id", current_run.datasource_id)
+            ),
+            datasource_generation=int(
+                overrides.get(
+                    "datasource_generation",
+                    current_run.datasource_generation,
+                )
+            ),
+        )
+
+    assert resolve() is not None
+    assert resolve(session_id="another_session") is None
+    assert resolve(datasource_generation=2) is None
+
+    owner_run.status = "running"
+    db_session.commit()
+    assert resolve() is None
+
+    owner_run.status = "completed"
+    owner_run.session_sequence = 3
+    db_session.commit()
+    assert resolve() is None
 
 
 def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
@@ -212,11 +287,12 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
             title="订单合计",
         ),
         ToolRunContext.for_invocation(
-            request=SimpleNamespace(
-                datasource_id=str(test_datasource.id),
-                session_id=lease.session_id,
-                run_id=admission.run_id,
-            ),
+                request=SimpleNamespace(
+                    datasource_id=str(test_datasource.id),
+                    datasource_generation=1,
+                    session_id=lease.session_id,
+                    run_id=admission.run_id,
+                ),
             db=db_session,
             idempotency_key="chart-create-test",
         ),

@@ -542,7 +542,7 @@ function call 和 function call output 必须使用同一个 provider `call_id`�
 - `observations`：耐久工具摘要与 Artifact 引用；
 - `selected_artifacts`：用户选择的引用；
 - `session_memory`：与当前 datasource generation 匹配的稳定状态；
-- `previous_run_outcome`：上次失败/取消的固定公开结果；
+- `previous_run_outcome`：紧邻的上次失败、取消或有界部分完成结果；
 - `conversation_archive`：总量、已加载量、遗漏量和搜索能力；
 - `sources`：每项上下文的来源与是否纳入。
 
@@ -552,7 +552,7 @@ function call 和 function call output 必须使用同一个 provider `call_id`�
 
 Session Memory 不复制最近完整问答，因为 canonical messages 已经提供这部分历史。它也不保存模型生成的 `verified_claims`；Artifact 引用证明来源存在，不自动证明模型措辞正确。
 
-Datasource generation 变化后，旧 working set、recent run 和 Evidence 引用会被过滤。需要旧数据时应重新查询，而不是把旧值当作当前事实。
+Datasource generation 变化后，旧 working set 和 Evidence 引用会被过滤。需要旧数据时应重新查询，而不是把旧值当作当前事实。
 
 ### 13.3 历史对话工具
 

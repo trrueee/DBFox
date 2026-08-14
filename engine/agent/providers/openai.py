@@ -309,9 +309,7 @@ class _ResponsesEventTranslator:
                 f"Message completion is outside lifecycle: {item.id}"
             )
         if state.output_index != output_index:
-            raise ResponsesProtocolError(
-                f"Message output index changed: {item.id}"
-            )
+            raise ResponsesProtocolError(f"Message output index changed: {item.id}")
         completed_text = _completed_message_text(item)
         if not state.text and completed_text:
             yield from self._answer_delta(item.id, completed_text)
@@ -389,14 +387,23 @@ class _ResponsesEventTranslator:
             )
         if event.response.usage is not None:
             usage = event.response.usage
+            input_details = getattr(usage, "input_tokens_details", None)
+            output_details = getattr(usage, "output_tokens_details", None)
+            normalized_usage = {
+                "prompt_tokens": usage.input_tokens,
+                "completion_tokens": usage.output_tokens,
+                "total_tokens": usage.total_tokens,
+            }
+            cached_tokens = getattr(input_details, "cached_tokens", None)
+            if cached_tokens is not None:
+                normalized_usage["cached_input_tokens"] = int(cached_tokens)
+            reasoning_tokens = getattr(output_details, "reasoning_tokens", None)
+            if reasoning_tokens is not None:
+                normalized_usage["reasoning_output_tokens"] = int(reasoning_tokens)
             yield self._emit(
                 TurnStreamKind.USAGE,
                 "usage",
-                usage={
-                    "prompt_tokens": usage.input_tokens,
-                    "completion_tokens": usage.output_tokens,
-                    "total_tokens": usage.total_tokens,
-                },
+                usage=normalized_usage,
             )
         if self.reasoning_started and not self.reasoning_ended:
             yield self._end_reasoning()
@@ -591,12 +598,14 @@ def _classify_provider_failure(exc: Exception) -> _ProviderFailure:
     return _provider_failure(FixedErrorCode.MODEL_PROVIDER_STREAM_FAILED, False)
 
 
-_QUOTA_ERROR_CODES = frozenset({
-    "credit_balance_exhausted",
-    "organization_spend_limit_exceeded",
-    "organization_usage_limit_exceeded",
-    "project_spend_limit_exceeded",
-})
+_QUOTA_ERROR_CODES = frozenset(
+    {
+        "credit_balance_exhausted",
+        "organization_spend_limit_exceeded",
+        "organization_usage_limit_exceeded",
+        "project_spend_limit_exceeded",
+    }
+)
 
 
 def _provider_failure(

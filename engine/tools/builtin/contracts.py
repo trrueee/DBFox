@@ -258,7 +258,7 @@ class DataPreviewInput(ToolInputModel):
     columns: list[Identifier] | None = Field(default=None, max_length=32)
     limit: int = Field(default=10, ge=1, le=MAX_PREVIEW_ROWS)
     where: PreviewFilterInput | None = None
-    order_by: list[PreviewOrderInput] = Field(default_factory=list, max_length=8)
+    order_by: list[PreviewOrderInput] | None = Field(default=None, max_length=8)
 
 
 class DataPreviewOutput(ToolOutputModel):

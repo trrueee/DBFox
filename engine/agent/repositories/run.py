@@ -64,9 +64,7 @@ class RunRepository:
             RunStatus.CANCELLED.value,
         }
 
-    def has_pending_steering_inputs(
-        self, *, lease: SessionLease, run_id: str
-    ) -> bool:
+    def has_pending_steering_inputs(self, *, lease: SessionLease, run_id: str) -> bool:
         """Check the successful-terminalization barrier under the Run lock."""
 
         begin_agent_write(self.session)
@@ -75,11 +73,13 @@ class RunRepository:
         ).scalar_one()
         self._require_lease(run, lease)
         pending = self.session.execute(
-            select(AgentSessionInput.id).where(
+            select(AgentSessionInput.id)
+            .where(
                 AgentSessionInput.run_id == run_id,
                 AgentSessionInput.delivery_mode == DeliveryMode.STEER.value,
                 AgentSessionInput.status == SessionInputStatus.ADMITTED.value,
-            ).limit(1)
+            )
+            .limit(1)
         ).scalar_one_or_none()
         return pending is not None
 
@@ -746,25 +746,6 @@ class RunRepository:
             previous.get("datasource_id") == current_datasource_id
             and previous.get("datasource_generation") == current_generation
         )
-        recent_runs = [
-            item
-            for item in list(previous.get("recent_runs") or [])
-            if isinstance(item, dict)
-            and item.get("datasource_id") == current_datasource_id
-            and item.get("datasource_generation") == current_generation
-        ]
-        recent_runs.append(
-            {
-                "run_id": str(run.id),
-                "question": str(run.question or "")[:1_000],
-                "answer_summary": response.answer.text[:1_200],
-                "referenced_artifact_ids": response.referenced_artifact_ids,
-                "datasource_id": current_datasource_id,
-                "datasource_generation": current_generation,
-                "completed_at": _utcnow().isoformat(),
-            }
-        )
-        recent_runs = recent_runs[-8:]
         previous_stable = (
             dict(previous.get("stable_context") or {}) if same_generation else {}
         )
@@ -801,9 +782,8 @@ class RunRepository:
             if key not in {"verified_claims", "evidence_references"}
         }
         memory = {
-            "version": 2,
+            "version": 3,
             "datasource_id": current_datasource_id,
-            "recent_runs": recent_runs,
             "working_set": {
                 "datasource_id": current_datasource_id,
                 "datasource_generation": current_generation,

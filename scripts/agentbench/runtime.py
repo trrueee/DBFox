@@ -16,8 +16,10 @@ from scripts.agentbench.schema import DatasetManifest, EvalCase
 from scripts.agentbench.scoring import (
     PlanTrace,
     ResultTable,
+    RunTrace,
     ToolTrace,
     TrialTrace,
+    TurnEfficiencyTrace,
     score_trial,
 )
 
@@ -112,6 +114,14 @@ def _non_negative_int(value: Any) -> int:
     return 0
 
 
+def _optional_non_negative_int(value: Any) -> int | None:
+    return None if value is None else _non_negative_int(value)
+
+
+def _usage_int(usage: dict[str, Any], primary: str, fallback: str) -> int:
+    return _non_negative_int(usage.get(primary, usage.get(fallback, 0)))
+
+
 def _duration_ms(started_at: Any, completed_at: Any) -> float:
     if started_at is None or completed_at is None:
         return 0.0
@@ -153,7 +163,9 @@ def _plan_trace(plan: Any, events: list[Any], load_object: Any) -> PlanTrace:
         steps = json.loads(str(plan.steps_json or "[]"))
     except (TypeError, ValueError, json.JSONDecodeError):
         steps = []
-    statuses = [str(step.get("status") or "") for step in steps if isinstance(step, dict)]
+    statuses = [
+        str(step.get("status") or "") for step in steps if isinstance(step, dict)
+    ]
     step_id_versions: list[tuple[str, ...]] = []
     for event in events:
         payload = load_object(str(event.payload_json or "{}"))
@@ -161,7 +173,9 @@ def _plan_trace(plan: Any, events: list[Any], load_object: Any) -> PlanTrace:
         if not isinstance(item, dict) or item.get("type") != "plan":
             continue
         item_payload = item.get("payload")
-        item_steps = item_payload.get("steps") if isinstance(item_payload, dict) else None
+        item_steps = (
+            item_payload.get("steps") if isinstance(item_payload, dict) else None
+        )
         if not isinstance(item_steps, list):
             continue
         step_id_versions.append(
@@ -171,9 +185,8 @@ def _plan_trace(plan: Any, events: list[Any], load_object: Any) -> PlanTrace:
                 if isinstance(step, dict) and step.get("id")
             )
         )
-    stable_step_ids = (
-        not step_id_versions
-        or all(ids == step_id_versions[0] for ids in step_id_versions[1:])
+    stable_step_ids = not step_id_versions or all(
+        ids == step_id_versions[0] for ids in step_id_versions[1:]
     )
     return PlanTrace(
         exists=True,
@@ -240,6 +253,13 @@ def _infrastructure_reason(status: str, error_code: str | None) -> str | None:
     if code.startswith("LLM_") or code in {
         "AGENT_PROVIDER_RETRY_BUDGET",
         "AGENT_COST_PRICING_UNAVAILABLE",
+        "MODEL_PROVIDER_TIMEOUT",
+        "MODEL_PROVIDER_UNAVAILABLE",
+        "MODEL_PROVIDER_RATE_LIMITED",
+        "MODEL_PROVIDER_QUOTA_EXCEEDED",
+        "MODEL_PROVIDER_AUTHENTICATION_FAILED",
+        "MODEL_PROVIDER_PERMISSION_DENIED",
+        "MODEL_PROVIDER_MODEL_NOT_FOUND",
     }:
         return code
     return None
@@ -427,7 +447,10 @@ def run_real_provider(
                 else []
             )
             turns = (
-                db.query(AgentTurn).filter(AgentTurn.run_id.in_(run_ids)).all()
+                db.query(AgentTurn)
+                .filter(AgentTurn.run_id.in_(run_ids))
+                .order_by(AgentTurn.created_at, AgentTurn.id)
+                .all()
                 if run_ids
                 else []
             )
@@ -485,10 +508,83 @@ def run_real_provider(
                 else None
             )
             prompt_budgets = []
+            turn_efficiency: list[TurnEfficiencyTrace] = []
+            run_sequence_by_id = {
+                str(run_id): sequence
+                for sequence, run_id in enumerate(run_ids, start=1)
+            }
             for turn in turns:
                 snapshot = load_object(str(turn.context_snapshot_json or "{}"))
                 budget = snapshot.get("prompt_budget")
-                prompt_budgets.append(budget if isinstance(budget, dict) else {})
+                prompt_budget = budget if isinstance(budget, dict) else {}
+                prompt_budgets.append(prompt_budget)
+                usage = load_object(str(turn.usage_json or "{}"))
+                turn_efficiency.append(
+                    TurnEfficiencyTrace(
+                        run_sequence=run_sequence_by_id.get(str(turn.run_id), 1),
+                        turn_sequence=max(1, int(turn.sequence or 1)),
+                        provider_input_tokens=_usage_int(
+                            usage, "prompt_tokens", "input_tokens"
+                        ),
+                        provider_output_tokens=_usage_int(
+                            usage, "completion_tokens", "output_tokens"
+                        ),
+                        cached_input_tokens=_optional_non_negative_int(
+                            usage.get("cached_input_tokens")
+                        ),
+                        reasoning_output_tokens=_optional_non_negative_int(
+                            usage.get("reasoning_output_tokens")
+                        ),
+                        estimated_prompt_tokens=_non_negative_int(
+                            prompt_budget.get("estimated_prompt_tokens")
+                        ),
+                        max_prompt_tokens=_non_negative_int(
+                            prompt_budget.get("max_prompt_tokens")
+                        ),
+                        message_tokens=_non_negative_int(
+                            prompt_budget.get("message_tokens")
+                        ),
+                        reserved_tokens=_non_negative_int(
+                            prompt_budget.get("reserved_tokens")
+                        ),
+                        tool_schema_count=_non_negative_int(
+                            prompt_budget.get("tool_schema_count")
+                        ),
+                        tool_schema_tokens=_non_negative_int(
+                            prompt_budget.get("tool_schema_tokens")
+                        ),
+                        response_item_tokens=_non_negative_int(
+                            prompt_budget.get("response_item_tokens")
+                        ),
+                        evidence_ledger_tokens=_non_negative_int(
+                            prompt_budget.get("evidence_ledger_tokens")
+                        ),
+                        consumed_steer_tokens=_non_negative_int(
+                            prompt_budget.get("consumed_steer_tokens")
+                        ),
+                        omitted_messages=_non_negative_int(
+                            prompt_budget.get("omitted_messages")
+                        ),
+                        truncated_messages=_non_negative_int(
+                            prompt_budget.get("truncated_messages")
+                        ),
+                        omitted_response_items=_non_negative_int(
+                            prompt_budget.get("omitted_response_items")
+                        ),
+                        omitted_response_batches=_non_negative_int(
+                            prompt_budget.get("omitted_response_batches")
+                        ),
+                        transient_tool_output_count=_non_negative_int(
+                            prompt_budget.get("transient_tool_output_count")
+                        ),
+                        transient_tool_output_bytes=_non_negative_int(
+                            prompt_budget.get("transient_tool_output_bytes")
+                        ),
+                        tool_materialization_hash=str(
+                            turn.tool_materialization_hash or ""
+                        ),
+                    )
+                )
             durable_surfaces = [
                 *(str(run.result_json or "") for run in runs if run),
                 *(str(run.error_message or "") for run in runs if run),
@@ -513,6 +609,47 @@ def run_real_provider(
                 for event in events
                 if plan is not None and str(event.run_id or "") == str(plan.run_id)
             ]
+            run_traces: list[RunTrace] = []
+            for run in runs:
+                if run is None:
+                    continue
+                run_id = str(run.id)
+                run_tools = [item for item in tools if str(item.run_id) == run_id]
+                run_turns = [item for item in turns if str(item.run_id) == run_id]
+                run_fingerprints: list[str] = []
+                for artifact in result_artifacts:
+                    if str(artifact.run_id) != run_id:
+                        continue
+                    payload = load_object(str(artifact.payload_json))
+                    fingerprint = str(payload.get("queryFingerprint") or "").strip()
+                    if fingerprint:
+                        run_fingerprints.append(fingerprint)
+                run_traces.append(
+                    RunTrace(
+                        status=str(run.status),
+                        error_code=(str(run.error_code) if run.error_code else None),
+                        tools=tuple(
+                            ToolTrace(
+                                name=str(item.tool_name),
+                                status=str(item.status),
+                                error_code=(
+                                    str(item.error_code) if item.error_code else None
+                                ),
+                                attempt_count=int(item.attempt_count or 0),
+                                input_hash=str(item.input_hash or ""),
+                                latency_ms=_duration_ms(
+                                    item.started_at,
+                                    item.completed_at,
+                                ),
+                            )
+                            for item in run_tools
+                        ),
+                        turn_count=len(run_turns),
+                        token_count=int(run.consumed_tokens or 0),
+                        latency_ms=_duration_ms(run.started_at, run.completed_at),
+                        query_fingerprints=tuple(run_fingerprints),
+                    )
+                )
             trace = TrialTrace(
                 terminal_status=str(final_run.status) if final_run else "runner_failed",
                 answer=text,
@@ -556,6 +693,9 @@ def run_real_provider(
                     hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:16]
                     for run_id in run_ids
                 ),
+                run_statuses=tuple(str(run.status) for run in runs if run),
+                run_traces=tuple(run_traces),
+                turn_efficiency=tuple(turn_efficiency),
                 prompt_versions=tuple(str(turn.prompt_version) for turn in turns),
                 tool_materialization_hashes=tuple(
                     str(turn.tool_materialization_hash) for turn in turns

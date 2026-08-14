@@ -41,12 +41,14 @@ def _message(
 ) -> dict[str, Any]:
     content: list[dict[str, Any]] = []
     if text:
-        content.append({
-            "type": "output_text",
-            "text": text,
-            "annotations": [],
-            "logprobs": [],
-        })
+        content.append(
+            {
+                "type": "output_text",
+                "text": text,
+                "annotations": [],
+                "logprobs": [],
+            }
+        )
     if refusal:
         content.append({"type": "refusal", "refusal": refusal})
     message = {
@@ -157,97 +159,119 @@ def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
         "summary": [],
         "status": "completed",
     }
-    client = _Client([
-        _event({
-            "type": "response.output_item.added",
-            "sequence_number": 1,
-            "output_index": 0,
-            "item": _message(
-                "msg_1",
-                phase="commentary",
-                status="in_progress",
+    client = _Client(
+        [
+            _event(
+                {
+                    "type": "response.output_item.added",
+                    "sequence_number": 1,
+                    "output_index": 0,
+                    "item": _message(
+                        "msg_1",
+                        phase="commentary",
+                        status="in_progress",
+                    ),
+                }
             ),
-        }),
-        _event({
-            "type": "response.output_text.delta",
-            "sequence_number": 2,
-            "item_id": "msg_1",
-            "output_index": 0,
-            "content_index": 0,
-            "delta": "我先检查订单结构。",
-            "logprobs": [],
-        }),
-        _event({
-            "type": "response.output_item.done",
-            "sequence_number": 3,
-            "output_index": 0,
-            "item": completed_message,
-        }),
-        _event({
-            "type": "response.output_item.added",
-            "sequence_number": 4,
-            "output_index": 1,
-            "item": _function_call(
-                "fc_1",
-                call_id="call_1",
-                name="schema_inspect",
-                arguments="",
-                status="in_progress",
+            _event(
+                {
+                    "type": "response.output_text.delta",
+                    "sequence_number": 2,
+                    "item_id": "msg_1",
+                    "output_index": 0,
+                    "content_index": 0,
+                    "delta": "我先检查订单结构。",
+                    "logprobs": [],
+                }
             ),
-        }),
-        _event({
-            "type": "response.function_call_arguments.delta",
-            "sequence_number": 5,
-            "item_id": "fc_1",
-            "output_index": 1,
-            "delta": '{"table_name":"ord',
-        }),
-        _event({
-            "type": "response.function_call_arguments.delta",
-            "sequence_number": 6,
-            "item_id": "fc_1",
-            "output_index": 1,
-            "delta": 'ers"}',
-        }),
-        _event({
-            "type": "response.output_item.done",
-            "sequence_number": 7,
-            "output_index": 1,
-            "item": completed_call,
-        }),
-        _event({
-            "type": "response.reasoning_summary_text.delta",
-            "sequence_number": 8,
-            "item_id": "reasoning_1",
-            "output_index": 2,
-            "summary_index": 0,
-            "delta": "正在确认所需数据。",
-        }),
-        _event({
-            "type": "response.output_item.done",
-            "sequence_number": 9,
-            "output_index": 2,
-            "item": reasoning_item,
-        }),
-        _event({
-            "type": "response.completed",
-            "sequence_number": 10,
-            "response": _response(
-                status="completed",
-                output=[completed_message, completed_call, reasoning_item],
-                usage={
-                    "input_tokens": 10,
-                    "input_tokens_details": {
-                        "cached_tokens": 0,
-                        "cache_write_tokens": 0,
-                    },
-                    "output_tokens": 4,
-                    "output_tokens_details": {"reasoning_tokens": 1},
-                    "total_tokens": 14,
-                },
+            _event(
+                {
+                    "type": "response.output_item.done",
+                    "sequence_number": 3,
+                    "output_index": 0,
+                    "item": completed_message,
+                }
             ),
-        }),
-    ])
+            _event(
+                {
+                    "type": "response.output_item.added",
+                    "sequence_number": 4,
+                    "output_index": 1,
+                    "item": _function_call(
+                        "fc_1",
+                        call_id="call_1",
+                        name="schema_inspect",
+                        arguments="",
+                        status="in_progress",
+                    ),
+                }
+            ),
+            _event(
+                {
+                    "type": "response.function_call_arguments.delta",
+                    "sequence_number": 5,
+                    "item_id": "fc_1",
+                    "output_index": 1,
+                    "delta": '{"table_name":"ord',
+                }
+            ),
+            _event(
+                {
+                    "type": "response.function_call_arguments.delta",
+                    "sequence_number": 6,
+                    "item_id": "fc_1",
+                    "output_index": 1,
+                    "delta": 'ers"}',
+                }
+            ),
+            _event(
+                {
+                    "type": "response.output_item.done",
+                    "sequence_number": 7,
+                    "output_index": 1,
+                    "item": completed_call,
+                }
+            ),
+            _event(
+                {
+                    "type": "response.reasoning_summary_text.delta",
+                    "sequence_number": 8,
+                    "item_id": "reasoning_1",
+                    "output_index": 2,
+                    "summary_index": 0,
+                    "delta": "正在确认所需数据。",
+                }
+            ),
+            _event(
+                {
+                    "type": "response.output_item.done",
+                    "sequence_number": 9,
+                    "output_index": 2,
+                    "item": reasoning_item,
+                }
+            ),
+            _event(
+                {
+                    "type": "response.completed",
+                    "sequence_number": 10,
+                    "response": _response(
+                        status="completed",
+                        output=[completed_message, completed_call, reasoning_item],
+                        usage={
+                            "input_tokens": 10,
+                            "input_tokens_details": {
+                                "cached_tokens": 0,
+                                "cache_write_tokens": 0,
+                            },
+                            "output_tokens": 4,
+                            "output_tokens_details": {"reasoning_tokens": 1},
+                            "total_tokens": 14,
+                        },
+                    ),
+                }
+            ),
+        ]
+    )
     adapter = OpenAIModelAdapter(client=client, model_name="gpt-5")  # type: ignore[arg-type]
     input_items = [
         {"role": "user", "content": "查一下"},
@@ -257,12 +281,14 @@ def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
             "output": "先前结果",
         },
     ]
-    tools = [{
-        "type": "function",
-        "name": "schema_inspect",
-        "description": "读取表结构",
-        "parameters": {"type": "object", "properties": {}},
-    }]
+    tools = [
+        {
+            "type": "function",
+            "name": "schema_inspect",
+            "description": "读取表结构",
+            "parameters": {"type": "object", "properties": {}},
+        }
+    ]
 
     result = TurnStreamAssembler().consume(
         adapter.stream(messages=input_items, tools=tools)
@@ -286,6 +312,8 @@ def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
         "prompt_tokens": 10,
         "completion_tokens": 4,
         "total_tokens": 14,
+        "cached_input_tokens": 0,
+        "reasoning_output_tokens": 1,
     }
     assert client.responses.request == {
         "model": "gpt-5",
@@ -308,43 +336,55 @@ def test_responses_adapter_preserves_final_answer_phase_and_bounds_deltas() -> N
         status="completed",
         text=content,
     )
-    client = _Client([
-        _event({
-            "type": "response.output_item.added",
-            "sequence_number": 1,
-            "output_index": 0,
-            "item": _message(
-                "msg_final",
-                phase="final_answer",
-                status="in_progress",
+    client = _Client(
+        [
+            _event(
+                {
+                    "type": "response.output_item.added",
+                    "sequence_number": 1,
+                    "output_index": 0,
+                    "item": _message(
+                        "msg_final",
+                        phase="final_answer",
+                        status="in_progress",
+                    ),
+                }
             ),
-        }),
-        _event({
-            "type": "response.output_text.delta",
-            "sequence_number": 2,
-            "item_id": "msg_final",
-            "output_index": 0,
-            "content_index": 0,
-            "delta": content,
-            "logprobs": [],
-        }),
-        _event({
-            "type": "response.output_item.done",
-            "sequence_number": 3,
-            "output_index": 0,
-            "item": completed,
-        }),
-        _event({
-            "type": "response.completed",
-            "sequence_number": 4,
-            "response": _response(status="completed", output=[completed]),
-        }),
-    ])
+            _event(
+                {
+                    "type": "response.output_text.delta",
+                    "sequence_number": 2,
+                    "item_id": "msg_final",
+                    "output_index": 0,
+                    "content_index": 0,
+                    "delta": content,
+                    "logprobs": [],
+                }
+            ),
+            _event(
+                {
+                    "type": "response.output_item.done",
+                    "sequence_number": 3,
+                    "output_index": 0,
+                    "item": completed,
+                }
+            ),
+            _event(
+                {
+                    "type": "response.completed",
+                    "sequence_number": 4,
+                    "response": _response(status="completed", output=[completed]),
+                }
+            ),
+        ]
+    )
 
-    items = list(OpenAIModelAdapter(
-        client=client,  # type: ignore[arg-type]
-        model_name="gpt-5",
-    ).stream(messages=[], tools=[]))
+    items = list(
+        OpenAIModelAdapter(
+            client=client,  # type: ignore[arg-type]
+            model_name="gpt-5",
+        ).stream(messages=[], tools=[])
+    )
 
     deltas = [item for item in items if item.kind is TurnStreamKind.ANSWER_DELTA]
     assert [len(item.content or "") for item in deltas] == [96, 96, 13]
@@ -360,34 +400,44 @@ def test_responses_adapter_completes_terminal_text_when_phase_is_omitted() -> No
         status="completed",
         text="这是最终答案。",
     )
-    client = _Client([
-        _event({
-            "type": "response.output_item.added",
-            "sequence_number": 1,
-            "output_index": 0,
-            "item": _message(
-                "msg_without_phase",
-                phase=None,
-                status="in_progress",
+    client = _Client(
+        [
+            _event(
+                {
+                    "type": "response.output_item.added",
+                    "sequence_number": 1,
+                    "output_index": 0,
+                    "item": _message(
+                        "msg_without_phase",
+                        phase=None,
+                        status="in_progress",
+                    ),
+                }
             ),
-        }),
-        _event({
-            "type": "response.output_item.done",
-            "sequence_number": 2,
-            "output_index": 0,
-            "item": completed,
-        }),
-        _event({
-            "type": "response.completed",
-            "sequence_number": 3,
-            "response": _response(status="completed", output=[completed]),
-        }),
-    ])
+            _event(
+                {
+                    "type": "response.output_item.done",
+                    "sequence_number": 2,
+                    "output_index": 0,
+                    "item": completed,
+                }
+            ),
+            _event(
+                {
+                    "type": "response.completed",
+                    "sequence_number": 3,
+                    "response": _response(status="completed", output=[completed]),
+                }
+            ),
+        ]
+    )
 
-    result = TurnStreamAssembler().consume(OpenAIModelAdapter(
-        client=client,  # type: ignore[arg-type]
-        model_name="gpt-5",
-    ).stream(messages=[{"role": "user", "content": "回答问题"}], tools=[]))
+    result = TurnStreamAssembler().consume(
+        OpenAIModelAdapter(
+            client=client,  # type: ignore[arg-type]
+            model_name="gpt-5",
+        ).stream(messages=[{"role": "user", "content": "回答问题"}], tools=[])
+    )
     decision = CompletionPolicy().evaluate(
         context=ContextSnapshot(
             session_id="session-1",
@@ -422,53 +472,67 @@ def test_responses_adapter_keeps_commentary_and_final_messages_distinct() -> Non
         status="completed",
         text="最终结论。",
     )
-    client = _Client([
-        _event({
-            "type": "response.output_item.added",
-            "sequence_number": 1,
-            "output_index": 0,
-            "item": _message(
-                "msg_commentary",
-                phase="commentary",
-                status="in_progress",
+    client = _Client(
+        [
+            _event(
+                {
+                    "type": "response.output_item.added",
+                    "sequence_number": 1,
+                    "output_index": 0,
+                    "item": _message(
+                        "msg_commentary",
+                        phase="commentary",
+                        status="in_progress",
+                    ),
+                }
             ),
-        }),
-        _event({
-            "type": "response.output_item.done",
-            "sequence_number": 2,
-            "output_index": 0,
-            "item": commentary,
-        }),
-        _event({
-            "type": "response.output_item.added",
-            "sequence_number": 3,
-            "output_index": 1,
-            "item": _message(
-                "msg_final",
-                phase="final_answer",
-                status="in_progress",
+            _event(
+                {
+                    "type": "response.output_item.done",
+                    "sequence_number": 2,
+                    "output_index": 0,
+                    "item": commentary,
+                }
             ),
-        }),
-        _event({
-            "type": "response.output_item.done",
-            "sequence_number": 4,
-            "output_index": 1,
-            "item": final,
-        }),
-        _event({
-            "type": "response.completed",
-            "sequence_number": 5,
-            "response": _response(
-                status="completed",
-                output=[commentary, final],
+            _event(
+                {
+                    "type": "response.output_item.added",
+                    "sequence_number": 3,
+                    "output_index": 1,
+                    "item": _message(
+                        "msg_final",
+                        phase="final_answer",
+                        status="in_progress",
+                    ),
+                }
             ),
-        }),
-    ])
+            _event(
+                {
+                    "type": "response.output_item.done",
+                    "sequence_number": 4,
+                    "output_index": 1,
+                    "item": final,
+                }
+            ),
+            _event(
+                {
+                    "type": "response.completed",
+                    "sequence_number": 5,
+                    "response": _response(
+                        status="completed",
+                        output=[commentary, final],
+                    ),
+                }
+            ),
+        ]
+    )
 
-    result = TurnStreamAssembler().consume(OpenAIModelAdapter(
-        client=client,  # type: ignore[arg-type]
-        model_name="gpt-5",
-    ).stream(messages=[], tools=[]))
+    result = TurnStreamAssembler().consume(
+        OpenAIModelAdapter(
+            client=client,  # type: ignore[arg-type]
+            model_name="gpt-5",
+        ).stream(messages=[], tools=[])
+    )
 
     assert [message.phase for message in result.messages] == [
         "commentary",
@@ -490,45 +554,57 @@ def test_responses_adapter_preserves_refusal_text() -> None:
         status="completed",
         refusal=refusal,
     )
-    client = _Client([
-        _event({
-            "type": "response.output_item.added",
-            "sequence_number": 1,
-            "output_index": 0,
-            "item": _message(
-                "msg_refusal",
-                phase="final_answer",
-                status="in_progress",
+    client = _Client(
+        [
+            _event(
+                {
+                    "type": "response.output_item.added",
+                    "sequence_number": 1,
+                    "output_index": 0,
+                    "item": _message(
+                        "msg_refusal",
+                        phase="final_answer",
+                        status="in_progress",
+                    ),
+                }
             ),
-        }),
-        _event({
-            "type": "response.refusal.delta",
-            "sequence_number": 2,
-            "item_id": "msg_refusal",
-            "output_index": 0,
-            "content_index": 0,
-            "delta": refusal,
-        }),
-        _event({
-            "type": "response.refusal.done",
-            "sequence_number": 3,
-            "item_id": "msg_refusal",
-            "output_index": 0,
-            "content_index": 0,
-            "refusal": refusal,
-        }),
-        _event({
-            "type": "response.output_item.done",
-            "sequence_number": 4,
-            "output_index": 0,
-            "item": completed,
-        }),
-        _event({
-            "type": "response.completed",
-            "sequence_number": 5,
-            "response": _response(status="completed", output=[completed]),
-        }),
-    ])
+            _event(
+                {
+                    "type": "response.refusal.delta",
+                    "sequence_number": 2,
+                    "item_id": "msg_refusal",
+                    "output_index": 0,
+                    "content_index": 0,
+                    "delta": refusal,
+                }
+            ),
+            _event(
+                {
+                    "type": "response.refusal.done",
+                    "sequence_number": 3,
+                    "item_id": "msg_refusal",
+                    "output_index": 0,
+                    "content_index": 0,
+                    "refusal": refusal,
+                }
+            ),
+            _event(
+                {
+                    "type": "response.output_item.done",
+                    "sequence_number": 4,
+                    "output_index": 0,
+                    "item": completed,
+                }
+            ),
+            _event(
+                {
+                    "type": "response.completed",
+                    "sequence_number": 5,
+                    "response": _response(status="completed", output=[completed]),
+                }
+            ),
+        ]
+    )
 
     result = TurnStreamAssembler().consume(
         OpenAIModelAdapter(
@@ -548,29 +624,37 @@ def test_responses_adapter_uses_completed_message_when_no_text_delta_arrives() -
         status="completed",
         text="最终答案",
     )
-    client = _Client([
-        _event({
-            "type": "response.output_item.added",
-            "sequence_number": 1,
-            "output_index": 0,
-            "item": _message(
-                "msg_final",
-                phase="final_answer",
-                status="in_progress",
+    client = _Client(
+        [
+            _event(
+                {
+                    "type": "response.output_item.added",
+                    "sequence_number": 1,
+                    "output_index": 0,
+                    "item": _message(
+                        "msg_final",
+                        phase="final_answer",
+                        status="in_progress",
+                    ),
+                }
             ),
-        }),
-        _event({
-            "type": "response.output_item.done",
-            "sequence_number": 2,
-            "output_index": 0,
-            "item": completed,
-        }),
-        _event({
-            "type": "response.completed",
-            "sequence_number": 3,
-            "response": _response(status="completed", output=[completed]),
-        }),
-    ])
+            _event(
+                {
+                    "type": "response.output_item.done",
+                    "sequence_number": 2,
+                    "output_index": 0,
+                    "item": completed,
+                }
+            ),
+            _event(
+                {
+                    "type": "response.completed",
+                    "sequence_number": 3,
+                    "response": _response(status="completed", output=[completed]),
+                }
+            ),
+        ]
+    )
 
     result = TurnStreamAssembler().consume(
         OpenAIModelAdapter(
@@ -584,16 +668,20 @@ def test_responses_adapter_uses_completed_message_when_no_text_delta_arrives() -
 
 
 def test_responses_adapter_rejects_terminal_incomplete_response() -> None:
-    client = _Client([
-        _event({
-            "type": "response.incomplete",
-            "sequence_number": 1,
-            "response": _response(
-                status="incomplete",
-                incomplete_details={"reason": "max_output_tokens"},
+    client = _Client(
+        [
+            _event(
+                {
+                    "type": "response.incomplete",
+                    "sequence_number": 1,
+                    "response": _response(
+                        status="incomplete",
+                        incomplete_details={"reason": "max_output_tokens"},
+                    ),
+                }
             ),
-        }),
-    ])
+        ]
+    )
 
     with pytest.raises(
         TurnStreamError,
@@ -608,27 +696,33 @@ def test_responses_adapter_rejects_terminal_incomplete_response() -> None:
 
 
 def test_responses_adapter_rejects_stream_without_terminal_event() -> None:
-    client = _Client([
-        _event({
-            "type": "response.output_item.added",
-            "sequence_number": 1,
-            "output_index": 0,
-            "item": _message(
-                "msg_partial",
-                phase="final_answer",
-                status="in_progress",
+    client = _Client(
+        [
+            _event(
+                {
+                    "type": "response.output_item.added",
+                    "sequence_number": 1,
+                    "output_index": 0,
+                    "item": _message(
+                        "msg_partial",
+                        phase="final_answer",
+                        status="in_progress",
+                    ),
+                }
             ),
-        }),
-        _event({
-            "type": "response.output_text.delta",
-            "sequence_number": 2,
-            "item_id": "msg_partial",
-            "output_index": 0,
-            "content_index": 0,
-            "delta": "partial",
-            "logprobs": [],
-        }),
-    ])
+            _event(
+                {
+                    "type": "response.output_text.delta",
+                    "sequence_number": 2,
+                    "item_id": "msg_partial",
+                    "output_index": 0,
+                    "content_index": 0,
+                    "delta": "partial",
+                    "logprobs": [],
+                }
+            ),
+        ]
+    )
 
     with pytest.raises(
         TurnStreamError,
@@ -648,10 +742,12 @@ def test_responses_adapter_emits_safe_error_item() -> None:
             raise RuntimeError("secret provider detail")
 
     client = SimpleNamespace(responses=_FailingResponses())
-    item = list(OpenAIModelAdapter(
-        client=client,  # type: ignore[arg-type]
-        model_name="gpt-5",
-    ).stream(messages=[], tools=[]))[0]
+    item = list(
+        OpenAIModelAdapter(
+            client=client,  # type: ignore[arg-type]
+            model_name="gpt-5",
+        ).stream(messages=[], tools=[])
+    )[0]
 
     assert item.kind is TurnStreamKind.ERROR
     assert item.error_code == "MODEL_PROVIDER_STREAM_FAILED"
@@ -667,10 +763,12 @@ def test_responses_adapter_classifies_rate_limit_and_preserves_retry_after() -> 
             raise APIStatusError("private provider body", response=response, body=None)
 
     client = SimpleNamespace(responses=_RateLimitedResponses())
-    item = list(OpenAIModelAdapter(
-        client=client,  # type: ignore[arg-type]
-        model_name="gpt-5",
-    ).stream(messages=[], tools=[]))[0]
+    item = list(
+        OpenAIModelAdapter(
+            client=client,  # type: ignore[arg-type]
+            model_name="gpt-5",
+        ).stream(messages=[], tools=[])
+    )[0]
 
     assert item.error_code == "MODEL_PROVIDER_RATE_LIMITED"
     assert item.error_retryable is True
@@ -681,10 +779,30 @@ def test_responses_adapter_classifies_rate_limit_and_preserves_retry_after() -> 
 @pytest.mark.parametrize(
     ("status", "body", "expected_code", "retryable"),
     [
-        (400, {"error": {"code": "invalid_request_error"}}, "MODEL_PROVIDER_REQUEST_REJECTED", False),
-        (401, {"error": {"code": "invalid_api_key"}}, "MODEL_PROVIDER_AUTHENTICATION_FAILED", False),
-        (403, {"error": {"code": "permission_denied"}}, "MODEL_PROVIDER_PERMISSION_DENIED", False),
-        (404, {"error": {"code": "model_not_found"}}, "MODEL_PROVIDER_MODEL_NOT_FOUND", False),
+        (
+            400,
+            {"error": {"code": "invalid_request_error"}},
+            "MODEL_PROVIDER_REQUEST_REJECTED",
+            False,
+        ),
+        (
+            401,
+            {"error": {"code": "invalid_api_key"}},
+            "MODEL_PROVIDER_AUTHENTICATION_FAILED",
+            False,
+        ),
+        (
+            403,
+            {"error": {"code": "permission_denied"}},
+            "MODEL_PROVIDER_PERMISSION_DENIED",
+            False,
+        ),
+        (
+            404,
+            {"error": {"code": "model_not_found"}},
+            "MODEL_PROVIDER_MODEL_NOT_FOUND",
+            False,
+        ),
         (
             429,
             {"error": {"code": "organization_spend_limit_exceeded"}},
@@ -711,10 +829,12 @@ def test_responses_adapter_classifies_structured_status_without_leaking_provider
             )
 
     client = SimpleNamespace(responses=_RejectedResponses())
-    item = list(OpenAIModelAdapter(
-        client=client,  # type: ignore[arg-type]
-        model_name="gpt-5",
-    ).stream(messages=[], tools=[]))[0]
+    item = list(
+        OpenAIModelAdapter(
+            client=client,  # type: ignore[arg-type]
+            model_name="gpt-5",
+        ).stream(messages=[], tools=[])
+    )[0]
 
     assert item.error_code == expected_code
     assert item.error_retryable is retryable
@@ -742,11 +862,13 @@ def test_responses_stream_honors_cancellation_and_closes_sdk_stream() -> None:
 
     probes = iter([False, True])
     with pytest.raises(TurnStreamCancelled, match="cancelled"):
-        list(adapter.stream(
-            messages=[],
-            tools=[],
-            cancellation_probe=lambda: next(probes, True),
-        ))
+        list(
+            adapter.stream(
+                messages=[],
+                tools=[],
+                cancellation_probe=lambda: next(probes, True),
+            )
+        )
 
     assert client.responses.stream is not None
     assert client.responses.stream.closed

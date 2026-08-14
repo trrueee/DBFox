@@ -5,7 +5,14 @@ import json
 from engine.agent.context import ContextAssembler
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.session import DeliveryMode
-from engine.models import AgentArtifactRecord, AgentMessage, AgentRun, AgentSession
+from engine.models import (
+    AgentArtifactRecord,
+    AgentMessage,
+    AgentRun,
+    AgentSession,
+    AgentTaskPlanRecord,
+    AgentTurn,
+)
 
 
 def test_next_run_reads_durable_history_and_selected_artifact(
@@ -96,6 +103,7 @@ def test_next_run_reads_durable_history_and_selected_artifact(
         "queryFingerprint": "query-42",
         "rowCount": 1,
     }
+    assert snapshot.previous_run_outcome is None
     assert "sensitive-cell-value" not in json.dumps(snapshot.model_dump(mode="json"))
     assert snapshot.hash == ContextAssembler(db_session).build(second.run_id).hash
 
@@ -268,9 +276,244 @@ def test_next_run_receives_failed_outcome_without_failed_assistant_draft(
 
     snapshot = ContextAssembler(db_session).build(second.run_id)
 
-    assert snapshot.previous_run_outcome["status"] == "failed"
-    assert snapshot.previous_run_outcome["error_code"] == "AGENT_NO_PROGRESS"
-    assert "连续多轮" in snapshot.previous_run_outcome["public_message"]
+    assert snapshot.previous_run_outcome is not None
+    assert snapshot.previous_run_outcome.status == "failed"
+    assert snapshot.previous_run_outcome.error_code == "AGENT_NO_PROGRESS"
+    assert "连续多轮" in snapshot.previous_run_outcome.public_message
     rendered = json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False)
     assert "private provider payload" not in rendered
     assert "我正在猜测一个尚未验证的结论" not in rendered
+
+
+def test_next_run_receives_bounded_partial_plan_and_artifact_index(
+    db_session,
+    test_datasource,
+) -> None:
+    db_session.add(
+        AgentSession(
+            id="session_partial_context",
+            datasource_id=str(test_datasource.id),
+            title="Partial context",
+        )
+    )
+    db_session.commit()
+    repository = SessionRepository(db_session)
+    first = repository.admit(
+        session_id="session_partial_context",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="完整分析订单收入与留存",
+        idempotency_key="partial-first",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    first_run = db_session.get(AgentRun, first.run_id)
+    first_run.status = "completed"
+    first_run.result_json = json.dumps(
+        {
+            "completion_disposition": "bounded_partial",
+            "limitation_codes": ["TURN_BUDGET_REACHED"],
+        }
+    )
+    first_assistant = db_session.get(AgentMessage, first.assistant_message_id)
+    first_assistant.content = "分析以部分结果结束。"
+    first_assistant.status = "completed"
+    turn = AgentTurn(
+        id="turn_partial_context",
+        session_id="session_partial_context",
+        run_id=first.run_id,
+        sequence=1,
+        status="completed",
+        agent_definition_version="1",
+        prompt_version="1",
+        prompt_hash="prompt",
+        context_snapshot_json="{}",
+        context_hash="context",
+        tool_materialization_json="{}",
+        tool_materialization_hash="tools",
+        provider="test",
+        model_name="test",
+    )
+    db_session.add(turn)
+    db_session.flush()
+    db_session.add_all(
+        [
+            AgentTaskPlanRecord(
+                id="plan_partial_context",
+                session_id="session_partial_context",
+                run_id=first.run_id,
+                turn_id=turn.id,
+                objective="分析订单收入、退款和订阅留存",
+                status="partial",
+                summary="收入与退款已完成，留存未完成。",
+                steps_json=json.dumps(
+                    [
+                        {
+                            "id": "revenue",
+                            "title": "计算收入趋势",
+                            "status": "completed",
+                            "evidence_required": True,
+                            "artifact_ids": ["artifact_partial_result"],
+                            "note": "已得到月度趋势",
+                        },
+                        {
+                            "id": "retention",
+                            "title": "计算订阅留存",
+                            "status": "skipped",
+                            "evidence_required": True,
+                            "artifact_ids": [],
+                            "note": "运行以部分结果结束，此步骤未继续执行。",
+                        },
+                    ],
+                    ensure_ascii=False,
+                ),
+            ),
+            AgentArtifactRecord(
+                id="artifact_partial_result",
+                run_id=first.run_id,
+                session_id="session_partial_context",
+                turn_id=turn.id,
+                type="result_view",
+                title="月度收入趋势",
+                summary="返回 2 行月度汇总。",
+                payload_json=json.dumps(
+                    {
+                        "sourceSqlArtifactId": "artifact_partial_sql",
+                        "queryFingerprint": "partial-fingerprint",
+                        "rowCount": 2,
+                    }
+                ),
+                presentation_json="{}",
+                refs_json="{}",
+                provenance_json="{}",
+                relations_json="[]",
+                status="completed",
+                sequence=1,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    second = repository.admit(
+        session_id="session_partial_context",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="继续完成剩余分析",
+        idempotency_key="partial-second",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    db_session.commit()
+
+    snapshot = ContextAssembler(db_session).build(second.run_id)
+
+    assert snapshot.previous_run_outcome is not None
+    assert snapshot.previous_run_outcome.completion_disposition == "bounded_partial"
+    assert snapshot.previous_run_outcome.limitation_codes == ["TURN_BUDGET_REACHED"]
+    assert snapshot.previous_run_outcome.plan is not None
+    assert snapshot.previous_run_outcome.plan.objective == (
+        "分析订单收入、退款和订阅留存"
+    )
+    assert snapshot.previous_run_outcome.plan.steps[0].artifact_ids == [
+        "artifact_partial_result"
+    ]
+    assert [
+        artifact.model_dump(mode="json")
+        for artifact in snapshot.previous_run_outcome.artifacts
+    ] == [
+        {
+            "id": "artifact_partial_result",
+            "type": "result_view",
+            "title": "月度收入趋势",
+            "summary": "返回 2 行月度汇总。",
+        }
+    ]
+    rendered = json.dumps(
+        snapshot.previous_run_outcome.model_dump(mode="json"),
+        ensure_ascii=False,
+    )
+    assert "sourceSqlArtifactId" not in rendered
+    assert "继续完成剩余分析" not in rendered
+
+
+def test_next_run_indexes_result_artifacts_from_a_completed_previous_run(
+    db_session,
+    test_datasource,
+) -> None:
+    db_session.add(
+        AgentSession(
+            id="session_completed_result_context",
+            datasource_id=str(test_datasource.id),
+            title="Completed result context",
+        )
+    )
+    db_session.commit()
+    repository = SessionRepository(db_session)
+    first = repository.admit(
+        session_id="session_completed_result_context",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="查询订单状态分布",
+        idempotency_key="completed-result-first",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    first_run = db_session.get(AgentRun, first.run_id)
+    first_run.status = "completed"
+    first_run.result_json = json.dumps({"completion_disposition": "complete"})
+    first_answer = db_session.get(AgentMessage, first.assistant_message_id)
+    first_answer.content = "状态分布已查询。"
+    first_answer.status = "completed"
+    db_session.add(
+        AgentArtifactRecord(
+            id="artifact_completed_result",
+            run_id=first.run_id,
+            session_id="session_completed_result_context",
+            type="result_view",
+            title="订单状态分布",
+            summary="返回 4 行状态汇总。",
+            payload_json=json.dumps(
+                {
+                    "sourceSqlArtifactId": "artifact_completed_sql",
+                    "queryFingerprint": "completed-result-fingerprint",
+                    "rowCount": 4,
+                }
+            ),
+            presentation_json="{}",
+            refs_json="{}",
+            provenance_json="{}",
+            relations_json="[]",
+            status="completed",
+            sequence=1,
+        )
+    )
+    db_session.commit()
+
+    second = repository.admit(
+        session_id="session_completed_result_context",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="继续，告诉我最大的类别",
+        idempotency_key="completed-result-second",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    db_session.commit()
+
+    snapshot = ContextAssembler(db_session).build(second.run_id)
+
+    assert snapshot.previous_run_outcome is not None
+    assert snapshot.previous_run_outcome.status == "completed"
+    assert snapshot.previous_run_outcome.completion_disposition == "complete"
+    assert [item.id for item in snapshot.previous_run_outcome.artifacts] == [
+        "artifact_completed_result"
+    ]
+    assert "可复用" in snapshot.previous_run_outcome.public_message

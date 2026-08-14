@@ -13,8 +13,8 @@ from engine.agent.artifact import (
     ArtifactRelationType,
     ArtifactType,
 )
+from engine.agent.repositories.artifact import ArtifactRepository
 from engine.errors import ToolInputError
-from engine.json_codec import loads
 from engine.models import AgentArtifactRecord
 from engine.sql.result_view.models import ResultPageQuery, ResultSourceRef
 from engine.sql.result_view.service import ResultViewService
@@ -54,22 +54,28 @@ def _require_query_result(
 ) -> AgentArtifactRecord:
     db = context.require_database()
     request = context.require_request()
-    artifact = db.get(AgentArtifactRecord, artifact_id)
-    if (
-        artifact is None
-        or str(artifact.session_id) != request.session_id
-        or str(artifact.run_id) != request.run_id
-        or str(artifact.type) != ArtifactType.RESULT_VIEW.value
-    ):
-        raise ToolInputError("The Result Artifact is unavailable in the current Run.")
-    payload = loads(str(artifact.payload_json or "{}"))
+    artifact = ArtifactRepository(db).available_result(
+        current_run_id=request.run_id,
+        artifact_id=artifact_id,
+        session_id=request.session_id,
+        datasource_id=request.datasource_id,
+        datasource_generation=request.datasource_generation,
+    )
+    if artifact is None:
+        raise ToolInputError(
+            "The Result Artifact is unavailable in this datasource session."
+        )
+    payload = artifact.payload
     if not isinstance(payload, dict):
         raise ToolInputError("The Result Artifact payload is invalid.")
     if str(payload.get("evidenceKind") or "query_result") != "query_result":
         raise ToolInputError(
             "Sample-row Artifacts cannot be inspected as analytical query results."
         )
-    return artifact
+    record = db.get(AgentArtifactRecord, artifact.id)
+    if record is None:
+        raise ToolInputError("The Result Artifact is unavailable.")
+    return record
 
 
 def _resolve_chart_suggestion(
@@ -312,6 +318,7 @@ class ResultInspectTool(BaseTool[ResultInspectInput, ResultInspectOutput]):
         capabilities=("metadata_read", "database_read"),
     )
     semantics = ToolSemanticSpec(
+        produces=(ToolSemanticCapability.QUERY_RESULT,),
         contributes_progress=False,
         publishes_artifact_references=True,
     )

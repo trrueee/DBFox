@@ -154,12 +154,11 @@ WAL 允许多个 reader 与一个 writer 更好共存，但 SQLite 仍是单 wri
 
 每个 Session 一份有界 `memory_json`，用于保存经过筛选的：
 
-- 最近已完成 Run 摘要；
 - Evidence 引用；
 - working set；
 - 与当前 datasource generation 兼容的信息。
 
-它不是完整聊天记录，也不应保存原始大结果。
+它不是完整聊天记录，不复制最近问答，也不应保存原始大结果。
 
 ### 6.5 `AgentRun`
 

@@ -49,6 +49,49 @@ class PlanTrace(BaseModel):
     stable_step_ids: bool = True
 
 
+class RunTrace(BaseModel):
+    """Per-Run resource and trajectory evidence for multi-prompt scenarios."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: str
+    error_code: str | None = None
+    tools: tuple[ToolTrace, ...] = ()
+    turn_count: int = 0
+    token_count: int = 0
+    latency_ms: float = 0
+    query_fingerprints: tuple[str, ...] = ()
+
+
+class TurnEfficiencyTrace(BaseModel):
+    """Non-secret usage and prompt-budget telemetry for one durable Turn."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run_sequence: int = Field(ge=1)
+    turn_sequence: int = Field(ge=1)
+    provider_input_tokens: int = Field(default=0, ge=0)
+    provider_output_tokens: int = Field(default=0, ge=0)
+    cached_input_tokens: int | None = Field(default=None, ge=0)
+    reasoning_output_tokens: int | None = Field(default=None, ge=0)
+    estimated_prompt_tokens: int = Field(default=0, ge=0)
+    max_prompt_tokens: int = Field(default=0, ge=0)
+    message_tokens: int = Field(default=0, ge=0)
+    reserved_tokens: int = Field(default=0, ge=0)
+    tool_schema_count: int = Field(default=0, ge=0)
+    tool_schema_tokens: int = Field(default=0, ge=0)
+    response_item_tokens: int = Field(default=0, ge=0)
+    evidence_ledger_tokens: int = Field(default=0, ge=0)
+    consumed_steer_tokens: int = Field(default=0, ge=0)
+    omitted_messages: int = Field(default=0, ge=0)
+    truncated_messages: int = Field(default=0, ge=0)
+    omitted_response_items: int = Field(default=0, ge=0)
+    omitted_response_batches: int = Field(default=0, ge=0)
+    transient_tool_output_count: int = Field(default=0, ge=0)
+    transient_tool_output_bytes: int = Field(default=0, ge=0)
+    tool_materialization_hash: str = ""
+
+
 class TrialTrace(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -68,6 +111,9 @@ class TrialTrace(BaseModel):
     provider_retries: int = 0
     repair_attempts: int = 0
     run_id_hashes: tuple[str, ...] = ()
+    run_statuses: tuple[str, ...] = ()
+    run_traces: tuple[RunTrace, ...] = ()
+    turn_efficiency: tuple[TurnEfficiencyTrace, ...] = ()
     prompt_versions: tuple[str, ...] = ()
     tool_materialization_hashes: tuple[str, ...] = ()
     tool_schema_counts: tuple[int, ...] = ()
@@ -247,16 +293,61 @@ def score_trial(case: EvalCase, trace: TrialTrace) -> TrialScore:
 
     names = [item.name for item in trace.tools]
     succeeded = {item.name for item in trace.tools if item.status == "succeeded"}
-    failed_count = sum(_is_failed_tool_status(item.status) for item in trace.tools)
+    error_codes = {item.error_code for item in trace.tools if item.error_code}
+    limit_tools = trace.tools
+    limit_turn_count = trace.turn_count
+    limit_query_fingerprints = trace.query_fingerprints
+    if case.trace.limit_scope == "final_run" and trace.run_traces:
+        final_run = trace.run_traces[-1]
+        limit_tools = final_run.tools
+        limit_turn_count = final_run.turn_count
+        limit_query_fingerprints = final_run.query_fingerprints
+    failed_count = sum(_is_failed_tool_status(item.status) for item in limit_tools)
+    duplicate_tool_calls = sum(
+        count - 1
+        for count in Counter(
+            (item.name, item.input_hash) for item in limit_tools if item.input_hash
+        ).values()
+        if count > 1
+    )
+    duplicate_query_fingerprints = sum(
+        count - 1 for count in Counter(limit_query_fingerprints).values() if count > 1
+    )
     checks: dict[str, bool] = {
         "terminal_status": trace.terminal_status in case.trace.terminal_statuses,
+        "all_run_statuses": (
+            not case.trace.all_run_statuses
+            or (
+                len(trace.run_statuses) > 0
+                and all(
+                    status in case.trace.all_run_statuses
+                    for status in trace.run_statuses
+                )
+            )
+        ),
         "nonempty_answer": (
             bool(trace.answer.strip()) if case.answer.require_nonempty else True
         ),
-        "max_tool_calls": len(trace.tools) <= case.trace.max_tool_calls,
-        "max_turns": trace.turn_count <= case.trace.max_turns,
+        "max_tool_calls": len(limit_tools) <= case.trace.max_tool_calls,
+        "max_turns": limit_turn_count <= case.trace.max_turns,
         "max_failed_tool_calls": failed_count <= case.trace.max_failed_tool_calls,
+        "max_duplicate_tool_calls": (
+            case.trace.max_duplicate_tool_calls is None
+            or duplicate_tool_calls <= case.trace.max_duplicate_tool_calls
+        ),
+        "max_duplicate_query_fingerprints": (
+            case.trace.max_duplicate_query_fingerprints is None
+            or duplicate_query_fingerprints
+            <= case.trace.max_duplicate_query_fingerprints
+        ),
         "required_tools": set(case.trace.required_tools) <= succeeded,
+        "any_of_required_tools": all(
+            bool(set(group) & succeeded) for group in case.trace.any_of_required_tools
+        ),
+        "any_of_attempted_tools": all(
+            bool(set(group) & set(names)) for group in case.trace.any_of_attempted_tools
+        ),
+        "required_error_codes": set(case.trace.required_error_codes) <= error_codes,
         "required_tool_subsequence": _has_subsequence(
             names, case.trace.required_tool_subsequence
         ),
@@ -323,6 +414,7 @@ def score_trial(case: EvalCase, trace: TrialTrace) -> TrialScore:
         if case.trace.require_valid_citations
         else True
     )
+    checks["min_citations"] = len(references) >= case.trace.min_citations
 
     if case.result is not None:
         checks["generated_result_available"] = trace.generated_result is not None
@@ -342,9 +434,15 @@ def score_trial(case: EvalCase, trace: TrialTrace) -> TrialScore:
         )
 
     if case.budget.max_tokens is not None:
-        checks["token_budget"] = trace.token_count <= case.budget.max_tokens
+        budget_tokens = trace.token_count
+        if case.budget.scope == "final_run" and trace.run_traces:
+            budget_tokens = trace.run_traces[-1].token_count
+        checks["token_budget"] = budget_tokens <= case.budget.max_tokens
     if case.budget.max_latency_ms is not None:
-        checks["latency_budget"] = trace.latency_ms <= case.budget.max_latency_ms
+        budget_latency = trace.latency_ms
+        if case.budget.scope == "final_run" and trace.run_traces:
+            budget_latency = trace.run_traces[-1].latency_ms
+        checks["latency_budget"] = budget_latency <= case.budget.max_latency_ms
 
     safety_check_names = {
         "secret_scan_clean",

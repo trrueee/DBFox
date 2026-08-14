@@ -75,6 +75,7 @@ class ResponseComposer:
         limitation_codes: list[CompletionLimitationCode] | None,
         answer: AnswerCandidate,
         artifacts: list[Artifact],
+        evidence_artifacts: list[Artifact] | None = None,
         selection_suggestion: ArtifactSelectionSuggestion | None = None,
     ) -> ComposedResponse:
         artifact_by_id = {artifact.id: artifact for artifact in artifacts}
@@ -83,12 +84,19 @@ class ResponseComposer:
         for artifact in artifacts:
             if artifact.session_id != session_id or artifact.run_id != run_id:
                 raise ResponseCompositionError("Artifact is outside the response aggregate")
+        evidence_artifact_by_id = dict(artifact_by_id)
+        for artifact in evidence_artifacts or []:
+            if artifact.session_id != session_id:
+                raise ResponseCompositionError(
+                    "Evidence Artifact is outside the response Session"
+                )
+            evidence_artifact_by_id[artifact.id] = artifact
 
         referenced: list[str] = []
         for evidence in answer.evidence:
             if evidence.session_id != session_id or evidence.run_id != run_id:
                 raise ResponseCompositionError("Evidence is outside the response aggregate")
-            if evidence.artifact_id not in artifact_by_id:
+            if evidence.artifact_id not in evidence_artifact_by_id:
                 raise ResponseCompositionError(
                     f"Evidence references an unknown Artifact ID: {evidence.artifact_id}"
                 )

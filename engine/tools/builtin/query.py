@@ -130,7 +130,10 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
                     if tool_input.where
                     else None
                 ),
-                order_by=[item.model_dump(mode="json") for item in tool_input.order_by]
+                order_by=[
+                    item.model_dump(mode="json")
+                    for item in (tool_input.order_by or [])
+                ]
                 or None,
             )
         )

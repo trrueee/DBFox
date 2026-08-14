@@ -4,7 +4,13 @@ import json
 
 from scripts.agentbench.reporting import TrialRecord, write_reports
 from scripts.agentbench.schema import DatasetManifest
-from scripts.agentbench.scoring import PlanTrace, ToolTrace, TrialTrace, score_trial
+from scripts.agentbench.scoring import (
+    PlanTrace,
+    ToolTrace,
+    TrialTrace,
+    TurnEfficiencyTrace,
+    score_trial,
+)
 
 
 def test_reports_are_reproducible_and_do_not_copy_prompts_or_golden_sql(
@@ -43,6 +49,24 @@ def test_reports_are_reproducible_and_do_not_copy_prompts_or_golden_sql(
         latency_ms=20,
         turn_latency_ms=18,
         tool_latency_ms=4,
+        tool_materialization_hashes=("same", "same"),
+        turn_efficiency=(
+            TurnEfficiencyTrace(
+                run_sequence=1,
+                turn_sequence=1,
+                provider_input_tokens=7,
+                provider_output_tokens=3,
+                cached_input_tokens=2,
+                estimated_prompt_tokens=8,
+                max_prompt_tokens=100,
+                message_tokens=3,
+                reserved_tokens=5,
+                tool_schema_count=2,
+                tool_schema_tokens=4,
+                response_item_tokens=1,
+                transient_tool_output_count=1,
+            ),
+        ),
         tools=(
             ToolTrace(
                 name="sql_execute_readonly",
@@ -82,6 +106,13 @@ def test_reports_are_reproducible_and_do_not_copy_prompts_or_golden_sql(
     assert summary["cost_usd"]["median"] == 0.01
     assert summary["cost_usd_available_trials"] == 1
     assert summary["plans"]["created_trials"] == 1
+    assert summary["efficiency"]["turn_detail_coverage"] == {
+        "observed": 1,
+        "expected": 1,
+    }
+    assert summary["efficiency"]["tool_schema_share_of_estimate"] == 0.5
+    assert summary["efficiency"]["cached_input_ratio"] == 2 / 7
+    assert summary["efficiency"]["transient_tool_output_turns"] == 1
     combined = "\n".join(
         path.read_text(encoding="utf-8")
         for path in output.iterdir()
@@ -89,9 +120,9 @@ def test_reports_are_reproducible_and_do_not_copy_prompts_or_golden_sql(
     )
     assert "PRIVATE PROMPT SENTINEL" not in combined
     assert "SELECT 3 AS GOLDEN_SENTINEL" not in combined
-    assert "Passed / scored trials: 1/1" in (
-        output / "report.md"
-    ).read_text(encoding="utf-8")
+    assert "Passed / scored trials: 1/1" in (output / "report.md").read_text(
+        encoding="utf-8"
+    )
     junit = (output / "junit.xml").read_text(encoding="utf-8")
     assert 'tests="1"' in junit
     json.loads((output / "summary.json").read_text(encoding="utf-8"))

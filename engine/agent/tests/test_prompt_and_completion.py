@@ -43,9 +43,11 @@ def test_prompt_keeps_user_and_database_context_out_of_system_role():
         definition=DEFAULT_AGENT_DEFINITION,
         context=_context(),
     ).hash
-    assert bundle.version == "3.4"
+    assert bundle.version == "3.5"
     assert "metric, dimensions, filters" in bundle.system_prompt
     assert "result_profile" in bundle.system_prompt
+    assert "Prior assistant text and prior Artifact metadata are context" in bundle.system_prompt
+    assert "Reuse the prior Artifact ID" in bundle.system_prompt
 
 
 def test_prompt_isolates_the_only_active_request_from_prior_history():

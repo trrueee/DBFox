@@ -28,6 +28,7 @@ from engine.models import (
     AgentTurn,
 )
 from engine.tools.builtin.query import SqlExecuteReadonlyTool, SqlValidateTool
+from engine.tools.builtin.results import ResultInspectTool
 from engine.tools.builtin.artifacts import query_result_draft, sql_validation_drafts
 from engine.tools.builtin.contracts import QueryResultOutput, SqlValidateOutput
 from engine.tools.runtime import (
@@ -40,6 +41,82 @@ from engine.tools.runtime import (
 )
 from engine.tools.runtime.observation import ToolObservationProjection
 from engine.tools.runtime.semantics import ToolSemanticCapability
+
+
+def _tool_turn(call_id: str, name: str, arguments: dict[str, object]):
+    encoded = json.dumps(arguments, ensure_ascii=False)
+    yield TurnStreamItem(
+        kind=TurnStreamKind.TOOL_CALL_START,
+        item_id="tool:0",
+        revision=1,
+        tool_call_index=0,
+        tool_call_id=call_id,
+        tool_name=name,
+        arguments_delta=encoded,
+    )
+    yield TurnStreamItem(
+        kind=TurnStreamKind.TOOL_CALL_END,
+        item_id="tool:0",
+        revision=2,
+        tool_call_index=0,
+    )
+    yield TurnStreamItem(
+        kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
+        item_id="tool:0",
+        revision=3,
+        output_index=0,
+        model_output_item={
+            "type": "function_call",
+            "call_id": call_id,
+            "name": name,
+            "arguments": encoded,
+        },
+    )
+    yield TurnStreamItem(
+        kind=TurnStreamKind.FINISH,
+        item_id="finish",
+        revision=1,
+        termination=TurnTermination.COMPLETED,
+    )
+
+
+def _final_turn(content: str):
+    yield TurnStreamItem(
+        kind=TurnStreamKind.ANSWER_START,
+        item_id="answer",
+        revision=1,
+        output_index=0,
+    )
+    yield TurnStreamItem(
+        kind=TurnStreamKind.ANSWER_DELTA,
+        item_id="answer",
+        revision=2,
+        content=content,
+    )
+    yield TurnStreamItem(
+        kind=TurnStreamKind.ANSWER_END,
+        item_id="answer",
+        revision=3,
+        output_index=0,
+        message_status="completed",
+    )
+    yield TurnStreamItem(
+        kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
+        item_id="answer",
+        revision=4,
+        output_index=0,
+        model_output_item={
+            "type": "message",
+            "role": "assistant",
+            "content": content,
+        },
+    )
+    yield TurnStreamItem(
+        kind=TurnStreamKind.FINISH,
+        item_id="finish",
+        revision=1,
+        termination=TurnTermination.COMPLETED,
+    )
 
 
 def _tool_context(**updates):
@@ -121,7 +198,10 @@ def test_tool_disclosure_restores_result_for_failed_run_recovery():
     configured = {"control", "conversation", "catalog", "query", "result"}
     context = _tool_context(
         previous_run_outcome={
+            "run_id": "failed-run",
             "status": "failed",
+            "public_message": "上一次运行失败。",
+            "recovery": "复用已完成结果。",
             "tool_outcomes": [
                 {
                     "tool": "sql_execute_readonly",
@@ -145,7 +225,10 @@ def test_tool_disclosure_does_not_treat_non_result_artifact_as_result():
     configured = {"control", "conversation", "catalog", "query", "result"}
     context = _tool_context(
         previous_run_outcome={
+            "run_id": "failed-run",
             "status": "failed",
+            "public_message": "上一次运行失败。",
+            "recovery": "复用已完成结果。",
             "tool_outcomes": [
                 {
                     "tool": "sql_validate",
@@ -707,6 +790,69 @@ class ToolBudgetModel:
         )
 
 
+class StalledAfterResultModel:
+    """Produce one durable Result, then three completed-but-empty model turns."""
+
+    def __init__(self, call_number: int):
+        self.call_number = call_number
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        if self.call_number <= 2:
+            yield from ScriptedModel(self.call_number).stream(
+                messages=messages,
+                tools=tools,
+                timeout_seconds=timeout_seconds,
+                cancellation_probe=cancellation_probe,
+            )
+            return
+        yield TurnStreamItem(
+            kind=TurnStreamKind.FINISH,
+            item_id="finish",
+            revision=1,
+            termination=TurnTermination.COMPLETED,
+        )
+
+
+class ResumePreviousResultModel:
+    def __init__(self, call_number: int, *, result_artifact_id: str):
+        self.call_number = call_number
+        self.result_artifact_id = result_artifact_id
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        del timeout_seconds, cancellation_probe
+        serialized = json.dumps(messages, ensure_ascii=False)
+        if self.call_number == 1:
+            available = {
+                str(item.get("name") or item.get("function", {}).get("name") or "")
+                for item in tools
+            }
+            assert "result_inspect" in available
+            assert "bounded_partial" in serialized
+            assert self.result_artifact_id in serialized
+            yield from _tool_turn(
+                "resume-result",
+                "result_inspect",
+                {
+                    "result_artifact_id": self.result_artifact_id,
+                    "page": 1,
+                    "page_size": 5,
+                },
+            )
+            return
+
+        output = next(
+            item
+            for item in messages
+            if item.get("type") == "function_call_output"
+            and item.get("call_id") == "resume-result"
+        )
+        observation = json.loads(str(output["output"]))
+        assert observation["status"] == "succeeded"
+        assert observation["facts"]["returned_rows"] == 1
+        assert list(observation["facts"]["rows"][0]) == ["total"]
+        yield from _final_turn("继续完成：共有 42 条订单，已复用上次保存的结果工件。")
+
+
 class BudgetAnswerModel:
     def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
         content = "已完成当前预算内的分析。"
@@ -1103,9 +1249,7 @@ def test_invalid_artifact_batch_settles_as_tool_contract_failure_without_failing
     run = db_session.get(AgentRun, admission.run_id)
     answer = db_session.get(AgentMessage, admission.assistant_message_id)
     invocation = (
-        db_session.query(AgentToolInvocation)
-        .filter_by(run_id=admission.run_id)
-        .one()
+        db_session.query(AgentToolInvocation).filter_by(run_id=admission.run_id).one()
     )
     observation = (
         db_session.query(AgentObservationRecord)
@@ -1122,9 +1266,7 @@ def test_invalid_artifact_batch_settles_as_tool_contract_failure_without_failing
     assert observation.error_code == "TOOL_OUTPUT_CONTRACT_FAILED"
     assert json.loads(observation.artifact_ids_json) == []
     assert (
-        db_session.query(AgentArtifactRecord)
-        .filter_by(run_id=admission.run_id)
-        .count()
+        db_session.query(AgentArtifactRecord).filter_by(run_id=admission.run_id).count()
         == 0
     )
     assert calls["count"] == 2
@@ -1415,6 +1557,182 @@ def test_tool_budget_returns_bounded_partial_when_verified_result_exists(
     assert result["completion_disposition"] == "bounded_partial"
     assert result["limitation_codes"] == ["TOOL_BUDGET_REACHED"]
     assert "已达到工具调用上限" in result["answer"]["caveats"][0]
+    assert "已保留" in result["answer"]["text"]
+    assert "后续运行可以复用已有结果" in result["answer"]["text"]
+
+
+def test_no_progress_returns_bounded_partial_when_verified_result_exists(
+    db_session, test_datasource
+):
+    db_session.add(
+        AgentSession(
+            id="session_no_progress_result",
+            datasource_id=str(test_datasource.id),
+            title="No progress with durable result",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session_no_progress_result",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="统计订单数量并给出结论",
+        idempotency_key="no-progress-result",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(
+        session_id="session_no_progress_result", owner="worker", ttl_seconds=120
+    )
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    calls = {"count": 0}
+
+    def model_factory(_settings):
+        calls["count"] += 1
+        return StalledAfterResultModel(calls["count"])
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=ToolRegistry().register(ValidateTool()).register(ExecuteTool()),
+        definition=AgentDefinition(
+            limits=RunLimits(max_turns=8, max_stalled_turns=2)
+        ),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None and run.status == "completed"
+    result = json.loads(run.result_json)
+    assert result["completion_disposition"] == "bounded_partial"
+    assert result["limitation_codes"] == ["NO_PROGRESS"]
+    assert "已保留" in result["answer"]["text"]
+    assert calls["count"] == 4
+
+
+def test_next_run_resumes_a_bounded_partial_from_the_previous_result_artifact(
+    db_session, test_datasource
+):
+    session_id = "session_bounded_partial_resume"
+    db_session.add(
+        AgentSession(
+            id=session_id,
+            datasource_id=str(test_datasource.id),
+            title="Bounded partial resume",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    first = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="统计订单数量；达到预算后保留结果。",
+        idempotency_key="bounded-partial-first",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id=session_id, owner="worker", ttl_seconds=120)
+    assert lease is not None
+    assert sessions.promote_next_input(lease=lease) == first.run_id
+    db_session.commit()
+
+    registry = (
+        ToolRegistry()
+        .register(ValidateTool())
+        .register(ExecuteTool())
+        .register(ResultInspectTool())
+    )
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    first_calls = {"count": 0}
+
+    def first_model_factory(_settings):
+        first_calls["count"] += 1
+        return ToolBudgetModel(first_calls["count"])
+
+    RunLoop(
+        session_factory=factory,
+        model_factory=first_model_factory,
+        registry=registry,
+        definition=AgentDefinition(limits=RunLimits(max_tool_invocations=2)),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=first.run_id)
+
+    db_session.expire_all()
+    first_run = db_session.get(AgentRun, first.run_id)
+    assert first_run is not None
+    assert json.loads(str(first_run.result_json))["completion_disposition"] == (
+        "bounded_partial"
+    )
+    result_artifact = (
+        db_session.query(AgentArtifactRecord)
+        .filter_by(run_id=first.run_id, type="result_view")
+        .one()
+    )
+
+    second = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="继续，直接复用上次已经保存的结果完成回答。",
+        idempotency_key="bounded-partial-second",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    assert sessions.promote_next_input(lease=lease) == second.run_id
+    db_session.commit()
+    second_calls = {"count": 0}
+
+    def second_model_factory(_settings):
+        second_calls["count"] += 1
+        return ResumePreviousResultModel(
+            second_calls["count"],
+            result_artifact_id=str(result_artifact.id),
+        )
+
+    RunLoop(
+        session_factory=factory,
+        model_factory=second_model_factory,
+        registry=registry,
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=second.run_id)
+
+    db_session.expire_all()
+    second_run = db_session.get(AgentRun, second.run_id)
+    answer = db_session.get(AgentMessage, second.assistant_message_id)
+    invocations = (
+        db_session.query(AgentToolInvocation)
+        .filter(AgentToolInvocation.run_id.in_([first.run_id, second.run_id]))
+        .order_by(AgentToolInvocation.created_at)
+        .all()
+    )
+    assert second_run is not None and second_run.status == "completed"
+    assert answer is not None and answer.content.startswith("继续完成：共有 42 条订单")
+    assert f"{{{{cite:{result_artifact.id}}}}}" in answer.content
+    evidence = (
+        db_session.query(AgentEvidenceRecord)
+        .filter_by(run_id=second.run_id, artifact_id=result_artifact.id)
+        .one()
+    )
+    assert evidence.session_id == session_id
+    assert [item.tool_name for item in invocations] == [
+        "sql_validate",
+        "sql_execute_readonly",
+        "result_inspect",
+    ]
+    assert invocations[-1].status == "succeeded"
 
 
 def test_token_budget_preserves_the_settled_final_answer(db_session, test_datasource):

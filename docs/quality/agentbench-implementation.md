@@ -53,6 +53,7 @@ scripts/agentbench/
 └── datasets/
     ├── sqlite-seed-v1.sql
     ├── calibration-v1.json
+    ├── continuity-v1.json
     └── regression-v1.json
 ```
 
@@ -110,9 +111,20 @@ Agent SQL 必须先走生产 `sql_validate → sql_execute_readonly`。测评器
 稳定 step ID 和最大 skipped 数。Plan 仍是生产 RunLoop 的耐久可见合同，不是
 AgentBench 自己实现的调度器。
 
+`continuity-v1.json` 专门评估多 Run 用户任务。它逐一记录全部 Run 状态，并对
+相同 canonical tool input、相同 query fingerprint、失败工具数、Token 和延迟设
+独立上限。缺失对象场景使用“尝试过的工具 + 预期错误码”表达负向证据，不要求
+本应失败的检查伪装成 succeeded。
+
+多 Prompt 场景同时保存聚合轨迹和逐 Run 轨迹。`required_tools`、Artifact、答案和
+引用仍按整个用户场景验收；工具数、Turn、重复调用、Token 和延迟可通过
+`limit_scope/final_run` 与 `budget.scope/final_run` 只评价最后一个目标 Run。这样
+用于准备前置 Result 的 Run 不会污染“继续”请求的效率指标，不同 Run 中合法的同参
+目录检查也不会被误判为单 Run 内重复。单 Prompt 场景继续按完整 Run 计量。
+
 ### 6.3 答案与引用
 
-只检查可确定数字、术语、禁止内容、引用语法及 Artifact 是否属于耐久轨迹；不做整段字符串匹配。
+只检查可确定数字、术语、禁止内容、引用语法及 Artifact 是否属于耐久轨迹；不做整段字符串匹配。需要数据证据的场景通过 `min_citations` 明确要求至少一个可解析引用，避免“零引用也通过语法检查”的空真值。
 
 ### 6.4 安全 veto
 
@@ -137,6 +149,7 @@ Runner 崩溃、Provider 429/5xx 或配置缺失单列为 `unscored`；报告展
 
 ```powershell
 python -m scripts.agentbench validate
+python -m scripts.agentbench validate --dataset scripts/agentbench/datasets/continuity-v1.json
 python -m scripts.agentbench calibrate
 
 $env:DBFOX_RUN_REAL_LLM = "1"
@@ -144,6 +157,7 @@ $env:DBFOX_REAL_LLM_CREDENTIAL_ID = "<vault reference>"
 python -m scripts.agentbench real --tag real_provider --tag nightly --repetitions 3
 
 python -m scripts.agentbench real --case sql-count-orders --repetitions 1
+python -m scripts.agentbench real --dataset scripts/agentbench/datasets/continuity-v1.json --repetitions 3
 python -m scripts.agentbench replay --trials <trials.json> --output <new-dir>
 ```
 
@@ -166,6 +180,55 @@ Token 增幅不超过 15%，p90 延迟增幅不超过 20%。小样本区间不�
 `cost_usd` 仅在 runner 配置可信价格解析器时存在；否则为 `null`，并由
 `cost_usd_available_trials` 明确记录覆盖数。当前本地真实 Provider 证据只有
 Token 成本代理指标，不能声称美元成本为 0。
+
+### 9.1 低成本 Prompt 效率诊断
+
+AgentBench 直接读取生产 `AgentTurn` 已持久化的 `usage_json`、
+`context_snapshot_json.prompt_budget` 和 Tool materialization hash，不建立第二套
+Prompt 组装器，也不保存 Prompt 正文。逐 Turn 报告区分：
+
+- Provider 计费口径的 input/output token；
+- DBFox 保守估算的完整 Prompt、消息、工具 schema、原生 Responses Items、
+  Evidence ledger 与 consumed steer token；
+- Provider 可选返回的 cached input 与 reasoning output token；
+- 完整 response batch 被省略、消息被截断以及临时工具输出进入下一 Turn 的次数；
+- 相邻 Turn 工具物化 hash 的复用比例和同一 Run 首尾输入增长。
+
+估算 token 与 Provider token 不是同一分词口径，工具 schema 估算占比不能直接解释为
+可节省费用。缓存命中率只在 Provider 明确返回 `cached_tokens` 时计算；未返回时为
+`null/unavailable`，不得按零命中处理。
+
+预算有限时先对既有 `trials.json` 执行离线 replay，再只选择代表性的长计划、跨 Run
+结果复用和错误恢复场景各运行一次：
+
+```powershell
+python -m scripts.agentbench replay `
+  --dataset scripts/agentbench/datasets/continuity-v1.json `
+  --trials <existing-trials.json> `
+  --output <offline-profile-dir>
+
+python -m scripts.agentbench real `
+  --dataset scripts/agentbench/datasets/continuity-v1.json `
+  --case continuity-long-plan `
+  --case continuity-result-followup `
+  --case continuity-recover-invalid-column `
+  --repetitions 1 `
+  --output <focused-profile-dir>
+```
+
+单次样本用于定位成本构成和验证埋点，不替代夜间重复样本，也不能用于宣称稳定率。
+
+### 9.2 2026-08-15 聚焦效率样本
+
+在当前工作树、同一隔离 SQLite seed 上只运行上述 3 个场景各一次：3/3 完成，
+安全 veto 为 0；16 个 Turn 的逐 Turn 遥测覆盖 16/16。Provider 输入/输出为
+118,134/5,263 token；缓存明细覆盖 16/16 Turn，cached input 占 Provider input
+约 86.0%。工具 schema 占 DBFox Prompt 估算约 43.4%，Responses Items 占约
+26.7%，但二者大部分可能落入 Provider 缓存，不能据此直接删减工具能力。
+
+同一 Run 首尾 input 增长中位数约 1.51 倍，最大约 2.59 倍；未出现 Prompt 消息
+截断或 response batch 省略。当前最值得继续观察的是长计划中原生 response items
+随 Turn 累积，而不是在小样本后立即削减工具 schema 或降低任务完成门禁。
 
 MySQL 作业衡量数据库方言和生产工具链，不衡量模型质量；真实 Provider
 作业使用确定性 SQLite 数据集以保证 golden result 可重复。两个维度分开，

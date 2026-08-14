@@ -152,13 +152,21 @@ def _relevant_tool_groups(
         isinstance(item, dict) and bool(item.get("artifact_id"))
         for item in evidence_references
     )
-    tool_outcomes = context.previous_run_outcome.get("tool_outcomes", [])
+    tool_outcomes = (
+        context.previous_run_outcome.tool_outcomes
+        if context.previous_run_outcome is not None
+        else []
+    )
+    previous_artifacts = (
+        context.previous_run_outcome.artifacts
+        if context.previous_run_outcome is not None
+        else []
+    )
     has_result_artifact = has_result_artifact or any(
-        isinstance(item, dict)
-        and any(
-            isinstance(artifact, dict) and artifact.get("type") == "result_view"
-            for artifact in item.get("artifacts", [])
-        )
+        artifact.type == "result_view" for artifact in previous_artifacts
+    )
+    has_result_artifact = has_result_artifact or any(
+        any(artifact.type == "result_view" for artifact in item.artifacts)
         for item in tool_outcomes
     )
     if not has_result_artifact:

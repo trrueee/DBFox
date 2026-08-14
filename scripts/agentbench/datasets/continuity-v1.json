@@ -1,0 +1,155 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "dbfox-agent-continuity",
+  "dataset_version": "1.0.2",
+  "role": "regression",
+  "seed_version": "sqlite-seed-v1",
+  "description": "Latest-code evaluation of multi-Run task completion, active-request scoping, reusable Result Artifacts, bounded recovery and user-visible final outcomes.",
+  "cases": [
+    {
+      "case_id": "continuity-result-followup",
+      "category": "continuity",
+      "capability": "reuse a completed Result Artifact without repeating the query",
+      "tags": ["continuity", "real_provider"],
+      "prompts": [
+        "执行只读查询统计 orders 各 status 的数量，按数量降序、status 升序，并保留可验证的查询结果。",
+        "继续上一轮。不要重新执行相同 SQL；直接复用上一轮保存的结果，告诉我数量最大的 status 和数量，并引用结果工件。"
+      ],
+      "answer": {"required_terms": ["completed"], "required_numbers": [400]},
+      "trace": {
+        "all_run_statuses": ["completed"],
+        "required_tools": ["sql_validate", "sql_execute_readonly", "result_inspect"],
+        "required_artifacts": ["result_view"],
+        "max_tool_calls": 5,
+        "max_turns": 8,
+        "max_failed_tool_calls": 0,
+        "max_duplicate_tool_calls": 0,
+        "max_duplicate_query_fingerprints": 0,
+        "min_citations": 1,
+        "limit_scope": "final_run"
+      },
+      "budget": {"max_tokens": 30000, "max_latency_ms": 45000, "scope": "final_run"}
+    },
+    {
+      "case_id": "continuity-request-correction",
+      "category": "continuity",
+      "capability": "treat the newest request as authoritative without replaying the old task",
+      "tags": ["continuity", "real_provider"],
+      "prompts": [
+        "用只读 SQL 查询 completed 状态的订单数量。",
+        "修改问题：现在只查询 pending 状态的订单数量。不要继续回答 completed，也不要重复上一条 SQL。"
+      ],
+      "answer": {
+        "required_terms": ["pending"],
+        "forbidden_terms": ["400"],
+        "required_numbers": [200]
+      },
+      "trace": {
+        "all_run_statuses": ["completed"],
+        "required_tool_subsequence": ["sql_validate", "sql_execute_readonly", "sql_validate", "sql_execute_readonly"],
+        "max_tool_calls": 6,
+        "max_turns": 8,
+        "max_failed_tool_calls": 0,
+        "max_duplicate_tool_calls": 0,
+        "max_duplicate_query_fingerprints": 0,
+        "limit_scope": "final_run"
+      },
+      "budget": {"max_tokens": 40000, "max_latency_ms": 45000, "scope": "final_run"}
+    },
+    {
+      "case_id": "continuity-long-plan",
+      "category": "long_task",
+      "capability": "complete a visible multi-stage analysis and synthesize all verified results",
+      "tags": ["continuity", "real_provider"],
+      "prompts": [
+        "建立并维护一个可见计划，完成三阶段分析：1）orders 的 status 分布；2）completed 订单按 customer segment 汇总收入；3）未解决 support_tickets 的工单数和涉及客户数。最后一次性总结最大 status、收入最高 segment、未解决工单数和客户数；每个数字都必须来自只读 SQL 结果。"
+      ],
+      "answer": {
+        "required_terms": ["completed", "growth"],
+        "required_numbers": [400, 27497.5, 2]
+      },
+      "trace": {
+        "all_run_statuses": ["completed"],
+        "required_tools": ["update_plan", "sql_validate", "sql_execute_readonly"],
+        "required_artifacts": ["result_view"],
+        "max_tool_calls": 14,
+        "max_turns": 18,
+        "max_failed_tool_calls": 1,
+        "max_duplicate_tool_calls": 0,
+        "max_duplicate_query_fingerprints": 0
+      },
+      "plan": {
+        "required": true,
+        "min_versions": 2,
+        "terminal_statuses": ["completed"],
+        "max_skipped_steps": 0
+      },
+      "budget": {"max_tokens": 90000, "max_latency_ms": 120000}
+    },
+    {
+      "case_id": "continuity-recover-invalid-column",
+      "category": "recovery",
+      "capability": "recover from one tool-input error and still deliver a verified answer",
+      "tags": ["continuity", "real_provider"],
+      "prompts": [
+        "先尝试用只读 SQL 查询 orders.legacy_status 的数量；该字段不存在时，只允许失败一次，然后检查 orders 的真实结构，改用 status='pending' 完成查询并给出数量。"
+      ],
+      "answer": {"required_terms": ["pending"], "required_numbers": [200]},
+      "trace": {
+        "all_run_statuses": ["completed"],
+        "required_tools": ["schema_inspect", "sql_validate", "sql_execute_readonly"],
+        "max_tool_calls": 7,
+        "max_turns": 10,
+        "max_failed_tool_calls": 1,
+        "max_duplicate_tool_calls": 0,
+        "max_duplicate_query_fingerprints": 0
+      },
+      "budget": {"max_tokens": 60000, "max_latency_ms": 90000}
+    },
+    {
+      "case_id": "continuity-bounded-negative",
+      "category": "recovery",
+      "capability": "stop boundedly after proving an object is absent",
+      "tags": ["continuity", "real_provider"],
+      "prompts": [
+        "确认 absolutely_missing_2026 表是否存在。用一种合适的目录工具检查一次；若不存在就明确说明并停止，不要换关键词反复搜索。"
+      ],
+      "answer": {"required_terms": ["absolutely_missing_2026"]},
+      "trace": {
+        "all_run_statuses": ["completed"],
+        "any_of_attempted_tools": [["schema_search", "schema_inspect", "schema_list"]],
+        "max_tool_calls": 2,
+        "max_turns": 4,
+        "max_failed_tool_calls": 1,
+        "max_duplicate_tool_calls": 0,
+        "max_duplicate_query_fingerprints": 0,
+        "require_valid_citations": false
+      },
+      "budget": {"max_tokens": 25000, "max_latency_ms": 45000}
+    },
+    {
+      "case_id": "continuity-large-result-followup",
+      "category": "continuity",
+      "capability": "inspect a bounded prior result instead of re-running a large query",
+      "tags": ["continuity", "real_provider"],
+      "prompts": [
+        "查询 orders 的 id、total_amount，按 total_amount 降序、id 升序，最多 1000 行。最终只说明结果已经保存以及总返回行数，不要在正文罗列具体订单。",
+        "继续上一轮，不要重新执行 SQL。读取上一轮 Result Artifact 的第一页，告诉我金额最高的订单 id 和金额，并引用同一个结果工件。"
+      ],
+      "answer": {"required_numbers": [96, 260]},
+      "trace": {
+        "all_run_statuses": ["completed"],
+        "required_tools": ["sql_validate", "sql_execute_readonly", "result_inspect"],
+        "required_artifacts": ["result_view"],
+        "max_tool_calls": 5,
+        "max_turns": 8,
+        "max_failed_tool_calls": 0,
+        "max_duplicate_tool_calls": 0,
+        "max_duplicate_query_fingerprints": 0,
+        "min_citations": 1,
+        "limit_scope": "final_run"
+      },
+      "budget": {"max_tokens": 30000, "max_latency_ms": 45000, "scope": "final_run"}
+    }
+  ]
+}

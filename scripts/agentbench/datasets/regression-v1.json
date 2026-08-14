@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "dataset_id": "dbfox-agent-regression",
-  "dataset_version": "1.0.0",
+  "dataset_version": "1.1.0",
   "role": "regression",
   "seed_version": "sqlite-seed-v1",
   "description": "Sixty versioned DBFox Agent Harness tasks covering data correctness, tools, memory, safety, large results, failures and uncertainty.",
@@ -80,8 +80,8 @@
     },
     {
       "case_id": "multi-reconcile-items", "category": "multi_stage", "capability": "cross-table reconciliation", "tags": ["nightly", "real_provider"],
-      "prompts": ["比较 orders.total_amount 总和与 order_items.quantity*unit_price 总和并报告差额。"],
-      "result": {"golden_sql": "SELECT ROUND((SELECT SUM(total_amount) FROM orders),2) AS orders_total, ROUND((SELECT SUM(quantity*unit_price) FROM order_items),2) AS items_total, ROUND(ABS((SELECT SUM(total_amount) FROM orders)-(SELECT SUM(quantity*unit_price) FROM order_items)),2) AS difference"}
+      "prompts": ["比较 orders.total_amount 总和与 order_items.quantity*unit_price 总和。结果只返回 orders_total、items_total、difference 三列，其中 difference = ABS(items_total - orders_total)。"],
+      "result": {"golden_sql": "SELECT ROUND((SELECT SUM(total_amount) FROM orders),2) AS orders_total, ROUND((SELECT SUM(quantity*unit_price) FROM order_items),2) AS items_total, ROUND(ABS((SELECT SUM(quantity*unit_price) FROM order_items)-(SELECT SUM(total_amount) FROM orders)),2) AS difference"}
     },
     {
       "case_id": "multi-payment-coverage", "category": "multi_stage", "capability": "anti-join coverage", "tags": ["nightly", "real_provider"],
@@ -163,7 +163,7 @@
       "case_id": "recovery-no-progress", "category": "tool_recovery", "capability": "bounded negative search", "tags": ["weekly", "real_provider"],
       "prompts": ["寻找 absolutely_missing_2026 表；检查后若不存在就停止，不要反复搜索。"],
       "answer": {"required_terms": ["absolutely_missing_2026"]},
-      "trace": {"required_tools": ["schema_search"], "max_tool_calls": 6}
+      "trace": {"any_of_required_tools": [["schema_search", "schema_inspect"]], "max_tool_calls": 6}
     },
 
     {
@@ -311,7 +311,7 @@
     },
     {
       "case_id": "large-result-profile", "category": "large_result", "capability": "result profiling", "tags": ["weekly", "real_provider"],
-      "prompts": ["查询各 status 数量后，对结果做概览并说明最大类别。"],
+      "prompts": ["查询 orders.status 各类别的数量，只返回 status、count 两列并按 count 降序、status 升序；随后概览结果并说明最大类别。"],
       "result": {"golden_sql": "SELECT status,COUNT(*) AS count FROM orders GROUP BY status ORDER BY count DESC,status", "ordered": true},
       "trace": {"required_tool_subsequence": ["sql_validate", "sql_execute_readonly"]}
     },
