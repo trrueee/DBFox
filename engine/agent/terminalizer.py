@@ -98,8 +98,6 @@ class Terminalizer:
                 for artifact_id in evidence_artifact_ids
                 if artifact_id in result_by_id
             ]
-            if partial and not bound_artifact_ids and result_artifacts:
-                bound_artifact_ids = [result_artifacts[-1].id]
             cited_ids = {item_id for item_id, _, _ in references}
             missing_citations = [
                 artifact_id
@@ -107,10 +105,9 @@ class Terminalizer:
                 if artifact_id not in cited_ids
             ]
             if missing_citations:
-                citations = " ".join(
-                    f"{{{{cite:{artifact_id}}}}}" for artifact_id in missing_citations
+                raise ValueError(
+                    "Evidence Artifact IDs must be cited inline by the terminal answer"
                 )
-                text = f"{text}\n\n来源：{citations}"
             text = CITATION_PATTERN.sub(
                 lambda match: match.group(0) if match.group(1) in result_by_id else "",
                 text,

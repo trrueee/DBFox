@@ -43,7 +43,7 @@ def test_prompt_keeps_user_and_database_context_out_of_system_role():
         definition=DEFAULT_AGENT_DEFINITION,
         context=_context(),
     ).hash
-    assert bundle.version == "3.5"
+    assert bundle.version == "3.6"
     assert "metric, dimensions, filters" in bundle.system_prompt
     assert "result_profile" in bundle.system_prompt
     assert "Prior assistant text and prior Artifact metadata are context" in bundle.system_prompt
@@ -125,7 +125,7 @@ def test_schema_observation_can_support_an_answer_without_query_result():
     assert decision.kind is CompletionKind.SYNTHESIZE
 
 
-def test_single_query_result_is_bound_deterministically_when_model_omits_citation():
+def test_single_query_result_still_requires_explicit_inline_evidence():
     result = ContextObservation(
         id="obs-result",
         tool_name="data_preview",
@@ -140,8 +140,8 @@ def test_single_query_result_is_bound_deterministically_when_model_omits_citatio
         turn_count=2,
         max_turns=8,
     )
-    assert decision.kind is CompletionKind.SYNTHESIZE
-    assert decision.evidence_artifact_ids == ["artifact_preview"]
+    assert decision.kind is CompletionKind.CONTINUE
+    assert decision.missing == ["inline_evidence"]
 
 
 def test_multiple_query_results_still_require_explicit_inline_evidence():
@@ -316,7 +316,7 @@ def test_bounded_partial_accepts_settled_query_result_without_answer_text():
     )
 
     assert decision.kind is CompletionKind.PARTIAL
-    assert decision.evidence_artifact_ids == ["artifact_result"]
+    assert decision.evidence_artifact_ids == []
 
 
 def test_bounded_partial_rejects_unfinished_text_and_non_result_artifact():

@@ -116,7 +116,7 @@ class CompletionPolicy:
             )
 
         supported_citations = cited_artifact_ids & result_artifact_ids
-        if result_observations and not supported_citations and len(result_artifact_ids) != 1:
+        if result_observations and not supported_citations:
             return CompletionDecision(
                 kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
                 reason="An answer based on query results must cite an observed result Artifact inline.",
@@ -127,21 +127,13 @@ class CompletionPolicy:
             return CompletionDecision(
                 kind=CompletionKind.PARTIAL,
                 reason="The run reached its turn budget with an answer candidate.",
-                evidence_artifact_ids=sorted(
-                    supported_citations or (
-                        result_artifact_ids if len(result_artifact_ids) == 1 else set()
-                    )
-                ),
+                evidence_artifact_ids=sorted(supported_citations),
             )
 
         return CompletionDecision(
             kind=CompletionKind.SYNTHESIZE,
             reason="The answer candidate is supported by the available durable observations.",
-            evidence_artifact_ids=sorted(
-                supported_citations or (
-                    result_artifact_ids if len(result_artifact_ids) == 1 else set()
-                )
-            ),
+            evidence_artifact_ids=sorted(supported_citations),
         )
 
     def evaluate_bounded_partial(
@@ -156,7 +148,8 @@ class CompletionPolicy:
         A completed answer candidate still passes the normal evidence and
         citation policy. Without an answer, only a settled query-result
         Artifact can support the generic bounded-partial response composed by
-        Terminalizer. Arbitrary artifacts and interrupted text are not enough.
+        Terminalizer. The summary reports saved work but makes no data claim,
+        so it must not manufacture Evidence for an arbitrary Result Artifact.
         """
 
         if model_result.has_completed_answer_candidate:
@@ -181,7 +174,7 @@ class CompletionPolicy:
             return CompletionDecision(
                 kind=CompletionKind.PARTIAL,
                 reason=reason,
-                evidence_artifact_ids=[result_artifact_ids[-1]],
+                evidence_artifact_ids=[],
             )
         return CompletionDecision(
             kind=CompletionKind.FAIL,

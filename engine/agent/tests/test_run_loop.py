@@ -612,7 +612,12 @@ class ScriptedModel:
                 phase="commentary",
                 message_status="completed",
             )
-            content = "共有 42 条订单。"
+            result_artifact_id = next(
+                artifact_id
+                for artifact_id in json.loads(execute_output["output"])["artifact_ids"]
+                if str(artifact_id).startswith("artifact_")
+            )
+            content = f"共有 42 条订单。{{{{cite:{result_artifact_id}}}}}"
             yield TurnStreamItem(
                 kind=TurnStreamKind.ANSWER_START,
                 item_id="answer",
@@ -851,7 +856,10 @@ class ResumePreviousResultModel:
         assert observation["status"] == "succeeded"
         assert observation["facts"]["returned_rows"] == 1
         assert list(observation["facts"]["rows"][0]) == ["total"]
-        yield from _final_turn("继续完成：共有 42 条订单，已复用上次保存的结果工件。")
+        yield from _final_turn(
+            "继续完成：共有 42 条订单，已复用上次保存的结果工件。"
+            f"{{{{cite:{self.result_artifact_id}}}}}"
+        )
 
 
 class FinalizationReserveModel:
@@ -1221,7 +1229,7 @@ def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(
     run = db_session.get(AgentRun, admission.run_id)
     answer = db_session.get(AgentMessage, admission.assistant_message_id)
     assert run.status == "completed"
-    assert answer.content.startswith("共有 42 条订单。\n\n来源：{{cite:artifact_")
+    assert answer.content.startswith("共有 42 条订单。{{cite:artifact_")
     assert db_session.query(AgentEvidenceRecord).filter_by(run_id=run.id).count() == 1
     assert calls["count"] == 3
     assert all(
@@ -1255,11 +1263,13 @@ def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(
     recovered = RunRepository(db_session).latest_completed_answer(str(run.id))
     assert recovered.turn_id is not None
     assert [message.phase for message in recovered.messages] == ["commentary", None]
-    assert recovered.answer_text == "共有 42 条订单。"
+    assert recovered.answer_text.startswith("共有 42 条订单。{{cite:artifact_")
     assert timeline[2]["payload"]["call_id"] == timeline[3]["payload"]["call_id"]
     assert subscription.receive(timeout=0.01).content == "先验证并执行聚合查询。"
     assert subscription.receive(timeout=0.01).content == "正在整理可验证结论。"
-    assert subscription.receive(timeout=0.01).content == "共有 42 条订单。"
+    assert subscription.receive(timeout=0.01).content.startswith(
+        "共有 42 条订单。{{cite:artifact_"
+    )
 
 
 def test_invalid_artifact_batch_settles_as_tool_contract_failure_without_failing_run(
@@ -1623,6 +1633,13 @@ def test_tool_budget_returns_bounded_partial_when_verified_result_exists(
     assert "已达到工具调用上限" in result["answer"]["caveats"][0]
     assert "已保留" in result["answer"]["text"]
     assert "后续运行可以复用已有结果" in result["answer"]["text"]
+    assert "来源：" not in result["answer"]["text"]
+    assert (
+        db_session.query(AgentEvidenceRecord)
+        .filter_by(run_id=admission.run_id)
+        .count()
+        == 0
+    )
 
 
 def test_finalization_reserve_synthesizes_before_the_hard_tool_limit(
@@ -1760,6 +1777,13 @@ def test_no_progress_returns_bounded_partial_when_verified_result_exists(
     assert result["completion_disposition"] == "bounded_partial"
     assert result["limitation_codes"] == ["NO_PROGRESS"]
     assert "已保留" in result["answer"]["text"]
+    assert "来源：" not in result["answer"]["text"]
+    assert (
+        db_session.query(AgentEvidenceRecord)
+        .filter_by(run_id=admission.run_id)
+        .count()
+        == 0
+    )
     assert calls["count"] == 5
 
 
