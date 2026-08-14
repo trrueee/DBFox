@@ -8,4 +8,5 @@
 
 ## 关闭记录
 
+- [2026-07-11 Runtime Reset 交付记录](2026-07-11-foundation-runtime-reset.md)：归档早期基础能力阶段报告，当前合同以 Runtime 架构文档为准。
 - [2026-08-13 代码质量评审逐项关闭记录](2026-08-13-code-quality-review-closure.md)：归并原评审重复条目，说明已修复、已反证和不实施的设计建议。

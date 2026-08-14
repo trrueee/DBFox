@@ -161,11 +161,15 @@ Thumbs.db
 .windsurf/
 .aider*
 .codex/
+.codex-temp/
 .codex-remote-attachments/
+.codeartsdoer/
 .playwright-cli/
 .agents/
 .superpowers/
 .worktrees/
 .workbuddy/
 docs/skills/
-.mimocode/.cron-lock
+.mimocode/
+.review-basetemp/
+.review-tmp/

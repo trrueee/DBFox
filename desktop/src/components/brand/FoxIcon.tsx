@@ -1,6 +1,6 @@
 import type { ImgHTMLAttributes } from "react";
 
-export type FoxIconVariant = "tight" | "plain" | "ai" | "ai-tight" | "app";
+export type FoxIconVariant = "ai-tight" | "app";
 
 type FoxIconProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "width" | "height" | "style"> & {
   size?: number | string;
@@ -14,16 +14,13 @@ type FoxIconAsset = {
 };
 
 const assetByVariant: Record<FoxIconVariant, FoxIconAsset> = {
-  tight: { basePath: "/assets/fox/svg", file: "fox-icon-tight.svg" },
-  plain: { basePath: "/assets/fox/svg", file: "fox-icon.svg" },
-  ai: { basePath: "/assets/fox/svg", file: "fox-icon-ai.svg" },
-  "ai-tight": { basePath: "/assets/fox/svg", file: "fox-icon-ai-tight.svg" },
+  "ai-tight": { basePath: "/assets/fox/png", file: "fox-icon-ai-tight-256.png" },
   app: { basePath: "/assets/fox/png", file: "fox-icon-app-transparent-512.png" },
 };
 
 export function FoxIcon({
   size = 24,
-  variant = "tight",
+  variant = "app",
   assetBasePath,
   alt = "DBFox fox icon",
   className,

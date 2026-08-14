@@ -4,12 +4,15 @@ import { describe, expect, it } from "vitest";
 import { FoxIcon } from "../FoxIcon";
 
 describe("FoxIcon", () => {
-  it("renders the tight fox asset from the public asset pack by default", () => {
+  it("renders the app asset from the public asset pack by default", () => {
     render(<FoxIcon />);
 
     const icon = screen.getByRole("img", { name: "DBFox fox icon" });
 
-    expect(icon).toHaveAttribute("src", "/assets/fox/svg/fox-icon-tight.svg");
+    expect(icon).toHaveAttribute(
+      "src",
+      "/assets/fox/png/fox-icon-app-transparent-512.png",
+    );
     expect(icon).toHaveAttribute("width", "24");
     expect(icon).toHaveAttribute("height", "24");
   });
@@ -19,7 +22,7 @@ describe("FoxIcon", () => {
 
     const icon = screen.getByRole("img", { name: "Ask DBFox" });
 
-    expect(icon).toHaveAttribute("src", "/assets/fox/svg/fox-icon-ai-tight.svg");
+    expect(icon).toHaveAttribute("src", "/assets/fox/png/fox-icon-ai-tight-256.png");
     expect(icon).toHaveAttribute("width", "32");
     expect(icon).toHaveAttribute("height", "32");
   });
