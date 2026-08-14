@@ -2890,10 +2890,7 @@ export type RunProjection = {
      * Session Sequence
      */
     session_sequence: number;
-    /**
-     * Status
-     */
-    status: 'created' | 'queued' | 'running' | 'waiting_approval' | 'waiting_input' | 'cancelling' | 'completed' | 'failed' | 'cancelled';
+    status: RunStatus;
     /**
      * User Message Id
      */
@@ -2903,6 +2900,11 @@ export type RunProjection = {
      */
     version: number;
 };
+
+/**
+ * RunStatus
+ */
+export type RunStatus = 'created' | 'queued' | 'running' | 'waiting_approval' | 'waiting_input' | 'cancelling' | 'cancelled' | 'completed' | 'failed';
 
 /**
  * RuntimeEvent

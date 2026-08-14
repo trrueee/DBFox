@@ -1243,6 +1243,21 @@ export const zQuestionItem = z.object({
 });
 
 /**
+ * RunStatus
+ */
+export const zRunStatus = z.enum([
+    'created',
+    'queued',
+    'running',
+    'waiting_approval',
+    'waiting_input',
+    'cancelling',
+    'cancelled',
+    'completed',
+    'failed'
+]);
+
+/**
  * RunProjection
  *
  * Canonical public Run state shared by snapshots and lifecycle events.
@@ -1258,17 +1273,7 @@ export const zRunProjection = z.object({
     result: z.record(z.string(), z.unknown()).optional(),
     session_id: z.string(),
     session_sequence: z.int().gte(1),
-    status: z.enum([
-        'created',
-        'queued',
-        'running',
-        'waiting_approval',
-        'waiting_input',
-        'cancelling',
-        'completed',
-        'failed',
-        'cancelled'
-    ]),
+    status: zRunStatus,
     user_message_id: z.string(),
     version: z.int().gte(0)
 });
