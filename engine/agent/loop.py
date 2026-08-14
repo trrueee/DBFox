@@ -48,6 +48,7 @@ from engine.llm.config import (
     resolve_product_llm_config_from_credential,
 )
 from engine.llm.endpoint_policy import LlmEndpointPolicyError
+from engine.json_codec import load_object
 from engine.models import (
     AgentTurn,
 )
@@ -106,6 +107,7 @@ class _ExecutionState:
     pricing: ModelPricing | None
     tool_count: int
     completed_turn_count: int
+    finalizing: bool = False
     last_result: ModelTurnResult = field(default_factory=ModelTurnResult)
     best_answer_result: ModelTurnResult = field(default_factory=ModelTurnResult)
     transient_tool_outputs: dict[str, str] = field(default_factory=dict)
@@ -175,6 +177,9 @@ def _relevant_tool_groups(
 
 
 LIVE_STREAM_HUB = LiveStreamHub()
+_FINALIZATION_TOOL_NAMES = frozenset(
+    {"update_plan", "result_inspect", "result_profile"}
+)
 
 
 def _default_model_factory(settings: ProviderSettings) -> ModelAdapter:
@@ -252,9 +257,23 @@ class RunLoop:
                 self.definition.limits.max_turns + 1,
             ):
                 state.control.checkpoint()
+                if self._should_enter_finalization(state, turn_count=turn_count):
+                    self._activate_finalization(
+                        lease,
+                        run_id,
+                        state,
+                        turns_remaining=(
+                            self.definition.limits.max_turns - turn_count + 1
+                        ),
+                        reason=(
+                            "The Run reached its finalization reserve. Synthesize the "
+                            "best supported answer without starting new analysis."
+                        ),
+                    )
                 prepared = self._prepare_turn(
                     lease,
                     run_id,
+                    finalizing=state.finalizing,
                     tool_output_overrides=state.transient_tool_outputs,
                 )
                 result = self._run_model_turn(
@@ -279,6 +298,8 @@ class RunLoop:
                         lease,
                         run_id,
                         state.answer_result,
+                        state=state,
+                        turn_count=turn_count,
                     ):
                         return
                     continue
@@ -295,6 +316,8 @@ class RunLoop:
                         lease,
                         run_id,
                         state.answer_result,
+                        state=state,
+                        turn_count=turn_count,
                         context=prepared.context,
                     ):
                         return
@@ -382,6 +405,9 @@ class RunLoop:
                 or 0
             )
             best_answer_result = RunRepository(db).latest_completed_answer(run_id)
+            run_result = load_object(str(run.result_json or "{}"))
+            focus = run_result.get("focus")
+            finalizing = isinstance(focus, dict) and focus.get("kind") == "synthesize"
             provider_settings = ProviderSettings(
                 credential_id=str(run.llm_credential_id),
                 api_base=str(run.api_base) if run.api_base else None,
@@ -400,6 +426,7 @@ class RunLoop:
             pricing=self.pricing_resolver(provider_settings),
             tool_count=tool_count,
             completed_turn_count=completed_turn_count,
+            finalizing=finalizing,
             best_answer_result=best_answer_result,
         )
 
@@ -629,6 +656,7 @@ class RunLoop:
         lease: SessionLease,
         run_id: str,
         *,
+        finalizing: bool = False,
         tool_output_overrides: dict[str, str] | None = None,
     ) -> _PreparedTurn:
         with self.session_factory() as db:
@@ -649,6 +677,7 @@ class RunLoop:
             tools = materialize_tools(
                 self.registry,
                 allowed_groups=groups,
+                allowed_names=(set(_FINALIZATION_TOOL_NAMES) if finalizing else None),
                 execution_mode=self.definition.execution_mode,
             )
             tool_schemas = tools.provider_schemas()
@@ -854,12 +883,63 @@ class RunLoop:
                 "cancelled",
             }
 
+    def _should_enter_finalization(
+        self,
+        state: _ExecutionState,
+        *,
+        turn_count: int,
+    ) -> bool:
+        if state.finalizing:
+            return False
+        limits = self.definition.limits
+        turn_reserve = limits.effective_finalization_turn_reserve
+        tool_reserve = limits.effective_finalization_tool_reserve
+        turn_boundary = (
+            turn_reserve > 0 and turn_count >= limits.max_turns - turn_reserve + 1
+        )
+        tool_boundary = (
+            tool_reserve > 0
+            and state.tool_count >= limits.max_tool_invocations - tool_reserve
+        )
+        return turn_boundary or tool_boundary
+
+    def _activate_finalization(
+        self,
+        lease: SessionLease,
+        run_id: str,
+        state: _ExecutionState,
+        *,
+        turns_remaining: int,
+        reason: str,
+    ) -> None:
+        if state.finalizing:
+            return
+        tools_remaining = max(
+            0,
+            self.definition.limits.max_tool_invocations - state.tool_count,
+        )
+        with self.session_factory() as db:
+            RunRepository(db).record_focus(
+                lease=lease,
+                run_id=run_id,
+                kind="synthesize",
+                reason=(
+                    f"{reason} Remaining Turn budget: {max(0, turns_remaining)}; "
+                    f"remaining data-tool budget: {tools_remaining}."
+                ),
+                missing=["settled_plan", "inline_evidence", "final_answer"],
+            )
+            db.commit()
+        state.finalizing = True
+
     def _stop_if_stalled(
         self,
         lease: SessionLease,
         run_id: str,
         result: ModelTurnResult,
         *,
+        state: _ExecutionState,
+        turn_count: int,
         context: ContextSnapshot | None = None,
     ) -> bool:
         with self.session_factory() as db:
@@ -882,6 +962,18 @@ class RunLoop:
         if not reached_limit:
             return False
         if decision.kind is CompletionKind.PARTIAL:
+            if not state.finalizing and turn_count < self.definition.limits.max_turns:
+                self._activate_finalization(
+                    lease,
+                    run_id,
+                    state,
+                    turns_remaining=(self.definition.limits.max_turns - turn_count),
+                    reason=(
+                        "The Run stopped making progress. Use the remaining budget "
+                        "once to synthesize the durable work already completed."
+                    ),
+                )
+                return False
             return self._complete(
                 lease,
                 run_id,

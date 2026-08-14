@@ -29,6 +29,7 @@ from engine.models import (
 )
 from engine.tools.builtin.query import SqlExecuteReadonlyTool, SqlValidateTool
 from engine.tools.builtin.results import ResultInspectTool
+from engine.tools.builtin.control import UpdatePlanCommand
 from engine.tools.builtin.artifacts import query_result_draft, sql_validation_drafts
 from engine.tools.builtin.contracts import QueryResultOutput, SqlValidateOutput
 from engine.tools.runtime import (
@@ -853,6 +854,69 @@ class ResumePreviousResultModel:
         yield from _final_turn("继续完成：共有 42 条订单，已复用上次保存的结果工件。")
 
 
+class FinalizationReserveModel:
+    def __init__(
+        self,
+        call_number: int,
+        *,
+        state: dict[str, str],
+    ) -> None:
+        self.call_number = call_number
+        self.state = state
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        if self.call_number <= 2:
+            yield from ScriptedModel(self.call_number).stream(
+                messages=messages,
+                tools=tools,
+                timeout_seconds=timeout_seconds,
+                cancellation_probe=cancellation_probe,
+            )
+            return
+
+        available = {str(item.get("name") or "") for item in tools}
+        assert available == {"result_inspect", "update_plan"}
+        serialized = json.dumps(messages, ensure_ascii=False)
+        assert "synthesize" in serialized
+        if self.call_number == 3:
+            execute_output = next(
+                item
+                for item in messages
+                if item.get("type") == "function_call_output"
+                and item.get("call_id") == "execute"
+            )
+            observation = json.loads(str(execute_output["output"]))
+            result_artifact_id = next(
+                artifact_id
+                for artifact_id in observation["artifact_ids"]
+                if str(artifact_id).startswith("artifact_")
+            )
+            self.state["result_artifact_id"] = str(result_artifact_id)
+            yield from _tool_turn(
+                "settle-final-plan",
+                "update_plan",
+                {
+                    "objective": "统计订单数量并给出可验证结论",
+                    "steps": [
+                        {
+                            "id": "count",
+                            "title": "统计订单数量",
+                            "status": "completed",
+                            "evidence_required": True,
+                            "artifact_ids": [result_artifact_id],
+                        }
+                    ],
+                    "summary": "查询已完成，正在形成最终回答。",
+                },
+            )
+            return
+
+        result_artifact_id = self.state["result_artifact_id"]
+        yield from _final_turn(
+            f"当前结果共有 42 条订单。{{{{cite:{result_artifact_id}}}}}"
+        )
+
+
 class BudgetAnswerModel:
     def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
         content = "已完成当前预算内的分析。"
@@ -1561,6 +1625,89 @@ def test_tool_budget_returns_bounded_partial_when_verified_result_exists(
     assert "后续运行可以复用已有结果" in result["answer"]["text"]
 
 
+def test_finalization_reserve_synthesizes_before_the_hard_tool_limit(
+    db_session,
+    test_datasource,
+) -> None:
+    session_id = "session-finalization-reserve"
+    db_session.add(
+        AgentSession(
+            id=session_id,
+            datasource_id=str(test_datasource.id),
+            title="Finalization reserve",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="统计订单数量并给出可验证结论",
+        idempotency_key="finalization-reserve",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id=session_id, owner="worker", ttl_seconds=120)
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    calls = {"count": 0}
+    model_state: dict[str, str] = {}
+
+    def model_factory(_settings):
+        calls["count"] += 1
+        return FinalizationReserveModel(calls["count"], state=model_state)
+
+    registry = (
+        ToolRegistry()
+        .register(ValidateTool())
+        .register(ExecuteTool())
+        .register(ResultInspectTool())
+        .register(UpdatePlanCommand())
+    )
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=registry,
+        definition=AgentDefinition(
+            limits=RunLimits(
+                max_turns=8,
+                max_tool_invocations=4,
+                finalization_turn_reserve=2,
+                finalization_tool_reserve=2,
+            )
+        ),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    answer = db_session.get(AgentMessage, admission.assistant_message_id)
+    turns = (
+        db_session.query(AgentTurn)
+        .filter_by(run_id=admission.run_id)
+        .order_by(AgentTurn.sequence)
+        .all()
+    )
+    assert run is not None and run.status == "completed"
+    assert answer is not None and answer.content.startswith("当前结果共有 42 条订单")
+    assert calls["count"] == 4
+    assert len(turns) == 4
+    for turn in turns[-2:]:
+        snapshot = json.loads(str(turn.context_snapshot_json))
+        assert snapshot["run_focus"]["kind"] == "synthesize"
+        materialization = json.loads(str(turn.tool_materialization_json))
+        assert {item["name"] for item in materialization["tools"]} == {
+            "result_inspect",
+            "update_plan",
+        }
+
+
 def test_no_progress_returns_bounded_partial_when_verified_result_exists(
     db_session, test_datasource
 ):
@@ -1602,9 +1749,7 @@ def test_no_progress_returns_bounded_partial_when_verified_result_exists(
         session_factory=factory,
         model_factory=model_factory,
         registry=ToolRegistry().register(ValidateTool()).register(ExecuteTool()),
-        definition=AgentDefinition(
-            limits=RunLimits(max_turns=8, max_stalled_turns=2)
-        ),
+        definition=AgentDefinition(limits=RunLimits(max_turns=8, max_stalled_turns=2)),
         live_stream=LiveStreamHub(),
     ).execute(lease=lease, run_id=admission.run_id)
 
@@ -1615,7 +1760,7 @@ def test_no_progress_returns_bounded_partial_when_verified_result_exists(
     assert result["completion_disposition"] == "bounded_partial"
     assert result["limitation_codes"] == ["NO_PROGRESS"]
     assert "已保留" in result["answer"]["text"]
-    assert calls["count"] == 4
+    assert calls["count"] == 5
 
 
 def test_next_run_resumes_a_bounded_partial_from_the_previous_result_artifact(

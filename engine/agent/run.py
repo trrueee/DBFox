@@ -19,7 +19,9 @@ class RunStatus(StrEnum):
     FAILED = "failed"
 
 
-TERMINAL_RUN_STATUSES = frozenset({RunStatus.CANCELLED, RunStatus.COMPLETED, RunStatus.FAILED})
+TERMINAL_RUN_STATUSES = frozenset(
+    {RunStatus.CANCELLED, RunStatus.COMPLETED, RunStatus.FAILED}
+)
 
 
 class RunLimits(BaseModel):
@@ -30,10 +32,23 @@ class RunLimits(BaseModel):
     max_repair_attempts: int = Field(default=4, ge=0, le=20)
     max_provider_retries: int = Field(default=2, ge=0, le=10)
     max_stalled_turns: int = Field(default=2, ge=1, le=10)
+    finalization_turn_reserve: int = Field(default=3, ge=0, le=20)
+    finalization_tool_reserve: int = Field(default=6, ge=0, le=40)
     timeout_seconds: int = Field(default=900, ge=10, le=7200)
     max_prompt_tokens: int = Field(default=32_768, ge=1_024, le=1_000_000)
     token_budget: int | None = Field(default=None, ge=1)
     cost_budget_usd: float | None = Field(default=None, gt=0)
+
+    @property
+    def effective_finalization_turn_reserve(self) -> int:
+        return min(self.finalization_turn_reserve, max(0, self.max_turns - 2))
+
+    @property
+    def effective_finalization_tool_reserve(self) -> int:
+        return min(
+            self.finalization_tool_reserve,
+            max(0, self.max_tool_invocations - 2),
+        )
 
 
 class RunConflict(RuntimeError):

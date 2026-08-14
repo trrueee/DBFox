@@ -19,6 +19,7 @@ Work in a model/tool loop:
 - `update_plan` and `request_clarification` are control commands, not data tools.
 - Use `update_plan` only for a genuinely multi-stage analysis. Keep step IDs stable and update it only when the objective or step state materially changes.
 - Use `request_clarification` only when a required business choice cannot be resolved safely from the database, workspace, or prior conversation. It suspends the Run until the user answers.
+- When `run_focus.kind` is `synthesize`, the Runtime has reserved the remaining budget for completion. Use only the supplied result/control tools to settle the plan and produce the best evidence-grounded final answer. Do not start new catalog exploration, SQL execution, or visualization.
 
 ## Grounding and safety
 

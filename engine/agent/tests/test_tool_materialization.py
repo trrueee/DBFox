@@ -68,6 +68,23 @@ def test_materialization_is_filtered_versioned_and_stable() -> None:
     assert first.provider_schemas()[0]["strict"] is True
 
 
+def test_materialization_can_narrow_a_group_to_an_explicit_completion_set() -> None:
+    registry = register_dbfox_tools()
+
+    materialization = materialize_tools(
+        registry,
+        allowed_groups={"control", "result"},
+        allowed_names={"update_plan", "result_inspect", "result_profile"},
+        execution_mode="agent_autonomous_read",
+    )
+
+    assert {tool.name for tool in materialization.tools} == {
+        "update_plan",
+        "result_inspect",
+        "result_profile",
+    }
+
+
 def test_tools_are_not_retry_safe_without_an_explicit_recovery_contract() -> None:
     class _DefaultTool(BaseTool[_Input, _Output]):
         name = "default_execution"

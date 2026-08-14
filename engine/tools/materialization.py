@@ -65,6 +65,7 @@ def materialize_tools(
     registry: ToolRegistry,
     *,
     allowed_groups: set[str] | None = None,
+    allowed_names: set[str] | None = None,
     execution_mode: str,
 ) -> ToolMaterialization:
     materialized: list[MaterializedTool] = []
@@ -73,6 +74,8 @@ def materialize_tools(
         if not spec.policy.visible_to_model:
             continue
         if allowed_groups is not None and spec.group not in allowed_groups:
+            continue
+        if allowed_names is not None and spec.name not in allowed_names:
             continue
         allowed_modes = set(spec.policy.allowed_execution_modes)
         if allowed_modes and execution_mode not in allowed_modes:
