@@ -40,14 +40,14 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['"Fira Sans"', "system-ui", "sans-serif"],
-        mono: ['"Fira Code"', '"JetBrains Mono"', "monospace"],
-        display: ['"Fira Sans"', "system-ui", "sans-serif"],
+        sans: ["var(--font-family-ui)"],
+        mono: ["var(--font-family-code)"],
+        display: ["var(--font-family-ui)"],
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) + 1px)",
-        sm: "var(--radius)",
+        lg: "var(--radius-lg)",
+        md: "var(--radius-md)",
+        sm: "var(--radius-sm)",
       },
       animation: {
         "fade-in": "fadeIn 0.2s ease-out",

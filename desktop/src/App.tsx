@@ -16,6 +16,7 @@ import { useWorkspaceStore } from "./stores/workspaceStore";
 import { useConversationStore } from "./stores/conversationStore";
 import { Search } from "lucide-react";
 import { DesktopLifecycleMonitor } from "./features/appShell/DesktopLifecycleMonitor";
+import { LoadingState } from "./components/ui";
 
 const AppCommandPalette = lazy(() =>
   import("./features/appShell/AppCommandPalette").then((module) => ({
@@ -63,6 +64,42 @@ const WorkspaceTabs = lazy(() =>
   })),
 );
 const TitleBar = lazy(() => import("./components/TitleBar"));
+
+function TitleBarFallback() {
+  return <div className="app-titlebar-fallback" aria-hidden="true" />;
+}
+
+function SidebarFallback() {
+  return (
+    <div className="app-sidebar-fallback" role="status" aria-label="正在载入数据源">
+      <span className="app-skeleton app-skeleton--heading" />
+      <span className="app-skeleton app-skeleton--control" />
+      <span className="app-skeleton app-skeleton--control" />
+      <span className="app-skeleton app-skeleton--row" />
+      <span className="app-skeleton app-skeleton--row" />
+      <span className="app-skeleton app-skeleton--row-short" />
+    </div>
+  );
+}
+
+function WorkspaceFallback({ label = "正在载入工作区" }: { label?: string }) {
+  return (
+    <div className="workspace-route-loading">
+      <LoadingState label={label} />
+    </div>
+  );
+}
+
+function AppLayoutFallback() {
+  return (
+    <div className="app-layout-fallback">
+      <SidebarFallback />
+      <div className="app-layout-fallback__workspace">
+        <WorkspaceFallback />
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [treeSearch, setTreeSearch] = useState("");
@@ -187,18 +224,18 @@ export default function App() {
         ref={useCallback((el: HTMLDivElement | null) => { setDialogContainer(el); setToastRoot(el); }, [])}
       >
         <DesktopLifecycleMonitor showToast={toast} />
-        <Suspense fallback={null}>
+        <Suspense fallback={<TitleBarFallback />}>
           <TitleBar />
         </Suspense>
         {/* Window body: sidebar + main surface + right drawer */}
         <main className="app-body">
-          <Suspense fallback={null}>
+          <Suspense fallback={<AppLayoutFallback />}>
             <ResizableWorkspaceLayout
               key={effectiveSidebarCollapsed ? "collapsed" : settingsOpen ? "settings" : "expanded"}
               sidebarCollapsed={effectiveSidebarCollapsed}
               settingsOpen={settingsOpen}
               sidebar={settingsOpen ? (
-                <Suspense fallback={null}>
+                <Suspense fallback={<SidebarFallback />}>
                   <SettingsSidebar
                     section={settingsSection}
                     onSectionChange={setSettingsSection}
@@ -206,7 +243,7 @@ export default function App() {
                   />
                 </Suspense>
               ) : (
-                <Suspense fallback={null}>
+                <Suspense fallback={<SidebarFallback />}>
                   <DataSourceTree
                     treeSearch={treeSearch}
                     collapsed={effectiveSidebarCollapsed}
@@ -226,7 +263,7 @@ export default function App() {
               workspace={
                 <section className={`app-main${settingsOpen ? " app-main--settings" : ""}`}>
                 {settingsOpen ? (
-                  <Suspense fallback={null}>
+                  <Suspense fallback={<WorkspaceFallback label="正在载入设置" />}>
                     <div className="app-main-scroll">
                       <SettingsPage section={settingsSection} showToast={toast} />
                     </div>
@@ -235,7 +272,7 @@ export default function App() {
                   <>
                     {/* Top Workspace Tab Bar */}
                     <div className="app-tabbar">
-                      <Suspense fallback={null}>
+                      <Suspense fallback={<div className="app-tabs-fallback" aria-hidden="true" />}>
                         <WorkspaceTabs onOpenSqlConsole={openSqlConsole} />
                       </Suspense>
 
@@ -253,7 +290,7 @@ export default function App() {
                     </div>
 
                     <div className="app-main-scroll">
-                      <Suspense fallback={null}>
+                      <Suspense fallback={<WorkspaceFallback />}>
                         <WorkspaceRouter activeTab={activeTab} showToast={toast} />
                       </Suspense>
                     </div>

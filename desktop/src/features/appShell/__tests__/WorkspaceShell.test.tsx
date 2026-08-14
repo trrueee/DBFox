@@ -36,6 +36,19 @@ describe("WorkspaceShell", () => {
     );
   });
 
+  it("supports a headerless workspace when surrounding navigation already names it", () => {
+    render(
+      <WorkspaceShell title="Conversation history" showHeader={false} aria-label="Conversation history">
+        <div>History body</div>
+      </WorkspaceShell>,
+    );
+
+    const shell = screen.getByRole("region", { name: "Conversation history" });
+    expect(shell.querySelector(".workspace-shell__header")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Conversation history" })).toBeNull();
+    expect(screen.getByText("History body")).toBeTruthy();
+  });
+
   it("uses standardized loading, empty, and error body states", () => {
     const onRetry = vi.fn();
     const { rerender } = render(

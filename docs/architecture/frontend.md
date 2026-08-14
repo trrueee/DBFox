@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-09
+> 最后核验：2026-08-14
 >
 > 适用范围：`desktop/src/` 的工作区、传输、状态和用户交互
 
@@ -185,6 +185,29 @@ Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecute
 - `previewRows`
 - Chart `series`
 - 任意结果单元格副本
+
+### 6.1 数据单元格展示合同
+
+表数据预览与 Result Artifact 复用 `CellValuePreview` 作为只读值展示入口。它只负责把当前页已有值投影为适合网格阅读的形式，不改变数据库值、不回写数据，也不建立第二份结果缓存。完整交互、分类和验收规范见[数据网格与值查看规范](../specs/data-grid.md)。
+
+| 值类型 | 网格表现 | 按需查看 | 安全边界 |
+|---|---|---|---|
+| `NULL`、布尔、数字、日期 | 固定的紧凑语义样式 | 不额外加载 | 保留原始复制文本 |
+| JSON 对象或数组 | 类型与成员数摘要 | 结构树和格式化详情 | 只解析合法对象或数组；无效 JSON 按普通文本显示 |
+| 长文本或多行文本 | 类型标签与单行截断摘要 | 有界悬浮预览；点击打开完整 Value Viewer | 保留原始换行；网格不展开整段内容 |
+| 普通 HTTPS URL | 省略显示并带外部链接图标 | 点击先进入 Value Viewer，再由明确动作交给 Rust/Tauri opener | 只允许 HTTPS；前后端边界重复校验 |
+| HTTPS 图片 URL | 图片类型入口，不自动请求远端 | 稳定悬浮约 400ms 后快速预览；点击在应用内完整查看；可再次选择外部打开 | 仅识别受支持图片后缀或已知图片处理参数；使用 `no-referrer`；失败显示固定状态 |
+| 二进制 | 仅在二进制列中识别后端 `<binary>` 占位 | Viewer 解释原始字节未进入当前合同 | 不把普通字符串 `<binary>` 当占位，不伪造预览或下载 |
+
+图片预览只放宽 CSP 的 `img-src` 到 HTTPS，不放宽 `connect-src`，也不经过临时文件、下载目录或自建图片代理。数据库中的 URL 只有在稳定悬浮意图成立或用户点击后才创建 `<img>`；掠过单元格或在延迟内移开不会请求远端。固定尺寸悬浮框只约束布局，不承诺减少下载量：没有服务端缩略图合同时，浏览器仍会请求原始图片。`file:`、`javascript:`、HTTP 和其他协议不可点击、不可加载。
+
+该设计沿用 DataGrip/DBeaver 的“紧凑网格 + 按需 Value Viewer”边界：复杂值详情不占用行高，完整内容只在用户选择单元格后出现。当前实现保持只读，不引入它们的单元格编辑、LOB 下载或二进制编辑能力。
+
+设计依据：
+
+- [DataGrip：View data](https://www.jetbrains.com/help/datagrip/tables-view-data.html) 将 JSON、数组、长值和图片放入独立 Value editor，而不是扩大主网格行高；
+- [DBeaver：Value Panel](https://dbeaver.com/docs/team-edition/desktop/Value-Panel/) 按 Text、JSON、Binary、Image 等内容类型提供专用查看方式；
+- [Tauri：Content Security Policy](https://v2.tauri.app/security/csp/) 要求只开放应用确实需要的资源来源，因此图片只扩展 `img-src`，不扩展脚本、frame 或通用网络请求能力。
 
 ## 7. 状态边界
 

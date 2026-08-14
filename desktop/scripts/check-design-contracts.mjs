@@ -7,6 +7,14 @@ const desktopRoot = resolve(import.meta.dirname, "..");
 const sourceRoot = join(desktopRoot, "src");
 const tokenFile = "styles/tokens.css";
 const conversationWorkspace = "features/conversation/workspace/conversationWorkspace.css";
+const densityControlledPrimitives = new Set([
+  "components/ui/input.css",
+  "components/ui/select.css",
+]);
+const densityControlledSelectors = new Set([
+  ".dbfox-input",
+  ".dbfox-select-trigger",
+]);
 const violations = [];
 
 async function cssFiles(directory) {
@@ -39,6 +47,14 @@ for (const path of await cssFiles(sourceRoot)) {
       && (/#(?:[0-9a-f]{3,8})\b/i.test(value) || /\brgba?\(/i.test(value))
     ) {
       report(file, declaration, "conversation colors must use Agent design tokens");
+    }
+    if (
+      densityControlledPrimitives.has(file)
+      && declaration.prop === "height"
+      && densityControlledSelectors.has(declaration.parent?.selector)
+      && /^\d+(?:\.\d+)?px$/.test(value)
+    ) {
+      report(file, declaration, "shared control height must use a density design token");
     }
   });
 }

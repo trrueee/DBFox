@@ -14,6 +14,7 @@ interface WorkspaceShellProps extends Omit<HTMLAttributes<HTMLDivElement>, "titl
   toolbar?: ReactNode;
   state?: WorkspaceShellState;
   bodyClassName?: string;
+  showHeader?: boolean;
 }
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -26,29 +27,33 @@ export function WorkspaceShell({
   toolbar,
   state,
   bodyClassName,
+  showHeader = true,
   className,
   children,
   ...props
 }: WorkspaceShellProps) {
   const titleId = useId();
   const ready = !state || !state.kind || state.kind === "ready";
+  const hasExplicitLabel = Boolean(props["aria-label"]);
 
   return (
     <section
       role="region"
-      aria-labelledby={props["aria-label"] ? undefined : titleId}
+      aria-labelledby={hasExplicitLabel || !showHeader ? undefined : titleId}
       className={cx("workspace-shell", className)}
       {...props}
     >
-      <header className="workspace-shell__header">
-        <div className="workspace-shell__heading">
-          <h2 id={titleId} className="workspace-shell__title">
-            {title}
-          </h2>
-          {description ? <p className="workspace-shell__description">{description}</p> : null}
-        </div>
-        {toolbar ? <div className="workspace-shell__toolbar">{toolbar}</div> : null}
-      </header>
+      {showHeader ? (
+        <header className="workspace-shell__header">
+          <div className="workspace-shell__heading">
+            <h2 id={titleId} className="workspace-shell__title">
+              {title}
+            </h2>
+            {description ? <p className="workspace-shell__description">{description}</p> : null}
+          </div>
+          {toolbar ? <div className="workspace-shell__toolbar">{toolbar}</div> : null}
+        </header>
+      ) : null}
       <div className={cx("workspace-shell__body", bodyClassName)}>
         {ready ? children : <div className="workspace-shell__state">{renderState(state)}</div>}
       </div>

@@ -27,8 +27,8 @@
   min-width: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  background:
-    radial-gradient(120% 80% at 50% -10%, var(--app-bg) 0%, var(--app-bg-deep) 100%);
+  background:
+    radial-gradient(120% 80% at 50% -10%, var(--app-bg) 0%, var(--app-bg-deep) 100%);
   position: relative;
 }
 
@@ -73,25 +73,23 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  margin: 8px 8px 6px 0;
+  margin: 6px 6px 6px 0;
   display: flex;
   flex-direction: column;
   background: var(--surface-raised);
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 16px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    0 10px 30px rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: var(--radius-window);
+  box-shadow: var(--shadow-window);
   overflow: hidden;
 }
 
-.app-tabbar {
-  height: 40px;
+.app-tabbar {
+  height: var(--density-toolbar-min-height);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px 0 4px;
+  padding: 0 6px 0 2px;
   background: var(--surface-raised);
   border-bottom: 1px solid var(--hairline);
 }
@@ -104,7 +102,7 @@
 }
 
 .app-cmd-btn {
-  height: 26px;
+  height: var(--density-control-height-sm);
   min-width: 132px;
   padding: 0 7px 0 9px;
   display: inline-flex;
@@ -158,12 +156,83 @@
   font-size: var(--ui-font-control);
 }
 
+.app-titlebar-fallback {
+  grid-row: 1;
+  height: 40px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-raised);
+}
+
+.app-layout-fallback {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  background: var(--app-bg);
+}
+
+.app-sidebar-fallback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-right: 1px solid var(--hairline);
+  background: var(--sidebar-bg);
+}
+
+.app-layout-fallback__workspace {
+  min-width: 0;
+  min-height: 0;
+  margin: 6px;
+  display: flex;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-window);
+  background: var(--surface-raised);
+}
+
+.app-tabs-fallback {
+  width: 220px;
+  height: 24px;
+  margin-left: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--color-bg), var(--control-bg-hover), var(--color-bg));
+  background-size: 200% 100%;
+  animation: app-skeleton-shift 1.4s ease-in-out infinite;
+}
+
+.app-skeleton {
+  display: block;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--color-border), var(--control-bg-hover), var(--color-border));
+  background-size: 200% 100%;
+  animation: app-skeleton-shift 1.4s ease-in-out infinite;
+}
+
+.app-skeleton--heading { width: 38%; }
+.app-skeleton--control { width: 100%; height: 34px; }
+.app-skeleton--row { width: 82%; }
+.app-skeleton--row-short { width: 62%; }
+
+@keyframes app-skeleton-shift {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-tabs-fallback,
+  .app-skeleton {
+    animation: none;
+  }
+}
+
 /* Card rules */
-.hifi-card {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+.hifi-card {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
 }
 
@@ -294,12 +363,12 @@
 }
 
 /* Left Sidebar - Data Source */
-.hifi-sidebar-panel {
+.hifi-sidebar-panel {
   background: transparent;
   border: none;
   border-radius: 0;
   box-shadow: none;
-  padding: 14px 12px;
+  padding: var(--density-panel-padding);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -783,7 +852,7 @@
 
 
 /* Tab panes */
-.hifi-tab-pane {
+.hifi-tab-pane {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -872,11 +941,11 @@
   height: 100%;
   overflow: auto;
   background: var(--color-panel);
-  padding: 20px 24px;
+  padding: var(--density-panel-padding);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: calc(var(--density-gap) * 2);
 }
 
 .hifi-page-header {
@@ -900,18 +969,18 @@
   line-height: 1.5;
 }
 
-.hifi-card {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.02);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.hifi-card:hover {
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05), 0 12px 32px rgba(15, 23, 42, 0.04);
-  border-color: var(--color-border-hover);
-}
+.hifi-card {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.02);
+  transition: box-shadow var(--motion-fast) ease, border-color var(--motion-fast) ease;
+}
+
+.hifi-card:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05), 0 12px 32px rgba(15, 23, 42, 0.04);
+  border-color: var(--color-border-hover);
+}
 
 .hifi-card-title {
   margin: 0 0 16px;
@@ -921,14 +990,14 @@
   letter-spacing: -0.01em;
 }
 
-.hifi-btn {
+.hifi-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 36px;
+  height: var(--density-control-height);
   padding: 0 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   font-size: var(--ui-font-body);
   font-weight: 600;
   cursor: pointer;
@@ -1056,21 +1125,21 @@
 }
 
 /* 闂佸啿鍘滈崑鎾绘煃閸忓浜?Custom Premium Scrollbars 闂佸啿鍘滈崑鎾绘煃閸忓浜?*/
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.18);
-  border-radius: 99px;
-  transition: background 0.2s ease;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.4);
-}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-text-muted) 24%, transparent);
+  border-radius: var(--radius-pill);
+  transition: background var(--motion-fast) ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-text-muted) 48%, transparent);
+}
 
 /* 闂佸啿鍘滈崑鎾绘煃閸忓浜?Tauri Inactive Window State Dimming 闂佸啿鍘滈崑鎾绘煃閸忓浜?*/
 .window-inactive .titlebar {

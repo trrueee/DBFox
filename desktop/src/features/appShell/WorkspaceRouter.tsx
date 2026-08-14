@@ -87,16 +87,12 @@ export function WorkspaceRouter({ activeTab, showToast }: WorkspaceRouterProps) 
 // ── SmartQueryHome tab ──
 function SmartQueryHomeTab({ showToast }: { showToast: WorkspaceRouterProps["showToast"] }) {
   const [askInputValue, setAskInputValue] = useState("");
-  const contextTables = useWorkspaceStore((s) => s.contextTables);
-  const addContextTable = useWorkspaceStore((s) => s.addContextTable);
-  const removeContextTable = useWorkspaceStore((s) => s.removeContextTable);
-  const clearContextTables = useWorkspaceStore((s) => s.clearContextTables);
 
   const handleSubmitAsk = async () => {
     const text = askInputValue.trim();
     if (!text) return;
     try {
-      const detail = await useConversationStore.getState().createAndOpenConversation(text, contextTables);
+      const detail = await useConversationStore.getState().createAndOpenConversation(text);
       await useConversationStore
         .getState()
         .sendMessage(detail.id, text, "queue", globalThis.crypto.randomUUID());
@@ -110,12 +106,8 @@ function SmartQueryHomeTab({ showToast }: { showToast: WorkspaceRouterProps["sho
   return (
     <SmartQueryHome
       askInputValue={askInputValue}
-      contextTables={contextTables}
       onAskInputChange={setAskInputValue}
       onSubmitAsk={handleSubmitAsk}
-      onAddContextTable={addContextTable}
-      onRemoveContextTable={removeContextTable}
-      onClearContextTables={clearContextTables}
     />
   );
 }
@@ -123,6 +115,10 @@ function SmartQueryHomeTab({ showToast }: { showToast: WorkspaceRouterProps["sho
 // ── ConversationHistory tab ──
 function ConversationHistoryTab({ activeTab }: { activeTab: WorkspaceTab }) {
   const conversations = useConversationStore((s) => s.summaries);
+  const { datasources } = useDatasourceState();
+  const datasourceLabels = Object.fromEntries(
+    datasources.map((datasource) => [datasource.id, datasource.name]),
+  );
   const openConversation = async (summary: ConversationSummary) => {
     await useConversationStore.getState().openConversation(summary.id);
     useWorkspaceStore.getState().openConversationResult({ id: summary.id, title: summary.title });
@@ -131,6 +127,7 @@ function ConversationHistoryTab({ activeTab }: { activeTab: WorkspaceTab }) {
   return (
     <ConversationHistoryPanel
       conversations={conversations}
+      datasourceLabels={datasourceLabels}
       activeConversationId={activeTab.conversationId}
       onOpenConversation={(summary) => void openConversation(summary)}
       onDeleteConversation={(conversationId) => void useConversationStore.getState().deleteConversationById(conversationId)}
@@ -158,6 +155,7 @@ function TableWorkspaceTab({ activeTab, showToast }: { activeTab: WorkspaceTab; 
 
   return (
     <TableWorkspace
+      key={activeTab.id}
       tableId={tableId}
       datasourceId={datasourceId}
       datasourceDbType={datasourceDbType}

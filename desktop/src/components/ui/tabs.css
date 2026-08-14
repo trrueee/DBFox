@@ -12,7 +12,7 @@
   align-items: center;
   justify-content: center;
   white-space: nowrap;
-  min-height: 32px;
+  min-height: var(--density-control-height-sm);
   padding: 0 10px;
   border-radius: calc(var(--radius-control) - 2px);
   color: var(--color-text-secondary);

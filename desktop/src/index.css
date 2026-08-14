@@ -86,9 +86,14 @@
   * { @apply border-border; }
   body { @apply bg-background text-foreground; overflow: hidden; height: 100vh; width: 100vw; }
   #root { height: 100vh; width: 100vw; }
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar { width: var(--scrollbar-size, 6px); height: var(--scrollbar-size, 6px); }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill, 999px);
+    background-clip: padding-box;
+  }
   ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
 }
 

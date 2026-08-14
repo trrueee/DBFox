@@ -11,7 +11,6 @@ interface WorkspaceState {
   activeTabId: string;
   sqlConsoleState: Record<string, SqlConsoleTabState>;
   selectedTables: string[];
-  contextTables: string[];
   tableSubTabs: Record<string, string>;
   settingsOpen: boolean;
   settingsSection: AppSettingsSection;
@@ -44,9 +43,6 @@ interface WorkspaceActions {
   openQueryResultTab: (queryText: string) => string | undefined;
   patchTab: (tabId: string, patch: Partial<WorkspaceTab>) => void;
   setSelectedTables: (tables: string[] | ((prev: string[]) => string[])) => void;
-  addContextTable: (name: string) => void;
-  removeContextTable: (name: string) => void;
-  clearContextTables: () => void;
   setTableSubTabs: (
     updater: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>),
   ) => void;
@@ -67,7 +63,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   activeTabId: HOME_TAB.id,
   sqlConsoleState: {},
   selectedTables: [],
-  contextTables: [],
   tableSubTabs: {},
   settingsOpen: false,
   settingsSection: "appearance",
@@ -288,16 +283,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     set((state) => ({
       selectedTables: typeof tables === "function" ? tables(state.selectedTables) : tables,
     })),
-
-  addContextTable: (name) =>
-    set((state) => ({
-      contextTables: state.contextTables.includes(name) ? state.contextTables : [...state.contextTables, name],
-    })),
-
-  removeContextTable: (name) =>
-    set((state) => ({ contextTables: state.contextTables.filter((table) => table !== name) })),
-
-  clearContextTables: () => set({ contextTables: [] }),
 
   setTableSubTabs: (updater) =>
     set((state) => ({

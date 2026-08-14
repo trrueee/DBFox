@@ -70,6 +70,12 @@ describe("DataSourceTree", () => {
     expect(container.querySelector(".dbfox-scroll-area-viewport")?.textContent).toContain("orders");
   });
 
+  it("does not expose the removed table-context drag interaction", () => {
+    renderTree();
+
+    expect(screen.getByRole("button", { name: "orders" }).getAttribute("draggable")).toBeNull();
+  });
+
   it("exposes common workspace routes and a dedicated settings entry", () => {
     const onOpenSqlConsole = vi.fn();
     const onOpenConnectionManager = vi.fn();

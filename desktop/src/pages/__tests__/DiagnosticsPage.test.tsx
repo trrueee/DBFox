@@ -41,7 +41,12 @@ describe("DiagnosticsPage", () => {
           exists: true,
           size_bytes: 42,
           modified_at: "2026-06-20T00:00:00Z",
-          content: "ERROR api_key=[REDACTED] failed",
+          content: JSON.stringify({
+            timestamp: "2026-06-20T00:00:00Z",
+            level: "error",
+            logger: "dbfox.api",
+            message: "api_key=[REDACTED] failed",
+          }),
         },
         {
           name: "engine-stderr",
@@ -95,6 +100,9 @@ describe("DiagnosticsPage", () => {
     expect(getByText("已脱敏")).toBeInTheDocument();
     expect(getByRole("heading", { name: "后端日志" })).toBeInTheDocument();
     expect(getByText("engine, engine-stderr")).toBeInTheDocument();
+    expect(getByRole("table", { name: "后端日志内容" })).toBeInTheDocument();
+    expect(getByText("dbfox.api")).toBeInTheDocument();
+    expect(getByText("ERROR")).toHaveClass("diagnostics-log-level--error");
     expect(getByText(/api_key=\[REDACTED\]/)).toBeInTheDocument();
     expect(getByText(/backend stderr/)).toBeInTheDocument();
     expect(queryByText("secret-key")).not.toBeInTheDocument();

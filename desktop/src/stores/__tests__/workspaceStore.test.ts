@@ -7,7 +7,6 @@ const INITIAL = {
   activeTabId: "smart-query",
   sqlConsoleState: {},
   selectedTables: [],
-  contextTables: [],
   tableSubTabs: {},
   settingsOpen: false,
   settingsSection: "appearance" as const,
@@ -151,30 +150,6 @@ describe("workspaceStore — ids", () => {
     const a = useWorkspaceStore.getState()._nextMsgId();
     const b = useWorkspaceStore.getState()._nextMsgId();
     expect(b).toBe(a + 1);
-  });
-});
-
-describe("workspaceStore — context tables", () => {
-  beforeEach(reset);
-
-  it("addContextTable dedupes and keeps order", () => {
-    useWorkspaceStore.getState().addContextTable("users");
-    useWorkspaceStore.getState().addContextTable("orders");
-    useWorkspaceStore.getState().addContextTable("users");
-    expect(useWorkspaceStore.getState().contextTables).toEqual(["users", "orders"]);
-  });
-
-  it("removeContextTable drops only the named table", () => {
-    useWorkspaceStore.getState().addContextTable("users");
-    useWorkspaceStore.getState().addContextTable("orders");
-    useWorkspaceStore.getState().removeContextTable("users");
-    expect(useWorkspaceStore.getState().contextTables).toEqual(["orders"]);
-  });
-
-  it("clearContextTables empties the list", () => {
-    useWorkspaceStore.getState().addContextTable("users");
-    useWorkspaceStore.getState().clearContextTables();
-    expect(useWorkspaceStore.getState().contextTables).toEqual([]);
   });
 });
 

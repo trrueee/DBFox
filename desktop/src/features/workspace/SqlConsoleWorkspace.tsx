@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type SyntheticEvent, type UIEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Panel } from "../../components/ui/panel";
@@ -11,7 +11,9 @@ import type { ResultViewArtifact } from "../../types/agentArtifact";
 import { parseConversationArtifact } from "../conversation/conversationWireSchema";
 import { toResultViewArtifactModel } from "../conversation/workspace/conversationArtifactModels";
 import { TableArtifactView } from "./artifacts/TableArtifactView";
-import { firstSqlKeyword, splitSqlStatements, tokenizeSql, type SqlStatementKind, type SqlTokenKind } from "./artifacts/sqlTokenizer";
+import { firstSqlKeyword, splitSqlStatements, type SqlStatementKind } from "./artifacts/sqlTokenizer";
+import { SqlEditor } from "./sqlEditor/SqlEditor";
+import { useSqlCompletionCatalog } from "./sqlEditor/useSqlCompletionCatalog";
 import "./SqlConsoleWorkspace.css";
 
 export type SqlConsoleTabState = {
@@ -49,8 +51,7 @@ const nextEntryId = () => ++entrySeq;
 
 export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntries, onToast, datasources, activeDatasourceId }: SqlConsoleWorkspaceProps) {
   const { draftSql, entries, running } = state;
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const highlightRef = useRef<HTMLPreElement>(null);
+  const terminalScrollRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
   const [selectedSql, setSelectedSql] = useState("");
 
@@ -69,51 +70,35 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
   const dbLabel = resolvedDatasource
     ? `${resolvedDatasource.name} · ${resolvedDatasource.database_name} · ${databaseTypeLabel(resolvedDatasource.db_type)}`
     : "数据源不可用";
+  const completionCatalog = useSqlCompletionCatalog({
+    datasourceId: resolvedDatasource?.id ?? "",
+    connectionGeneration: resolvedDatasource?.connection_generation ?? 0,
+    enabled: Boolean(resolvedDatasource),
+  });
   const statementSummary = useMemo(() => summarizeSqlInput(draftSql, selectedSql), [draftSql, selectedSql]);
+  const hasCommandHistory = entries.some((entry) => entry.kind === "sql" || entry.kind === "result" || entry.kind === "error");
 
   useEffect(() => {
     if (!initializedRef.current && entries.length === 0) {
       initializedRef.current = true;
       onAppendEntries(tabId, [
-        { id: nextEntryId(), kind: "info", text: "SQL Console 已就绪，输入语句后按 F9 或 Ctrl+Enter 执行。", time: formatTime() },
+        { id: nextEntryId(), kind: "info", text: "SQL 控制台已就绪，输入语句后按 F9 或 Ctrl+Enter 执行。", time: formatTime() },
       ]);
     }
   }, [tabId, entries.length, onAppendEntries]);
 
   useEffect(() => {
-    const node = scrollRef.current;
-    if (node) node.scrollTop = node.scrollHeight;
-  }, [entries, running]);
+    const node = terminalScrollRef.current;
+    if (!node) return;
+    const frame = requestAnimationFrame(() => {
+      node.scrollTop = node.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [entries.length, running]);
 
   const appendEntries = (items: ConsoleEntryDraft[]) => {
     const time = formatTime();
     onAppendEntries(tabId, items.map((item) => ({ ...item, id: nextEntryId(), time }) as ConsoleEntry));
-  };
-
-  const selectedTextFromTextarea = (input: HTMLTextAreaElement) => {
-    const start = input.selectionStart;
-    const end = input.selectionEnd;
-    return end > start ? input.value.slice(start, end) : "";
-  };
-
-  const updateSelectedSql = (event: SyntheticEvent<HTMLTextAreaElement>) => {
-    setSelectedSql(selectedTextFromTextarea(event.currentTarget));
-  };
-
-  const handleEditorKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    const shouldExecute = event.key === "F9" || ((event.ctrlKey || event.metaKey) && event.key === "Enter");
-    if (!shouldExecute) return;
-    event.preventDefault();
-    const selected = selectedTextFromTextarea(event.currentTarget);
-    setSelectedSql(selected);
-    void runSql(selected);
-  };
-
-  const syncHighlightScroll = (event: UIEvent<HTMLTextAreaElement>) => {
-    const highlight = highlightRef.current;
-    if (!highlight) return;
-    highlight.scrollTop = event.currentTarget.scrollTop;
-    highlight.scrollLeft = event.currentTarget.scrollLeft;
   };
 
   const runSql = async (requestedSql?: string) => {
@@ -139,7 +124,7 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
       const result = await agentApi.executeSqlConsole({
         datasourceId: resolvedDatasource.id,
         sql,
-        question: "SQL Console",
+        question: "SQL 控制台",
         sessionId: tabId,
       });
       const resultArtifact = result.artifacts
@@ -151,10 +136,10 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
         ? [{ kind: "result", artifact: resultArtifact, runId: result.runId }]
         : [{ kind: "info", text: "执行成功，无结果集。" }];
       for (const warning of result.warnings ?? []) {
-        extras.push({ kind: "info", text: `[WARN] ${warning}` });
+        extras.push({ kind: "info", text: `警告：${warning}` });
       }
       for (const notice of result.notices ?? []) {
-        extras.push({ kind: "info", text: `[INFO] ${notice}` });
+        extras.push({ kind: "info", text: `提示：${notice}` });
       }
       appendEntries(extras);
     } catch (err) {
@@ -176,10 +161,10 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
   const statusClassName = ["sql-console-status", datasourceWarning ? "is-warning" : ""].filter(Boolean).join(" ");
 
   return (
-    <Panel className="hifi-sql-workspace hifi-tab-pane" aria-label="SQL Console">
-      <Toolbar className="sql-console-toolbar" aria-label="SQL Console 工具栏">
+    <Panel className="hifi-sql-workspace hifi-tab-pane" aria-label="SQL 控制台">
+      <Toolbar className="sql-console-toolbar" aria-label="SQL 控制台工具栏">
         <ToolbarGroup className="gap-3">
-          <ToolbarTitle>SQL Console</ToolbarTitle>
+          <ToolbarTitle>SQL 控制台</ToolbarTitle>
           <span className="sql-console-datasource-label">{dbLabel}</span>
         </ToolbarGroup>
         <ToolbarGroup>
@@ -195,42 +180,44 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
         </ToolbarGroup>
       </Toolbar>
 
-      <div className="sql-console">
-        <div className="sql-console-scroll" ref={scrollRef}>
-          {entries.map((entry) => renderEntry(entry, onToast))}
-
-          {running && <LoadingState className="sql-console-running" label="正在执行…" />}
-
-          <div className={statusClassName} aria-label="SQL 输入状态">
-            <span>{datasourceWarning || `数据源 ${dbLabel}`}</span>
-            <span>{statementSummary}</span>
+      <div className="sql-console-workbench">
+        <section
+          className="sql-console-terminal"
+          aria-label="SQL 命令行控制台"
+          ref={terminalScrollRef}
+        >
+          <div className="sql-console-transcript">
+            {entries.map((entry) => renderEntry(entry, onToast))}
+            {running && <LoadingState className="sql-console-running" label="正在执行…" />}
           </div>
 
-          <label className="sql-console-prompt sql-console-editor-prompt">
+          <div
+            className={`sql-console-command-row ${hasCommandHistory ? "has-history" : "is-empty"}`}
+            aria-label="当前 SQL 输入"
+          >
             <span className="sql-console-prompt-label">sql&gt;</span>
             <div className="sql-console-input-stack">
-              <pre ref={highlightRef} className="sql-console-highlight" aria-label="SQL 高亮预览">
-                {renderSqlConsoleHighlight(draftSql)}
-              </pre>
-              <textarea
-                className="sql-console-input"
-                aria-label="SQL 编辑器"
-                value={draftSql}
-                rows={Math.min(12, Math.max(1, draftSql.split("\n").length))}
-                spellCheck={false}
-                disabled={running}
-                autoFocus
-                onChange={(event) => {
-                  setSelectedSql("");
-                  onPatchState(tabId, { draftSql: event.target.value });
-                }}
-                onScroll={syncHighlightScroll}
-                onSelect={updateSelectedSql}
-                onKeyUp={updateSelectedSql}
-                onKeyDown={handleEditorKeyDown}
-              />
+                <SqlEditor
+                  value={draftSql}
+                  disabled={running}
+                  dbType={resolvedDatasource?.db_type ?? null}
+                  tables={completionCatalog.tables}
+                  loadColumns={completionCatalog.loadColumns}
+                  onChange={(nextValue) => {
+                    setSelectedSql("");
+                    onPatchState(tabId, { draftSql: nextValue });
+                  }}
+                  onSelectionChange={setSelectedSql}
+                  onExecute={(selection) => void runSql(selection)}
+                />
             </div>
-          </label>
+          </div>
+        </section>
+
+        <div className={statusClassName} aria-label="SQL 输入状态">
+          {datasourceWarning ? <span>{datasourceWarning}</span> : null}
+          <span>{statementSummary}</span>
+          {completionCatalog.loading ? <span>正在加载表结构提示…</span> : null}
         </div>
       </div>
     </Panel>
@@ -241,7 +228,7 @@ function renderEntry(entry: ConsoleEntry, onToast: (message: string) => void) {
   switch (entry.kind) {
     case "info":
       return (
-        <div key={entry.id} className={`sql-console-info ${entry.text.startsWith("[WARN]") ? "warn" : ""}`}>
+        <div key={entry.id} className={`sql-console-info ${entry.text.startsWith("警告：") ? "warn" : ""}`}>
           {entry.text}
         </div>
       );
@@ -255,38 +242,12 @@ function renderEntry(entry: ConsoleEntry, onToast: (message: string) => void) {
     case "error":
       return (
         <div key={entry.id} className="sql-console-error">
-          <strong>ERROR</strong> {entry.message}
+          <strong>执行失败</strong> {entry.message}
         </div>
       );
     case "result":
       return <ResultBlock key={entry.id} artifact={entry.artifact} runId={entry.runId} time={entry.time} onToast={onToast} />;
   }
-}
-
-function renderSqlConsoleHighlight(sql: string) {
-  const statements = splitSqlStatements(sql);
-  const segments = statements.length > 0 ? statements : [{ text: sql || "\u200b", kind: "other" as const }];
-
-  return (
-    <code>
-      {segments.map((statement, statementIndex) => (
-        <span
-          key={`${statementIndex}-${statement.kind}`}
-          className={`sql-console-statement sql-console-statement--${statement.kind}`}
-        >
-          {tokenizeSql(statement.text).map((token, tokenIndex) => (
-            <span key={`${tokenIndex}-${token.kind}`} className={sqlConsoleTokenClass(token.kind)}>
-              {token.text}
-            </span>
-          ))}
-        </span>
-      ))}
-    </code>
-  );
-}
-
-function sqlConsoleTokenClass(kind: SqlTokenKind) {
-  return kind === "whitespace" ? "sql-console-token sql-console-token-whitespace" : `sql-console-token sql-console-token-${kind}`;
 }
 
 function summarizeSqlInput(sql: string, selectedSql: string) {
@@ -325,8 +286,12 @@ function ResultBlock({
   return (
     <div className="sql-console-result">
       <div className="sql-console-result-meta">
-        SQL-backed result · {rowCount} 行{latencyText} · {time} · {runId}
+        查询结果 · {rowCount} 行{latencyText} · {time}
         {artifact.truncated ? " · 结果已截断" : ""}
+        <details className="sql-console-result-details">
+          <summary>执行详情</summary>
+          <span>Run ID：{runId}</span>
+        </details>
       </div>
       <TableArtifactView artifact={artifact} onToast={onToast} mode="workspace" />
     </div>

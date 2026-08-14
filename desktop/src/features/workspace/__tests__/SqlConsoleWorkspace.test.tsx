@@ -1,4 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { EditorView } from "@codemirror/view";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConsoleExecuteResponse, DataSource } from "../../../lib/api/types";
@@ -10,6 +12,13 @@ vi.mock("../../../lib/api/agent", () => ({
     executeSqlConsole: vi.fn(),
     fetchArtifactPage: vi.fn(),
     exportArtifactCsv: vi.fn(),
+  },
+}));
+
+vi.mock("../../../lib/api/schema", () => ({
+  schemaApi: {
+    listTables: vi.fn().mockResolvedValue([]),
+    listColumns: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -136,20 +145,23 @@ function renderConsole(
   } = {},
 ) {
   const onToast = options.onToast ?? vi.fn();
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   function Harness() {
     const [state, setState] = useState(initialState);
     return (
-      <SqlConsoleWorkspace
-        tabId="sql-1"
-        state={state}
-        onPatchState={(_tabId, patch) => setState((current) => ({ ...current, ...patch }))}
-        onAppendEntries={(_tabId, entries: ConsoleEntry[]) =>
-          setState((current) => ({ ...current, entries: [...current.entries, ...entries] }))
-        }
-        onToast={onToast}
-        datasources={options.datasources ?? [datasource]}
-        activeDatasourceId={options.activeDatasourceId ?? "ds-1"}
-      />
+      <QueryClientProvider client={queryClient}>
+        <SqlConsoleWorkspace
+          tabId="sql-1"
+          state={state}
+          onPatchState={(_tabId, patch) => setState((current) => ({ ...current, ...patch }))}
+          onAppendEntries={(_tabId, entries: ConsoleEntry[]) =>
+            setState((current) => ({ ...current, entries: [...current.entries, ...entries] }))
+          }
+          onToast={onToast}
+          datasources={options.datasources ?? [datasource]}
+          activeDatasourceId={options.activeDatasourceId ?? "ds-1"}
+        />
+      </QueryClientProvider>
     );
   }
 
@@ -183,14 +195,16 @@ describe("SqlConsoleWorkspace", () => {
     vi.mocked(agentApi.exportArtifactCsv).mockResolvedValue(new Blob(["id,name\n1,Ada\n"]));
   });
 
-  it("renders a terminal textarea without the boxed Monaco editor and disables execute for empty SQL", () => {
+  it("renders the CodeMirror SQL editor and disables execute for empty SQL", () => {
     const { container } = renderConsole({ draftSql: "   ", entries: [], running: false });
 
     const editor = screen.getByRole("textbox", { name: "SQL 编辑器" });
     expect(editor).toBeTruthy();
-    expect(editor.closest(".sql-console-scroll")).toBeTruthy();
-    expect(container.querySelector(".sql-console-editor-inline")).toBeNull();
-    expect(container.querySelector(".sql-console-editor-shell")).toBeNull();
+    expect(editor.closest(".sql-console-editor")).toBeTruthy();
+    expect(editor.closest(".sql-console-command-row")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "SQL 命令行控制台" })).toBeTruthy();
+    expect(screen.queryByRole("separator", { name: /结果面板/ })).toBeNull();
+    expect(container.querySelector(".sql-console-transcript")).toBeTruthy();
     expect((screen.getByRole("button", { name: /运行/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -204,7 +218,7 @@ describe("SqlConsoleWorkspace", () => {
       expect(agentApi.executeSqlConsole).toHaveBeenCalledWith({
         datasourceId: "ds-1",
         sql: "SELECT 1 AS id, 'Ada' AS name",
-        question: "SQL Console",
+        question: "SQL 控制台",
         sessionId: "sql-1",
       });
     });
@@ -216,6 +230,28 @@ describe("SqlConsoleWorkspace", () => {
       );
     });
     expect(await screen.findByText("Ada")).toBeTruthy();
+    const terminal = screen.getByRole("region", { name: "SQL 命令行控制台" });
+    expect(terminal.textContent).toContain("SELECT 1 AS id, 'Ada' AS name");
+    expect(terminal.textContent).toContain("Ada");
+    expect(screen.getByText("SQL 控制台已就绪，输入语句后按 F9 或 Ctrl+Enter 执行。")).toBeTruthy();
+    expect(screen.getByText("SELECT 1 AS id, 'Ada' AS name")).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: /结果/ })).toBeNull();
+    expect(screen.queryByRole("separator", { name: /结果面板/ })).toBeNull();
+  });
+
+  it("keeps command history and results in one transcript and clears them together", async () => {
+    renderConsole({ draftSql: "SELECT 1 AS id, 'Ada' AS name", entries: [], running: false });
+
+    fireEvent.click(screen.getByRole("button", { name: /运行/ }));
+    expect(await screen.findByText("Ada")).toBeTruthy();
+    expect(screen.getByText("SELECT 1 AS id, 'Ada' AS name")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "清屏" }));
+
+    expect(screen.getByText("控制台已清屏。")).toBeTruthy();
+    expect(screen.queryByText("Ada")).toBeNull();
+    expect(screen.queryByText("SELECT 1 AS id, 'Ada' AS name")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "SQL 编辑器" })).toBeTruthy();
   });
 
   it("executes selected SQL without clearing the full editor draft", async () => {
@@ -225,27 +261,27 @@ describe("SqlConsoleWorkspace", () => {
       running: false,
     });
 
-    const editor = screen.getByRole("textbox", { name: "SQL 编辑器" }) as HTMLTextAreaElement;
-    editor.focus();
-    editor.setSelectionRange(22, 52);
-    fireEvent.select(editor);
+    const editor = screen.getByRole("textbox", { name: "SQL 编辑器" });
+    const editorView = EditorView.findFromDOM(editor as HTMLElement);
+    expect(editorView).toBeTruthy();
+    editorView!.dispatch({ selection: { anchor: 22, head: 52 } });
     fireEvent.keyDown(editor, { key: "F9" });
 
     await waitFor(() => {
       expect(agentApi.executeSqlConsole).toHaveBeenCalledWith({
         datasourceId: "ds-1",
         sql: "SELECT selected_id FROM orders",
-        question: "SQL Console",
+        question: "SQL 控制台",
         sessionId: "sql-1",
       });
     });
-    expect(editor.value).toContain("SELECT * FROM orders");
+    expect(editorView!.state.doc.toString()).toContain("SELECT * FROM orders");
   });
 
   it("locks editor actions while a query is running", () => {
     renderConsole({ draftSql: "SELECT 1", entries: [], running: true });
 
-    expect((screen.getByRole("textbox", { name: "SQL 编辑器" }) as HTMLTextAreaElement).disabled).toBe(true);
+    expect(screen.getByRole("textbox", { name: "SQL 编辑器" }).getAttribute("aria-readonly")).toBe("true");
     expect((screen.getByRole("button", { name: /正在运行/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -257,20 +293,15 @@ describe("SqlConsoleWorkspace", () => {
     });
 
     const status = screen.getByLabelText("SQL 输入状态");
-    expect(status.textContent).toContain("Local SQLite");
-    expect(status.textContent).toContain("app.db");
-    expect(status.textContent).toContain("SQLite");
+    expect(screen.getByText("Local SQLite · app.db · SQLite")).toBeTruthy();
     expect(status.textContent).toContain("2 条语句");
     expect(status.textContent).toContain("SELECT");
     expect(status.textContent).toContain("UPDATE");
 
-    const highlight = screen.getByLabelText("SQL 高亮预览");
-    expect(highlight.querySelector(".sql-console-statement--read")?.textContent).toContain("SELECT");
-    expect(highlight.querySelector(".sql-console-statement--write")?.textContent).toContain("UPDATE");
-    expect(container.querySelector(".sql-console-token-keyword")?.textContent).toBe("SELECT");
-    expect(container.querySelector(".sql-console-token-function")?.textContent).toBe("COUNT");
-    expect(container.querySelector(".sql-console-token-string")?.textContent).toBe("'Ada'");
-    expect(container.querySelector(".sql-console-token-number")?.textContent).toBe("0");
+    expect(container.querySelector(".cm-content")?.textContent).toContain("SELECT COUNT(*)");
+    expect(container.querySelector(".tok-keyword")?.textContent?.toUpperCase()).toBe("SELECT");
+    expect(container.querySelector(".tok-string")?.textContent).toBe("'Ada'");
+    expect(container.querySelector(".tok-number")?.textContent).toBe("0");
   });
 
   it("disables execution and warns when the requested datasource is unavailable", () => {

@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, type ReactNode } from "react";
-import { Copy, FileText, GitMerge, Info, Layers, RefreshCw, Sparkles, Terminal, Trash2, X } from "lucide-react";
+import { Copy, FileText, GitMerge, Info, Layers, RefreshCw, Terminal, Trash2, X } from "lucide-react";
 import type { ContextMenuState } from "../../types/workspace";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { clearCspOverlayPosition, setCspOverlayPosition } from "../../lib/cspDynamicPosition";
@@ -26,8 +26,6 @@ export function DataSourceContextMenu({
   const positionToken = useId().replaceAll(":", "");
   const selectedTables = useWorkspaceStore((s) => s.selectedTables);
   const setSelectedTables = useWorkspaceStore((s) => s.setSelectedTables);
-  const addContextTable = useWorkspaceStore((s) => s.addContextTable);
-  const clearContextTables = useWorkspaceStore((s) => s.clearContextTables);
 
   useLayoutEffect(() => {
     if (!contextMenu.visible) return undefined;
@@ -59,7 +57,7 @@ export function DataSourceContextMenu({
 
       {contextMenu.type === "schema" && (
         <>
-          <Item icon={<Terminal size={11} className="text-slate-500" />} label="新建 SQL Console" onClick={() => run(onOpenSqlConsole)} />
+          <Item icon={<Terminal size={11} className="text-slate-500" />} label="新建 SQL 控制台" onClick={() => run(onOpenSqlConsole)} />
           <Item icon={<FileText size={11} className="text-slate-500" />} label="查看所有表结构" onClick={() => run(() => onOpenTable(contextMenu.targetNode, "schema"))} />
           <Item icon={<GitMerge size={11} className="text-slate-500" />} label="生成库级 ER 图" onClick={() => run(() => onOpenTable(contextMenu.targetNode, "er"))} />
           <div className="hifi-context-menu-divider" />
@@ -71,7 +69,6 @@ export function DataSourceContextMenu({
         <>
           <Item icon={<FileText size={11} className="text-slate-500" />} label="预览表数据" onClick={() => run(() => onOpenTable(contextMenu.targetNode, "preview"))} />
           <Item icon={<Info size={11} className="text-slate-500" />} label="查看表字段结构" onClick={() => run(() => onOpenTable(contextMenu.targetNode, "schema"))} />
-          <Item icon={<Sparkles size={11} className="text-indigo-500" />} label="作为问数上下文" onClick={() => run(() => addContextTable(contextMenu.targetNode))} />
           <Item icon={<GitMerge size={11} className="text-slate-500" />} label="生成表级 ER 关系图" onClick={() => run(() => onOpenTable(contextMenu.targetNode, "er"))} />
           <div className="hifi-context-menu-divider" />
           <Item icon={<Copy size={11} className="text-slate-500" />} label="复制物理表名" onClick={() => run(() => { navigator.clipboard.writeText(contextMenu.targetNode); onToast(`已成功复制表名: ${contextMenu.targetNode}`); })} />
@@ -83,7 +80,6 @@ export function DataSourceContextMenu({
       {contextMenu.type === "multi-table" && (
         <>
           <Item icon={<GitMerge size={11} className="text-orange-500" />} label="作为联合 Workspace 打开" onClick={() => run(() => onOpenMultiTableWorkspace(selectedTables))} />
-          <Item icon={<Sparkles size={11} className="text-purple-500" />} label="基于选择的多表智能问数" onClick={() => run(() => { clearContextTables(); selectedTables.forEach((t) => addContextTable(t)); })} />
           <Item icon={<Layers size={11} className="text-blue-500" />} label="生成选定表联合 ER 图" onClick={() => run(() => onOpenTable(selectedTables[0], "er"))} />
           <div className="hifi-context-menu-divider" />
           <Item icon={<X size={11} className="text-slate-500" />} label="取消选择" onClick={() => run(() => setSelectedTables([]))} />

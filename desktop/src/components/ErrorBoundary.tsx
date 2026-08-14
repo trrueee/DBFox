@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { TriangleAlert } from "lucide-react";
 
 interface Props {
   children: ReactNode;
@@ -32,7 +33,9 @@ export class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) return this.props.fallback;
       return (
         <div className="app-error-boundary">
-          <div className="app-error-boundary-icon">⚠</div>
+          <div className="app-error-boundary-icon" aria-hidden="true">
+            <TriangleAlert size={22} />
+          </div>
           <h1 className="app-error-boundary-title">
             DBFox 启动异常
           </h1>

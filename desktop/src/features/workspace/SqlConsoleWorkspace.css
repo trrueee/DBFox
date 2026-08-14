@@ -1,13 +1,17 @@
 .hifi-sql-workspace {
   display: flex;
   height: 100%;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
   border: 0;
-  background: transparent;
+  border-radius: 0;
+  background: var(--surface-raised);
 }
 
 .sql-console-toolbar {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--color-border);
   background: var(--surface-raised);
 }
 
@@ -18,7 +22,7 @@
 
 .sql-console-datasource-label {
   min-width: 0;
-  max-width: 360px;
+  max-width: min(38vw, 480px);
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--color-text-secondary);
@@ -32,141 +36,257 @@
   font-size: var(--ui-font-control);
 }
 
-.sql-console {
+.sql-console-workbench {
   display: flex;
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
+  overflow: hidden;
   background: var(--sql-code-surface);
-  cursor: default;
-  padding: 0;
 }
 
-.sql-console-scroll {
+.sql-console-terminal {
+  display: flex;
+  min-height: 0;
   flex: 1 1 auto;
+  flex-direction: column;
   overflow: auto;
-  padding: 12px 14px;
+  background: var(--sql-code-surface);
+  color: var(--sql-code-text);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-code);
+  line-height: var(--code-line-height);
+  scrollbar-gutter: stable;
+}
+
+.sql-console-transcript {
+  flex: 0 0 auto;
+  padding: 10px 14px 0;
+}
+
+.sql-console-command-row {
+  display: grid;
+  min-height: 160px;
+  flex: 0 0 160px;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.sql-console-command-row.is-empty {
+  min-height: 280px;
+  flex: 1 0 280px;
+}
+
+.sql-console-command-row > .sql-console-prompt-label {
+  padding: 10px 0 0 14px;
+}
+
+.sql-console-input-stack {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sql-console-editor {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.sql-console-editor .cm-editor {
+  height: 100%;
+  background: transparent;
   color: var(--sql-code-text);
   font-family: var(--font-mono);
   font-size: var(--ui-font-code);
   line-height: var(--code-line-height);
 }
 
-.sql-console-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  margin: 2px 0 8px;
-  color: var(--color-info);
+.sql-console-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.sql-console-editor .cm-scroller {
+  height: 100%;
+  font-family: inherit;
+  line-height: inherit;
+}
+
+.sql-console-editor .cm-content {
+  min-height: 100%;
+  padding: 10px 0 32px;
+  caret-color: var(--color-success);
+}
+
+.sql-console-editor .cm-line {
+  padding: 0 14px 0 8px;
+}
+
+.sql-console-editor .cm-gutters {
+  display: none;
+}
+
+.sql-console-editor .cm-activeLine {
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+}
+
+.sql-console-editor .cm-selectionBackground,
+.sql-console-editor .cm-content ::selection {
+  background: color-mix(in srgb, var(--color-primary) 28%, transparent) !important;
+}
+
+.sql-console-editor .cm-cursor {
+  border-left-color: var(--color-success);
+}
+
+.sql-console-editor .cm-foldPlaceholder {
+  border-color: var(--sql-code-border);
+  background: var(--surface-panel-muted);
+  color: var(--color-text-secondary);
+}
+
+.sql-console-editor .cm-tooltip {
+  overflow: hidden;
+  border: 1px solid var(--agent-border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--color-text-primary);
+  box-shadow: var(--agent-shadow-hover);
+  font-family: var(--font-family);
   font-size: var(--ui-font-label);
 }
 
-.sql-console-status span {
-  min-width: 0;
-  overflow-wrap: anywhere;
+.sql-console-editor .cm-tooltip-autocomplete > ul {
+  max-height: 280px;
+  font-family: var(--font-family);
 }
 
-.sql-console-status.is-warning {
-  color: var(--color-warning);
+.sql-console-editor .cm-tooltip-autocomplete > ul > li {
+  min-height: 28px;
+  padding: 4px 8px;
 }
 
-.sql-console-input-stack {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 1.6em;
+.sql-console-editor .cm-tooltip-autocomplete > ul > completion-section {
+  border-top: 1px solid var(--hairline);
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  padding: 7px 10px 3px;
 }
 
-.sql-console-highlight {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  color: var(--sql-code-text);
-  font: inherit;
-  line-height: inherit;
-  pointer-events: none;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  tab-size: 2;
+.sql-console-editor .cm-tooltip-autocomplete > ul > completion-section:first-child {
+  border-top: 0;
 }
 
-.sql-console-input {
-  position: relative;
-  z-index: 1;
-  flex: 1 1 auto;
-  width: 100%;
-  min-width: 0;
-  min-height: 1.6em;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: transparent;
-  font: inherit;
-  line-height: inherit;
-  outline: none;
-  resize: none;
-  caret-color: var(--color-success);
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  tab-size: 2;
+.sql-console-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: color-mix(in srgb, var(--color-primary) 13%, var(--surface-raised));
+  color: var(--color-text-primary);
 }
 
-.sql-console-input::selection {
-  background: rgba(96, 165, 250, 0.32);
-  color: transparent;
+.sql-console-editor .cm-completionLabel {
+  font-family: var(--font-mono);
 }
 
-.sql-console-statement {
-  border-radius: 3px;
+.sql-console-editor .cm-completionDetail {
+  margin-left: 10px;
+  color: var(--color-text-muted);
+  font-style: normal;
 }
 
-.sql-console-statement--read {
-  background: rgba(59, 130, 246, 0.08);
+.sql-console-editor .cm-completionIcon-namespace {
+  color: var(--color-primary);
 }
 
-.sql-console-statement--write {
-  background: rgba(251, 191, 36, 0.09);
+.sql-console-editor .cm-completionIcon-class {
+  color: var(--color-success);
 }
 
-.sql-console-statement--ddl {
-  background: rgba(196, 181, 253, 0.1);
+.sql-console-editor .cm-completionIcon-property {
+  color: var(--color-info);
 }
 
-.sql-console-token-keyword {
+.sql-console-editor .cm-completionIcon-keyword,
+.sql-console-editor .cm-completionIcon-type {
+  color: var(--color-text-muted);
+}
+
+.sql-console-editor .tok-keyword,
+.sql-console-editor .tok-bool,
+.sql-console-editor .tok-null {
   color: var(--color-info);
   font-weight: 700;
 }
 
-.sql-console-token-function {
+.sql-console-editor .tok-function,
+.sql-console-editor .tok-typeName,
+.sql-console-editor .tok-className {
   color: var(--sql-code-keyword);
   font-weight: 700;
 }
 
-.sql-console-token-string {
+.sql-console-editor .tok-string,
+.sql-console-editor .tok-regexp {
   color: var(--sql-code-string);
 }
 
-.sql-console-token-number {
+.sql-console-editor .tok-number {
   color: var(--color-warning);
 }
 
-.sql-console-token-comment {
+.sql-console-editor .tok-comment {
   color: var(--sql-code-comment);
   font-style: italic;
 }
 
-.sql-console-token-operator,
-.sql-console-token-punctuation {
+.sql-console-editor .tok-operator,
+.sql-console-editor .tok-punctuation {
   color: var(--color-text-secondary);
 }
 
-.sql-console-token-identifier,
-.sql-console-token-whitespace {
+.sql-console-editor .tok-variableName,
+.sql-console-editor .tok-propertyName {
   color: var(--sql-code-text);
+}
+
+.sql-console-editor [aria-readonly="true"] {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.sql-console-status {
+  display: flex;
+  min-height: 30px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--sql-code-border);
+  background: var(--surface-raised);
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-label);
+  box-sizing: border-box;
+}
+
+.sql-console-status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sql-console-status span + span::before {
+  content: "·";
+  margin-right: 14px;
+  color: var(--color-text-muted);
+}
+
+.sql-console-status.is-warning {
+  color: var(--color-warning);
 }
 
 .sql-console-info {
@@ -180,126 +300,114 @@
 }
 
 .sql-console-stmt {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: start;
+  margin: 10px 0 4px;
 }
 
 .sql-console-prompt-label {
   flex-shrink: 0;
   color: var(--color-success);
-  font-weight: 600;
+  font-weight: 650;
   line-height: var(--code-line-height);
   user-select: none;
 }
 
 .sql-console-sql {
   margin: 0;
-  color: var(--color-primary);
+  color: var(--sql-code-text);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .sql-console-running {
-  margin: 6px 0;
+  margin: 8px 0;
   color: var(--color-warning);
 }
 
 .sql-console-error {
-  margin: 6px 0 4px;
+  margin: 8px 0 4px 44px;
+  padding: 7px 10px;
   border-left: 2px solid var(--color-danger);
-  background: rgba(239, 68, 68, 0.08);
+  border-radius: 0 6px 6px 0;
+  background: var(--color-danger-soft);
   color: var(--color-danger);
-  padding: 6px 10px;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .sql-console-error strong {
   margin-right: 8px;
-  color: var(--color-danger);
 }
 
 .sql-console-result {
-  margin: 6px 0 4px;
+  display: flex;
+  width: calc(100% - 44px);
+  height: clamp(240px, 42vh, 480px);
+  min-height: 240px;
+  flex-direction: column;
+  margin: 8px 0 14px 44px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
 }
 
 .sql-console-result-meta {
-  margin-bottom: 4px;
-  color: var(--color-text-muted);
-  font-size: var(--ui-font-label);
-}
-
-.sql-console-table-wrap {
-  max-height: 320px;
-  overflow: auto;
-  border: 1px solid var(--sql-code-border);
-  border-radius: 4px;
-  background: var(--sql-code-surface);
-}
-
-.sql-console-table {
-  width: max-content;
-  min-width: 100%;
-  border-collapse: collapse;
-  font-size: var(--ui-font-label);
-}
-
-.sql-console-table th {
-  position: sticky;
-  top: 0;
-  border-right: 1px solid var(--sql-code-border);
-  border-bottom: 1px solid var(--sql-code-border);
-  background: var(--color-panel);
-  color: var(--color-info);
-  font-weight: 600;
-  padding: 4px 10px;
-  text-align: left;
-  white-space: nowrap;
-}
-
-.sql-console-table th:last-child {
-  border-right: 0;
-}
-
-.sql-console-table td {
-  max-width: 280px;
-  overflow: hidden;
-  border-right: 1px solid var(--sql-code-border);
-  border-bottom: 1px solid var(--sql-code-border);
-  color: var(--color-text-secondary);
-  padding: 3px 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sql-console-table td:last-child {
-  border-right: 0;
-}
-
-.sql-console-table tbody tr:hover td {
-  background: rgba(59, 130, 246, 0.08);
-}
-
-.sql-console-null {
-  color: var(--color-text-secondary);
-  font-style: italic;
-}
-
-.sql-console-empty {
-  color: var(--color-text-muted);
-  text-align: center;
-}
-
-.sql-console-prompt {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 10px;
+  min-height: 30px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-label);
+  box-sizing: border-box;
 }
 
-.sql-console-input:disabled {
-  cursor: wait;
-  opacity: 0.6;
+.sql-console-result-details {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sql-console-result-details summary {
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.sql-console-result-details span {
+  font-family: var(--font-mono);
+}
+
+.sql-console-result > .artifact-table-workspace {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 900px) {
+  .sql-console-datasource-label {
+    max-width: 240px;
+  }
+
+  .sql-console-selection-meta {
+    display: none;
+  }
+
+  .sql-console-command-row {
+    grid-template-columns: 46px minmax(0, 1fr);
+  }
+
+  .sql-console-transcript {
+    padding-inline: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sql-console-editor .cm-editor {
+    scroll-behavior: auto;
+  }
 }

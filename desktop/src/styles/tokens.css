@@ -116,8 +116,19 @@
   --density-toolbar-min-height: 40px;
   --density-control-height: 36px;
   --density-control-height-sm: 32px;
+  --density-tab-height: 36px;
+  --density-tree-row-height: 28px;
   --density-panel-padding: 12px;
   --density-gap: 8px;
+  --scrollbar-size: 6px;
+
+  /* A small, explicit spacing scale keeps workspace rhythm predictable. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
 
   --hairline: rgba(15, 23, 42, 0.06);
   --hairline-strong: rgba(15, 23, 42, 0.10);
@@ -405,6 +416,8 @@
   --density-toolbar-min-height: 34px;
   --density-control-height: 32px;
   --density-control-height-sm: 28px;
+  --density-tab-height: 32px;
+  --density-tree-row-height: 26px;
   --density-panel-padding: 8px;
   --density-gap: 6px;
 }
@@ -413,6 +426,8 @@
   --density-toolbar-min-height: 46px;
   --density-control-height: 40px;
   --density-control-height-sm: 36px;
+  --density-tab-height: 40px;
+  --density-tree-row-height: 32px;
   --density-panel-padding: 16px;
   --density-gap: 10px;
 }

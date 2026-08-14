@@ -55,9 +55,10 @@
 ### 修改 SQL、结果或数据源能力
 
 1. [`architecture/data-sql-results.md`](architecture/data-sql-results.md)
-2. [`architecture/backend.md`](architecture/backend.md)
-3. [`architecture/implementation-map.md`](architecture/implementation-map.md)
-4. [`quality/engineering-gates.md`](quality/engineering-gates.md)
+2. [`specs/data-grid.md`](specs/data-grid.md)（修改表格呈现或值查看时）
+3. [`architecture/backend.md`](architecture/backend.md)
+4. [`architecture/implementation-map.md`](architecture/implementation-map.md)
+5. [`quality/engineering-gates.md`](quality/engineering-gates.md)
 
 ### 准备提交或发布
 

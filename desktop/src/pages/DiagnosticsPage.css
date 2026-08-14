@@ -3,9 +3,9 @@
   box-sizing: border-box;
   height: 100%;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   overflow: hidden;
-  padding: 20px 24px;
+  padding: 16px 20px;
 }
 
 .diagnostics-page--workspace {
@@ -32,7 +32,7 @@
 }
 
 .diagnostics-page-subtitle {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--color-text-secondary);
   font-size: var(--ui-font-control);
 }
@@ -113,17 +113,17 @@
 
 .diagnostics-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
 }
 
 .diagnostics-content {
   display: flex;
-  width: min(100%, 1120px);
+  width: min(100%, 1240px);
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   margin: 0 auto;
   overflow: auto;
   padding: 2px 2px 4px;
@@ -132,7 +132,7 @@
 .diagnostics-metric {
   min-width: 0;
   border-right: 1px solid var(--hairline);
-  padding: 2px 14px;
+  padding: 2px 12px;
 }
 
 .diagnostics-metric:first-child {
@@ -269,7 +269,7 @@
 
 .diagnostics-log-section {
   display: flex;
-  min-height: 320px;
+  min-height: 360px;
   flex: 1 1 auto;
   flex-direction: column;
 }
@@ -314,20 +314,98 @@
   white-space: nowrap;
 }
 
-.diagnostics-source-content {
-  max-height: 360px;
-  margin: 0;
+.diagnostics-log-list {
+  max-height: 440px;
   overflow: auto;
-  background: color-mix(in srgb, var(--color-bg) 72%, #ffffff);
+  background: var(--surface-panel-muted);
   color: var(--color-text-primary);
   cursor: default;
-  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
-  font-size: var(--ui-font-label);
-  line-height: 1.6;
-  padding: 12px 14px;
   user-select: text;
-  white-space: pre-wrap;
-  word-break: break-word;
+}
+
+.diagnostics-log-row {
+  display: grid;
+  min-height: 32px;
+  grid-template-columns: 78px 62px minmax(120px, 180px) minmax(240px, 1fr);
+  align-items: start;
+  border-bottom: 1px solid var(--hairline);
+  font-size: var(--ui-font-label);
+}
+
+.diagnostics-log-row:last-child {
+  border-bottom: 0;
+}
+
+.diagnostics-log-row > * {
+  min-width: 0;
+  padding: 7px 9px;
+}
+
+.diagnostics-log-row--header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  min-height: 30px;
+  background: var(--surface-raised);
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
+  font-weight: 650;
+}
+
+.diagnostics-log-row time,
+.diagnostics-log-origin {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagnostics-log-level {
+  align-self: center;
+  justify-self: start;
+  margin: 5px 9px;
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-caption);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.diagnostics-log-level--info {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+
+.diagnostics-log-level--warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.diagnostics-log-level--error {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.diagnostics-log-level--muted {
+  background: var(--control-bg-hover);
+  color: var(--color-text-muted);
+}
+
+.diagnostics-log-message {
+  font-family: var(--font-mono);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-source-empty {
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+  background: var(--surface-panel-muted);
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-control);
 }
 
 .diagnostics-empty {
@@ -352,5 +430,16 @@
     border-right: 0;
     border-bottom: 1px solid var(--hairline);
     padding: 8px 0;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1100px) {
+  .diagnostics-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 12px;
+  }
+
+  .diagnostics-metric:nth-child(3) {
+    border-right: 0;
   }
 }

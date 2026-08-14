@@ -31,13 +31,21 @@ describe("app shell layout", () => {
     expect(resizable).toContain('from "react-resizable-panels"');
   });
 
-  it("uses a real viewport shell with grid rows and a raised main surface", () => {
+  it("uses a real viewport shell with grid rows and a restrained main surface", () => {
     const css = read("App.css");
 
     expect(css).toMatch(/\.app-shell\s*{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*width:\s*100vw;[^}]*height:\s*100vh;/s);
     expect(css).toMatch(/\.app-shell-inner\s*{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);/s);
     expect(css).toMatch(/\.app-body\s*{[^}]*grid-row:\s*2;/s);
-    expect(css).toMatch(/\.app-main\s*{[^}]*margin:\s*8px 8px 6px 0;[^}]*border-radius:\s*16px;[^}]*box-shadow:[^}]*overflow:\s*hidden;/s);
+    expect(css).toMatch(/\.app-main\s*{[^}]*margin:\s*6px 6px 6px 0;[^}]*border-radius:\s*var\(--radius-window\);[^}]*box-shadow:\s*var\(--shadow-window\);[^}]*overflow:\s*hidden;/s);
+  });
+
+  it("keeps lazy workspace boundaries visibly loading instead of flashing blank", () => {
+    const app = read("App.tsx");
+
+    expect(app).toContain("<TitleBarFallback />");
+    expect(app).toContain("<AppLayoutFallback />");
+    expect(app).toContain("<WorkspaceFallback />");
   });
 
   it("keeps the Tauri drag region on the titlebar and out of controls", () => {

@@ -86,9 +86,13 @@
 }
 
 .settings-sidebar__item.is-active {
-  background: var(--nav-active-bg);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.settings-sidebar__item.is-active svg {
   color: var(--color-primary);
-  box-shadow: inset 2px 0 0 var(--nav-active-indicator);
 }
 
 .settings-page {

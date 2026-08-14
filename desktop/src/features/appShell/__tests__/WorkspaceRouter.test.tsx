@@ -141,7 +141,6 @@ describe("WorkspaceRouter table tabs", () => {
       activeTabId: "smart-query",
       sqlConsoleState: {},
       selectedTables: [],
-      contextTables: [],
       tableSubTabs: {},
       _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
     });
@@ -233,7 +232,7 @@ describe("WorkspaceRouter smart query admission", () => {
       await (smartQueryHomeProps.latest?.onSubmitAsk as () => Promise<void>)();
     });
 
-    expect(create).toHaveBeenCalledWith("分析订单", []);
+    expect(create).toHaveBeenCalledWith("分析订单");
     expect(send).toHaveBeenCalledOnce();
     expect(openResult).not.toHaveBeenCalled();
     expect(smartQueryHomeProps.latest?.askInputValue).toBe("分析订单");
@@ -254,7 +253,6 @@ describe("WorkspaceRouter SQL console tabs", () => {
       activeTabId: "smart-query",
       sqlConsoleState: {},
       selectedTables: [],
-      contextTables: [],
       tableSubTabs: {},
       _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
     });
@@ -295,7 +293,6 @@ describe("WorkspaceRouter desktop shell tabs", () => {
       activeTabId: "smart-query",
       sqlConsoleState: {},
       selectedTables: [],
-      contextTables: [],
       tableSubTabs: {},
       _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
     });

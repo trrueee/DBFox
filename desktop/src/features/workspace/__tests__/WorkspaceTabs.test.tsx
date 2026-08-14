@@ -18,7 +18,6 @@ describe("WorkspaceTabs interactions", () => {
         "sql-1": { draftSql: "SELECT 1", entries: [], running: false },
       },
       selectedTables: [],
-      contextTables: [],
       tableSubTabs: {},
       _tabSeq: { sql: 2, multiTable: 1, queryResult: 1, message: 1 },
     });

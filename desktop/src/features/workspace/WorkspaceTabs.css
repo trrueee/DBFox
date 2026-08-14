@@ -1,7 +1,7 @@
 .workspace-tabs {
   display: flex;
   min-width: 0;
-  height: 36px;
+  height: var(--density-tab-height);
   flex: 1 1 auto;
   flex-shrink: 0;
   align-items: center;
@@ -38,9 +38,9 @@
   max-width: 150px;
   flex: 0 0 auto;
   align-items: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
-  border-left: 2px solid transparent;
+  border: 0;
   transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease;
   user-select: none;
 }
@@ -51,7 +51,6 @@
 }
 
 .workspace-tab.is-active {
-  border-left-color: var(--nav-active-indicator);
   background: var(--nav-active-bg);
   color: var(--color-primary);
   font-weight: 600;
@@ -63,7 +62,7 @@
 
 .workspace-tab__main {
   min-width: 0;
-  height: 32px;
+  height: calc(var(--density-tab-height) - 4px);
   flex: 1 1 auto;
   gap: 6px;
   border-radius: 0;
@@ -97,18 +96,12 @@
   color: var(--color-success);
 }
 
-.workspace-tab__icon--multi-table {
-  color: var(--color-secondary);
-}
-
+.workspace-tab__icon--multi-table,
 .workspace-tab__icon--result {
   color: var(--color-secondary);
 }
 
-.workspace-tab__icon--conversation {
-  color: var(--color-primary);
-}
-
+.workspace-tab__icon--conversation,
 .workspace-tab__icon--llm {
   color: var(--color-primary);
 }
@@ -126,10 +119,10 @@
 }
 
 .workspace-tab__close {
-  width: 28px;
-  height: 28px;
+  width: var(--density-control-height-sm);
+  height: var(--density-control-height-sm);
   flex: 0 0 auto;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   margin-right: 2px;
   opacity: 0.56;
@@ -148,8 +141,8 @@
 }
 
 .workspace-tabs__add {
-  width: 32px;
-  height: 32px;
+  width: var(--density-control-height-sm);
+  height: var(--density-control-height-sm);
   flex: 0 0 auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);

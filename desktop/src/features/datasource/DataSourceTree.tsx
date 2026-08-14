@@ -293,11 +293,6 @@ export function DataSourceTree({
                       type="button"
                       key={table.id}
                       className={`hifi-tree-node ds-tree-table-row ${isSelected ? "active" : ""}`}
-                      draggable
-                      onDragStart={(event) => {
-                        event.dataTransfer.setData("text/plain", table.table_name);
-                        event.dataTransfer.effectAllowed = "copy";
-                      }}
                       onClick={(event) => onTableClick(table.table_name, event)}
                       onDoubleClick={() => onTableDoubleClick(table.table_name)}
                       onContextMenu={(event) => onNodeContextMenu(event, "table", table.table_name)}

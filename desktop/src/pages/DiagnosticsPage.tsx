@@ -32,7 +32,16 @@ interface DiagnosticLogGroup {
   exists: boolean;
   sizeBytes: number;
   modifiedAt: string | null;
-  content: string;
+  entries: DiagnosticLogEntry[];
+}
+
+interface DiagnosticLogEntry {
+  id: string;
+  sourceName: string;
+  timestamp: string;
+  level: string;
+  logger: string;
+  message: string;
 }
 
 type DiagnosticLogsView = Omit<DiagnosticLogsResponse, "environment"> & {
@@ -324,9 +333,39 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
                     {selectedGroup.exists ? `${formatBytes(selectedGroup.sizeBytes)}` : "未生成"}
                   </span>
                 </div>
-                <pre className="diagnostics-source-content">
-                  {selectedGroup.content || (selectedGroup.exists ? "无日志内容" : "日志文件不存在")}
-                </pre>
+                {selectedGroup.entries.length > 0 ? (
+                  <div className="diagnostics-log-list" role="table" aria-label={`${selectedGroup.label}内容`}>
+                    <div className="diagnostics-log-row diagnostics-log-row--header" role="row">
+                      <span role="columnheader">时间</span>
+                      <span role="columnheader">级别</span>
+                      <span role="columnheader">来源</span>
+                      <span role="columnheader">消息</span>
+                    </div>
+                    {selectedGroup.entries.map((entry) => (
+                      <div className="diagnostics-log-row" role="row" key={entry.id}>
+                        <time role="cell" dateTime={entry.timestamp || undefined} title={entry.timestamp || undefined}>
+                          {formatLogTime(entry.timestamp)}
+                        </time>
+                        <span
+                          role="cell"
+                          className={`diagnostics-log-level diagnostics-log-level--${logLevelTone(entry.level)}`}
+                        >
+                          {entry.level}
+                        </span>
+                        <span role="cell" className="diagnostics-log-origin" title={`${entry.sourceName}${entry.logger ? ` · ${entry.logger}` : ""}`}>
+                          {entry.logger || entry.sourceName}
+                        </span>
+                        <span role="cell" className="diagnostics-log-message" title={entry.message}>
+                          {entry.message}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="diagnostics-source-empty">
+                    {selectedGroup.exists ? "无日志内容" : "日志文件不存在"}
+                  </div>
+                )}
               </section>
             ) : null}
             {!loading && visibleGroups.length === 0 ? (
@@ -419,7 +458,7 @@ function emptyLogGroup(key: DiagnosticGroupKey, label: string): DiagnosticLogGro
     exists: false,
     sizeBytes: 0,
     modifiedAt: null,
-    content: "",
+    entries: [],
   };
 }
 
@@ -440,15 +479,56 @@ function finalizeLogGroup(group: DiagnosticLogGroup, showEmpty: boolean): Diagno
     exists: group.sources.some((source) => source.exists),
     sizeBytes: group.sources.reduce((total, source) => total + source.size_bytes, 0),
     modifiedAt: latestModifiedAt(group.sources),
-    content: contentSources.map(formatGroupedSourceContent).filter(Boolean).join("\n\n"),
+    entries: contentSources.flatMap(parseDiagnosticSource),
   };
 }
 
-function formatGroupedSourceContent(source: DiagnosticLogSource): string {
-  const state = source.exists ? formatBytes(source.size_bytes) : "missing";
-  const header = `--- ${source.name} | ${state} | ${source.path} ---`;
-  const body = source.content || (source.exists ? "无日志内容" : "日志文件不存在");
-  return `${header}\n${body}`;
+function parseDiagnosticSource(source: DiagnosticLogSource): DiagnosticLogEntry[] {
+  return source.content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      try {
+        const value = JSON.parse(line) as Record<string, unknown>;
+        return {
+          id: `${source.name}-${index}`,
+          sourceName: source.name,
+          timestamp: typeof value.timestamp === "string" ? value.timestamp : "",
+          level: typeof value.level === "string" ? value.level.toUpperCase() : "LOG",
+          logger: typeof value.logger === "string" ? value.logger : source.name,
+          message: typeof value.message === "string" ? value.message : line,
+        };
+      } catch {
+        return {
+          id: `${source.name}-${index}`,
+          sourceName: source.name,
+          timestamp: "",
+          level: "LOG",
+          logger: source.name,
+          message: line,
+        };
+      }
+    });
+}
+
+function formatLogTime(value: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function logLevelTone(level: string) {
+  const normalized = level.toLowerCase();
+  if (normalized === "error" || normalized === "fatal" || normalized === "critical") return "error";
+  if (normalized === "warn" || normalized === "warning") return "warning";
+  if (normalized === "debug" || normalized === "trace") return "muted";
+  return "info";
 }
 
 function latestModifiedAt(sources: DiagnosticLogSource[]): string | null {
