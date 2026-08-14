@@ -13,7 +13,9 @@ exclude = [
 [tool.pytest.ini_options]
 norecursedirs = [
     ".build_venv",
+    ".cache",
     ".git",
+    ".tmp",
     ".venv",
     "desktop/node_modules",
     "desktop/src-tauri/target",
