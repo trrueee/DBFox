@@ -295,6 +295,7 @@ def test_npm_lock_is_registry_resolved_and_integrity_verified() -> None:
     packages = lock["packages"]
     assert isinstance(packages, dict) and packages
     assert package["engines"]["node"] == ">=22.18.0"
+    assert package["packageManager"] == "npm@10.9.3"
     assert packages[""]["engines"]["node"] == package["engines"]["node"]
     assert 'NODE_VERSION: "22.18.0"' in workflow
 
@@ -306,6 +307,22 @@ def test_npm_lock_is_registry_resolved_and_integrity_verified() -> None:
         assert not package.get("link"), package_path
         assert str(package.get("resolved", "")).startswith("https://registry.npmjs.org/"), package_path
         assert re.fullmatch(r"sha512-[A-Za-z0-9+/=]+", str(package.get("integrity", ""))), package_path
+
+
+def test_frontend_security_floors_and_cross_platform_build_peers_are_locked() -> None:
+    package = json.loads(NPM_MANIFEST.read_text(encoding="utf-8"))
+    lock = json.loads(NPM_LOCK.read_text(encoding="utf-8"))
+    packages = lock["packages"]
+
+    assert package["overrides"] == {
+        "@hey-api/json-schema-ref-parser": {"js-yaml": "4.3.1"}
+    }
+    assert package["devDependencies"]["@emnapi/core"] == "2.0.0-alpha.4"
+    assert package["devDependencies"]["@emnapi/runtime"] == "2.0.0-alpha.4"
+    assert packages["node_modules/js-yaml"]["version"] == "4.3.1"
+    assert packages["node_modules/brace-expansion"]["version"] == "5.0.9"
+    assert packages["node_modules/@emnapi/core"]["version"] == "2.0.0-alpha.4"
+    assert packages["node_modules/@emnapi/runtime"]["version"] == "2.0.0-alpha.4"
 
 
 def test_cargo_lock_is_registry_resolved_and_checksum_verified() -> None:

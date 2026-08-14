@@ -66,10 +66,20 @@ DBFox 不直接使用该库，而是由 Paramiko 传递引入，因此通过标�
 依赖解析共同限制到 `cryptography>=50.0.0,<51.0.0`，避免为了安全版本约束重新制造一项
 虚假的直接运行时依赖。
 
-前端依赖事实以 `desktop/package.json` 和 `desktop/package-lock.json` 为准。当前项目不再
-依赖 Monaco，也没有为已删除依赖保留全局 npm override。新增或重新引入编辑器、HTML
-渲染器等高风险 UI 依赖时，必须先评估其传递依赖、许可证和浏览器攻击面，再运行完整
-前端回归、锁文件合同测试和在线 `npm audit`；不得为绕过审计增加无到期条件的 override。
+前端依赖事实以 `desktop/package.json` 和 `desktop/package-lock.json` 为准，并使用
+`packageManager: npm@10.9.3` 与 CI 的 Node 22.18.0 工具链保持一致。`@emnapi/core` 和
+`@emnapi/runtime` 是跨平台 Vite/Rolldown WASM 构建路径声明的必需 peer；将它们列为
+开发依赖，是为了让 Windows 生成的 lockfile 也完整描述 Linux Runner 所需的依赖图，
+它们不是桌面应用运行时能力。
+
+`@hey-api/json-schema-ref-parser@1.4.4` 把 `js-yaml` 固定在受
+`GHSA-52cp-r559-cp3m` 和 `GHSA-5p4m-2wfm-xmqj` 影响的 4.2.0，因此仅在该真实上游边界
+使用 npm 官方 `overrides` 机制提升到修复版 4.3.1。`brace-expansion` 则通过正常的
+传递依赖更新提升到修复版 5.0.9，不建立 override。上游解除精确版本限制后，应删除
+`js-yaml` override 并重新生成锁文件。当前项目不再依赖 Monaco，也不为已删除依赖保留
+全局 override。新增或重新引入编辑器、HTML 渲染器等高风险 UI 依赖时，必须先评估其
+传递依赖、许可证和浏览器攻击面，再运行完整前端回归、锁文件合同测试和在线
+`npm audit`；不得为绕过审计增加无明确上游退出条件的 override。
 
 ## 作者身份与正式产物来源
 

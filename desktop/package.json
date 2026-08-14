@@ -4,6 +4,7 @@
   "engines": {
     "node": ">=22.18.0"
   },
+  "packageManager": "npm@10.9.3",
   "version": "1.0.3",
   "type": "module",
   "scripts": {
@@ -71,6 +72,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@emnapi/core": "2.0.0-alpha.4",
+    "@emnapi/runtime": "2.0.0-alpha.4",
     "@hey-api/openapi-ts": "^0.99.0",
     "@tauri-apps/cli": "^2.11.2",
     "@testing-library/jest-dom": "^6.9.1",
@@ -92,5 +95,10 @@
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",
     "vitest": "^4.1.8"
+  },
+  "overrides": {
+    "@hey-api/json-schema-ref-parser": {
+      "js-yaml": "4.3.1"
+    }
   }
 }
