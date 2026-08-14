@@ -248,8 +248,22 @@ def _git_source_facts() -> dict[str, object]:
         text=True,
         check=False,
     )
-    status = subprocess.run(
-        ["git", "status", "--porcelain=v1", "--untracked-files=normal"],
+    unstaged = subprocess.run(
+        ["git", "diff", "--quiet", "--ignore-submodules", "--"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    staged = subprocess.run(
+        ["git", "diff", "--cached", "--quiet", "--ignore-submodules", "--"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"],
         cwd=str(ROOT),
         capture_output=True,
         text=True,
@@ -260,11 +274,17 @@ def _git_source_facts() -> dict[str, object]:
         character not in "0123456789abcdef" for character in revision
     ):
         raise RuntimeError("Unable to resolve the Git commit for Sidecar provenance")
-    if status.returncode != 0:
+    if unstaged.returncode not in (0, 1) or staged.returncode not in (0, 1):
+        raise RuntimeError("Unable to inspect tracked Git changes for Sidecar provenance")
+    if untracked.returncode != 0:
         raise RuntimeError("Unable to inspect the Git worktree for Sidecar provenance")
     return {
         "source_git_commit": revision,
-        "source_git_dirty": bool(status.stdout.strip()),
+        "source_git_dirty": (
+            unstaged.returncode == 1
+            or staged.returncode == 1
+            or bool(untracked.stdout)
+        ),
     }
 
 

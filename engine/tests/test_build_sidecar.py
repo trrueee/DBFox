@@ -422,6 +422,45 @@ def test_target_triplet_fails_closed_when_rustc_fails(monkeypatch) -> None:
         build_sidecar.get_target_triplet()
 
 
+def test_git_source_facts_use_content_diffs_instead_of_status_metadata(
+    monkeypatch,
+) -> None:
+    observed: list[list[str]] = []
+
+    def run(command, **_kwargs):
+        observed.append(command)
+        if command == ["git", "rev-parse", "HEAD"]:
+            return subprocess.CompletedProcess(command, 0, "a" * 40 + "\n", "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(build_sidecar.subprocess, "run", run)
+
+    assert build_sidecar._git_source_facts() == {
+        "source_git_commit": "a" * 40,
+        "source_git_dirty": False,
+    }
+    assert ["git", "status", "--porcelain=v1", "--untracked-files=normal"] not in observed
+    assert ["git", "diff", "--quiet", "--ignore-submodules", "--"] in observed
+
+
+@pytest.mark.parametrize("dirty_command", ["unstaged", "staged", "untracked"])
+def test_git_source_facts_detect_content_changes(monkeypatch, dirty_command) -> None:
+    def run(command, **_kwargs):
+        if command == ["git", "rev-parse", "HEAD"]:
+            return subprocess.CompletedProcess(command, 0, "b" * 40 + "\n", "")
+        if dirty_command == "unstaged" and command[:3] == ["git", "diff", "--quiet"]:
+            return subprocess.CompletedProcess(command, 1, "", "")
+        if dirty_command == "staged" and command[:3] == ["git", "diff", "--cached"]:
+            return subprocess.CompletedProcess(command, 1, "", "")
+        if dirty_command == "untracked" and command[:3] == ["git", "ls-files", "--others"]:
+            return subprocess.CompletedProcess(command, 0, "local.tmp\0", "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(build_sidecar.subprocess, "run", run)
+
+    assert build_sidecar._git_source_facts()["source_git_dirty"] is True
+
+
 def test_release_sync_requires_uv(monkeypatch, tmp_path, capsys) -> None:
     lock = tmp_path / "requirements-build.lock"
     lock.write_text("", encoding="utf-8")
