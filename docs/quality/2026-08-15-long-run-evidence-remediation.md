@@ -158,3 +158,57 @@ git diff --check
 最终回归结果：Python `1096 passed, 4 skipped`；前端 `80 files / 350 tests`；生产构建、ESLint、设计合同和测试 TypeScript 均通过；Rust `27 passed`，Clippy `-D warnings` 与 rustfmt 通过。npm 官方审计的 production 依赖为 `0` 个已知漏洞；真实 Provider 场景仍保持 opt-in，本轮未消耗模型额度。
 
 上述 Commit 均可独立回滚；未新增 Provider 兼容层、第二套 Agent Runtime、第二套 Artifact 模型或自然语言 Run 分类器。Windows 安装包在本记录提交后由干净工作树构建，其文件名、大小和 SHA-256 作为本轮交付证据单独记录；macOS/Linux 未验证。
+
+## 8. 真实长任务复验：元数据连接池耗尽
+
+### 8.1 现象与证据
+
+2026-08-15 对 Windows 安装态再次执行复杂分析时，Run
+`run_6500ac41ed8240039856bd07e0b9bc62` 已完成目录探索、Schema 检查、
+四次数据预览、五次 SQL 校验和五次只读执行，并保存 9 个 Result
+Artifact。第 8 个 Turn 在模型流式输出期间失败；不是 Turn 或 Tool 预算耗尽。
+
+引擎日志中的直接异常为：
+
+```text
+sqlalchemy.exc.TimeoutError: QueuePool limit of size 20 overflow 20 reached,
+connection timed out, timeout 30.00
+```
+
+调用链为：
+
+```text
+RunLoop._publish_stream
+  -> RunControl.checkpoint
+  -> RunRepository.get
+  -> metadata Engine QueuePool checkout timeout
+```
+
+同一时间还出现三次 `query_history_write TimeoutError`。静态检查确认
+`_write_query_history` 在调用者 Session 已持有元数据连接时，又针对同一 Engine
+创建第二个 Session。Agent 执行和工件分页并发时，每个查询可能占用两条元数据
+连接，能够形成“所有调用者都持有第一条连接并等待第二条连接”的池耗尽窗口。
+
+### 8.2 决策
+
+采用 SQLAlchemy 的 Session 工作单元语义：QueryHistory 与其 FTS 搜索文档加入
+调用者已有事务，由现有 Tool、Console 或 API 边界决定 commit/rollback。
+写入使用同一 Session 的 savepoint 保持最佳努力语义；索引失败不会迫使调用者
+再取一条连接，也不会留下半份历史/索引数据。
+
+未采用：
+
+- 不扩大 `pool_size` 或 `max_overflow`，因为这只能推迟嵌套取连接死锁；
+- 不建立 QueryHistory 专用 Engine、后台队列或第二套持久化链；
+- 不把 QueryHistory 提升为独立安全审计。安全审计仍由现有
+  `SecurityAuditService` 合同负责；普通查询历史随所属工作单元提交或回滚；
+- 不修改 Run、Turn、收尾预算或 Provider 流协议，因为现场证据已排除这些根因。
+
+### 8.3 验收标准
+
+- 在 `pool_size=1`、`max_overflow=0` 且调用者已占用唯一连接时，查询历史和 FTS
+  文档仍能写入并提交；
+- 写入期间 `checkedout()` 始终为 1，不发生嵌套连接 checkout；
+- SQL 执行、数据预览、Result View、Agent 取消检查和查询历史搜索不退化；
+- 数据库连接/事务的未知异常仍按既有边界令操作失败，不由 Agent 伪装成成功；
+- 不通过增加池容量、重试或吞掉 Run 错误来满足测试。
