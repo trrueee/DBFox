@@ -96,6 +96,8 @@ desktop/src-tauri/.tauri/
 # ============================================================
 # Generated Artifacts
 # ============================================================
+.cache/
+.tmp/
 .arts/
 artifacts/*.json
 artifacts/*_report*.md
