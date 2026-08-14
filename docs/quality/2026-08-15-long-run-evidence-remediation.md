@@ -212,3 +212,46 @@ RunLoop._publish_stream
 - SQL 执行、数据预览、Result View、Agent 取消检查和查询历史搜索不退化；
 - 数据库连接/事务的未知异常仍按既有边界令操作失败，不由 Agent 伪装成成功；
 - 不通过增加池容量、重试或吞掉 Run 错误来满足测试。
+
+## 9. 真实长任务复验：收尾阶段越界工具调用
+
+### 9.1 现象与证据
+
+安装态 Run `run_c71faec7edbd4fd8979154135fb23ec0` 完成 15 个 Turn，保存了
+12 个 Result Artifact，并在 `result_json.focus` 中进入 `synthesize`。这次运行
+没有耗尽硬 Turn、Tool 或 Token 预算，也没有再次出现元数据连接池超时。
+
+第 15 个 Turn 已按收尾合同只物化 `result_inspect` 和 `update_plan`，但 Provider
+仍返回了 `sql_execute_readonly`。`RunLoop._dispatch_tool_calls` 在进入既有
+ToolDispatcher admission 边界前，为判断调用是否计入预算直接执行
+`prepared.tools.require(call.name)`，因此抛出：
+
+```text
+KeyError: 'Tool is not materialized for this Turn: sql_execute_readonly'
+```
+
+ToolDispatcher 本来已经能够把未物化工具结算为持久化 `UNKNOWN_TOOL`
+Observation；RunLoop 的提前解引用绕过了这条正式边界，才把可恢复的模型合同错误
+升级成 `AGENT_RUNTIME_ERROR`。
+
+### 9.2 决策
+
+预算分类只读取本 Turn 已物化的工具。未物化调用不计入数据工具预算，并交给现有
+ToolDispatcher admission 结算为 `UNKNOWN_TOOL`；下一 Turn 可以读取固定、安全的
+Observation，更新计划并使用已有结果形成最终回答。
+
+未采用：
+
+- 不重新开放 SQL 工具或放宽收尾工具集合；
+- 不根据 Provider 名称增加兼容分支；
+- 不自动执行模型请求的隐藏工具；
+- 不把 `KeyError` 加入通用异常吞噬列表；
+- 不通过提高 Turn、Tool 或 Token 预算掩盖边界错误。
+
+### 9.3 验收标准
+
+- 收尾阶段对未披露数据工具的调用产生 `rejected / UNKNOWN_TOOL` Tool Invocation；
+- 未披露调用不消耗数据工具预算，也不执行数据库 I/O；
+- Provider 下一 Turn 能看到对应 function output；
+- 已有 Result Artifact、Task Plan 和内联 Evidence 仍可完成正式回答；
+- 未知数据库、事务、lease 或持久化异常仍令 Run 失败。

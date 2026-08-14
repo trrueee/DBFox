@@ -925,6 +925,89 @@ class FinalizationReserveModel:
         )
 
 
+class UnavailableToolDuringFinalizationModel:
+    """Ignore the narrowed tool list once, then recover from its observation."""
+
+    def __init__(
+        self,
+        call_number: int,
+        *,
+        state: dict[str, str],
+    ) -> None:
+        self.call_number = call_number
+        self.state = state
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        if self.call_number <= 2:
+            yield from ScriptedModel(self.call_number).stream(
+                messages=messages,
+                tools=tools,
+                timeout_seconds=timeout_seconds,
+                cancellation_probe=cancellation_probe,
+            )
+            return
+
+        available = {str(item.get("name") or "") for item in tools}
+        assert available == {"result_inspect", "update_plan"}
+        serialized = json.dumps(messages, ensure_ascii=False)
+        assert "synthesize" in serialized
+        if self.call_number == 3:
+            execute_output = next(
+                item
+                for item in messages
+                if item.get("type") == "function_call_output"
+                and item.get("call_id") == "execute"
+            )
+            observation = json.loads(str(execute_output["output"]))
+            result_artifact_id = next(
+                artifact_id
+                for artifact_id in observation["artifact_ids"]
+                if str(artifact_id).startswith("artifact_")
+            )
+            self.state["result_artifact_id"] = str(result_artifact_id)
+            yield from _tool_turn(
+                "unavailable-during-finalization",
+                "sql_execute_readonly",
+                {"validation_artifact_id": "artifact_not_available"},
+            )
+            return
+
+        if self.call_number == 4:
+            unavailable_output = next(
+                item
+                for item in messages
+                if item.get("type") == "function_call_output"
+                and item.get("call_id") == "unavailable-during-finalization"
+            )
+            observation = json.loads(str(unavailable_output["output"]))
+            assert observation["status"] == "rejected"
+            assert observation["error_code"] == "UNKNOWN_TOOL"
+            result_artifact_id = self.state["result_artifact_id"]
+            yield from _tool_turn(
+                "settle-plan-after-unavailable-call",
+                "update_plan",
+                {
+                    "objective": "统计订单数量并给出可验证结论",
+                    "steps": [
+                        {
+                            "id": "count",
+                            "title": "统计订单数量",
+                            "status": "completed",
+                            "evidence_required": True,
+                            "artifact_ids": [result_artifact_id],
+                        }
+                    ],
+                    "summary": "查询已完成，正在形成最终回答。",
+                },
+            )
+            return
+
+        result_artifact_id = self.state["result_artifact_id"]
+        yield from _final_turn(
+            f"当前结果共有 42 条订单。{{{{cite:{result_artifact_id}}}}}"
+        )
+
+
 class BudgetAnswerModel:
     def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
         content = "已完成当前预算内的分析。"
@@ -1723,6 +1806,87 @@ def test_finalization_reserve_synthesizes_before_the_hard_tool_limit(
             "result_inspect",
             "update_plan",
         }
+
+
+def test_unavailable_tool_during_finalization_is_rejected_without_failing_run(
+    db_session,
+    test_datasource,
+) -> None:
+    session_id = "session-finalization-unavailable-tool"
+    db_session.add(
+        AgentSession(
+            id=session_id,
+            datasource_id=str(test_datasource.id),
+            title="Finalization unavailable tool",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="统计订单数量并给出可验证结论",
+        idempotency_key="finalization-unavailable-tool",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id=session_id, owner="worker", ttl_seconds=120)
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    calls = {"count": 0}
+    model_state: dict[str, str] = {}
+
+    def model_factory(_settings):
+        calls["count"] += 1
+        return UnavailableToolDuringFinalizationModel(
+            calls["count"],
+            state=model_state,
+        )
+
+    registry = (
+        ToolRegistry()
+        .register(ValidateTool())
+        .register(ExecuteTool())
+        .register(ResultInspectTool())
+        .register(UpdatePlanCommand())
+    )
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=registry,
+        definition=AgentDefinition(
+            limits=RunLimits(
+                max_turns=8,
+                max_tool_invocations=4,
+                finalization_turn_reserve=2,
+                finalization_tool_reserve=2,
+            )
+        ),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    answer = db_session.get(AgentMessage, admission.assistant_message_id)
+    rejected = (
+        db_session.query(AgentToolInvocation)
+        .filter_by(
+            run_id=admission.run_id,
+            provider_call_id="unavailable-during-finalization",
+        )
+        .one()
+    )
+    assert run is not None and run.status == "completed"
+    assert answer is not None and answer.content.startswith("当前结果共有 42 条订单")
+    assert rejected.status == "rejected"
+    assert rejected.error_code == "UNKNOWN_TOOL"
+    assert calls["count"] == 5
 
 
 def test_no_progress_returns_bounded_partial_when_verified_result_exists(

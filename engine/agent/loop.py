@@ -582,7 +582,17 @@ class RunLoop:
     ) -> bool:
         for call in result.tool_calls:
             state.control.checkpoint()
-            counts_toward_budget = prepared.tools.require(call.name).kind != "control"
+            try:
+                frozen_tool = prepared.tools.require(call.name)
+            except KeyError:
+                # Admission owns unavailable-tool rejection and returns a durable,
+                # model-visible observation.  Do not let budget classification turn
+                # a provider-authored call outside this Turn's frozen contract into
+                # a Run-level infrastructure failure.
+                frozen_tool = None
+            counts_toward_budget = (
+                frozen_tool is not None and frozen_tool.kind != "control"
+            )
             if (
                 counts_toward_budget
                 and state.tool_count >= self.definition.limits.max_tool_invocations
