@@ -24,14 +24,14 @@
     "build_python_build": "20260610",
     "build_python_version": "3.14.6",
     "dbfox_version": "1.0.3",
-    "engine_source_sha256": "7b31bd173654613db29358e935ccf81466816fbb77c5c7cc3bca3a2cf87abacc",
+    "engine_source_sha256": "f83b09249b8d6a9baf3438ed29cc0300fd9dadff6698d36fd397bcd7a7e1ce68",
     "frozen": true,
     "machine": "AMD64",
     "platform": "Windows-11-10.0.26200-SP0",
     "python_implementation": "CPython",
     "python_version": "3.14.6",
     "schema_version": 2,
-    "source_git_commit": "b8b02f684e70e6396848c3cb75915067430e75bb",
+    "source_git_commit": "de378f94e64d85156edec13a671752239900d7d8",
     "source_git_dirty": false,
     "sqlite_compile_options": [
       "ATOMIC_INTRINSICS=0",
@@ -92,7 +92,7 @@
   },
   "schema_version": 3,
   "sidecar_filename": "dbfox-engine-x86_64-pc-windows-msvc.exe",
-  "sidecar_sha256": "44577f48cb6694ede235da642d65a5dd0d27412fcc98ebeccf00b9bd03d65fa2",
+  "sidecar_sha256": "584a5f6817e1ff90c0074a17b2721fad0f6b7301adf3a0480ce5daf7955b7f5a",
   "target_sqlite_version": "3.53.4",
   "target_triplet": "x86_64-pc-windows-msvc"
 }
