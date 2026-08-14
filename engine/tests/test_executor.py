@@ -272,6 +272,62 @@ class TestExecutorSQLite:
 
 
 class TestPerformanceAndExplain:
+    def test_query_history_reuses_the_callers_single_pooled_connection(
+        self,
+        tmp_path,
+        metadata_template_file,
+    ) -> None:
+        """Query history must not deadlock on a nested checkout from the same pool."""
+        from shutil import copy2
+
+        from sqlalchemy import create_engine, text
+        from sqlalchemy.orm import sessionmaker
+
+        from engine.models import QueryHistory
+        from engine.persistence.search_index import SearchIndexService
+        from engine.sql.executor import _write_query_history
+
+        database_path = tmp_path / "single-connection-metadata.db"
+        copy2(metadata_template_file, database_path)
+        engine = create_engine(
+            f"sqlite:///{database_path.as_posix()}",
+            connect_args={"check_same_thread": False},
+            pool_size=1,
+            max_overflow=0,
+            pool_timeout=0.05,
+        )
+        Session = sessionmaker(bind=engine)
+        try:
+            with Session() as db:
+                # Keep the pool's only connection checked out.  A nested Session
+                # on this Engine would time out here instead of recording history.
+                db.execute(text("SELECT 1"))
+                history = QueryHistory(
+                    data_source_id="single-pool-datasource",
+                    question="single pool history",
+                    submitted_sql="SELECT 1",
+                    generated_sql="SELECT 1",
+                    safe_sql="SELECT 1",
+                    executed_sql="SELECT 1",
+                    guardrail_result="passed",
+                    execution_status="success",
+                )
+
+                history_id = _write_query_history(db, history)
+
+                assert history_id == history.id
+                assert engine.pool.checkedout() == 1
+                db.commit()
+
+            with Session() as verify_db:
+                assert verify_db.get(QueryHistory, history_id) is not None
+                assert SearchIndexService(verify_db).search_query_history(
+                    "single pool",
+                    datasource_id="single-pool-datasource",
+                ) == [history_id]
+        finally:
+            engine.dispose()
+
     def test_execute_query_latency_metrics(self, db_session_module, test_datasource_module) -> None:
         sync_schema(db_session_module, test_datasource_module.id)
         res = execute_query(db_session_module, test_datasource_module.id, "SELECT id, username FROM users LIMIT 3")

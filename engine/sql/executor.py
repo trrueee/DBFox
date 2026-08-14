@@ -49,39 +49,30 @@ from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
 from engine.policy.authority import ExecutionAuthority
 
 
+logger = logging.getLogger("dbfox.sql.executor")
+
+
 def _sql_execution_failure_message() -> str:
     return fixed_error_message(FixedErrorCode.SQL_EXECUTION_FAILED)
 
 
 def _write_query_history(db: Session, history: QueryHistory) -> str | None:
-    """Persist a QueryHistory record in an isolated audit session.
+    """Stage query history and its search document in the caller's transaction.
 
-    Returns the history record ID on success, or ``None`` if the write fails.
-    The independent session prevents the audit log from participating in the
-    caller's transaction (history must survive a caller rollback).
-    Also populates the FTS5 index for query history search.
+    Query history is part of the query work unit, not an independently durable
+    security audit.  Reusing the caller's Session avoids a nested checkout from
+    the same bounded metadata pool while leaving commit/rollback ownership at
+    the API or Tool boundary.  A savepoint keeps this best-effort projection
+    from invalidating the caller's outer transaction when indexing fails.
     """
-    from sqlalchemy.orm import sessionmaker
-
-    audit_db = sessionmaker(bind=db.get_bind())()
     try:
-        audit_db.add(history)
-        audit_db.commit()
-        try:
-            SearchIndexService(audit_db).index_query_history(history)
-            audit_db.commit()
-        except Exception as exc:
-            audit_db.rollback()
-            log_unexpected_exception(
-                logger,
-                operation=SafeLogOperation.QUERY_HISTORY_INDEX_POPULATE,
-                exc=exc,
-                level="warning",
-            )
+        with db.begin_nested():
+            db.add(history)
+            db.flush()
+            SearchIndexService(db).index_query_history(history)
         history_id = getattr(history, "id", None)
         return str(history_id) if history_id else None
     except Exception as exc:
-        audit_db.rollback()
         log_unexpected_exception(
             logger,
             operation=SafeLogOperation.QUERY_HISTORY_WRITE,
@@ -89,9 +80,6 @@ def _write_query_history(db: Session, history: QueryHistory) -> str | None:
             level="warning",
         )
         return None
-    finally:
-        audit_db.close()
-logger = logging.getLogger("dbfox.sql.executor")
 
 
 
