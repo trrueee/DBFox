@@ -6,479 +6,536 @@
 >
 > 最后核验：2026-08-16
 >
+> 基线：`main@daa99d048decd7f5f8dc010cbe5465f332686a3c`
+>
 > 上位 RFC：[DBFox 可扩展 Runtime 与 Workbench 架构计划](./extensible-runtime-workbench-program.md)
 
 ## 1. 目标
 
-本指南将 Runtime Extension、Memory v4 和 Workbench Shell 三条架构线拆成可审查、可回滚、可独立验收的 PR 序列。
+把 Runtime Extension、Memory v4、Artifact/Completion 和 Workbench Shell 拆成小 PR，并确保实现不会为了未来完整性提前建立无真实使用者的层级。
 
-禁止三条线各自形成长期大分支后再集成。每个 PR 必须：
+每个 PR 必须：
 
-- 保持 main 可运行；
-- 不把目标 ADR 描述成已实现能力；
-- 有 characterization/contract test；
-- 明确新增 seam 与本阶段非目标；
-- 同步更新受影响当前状态文档；
-- 有 feature flag、shadow path 或兼容读取时，写清退出条件和删除时间。
+- main 可运行；
+- 先有 characterization test；
+- 新抽象说明至少两个真实变化点，或明确是短期 migration facade；
+- 不复制 canonical state；
+- 不新增无必要 DTO/Mapper/Manager；
+- 数据结构的 identity/order/bounds 先于 Service class；
+- 同步更新当前实现文档；
+- feature flag/compat path 写清删除条件。
 
-## 2. 总体依赖图
+## 2. 总体顺序
 
 ```text
-P0 RFC / ADR / characterization
-        ↓
-P1 minimal Extension bootstrap
-        ↓
-P2 Memory v4 shadow ──────────────┐
-        ↓                          │
-P3 Artifact envelope + Completion │
-        ↓                          │
-P4 Workbench Shell V2              │
-        ↓                          │
-P5 InvocationContext / Environment │
-        ↓                          │
-P6 isolated_process protocol       │
-        ↓                          │
-P7 Workspace read-only Extension ◄─┘
-        ↓
-P8 Patch write
-        ↓
-P9 Terminal / Tests
-        ↓
+P0.5 implementation refinement / characterization
+  ↓
+P1 minimal Extension ownership
+  ↓
+P2 Memory v4 P0 + catalog_revision
+  ↓
+P3 Artifact open type + Completion constraint
+  ↓
+P4 Workbench Shell V2
+  ↓
+P5 Database + Workspace resource boundary
+  ↓
+P6 isolated execution attempt runner
+  ↓
+P7 Workspace read-only vertical slice
+  ↓
+P8 Patch write with CAS
+  ↓
+P9 Terminal / real external bindings
+  ↓
 P10 second Extension proof
 ```
 
-P2 是当前产品 P0，不应被全套 Registry 或前端迁移阻塞。P4 可以与 P2 的后半段并行，但共享 wire contract 的改动必须先进入 P3。
+P2 是跨 Run 连续性的产品 P0，不被“先做完整 Extension Framework”阻塞。
 
-Native/API/MCP/Command Binding 的架构合同在本轮文档中冻结，但不会为了理论完整性预先实现一个通用 MCP client 或万能 Terminal。外部 Provider adapter 按第一个真实集成需求进入 P5 之后的实现阶段，并必须复用同一 Tool materialization、Policy、Observation、Artifact、Effect 和 recovery contract。
+## 3. P0.5 — 实现前纠偏与 characterization
 
-## 3. Phase 0 — RFC、ADR 与 characterization
+本阶段就是实现前最后一道架构门。
 
-### 目标
+### 必须固定的当前合同
 
-冻结共同术语、两个 Kernel、Canonical truth、Extension contribution、ContextSnapshot/PromptBundle、Effect 非事实源、Workbench ownership、Tool execution binding 和 isolated-process 威胁模型。
+Backend：
 
-### PR 切片
+- `register_dbfox_tools()` 当前注册集合和 materialization hash；
+- Tool input/output/Policy/Execution/Semantics parity；
+- ToolExecutor deadline/retry/cancel/quarantine；
+- completed/failed/cancelled terminal transaction；
+- Memory v3 当前 write/read；
+- Catalog search/inspect facts bounds；
+- Artifact batch validation；
+- Completion query-result citation behavior。
 
-1. 合入本 RFC/ADR/指南；
-2. 给当前 Tool registry/materialization、Artifact contract、CompletionPolicy、Memory v3、Context budget 和 frontend Workspace 建 characterization tests；
-3. 记录当前 AgentBench continuity baseline 和 frontend workflow baseline。
+Frontend：
+
+- Conversation stream/cancel/approval/question；
+- SQL draft/execute/result/error；
+- Table Preview/Schema/ER；
+- MultiTable；
+- Artifact open/render；
+- Project list/create；
+- Datasource create/edit/test/sync；
+- Settings / command palette / shortcuts。
 
 ### 退出条件
 
-- 文档 review 通过；
-- 所有现有核心测试绿色；
-- baseline report 保存 commit/model/provider/test data；
-- 团队确认旧 review 不再是独立实施合同。
+- 本轮 correction ADR 合入；
+- characterization tests 绿色；
+- baseline AgentBench continuity 记录 commit/model/provider/dataset；
+- 团队确认下列内容不作为实现前置：Effect P0、dependency graph、万能 Environment、第二套 Tool fingerprint、Project≈Datasource adapter。
 
-## 4. Phase 1 — 最小 Extension bootstrap
+## 4. P1 — 最小 Extension ownership
 
 ### 目标
 
-建立 Manifest、namespaced ID、依赖/冲突校验、确定性注册顺序和 freeze，不改变产品行为。
+只建立“谁拥有 contribution”和“serving 后不可变”的 seam，不改变 Tool 行为。
 
-### PR 切片
+### PR 1：注册所有权拆分
 
-1. `ExtensionId`/version/dependency/manifest 基础模型；
-2. `register_builtin_data_extension()` 包装现有 `register_dbfox_tools()`；
-3. Registry fingerprint 基础设施，仅计算实际启用贡献；
-4. contract tests：duplicate、dependency mismatch、order、freeze、current Tool schema parity。
+把现有组合注册拆成：
 
-### 约束
+```text
+register_core_functions
+register_conversation_functions
+register_data_extension
+```
 
-- 不一次实现所有贡献 Registry；
-- 不改变 Tool 名、version、input/output schema、Policy 或 materialization hash，除非有显式 migration；
-- 不引入动态发现、第三方加载或 Extension Host；
-- 不实现自动发现任意 MCP Server 并把所有 Tool 直接透传给模型。
+保留 `register_dbfox_tools()` facade 作为短期组合入口。
+
+要求：
+
+- Control/Conversation 不误归 `dbfox.data`；
+- Tool 真实对象直接进 Registry；
+- 不创建 ToolContribution DTO；
+- existing Tool materialization hash parity 100%。
+
+### PR 2：owner/duplicate/freeze
+
+为实际已启用 Registry 增加：
+
+- owner ID；
+- duplicate contribution ID check；
+- `freeze()`；
+- freeze 后 mutation test。
+
+P1 不实现 dependency graph。出现第二个有真实依赖的 Extension 时另开 ADR/PR，使用拓扑排序。
 
 ### 回滚
 
-保留旧 `register_dbfox_tools()` facade，直到所有启动路径切到 manifest 且 parity tests 稳定。
+删除新组合入口，旧 facade 仍可直接构建原 Registry。
 
-## 5. Phase 2 — Memory v4 P0
+## 5. P2 — Memory v4 P0
 
-### 2.1 Catalog revision
+P2 解决真正的 Context continuity。
 
-PR：
+### 5.1 PR：Catalog publication transaction + revision
 
-- DataSource migration 增加 `catalog_revision`；
-- 所有 search-visible Catalog mutation 同事务 bump；
-- Catalog Tool Observation/Effect 记录执行时 revision；
-- 失败不 bump、Run 外 mutation、AI enrichment 和 read-time fence 测试。
+先修正 transaction ownership，再加 revision。
 
-### 2.2 Effect/Projection contracts
+工作：
 
-PR：
+- `DataSource.catalog_revision` migration；
+- Catalog authoritative publication 与 SearchDoc publication 同一短事务；
+- AI enrichment 移除内部 commit/rollback 对外层 transaction 的破坏；
+- LLM call 放在数据库写 transaction 外；
+- enrichment 写入前 re-check schema/generation；
+- DB atomic `catalog_revision = catalog_revision + 1`；
+- Catalog Tool output/Observation 冻结 execution-time revision。
 
-- Effect envelope/registry/storage；
-- Catalog Effect payload models；
-- Memory v4 envelope/models/policy；
-- pure Catalog Projector；
-- Repository/Service/Rebuilder 边界；
-- no rows/secret/schema-copy tests。
+测试：
 
-### 2.3 Terminal consolidation
+- successful refresh bumps；
+- failed publication no bump；
+- AI enrichment publication bumps；
+- concurrent publication revision monotonic；
+- observation revision 不在 terminal 时倒填。
 
-PR：
+### 5.2 PR：Memory v4 typed models + Catalog reducer
 
-- completed/failed/cancelled 共用 projection service；
-- fold eligible succeeded Effect；
-- unknown/failed/cancelled/rejected exclusion；
-- Run recovery independence；
-- terminal transaction rollback test。
+新增：
 
-### 2.4 Shadow projection/rebuild
+```text
+SessionMemoryStateV4
+SessionMemoryCore
+SessionProjectionEnvelope
+CatalogProjectionScope
+CatalogWorkingState
+CatalogObjectKey
+CatalogObjectState
+SearchFootprint
+```
 
-PR：
+实现 pure Data-owned Catalog reducer，输入直接来自 canonical Invocation/Observation。
 
-- v3 正常写入；
-- v4 shadow 增量计算；
-- compare-mode full rebuild；
-- hash/watermark/fingerprint telemetry；
-- strict missing-projector semantics；
-- migration/repair command 或内部 service。
+**不新增 Effect storage/registry。**
 
-### 2.5 Context integration
+算法必须满足：
 
-PR：
+- temporary object hash map O(1) merge；
+- search <= 12；
+- objects <= 32；
+- deterministic eviction；
+- deterministic canonical serialization/hash。
 
-- typed Context Memory；
-- read-time datasource/generation/revision fence；
-- prior Observation bounded digest；
-- SESSION_WORKING_STATE/SESSION_EVIDENCE_INDEX renderer；
-- token cap/priority/source telemetry；
+### 5.3 PR：统一 terminal fold
+
+completed/failed/cancelled 都在同一 terminal transaction 调用 projection service。
+
+规则：
+
+- only succeeded Observation；
+- watermark by session_sequence；
+- duplicate apply no-op；
+- gap detection；
+- projection failure 与 terminal transaction 一起失败，避免提交“terminal 已发布但 Memory 水位线假装已推进”的状态。
+
+Memory 仍不参与 same-Run recovery correctness。若后续实践证明 derived projection failure 不应阻塞 terminal publication，必须通过独立 ADR 定义 catch-up/outbox 语义，不能在实现里临时 best-effort skip。
+
+### 5.4 PR：shadow + rebuild
+
+- v3 继续当前写；
+- v4 shadow incremental；
+- full rebuild 调**同一 reducer**；
+- compare hash telemetry；
+- strict/compare/repair modes；
+- missing projector incomplete semantics。
+
+禁止写第二套 rebuild merge 算法。
+
+### 5.5 PR：Context rehydration
+
+- typed context-facing Memory；
+- datasource/generation/revision read fence；
+- deterministic prior Observation selection；
+- <=8 object digest；
+- SESSION_WORKING_STATE / SESSION_EVIDENCE_INDEX；
+- <=2,000 estimated token working-state budget；
 - feature flag 切 v4 Context。
 
-### 2.6 Cutover
+第一版不使用 LLM/embedding 做 prior digest selection。
 
-切换条件：
+### 5.6 P2 cutover gate
 
-- deterministic tests 100%；
-- shadow incremental/rebuild hash match 100%；
-- continuity baseline 不回归；
-- no secret/result-value violations；
-- long-session tokens 进入平台期；
-- failed/cancelled continuation 场景通过。
+- incremental/full rebuild hash match 100% in deterministic suite；
+- failed/cancelled continuity scenarios pass；
+- no rows/full schema/secret in Memory；
+- 10/50/100 Run state bytes/tokens 达平台期；
+- AgentBench 无理由 exact Catalog duplicate 显著下降；
+- rollback 可切回 v3 Context。
 
-切换后停止写 v3；保留一个明确回退窗口，再删除 raw dict compatibility。
+达到稳定窗口后停止 v3 write，再删除 raw dict compatibility。
 
-## 6. Phase 3 — Artifact envelope 与 Data Completion Rule
+## 6. P3 — Artifact 与 Completion
 
-### 3.1 Artifact expand
+### 6.1 PR：Artifact open type
 
-PR：
+当前 DB column `type` 保留。
 
-- 添加 `type_id/schema_version` compatible read；
-- Kernel envelope validator；
-- Data Artifact contracts 注册；
-- existing enum/API adapter；
-- unknown historical Artifact fallback；
-- payload limit/rows/secret/ownership tests。
+改：
 
-### 3.2 Wire/frontend compatible read
+```text
+ArtifactType enum → validated string boundary
+add schema_version
+validator map[(type, schema_version)]
+```
 
-PR：
+保持：
 
-- OpenAPI/wire 使用 string `type_id` + schema version + JSON payload；
-- 旧 known type adapter 保持现有 UI；
-- unknown Artifact metadata projection；
-- generated client synchronized。
+- existing `sql/safety/result_view/chart/markdown/error/...` ID；
+- `Artifact.version` 的 semantic-key version 语义；
+- current Artifact relations；
+- current payload aliases；
+- batch prepare-before-write algorithm。
 
-### 3.3 Completion split
+unknown historical read fallback；unknown new write reject。
 
-PR：
+不做 `type → type_id → legacy mapper` 双字段长期兼容。
 
-- Core Completion 保留 lifecycle、pending work、answer/citation/ownership/budget；
-- 当前 QUERY_RESULT 逻辑迁为 DataCompletionRule；
-- PASS/MISSING/VETO aggregation；
-- Rule exception fail-closed；
-- decision/evidence parity tests。
+### 6.2 PR：frontend compatible read
 
-### 退出条件
+前端 wire 从 closed union 的入口改为：
 
-现有 Data Artifact 和完成行为无回归，旧 Conversation snapshot 可读，未知 Artifact 不破坏 Session。
+```text
+type: string
+schema_version: number
+payload: object
+```
 
-## 7. Phase 4 — Workbench Shell V2
+已知类型 renderer 在 registry 中严格 parse；unknown metadata fallback。
 
-Shell 通过 feature flag 演进，具体细节见 Workbench migration guide。
+现有已知类型业务 View 可继续保留 typed local models，不要求所有 React 代码变成 `unknown`。
 
-### PR 切片
+### 6.3 PR：Completion constraint
 
-1. ShellStore、Navigation adapter、Project-scoped UI state；
-2. Project Sidebar 与 Conversation/Data lists；
-3. Settings Mode 和 Main Surface；
-4. DockView/ArtifactRenderer contribution 基础；
-5. Workspace Dock shell/identity/fallback；
-6. SQL migration；
-7. Table/MultiTable migration；
-8. Artifact migration；
-9. Project Create/Edit migration；
-10. commands/shortcuts/context menu cutover；
-11. default-enable Shell V2；
-12. legacy deletion。
+保持 Completion Core 的 lifecycle/citation/budget 逻辑。
 
-### 质量门禁
+只抽：
 
-- 每个迁移 PR 运行相邻 component/store/integration tests；
-- SQL/Table/Conversation/Datasource/Settings parity；
-- same-target dedup；
-- Project switch/Settings round trip；
-- no duplicated business implementation；
-- production build。
+```text
+DataResultCitationConstraint
+```
 
-### 回滚
+使用 immutable tuple composition；不建 RuleManager。
 
-在默认切换前保留旧 Shell feature flag。默认切换后只接受 bug fix；达到稳定窗口后删除旧路径，禁止长期双 Shell。
+现有 decision/evidence artifact IDs 必须 parity。
 
-## 8. Phase 5 — InvocationContext、Environment 与 Grant
+### 6.4 Semantic capability
 
-### PR 切片
+先把 Registry/Observation 接口从 closed enum 放宽到 validated string，但 legacy IDs 原样保留。新 Extension capability 使用 namespace。
 
-1. `ResourceScopeRef` 和 serializable `ToolInvocationContext`；
-2. Capability Grant model/authority binding；
-3. `ToolExecutionEnvironment` protocol；
-4. in-process Database Environment；
-5. ToolRuntime/Dispatcher 传递新 context；
-6. 现有 `ToolRunContext.require_database()` compatibility facade；
-7. Data Tool parity 和 recovery tests；
-8. 删除 DB-specific request/context fields 的直接依赖。
+不在 P3 批量 rename legacy capability。
 
-### 外部 Binding 规则
+## 7. P4 — Workbench Shell V2
 
-从本阶段开始，真实业务若需要外部平台，可以实现 ApiBinding、McpBinding 或 CommandBinding，但必须：
+详细阶段见 [Workbench Shell 迁移规范](./workbench-shell-migration-guide.md)。
 
-- 先有稳定 DBFox ToolSpec；
-- 通过 Policy/Approval/Capability Grant；
-- MCP Tool 经过 allowlist/admission/materialization；
-- Command 使用固定 executable/subcommand 和结构化 args；
-- provider response 经过严格 DBFox output/Artifact/Effect validation；
-- Secret 通过 resolver/broker；
-- schema/protocol drift 有 frozen version 和 unknown/replan 行为。
+### P4 约束
 
-不建立与 RunLoop 平行的 MCP Session/Runtime。
+- 使用真实 Project model 和当前 list/create API；
+- `Project != Datasource`；
+- current Conversation 仍 datasource-bound；
+- Project Edit 若是需求，先补最小 Project update backend contract，不能假设当前已有；
+- Main Surface 固定显式，不 Registry 化；
+- Dock View / Artifact Renderer 是开放 registry；
+- ShellStore 只保存 identity/layout；
+- SQL state project-keyed；
+- Dock canonical key 不使用递增 counter；
+- tab 小集合优先单一数组，不维护双索引真相；
+- Navigation facade 有删除条件。
 
-### 退出条件
+### Gate
 
-当前 DB Tool 无行为/安全回归；Tool implementation 不接触全局 Service Locator；Grant scope/version/input binding 可测试。
+- Conversation/SQL/Table/MultiTable/Artifact/Project list-create/Datasource/Settings parity；
+- 若实现 Project Edit，其 backend update contract 独立有测试；
+- Project switch restore；
+- same canonical target dedup；
+- no business payload in ShellStore；
+- no central Dock domain switch；
+- no legacy `openXxxTab()` after deletion phase。
 
-## 9. Phase 6 — isolated_process protocol
+## 8. P5 — 从两个真实资源提炼 execution resource boundary
 
-### PR 切片
+P5 之前不要实现万能 `ToolExecutionEnvironment`。
 
-1. parent/worker message schema 和 version/schema-hash handshake；
-2. worker lifecycle、heartbeat、deadline、cancel；
-3. process group/tree kill 和 late-result suppression；
-4. environment allowlist、workspace grant、secret broker refs；
-5. structured output、Artifact/Effect envelope、stdout/stderr limit；
-6. retry/reconcile/unknown 映射；
-7. Windows/macOS/Linux contract tests；
-8. executor backend registration 和 saturation/cleanup telemetry。
+先有：
 
-### 安全门禁
+```text
+Database Tool
+Workspace File read Tool prototype
+```
 
-任何 filesystem/network/subprocess Tool 在 backend 完成前不得绕到 `in_process`。不得以普通子进程为第三方 hostile-code sandbox 做产品承诺。
+然后对照两者提炼：
 
-stdio MCP 或 CLI CommandBinding 如果需要本地子进程执行，从本阶段后才可正式启用 isolated execution；网络 MCP/API Provider 仍必须通过 Network Gateway、Grant 和 Secret boundary。
+- serializable `ToolInvocationContext`；
+- `ResourceScopeRef(kind,id,version)`；
+- minimum resource resolver / execution resource interface；
+- resource authorization value if current ExecutionAuthority insufficient。
 
-## 10. Phase 7 — Workspace read-only vertical slice
+### ToolInvocationContext 上限
 
-先证明读取链路：
+只允许：
+
+```text
+session_id
+run_id
+turn_id
+invocation_id
+idempotency_key
+deadline_at
+scope_refs
+```
+
+除非第二资源证明必要，不增加 project_id、execution_id、metadata bag、authority_ref、grant IDs。
+
+### Gate
+
+- current DB Tool parity；
+- File read prototype 能用同一 invocation/resource seam；
+- Tool 看不到 global service container；
+- no secret in invocation JSON。
+
+## 9. P6 — isolated execution attempt runner
+
+在现有 `ToolExecutor` 内抽 AttemptRunner Strategy。
+
+### PR 1：InProcessAttemptRunner extraction
+
+只移动当前 ThreadPool/quarantine 单次 attempt 逻辑，确保行为 parity。
+
+`ToolExecutor` 继续拥有：
+
+- retry；
+- overall deadline；
+- concurrency；
+- attempts；
+- recovery decision。
+
+### PR 2：worker protocol
+
+- protocol handshake；
+- one attempt request/result；
+- heartbeat；
+- cancel；
+- process-tree kill；
+- output/frame/diagnostic bound；
+- late result suppression；
+- worker crash mapping。
+
+### PR 3：IsolatedProcessAttemptRunner
+
+接到同一个 ToolExecutor attempt seam。
+
+不复制 retry/recovery loop。
+
+### Gate
+
+- Windows/macOS/Linux contract tests；
+- executor saturation/cleanup；
+- current in-process parity；
+- isolated crash/timeout/cancel/late result；
+- no hostile-code sandbox claim。
+
+## 10. P7 — Workspace read-only vertical slice
+
+目标链：
 
 ```text
 file_read / file_search
-→ Observation + FileSnapshot Artifact + FileRead Effect
-→ Workspace Projection
-→ Next Run Context
-→ File Renderer / Dock View
+→ strict Tool output
+→ Observation + FileSnapshot Artifact
+→ Workspace reducer/projection
+→ next Run bounded Context
+→ File Dock View
 ```
 
-### PR 切片
+P7 是检验 Runtime seam 的关键：
 
-1. Workspace scope/root/version model；
-2. filesystem read grant/path/symlink policy；
-3. `file_read` bounded window；
-4. `file_search` bounded match context；
-5. FileSnapshot Artifact contract；
-6. Workspace Effect/Projection；
-7. prior file digest/Context lane；
-8. File renderer/Dock contribution；
-9. Extension e2e and long-session tests。
+- 不允许 `ContextSnapshot.file_context`；
+- 不允许 RunLoop `if tool == file_read`；
+- 不允许 Artifact Core `if type == code_file`；
+- 不允许 Dock Kernel `if viewType == file`。
 
-第一种 Extension 可以补充通用 seam，但任何修改必须同时解释 Data 和 Workspace，并禁止 Tool-name/domain branch。
+Workspace projector 可以像 Data projector 一样理解自己拥有的 Tool。
 
-## 11. Phase 8 — Patch write
+## 11. P8 — Patch write
 
 ```text
 file_write_patch
-→ expected file/workspace version CAS
+→ authorized workspace root
+→ expected file hash/version CAS
+→ temp sibling write
+→ flush/fsync where applicable
 → atomic replace
 → CodePatch Artifact
-→ Workspace Effect/Projection
-→ Diff Renderer
+→ Workspace projection
+→ Diff View
 ```
 
-### 必须实现
+必须：
 
-- root/path/symlink/reparse-point fence；
-- expected hash/version；
-- conflict response；
-- temp write + atomic replace；
-- crash/reconcile/unknown contract；
-- changed-file provenance；
-- write approval/policy；
-- Secret/result-size scan；
-- concurrent external modification tests。
+- path canonicalization；
+- symlink/reparse defense；
+- CAS conflict；
+- crash/reconcile/unknown；
+- bounded patch；
+- no silent overwrite。
 
-模型不能直接打开 Diff View；用户从 Artifact reference 打开。
+## 12. P9 — Terminal / external binding
 
-## 12. Phase 9 — Terminal 与 Tests
+只在有真实 use case 时实现。
 
-文件读写稳定后才增加 subprocess：
+### Command-backed Tool
 
-```text
-command_exec
-run_tests
-build
-CommandLog Artifact
-TestReport Artifact
-dbfox.tests.result semantic proof
-TestsCompletionRule
-```
+固定 executable + operation + structured argv + versioned parser。
 
-命令必须是 registered operation 或严格 Policy contract，不默认暴露任意 shell。非幂等命令不使用 retry-safe；进程丢失且结果不可证明时结算 unknown。
+### Generic Terminal
 
-这里的 Generic Terminal 与 CommandBinding 分开：稳定外部 CLI 集成优先使用结构化 Command-backed Tool；Generic Terminal 只处理自由度更高的 coding/build/test/排障。
+独立高风险 Tool；用于 coding/build/test/排障；不成为 API/MCP/CLI 的万能 fallback。
 
-## 13. Phase 10 — 第二 Extension 证明稳定性
+### API/MCP
 
-使用 GitHub 或 Web read-only Extension 验证：
+第一个真实平台接入时再抽最小 Binding Strategy。
 
-- 可以选择 Native/API/MCP/Command 中最合适的 Binding，而不改变上层 Tool contract；
-- 不修改 RunLoop；
-- 不增加 ContextSnapshot domain field；
-- 不修改 Memory 根 envelope；
-- 不修改 Completion Core；
-- 不修改 WorkspaceDock central dispatch；
-- 只注册 Tool/Artifact/Semantic/Projection/Renderer/Command contributions。
+MCP 必须 admission/allowlist/materialization；API/MCP/Command 都复用 Tool settlement。
 
-如仍需新增 seam，必须说明为何 Workspace Extension 未暴露该通用需求，并补充跨 Extension contract test。
+P9 不因为“支持未来”一次实现 universal MCP marketplace 或 generic external provider framework。
 
-## 14. 通用测试层级
+## 13. P10 — 第二 Extension proof
 
-### L0 静态/合同
+P10 的意义不是多一个 demo，而是证明 seam 稳定。
 
-- namespaced IDs、dependencies、freeze；
-- schema/model validation；
-- forbidden imports/domain switches；
-- no rows/secrets；
-- wire generation；
-- Markdown/internal links。
+第二种完整 Extension 必须：
 
-### L1 deterministic integration
+- 注册 Tool；
+- 产生 Observation/Artifact；
+- 如需跨 Run，注册自己的 Projector；
+- 如有领域完成条件，注册 Constraint；
+- 如有 UI，注册 Dock/Renderer contribution；
+- 不修改 RunLoop 领域 branch；
+- 不修改 ContextSnapshot 根模型领域字段；
+- 不修改 Completion Core 领域逻辑；
+- 不修改 Dock Kernel central switch。
 
-- terminal transaction；
-- Memory rebuild；
-- Context budget；
-- Tool recovery/backend；
-- Artifact compatibility；
-- Shell identity/state；
-- Extension missing modes；
-- MCP admission/schema drift 和 Command argument builder。
+如果为了第二 Extension 需要这些 Kernel 变化，暂停功能实现，回到 seam review。
 
-L0/L1 必须 100%。安全失败是 veto，不能用成功率补偿。
+## 14. PR 设计检查表
 
-### AgentBench
+每个实现 PR 在 description 回答：
 
-- continuity；
-- duplicate Tool calls；
-- topic switch/return；
-- result reuse；
-- failed/cancelled continuation；
-- Catalog invalidation；
-- token/latency/tool count；
-- Real Provider 重复 trials。
+1. 当前真实问题是什么？
+2. 最小改动是什么？
+3. 新抽象有几个真实使用者？
+4. 是否新增第二份 identity/state/hash？
+5. 是否引入 DTO/Mapper 只为字段搬运？
+6. identity/key/order/bounds/eviction 是什么？
+7. transaction owner 是谁？
+8. incremental 与 rebuild 是否同一算法？
+9. fail/cancel/recovery 的 owner 是谁？
+10. compatibility path 什么时候删除？
 
-### Desktop
+## 15. Rollback 原则
 
-- store/component tests；
-- Conversation/SQL/Table/Artifact/Datasource/Settings flows；
-- feature flag parity；
-- production build；
-- 平台差异记录。
+- P1：保留旧 Tool registry facade 到 parity 完成；
+- P2：v4 shadow + Context flag，回退只切 read path；
+- P3：compatible read，legacy Artifact schema v1 始终可读；
+- P4：Shell V2 flag 到 entry parity；
+- P5/P6：existing in-process DB path 在新 seam parity 前不删除；
+- P7+：新 Extension 可独立 disable，不破坏 Data Agent canonical state。
 
-## 15. Observability
+禁止长期双写/双事实源。Rollback window 结束必须删除兼容路径。
 
-统一记录：
+## 16. 最终完成定义
 
-```text
-extension manifests/fingerprints
-Tool binding/provider type
-Tool backend/capability grants
-MCP server/tool materialization hashes
-worker protocol/version/exit/timeout/cancel
-Effect type/version/bytes
-projection version/hash/lag/rebuild status
-working-state bytes/tokens
-cross-run duplicate calls
-Artifact type/schema/fallback
-Completion rule decisions/errors
-Dock view type/canonical key/dedup/fallback
-Shell feature flag and migration state
-```
+只有同时满足以下条件才算这轮架构实施成功：
 
-不得记录 Secret、完整文件、结果行、长 stdout 或未脱敏网络/MCP 内容。
+### Context
 
-## 16. Rollout 与回滚
+- completed/failed/cancelled 中 succeeded work 跨 Run 连续；
+- stale generation/revision 不误用；
+- Memory bounded/rebuildable/non-authoritative；
+- prior digest 回 canonical source。
 
-- Schema 迁移使用 expand/compatible-read/switch/delete；
-- Memory 使用 shadow projection 和 Context feature flag；
-- Artifact 使用旧 known type adapter + 新 envelope compatible read；
-- Workbench 使用 Shell V2 feature flag，稳定后删除旧 Shell；
-- Backend 在注册新 Tool 前完成 protocol/platform gate；
-- External Binding 出现 schema/protocol mismatch 时 fail-closed/replan，不自动猜兼容；
-- Extension 缺失不得静默 drop state；
-- 每个临时兼容层必须有 owner、删除条件和最晚删除 phase。
+### Tool
 
-回滚不能恢复已被删除的 canonical 数据，因此所有 destructive migration 在严格 rebuild/backup/compatibility 验证前禁止执行。
+- Database/File/Terminal/External provider 使用同一 durable Tool lifecycle；
+- Kernel 不认识具体新 Tool；
+- execution resource boundary 来自真实案例；
+- isolated attempt 不复制 executor orchestration。
 
-## 17. PR Review 模板
+### Frontend
 
-每个实现 PR 至少说明：
+- Project/Datasource ownership真实；
+- Shell/Main/Dock/Settings 边界明确；
+- ShellStore 无业务事实；
+- new View/Renderer registration 不改 central domain switch。
 
-```text
-问题与当前代码事实
-本 PR 所属 Phase/ADR
-新增或迁移的所有权 seam
-行为变化与不变量
-兼容/迁移/回滚
-执行的测试和平台
-新增 telemetry
-本 PR 明确不做什么
-临时 compatibility 的删除条件
-```
+### Design quality
 
-Code review 必须检查：
-
-- 是否新增领域 Kernel branch；
-- Tool Binding 是否绕过 materialization/Policy/settlement；
-- Effect 是否复制事实或 authority；
-- Artifact/Context/Memory 是否泄露大结果或 Secret；
-- Registry fingerprint 是否过宽；
-- ShellStore 是否复制业务对象；
-- View identity 是否由 contribution 生成；
-- unknown/missing Extension 行为是否明确；
-- 文档是否把目标错误描述为当前能力。
-
-## 18. Program 完成定义
-
-本 Architecture Program 完成，不等于所有未来 Extension 已实现。它完成时至少满足：
-
-1. Memory v4 正式切换并通过 rebuild/continuity；
-2. Artifact envelope 和 DataCompletionRule 完成迁移；
-3. Workbench Shell V2 默认开启，Legacy Shell 删除；
-4. InvocationContext/Environment/Grant 生效；
-5. isolated backend 通过平台和安全合同；
-6. Workspace read/write Extension 端到端可用；
-7. Terminal/Test 具备受限、安全、可恢复合同；
-8. 至少一种 External Binding（API/MCP/Command）通过真实 Extension 验证 provider-neutral Tool contract；
-9. 第二种 Extension 无 Kernel 领域分支接入；
-10. 当前架构文档同步为已实现状态，临时 compatibility 已清理。
+- 没有为了对称性存在的空抽象；
+- 没有长期 Mapper/Adapter 链；
+- 没有重复 fingerprint/identity/state；
+- 关键 reducer、dedup、eviction、CAS 算法确定、有界、可测试。

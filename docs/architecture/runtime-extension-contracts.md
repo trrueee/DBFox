@@ -6,184 +6,197 @@
 >
 > 最后核验：2026-08-16
 >
-> 基线：`main@641ddf98a962189f0a2959e6b752533087c2cd65`
+> 基线：`main@daa99d048decd7f5f8dc010cbe5465f332686a3c`
 >
 > 上位 RFC：[DBFox 可扩展 Runtime 与 Workbench 架构计划](./extensible-runtime-workbench-program.md)
 
 ## 1. 决策
 
-DBFox 建立受信任、编译期的 Backend Extension Contract，使 Data、Workspace、Terminal、GitHub 和 Web 能力通过注册贡献进入 Runtime，而不是通过 RunLoop、ContextSnapshot、CompletionPolicy 或 Artifact switch 中的领域分支进入。
+DBFox 建立受信任、编译期的 Runtime Extension ownership seam，使 Data、Workspace、Terminal、GitHub、Web 等能力通过**直接注册真实合同对象**进入 Runtime，而不是通过 RunLoop、ContextSnapshot、CompletionPolicy 或 Artifact switch 的领域分支进入。
 
-第一阶段不支持第三方动态代码。现有 Data Agent 能力首先迁移为内置 Data Extension，用它证明新合同不改变当前产品行为。
+第一阶段不是插件框架，也不为了未来对称性预先实现全部 Registry、依赖图、Environment 层或 Binding 对象。
 
-一个重要边界是：
+核心原则：
 
-> **Tool 是 DBFox 的逻辑能力合同；Native API、HTTP/SDK、MCP 和 CLI/Command 只是这个 Tool 背后的执行 Binding。**
+> **Extension 是所有权边界；Tool 是逻辑能力合同；Native/API/MCP/Command 是执行来源。**
 
-因此 MCP 不成为第二套 Agent Runtime，CLI/Terminal 也不绕过 DBFox 的 Tool/Policy/Observation/Artifact/Memory 生命周期。
+## 2. 当前实现事实
 
-## 2. 当前边界
+当前 Tool Runtime 已具备：
 
-现有 Tool 定义已具有严格 input/output model、Tool version、Policy/Approval、timeout/retry/recovery/concurrency、Backend 名称、capability、Tool-owned Observation projection、Artifact draft 和冻结 Tool materialization。
+- 严格 input/output Pydantic model；
+- Tool contract content hash / Turn materialization；
+- Policy / Approval / ExecutionAuthority；
+- timeout / retry / recovery / concurrency；
+- in-process capability allowlist；
+- durable ToolInvocation / Observation settlement；
+- Tool-owned Observation projection；
+- Artifact drafts；
+- transient provider payload 与 durable facts 分离。
 
-缺口是：
+当前需要解决的真实缺口是：
 
-- `ToolRunContext` 直接携带 datasource、dialect、SQLAlchemy Session 和数据库导向 request；
-- Registry 已禁止 filesystem/network/subprocess 进入 `in_process`，但 executor 对 `isolated_process` 仍返回 unavailable；
-- Semantic capability 是封闭 Data enum；
-- Completion Core 直接理解 `QUERY_RESULT`；
-- Artifact type/payload map 和前端 wire union 是封闭集合；
-- 外部 API、MCP Server 和官方 CLI 尚无统一 Binding/admission 语义。
+- `ToolRunContext` 直接携带 datasource、dialect、SQLAlchemy Session 和 DB-oriented request；
+- `isolated_process` 名称存在但 executor 尚不执行它；
+- Semantic capability 是封闭 enum；
+- Completion Core 直接理解 Data `QUERY_RESULT`；
+- Artifact domain model / frontend union 是封闭集合；
+- 外部 API/MCP/CLI 尚无统一受控接入路径。
 
-## 3. Extension bootstrap
+这些缺口按真实阶段逐个打开，不一次建立一个“万能扩展框架”。
+
+## 3. P1：最小 Extension ownership
+
+P1 只引入 owner ID、直接注册和 freeze。
+
+推荐组合入口：
 
 ```python
-class BackendExtensionManifest(BaseModel):
-    id: str
-    version: str
-    api_version: str
-    dependencies: tuple[ExtensionDependency, ...] = ()
-    tools: tuple[ToolContribution, ...] = ()
-    artifact_contracts: tuple[ArtifactContractContribution, ...] = ()
-    semantic_capabilities: tuple[SemanticCapabilityContribution, ...] = ()
-    session_effect_contracts: tuple[SessionEffectContribution, ...] = ()
-    projection_modules: tuple[ProjectionModuleContribution, ...] = ()
-    completion_rules: tuple[CompletionRuleContribution, ...] = ()
+def register_builtin_functions(registries: RuntimeRegistries) -> None:
+    register_core_functions(registries)
+    register_conversation_functions(registries)
+    register_data_extension(registries)
+    registries.freeze()
 ```
 
-启动规则：
+注册 API 直接接收真实对象：
 
-```text
-load built-in manifests
-→ validate IDs / API versions / dependencies
-→ validate namespaced contribution IDs and duplicates
-→ register in deterministic extension-ID order
-→ compute relevant fingerprints
-→ freeze before accepting Runs
+```python
+registries.tools.register(CatalogOverviewTool(), owner="dbfox.data")
+registries.tools.register(SchemaSearchTool(), owner="dbfox.data")
 ```
 
-Manifest 是贡献声明，不要求 Phase 1 一次实现所有 Registry。每个贡献点按实际阶段启用。
-
-ID 必须稳定、命名空间化，例如：
+不建立：
 
 ```text
+Tool → ToolContribution DTO → ToolAdapter → ToolRegistry
+```
+
+这种只为再映射一次存在的层级。
+
+当前 `register_dbfox_tools()` 同时注册 Control、Conversation 和 Data 功能，因此不能整体归属 `dbfox.data`。迁移时拆注册所有权，保留原函数作为短期 facade，所有调用点迁完后删除。
+
+### 3.1 ID
+
+Extension owner ID 必须稳定，例如：
+
+```text
+dbfox.core
+dbfox.conversation
 dbfox.data
-dbfox.catalog.search_performed
-dbfox.data.query_result
+dbfox.workspace
+```
+
+新开放贡献 ID 使用命名空间，例如：
+
+```text
 dbfox.workspace.file_snapshot
 dbfox.workspace.code_patch
+dbfox.tests.result
 ```
 
-用户可见标题不是稳定 ID。
+现有 Tool 名和已有 Semantic/Artifact ID 不为形式统一而批量改名；这些值已经参与 durable materialization 或历史数据。
 
-## 4. Logical Tool 与 Execution Binding
+### 3.2 注册顺序与依赖
 
-Agent、RunLoop 和 durable ToolInvocation 只识别 DBFox Tool Contract。一个 Tool 的具体执行来源由 Binding 决定：
+P1 没有真实 Extension dependency，因此只要求：
+
+- duplicate owner / contribution ID 拒绝；
+- 注册结果确定；
+- serving 前 freeze；
+- freeze 后拒绝 mutation。
+
+不要在 P1 加 dependency graph。
+
+以后出现真实依赖时再引入 `requires`，并用稳定拓扑排序；若存在 cycle 或 missing dependency 则启动失败。简单“按 extension ID 排序”不能代替依赖解析。
+
+## 4. Tool contract 与执行来源
+
+Agent、RunLoop 和 durable ToolInvocation 只识别 DBFox Tool contract。
+
+执行来源概念上包括：
 
 ```text
-                    DBFox Tool Contract
-                           │
-        ┌──────────────────┼──────────────────┐
-        ▼                  ▼                  ▼
-   NativeBinding       ExternalBinding     CommandBinding
-                         │
-                  ┌──────┴──────┐
-                  ▼             ▼
-              ApiBinding     McpBinding
+Native implementation
+API / SDK adapter
+MCP adapter
+Command / CLI adapter
 ```
 
-### 4.1 NativeBinding
+Native Tool 继续直接实现 `BaseTool.run()`，不为了对称性包装空 `NativeBinding`。
 
-用于 DBFox correctness 核心能力和与内部状态深度耦合的能力，例如 Catalog、SQL safety、Result Gateway、Workspace CAS write。它可以调用 DBFox 内部 Python service，但仍遵守 Tool input/output、Policy、Artifact、Observation 和 recovery contract。
+当第一个真实非 Native 集成出现时，才抽最小 `ToolBinding` Strategy；它必须是 Tool implementation 内部的可替换执行策略，而不是第二套 Agent Runtime。
 
-### 4.2 ApiBinding
+### 4.1 API
 
-用于具有稳定官方 API/SDK 的外部平台。Adapter 负责：
+API adapter 负责：
 
-- 将 DBFox Tool input 映射为外部请求；
-- 通过 SecretResolver 注入凭据；
-- timeout/pagination/rate-limit/retry；
-- 将外部错误映射为固定安全错误；
-- 将结果规范化为 DBFox Tool output/Artifact/Effect。
+- 将已经验证的 Tool input 组成外部请求；
+- timeout / pagination / rate limit；
+- 通过受控 secret resolver 使用 credential；
+- 将外部错误归一为 DBFox 固定安全错误；
+- 将结果验证为 Tool output / Artifact。
 
-外部 API response 不能直接成为 Session Memory 或模型长期上下文。
+Raw response 不直接进入 Memory 或 Prompt。
 
-### 4.3 McpBinding
+### 4.2 MCP
 
-MCP 是可选的 External Tool Provider，不是第二套 Runtime。DBFox 不把远端/stdio MCP Server 的 `tools/list` 原样暴露给模型。
+MCP 是 External Tool Provider，不是第二套 Runtime。
 
-MCP Tool 进入 Turn 前必须经过：
+MCP Tool 在进入 Turn materialization 前必须完成：
 
 ```text
-MCP discovery
-→ trusted-server / allowlist policy
-→ tool/input schema validation
-→ risk/capability mapping
-→ DBFox ToolSpec adaptation
-→ frozen materialization
-→ model-visible Tool definitions
+discover
+→ trusted server/config policy
+→ allowlist tool
+→ validate input schema
+→ risk/capability review
+→ materialize DBFox Tool contract
+→ freeze for Turn
 ```
 
-冻结 materialization 至少绑定：
+至少冻结：
 
 ```text
-mcp_server_id
-mcp protocol/adapter version
+server identity
+transport/protocol adapter version
 external tool name
-input schema hash
-structured-output/adapter contract hash
-DBFox ToolSpec version
+input/output contract hash
+DBFox Tool contract version
 ```
 
-如果 MCP schema 在 pending 调用期间变化：尚未执行则按 Tool version changed 重新规划；已经开始且 outcome 无法证明则结算 `UNKNOWN`，不能用新 schema 猜测旧调用结果。
+Server schema 变化时：
 
-MCP output 仍必须经过 DBFox output schema、size/secret 校验，然后投影为 Observation、Artifact 和可选 Session Effect。MCP Server 不能直接写 Session Memory、Evidence、Completion state 或 Prompt policy lane。
+- 尚未执行的 frozen call：`TOOL_VERSION_CHANGED`，要求重新规划；
+- 已经开始且 outcome 无法证明：结算 `UNKNOWN`；
+- 不用新 schema 猜测旧调用结果。
 
-### 4.4 CommandBinding
+MCP result 必须经过 DBFox output、size、secret、Artifact validation，不能直接写 Memory、Evidence、Completion 或 Prompt policy lane。
 
-当平台没有合适 API/MCP，但存在稳定官方 CLI 时，CLI 是一等合法 Binding。Command Tool 必须使用固定 executable/operation 和严格参数 builder：
+### 4.3 Command / CLI
+
+稳定官方 CLI 可以封装成一等 Tool：
 
 ```text
 validated Tool input
-→ approved executable + approved subcommand + structured args
-→ isolated process
-→ bounded stdout/stderr + structured parser
+→ fixed executable
+→ fixed / allowlisted operation
+→ structured argv builder
+→ one execution attempt
+→ bounded stdout/stderr
+→ versioned parser
 → strict Tool output
 ```
 
-禁止把 model-authored 任意字符串直接传给 `shell=True`。CommandBinding 负责稳定解析 job ID/status/result，而 Generic Terminal Tool 不应承担所有第三方集成。
+禁止 model-authored 字符串直接进入 `shell=True`。
 
-### 4.5 Generic Terminal
+Generic Terminal 用于 coding/build/test/排障和长尾探索，不作为所有平台集成的默认胶水。
 
-Generic Terminal 是更自由的 Agent 能力，主要用于 coding/build/test/排障和没有稳定封装的长尾操作。它不是默认 Integration Binding。若一个 CLI 操作会重复使用、需要权限/恢复/语义证明，应升级为 Command-backed Tool。
+## 5. Invocation：先保留最小稳定数据
 
-### 4.6 Binding 选择原则
+当 Workspace 成为第二种真实执行资源时，当前 DB-oriented `ToolRunContext` 需要拆成“可序列化 invocation facts”和“执行位置资源”。
 
-```text
-DBFox correctness 核心能力          → Native Tool
-稳定官方 API/SDK                    → ApiBinding
-成熟、可信、维护良好的 MCP Server   → McpBinding
-稳定官方 CLI                        → CommandBinding
-无稳定合同的长尾操作                → Generic Terminal / Browser fallback
-```
-
-API 与 MCP 的优先顺序按具体平台成熟度决定。无论 Binding 类型，上层 Tool ID、Policy、Observation、Artifact、Effect、Completion 和 Memory 生命周期保持一致。
-
-## 5. Tool execution 分层
-
-```text
-ToolInvocationContext
-        ↓
-ExecutionBackend
-        ↓ materialize authorized grants
-ToolExecutionEnvironment
-        ↓
-Tool implementation / Binding adapter
-```
-
-### 5.1 ToolInvocationContext
-
-描述“这一次调用是什么”，必须可序列化、backend-neutral，不携带数据库 Session、文件 handle、HTTP client 或 Secret object。
+可序列化部分只保留执行身份和 scope：
 
 ```python
 class ToolInvocationContext(BaseModel):
@@ -191,115 +204,120 @@ class ToolInvocationContext(BaseModel):
     run_id: str
     turn_id: str
     invocation_id: str
-    execution_id: str
     idempotency_key: str
     deadline_at: datetime | None
-    project_id: str | None
     scope_refs: tuple[ResourceScopeRef, ...]
-    authority_ref: str | None
-    capability_grant_ids: tuple[str, ...]
 ```
-
-统一 Scope ref，避免持续增加 `datasource_ref/workspace_ref/repository_ref`：
 
 ```python
 class ResourceScopeRef(BaseModel):
     kind: str
     id: str
-    project_id: str | None = None
     version: str | int | None = None
-    metadata: dict[str, JsonValue] = Field(default_factory=dict)
 ```
 
-Scope metadata 必须有大小限制并由对应 kind 合同验证。当前 `AgentSession.datasource_id` 仍是非空约束，UI 可暂用 `project_id = datasource_id` adapter；真正支持无数据库 Session 仍需数据模型迁移。
+不放：
 
-### 5.2 ToolExecutionEnvironment
+- SQLAlchemy Session；
+- HTTP client；
+- Secret object；
+- arbitrary `metadata: dict`；
+- `project_id` 与 scope 重复字段；
+- `authority_ref` / `capability_grant_ids` 这种额外引用链；
+- DBFox 当前仅用于 DB query cancellation 的 `execution_id`，除非第二种执行资源证明它是 universal identity。
 
-描述“本 backend 中真正能访问什么”，由 Backend 基于 Kernel 授权在执行进程内创建：
+真实 Project 若是 scope，就表示为 `ResourceScopeRef(kind="project", ...)`；Datasource、Workspace 等同理。
 
-```python
-class ToolExecutionEnvironment(Protocol):
-    def require_database(self) -> DatabaseResource: ...
-    def require_workspace(self) -> WorkspaceResource: ...
-    def require_filesystem(self) -> FilesystemResource: ...
-    def require_process_runner(self) -> ProcessRunner: ...
-    def require_network_gateway(self) -> NetworkGateway: ...
-    def require_secret_resolver(self) -> SecretResolver: ...
-```
+## 6. Execution resource boundary：延迟到第二个真实案例
 
-Environment 不是全局 Service Locator：只暴露本 invocation 已授权能力；缺少 Grant 时 `require_*` 必须失败；不得注入整个应用容器。现有 DB Tool 迁移期继续通过 `require_database()` compatibility facade 使用。
+当前只有 Database Tool 时继续复用现有 `ToolRunContext.require_database()` 和 leaf-owned SQLAlchemy Session。
 
-## 6. Capability Grant
-
-Tool 的 `execution.capabilities` 是需求声明，不是授权。Kernel 根据 ToolSpec、Policy、Approval、authorized input、scope 和 generation/version 铸造 Grant。
-
-Grant 至少绑定：
-
-- invocation ID；
-- Tool name/version；
-- authorized input hash；
-- capability kind；
-- resource scope/version；
-- policy fingerprint；
-- approval ID（如适用）；
-- deadline/expiry。
-
-Environment 只能 materialize Grant 中列出的资源。Tool 或 Binding 不能自行扩大目录、域名、命令、MCP Server、数据源或凭据范围。
-
-## 7. Session Effect
-
-Session Effect 是 Projection 的类型化输入，不是新的领域事实源。
-
-```python
-class SessionEffectEnvelope(BaseModel):
-    extension_id: str
-    effect_type: str
-    effect_version: int
-    payload: dict[str, JsonValue]
-```
-
-Effect payload 不重复 run/observation/timestamp provenance；这些来自 enclosing Observation。
-
-Effect 必须：
-
-- 由已注册 Tool/Extension 产生；
-- 与 Observation 在同一 Tool settlement 事务持久化；
-- 按 `(extension_id, effect_type, effect_version)` 严格验证；
-- 使用 canonical JSON，并有 item/byte 上限；
-- 只有 enclosing Observation `succeeded` 时可 fold。
-
-Effect 禁止保存 rows、series、完整 Schema、完整文件、长日志、Secret、DSN、Token 或 execution authority；不能影响当前 Run recovery、进入系统指令 lane 或覆盖 Observation/Artifact/Evidence。
-
-推荐作为 Tool outcome 的独立贡献：
-
-```python
-ToolOutcome(output=..., artifacts=(...), session_effects=(...))
-```
-
-如果 Catalog 实现证明 Effect 只是 Invocation/Observation 的完全重复，应通过实现评审改为 extension-owned reducer 直接读取 canonical records；无论哪条路径，Kernel 都不能按具体 Tool 名写 reducer。
-
-## 8. Semantic capability
-
-Semantic capability 改为 namespaced string contract：
+不要提前定义一个同时包含：
 
 ```text
-dbfox.data.environment_profile
-dbfox.data.schema_metadata
-dbfox.data.query_result
-dbfox.workspace.file_content
-dbfox.workspace.modified
-dbfox.tests.result
+require_database
+require_workspace
+require_filesystem
+require_process_runner
+require_network_gateway
+require_secret_resolver
 ```
 
-它表达成功 Observation 能证明什么，不是 Tool 名别名，也不授予执行权限。注册时验证 ID 唯一、所属 Extension 和版本；Tool 只能声明已注册 capability。
+的万能 Environment。
 
-## 9. Completion composition
+当 Workspace/File vertical slice 出现后，以 **Database + Workspace** 两种真实资源为样本提炼最小接口。要求：
 
-Completion 拆为 Core 和 Domain rules。
+- Tool 只能看到本 invocation 被授权的资源；
+- 不能拿到全局应用容器；
+- Secret 仍通过 opaque reference 解析；
+- 接口必须能解释现有 DB Tool，而不是迫使现有实现适配一个更复杂的抽象。
 
-Core 负责 Tool 是否 settled、pending Approval/Question、Run/cancel、answer candidate、citation 基础有效性、Artifact ownership 和 budget。
+## 7. Capability / Authority
 
-Extension Rule 只能增加约束：
+Tool `execution.capabilities` 继续表示需求声明，不等于授权。
+
+现有 `ExecutionAuthority` 继续负责已存在的 Approval/safety binding，不因为 Extension 重构而复制一套 grant table。
+
+Filesystem/Network/Process 第二类资源真正出现时，如现有 Policy/Authority 无法表达 resource scope，再引入 immutable execution grant value。Grant 直接随 attempt 传递，不先建立 `grant_id → lookup → materialize` 的额外持久引用层。
+
+任何新 grant 都必须至少绑定：
+
+- invocation；
+- Tool contract；
+- authorized input hash；
+- resource scope/version；
+- policy / approval fingerprint；
+- expiry/deadline。
+
+## 8. Session Projection input
+
+P0 Catalog Memory **不实现 Session Effect storage/registry**。
+
+理由：当前 canonical `AgentToolInvocation + AgentObservationRecord + Artifact references + Run` 已经包含 Catalog reducer 所需的稳定输入。再写一份 `search_performed/objects_inspected` Effect 会复制同一事实。
+
+P0 Projector 直接读取 canonical records：
+
+```text
+Invocation authorized input
++ succeeded Observation facts / capabilities
++ Artifact refs
++ enclosing Run sequence
+→ pure reducer
+```
+
+未来只有在真实 Extension 出现“canonical records 无法稳定表达、但必须跨 Run 归约”的信息时，才评审 Effect。若引入 Effect，它仍然只能是 projection input，不是事实、证据、授权或 Prompt 指令。
+
+## 9. Semantic capability
+
+Semantic capability 表达成功 Observation 能证明什么，不授予执行权限。
+
+兼容策略：
+
+- 现有 `environment_profile/schema_metadata/query_result/...` 保持不变；
+- 新 Extension capability 使用 namespaced string；
+- Runtime 接口从 enum 接受范围迁到受验证 string，但不做历史批量 rename；
+- 若未来迁移 legacy ID，必须有独立 wire/materialization migration。
+
+这样避免仅为命名统一触发全部 Tool materialization hash 变化。
+
+## 10. Completion composition
+
+Completion Core 保持：
+
+- active/pending Tool、Approval、Question；
+- answer candidate 是否完整；
+- citation syntax；
+- cited Artifact 是否属于已观察集合；
+- Run budget / forced partial；
+- cancel / failure lifecycle。
+
+领域规则只实现为只读 Constraint Strategy：
+
+```python
+class CompletionConstraint(Protocol):
+    id: str
+    def evaluate(self, input: CompletionConstraintInput) -> ConstraintResult: ...
+```
 
 ```text
 PASS
@@ -307,64 +325,84 @@ MISSING(requirements)
 VETO(reason)
 ```
 
-组合顺序：
+组合：
 
 ```text
-Core VETO > Extension VETO > union(MISSING) > PASS
+Core terminal eligibility
+→ any VETO
+→ union MISSING
+→ PASS
 ```
 
-Extension Rule 可以要求 Semantic Proof、Artifact、引用或测试结果；不能强制 completed、绕过 pending work/citation/authority、修改预算、把失败 Observation 当成功或降低其他 Rule 要求。Rule 抛异常时 fail-closed。
+第一阶段只有 Data result citation constraint。使用 immutable tuple 注册即可，不建立 Rule Manager/Service 层。
 
-当前 `QUERY_RESULT → inline Result Artifact citation` 机械迁移为 DataCompletionRule，现有测试必须保持 decision 和 Evidence artifact IDs 等价。
+Constraint 只能增加要求，不能绕过 pending work、authority、citation ownership 或 budget。
 
-## 10. Fingerprint 与缺失扩展
+## 11. Artifact contract
 
-不能使用覆盖前后端所有贡献的单一 `extension_registry_hash`。分别计算：
+当前数据库 `AgentArtifactRecord.type` 已是 String；真正的封闭点在 Python enum、payload map 和前端 union。
+
+迁移采用最小扩展：
 
 ```text
-runtime_contract_registry_fingerprint
-state_projection_registry_fingerprint
-presentation_registry_fingerprint
+type: string            # 保留现字段/现 ID
+schema_version: integer # 新字段
+payload: JSON object
 ```
 
-Memory 使用 per-projection `contract_fingerprint`；增加前端 Renderer 不得改变 Catalog projection hash。
+`Artifact.version` 保持现有含义：同 semantic key 的业务/工作产品版本。它不能复用为 payload schema version。
 
-External Binding 的 endpoint、credential identity 等运行配置不进入 Tool semantic version；但能改变输入/输出解释、权限或恢复语义的 adapter/protocol/schema contract 必须进入 materialization/fingerprint。
+Validator Registry 只按 `(type, schema_version)` 保存 payload validator。Kernel 继续负责：
 
-缺失扩展遵守：
+- ownership；
+- payload/relations size；
+- rows/series 等禁止复制；
+- secret scan；
+- relation target visibility。
 
-- degraded read：保留 envelope，不进入 Prompt/Completion；
-- strict rebuild：缺 Projector 则 incomplete，不覆盖 Memory；
-- explicit migration/drop：显式 tombstone 后才可丢弃 namespace。
+Existing `result_view/chart/sql/...` 作为 schema v1 原样兼容；新 Extension type 必须 namespaced。
 
-缺 Renderer 只影响呈现；缺 Tool/Binding 只影响未来调用；缺 Projector 影响 rebuild；缺 Artifact validator 拒绝新写入但不能破坏旧 envelope 读取。
+未知历史 type：保留 envelope，UI fallback；未知新写入：拒绝。
 
-## 11. Data Extension 迁移
+## 12. Fingerprint
 
-现有 `register_dbfox_tools()` 先包装为：
+不要再增加覆盖全部 Tool 的 `runtime_contract_registry_fingerprint`，因为当前 `ToolMaterialization` 已对完整 Tool contract content-address。
 
-```python
-register_builtin_data_extension(registries)
+需要 fingerprint 的地方只保留本地问题域：
+
+- 每个 Memory projection 自己的 `contract_fingerprint`；
+- Artifact payload schema 由 `(type, schema_version)` 定位；
+- 外部 MCP/API/Command adapter 若改变 schema/permission/recovery 语义，则进入该 Tool materialization。
+
+Presentation registry 变化不得触发 Memory rebuild。
+
+## 13. Data ownership 迁移
+
+Data Extension 第一阶段只改变**所有权**：
+
+```text
+Core / Control functions     → dbfox.core
+Conversation functions       → dbfox.conversation
+Catalog / Query / Result     → dbfox.data
 ```
 
-第一步只改变注册所有权，不改变 Tool 名、版本、Schema、Policy、Observation、Artifact 或用户行为。随后按阶段迁移 Catalog Projection、Data Artifact contract、namespaced semantics、DataCompletionRule 和前端 Result/Table/Chart contributions。
+不要为了每个 owner 都建立独立 Extension class。注册函数足够。
 
-## 12. 验收
+迁移完成标准：
 
-- 注册顺序确定，duplicate/dependency mismatch 拒绝，serving 后 Registry 冻结；
-- 当前 Data Tool schema/materialization 在预期迁移点外不变化；
-- DB Tool 无回归，高权限 capability 不能进入 `in_process`；
-- Grant 与 invocation/input/scope/version 绑定；
-- MCP Tool 经过 allowlist/admission/materialization，不直接透传给模型；
-- CommandBinding 不执行 model-authored 任意 shell 字符串；
-- 不同 Binding 的 output 都进入相同 DBFox Observation/Artifact/Effect pipeline；
-- 未注册 Artifact 写入失败，历史未知 Artifact envelope 可读取；
-- DataCompletionRule 与迁移前行为一致，Rule exception fail-closed；
-- 第一个 Workspace Extension 不添加 Tool-name/domain switch；
-- 第二个完整 Extension 只通过 contribution registration 接入，不修改 RunLoop、ContextSnapshot 根字段、Memory 根模型、Completion Core 或 WorkspaceDock dispatch。
+- existing Tool 名、schema、policy 和 materialization 在非预期点不变；
+- Registry freeze 有 contract test；
+- RunLoop 不知道 `dbfox.data`；
+- 后续 Workspace Tool 可以通过同一直接注册机制进入。
 
-## 13. 非目标
+## 14. 验收
 
-不做动态第三方 Extension、Marketplace、任意 Service Locator、通用任务 DSL、通用 Tool Cache、外部 Workflow Engine，或“自动发现任意 MCP Server 并把所有 Tool 无审查透传给模型”。Generic MCP Marketplace/compatibility layer 不属于初始实施范围；MCP 作为受策略控制的未来 Tool Binding 是架构允许且明确支持的方向。
-
-隔离执行、安全协议、MCP/Command provider、Artifact envelope 和 wire compatibility 的细节见[Runtime Extension 安全与兼容规范](./runtime-extension-security-compatibility.md)。
+- P1 无多余 Contribution DTO / Mapper；
+- Control/Conversation 不被误归 Data；
+- Tool materialization 仍是 Tool executable contract 的兼容性事实源；
+- Catalog Memory P0 不写重复 Effect；
+- 新 Extension Tool 不要求 RunLoop 添加 Tool-name branch；
+- existing semantic/artifact IDs 不为命名统一产生无必要迁移；
+- first external binding 复用同一 Tool settlement；
+- second real resource 出现前不提前建设万能 Environment；
+- second full Extension 接入后仍能保持 Kernel 无领域特例。
