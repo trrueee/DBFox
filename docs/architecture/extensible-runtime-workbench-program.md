@@ -21,7 +21,7 @@ DBFox 后续统一目标保持不变：
 三个最终必须解决的问题是：
 
 1. **Context continuity**：Run 结束不能等于已经成功完成的工作被遗忘；completed、failed、cancelled Run 中已成功结算的 Observation 都能在后续 Run 有界复用。
-2. **Tool extensibility**：Database、File、Terminal、API、MCP 等 Tool 不要求 RunLoop、ContextSnapshot、Completion Core 或 Artifact Core 持续增加领域分支。
+2. **Runtime capability extensibility**：Database、File、Code、Terminal、API、MCP、Remote Job、Data Engineering、ML 等能力家族不要求 RunLoop、ContextSnapshot、Completion Core 或 Artifact Core 持续增加领域分支。
 3. **Workbench extensibility**：Project、Conversation、Dock、Settings 所有权清晰；新增资源 View 不再扩张中央 Workspace Router。
 
 ## 2. 实现前复核原则
@@ -142,6 +142,33 @@ Tool contract
 
 MCP 不成为第二套 Agent Runtime；Generic Terminal 仍是高自由度 fallback，不是所有外部平台的默认集成层。
 
+### 6.1 Capability family 不等于 Tool 集合
+
+未来 Runtime compatibility 的目标不是“所有新功能都做成更多 Tool”。一个真实 capability family 只贡献它需要的组成部分：
+
+```text
+Capability family
+├── Tool(s)                可执行动作 / 读取动作
+├── Resource reference(s)  Workspace、Remote Job、Deployment、Repository 等稳定身份
+├── Artifact contract(s)   可复用工作产品
+├── Projection reducer     需要跨 Run 连续性时才有
+├── Context projection     从 projection / canonical records 生成有界模型上下文
+├── Completion constraint  只有领域完成条件时才有
+└── Workbench contribution 只有需要 UI 呈现时才有
+```
+
+这些组成部分是**可选组合**，不是每个 Extension 都必须实现全套 contribution。
+
+例如：
+
+- Coding：File read/search Tool + File/CodePatch Artifact + Workspace Projection + File/Diff View；
+- Data Engineering：Spark/Airflow submit/status Tool + Remote Job reference + Job/Report Artifact；
+- ML：Train/Evaluate/Deploy Tool + Dataset/Model/Evaluation/Deployment Artifact 或 Resource reference；
+- GitHub/Web：读取/操作 Tool + repository/document resource + bounded Context projection；
+- 长时间运行任务：`submit → durable RemoteJobRef → 后续 Run status/read result`，而不是让一个 ToolInvocation 挂数小时。
+
+Kernel 只拥有 Session/Run/Invocation/Observation/Artifact/Projection/Context/Completion 的通用生命周期，不拥有 Spark、File、Model、Deployment、GitHub 等领域根字段。
+
 ## 7. Context / Memory 的最终边界
 
 ```text
@@ -158,13 +185,37 @@ Memory v4 的 P0 直接从 canonical Invocation + Observation + Artifact referen
 
 如果未来某个真实 Extension 产生了 canonical records 无法稳定表达、且又必须跨 Run 归约的领域变化，再评审是否增加 Effect。Effect 不是 P0 前置条件。
 
+Context compatibility 也不能等价于不断给 `ContextSnapshot` 增领域字段。禁止演进为：
+
+```text
+file_context
+github_context
+spark_context
+ml_context
+browser_context
+...
+```
+
+Kernel 固定 Context 的安全 lane、预算和优先级；领域能力负责把自己的 bounded state / canonical observations 渲染成这些 lane 中的候选片段。P2 Catalog 可以先用直接 renderer；当 Workspace 成为第二个真实跨 Run Context 来源时，再从 **Catalog + Workspace 两个真实实现** 提炼最小 Context-fragment contract，而不是提前建设通用 Context plugin framework。
+
+未来 Context fragment 必须满足：
+
+- 有稳定 source/provenance；
+- 明确属于 working-state/resource/artifact/evidence 等 Kernel 允许 lane；
+- 有 item/byte/token 上限；
+- 作为不可信数据进入模型，不获得 System/Policy 指令权限；
+- 不复制 canonical 大对象、rows、完整文件、完整 Schema 或长日志；
+- 可因 resource version / generation / revision / freshness fence 被确定性排除；
+- 不直接绕过 Context budget 或 Prompt assembler 写 Provider input。
+
 最终验收不是“Memory schema 存在”，而是以下行为成立：
 
 - failed/cancelled Run 中已经成功的 search/inspect 可在下一 Run 继续使用；
-- `catalog_revision` 或 datasource generation 变化后旧 working state 不作为 current knowledge；
+- Workspace/File 等后续 capability 也能通过自己的 projection/context fragment 跨 Run 继续，而不修改 Context 根模型；
+- `catalog_revision`、datasource generation 或其他 capability-owned resource version 变化后旧 working state 不作为 current knowledge；
 - Memory 删除不影响审计、Artifact、Evidence 或 Run recovery；
 - Memory 有界，长期 Session 达到容量平台期；
-- prior digest 每次从 canonical Observation 生成，不保存第二份完整 Schema。
+- prior digest 每次从 canonical Observation 生成，不保存第二份完整事实。
 
 ## 8. Artifact 与 Completion
 
@@ -250,7 +301,9 @@ P2 是产品连续性的最高优先级，不被后端扩展框架或前端迁�
 - Run boundary 不再导致成功工作被遗忘；
 - Memory incremental fold 与同版本 full rebuild 使用同一 reducer 并得到相同 hash；
 - 新 File/Terminal/API/MCP Tool 不要求 RunLoop 增具体 Tool 名分支；
-- 新 Extension 不要求 `ContextSnapshot.file_context/github_context/...`；
+- 新 capability family 可以增加 Resource/Remote Job/Artifact/Projection/Context contribution，而不要求所有能力都退化成 Tool-only 模型；
+- 新 Extension 不要求 `ContextSnapshot.file_context/github_context/spark_context/ml_context/...`；
+- 第二个跨 Run Context 来源接入后，可以通过统一 bounded fragment/lane 进入预算，而不改 Prompt/Context 根模型；
 - 新 Artifact type 不要求修改中央 enum/switch；
 - 新领域 completion constraint 不修改 Completion Core 的生命周期判断；
 - 新 Dock View 不修改中央 Workspace Router；
@@ -258,9 +311,10 @@ P2 是产品连续性的最高优先级，不被后端扩展框架或前端迁�
 - ShellStore 不保存 SQL Result、Artifact payload、Table metadata 或 File content；
 - filesystem/network/subprocess 不进入当前 `in_process` 高权限路径；
 - isolated process 不被宣传为 hostile-code sandbox；
+- 长时间 Remote Job 使用 durable reference + 后续 Run 查询，不以长挂 ToolInvocation 维持连续性；
 - 兼容层有删除条件，不长期双写/双路由。
 
-如果第二种完整 Extension 接入时仍需要修改 RunLoop、Context 根模型、Completion Core 或 Dock Kernel 的领域分支，则本架构未达到目标，应重新审查 seam。
+如果第二种完整 capability family 接入时仍需要修改 RunLoop、Context 根模型、Completion Core 或 Dock Kernel 的领域分支，则本架构未达到目标，应重新审查 seam。
 
 ## 13. 配套文档
 
