@@ -40,7 +40,7 @@
 
 ## 本地开发
 
-要求 Node.js `>=20.19.0`。运行 Tauri 桌面壳还需要 Rust 1.95 和平台对应的 Tauri 系统依赖。
+要求 Node.js `>=22.18.0`（以 [`package.json`](package.json) 的 `engines` 为准）。运行 Tauri 桌面壳还需要 Rust 1.95 和平台对应的 Tauri 系统依赖。
 
 ```powershell
 Set-Location desktop

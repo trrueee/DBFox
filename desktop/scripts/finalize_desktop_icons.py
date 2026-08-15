@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+"""Finalize DBFox desktop icons after regenerating Tauri icon assets.
+
+Not part of normal builds. Run only after regenerating Tauri icons for a brand
+asset change: it cleans icon alpha, backfills Windows ICO sizes, guarantees
+taskbar/shortcut icons and syncs the favicon. Mobile (android/ios) icons are
+intentionally not generated or tracked while DBFox has no mobile product.
+"""
+
 import math
 import shutil
 from pathlib import Path
