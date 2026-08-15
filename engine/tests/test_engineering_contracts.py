@@ -490,17 +490,21 @@ def test_current_documentation_relative_links_resolve() -> None:
     assert not broken, broken
 
 
-def test_readme_architecture_diagram_is_inline_mermaid() -> None:
+def test_readme_architecture_diagram_is_static_svg() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    diagram = readme.split("```mermaid", 1)[1].split("```", 1)[0]
+    diagram_path = ROOT / "docs" / "images" / "system-architecture.svg"
+    diagram = diagram_path.read_text(encoding="utf-8")
 
-    assert "```mermaid" in readme
-    assert "system-architecture.svg" not in readme
-    assert "flowchart LR" in diagram
-    assert "<br" not in diagram
-    assert "Tauri / Rust Host" in diagram
-    assert "FastAPI Sidecar" in diagram
+    assert "![DBFox 系统架构](docs/images/system-architecture.svg)" in readme
+    assert "```mermaid" not in readme
+    assert "<svg" in diagram
+    assert "DBFox 系统架构" in diagram
+    assert "React 工作区" in diagram
+    assert "Tauri / Rust" in diagram
+    assert "FastAPI" in diagram and "Sidecar" in diagram
     assert "本地 SQLite" in diagram
+    assert "用户数据库" in diagram
+    assert "模型服务" in diagram
 
 
 def test_capability_and_config_schemas_use_local_or_official_sources() -> None:
