@@ -26,15 +26,16 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
-# 检查 Python 环境
+# 检查 Python 环境：优先使用开发环境 .venv，否则回退到系统 Python。
+# .build_venv 只属于 Frozen Sidecar 发布构建，开发脚本不使用。
 $PythonCmd = $null
-if (Test-Path "$ScriptDir\.build_venv\Scripts\python.exe") {
-    $PythonCmd = "$ScriptDir\.build_venv\Scripts\python.exe"
+if (Test-Path "$ScriptDir\.venv\Scripts\python.exe") {
+    $PythonCmd = "$ScriptDir\.venv\Scripts\python.exe"
 } else {
     $PythonCmd = (Get-Command python -ErrorAction SilentlyContinue).Source
 }
 if (-not $PythonCmd) {
-    Write-Host "[DBFox] ERROR: Python not found. Install Python 3.12+ and create .build_venv." -ForegroundColor Red
+    Write-Host "[DBFox] ERROR: Python not found. Install Python 3.12+ and create .venv (see CONTRIBUTING.md)." -ForegroundColor Red
     exit 1
 }
 
