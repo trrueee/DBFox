@@ -501,3 +501,14 @@ def test_readme_architecture_diagram_is_inline_mermaid() -> None:
     assert "Tauri / Rust Host" in diagram
     assert "FastAPI Sidecar" in diagram
     assert "本地 SQLite" in diagram
+
+
+def test_capability_and_config_schemas_use_local_or_official_sources() -> None:
+    capabilities_root = ROOT / "desktop" / "src-tauri" / "capabilities"
+    for path in sorted(capabilities_root.glob("*.json")):
+        capability = json.loads(path.read_text(encoding="utf-8"))
+        assert capability["$schema"] == "../../gen/schemas/desktop-schema.json", path.name
+
+    config_path = ROOT / "desktop" / "src-tauri" / "tauri.conf.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["$schema"] == "https://schema.tauri.app/config/2"

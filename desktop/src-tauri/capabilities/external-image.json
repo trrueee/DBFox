@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nickknapton88/tauri-docs/v2.11.2/src/content/docs/reference/config/capability-schema.json",
+  "$schema": "../../gen/schemas/desktop-schema.json",
   "identifier": "external-image",
   "description": "User-confirmed, Host-validated saving of external image values for the main DBFox WebView",
   "windows": ["main"],

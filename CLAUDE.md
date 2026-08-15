@@ -1,119 +1,59 @@
 # DBFox — Local-First AI Database Workbench
 
-本文件是仓库开发入口，不替代当前架构文档。开始跨模块修改前先读 `docs/README.md` 和 `docs/architecture/README.md`；源码、迁移、锁文件和当前 commit 的测试证据优先级最高。
+DBFox 是本地优先、结果可追溯的 AI 数据分析桌面应用：Tauri/Rust Host 管理
+Frozen FastAPI Sidecar 的生命周期，React 工作区通过带短期令牌的 HTTP/SSE 与
+Sidecar 通信；Agent 工具调用与 SQL 只读执行都经过正式合同。
 
-## Runtime Baseline
+本文件只提供修改入口和少量关键不变量。它**不是**版本、命令或依赖的权威来源；
+不要按这里的任何具体版本号、命令或路径推断当前状态。
 
-- Backend development/test: Python 3.12 + FastAPI + Uvicorn (`engine/`)
-- Frozen production Sidecar: Python 3.14.6，版本由 `.sidecar-python-version` 固定
-- Frontend: React 19 + TypeScript + Vite (`desktop/src/`)
-- Desktop host: Tauri 2 + Rust 1.95 (`desktop/src-tauri/`)
-- Node.js: 20.19+
-- Development virtualenv: `.venv/`; production build environment is isolated and must not be inferred from it
+## 修改前先读
 
-## Run
+- `README.md` — 产品定位、支持范围与快速开始
+- `CONTRIBUTING.md` — 开发环境、变更要求、提交与验证流程
+- `docs/README.md` — 文档中心与阅读路线
+- `docs/architecture/README.md` / `docs/architecture/system-overview.md` — 当前架构
+- `docs/architecture/implementation-map.md` — 功能到代码、测试与数据表的索引
 
-Prefer the root scripts; they generate a shared development Token and keep the frontend/backend contract aligned.
+## 权威事实源
 
-```powershell
-./dev.ps1
-./dev.ps1 backend
-./dev.ps1 frontend
-./dev.ps1 -NoReload
-```
+| 事实 | 权威文件 |
+| --- | --- |
+| Node 版本 | `desktop/package.json`（`engines`） |
+| Rust 版本 | `desktop/src-tauri/rust-toolchain.toml` |
+| Frozen Sidecar Python | `.sidecar-python-version` / `.sidecar-python-build` |
+| 开发 Python 与依赖 | `CONTRIBUTING.md` + `requirements-dev.lock` |
+| 各生态锁文件 | `requirements*.lock`、`desktop/package-lock.json`、`desktop/src-tauri/Cargo.lock` |
+| 质量门禁命令 | `docs/quality/engineering-gates.md` + `.github/workflows/ci.yml` |
 
-```bash
-./dev.sh
-./dev.sh backend
-./dev.sh frontend
-```
+## 开发入口
 
-Manual backend development entry:
+优先使用根脚本 `./dev.ps1` / `./dev.sh`（`backend` / `frontend` / `both`）；它们通过
+`scripts/dev_environment.py` 生成共享开发 Token，并保持前后端合同一致。开发端口：
+后端 `18625`，前端 `5173`。完整桌面开发：`cd desktop && npm run tauri -- dev`。
 
-```bash
-python engine/dev_server.py
-```
+## 关键架构不变量
 
-Never run `python engine/main.py`; direct-file execution breaks package imports. Full desktop development:
+1. Rust 是生产 Sidecar 生命周期的唯一权威；不要增加第二套启动器、猜测的 target 映射或 fallback 路径。
+2. `scripts/dev_environment.py` 是被忽略的 `desktop/.env.local` 的唯一写入者；`build_sidecar.py` 只负责 Frozen Sidecar 构建，不再承担开发凭据职责。
+3. 秘密进入 OS 凭据库；API Key、密码、运行时 Token 或完整 DSN 不得落入业务状态、日志、`.env` 或公开错误。
+4. SQLite/Alembic 是耐久事实源；Coordinator 内存只是有界调度状态，不是第二个队列。
+5. Agent 上下文区分原始请求、已消费 steers、历史消息、工具观察、结果 Artifact、会话记忆与对话归档。
+6. 完成判定 provider-neutral：只有带可展示文本、且无待处理工具/控制/错误的正常回合才能 finalize。
+7. 工具错误只暴露注册过的安全公开消息；任意异常文本不进入 UI 或 Provider 输出。
+8. 模型 SQL 必须走 `sql_validate` → 不可变校验 Artifact → `sql_execute_readonly`；执行端不接受原始模型 SQL。
+9. 大结果留在结果后端；模型只拿有界摘要，并用结果工具检视/分析。
+10. 事件先持久化再发布，SSE 用 cursor/snapshot 恢复；没有 UI-only 的真相。
 
-```bash
-cd desktop
-npm run tauri -- dev
-```
+工具只在 `engine/tools/builtin/registry.py` 注册一次；执行策略、审批、幂等、观察上限与
+呈现语义属于 provider-neutral 的 Tool Runtime。
 
-Development uses backend port `18625` and frontend port `5173`. Production Sidecar port, Token and generation are selected by Rust at runtime and delivered through Tauri IPC.
+## 反模式
 
-## Quality Gates
-
-```bash
-python -m pytest -q --tb=short
-python -m pyflakes engine build_sidecar.py
-python -m mypy engine build_sidecar.py
-
-cd desktop
-npm run lint
-npm run typecheck:test
-npm test -- --maxWorkers=1
-npm run build
-npm run test:rust
-```
-
-Run the platform/Frozen Sidecar/release gates when the change affects Runtime, auth, ACL, bundling or dependencies. Windows evidence does not validate macOS/Linux.
-
-## Architecture
-
-```text
-Tauri Runtime Supervisor
-  └─ Frozen FastAPI Sidecar
-       ├─ Agent Harness + SessionCoordinator
-       ├─ Tool Runtime + Approval/Idempotency
-       ├─ SQL validation/execution/artifacts
-       ├─ SQLite metadata/event durability
-       └─ MySQL / PostgreSQL / SQLite / DuckDB datasources
-
-React Workspace ── authenticated HTTP + recoverable SSE ── FastAPI
-```
-
-## Core Contracts
-
-- Rust is the only production Sidecar lifecycle authority; do not add a second launcher, guessed target mapping or fallback path.
-- `scripts/dev_environment.py` is the only writer of ignored `desktop/.env.local`.
-- Secrets live in the OS credential vault. Never persist API keys, passwords, runtime Tokens or complete DSNs in business state, logs or `.env`.
-- SQLite/Alembic is the durable source of truth. Coordinator memory is bounded scheduling state, not a second queue.
-- Agent context distinguishes the raw current request, consumed steers, historical messages, tool observations, result Artifacts, session memory and conversation archive.
-- Completion is provider-neutral: only a normally completed turn with displayable assistant text and no pending tools/control/error may finalize.
-- Tool errors expose only registered safe public messages. Arbitrary exception text is not trusted UI/provider output.
-- Model-authored SQL follows `sql_validate` → immutable validation Artifact → `sql_execute_readonly`; execution does not accept raw model SQL.
-- Large query results remain in the result backend. The model receives bounded summaries and uses result tools to inspect/profile them.
-- Events are persisted before publish and recovered with SSE cursor/snapshot; no UI-only truth.
-
-## Agent Tool Chain
-
-Tools are registered once in `engine/tools/builtin/registry.py`:
-
-- Runtime: `request_clarification`, `update_plan`
-- Conversation recall: `conversation_search`, `conversation_read`
-- Catalog: `catalog_overview`, `catalog_refresh`, `schema_list`, `schema_search`, `schema_inspect`
-- Query: `data_preview`, `sql_validate`, `sql_execute_readonly`
-- Results: `result_inspect`, `result_profile`, `chart_create`
-
-Tool schemas, execution policy, approval, idempotency, observation limits and presentation semantics belong to the provider-neutral Tool Runtime. Do not add provider-name branches or a second SQL execution chain.
-
-## Dependency Sources
-
-- Python runtime/dev/build locks: `requirements.lock`, `requirements-dev.lock`, `requirements-build.lock`
-- Frontend: `desktop/package-lock.json`
-- Rust: `desktop/src-tauri/Cargo.lock` and `desktop/src-tauri/rust-toolchain.toml`
-- Frozen Python: `.sidecar-python-version`
-
-Do not replace locked installs with floating dependencies or use force-fix commands that silently rewrite contracts.
-
-## Anti-patterns
-
-- Do not run `python engine/main.py`.
-- Do not add aliases for retired dotted tool names.
-- Do not parse textual Thought/Action/Observation; the Agent uses native Responses Items/function calling.
-- Do not drive the Agent loop or durable state machine from React/Zustand.
-- Do not expose arbitrary `DBFoxError.message`, Provider text, SQL/DSN fragments or tool exception strings.
-- Do not auto-replay non-idempotent requests after Runtime generation changes.
-- Do not add mapper/wrapper/fallback layers to hide an internal contract mismatch; fix the canonical boundary.
+- 不要 `python engine/main.py` 直接执行文件；模块入口是 `python -m engine.main`。
+- 不要给已退役的带点工具名加别名，也不要在工具层加 provider-name 分支或第二套 SQL 执行链。
+- 不要解析 Thought/Action/Observation 文本；Agent 使用原生 Responses Items/function calling。
+- 不要在 React/Zustand 里驱动 Agent 循环或耐久状态机。
+- 不要为掩盖内部合同错配而加 mapper/wrapper/fallback 层；修权威边界。
+- 运行时 generation 变化后，不要自动重放非幂等请求。
+- 不要用 force-fix 命令静默改写锁文件等可复现构建合同。

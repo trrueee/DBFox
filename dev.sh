@@ -8,9 +8,10 @@ cd "$SCRIPT_DIR"
 
 TARGET="${1:-both}"
 
-# 查找 Python
-if [ -f "$SCRIPT_DIR/.build_venv/bin/python" ]; then
-    PYTHON="$SCRIPT_DIR/.build_venv/bin/python"
+# 查找 Python：优先使用开发环境 .venv，否则回退到系统 Python。
+# .build_venv 只属于 Frozen Sidecar 发布构建，开发脚本不使用。
+if [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/bin/python"
 elif command -v python3 &>/dev/null; then
     PYTHON="python3"
 elif command -v python &>/dev/null; then

@@ -6,19 +6,18 @@ import sys
 from pathlib import Path
 
 import pytest
-from scripts import verify_release_artifact
+from scripts import dev_environment, verify_release_artifact
 
 
 pytestmark = pytest.mark.platform_contract
 
 
-def test_write_env_local_uses_frontend_engine_env_names(tmp_path, monkeypatch) -> None:
+def test_frontend_env_writer_uses_frontend_engine_env_names(tmp_path) -> None:
     desktop_dir = tmp_path / "desktop"
     desktop_dir.mkdir()
-    monkeypatch.setattr(build_sidecar, "DESKTOP_DIR", desktop_dir)
 
     token = "a" * 64
-    path = build_sidecar.write_env_local(token)
+    path = dev_environment.write_frontend_env(token, desktop_dir=desktop_dir)
 
     assert path == desktop_dir / ".env.local"
     env_text = path.read_text(encoding="utf-8")
@@ -387,17 +386,6 @@ def test_removed_local_crypto_is_not_a_direct_runtime_dependency() -> None:
     assert not (root / "engine" / "crypto.py").exists()
 
 
-def test_token_only_does_not_write_production_static_token(monkeypatch, tmp_path) -> None:
-    def fail_static_token_write(_token: str) -> Path:
-        raise AssertionError("production static token preset must not be generated")
-
-    monkeypatch.setattr(build_sidecar, "write_token_preset", fail_static_token_write, raising=False)
-    monkeypatch.setattr(build_sidecar, "write_env_local", lambda _token: tmp_path / ".env.local")
-    monkeypatch.setattr(sys, "argv", ["build_sidecar.py", "--token-only"])
-
-    build_sidecar.main()
-
-
 def test_target_triplet_uses_rustc_host_tuple(monkeypatch) -> None:
     observed: list[list[str]] = []
 
@@ -589,11 +577,10 @@ def test_release_build_never_writes_frontend_dev_token(monkeypatch, tmp_path) ->
         lambda _binary: _release_contracts(),
     )
     monkeypatch.setattr(build_sidecar, "write_artifact_manifest", lambda *_args: tmp_path / "manifest.json")
-    monkeypatch.setattr(
-        build_sidecar,
-        "write_env_local",
-        lambda _token: (_ for _ in ()).throw(AssertionError("release wrote .env.local")),
-    )
     monkeypatch.setattr(sys, "argv", ["build_sidecar.py"])
+
+    builder_source = Path(build_sidecar.__file__).read_text(encoding="utf-8")
+    assert "write_env_local" not in builder_source
+    assert "write_frontend_env" not in builder_source
 
     build_sidecar.main()

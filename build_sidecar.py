@@ -6,12 +6,11 @@ This script:
   2. Copies the binary to desktop/src-tauri/binaries/ with the correct
      target-triplet filename that Tauri's externalBin expects
 
-Development credentials are generated only by dev.ps1/dev.sh or the explicit
---token-only development command. A release build never writes frontend env.
+Development credentials are generated only by dev.ps1/dev.sh through
+scripts/dev_environment.py. This builder never writes frontend env.
 
 Usage:
     python build_sidecar.py              # full build
-    python build_sidecar.py --token-only # generate token files only
 """
 
 from __future__ import annotations
@@ -26,7 +25,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from scripts.dev_environment import generate_dev_token, write_frontend_env
+from scripts.dev_environment import generate_dev_token
 
 ROOT = Path(__file__).resolve().parent
 ENGINE_DIR = ROOT / "engine"
@@ -169,10 +168,6 @@ def _venv_python() -> str:
     return exe
 
 
-def generate_token() -> str:
-    return generate_dev_token()
-
-
 def sync_build_environment(python_exe: str) -> None:
     uv_exe = shutil.which("uv")
     if not BUILD_LOCK.exists():
@@ -194,12 +189,6 @@ def sync_build_environment(python_exe: str) -> None:
         print("  [FAIL] Locked build environment sync failed", file=sys.stderr)
         sys.exit(result.returncode)
     print(f"  [OK] Synced from {BUILD_LOCK.name} with uv pip sync")
-
-
-def write_env_local(token: str) -> Path:
-    path = write_frontend_env(token, desktop_dir=DESKTOP_DIR)
-    print(f"  [OK] {path}")
-    return path
 
 
 def _ignore_sidecar_runtime(src: str, names: list[str]) -> set[str]:
@@ -437,7 +426,7 @@ def _probe_sidecar_json(
 ) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="dbfox-sidecar-probe-") as runtime_dir:
         env = os.environ.copy()
-        env["DBFOX_ENGINE_TOKEN"] = generate_token()
+        env["DBFOX_ENGINE_TOKEN"] = generate_dev_token()
         env["DBFOX_RUNTIME_DIR"] = runtime_dir
         result = subprocess.run(
             [str(binary), argument],
@@ -607,29 +596,15 @@ def write_artifact_manifest(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build DBFox engine sidecar")
-    parser.add_argument(
-        "--token-only",
-        action="store_true",
-        help="Only generate token files, skip PyInstaller build",
-    )
-    args = parser.parse_args()
+    parser.parse_args()
 
     print("=" * 55)
     print("DBFox Sidecar Builder")
     print("=" * 55)
 
-    # Validate build prerequisites before producing any generated credential
-    # material.  A failed package build must not leave a stale dev token behind.
-    python_exe = None if args.token_only else _venv_python()
-
-    if args.token_only:
-        token = generate_token()
-        print(f"\n[1/1] Dev token ({len(token)} hex chars)")
-        write_env_local(token)
-        print("\n  Done (token-only mode).")
-        return
-
-    assert python_exe is not None
+    # Validate build prerequisites before producing any build output. A failed
+    # package build must not leave a half-written sidecar behind.
+    python_exe = _venv_python()
     print("\n[1/4] Sync locked build environment")
     sync_build_environment(python_exe)
 
