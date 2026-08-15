@@ -6,337 +6,419 @@
 >
 > 最后核验：2026-08-16
 >
+> 基线：`main@daa99d048decd7f5f8dc010cbe5465f332686a3c`
+>
 > 关联 ADR：[Workbench Shell 与 Workspace Dock](./workbench-shell-workspace-dock.md)
 
 ## 1. 迁移原则
 
-> **能搬就不重写，能拆容器就不重写内容，能复用现有组件就不复制新的。**
+> **能搬就不重写；能直接调用就不加 Mapper；开放点才用 Registry；固定状态保持显式。**
 
-本轮真正重新设计的是 App Shell、导航所有权、Workspace Dock 和状态归属，不是 SQL、Table、Conversation、Datasource、Artifact 或 Settings 的业务能力。
+本轮重新设计的是 App Shell、导航所有权、Workspace Dock 和状态归属，不是 SQL、Table、Conversation、Datasource、Project、Artifact 或 Settings 的业务实现。
 
-## 2. 组件处置清单
+任何新层都必须回答：它消除了哪一个真实 switch/ownership 冲突？如果答案只是“以后可能统一”，不加入。
 
-### 2.1 优先复用
+## 2. 真实 Project / Datasource 边界
 
-| 当前能力 | 处理方式 |
+Shell V2 直接使用仓库现有 Project model 和 list/create API。
+
+```text
+Project
+  ├── DataSource A
+  ├── DataSource B
+  └── UI workspace state
+```
+
+当前 Conversation 仍 datasource-bound，因此 Conversation 的 Project 归属通过：
+
+```text
+AgentSession.datasource_id
+→ DataSource.project_id
+```
+
+禁止：
+
+```text
+projectId = datasourceId
+Project ≈ Connection
+```
+
+Project Create 使用当前 Project create contract。若产品确实需要 Project Edit，先补最小 Project update API/contract，再接 Main Surface；不得复用 Datasource form 充当 Project form。
+
+Datasource form 只用于 Project 内的 DataSource create/edit/test/credential/schema sync。
+
+## 3. 组件处置
+
+### 3.1 直接复用
+
+| 当前能力 | 处理 |
 | --- | --- |
-| `ConversationWorkspace` | 保留 Conversation 内核，移除 Artifact layout ownership |
-| Message/Timeline/Plan/Approval/Question/Composer | 直接保留 |
-| Conversation view model/store/repository | 直接保留事实和传输职责 |
-| `SqlConsoleWorkspace` | 保留执行与 transcript，迁入 Dock |
-| `TableWorkspace`、Preview、Schema、ER | 原样迁入 Dock |
-| Result/Chart/Markdown renderer | 迁入 ArtifactRenderer contribution |
-| `DataSourcesPage` controller/form/API | 拆出并复用到 Project Create/Edit Main View |
-| connection test/save/update/delete/sync | 直接保留 |
-| `SettingsSidebar` 和 settings panels | 直接保留 |
-| `AppCommandPalette` | 保留，重接 Shell actions |
-| `DataSourceContextMenu` action 逻辑 | 保留，改变打开目标 |
-| `DataSourceTree` schema/table 数据逻辑 | 拆到 ProjectDataList |
+| `ConversationWorkspace` | 保留，移除 Artifact layout ownership |
+| Message/Timeline/Plan/Approval/Question/Composer | 保留 |
+| Conversation store/repository | 保留 |
+| `SqlConsoleWorkspace` | 原样迁入 Dock |
+| `TableWorkspace` / Preview / Schema / ER | 原样迁入 Dock |
+| MultiTable | 原样迁入 Dock |
+| Result/Chart/Markdown renderer | 注册到 Artifact renderer map |
+| Project list/create API | 直接用于 Sidebar/Create |
+| Datasource controller/form/API | 作为 Project DataSource 管理能力保留 |
+| Settings panels | 保留 |
+| AppCommandPalette | 保留，重接 Shell actions |
+| DataSourceTree 数据逻辑 | 拆出到 Project Data list |
 
-### 2.2 迁移完成后退休
+### 3.2 最终删除
 
-| 当前容器 | 最终处理 |
-| --- | --- |
-| `WorkspaceTabs.tsx` | 删除 Global Tab 产品模型 |
-| `WorkspaceRouter.tsx` | 拆为 Main Surface contributions 和 Dock View contributions |
-| `DataSourceTree.tsx` | 拆为 ProjectSidebar / ProjectConversationList / ProjectDataList |
-| Conversation `ArtifactDock.tsx` container | 删除专属 layout，保留 renderer |
-| `ContextDrawer.tsx` | 对象属性归 Table View；AI 建议归 Conversation/Artifact；容器删除 |
-| `workspaceStore.ts` | 入口迁完后由 ShellStore + ViewStore 替代 |
-| Conversation 内 PanelGroup | 移到 App Shell / Dock 布局层 |
-| datasource selector/dropdown 和 quick nav | 删除，改 Project List |
-| Conversation History / Datasource Settings Workspace Tab | 删除页面/Tab 模型，保留底层功能 |
+- `WorkspaceTabs.tsx` Global Tabs 模型；
+- `WorkspaceRouter.tsx` 的领域页面中央 switch；
+- Conversation History workspace tab；
+- Datasource Settings workspace tab；
+- Conversation `ArtifactDock` layout container；
+- `ContextDrawer` 中已经有明确新 owner 的职责；
+- `workspaceStore` 中 SQL/Table/Artifact 业务 payload；
+- 所有 `openXxxTab()` legacy action；
+- `sql-N/query-result-N` 等仅为 Tab identity 的 counter。
 
-## 3. 信息架构约束
+## 4. 信息架构
 
-每个功能必须属于以下之一：
+每个 UI 功能必须归属：
 
 ```text
 Project Sidebar
-Conversation/Main Surface
+Conversation / Main Surface
 Workspace Dock
 Settings Mode
-Overlay/Menu/Dialog
+Overlay / Menu / Dialog
 ```
-
-出现“再加一个全局 Tab”“再加一个右侧 Drawer”“再建一个管理页”时，必须停止并重新审查所有权。
 
 ### Sidebar
 
-- 顶部固定 New Conversation；
-- Projects 标题旁只有一个全局 `+`；
-- Project 直接列出，不隐藏在 selector；
-- Project 无 Chevron；
-- active Project 才显示 Conversation/Data 子资源；
-- 一个轻量图标在 Conversation/Data mode 间切换；
-- Settings 固定左下；
-- Project 管理动作进入 context menu/hover `…`。
+- New Conversation；
+- Project list；
+- active Project 下 Conversations/Data 两种 mode；
+- Data mode 下才出现 DataSource/Schema/Table；
+- Settings 固定入口。
 
-### Conversation list
+### Main
 
-- 列表本身就是 history；
-- 不出现重复的“历史记录”页面入口；
-- 首版不增加 Card、重复标题、内嵌 New Conversation 或额外搜索；
-- row 默认只显示标题，hover/context menu 提供 rename/delete 等操作。
+固定状态：
 
-### Data list
+```text
+Conversation
+New Conversation
+Project Create
+Project Edit（仅当 update contract 存在）
+Empty/Error
+```
 
-- Search 只在 Data mode 出现；
-- 不混入 SQL、Settings、Datasource management、Smart Query 或 Conversation history；
-- Connection 使用 DB brand icon；Database/Catalog 使用 cylinder icon；Table 使用 table icon；
-- 逻辑可以是 tree，视觉优先轻分组和 indentation，避免多层文件树视觉。
+不要把固定 Main Surface 做成 contribution registry。
 
-### Main Surface
+### Dock
 
-- Workspace 常态是 Conversation；
-- New Conversation 使用现有 Smart Query 空状态的有价值部分；
-- Project Create/Edit 在 Main 打开并隐藏 Dock；
-- 不使用 Dock Tab、Global Tab 或强制 Modal 承载 Project form。
+开放资源 View：SQL、Table、MultiTable、Artifact，未来 File/Diff/GitHub/Web。
 
-### Workspace Dock
-
-- 默认关闭；
-- Table/Artifact/SQL/MultiTable 用户动作才打开；
-- 关闭最后一个可见 Tab 后 collapse；
-- Tab bar 轻量，不做 Card Header/Pill；
-- Settings、Project、History、Global Search 和普通 Confirm 禁止进入。
-
-## 4. 状态迁移
-
-### 4.1 ShellStore
+## 5. ShellStore
 
 只保存：
 
 ```text
 app mode
 active project
+per-project active datasource
+per-project active conversation
 per-project sidebar mode
-active conversation ID
-main-surface ref
-dock open/width/order/active tab/resource refs
+main surface identity
+dock open/width/active key/views
 settings section
 ```
 
-### 4.2 ViewStore
-
-SQL state 从 `tabId` keyed 迁为 `projectId` keyed：
+不保存：
 
 ```text
-draft
-transcript entries
-running
-last result/error
-scroll position
+SQL draft/result/transcript
+Table metadata/result
+Artifact payload
+Conversation payload
+File content
+Patch content
+Datasource credentials
 ```
 
-Table state按 canonical table view key 管理 active subview/filter。Artifact 内容从 Conversation/Artifact repository 或 query cache 获取，不复制进 ShellStore。
+## 6. ViewStore
 
-### 4.3 Project 切换
-
-每个 Project 独立保存：
+### SQL
 
 ```text
-active Conversation
-sidebar mode
-Dock open/width/tabs/active tab
-SQL Console state
-Table View state
+SqlConsoleViewStore[projectId]
+  selectedDatasourceId
+  draft
+  transcript
+  running
+  last result/error
+  scroll
 ```
 
-切回 Project 恢复原现场。Conversation 切换不关闭 Project 级 SQL/Table Dock View；Artifact 可保持打开并显示来源 Conversation。
+一个 Project 一个 SQL state；console 内可以选择该 Project 下的 DataSource。
 
-## 5. Canonical Dock identity
+### Table
 
-调用统一动作：
+```text
+TableViewStore[projectId + datasourceId + canonical table]
+  active subview
+  filter/options
+```
+
+### Artifact
+
+Artifact content 由 canonical conversation/artifact repository 或 query cache 读取，不复制到 ShellStore。
+
+## 7. Dock identity
+
+统一动作：
 
 ```typescript
 openDock({ viewType, projectId, resourceRef, sourceRef? })
 ```
 
-由注册的 contribution 解析并生成 canonical key。调用方不得维护自己的 tab counter 或 dedup 规则。
-
-首批目标语义：
+贡献点只做四件事：
 
 ```text
-one SQL console per Project
-one Table view per Project + canonical object + requested subview
-one Artifact view per Artifact ID
-one MultiTable view per canonical selected object set
+parse/validate resourceRef
+canonicalize identity
+resolve title
+render
 ```
 
-关闭 Tab 默认只隐藏；View lifecycle 决定 state 保留。显式“关闭并清除”需要单独产品动作，不能与 Tab `×` 混同。
+Shell 在 open 时只 canonicalize 一次，得到唯一 `viewKey`。
 
-## 6. 关键交互迁移
-
-### New Conversation
-
-`Cmd/Ctrl+N` 从打开 SQL 改为 New Conversation。沿用当前 Conversation create/send 生命周期；可以在首次发送时才创建 durable Conversation。
-
-### SQL
-
-- Project context menu、Cmd+K 和 Conversation SQL action 都调用 `openSql(projectId, sql?)`；
-- AI → SQL 不自动执行；
-- 非空 draft 不静默覆盖，可追加带来源注释或要求用户确认替换；
-- SQL result/error → AI 只预填 Composer，不自动发送；
-- SQL execution shortcut 继续留在 SQL View 内。
-
-### Table
-
-- Sidebar click → Dock Table；
-- context menu 的 Preview/Schema/ER 只改变 Table View subview；
-- Table → SQL 激活 Project SQL；
-- Table → Ask AI 预填 Conversation；
-- 同一表重复点击只激活。
-
-### Artifact
-
-- Conversation 中保留 Artifact reference；
-- 用户点击后打开 Dock；
-- AI 生成 Artifact 不自动展开 Dock；
-- source SQL / source Conversation 作为可导航引用；
-- renderer 沿用现有实现。
-
-### Settings
-
-进入前保存 Workspace UI state，返回后恢复。Settings 不修改 Project Dock/Conversation 状态，也不在 Dock 中显示。
-
-### Command Palette
-
-保留现有基础设施，仅将 action 迁到：
+首批 key：
 
 ```text
-switchProject
-new/openConversation
-openTable
-openSql
-openProjectCreate/Edit
-openSettings
+SQL
+  projectId
+
+Table
+  projectId + datasourceId + canonical schema/table
+
+Artifact
+  artifactId
+
+MultiTable
+  projectId + datasourceId + dedup/sorted canonical table set
 ```
 
-不新建第二套全局搜索。
+不使用递增 counter，不允许 caller 拼自己的 dedup key。
 
-## 7. 分阶段迁移
+## 8. 状态数据结构
 
-### F0 冻结旧模型扩张
+Dock view 数量小，使用单一有序数组：
 
-旧 `WorkspaceTabs`、`ContextDrawer`、DataSource quick nav、ArtifactDock container 和 Datasource Settings Tab 只修 bug，不再添加新功能。
-
-### F1 Characterization 与 feature flag
-
-- 固定 Conversation/SQL/Table/Datasource/Settings 核心测试；
-- 建立 Shell V2 feature flag；
-- 标记可回退的稳定版本；
-- 不回退 Engine/API/SQL/Data 层以解决纯 Shell 问题。
-
-### F2 ShellStore 和 Navigation adapter
-
-新增统一 actions：
-
-```text
-newConversation
-switchProject
-openConversation
-openProjectCreate/Edit
-openSql/openTable/openArtifact/openMultiTable
-openSettings
+```typescript
+views: DockViewRef[]
+activeKey?: string
 ```
 
-旧组件迁一个改一个；暂不删除 `openXxxTab()`。
+打开时线性查找 canonical key；这比维护 `viewsByKey + order` 两份可变状态更可靠。
 
-### F3 Project Sidebar
+只有真实 profiling 证明这里成为热点后才添加派生 index。
 
-先完成 New Conversation、Project List、Conversation/Data mode 和 Settings。Main 可暂时继续旧 Router，先稳定左侧所有权。
+## 9. F0 — Characterization 与旧模型冻结
 
-### F4 Settings Mode 与 Main Surface
-
-接入 Settings replace/restore；建立 Conversation/New/Project Create/Edit/Empty 的 Main Surface。
-
-### F5 Workspace Dock shell
-
-只实现 open/close/resize/order/activate/collapse、per-project persistence、unknown View fallback 和测试 contribution。
-
-### F6 SQL vertical migration
-
-原样挂载 `SqlConsoleWorkspace`，迁 state 为 Project keyed，验证 close/reopen、Project isolation、Conversation switch、AI↔SQL。
-
-### F7 Table 和 MultiTable
-
-原样挂载现有 View，迁 context-menu action 和 subview state，验证 Preview/Schema/ER/SQL/Ask AI/dedup。
-
-### F8 Artifact
-
-注册现有 renderers，迁 Conversation Artifact click，去掉内部 Artifact panel 和 PanelGroup ownership。
-
-### F9 Project Create/Edit
-
-复用现有 Datasource controller/form logic，重组 Main Surface 外壳；不重写 API、validation、test、credential、SSH/SSL 和 sync。
-
-### F10 Entry point cutover
-
-迁 Sidebar、Conversation、context menu、Cmd+K、keyboard 和所有 `openXxxTab()` 调用。Shell V2 达到 parity 后默认开启。
-
-### F11 Legacy deletion
-
-回退窗口结束后删除旧 Tabs/Router branches/store actions/ContextDrawer/History route/ArtifactDock container。删除必须有反向 import/search test，防止残留双路径。
-
-## 8. 视觉实施边界
-
-允许优化：icon mapping、row height、indent、hover/active/focus、loading/empty、tooltip、Dock resize/tab、状态点和 Project form 层级。
-
-禁止：
-
-- 新 UI framework；
-- 新 Typography/Radius/Spacing 系统；
-- 重写 Button/Input/Tooltip/ScrollArea 等现有 primitive；
-- Project Card、层层白 Card、大量 Pill；
-- Connection 与 Database 共用同一 icon；
-- 顶部 Global Tab 或第二套右 Drawer；
-- 为目标截图从零复制 SQL/Table/Artifact/Settings/Form。
-
-先移动和拆容器，再做局部视觉优化。
-
-## 9. 测试
-
-### Store/identity
-
-- Project state isolation/restore；
-- canonical key dedup；
-- Tab hide/reopen state；
-- Settings round trip；
-- unknown View fallback；
-- ShellStore 无业务 payload。
-
-### Feature parity
+先固定：
 
 - Conversation stream/cancel/approval/question；
 - SQL draft/execute/result/error；
 - Table Preview/Schema/ER；
-- MultiTable；
-- Artifact Result/Chart/Markdown；
+- Artifact open/render；
+- Project list/create；
 - Datasource create/edit/test/sync；
 - Settings；
-- command palette/context menu/shortcuts。
+- keyboard/command palette。
 
-### Integration
+旧 Global Tabs/ContextDrawer/ArtifactDock 只修 bug，不再增加产品能力。
 
-- Table click 不切走 Conversation；
-- Artifact click 不切走 Conversation；
-- Project/Conversation 切换恢复正确 Dock；
-- last tab close collapses Dock；
-- no Global Tabs/ContextDrawer/Conversation Artifact panel in Shell V2；
-- old Shell feature flag remains usable until cutover approval。
+## 10. F1 — Shell state 与真实 Project navigation
 
-## 10. Code Review checklist
+- 加载 Project list API；
+- activeProjectId 成为 Shell identity；
+- activeDatasourceId 变成 per-project navigation state；
+- Conversation list 按 datasource.project_id 归组；
+- 建立 Project Sidebar；
+- 不改变 Main/Dock 业务组件。
+
+验收：Project 切换能恢复其 active datasource/conversation/sidebar mode。
+
+## 11. F2 — Main Surface
+
+建立固定 Main Surface：
+
+- Conversation；
+- New Conversation；
+- Project Create；
+- Empty/Error；
+- Settings Mode replace/restore。
+
+如果 Project Edit 是本轮产品需求，本阶段先单独补最小 Project update backend contract 和测试，再接 Edit Main Surface；不复用 Datasource form。
+
+此阶段可保留短期 Navigation facade 把旧入口转到新 Main action。
+
+## 12. F3 — Dock Kernel
+
+只实现：
+
+- open/close/collapse；
+- resize；
+- active key；
+- ordered views；
+- canonical dedup；
+- unknown View fallback；
+- per-project restore。
+
+先用一个测试 contribution 证明 Kernel 不知道领域 View。
+
+## 13. F4 — SQL vertical slice
+
+- 直接挂载 `SqlConsoleWorkspace`；
+- state 从 `tabId` keyed 迁为 `projectId` keyed；
+- console 内 datasource 选择限制为当前 Project；
+- `openSql(projectId, sql?)` 只激活一个 canonical view；
+- 非空 draft 不静默覆盖。
+
+删除 SQL tab counter。
+
+## 14. F5 — Table / MultiTable
+
+- 直接挂载现有 Table/MultiTable；
+- Table key 包含真实 datasource；
+- Preview/Schema/ER 只改 View state；
+- Table → SQL 激活同 Project SQL 并切对应 datasource；
+- canonical MultiTable set 去重+排序。
+
+## 15. F6 — Artifact
+
+- Artifact renderer 使用只读注册表；
+- 现有 renderer 直接迁入；
+- Conversation Artifact click 打开 Dock；
+- 删除 Conversation 专属 Artifact layout container；
+- unknown Artifact metadata fallback。
+
+## 16. F7 — Entry cutover
+
+迁移：
+
+- Sidebar actions；
+- Conversation actions；
+- DataSource/Table context menu；
+- Command Palette；
+- keyboard shortcuts；
+- 所有 `openXxxTab()` callsite。
+
+每迁一个入口就改成新 Shell action；不要再加一层长期 adapter。
+
+## 17. F8 — Legacy deletion
+
+feature flag 达到稳定窗口后删除：
+
+- WorkspaceTabs；
+- central WorkspaceRouter domain branches；
+- old workspace tab types；
+- old workspaceStore business state；
+- History/Datasource Settings tabs；
+- old ContextDrawer ownership；
+- Navigation facade。
+
+加反向 grep/import test，确保没有旧 action/type 残留。
+
+## 18. 关键交互
+
+### New Conversation
+
+当前 AgentSession datasource-bound：如果 active Project 没有 active DataSource，UI 必须先让用户选择/创建 DataSource，而不是传一个假的 Project ID 给 Agent API。
+
+### Project switch
+
+切换 Project：
+
+```text
+save current Shell identity
+→ activate target ProjectShellState
+→ activate its datasource/conversation/dock
+```
+
+业务 ViewStore 不复制进 Shell snapshot。
+
+### SQL
+
+AI → SQL 只填/追加 draft，不执行；SQL → AI 只预填 composer，不自动发送。
+
+### Table
+
+单击打开 Dock，不切走 Conversation；同一 canonical table 只激活已有 View。
+
+### Artifact
+
+AI 创建 Artifact 不自动控制 Dock；用户点击 reference 才打开。
+
+## 19. 测试
+
+### Ownership
+
+- Project ≠ Datasource；
+- Project list/create API drives sidebar/create；
+- 不假设当前存在 Project update API；
+- Conversation datasource→project grouping；
+- ShellStore 无业务 payload。
+
+### Identity
+
+- SQL one/project；
+- Table dedup project+datasource+table；
+- MultiTable canonical set；
+- Artifact by artifact ID；
+- open/close/reopen state。
+
+### Lifecycle
+
+- Project state isolation/restore；
+- Settings round trip；
+- last Dock view close collapse；
+- unknown View/Artifact fallback；
+- legacy facade removal。
+
+### Feature parity
+
+- Conversation；
+- SQL；
+- Table/MultiTable；
+- Artifact；
+- Project list/create（以及未来独立 update contract）；
+- Datasource；
+- Settings；
+- commands/shortcuts。
+
+## 20. Code Review checklist
 
 每个 UI PR 必须回答：
 
-1. 是移动/包装现有能力，还是重写？若重写，为什么原实现不可复用？
-2. 新组件是在建立所有权 seam，还是复制旧业务组件？
-3. 功能属于 Sidebar、Main、Dock、Settings 还是 Overlay？
-4. 是否通过 contribution 注册，而不是新增 central switch？
-5. ShellStore 是否只保存 ID/layout？View state owner 是否明确？
-6. canonical identity、unknown fallback、Project isolation 和回退是否有测试？
+1. 这是移动/复用，还是重写？
+2. 新抽象是否有两个真实使用者？
+3. Project/Datasource ownership 是否正确？
+4. 是否假设了仓库当前不存在的 Project contract？
+5. 固定 Main Surface 是否被无必要 Registry 化？
+6. 开放 Dock/Artifact type 是否通过直接 registration，而不是新 central switch？
+7. ShellStore 是否只保存 identity/layout？
+8. 是否新增了随机 tab ID、重复 canonical key 或双索引状态？
+9. 兼容 facade 的删除条件是什么？
 
-## 11. 完成定义
+## 21. 完成定义
 
-迁移完成必须满足：左侧有 New Conversation/Projects/Settings；Project 无 selector/Chevron；Conversation/Data list 纯净；Main 常态 Conversation；无 Global Workspace Tabs；Dock 默认关闭且唯一；SQL/Table/Artifact/MultiTable 在 Dock；一个 Project 一个 SQL state；相同 target 不重复；Settings/New Project/History 不进 Dock；现有业务能力未被重复实现；Legacy 路径和双状态所有者已删除。
+- Project Sidebar 使用真实 Project；
+- Conversation/Data list 归属明确；
+- Main 常态 Conversation；
+- 无 Global Tabs；
+- Dock 唯一且默认关闭；
+- SQL/Table/Artifact/MultiTable 功能 parity；
+- 一个 Project 一个 SQL state；
+- canonical resource 不重复；
+- Settings/Project management 不进入 Dock；
+- existing business logic 未复制；
+- legacy navigation/store owners 删除。
