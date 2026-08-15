@@ -1,0 +1,65 @@
+name: Bug 报告
+description: 报告功能异常、合同违反或安全问题之外的问题
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢报告问题。请先确认同类问题未被报告，并**不要在 Issue 中粘贴 API Key、DSN、Token、数据库 dump 或原始日志**。安全漏洞请走 `SECURITY.md` 的私密报告渠道。
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / 来源
+      description: 受影响的应用版本或 commit（正式 Release 请给出版本号）。
+      placeholder: "1.0.3 或 commit a1b2c3d"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options:
+        - Windows x64（正式验证平台）
+        - macOS（未正式验证）
+        - Linux（未正式验证）
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题描述
+      description: 发生了什么？与预期行为有何不同？
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 最小可复现步骤；涉及 SQL 时请给出脱敏后的表结构、数据样例和语句。
+      placeholder: |
+        1. 打开…
+        2. 执行…
+        3. 观察到…
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+      description: 你期望的正确行为是什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据（脱敏后）
+      description: 公开错误消息、截图或诊断描述。不要粘贴凭据、连接串或未脱敏数据。
+    validations:
+      required: false

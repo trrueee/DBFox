@@ -1,0 +1,41 @@
+name: 功能建议
+description: 提出新功能或改进方向
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢提出建议。请先阅读 `README.md` 的能力范围与 `docs/architecture/` 的当前架构，确认建议与现有边界一致。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+      description: 这个建议解决什么用户问题或痛点？
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      description: 你期望的能力是什么？如何与现有架构边界（Rust Runtime 权威、SQL-first 工具链、耐久事实源等）共存？
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 已考虑过的替代方案
+      description: 是否已有官方组件、现有工具或工作区能力可以复用？
+    validations:
+      required: false
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 非目标
+      description: 明确这个建议不打算做什么，帮助维护者理解范围。
+    validations:
+      required: false
