@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">DBFox 系统架构</title>
+  <desc id="desc">用户通过 React 工作区使用 DBFox。Tauri Rust Host 管理桌面窗口和 FastAPI Sidecar 生命周期；React 通过 Tauri IPC 与 Host 通信，并通过 HTTP 和 SSE 访问 Sidecar。Sidecar 持久化本地 SQLite，并访问用户数据库和模型服务。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .canvas { fill: #ffffff; }
+      .group { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 2; }
+      .node { fill: #ffffff; stroke: #94a3b8; stroke-width: 2; }
+      .node-primary { fill: #eef2ff; stroke: #6366f1; stroke-width: 2; }
+      .node-data { fill: #ecfeff; stroke: #0891b2; stroke-width: 2; }
+      .title { font: 700 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .group-title { font: 700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .label { font: 600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .small { font: 500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
+      .edge { fill: none; stroke: #475569; stroke-width: 2.2; marker-end: url(#arrow); }
+      .edge-bi { fill: none; stroke: #475569; stroke-width: 2.2; marker-start: url(#arrow); marker-end: url(#arrow); }
+      .edge-label-bg { fill: #ffffff; opacity: 0.96; }
+      .edge-label { font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+    </style>
+  </defs>
+
+  <rect class="canvas" x="0" y="0" width="1200" height="520" rx="20"/>
+  <text class="title" x="600" y="42" text-anchor="middle">DBFox 系统架构</text>
+
+  <rect class="node-primary" x="35" y="220" width="120" height="76" rx="18"/>
+  <text class="label" x="95" y="252" text-anchor="middle">用户</text>
+  <text class="small" x="95" y="276" text-anchor="middle">桌面交互</text>
+
+  <rect class="group" x="200" y="90" width="600" height="360" rx="24"/>
+  <text class="group-title" x="500" y="122" text-anchor="middle">DBFox 桌面应用</text>
+
+  <rect class="node-primary" x="245" y="190" width="160" height="96" rx="18"/>
+  <text class="label" x="325" y="228" text-anchor="middle">React 工作区</text>
+  <text class="small" x="325" y="253" text-anchor="middle">UI / 视图投影</text>
+
+  <rect class="node" x="455" y="190" width="160" height="96" rx="18"/>
+  <text class="label" x="535" y="224" text-anchor="middle">Tauri / Rust</text>
+  <text class="small" x="535" y="248" text-anchor="middle">Desktop Host</text>
+  <text class="small" x="535" y="270" text-anchor="middle">生命周期 / 系统能力</text>
+
+  <rect class="node" x="635" y="310" width="120" height="96" rx="18"/>
+  <text class="label" x="695" y="346" text-anchor="middle">FastAPI</text>
+  <text class="small" x="695" y="370" text-anchor="middle">Sidecar</text>
+  <text class="small" x="695" y="392" text-anchor="middle">Agent / SQL</text>
+
+  <rect class="group" x="850" y="90" width="315" height="360" rx="24"/>
+  <text class="group-title" x="1007" y="122" text-anchor="middle">数据与外部服务</text>
+
+  <rect class="node-data" x="900" y="160" width="215" height="72" rx="18"/>
+  <text class="label" x="1007" y="191" text-anchor="middle">本地 SQLite</text>
+  <text class="small" x="1007" y="214" text-anchor="middle">会话 / 事件 / Artifact</text>
+
+  <rect class="node-data" x="900" y="260" width="215" height="72" rx="18"/>
+  <text class="label" x="1007" y="291" text-anchor="middle">用户数据库</text>
+  <text class="small" x="1007" y="314" text-anchor="middle">业务数据事实来源</text>
+
+  <rect class="node-data" x="900" y="360" width="215" height="72" rx="18"/>
+  <text class="label" x="1007" y="391" text-anchor="middle">模型服务</text>
+  <text class="small" x="1007" y="414" text-anchor="middle">Responses API</text>
+
+  <path class="edge" d="M155 258 H245"/>
+
+  <path class="edge-bi" d="M405 220 H455"/>
+  <rect class="edge-label-bg" x="410" y="193" width="40" height="20" rx="8"/>
+  <text class="edge-label" x="430" y="208" text-anchor="middle">IPC</text>
+
+  <path class="edge" d="M575 286 C585 330 610 350 635 350"/>
+  <rect class="edge-label-bg" x="540" y="306" width="96" height="20" rx="8"/>
+  <text class="edge-label" x="588" y="321" text-anchor="middle">进程生命周期</text>
+
+  <path class="edge-bi" d="M405 266 C500 410 565 410 635 376"/>
+  <rect class="edge-label-bg" x="468" y="386" width="78" height="20" rx="8"/>
+  <text class="edge-label" x="507" y="401" text-anchor="middle">HTTP / SSE</text>
+
+  <path class="edge-bi" d="M755 334 C825 260 850 204 900 196"/>
+  <rect class="edge-label-bg" x="785" y="245" width="78" height="20" rx="8"/>
+  <text class="edge-label" x="824" y="260" text-anchor="middle">业务状态</text>
+
+  <path class="edge-bi" d="M755 360 H900"/>
+  <rect class="edge-label-bg" x="792" y="337" width="76" height="20" rx="8"/>
+  <text class="edge-label" x="830" y="352" text-anchor="middle">只读 SQL</text>
+
+  <path class="edge-bi" d="M755 388 C820 414 850 405 900 396"/>
+  <rect class="edge-label-bg" x="777" y="401" width="104" height="20" rx="8"/>
+  <text class="edge-label" x="829" y="416" text-anchor="middle">Responses API</text>
+</svg>
