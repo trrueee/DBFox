@@ -7,6 +7,8 @@ import {
 import { EmptyState, Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui";
 import { useDatasourceState } from "../datasource/useDatasourceState";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useSqlConsoleStore } from "../../stores/sqlConsoleStore";
+import { useArtifactDockStore } from "../../stores/artifactDockStore";
 import type { WorkspaceDockTab } from "../../types/workspace";
 import { dockViewTitle, getDockView } from "./dockViewRegistry";
 import "./WorkspaceDock.css";
@@ -27,8 +29,8 @@ export function WorkspaceDock({ activeDatasourceId, activeConversationId, showTo
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
   const setDockActiveTab = useWorkspaceStore((s) => s.setDockActiveTab);
   const closeDockTab = useWorkspaceStore((s) => s.closeDockTab);
-  const openDockConsole = useWorkspaceStore((s) => s.openDockConsole);
-  const openDockArtifacts = useWorkspaceStore((s) => s.openDockArtifacts);
+  const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
+  const openDockArtifacts = useArtifactDockStore((s) => s.openArtifacts);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
   const { activeDatasource } = useDatasourceState();
 

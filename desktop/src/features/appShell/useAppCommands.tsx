@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Sparkles, Cpu, Database, FileText, Terminal, Bug, MessageSquare, Palette } from "lucide-react";
-import type { TableTabDatasourceContext } from "../../stores/workspaceStore";
+import type { TableTabDatasourceContext } from "../../types/workspace";
 import type { CommandItem } from "../../components/CommandPalette";
 import type { EngineSchemaTable } from "../../lib/api/schema";
 import type { ConversationSummary } from "../../types/conversation";

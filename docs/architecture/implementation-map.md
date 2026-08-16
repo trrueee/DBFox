@@ -89,7 +89,7 @@ flowchart TB
 
 ### 4.2 App Shell 与 Workspace
 
-App Shell 组织实体侧栏（顶层项目/连接胶囊 + 每行 `对话|文件` / `对话|数据库` 子胶囊）、固定 Main Surface、Dock registry、命令面板、连接管理 Dialog、设置和对话。Workspace Store 只保存 Shell identity/layout（含 `sidebarEntityMode`、`projectSubMode`、`connectionSubMode`、per-project shell state、SQL console state 与 Dock file tab identity）；业务实体由各领域 Store 从后端加载。
+App Shell 组织实体侧栏（顶层项目/连接胶囊 + 每行 `对话|文件` / `对话|数据库` 子胶囊）、固定 Main Surface、Dock registry、命令面板、连接管理 Dialog、设置和对话。Workspace Store 只保存 Shell identity/layout（含 `sidebarEntityMode`、`projectSubMode`、`connectionSubMode`、per-project shell state 和通用 Dock tab identity）；SQL draft/entries 归 `sqlConsoleStore`，表选择/表子页归 `tableWorkspaceStore`，Artifact 与文件 Dock 打开动作归 `artifactDockStore`/`workspaceFileStore`，业务实体由各领域 Store 从后端加载。
 
 本地项目文件链路由 Tauri Host 承担 I/O 并保持有界：
 

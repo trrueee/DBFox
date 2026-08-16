@@ -302,26 +302,30 @@ sql
 
 ## 12. Shell state
 
-```typescript
-interface ShellState {
-  appMode: "workspace" | "settings";
-  activeProjectId?: string;
-  workspaceByProject: Record<string, ProjectShellState>;
-  settingsSection: AppSettingsSection;
-}
+当前实现（`desktop/src/stores/workspaceStore.ts`）：
 
-interface ProjectShellState {
-  sidebarMode: "conversations" | "data";
-  activeDatasourceId?: string;
-  activeConversationId?: string;
-  mainSurface: MainSurfaceRef;
-  dock: DockState;
+```typescript
+interface WorkspaceState {
+  activeProjectId: string;
+  sidebarEntityMode: "projects" | "connections";
+  projectSubMode: Record<string, "conversations" | "files">;
+  connectionSubMode: Record<string, "conversations" | "database">;
+  projectShell: Record<string, ProjectShellState>;
+  mainSurfaceByProject: Record<string, MainSurfaceRef>;
+  centerMode: WorkspaceCenterMode;
+  dock: { open: boolean; activeTabId: string | null };
+  dockTabs: WorkspaceDockTab[];
 }
 ```
 
-`activeDatasourceId` 是当前 Project 内的导航选择，不等于 Project identity。
+`activeDatasourceId`/`activeConversationId` 是当前 Project 内的导航选择，不等于 Project identity。ShellStore 只提供通用 `openDockTab`/`updateDockTab`；它不保存 SQL draft/entries、表选择、表子页或 Artifact payload，也不提供 `openDockConsole` 等领域打开动作。
 
-ShellStore 不保存业务对象。
+- `sqlConsoleStore`：SQL console state + canonical `openConsole`；
+- `tableWorkspaceStore`：`selectedTables`/`tableSubTabs` + `openTable`/`openMultiTable`；
+- `artifactDockStore`：`openArtifacts`/`openArtifact`；
+- `workspaceFileStore`：`openFile`。
+
+`WorkspaceDockTabKind` 是开放 string；Shell/Registry 不 switch 所有 domain kind，未知 kind 由 Registry fallback 渲染。
 
 ## 13. View state
 

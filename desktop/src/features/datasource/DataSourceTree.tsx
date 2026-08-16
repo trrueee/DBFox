@@ -19,6 +19,8 @@ import {
 import { useDatasourceState } from "./useDatasourceState";
 import { useProjectState } from "../projects/useProjectState";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useWorkspaceFileStore } from "../../stores/workspaceFileStore";
+import { useTableWorkspaceStore } from "../../stores/tableWorkspaceStore";
 import { useConversationStore } from "../../stores/conversationStore";
 import { getUserErrorMessage } from "../../lib/api/client";
 import type { ProjectFolderEntry, ProjectFolderListing } from "../../lib/projectFolder";
@@ -178,7 +180,7 @@ export function DataSourceTree({
   const setProjectActiveConversation = useWorkspaceStore((s) => s.setProjectActiveConversation);
   const showSmartQueryHome = useWorkspaceStore((s) => s.showSmartQueryHome);
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
-  const openDockFile = useWorkspaceStore((s) => s.openDockFile);
+  const openDockFile = useWorkspaceFileStore((s) => s.openFile);
 
   const {
     datasources,
@@ -203,7 +205,7 @@ export function DataSourceTree({
   const summaries = useConversationStore((s) => s.summaries);
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
   const openConversation = useConversationStore((s) => s.openConversation);
-  const selectedTables = useWorkspaceStore((s) => s.selectedTables);
+  const selectedTables = useTableWorkspaceStore((s) => s.selectedTables);
 
   const restoredConversationProjectRef = useRef<string>("");
   const [schemaCollapsed, setSchemaCollapsed] = useState(false);

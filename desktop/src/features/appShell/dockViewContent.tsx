@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { EmptyState, LoadingState } from "../../components/ui";
 import { useDatasourceState } from "../datasource/useDatasourceState";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useSqlConsoleStore } from "../../stores/sqlConsoleStore";
+import { useTableWorkspaceStore } from "../../stores/tableWorkspaceStore";
+import { useArtifactDockStore } from "../../stores/artifactDockStore";
 import { defaultSql } from "../workspace/defaultSql";
 import type { ConsoleEntry } from "../workspace/SqlConsoleWorkspace";
 import { useConversationViewModel } from "../conversation/workspace/useConversationViewModel";
@@ -39,9 +41,9 @@ export function ConsoleDockContent({
   showToast: DockShowToast;
 }) {
   const { datasources } = useDatasourceState();
-  const sqlConsoleState = useWorkspaceStore((s) => s.sqlConsoleState);
-  const patchSqlConsoleState = useWorkspaceStore((s) => s.patchSqlConsoleState);
-  const appendSqlConsoleEntries = useWorkspaceStore((s) => s.appendSqlConsoleEntries);
+  const sqlConsoleState = useSqlConsoleStore((s) => s.sqlConsoleState);
+  const patchSqlConsoleState = useSqlConsoleStore((s) => s.patchSqlConsoleState);
+  const appendSqlConsoleEntries = useSqlConsoleStore((s) => s.appendSqlConsoleEntries);
   const tabId = tab.stateKey ?? `sql-${tab.datasourceId}`;
   const state = sqlConsoleState[tabId] ?? { draftSql: defaultSql, entries: [], running: false };
 
@@ -65,9 +67,9 @@ export function TableDockContent({
   tab: WorkspaceDockTab;
   showToast: DockShowToast;
 }) {
-  const tableSubTabs = useWorkspaceStore((s) => s.tableSubTabs);
-  const setTableSubTabs = useWorkspaceStore((s) => s.setTableSubTabs);
-  const openDockConsole = useWorkspaceStore((s) => s.openDockConsole);
+  const tableSubTabs = useTableWorkspaceStore((s) => s.tableSubTabs);
+  const setTableSubTabs = useTableWorkspaceStore((s) => s.setTableSubTabs);
+  const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
   const tableId = tab.tableId ?? "";
   const datasourceId = tab.datasourceId ?? "";
   const subTabKey = tab.id || tableId;
@@ -96,8 +98,8 @@ export function ArtifactsDockContent({ conversationId }: { conversationId: strin
     selectArtifact,
     loadRunArtifacts,
   } = viewModel;
-  const openDockArtifact = useWorkspaceStore((s) => s.openDockArtifact);
-  const openDockConsole = useWorkspaceStore((s) => s.openDockConsole);
+  const openDockArtifact = useArtifactDockStore((s) => s.openArtifact);
+  const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
   const { activeDatasource } = useDatasourceState();
   const pendingRevealArtifactIdRef = useRef<string | null>(null);
 
@@ -211,7 +213,7 @@ export function ArtifactDockContent({
         onToast: showToast,
         mode: "workspace",
         onOpenResultTab: (value) => {
-          useWorkspaceStore.getState().openDockArtifact(value, tab.conversationId);
+          useArtifactDockStore.getState().openArtifact(value, tab.conversationId);
         },
       })}
     </WorkspaceShell>

@@ -13,6 +13,9 @@ import type { ContextMenuState } from "./types/workspace";
 import { installClientErrorLogging, recordClientLog } from "./lib/diagnostics/clientLog";
 import { useDatasourceState } from "./features/datasource/useDatasourceState";
 import { useWorkspaceStore } from "./stores/workspaceStore";
+import { useSqlConsoleStore } from "./stores/sqlConsoleStore";
+import { useTableWorkspaceStore } from "./stores/tableWorkspaceStore";
+import { useArtifactDockStore } from "./stores/artifactDockStore";
 import { useConversationStore } from "./stores/conversationStore";
 import { DesktopLifecycleMonitor } from "./features/appShell/DesktopLifecycleMonitor";
 import { LoadingState } from "./components/ui";
@@ -131,10 +134,10 @@ export default function App() {
   const dockTabs = useWorkspaceStore((s) => s.dockTabs);
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
   const setDockActiveTab = useWorkspaceStore((s) => s.setDockActiveTab);
-  const openDockConsole = useWorkspaceStore((s) => s.openDockConsole);
-  const openDockTable = useWorkspaceStore((s) => s.openDockTable);
-  const openDockArtifacts = useWorkspaceStore((s) => s.openDockArtifacts);
-  const openDockMultiTable = useWorkspaceStore((s) => s.openDockMultiTable);
+  const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
+  const openDockTable = useTableWorkspaceStore((s) => s.openTable);
+  const openDockArtifacts = useArtifactDockStore((s) => s.openArtifacts);
+  const openDockMultiTable = useTableWorkspaceStore((s) => s.openMultiTable);
   const showSmartQueryHome = useWorkspaceStore((s) => s.showSmartQueryHome);
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
   const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
@@ -192,7 +195,7 @@ export default function App() {
 
   const handleTableClick = (tableName: string, event: MouseEvent) => {
     if (event.ctrlKey || event.metaKey) {
-      useWorkspaceStore.getState().setSelectedTables((prev) => (
+      useTableWorkspaceStore.getState().setSelectedTables((prev) => (
         prev.includes(tableName) ? prev.filter((table) => table !== tableName) : [...prev, tableName]
       ));
       return;
@@ -203,8 +206,8 @@ export default function App() {
   const handleNodeContextMenu = (event: MouseEvent, type: "database" | "schema" | "table", nodeName: string) => {
     event.preventDefault();
     event.stopPropagation();
-    const selectedTables = useWorkspaceStore.getState().selectedTables;
-    const setSelectedTables = useWorkspaceStore.getState().setSelectedTables;
+    const selectedTables = useTableWorkspaceStore.getState().selectedTables;
+    const setSelectedTables = useTableWorkspaceStore.getState().setSelectedTables;
     if (type === "table" && selectedTables.length > 1 && selectedTables.includes(nodeName)) {
       setContextMenu({ visible: true, x: event.clientX, y: event.clientY, type: "multi-table", targetNode: nodeName });
       return;

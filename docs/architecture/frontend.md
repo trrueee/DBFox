@@ -111,6 +111,7 @@ flowchart LR
 - 项目「文件」子模式通过 Tauri `list_project_folder` 逐层懒加载本地目录（跳过 `.git`、`node_modules`、`target` 等重目录），点击文本文件用 `read_project_file` 读取（UTF-8、≤ 1 MiB），并在 Dock 打开只读 `dbfox.workspace.file` 视图；文件内容不进入 Shell Store。
 - 顶部不再显示项目名与连接状态。
 - 右侧 `WorkspaceDock` 是统一 Tab 容器：SQL 控制台、表详情、只读项目文件、工件总览和工件 Tab 都在这里。项目文件 Tab 按 `projectId` 对当前 Project 可见，切换 Project 后其他 Project 的文件 Tab 隐藏。
+- Shell/View 状态已分 owner：`workspaceStore` 只保存 Shell identity/layout 和通用 `openDockTab`/`updateDockTab`；SQL draft/entries 归 `sqlConsoleStore`，表选择/表子页归 `tableWorkspaceStore`，工件/文件 Dock 打开动作归 `artifactDockStore`/`workspaceFileStore`。`WorkspaceDockTabKind` 是开放 string，未知 view 走统一 fallback。
 - 对话历史只保留在左侧项目卡内的对话列表；不再提供独立的「历史记录」入口，也不再作为 Dock Tab。
 - 「✦ 工件」Tab 的内容是 `ArtifactDock` 的列表 + 预览结构，工件事实仍属于 Conversation Store 与后端制品，不作为独立事实源。
 - Dock 可展开/收起；窄窗口下保持对话可用，打开或关闭 Dock 不丢失选中 Artifact ID。

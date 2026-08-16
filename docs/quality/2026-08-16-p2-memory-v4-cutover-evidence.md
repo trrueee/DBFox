@@ -32,6 +32,8 @@
 - failed / cancelled Run 的 succeeded Observation 可进入 v4 projection；
 - projection contract failure 不阻断 canonical terminalization，watermark 不前进；
 - sequence gap 不跨越；
+- resource-generation transition 会重置 Catalog working state，避免 projector 长期停留在旧 generation；
+- prior search query 只提升其自身 footprint 的 candidate keys，不会把一次命中放大为所有历史对象命中；
 - resource fence（datasource / generation / catalog revision）阻止 stale knowledge；
 - prior digest 有界（8 objects / 12 columns / 16 KiB / 2,000 tokens 估算）；
 - Memory 只保存 footprint/provenance，不保存 rows / 完整 schema / secret。

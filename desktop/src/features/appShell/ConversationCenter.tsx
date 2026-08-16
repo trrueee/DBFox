@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { useConversationStore } from "../../stores/conversationStore";
 import { useDatasourceState } from "../datasource/useDatasourceState";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useSqlConsoleStore } from "../../stores/sqlConsoleStore";
 import { getUserErrorMessage } from "../../lib/api/client";
 import { SmartQueryHome } from "../workspace/SmartQueryHome";
 import { Button, EmptyState, LoadingState } from "../../components/ui";
@@ -25,7 +26,7 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
   const pendingAsk = useWorkspaceStore((s) => s.pendingAsk);
   const clearPendingAsk = useWorkspaceStore((s) => s.clearPendingAsk);
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
-  const openDockConsole = useWorkspaceStore((s) => s.openDockConsole);
+  const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
   const { activeDatasource } = useDatasourceState();
   const [askInputValue, setAskInputValue] = useState("");

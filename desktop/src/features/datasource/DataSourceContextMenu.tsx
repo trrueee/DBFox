@@ -1,7 +1,7 @@
 import { useId, useLayoutEffect, type ReactNode } from "react";
 import { Copy, FileText, GitMerge, Info, Layers, RefreshCw, Terminal, Trash2, X } from "lucide-react";
 import type { ContextMenuState } from "../../types/workspace";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useTableWorkspaceStore } from "../../stores/tableWorkspaceStore";
 import { clearCspOverlayPosition, setCspOverlayPosition } from "../../lib/cspDynamicPosition";
 
 interface DataSourceContextMenuProps {
@@ -24,8 +24,8 @@ export function DataSourceContextMenu({
   onOpenProps,
 }: DataSourceContextMenuProps) {
   const positionToken = useId().replaceAll(":", "");
-  const selectedTables = useWorkspaceStore((s) => s.selectedTables);
-  const setSelectedTables = useWorkspaceStore((s) => s.setSelectedTables);
+  const selectedTables = useTableWorkspaceStore((s) => s.selectedTables);
+  const setSelectedTables = useTableWorkspaceStore((s) => s.setSelectedTables);
 
   useLayoutEffect(() => {
     if (!contextMenu.visible) return undefined;

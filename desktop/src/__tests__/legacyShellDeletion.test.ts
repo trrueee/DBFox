@@ -19,7 +19,7 @@ function sourceFiles(dir: string): string[] {
 
 describe("legacy Workspace Shell deletion", () => {
   it("has no production imports of WorkspaceTabs or WorkspaceRouter", () => {
-    const root = process.cwd();
+    const root = join(process.cwd(), "src");
     const failures: string[] = [];
     for (const file of sourceFiles(root)) {
       const source = readFileSync(file, "utf8");
@@ -31,15 +31,13 @@ describe("legacy Workspace Shell deletion", () => {
   });
 
   it("does not render the deleted legacy files", () => {
-    const root = process.cwd();
+    const root = join(process.cwd(), "src");
     expect(() => readFileSync(join(root, "features/workspace/WorkspaceTabs.tsx"), "utf8")).toThrow();
     expect(() => readFileSync(join(root, "features/appShell/WorkspaceRouter.tsx"), "utf8")).toThrow();
   });
-});
-
 
   it("removes legacy WorkspaceTab and internal ArtifactDock wiring from production", () => {
-    const root = process.cwd();
+    const root = join(process.cwd(), "src");
     const failures: string[] = [];
     for (const file of sourceFiles(root)) {
       const relativePath = relative(root, file).replaceAll("\\", "/");
@@ -54,3 +52,17 @@ describe("legacy Workspace Shell deletion", () => {
     }
     expect(failures).toEqual([]);
   });
+
+  it("keeps view business state outside the Shell Store", () => {
+    const root = join(process.cwd(), "src");
+    const shellSource = readFileSync(join(root, "stores/workspaceStore.ts"), "utf8");
+    expect(shellSource).not.toContain("sqlConsoleState");
+    expect(shellSource).not.toContain("selectedTables");
+    expect(shellSource).not.toContain("tableSubTabs");
+    expect(shellSource).not.toContain("openDockConsole");
+    expect(shellSource).not.toContain("openDockTable");
+    expect(shellSource).not.toContain("openDockFile");
+    expect(shellSource).not.toContain("openDockArtifact");
+    expect(shellSource).not.toContain("openDockMultiTable");
+  });
+});

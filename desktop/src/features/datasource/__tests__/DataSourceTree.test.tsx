@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
+import { useTableWorkspaceStore } from "../../../stores/tableWorkspaceStore";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import { useConversationStore } from "../../../stores/conversationStore";
 import type { DataSource } from "../../../lib/api/types";
@@ -94,8 +95,8 @@ describe("DataSourceTree", () => {
       projectSubMode: {},
       connectionSubMode: {},
       projectShell: {},
-      selectedTables: [],
     });
+    useTableWorkspaceStore.setState({ selectedTables: [], tableSubTabs: {} });
     useConversationStore.setState({
       activeConversationId: null,
       summaries: [

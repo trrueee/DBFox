@@ -2,13 +2,8 @@
 
 import type { ResultViewArtifact } from "./agentArtifact";
 
-export type WorkspaceDockTabKind =
-  | "console"
-  | "table"
-  | "artifacts"
-  | "artifact"
-  | "multi-table"
-  | "file";
+/** Dock view kind is an open Extension string; unknown kinds render a fallback. */
+export type WorkspaceDockTabKind = string;
 
 /** 右栏 Dock Tab（V3）：固定 Tab 不可关闭，临时 Tab 可关闭。 */
 export interface WorkspaceDockTab {
@@ -36,6 +31,11 @@ export type MainSurfaceRef =
   | { kind: "new-conversation" }
   | { kind: "project-create" }
   | { kind: "empty" };
+
+export interface TableTabDatasourceContext {
+  id: string;
+  dbType?: string | null;
+}
 
 export interface ContextMenuState {
   visible: boolean;

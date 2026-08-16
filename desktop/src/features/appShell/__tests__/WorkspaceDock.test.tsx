@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
+import { useSqlConsoleStore } from "../../../stores/sqlConsoleStore";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import { WorkspaceDock } from "../WorkspaceDock";
 
@@ -78,10 +79,12 @@ describe("WorkspaceDock", () => {
         datasourceId: "ds-1",
         datasourceDbType: "mysql",
       }],
+      settingsOpen: false,
+    });
+    useSqlConsoleStore.setState({
       sqlConsoleState: {
         "sql-ds-1": { draftSql: "SELECT 1", entries: [], running: false },
       },
-      settingsOpen: false,
     });
   });
 
