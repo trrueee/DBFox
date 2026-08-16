@@ -71,7 +71,11 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
         backend="in_process",
         capabilities=("filesystem_read",),
     )
-    semantics = ToolSemanticSpec()
+    semantics = ToolSemanticSpec(
+        produces=("dbfox.workspace.file_snapshot",),
+        contributes_progress=True,
+        publishes_artifact_references=False,
+    )
     presentation = ToolPresentation(
         title="读取项目文件",
         category="explore",

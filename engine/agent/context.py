@@ -417,6 +417,28 @@ class ContextAssembler:
             if MEMORY_V4_CONTEXT_ENABLED
             else self._memory(run, aggregate, sources)
         )
+        workspace_fragments = self._workspace_context_fragments(
+            run,
+            aggregate,
+        )
+        if workspace_fragments:
+            memory = {
+                **memory,
+                "WORKSPACE_RESOURCES": workspace_fragments,
+            }
+            sources.append(
+                ContextSource(
+                    kind="workspace_context",
+                    source_id="dbfox.workspace",
+                    version=workspace_fragments[0]["source_version"],
+                    included=True,
+                    reason=(
+                        f"included {len(workspace_fragments)} bounded Workspace "
+                        "file snapshot references"
+                    ),
+                    provenance={"canonical_table": "agent_observations"},
+                )
+            )
         workspace_context = _json_object(admitted.workspace_context_json)
         run_focus = _json_object(run.result_json).get("focus", {})
         previous_run_outcome = self._previous_run_outcome(run, sources)
@@ -478,6 +500,31 @@ class ContextAssembler:
             sources=sources,
             hash=digest,
         )
+
+    def _workspace_context_fragments(
+        self,
+        run: AgentRun,
+        aggregate: AgentSession,
+    ) -> list[dict[str, Any]]:
+        from engine.agent.context_fragment import ContextContributionInput
+        from engine.agent.workspace_context import WorkspaceContextContributor
+
+        contributor = WorkspaceContextContributor(self.session)
+        fragments = contributor.build(
+            ContextContributionInput(
+                session_id=str(run.session_id),
+                run_id=str(run.id),
+                current_request=str(
+                    self.session.get(AgentSessionInput, run.input_id).content
+                    if run.input_id and self.session.get(AgentSessionInput, run.input_id)
+                    else ""
+                ),
+            )
+        )
+        return [
+            fragment.model_dump(mode="json")
+            for fragment in fragments
+        ]
 
     def _previous_run_outcome(
         self,
