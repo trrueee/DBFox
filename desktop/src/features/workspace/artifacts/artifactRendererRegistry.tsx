@@ -5,11 +5,13 @@ import { DeferredChartArtifactView } from "./DeferredChartArtifactView";
 import { MarkdownArtifactView } from "./MarkdownArtifactView";
 import { SqlArtifactView } from "./SqlArtifactView";
 import { TableArtifactView } from "./TableArtifactView";
+import { WorkspaceFileSnapshotArtifactView } from "./WorkspaceFileSnapshotArtifactView";
 import type {
   ChartArtifact,
   MarkdownArtifact,
   ResultViewArtifact,
   SqlArtifact,
+  WorkspaceFileSnapshotArtifact,
 } from "../../../types/agentArtifact";
 
 /**
@@ -140,6 +142,25 @@ function parseMarkdownPayload(value: unknown): MarkdownArtifact {
   };
 }
 
+function parseWorkspaceFileSnapshotPayload(
+  value: unknown,
+): WorkspaceFileSnapshotArtifact {
+  const payload = asRecord(value);
+  return {
+    id: "",
+    type: "dbfox.workspace.file_snapshot",
+    schemaVersion: 1,
+    title: "",
+    relativePath: requiredString(payload.relativePath, "relativePath"),
+    sizeBytes:
+      typeof payload.sizeBytes === "number" && payload.sizeBytes >= 0
+        ? payload.sizeBytes
+        : 0,
+    sha256: requiredString(payload.sha256, "sha256"),
+    truncated: payload.truncated === true,
+  };
+}
+
 function parseSqlPayload(value: unknown): SqlArtifact {
   const payload = asRecord(value);
   return {
@@ -168,6 +189,19 @@ function parseSqlPayload(value: unknown): SqlArtifact {
 const RENDERER_CONTRIBUTIONS: ReadonlyArray<
   ArtifactRendererContribution<unknown>
 > = [
+  {
+    type: "dbfox.workspace.file_snapshot",
+    supportedSchemaVersions: [1],
+    parsePayload: parseWorkspaceFileSnapshotPayload,
+    render: (artifact) => {
+      const model = {
+        ...parseWorkspaceFileSnapshotPayload(artifact.payload),
+        id: artifact.id,
+        title: artifact.title,
+      };
+      return <WorkspaceFileSnapshotArtifactView artifact={model} />;
+    },
+  },
   {
     type: "result_view",
     supportedSchemaVersions: [1],

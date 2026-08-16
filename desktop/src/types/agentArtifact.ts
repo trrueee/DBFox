@@ -1,4 +1,4 @@
-export type AgentArtifactType = "chart" | "sql" | "result_view" | "markdown";
+export type AgentArtifactType = string;
 
 export type AgentArtifactBase = {
   id: string;
@@ -62,3 +62,12 @@ export type DataReference =
   | { type: "sql"; artifactId: string; label: string; sql?: string }
   | { type: "result"; artifactId: string; rowCount?: number; label: string }
   | { type: "chart"; artifactId: string; label: string };
+
+
+export type WorkspaceFileSnapshotArtifact = AgentArtifactBase & {
+  type: "dbfox.workspace.file_snapshot";
+  relativePath: string;
+  sizeBytes: number;
+  sha256: string;
+  truncated: boolean;
+};
