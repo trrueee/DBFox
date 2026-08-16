@@ -4,15 +4,19 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-16
+> 最后核验：2026-08-17
 >
 > 适用范围：`catalog_revision`、Memory v4 projection、`DBFOX_MEMORY_V4_CONTEXT` read path 的 P2 5.6 验收
 
 ## 1. 结论
 
 - P2 5.1–5.5 的代码合同已实现并由确定性测试覆盖。
-- **P2 5.6 尚未完全通过**：缺少当前工作树下的真实 Provider AgentBench 后测与 v3→v4 对比。
+- **P2 5.6 尚未完全通过**：真实 Provider AgentBench 后测已开始，但发现并修复 projection 无法写入的问题；修复后的完整 v4 候选运行被中止，尚未形成通过结论。
 - `DBFOX_MEMORY_V4_CONTEXT` 默认保持关闭，这是安全默认值；未完成 cutover 前不得默认开启。
+
+后续调查见：
+
+- [P2 Memory v4 DeepSeek 真实 Provider 调查与修复记录](./2026-08-17-memory-v4-projection-deepseek-investigation.md)
 
 ## 2. 已完成的本地确定性门禁
 
@@ -70,3 +74,7 @@
 4. `scripts.agentbench compare` 回归门禁通过。
 
 在此之前，P2 5.6 保持未完成，`DBFOX_MEMORY_V4_CONTEXT` 保持默认 `0`。
+
+## 6. 2026-08-17 DeepSeek 后测更新
+
+DeepSeek `deepseek-v4-flash` 已用于低成本真实 Provider 验证。运行中暴露的 `agent_memory_save_projection` warning 是真实问题：Memory v4 投影从未写入，v4 context 并未真正启用。根因和修复记录见上文链接。修复后的完整对比尚未完成，因此本文件的核心结论不变。
