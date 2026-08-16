@@ -61,14 +61,14 @@
 
 .sql-console-transcript {
   flex: 0 0 auto;
-  padding: 10px 14px 0;
+  padding: var(--space-4) var(--space-6) 0;
 }
 
 .sql-console-command-row {
   display: grid;
   min-height: 160px;
   flex: 0 0 160px;
-  grid-template-columns: 52px minmax(0, 1fr);
+  grid-template-columns: 60px minmax(0, 1fr);
   align-items: stretch;
 }
 
@@ -118,7 +118,7 @@
 .sql-console-editor .cm-content {
   min-height: 100%;
   padding: 10px 0 32px;
-  caret-color: var(--color-success);
+  caret-color: var(--color-console-accent);
 }
 
 .sql-console-editor .cm-line {
@@ -139,7 +139,7 @@
 }
 
 .sql-console-editor .cm-cursor {
-  border-left-color: var(--color-success);
+  border-left-color: var(--color-console-accent);
 }
 
 .sql-console-editor .cm-foldPlaceholder {
@@ -269,6 +269,7 @@
   background: var(--surface-raised);
   color: var(--color-text-secondary);
   font-size: var(--ui-font-label);
+  font-variant-numeric: tabular-nums;
   box-sizing: border-box;
 }
 
@@ -301,14 +302,14 @@
 
 .sql-console-stmt {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 60px minmax(0, 1fr);
   align-items: start;
-  margin: 10px 0 4px;
+  margin: var(--space-2) 0 var(--space-1);
 }
 
 .sql-console-prompt-label {
   flex-shrink: 0;
-  color: var(--color-success);
+  color: var(--color-console-accent);
   font-weight: 650;
   line-height: var(--code-line-height);
   user-select: none;
@@ -326,31 +327,35 @@
   color: var(--color-warning);
 }
 
+/* 设计基线 §8.1：错误不画卡片 —— 图标/错误码红色，描述继承正文色，内联排版。 */
 .sql-console-error {
-  margin: 8px 0 4px 44px;
-  padding: 7px 10px;
-  border-left: 2px solid var(--color-danger);
-  border-radius: 0 6px 6px 0;
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
+  margin: var(--space-1) 0 var(--space-2) 60px;
+  padding: 0;
+  border-left: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .sql-console-error strong {
-  margin-right: 8px;
+  margin-right: var(--space-2);
+  color: var(--color-danger);
 }
 
+/* 设计基线 §8：结果表格是 transcript 中唯一允许的盒形容器 —— 只保留细边框，
+   不出现圆角卡片、阴影或双边框。 */
 .sql-console-result {
   display: flex;
-  width: calc(100% - 44px);
+  width: calc(100% - 60px);
   height: clamp(240px, 42vh, 480px);
   min-height: 240px;
   flex-direction: column;
-  margin: 8px 0 14px 44px;
+  margin: var(--space-2) 0 var(--space-4) 60px;
   overflow: hidden;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
 }
 
@@ -364,7 +369,9 @@
   padding: 4px 10px;
   border-bottom: 1px solid var(--color-border);
   color: var(--color-text-muted);
+  font-family: var(--font-mono);
   font-size: var(--ui-font-label);
+  font-variant-numeric: tabular-nums;
   box-sizing: border-box;
 }
 
@@ -398,11 +405,21 @@
   }
 
   .sql-console-command-row {
-    grid-template-columns: 46px minmax(0, 1fr);
+    grid-template-columns: 56px minmax(0, 1fr);
   }
 
   .sql-console-transcript {
-    padding-inline: 10px;
+    padding-inline: var(--space-4);
+  }
+
+  .sql-console-stmt,
+  .sql-console-error,
+  .sql-console-result {
+    margin-left: 56px;
+  }
+
+  .sql-console-result {
+    width: calc(100% - 56px);
   }
 }
 

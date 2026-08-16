@@ -215,6 +215,10 @@ export type Artifact = {
      */
     run_id: string;
     /**
+     * Schema Version
+     */
+    schema_version?: number;
+    /**
      * Semantic Key
      */
     semantic_key?: string | null;
@@ -235,7 +239,10 @@ export type Artifact = {
      * Turn Id
      */
     turn_id?: string | null;
-    type: ArtifactType;
+    /**
+     * Type
+     */
+    type: string;
     /**
      * Version
      */
@@ -301,11 +308,6 @@ export type ArtifactSelectionResponse = {
  * ArtifactStatus
  */
 export type ArtifactStatus = 'creating' | 'completed' | 'failed' | 'stale';
-
-/**
- * ArtifactType
- */
-export type ArtifactType = 'analysis_plan' | 'sql' | 'safety' | 'result_view' | 'chart' | 'markdown' | 'error';
 
 /**
  * ArtifactVisibility
@@ -2267,6 +2269,10 @@ export type ProjectCreateRequest = {
      * Name
      */
     name: string;
+    /**
+     * Workspace Root
+     */
+    workspace_root?: string | null;
 };
 
 /**
@@ -2301,6 +2307,10 @@ export type ProjectResponse = {
      * Updated At
      */
     updated_at?: string | null;
+    /**
+     * Workspace Root
+     */
+    workspace_root?: string | null;
 };
 
 /**

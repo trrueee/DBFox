@@ -49,15 +49,11 @@ describe("ConversationWorkspace", () => {
     };
   });
 
-  it("keeps the conversation and core artifact dock in separate resizable panels", () => {
+  it("keeps Conversation as the only Main Surface and does not render an internal ArtifactDock", () => {
     renderWorkspace();
-    const conversationPane = screen.getByRole("region", { name: "Conversation" });
-    const artifactDock = screen.getByRole("complementary", { name: "Artifact dock" });
-    expect(conversationPane.closest(".conv-artifact-main-panel")).toBeTruthy();
-    expect(artifactDock.closest(".conv-artifact-dock-panel")).toBeTruthy();
-    expect(screen.getByRole("separator", { name: "调整工件区宽度" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Revenue Result Result" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Revenue SQL SQL" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Conversation" })).toBeTruthy();
+    expect(screen.queryByRole("complementary", { name: "Artifact dock" })).toBeNull();
+    expect(screen.queryByRole("separator", { name: "调整工件区宽度" })).toBeNull();
   });
 
   it("pins the canonical waiting approval above the composer", () => {
@@ -111,8 +107,11 @@ describe("ConversationWorkspace", () => {
       artifacts: artifacts(),
     };
     rendered.rerender(workspace());
-    expect(screen.getByRole("complementary", { name: "Artifact dock" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Revenue Result Result" })).toBeTruthy();
+    expect(screen.queryByRole("complementary", { name: "Artifact dock" })).toBeNull();
+    expect(viewModel.current.selectArtifact as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      "session-1",
+      "result-1",
+    );
   });
 });
 
@@ -124,10 +123,7 @@ function workspace() {
   return (
     <ConversationWorkspace
       conversationId="session-1"
-      onOpenHistory={vi.fn()}
       onOpenSqlConsole={vi.fn()}
-      onOpenResultTab={vi.fn()}
-      onDelete={vi.fn()}
     />
   );
 }

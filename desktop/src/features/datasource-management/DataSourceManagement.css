@@ -28,6 +28,56 @@
   gap: 12px;
 }
 
+.ds-page-context-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 4px 2px 2px;
+  background: transparent;
+}
+
+.ds-page-context-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.ds-page-context-back {
+  display: inline-flex;
+  height: var(--density-control-height-sm);
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-control);
+}
+
+.ds-page-context-back:hover {
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.ds-page-context-back:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.ds-page-context-description {
+  margin: 5px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
+  line-height: 1.45;
+}
+
 .ds-page-toolbar__meta {
   color: var(--color-text-muted);
   font-size: var(--ui-font-control);

@@ -1,0 +1,117 @@
+.project-create {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 100%;
+  padding: 32px 16px;
+}
+
+.project-create__card {
+  width: min(520px, 100%);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-window);
+  padding: 20px;
+}
+
+.project-create__header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.project-create__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-control);
+  padding: 0;
+}
+
+.project-create__back:hover {
+  color: var(--color-primary);
+}
+
+.project-create__title {
+  margin: 0;
+  font-size: var(--ui-font-title);
+  font-weight: 650;
+  color: var(--color-text-primary);
+}
+
+.project-create__description {
+  margin: 0;
+  font-size: var(--ui-font-control);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.project-create__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.project-create__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-create__label {
+  font-size: var(--ui-font-label);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.project-create__error {
+  border: 1px solid var(--trust-danger-border);
+  border-radius: var(--radius-control);
+  background: var(--trust-danger-bg);
+  color: var(--trust-danger);
+  font-size: var(--ui-font-control);
+  padding: 8px 10px;
+}
+
+.project-create__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.project-create__folder-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--density-control-height);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--control-bg-subtle, var(--color-bg-subtle));
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-control);
+  padding: 0 10px;
+}
+
+.project-create__folder-picker:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.project-create__folder-path {
+  margin-top: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-caption);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

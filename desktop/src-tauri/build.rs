@@ -22,6 +22,9 @@ fn main() {
         "open_external_https_url",
         "save_external_image",
         "export_diagnostic_bundle",
+        "pick_project_folder",
+        "list_project_folder",
+        "read_project_file",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(app_manifest))
         .expect("failed to build DBFox Tauri application manifest");

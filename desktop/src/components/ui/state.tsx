@@ -75,4 +75,22 @@ function LoadingState({ label = "加载中", className, ...props }: LoadingState
   );
 }
 
-export { EmptyState, ErrorState, LoadingState };
+interface SkeletonProps extends React.HTMLAttributes<HTMLSpanElement> {
+  variant?: "text" | "row" | "control";
+}
+
+/**
+ * 尺寸全部由 CSS 变体控制：text/row 占满行宽，control 为固定宽度。
+ * CSP（style-src-attr 'none'）禁止内联 style 属性，因此不提供 width prop。
+ */
+function Skeleton({ variant = "text", className, ...props }: SkeletonProps) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("dbfox-skeleton", `dbfox-skeleton--${variant}`, className)}
+      {...props}
+    />
+  );
+}
+
+export { EmptyState, ErrorState, LoadingState, Skeleton };

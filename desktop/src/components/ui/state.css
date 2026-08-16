@@ -4,8 +4,8 @@
   align-items: center;
   justify-content: center;
   min-height: 128px;
-  gap: 8px;
-  padding: 24px 16px;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
   text-align: center;
   background: var(--surface-panel-muted);
   border: 1px dashed var(--color-border);
@@ -24,8 +24,8 @@
 }
 
 .dbfox-empty-state__icon svg {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
 }
 
 .dbfox-empty-state__title {
@@ -44,15 +44,15 @@
 }
 
 .dbfox-empty-state__action {
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .dbfox-error-state {
   display: flex;
   align-items: flex-start;
   min-height: 96px;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   background: var(--color-danger-soft);
   border: 1px solid color-mix(in srgb, var(--color-danger) 25%, transparent);
   border-radius: var(--radius-panel);
@@ -64,8 +64,8 @@
 }
 
 .dbfox-error-state__icon svg {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
 }
 
 .dbfox-error-state__content {
@@ -81,32 +81,66 @@
 }
 
 .dbfox-error-state__description {
-  margin: 4px 0 0;
+  margin: var(--space-1) 0 0;
   color: var(--color-text-secondary);
   font-size: var(--ui-font-control);
   line-height: 1.6;
 }
 
 .dbfox-error-state__retry {
-  margin-top: 12px;
+  margin-top: var(--space-3);
 }
 
 .dbfox-loading-state {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   color: var(--color-text-secondary);
   font-size: var(--ui-font-control);
 }
 
 .dbfox-loading-state__icon {
-  width: 14px;
-  height: 14px;
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
   animation: dbfox-loading-state-spin 1s linear infinite;
 }
 
 @keyframes dbfox-loading-state-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* ── Skeleton：列表 / 表格 / 对话的 loading 占位 ──
+   只用 opacity 脉动，尊重 prefers-reduced-motion。 */
+.dbfox-skeleton {
+  display: block;
+  height: 1em;
+  background: var(--surface-panel-muted);
+  border-radius: var(--radius-sm);
+  animation: dbfox-skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+.dbfox-skeleton--text {
+  width: 100%;
+}
+
+.dbfox-skeleton--row {
+  height: var(--density-tree-row-height);
+}
+
+.dbfox-skeleton--control {
+  width: 120px;
+  height: var(--density-control-height-sm);
+  border-radius: var(--radius-control);
+}
+
+@keyframes dbfox-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
   }
 }

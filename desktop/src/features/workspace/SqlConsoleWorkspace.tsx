@@ -28,6 +28,18 @@ export type ConsoleEntry =
   | { id: number; kind: "result"; artifact: ResultViewArtifact; runId: string; time: string }
   | { id: number; kind: "error"; message: string; time: string };
 
+// 设计基线 §8.1：prompt 跟随数据库类型（mysql › / psql › / sqlite › / duckdb ›）。
+const CONSOLE_PROMPTS: Record<string, string> = {
+  mysql: "mysql ›",
+  postgresql: "psql ›",
+  sqlite: "sqlite ›",
+  duckdb: "duckdb ›",
+};
+
+function consolePrompt(dbType?: string | null): string {
+  return (dbType && CONSOLE_PROMPTS[dbType]) || "sql ›";
+}
+
 interface SqlConsoleWorkspaceProps {
   tabId: string;
   state: SqlConsoleTabState;
@@ -70,6 +82,7 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
   const dbLabel = resolvedDatasource
     ? `${resolvedDatasource.name} · ${resolvedDatasource.database_name} · ${databaseTypeLabel(resolvedDatasource.db_type)}`
     : "数据源不可用";
+  const prompt = consolePrompt(resolvedDatasource?.db_type);
   const completionCatalog = useSqlCompletionCatalog({
     datasourceId: resolvedDatasource?.id ?? "",
     connectionGeneration: resolvedDatasource?.connection_generation ?? 0,
@@ -187,7 +200,7 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
           ref={terminalScrollRef}
         >
           <div className="sql-console-transcript">
-            {entries.map((entry) => renderEntry(entry, onToast))}
+            {entries.map((entry) => renderEntry(entry, onToast, prompt))}
             {running && <LoadingState className="sql-console-running" label="正在执行…" />}
           </div>
 
@@ -195,7 +208,7 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
             className={`sql-console-command-row ${hasCommandHistory ? "has-history" : "is-empty"}`}
             aria-label="当前 SQL 输入"
           >
-            <span className="sql-console-prompt-label">sql&gt;</span>
+            <span className="sql-console-prompt-label">{prompt}</span>
             <div className="sql-console-input-stack">
                 <SqlEditor
                   value={draftSql}
@@ -224,7 +237,7 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
   );
 }
 
-function renderEntry(entry: ConsoleEntry, onToast: (message: string) => void) {
+function renderEntry(entry: ConsoleEntry, onToast: (message: string) => void, prompt: string) {
   switch (entry.kind) {
     case "info":
       return (
@@ -235,7 +248,7 @@ function renderEntry(entry: ConsoleEntry, onToast: (message: string) => void) {
     case "sql":
       return (
         <div key={entry.id} className="sql-console-stmt">
-          <span className="sql-console-prompt-label">sql&gt;</span>
+          <span className="sql-console-prompt-label">{prompt}</span>
           <pre className="sql-console-sql">{entry.sql}</pre>
         </div>
       );
@@ -285,7 +298,7 @@ function ResultBlock({
   const latencyText = artifact.latencyMs !== undefined ? ` · ${artifact.latencyMs}ms` : "";
   return (
     <div className="sql-console-result">
-      <div className="sql-console-result-meta">
+      <div className="sql-console-result-meta dbfox-tnum">
         查询结果 · {rowCount} 行{latencyText} · {time}
         {artifact.truncated ? " · 结果已截断" : ""}
         <details className="sql-console-result-details">

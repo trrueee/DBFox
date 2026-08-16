@@ -1,199 +1,226 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { ResultViewArtifact } from "../../types/agentArtifact";
 import { useWorkspaceStore } from "../workspaceStore";
 
-const INITIAL = {
-  tabs: [{ id: "smart-query", title: "问数工作台", type: "smart-query" as const }],
-  activeTabId: "smart-query",
-  sqlConsoleState: {},
-  selectedTables: [],
-  tableSubTabs: {},
-  settingsOpen: false,
-  settingsSection: "appearance" as const,
-  _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
-};
-
 function reset() {
-  useWorkspaceStore.setState(INITIAL);
+  useWorkspaceStore.setState({
+    activeProjectId: "",
+    sidebarEntityMode: "connections",
+    projectSubMode: {},
+    connectionSubMode: {},
+    projectShell: {},
+    mainSurfaceByProject: {},
+    centerMode: "home",
+    centerReturnMode: "home",
+    pendingAsk: null,
+    dock: { open: false, activeTabId: null },
+    dockTabs: [],
+    sqlConsoleState: {},
+    selectedTables: [],
+    tableSubTabs: {},
+    settingsOpen: false,
+    settingsSection: "appearance",
+  });
 }
 
-describe("workspaceStore — tabs", () => {
+describe("workspaceStore — Shell", () => {
   beforeEach(reset);
 
-  it("openSqlConsole adds a new sql tab and activates it", () => {
-    useWorkspaceStore.getState().openSqlConsole("SELECT 1");
-    const s = useWorkspaceStore.getState();
-    expect(s.tabs).toHaveLength(2);
-    expect(s.tabs[1].type).toBe("sql");
-    expect(s.activeTabId).toBe("sql-1");
-    expect(s.sqlConsoleState["sql-1"].draftSql).toBe("SELECT 1");
-  });
+  it("keeps sidebar and datasource selections scoped per real Project", () => {
+    useWorkspaceStore.getState().setActiveProject("project-1");
+    useWorkspaceStore.getState().setProjectSidebarMode("project-1", "conversations");
+    useWorkspaceStore.getState().setProjectActiveDatasource("project-1", "ds-a");
 
-  it("openSqlConsole can bind a SQL tab to a datasource", () => {
-    useWorkspaceStore.getState().openSqlConsole("SELECT * FROM users", "ds-2", "mysql");
+    useWorkspaceStore.getState().setActiveProject("project-2");
+    useWorkspaceStore.getState().setProjectSidebarMode("project-2", "data");
 
-    const s = useWorkspaceStore.getState();
-    expect(s.tabs[1]).toMatchObject({
-      id: "sql-1",
-      type: "sql",
-      datasourceId: "ds-2",
-      datasourceDbType: "mysql",
+    expect(useWorkspaceStore.getState().projectShell["project-1"]).toEqual({
+      sidebarMode: "conversations",
+      activeDatasourceId: "ds-a",
     });
-    expect(s.sqlConsoleState["sql-1"].draftSql).toBe("SELECT * FROM users");
+    expect(useWorkspaceStore.getState().projectShell["project-2"]).toEqual({
+      sidebarMode: "data",
+    });
   });
 
-  it("closeTab removes the tab and clears its console state", () => {
-    useWorkspaceStore.getState().openSqlConsole();
-    useWorkspaceStore.getState().closeTab("sql-1");
-    const s = useWorkspaceStore.getState();
-    expect(s.tabs.find((t) => t.id === "sql-1")).toBeUndefined();
-    expect(s.sqlConsoleState["sql-1"]).toBeUndefined();
+  it("tracks the fixed Main Surface per Project", () => {
+    useWorkspaceStore.getState().setActiveProject("project-1");
+    useWorkspaceStore.getState().showSmartQueryHome("问一下");
+    expect(useWorkspaceStore.getState().mainSurfaceByProject["project-1"]).toEqual({
+      kind: "new-conversation",
+    });
+
+    useWorkspaceStore.getState().openConversationCenter("conv-9");
+    expect(useWorkspaceStore.getState().mainSurfaceByProject["project-1"]).toEqual({
+      kind: "conversation",
+      conversationId: "conv-9",
+    });
   });
 
-  it("ignores late SQL state writes after a tab is closed", () => {
-    const store = useWorkspaceStore.getState();
-    store.openSqlConsole("SELECT 1");
-    useWorkspaceStore.getState().closeTab("sql-1");
-
-    useWorkspaceStore.getState().patchSqlConsoleState("sql-1", { running: false });
-    useWorkspaceStore.getState().appendSqlConsoleEntries("sql-1", [
-      { id: 1, kind: "info", text: "late", time: "00:00" },
-    ]);
-
-    expect(useWorkspaceStore.getState().sqlConsoleState["sql-1"]).toBeUndefined();
-  });
-
-  it("closeTab restores the default tab when all tabs are gone", () => {
-    useWorkspaceStore.getState().closeTab("smart-query");
-    const s = useWorkspaceStore.getState();
-    expect(s.tabs).toHaveLength(1);
-    expect(s.tabs[0].id).toBe("smart-query");
-    expect(s.activeTabId).toBe("smart-query");
-  });
-
-  it("setTabs accepts an updater function", () => {
-    useWorkspaceStore.getState().setTabs((prev) => [...prev, { id: "x", title: "X", type: "table" }]);
-    expect(useWorkspaceStore.getState().tabs.find((t) => t.id === "x")).toBeDefined();
-  });
-
-  it("patchTab merges a partial update into a single tab", () => {
-    useWorkspaceStore.getState().patchTab("smart-query", { title: "分析运行中" });
-    expect(useWorkspaceStore.getState().tabs[0].title).toBe("分析运行中");
-  });
-
-  it("opens settings as an app mode without adding a workspace tab", () => {
+  it("opens settings and switches sections", () => {
     useWorkspaceStore.getState().openSettings("model");
     expect(useWorkspaceStore.getState()).toMatchObject({
       settingsOpen: true,
       settingsSection: "model",
-      activeTabId: "smart-query",
     });
-    expect(useWorkspaceStore.getState().tabs).toHaveLength(1);
-
-    useWorkspaceStore.getState().setSettingsSection("diagnostics");
-    expect(useWorkspaceStore.getState().settingsSection).toBe("diagnostics");
-
+    useWorkspaceStore.getState().setSettingsSection("appearance");
+    expect(useWorkspaceStore.getState().settingsSection).toBe("appearance");
     useWorkspaceStore.getState().closeSettings();
     expect(useWorkspaceStore.getState().settingsOpen).toBe(false);
   });
 
-  it("opens appearance settings by default", () => {
-    useWorkspaceStore.getState().openSettings();
+  it("temporarily opens the New Project surface and returns home", () => {
+    useWorkspaceStore.getState().openConversationCenter("conv-1");
+    useWorkspaceStore.getState().openProjectCreate();
+
     expect(useWorkspaceStore.getState()).toMatchObject({
-      settingsOpen: true,
-      settingsSection: "appearance",
+      centerMode: "project-create",
+      centerReturnMode: "conversation",
     });
+
+    useWorkspaceStore.getState().showSmartQueryHome();
+    expect(useWorkspaceStore.getState().centerMode).toBe("home");
   });
 
-  it("returns to the workspace when a workspace action is opened", () => {
-    useWorkspaceStore.getState().openSettings("diagnostics");
-    useWorkspaceStore.getState().openSqlConsole();
-
-    expect(useWorkspaceStore.getState().settingsOpen).toBe(false);
-    expect(useWorkspaceStore.getState().activeTabId).toBe("sql-1");
-  });
-
-  it("binds table tabs to the datasource active when they are opened", () => {
-    useWorkspaceStore.getState().openTableTab("users", "schema", {
-      id: "ds-1",
-      dbType: "postgresql",
-    });
-    useWorkspaceStore.getState().openTableTab("users", "preview", {
-      id: "ds-2",
-      dbType: "mysql",
-    });
+  it("switches sidebar entity mode and keeps per-entity sub modes independent", () => {
+    useWorkspaceStore.getState().setSidebarEntityMode("projects");
+    useWorkspaceStore.getState().setProjectSubMode("project-1", "files");
+    useWorkspaceStore.getState().setSidebarEntityMode("connections");
+    useWorkspaceStore.getState().setConnectionSubMode("ds-1", "database");
 
     const state = useWorkspaceStore.getState();
-    const tableTabs = state.tabs.filter((tab) => tab.type === "table");
-    expect(tableTabs).toHaveLength(2);
-    expect(tableTabs[0]).toMatchObject({
-      id: "table-ds-1-users",
-      tableId: "users",
-      datasourceId: "ds-1",
-      datasourceDbType: "postgresql",
+    expect(state.sidebarEntityMode).toBe("connections");
+    expect(state.projectSubMode["project-1"]).toBe("files");
+    expect(state.connectionSubMode["ds-1"]).toBe("database");
+  });
+});
+
+describe("workspaceStore — Dock", () => {
+  beforeEach(reset);
+
+  it("opens, activates and closes the Dock", () => {
+    useWorkspaceStore.getState().setDockOpen(true);
+    expect(useWorkspaceStore.getState().dock.open).toBe(true);
+
+    useWorkspaceStore.getState().setDockActiveTab("tab-1");
+    expect(useWorkspaceStore.getState().dock).toEqual({
+      open: true,
+      activeTabId: "tab-1",
     });
-    expect(tableTabs[1]).toMatchObject({
-      id: "table-ds-2-users",
-      tableId: "users",
-      datasourceId: "ds-2",
-      datasourceDbType: "mysql",
+  });
+
+  it("keeps one canonical SQL console view per Project", () => {
+    useWorkspaceStore.getState().setActiveProject("project-1");
+    useWorkspaceStore.getState().openDockConsole("ds-a", "mysql", "SELECT 1", true);
+
+    let state = useWorkspaceStore.getState();
+    expect(state.dockTabs).toHaveLength(1);
+    expect(state.dockTabs[0]).toMatchObject({
+      id: "console-project-1",
+      stateKey: "sql-project-1",
+      datasourceId: "ds-a",
     });
+    expect(state.sqlConsoleState["sql-project-1"].draftSql).toBe("SELECT 1");
+
+    useWorkspaceStore.getState().openDockConsole("ds-b", "postgresql", undefined, true);
+    state = useWorkspaceStore.getState();
+    expect(state.dockTabs).toHaveLength(1);
+    expect(state.dockTabs[0].datasourceId).toBe("ds-b");
+    expect(state.sqlConsoleState["sql-project-1"].draftSql).toBe("SELECT 1");
+
+    useWorkspaceStore.getState().setActiveProject("project-2");
+    useWorkspaceStore.getState().openDockConsole("ds-c", "sqlite", "SELECT 2", true);
+    expect(useWorkspaceStore.getState().dockTabs.map((tab) => tab.id)).toEqual([
+      "console-project-1",
+      "console-project-2",
+    ]);
+    expect(useWorkspaceStore.getState().sqlConsoleState["sql-project-2"].draftSql).toBe("SELECT 2");
+  });
+
+  it("deduplicates Table dock views by datasource + canonical table", () => {
+    useWorkspaceStore.getState().openDockTable("users", "preview", { id: "ds-1", dbType: "mysql" });
+    useWorkspaceStore.getState().openDockTable("users", "schema", { id: "ds-1", dbType: "mysql" });
+
+    const state = useWorkspaceStore.getState();
+    expect(state.dockTabs.filter((tab) => tab.kind === "table")).toHaveLength(1);
+    expect(state.dock.activeTabId).toBe("table-ds-1-users");
     expect(state.tableSubTabs["table-ds-1-users"]).toBe("schema");
-    expect(state.tableSubTabs["table-ds-2-users"]).toBe("preview");
   });
-});
 
-describe("workspaceStore — ids", () => {
-  beforeEach(reset);
+  it("opens a project file in a canonical Dock view and keeps one tab per path", () => {
+    useWorkspaceStore.getState().setActiveProject("project-1");
+    useWorkspaceStore.getState().openDockFile("C:/demo/src/main.py", "main.py", "project-1");
 
-  it("_nextMsgId returns increasing ids and advances the sequence", () => {
-    const a = useWorkspaceStore.getState()._nextMsgId();
-    const b = useWorkspaceStore.getState()._nextMsgId();
-    expect(b).toBe(a + 1);
-  });
-});
-
-describe("workspaceStore — conversations", () => {
-  beforeEach(reset);
-
-  it("openConversationResult opens a lightweight conversation tab", () => {
-    useWorkspaceStore.getState().openConversationResult({ id: "conv-1", title: "Orders" });
-    useWorkspaceStore.getState().openConversationResult({ id: "conv-1", title: "Orders" });
-
-    const state = useWorkspaceStore.getState();
-    const tabs = state.tabs.filter((tab) => tab.id === "conversation-conv-1");
-    expect(tabs).toHaveLength(1);
-    expect(tabs[0].type).toBe("query-result");
-    expect(tabs[0].conversationId).toBe("conv-1");
-    expect(state.activeTabId).toBe("conversation-conv-1");
-  });
-});
-
-describe("workspaceStore - artifact results", () => {
-  beforeEach(reset);
-
-  it("opens a result view artifact as a dedicated result tab", () => {
-    const artifact: ResultViewArtifact = {
-      id: "result-view-1",
-      type: "result_view",
-      title: "Query result",
-      sourceSqlArtifactId: "sql-artifact-1",
-      queryFingerprint: "query-daily-orders",
-      datasourceGeneration: 1,
-      columns: ["day", "count"],
-      rowCount: 1,
-      returnedRows: 1,
-    };
-
-    useWorkspaceStore.getState().openArtifactResultTab(artifact);
-
-    const state = useWorkspaceStore.getState();
-    expect(state.activeTabId).toBe("artifact-result-result-view-1");
-    expect(state.tabs.at(-1)).toMatchObject({
-      id: "artifact-result-result-view-1",
-      title: "Query result",
-      type: "artifact-result",
-      artifactResult: artifact,
+    let state = useWorkspaceStore.getState();
+    expect(state.dockTabs).toHaveLength(1);
+    expect(state.dockTabs[0]).toMatchObject({
+      kind: "file",
+      id: "file-project-1-C:/demo/src/main.py",
+      title: "main.py",
+      projectId: "project-1",
+      filePath: "C:/demo/src/main.py",
     });
+    expect(state.dock.activeTabId).toBe("file-project-1-C:/demo/src/main.py");
+
+    useWorkspaceStore.getState().openDockFile("C:/demo/src/main.py", "main.py", "project-1");
+    state = useWorkspaceStore.getState();
+    expect(state.dockTabs).toHaveLength(1);
+    expect(state.dockTabs[0].fileName).toBe("main.py");
+  });
+
+  it("deduplicates Artifacts and Artifact views by canonical id", () => {
+    useWorkspaceStore.getState().openDockArtifacts("conv-1");
+    useWorkspaceStore.getState().openDockArtifacts("conv-1");
+    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
+
+    const artifact = {
+      id: "artifact-1",
+      type: "result_view" as const,
+      title: "Result",
+      sourceSqlArtifactId: "sql-1",
+      columns: [],
+      queryFingerprint: "fp",
+    };
+    useWorkspaceStore.getState().openDockArtifact(artifact, "conv-1");
+    useWorkspaceStore.getState().openDockArtifact(artifact, "conv-1");
+    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(2);
+  });
+
+  it("deduplicates MultiTable by the canonical sorted object set", () => {
+    useWorkspaceStore.getState().openDockMultiTable(["orders", "users", "orders"]);
+    const first = useWorkspaceStore.getState();
+    expect(first.dockTabs).toHaveLength(1);
+    expect(first.dockTabs[0].selectedTables).toEqual(["orders", "users"]);
+    expect(first.dockTabs[0].id).toBe("multi-table-orders|users");
+
+    useWorkspaceStore.getState().openDockMultiTable(["users", "orders"]);
+    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
+  });
+
+  it("closes the active Dock tab and advances to its neighbor", () => {
+    useWorkspaceStore.getState().openDockTable("orders", "preview", { id: "ds-1" });
+    useWorkspaceStore.getState().openDockTable("users", "preview", { id: "ds-1" });
+    useWorkspaceStore.getState().closeDockTab("table-ds-1-orders");
+
+    const state = useWorkspaceStore.getState();
+    expect(state.dockTabs.map((tab) => tab.id)).toEqual(["table-ds-1-users"]);
+    expect(state.dock.activeTabId).toBe("table-ds-1-users");
+  });
+
+  it("patches SQL console state only for an open console tab", () => {
+    useWorkspaceStore.getState().setActiveProject("project-1");
+    useWorkspaceStore.getState().openDockConsole("ds-a", "mysql", "SELECT 1");
+    useWorkspaceStore.getState().patchSqlConsoleState("sql-project-1", {
+      draftSql: "SELECT 2",
+    });
+    expect(useWorkspaceStore.getState().sqlConsoleState["sql-project-1"].draftSql).toBe(
+      "SELECT 2",
+    );
+
+    useWorkspaceStore.getState().patchSqlConsoleState("sql-project-missing", {
+      draftSql: "SELECT 3",
+    });
+    expect(
+      useWorkspaceStore.getState().sqlConsoleState["sql-project-missing"],
+    ).toBeUndefined();
   });
 });

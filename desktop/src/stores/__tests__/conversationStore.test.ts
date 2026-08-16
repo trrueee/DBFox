@@ -87,6 +87,9 @@ describe("conversationStore admission projection", () => {
       title: "分析最近订单",
       context_tables: [],
     });
+    expect(useConversationStore.getState().summaries).toContainEqual(
+      expect.objectContaining({ id: initialDetail.id, datasource_id: "datasource-1" }),
+    );
   });
 
   it("shows the admitted user message and queued run before following SSE", async () => {

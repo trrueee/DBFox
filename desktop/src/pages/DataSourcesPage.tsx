@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Database, Plus } from "lucide-react";
+import { ArrowLeft, Database, Plus } from "lucide-react";
 
 import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
 import { useToast } from "../components/toastState";
@@ -40,7 +40,8 @@ import {
 
 interface DataSourcesPageProps {
   initialShowAddForm?: boolean;
-  chrome?: "page" | "workspace";
+  chrome?: "page" | "workspace" | "dialog";
+  onClose?: () => void;
 }
 
 const firstSchemaSyncIssue = (result: SchemaSyncResult | null): string | null => {
@@ -118,6 +119,7 @@ async function enrollDatasourceCredentials(
 export const DataSourcesPage = ({
   initialShowAddForm,
   chrome = "page",
+  onClose,
 }: DataSourcesPageProps) => {
   const toast = useToast();
   const {
@@ -365,18 +367,45 @@ export const DataSourcesPage = ({
   };
 
   return (
-    <div className={`hifi-tab-pane ds-page${chrome === "workspace" ? " ds-page--workspace" : ""}`}>
-      {chrome === "workspace" ? mode === "detail" ? (
-        <div className="ds-page-toolbar">
-          <span className="ds-page-toolbar__meta">
-            {datasources.length > 0 ? `${datasources.length} 个连接` : "尚未创建连接"}
-          </span>
-          <Button type="button" onClick={startCreate}>
-            <Plus size={13} />
-            新建连接
-          </Button>
-        </div>
-      ) : null : (
+    <div className={`hifi-tab-pane ds-page${chrome === "workspace" ? " ds-page--workspace" : chrome === "dialog" ? " ds-page--dialog" : ""}`}>
+      {chrome === "workspace" || chrome === "dialog" ? (
+        <header className="ds-page-context-header">
+          <div className="ds-page-context-heading">
+            {chrome === "workspace" && onClose ? (
+              <button type="button" className="ds-page-context-back" onClick={onClose}>
+                <ArrowLeft size={15} aria-hidden="true" />
+                返回对话
+              </button>
+            ) : null}
+            <div>
+              {chrome !== "dialog" ? (
+                <h2 className="ds-page-title">
+                  {mode === "create" ? "新建项目连接" : "项目连接"}
+                </h2>
+              ) : null}
+              <p className="ds-page-context-description">
+                {chrome === "dialog"
+                  ? mode === "create"
+                    ? "填写连接信息并测试成功后，连接会出现在左侧连接列表中。"
+                    : datasources.length > 0
+                      ? `${datasources.length} 个连接；凭据由系统安全存储。`
+                      : "添加数据库连接后即可开始问数。"
+                  : mode === "create"
+                  ? "连接数据库并同步表结构，完成后可直接在当前项目中提问。"
+                  : datasources.length > 0
+                    ? `${datasources.length} 个连接；凭据由系统安全存储。`
+                    : "添加数据库连接后即可开始问数。"}
+              </p>
+            </div>
+          </div>
+          {mode === "detail" ? (
+            <Button type="button" onClick={startCreate}>
+              <Plus size={13} />
+              新建连接
+            </Button>
+          ) : null}
+        </header>
+      ) : (
         <div className="ds-page-header">
           <div>
             <h2 className="ds-page-title">数据源管理</h2>

@@ -176,3 +176,12 @@
     transition: none;
   }
 }
+
+.artifact-metadata-fallback {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text-muted, #6b7280);
+  font-size: var(--ui-font-control);
+  padding: var(--ui-space-md, 0.75rem) 0;
+}

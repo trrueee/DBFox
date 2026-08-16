@@ -14,6 +14,7 @@
   --color-success: #168A68;
   --color-warning: #806800;
   --color-danger: #C84040;
+  --color-on-danger: #FFFFFF;
 
   /* ── Text Colors ── */
   --color-text-primary: #172033;
@@ -33,6 +34,9 @@
   --color-warning-soft: rgba(128, 104, 0, 0.11);
   --color-danger-soft: rgba(200, 64, 64, 0.06);
   --color-focus-ring: rgba(101, 84, 217, 0.24);
+
+  /* ── Console accent（数据库在说话）── */
+  --color-console-accent: #0284C7;
 
   /* ── Typography ── */
   --font-family-ui: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
@@ -113,6 +117,8 @@
   --nav-active-bg: var(--color-primary-soft);
   --nav-active-indicator: var(--color-primary);
   --motion-fast: 150ms;
+  --icon-size-sm: 14px;
+  --icon-size-md: 16px;
   --density-toolbar-min-height: 40px;
   --density-control-height: 36px;
   --density-control-height-sm: 32px;
@@ -127,6 +133,7 @@
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
 
@@ -240,6 +247,7 @@
   --color-success: #4FD1A5;
   --color-warning: #F1B84B;
   --color-danger: #FF7B82;
+  --color-on-danger: #1B0B10;
   --color-text-primary: #F4F7FB;
   --color-text-secondary: #B5C0D0;
   --color-text-muted: #8F9DB2;
@@ -255,6 +263,9 @@
   --color-warning-soft: rgba(241, 184, 75, 0.14);
   --color-danger-soft: rgba(220, 38, 38, 0.15);
   --color-focus-ring: rgba(167, 155, 255, 0.30);
+
+  /* Console accent（dark） */
+  --color-console-accent: #38BDF8;
 
   --bg-hover: #202B42;
 
@@ -841,4 +852,10 @@
   margin-top: 12px;
   margin-bottom: 6px;
   letter-spacing: -0.01em;
+}
+
+/* ── Numeric discipline ──
+   表格数字、行数、耗时、错误码统一使用等宽数字。 */
+.dbfox-tnum {
+  font-variant-numeric: tabular-nums;
 }

@@ -1,0 +1,18 @@
+/* ConversationCenter — V3 中间只放对话。
+   表面沿用 --agent-surface；宽度由外层布局决定。 */
+
+.conversation-center {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--agent-surface);
+}
+
+.conversation-center > .smart-query-home,
+.conversation-center > .conv-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+}

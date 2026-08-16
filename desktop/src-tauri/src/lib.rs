@@ -13,6 +13,7 @@ mod app_updates;
 mod crash_recovery;
 mod diagnostic_bundle;
 mod external_image;
+mod project_folder;
 mod sidecar_log;
 mod sidecar_process;
 
@@ -24,6 +25,7 @@ use diagnostic_bundle::{
     export_bundle, DiagnosticBundlePayload, DiagnosticBundleResult, HostDiagnosticSnapshot,
 };
 use external_image::save_external_image;
+use project_folder::{list_project_folder, pick_project_folder, read_project_file};
 use sidecar_log::{retire_legacy_temp_sidecar_log, SidecarLog, SIDECAR_LOG_TARGET};
 use sidecar_process::{spawn_python_engine, EngineChild};
 
@@ -707,6 +709,9 @@ pub fn run() {
             open_diagnostic_logs,
             open_external_https_url,
             save_external_image,
+            pick_project_folder,
+            list_project_folder,
+            read_project_file,
             export_diagnostic_bundle,
             get_launch_recovery_status,
             get_update_configuration,

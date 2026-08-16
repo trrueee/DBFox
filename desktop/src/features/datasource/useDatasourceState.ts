@@ -14,6 +14,8 @@ import { useDatasourceSelectionStore } from "../../stores/datasourceSelectionSto
 
 export const datasourceQueryKeys = {
   all: ["datasources"] as const,
+  project: (projectId?: string) =>
+    ["datasources", "project", projectId ?? ""] as const,
   tables: (datasourceId: string, connectionGeneration: number) =>
     ["datasources", datasourceId, "tables", connectionGeneration] as const,
 };
@@ -25,14 +27,14 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function useDatasourceState() {
+export function useDatasourceState(projectId?: string) {
   const queryClient = useQueryClient();
   const activeDatasourceId = useDatasourceSelectionStore((state) => state.activeDatasourceId);
   const setSelectedDatasourceId = useDatasourceSelectionStore((state) => state.setActiveDatasourceId);
 
   const datasourcesQuery = useQuery({
-    queryKey: datasourceQueryKeys.all,
-    queryFn: () => datasourcesApi.listDatasources(),
+    queryKey: datasourceQueryKeys.project(projectId),
+    queryFn: () => datasourcesApi.listDatasources(projectId || undefined),
   });
   const datasources = datasourcesQuery.data ?? EMPTY_DATASOURCES;
   const activeDatasource = useMemo(

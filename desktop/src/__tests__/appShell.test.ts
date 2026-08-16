@@ -45,7 +45,7 @@ describe("app shell layout", () => {
 
     expect(app).toContain("<TitleBarFallback />");
     expect(app).toContain("<AppLayoutFallback />");
-    expect(app).toContain("<WorkspaceFallback />");
+    expect(app).toContain('<LoadingState label="正在载入工作区" />');
   });
 
   it("keeps the Tauri drag region on the titlebar and out of controls", () => {

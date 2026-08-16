@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Sparkles, Cpu, Database, FileText, Terminal, Bug, MessageSquare, Palette } from "lucide-react";
+import type { TableTabDatasourceContext } from "../../stores/workspaceStore";
 import type { CommandItem } from "../../components/CommandPalette";
 import type { EngineSchemaTable } from "../../lib/api/schema";
 import type { ConversationSummary } from "../../types/conversation";
@@ -11,26 +12,28 @@ export interface UseAppCommandsProps {
   tables: EngineSchemaTable[];
   conversations: ConversationSummary[];
   openSqlConsole: () => void;
-  openSmartQueryTab: () => void;
-  openConversationHistoryTab: () => void;
-  openConversationResult: (conversation: Pick<ConversationSummary, "id" | "title">) => void;
+  showSmartQueryHome: () => void;
+  openConversation: (conversationId: string) => void;
   openSettings: (section?: AppSettingsSection) => void;
-  openConnectionManagerTab: () => void;
-  openNewConnectionTab: () => void;
-  openTableTab: (tableName: string) => void;
+  openConnectionDialog: (mode?: "detail" | "create") => void;
+  openTable: (
+    tableName: string,
+    initialSubtab?: string,
+    datasource?: TableTabDatasourceContext,
+  ) => void;
+  activeDatasource?: TableTabDatasourceContext;
 }
 
 export function useAppCommands({
   tables,
   conversations,
   openSqlConsole,
-  openSmartQueryTab,
-  openConversationHistoryTab,
-  openConversationResult,
+  showSmartQueryHome,
+  openConversation,
   openSettings,
-  openConnectionManagerTab,
-  openNewConnectionTab,
-  openTableTab,
+  openConnectionDialog,
+  openTable,
+  activeDatasource,
 }: UseAppCommandsProps) {
   const commandItems = useMemo<CommandItem[]>(() => {
     const tableDisplayName = (table: EngineSchemaTable) => {
@@ -51,14 +54,7 @@ export function useAppCommands({
         name: "智能问数 (AI 问数)",
         category: "快捷入口",
         icon: <Sparkles size={13} />,
-        action: () => openSmartQueryTab(),
-      },
-      {
-        id: "conversation-history",
-        name: "对话历史",
-        category: "快捷入口",
-        icon: <MessageSquare size={13} />,
-        action: () => openConversationHistoryTab(),
+        action: () => showSmartQueryHome(),
       },
       {
         id: "appearance-settings",
@@ -79,14 +75,14 @@ export function useAppCommands({
         name: "新建数据源连接",
         category: "数据源",
         icon: <Database size={13} />,
-        action: () => openNewConnectionTab(),
+        action: () => openConnectionDialog("create"),
       },
       {
         id: "connection-manager",
         name: "数据源连接管理",
         category: "数据源",
         icon: <Database size={13} />,
-        action: () => openConnectionManagerTab(),
+        action: () => openConnectionDialog("detail"),
       },
       {
         id: "diagnostics-logs",
@@ -104,7 +100,7 @@ export function useAppCommands({
         description: conversationCommandDescription(conversation),
         category: "最近对话",
         icon: <MessageSquare size={13} />,
-        action: () => openConversationResult(conversation),
+        action: () => openConversation(conversation.id),
       });
     });
 
@@ -115,7 +111,7 @@ export function useAppCommands({
         name: `打开表: ${displayName}`,
         category: `数据表 (${table.table_schema || table.module_tag || "未分组"})`,
         icon: <FileText size={13} />,
-        action: () => openTableTab(table.table_name),
+        action: () => openTable(table.table_name, "preview", activeDatasource),
       });
     });
 
@@ -124,13 +120,12 @@ export function useAppCommands({
     tables,
     conversations,
     openSqlConsole,
-    openSmartQueryTab,
-    openConversationHistoryTab,
-    openConversationResult,
+    showSmartQueryHome,
+    openConversation,
     openSettings,
-    openConnectionManagerTab,
-    openNewConnectionTab,
-    openTableTab,
+    openConnectionDialog,
+    openTable,
+    activeDatasource,
   ]);
 
   return { commandItems };

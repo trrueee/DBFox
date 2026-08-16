@@ -1,0 +1,13 @@
+{
+  "$schema": "../../gen/schemas/desktop-schema.json",
+  "identifier": "project-folder",
+  "description": "User-confirmed local project folder selection for the main DBFox WebView",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "allow-pick-project-folder",
+    "allow-list-project-folder",
+    "allow-read-project-file"
+  ]
+}

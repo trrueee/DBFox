@@ -402,3 +402,353 @@
   outline: none;
   box-shadow: var(--focus-ring);
 }
+
+.ds-tree-project-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  padding: 0;
+  cursor: pointer;
+}
+
+.ds-tree-project-trigger .ds-tree-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin: 0 8px 8px;
+  padding: 2px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--control-bg-subtle, var(--color-bg-subtle));
+}
+
+.ds-mode-switch__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--density-control-height-sm);
+  border: 0;
+  border-radius: calc(var(--radius-control) - 2px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-label);
+  font-weight: 500;
+  padding: 0 8px;
+}
+
+.ds-mode-switch__button:hover {
+  color: var(--color-text-primary);
+  background: var(--control-bg-hover);
+}
+
+.ds-mode-switch__button.is-active {
+  background: var(--surface-raised);
+  color: var(--color-primary);
+  font-weight: 650;
+  box-shadow: var(--shadow-control, 0 1px 2px rgba(15, 23, 42, 0.08));
+}
+
+.ds-conversation-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.ds-conversation-count {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--ui-font-caption);
+  line-height: 16px;
+  text-align: center;
+}
+
+.ds-entity-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  min-width: 132px;
+  padding: 2px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--control-bg-subtle, var(--color-bg-subtle));
+}
+
+.ds-entity-switch__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--density-control-height-sm);
+  border: 0;
+  border-radius: calc(var(--radius-control) - 2px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-label);
+  font-weight: 500;
+  padding: 0 8px;
+}
+
+.ds-entity-switch__button:hover {
+  color: var(--color-text-primary);
+  background: var(--control-bg-hover);
+}
+
+.ds-entity-switch__button.is-active {
+  background: var(--surface-raised);
+  color: var(--color-primary);
+  font-weight: 650;
+  box-shadow: var(--shadow-control, 0 1px 2px rgba(15, 23, 42, 0.08));
+}
+
+.ds-entity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ds-entity-row {
+  border: 1px solid transparent;
+  border-radius: var(--radius-panel);
+  padding: 4px;
+}
+
+.ds-entity-row.is-active {
+  border-color: var(--hairline);
+  background: var(--surface-subtle, var(--color-bg-subtle));
+}
+
+.ds-entity-row__main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ds-entity-row__trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-label);
+  font-weight: 500;
+  padding: 4px 2px;
+  text-align: left;
+}
+
+.ds-entity-row__trigger:hover {
+  color: var(--color-primary);
+}
+
+.ds-entity-row__icon {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+}
+
+.ds-entity-row.is-active .ds-entity-row__icon {
+  color: var(--color-primary);
+}
+
+.ds-entity-row__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-entity-row__new-conversation {
+  flex: 0 0 auto;
+  width: var(--density-control-height-sm);
+  height: var(--density-control-height-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.ds-entity-row__new-conversation:hover {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.ds-entity-sub-switch {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 1px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--control-bg-subtle, var(--color-bg-subtle));
+}
+
+.ds-entity-sub-switch__button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  border: 0;
+  border-radius: calc(var(--radius-control) - 1px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-caption);
+  padding: 0 6px;
+}
+
+.ds-entity-sub-switch__button:hover {
+  color: var(--color-text-primary);
+}
+
+.ds-entity-sub-switch__button.is-active {
+  background: var(--surface-raised);
+  color: var(--color-primary);
+  font-weight: 650;
+}
+
+.ds-entity-row__content {
+  margin-top: 2px;
+  padding-left: 18px;
+}
+
+.ds-project-files {
+  padding-left: 2px;
+}
+
+.ds-project-file-tree {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ds-project-file-node,
+.ds-project-file-node__dir {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-caption);
+  text-align: left;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-right: 6px;
+}
+
+.ds-project-file-node:hover,
+.ds-project-file-node__dir:hover {
+  background: var(--color-primary-soft);
+}
+
+.ds-project-file-node__children {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ds-project-file-node__chevron {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+}
+
+.ds-project-file-node__icon {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+}
+
+.ds-project-file-node--file .ds-project-file-node__icon {
+  color: var(--color-text-tertiary, var(--color-text-secondary));
+}
+
+.ds-project-file-node__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-project-file-node__status {
+  padding-left: 26px;
+}
+
+.ds-project-file-node--depth-0 {
+  padding-left: 10px;
+}
+
+.ds-project-file-node--depth-1 {
+  padding-left: 24px;
+}
+
+.ds-project-file-node--depth-2 {
+  padding-left: 38px;
+}
+
+.ds-project-file-node--depth-3 {
+  padding-left: 52px;
+}
+
+.ds-project-file-node--depth-4 {
+  padding-left: 66px;
+}
+
+.ds-project-file-node--depth-5 {
+  padding-left: 80px;
+}
+
+.ds-project-file-node--depth-6 {
+  padding-left: 94px;
+}
+
+.ds-project-file-node--depth-7 {
+  padding-left: 108px;
+}
+
+.ds-project-file-node--depth-8 {
+  padding-left: 122px;
+}
+
+.ds-project-file-node--depth-9 {
+  padding-left: 136px;
+}
+
+.ds-project-file-node--depth-10 {
+  padding-left: 150px;
+}

@@ -573,6 +573,12 @@
           "markdownDescription": "Enables the get_engine_startup_status command without any pre-configured scope."
         },
         {
+          "description": "Enables the list_project_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-project-folder",
+          "markdownDescription": "Enables the list_project_folder command without any pre-configured scope."
+        },
+        {
           "description": "Enables the open_diagnostic_logs command without any pre-configured scope.",
           "type": "string",
           "const": "allow-open-diagnostic-logs",
@@ -583,6 +589,18 @@
           "type": "string",
           "const": "allow-open-external-https-url",
           "markdownDescription": "Enables the open_external_https_url command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the pick_project_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-pick-project-folder",
+          "markdownDescription": "Enables the pick_project_folder command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the read_project_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-read-project-file",
+          "markdownDescription": "Enables the read_project_file command without any pre-configured scope."
         },
         {
           "description": "Enables the restart_python_engine command without any pre-configured scope.",
@@ -615,6 +633,12 @@
           "markdownDescription": "Denies the get_engine_startup_status command without any pre-configured scope."
         },
         {
+          "description": "Denies the list_project_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-project-folder",
+          "markdownDescription": "Denies the list_project_folder command without any pre-configured scope."
+        },
+        {
           "description": "Denies the open_diagnostic_logs command without any pre-configured scope.",
           "type": "string",
           "const": "deny-open-diagnostic-logs",
@@ -625,6 +649,18 @@
           "type": "string",
           "const": "deny-open-external-https-url",
           "markdownDescription": "Denies the open_external_https_url command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the pick_project_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-pick-project-folder",
+          "markdownDescription": "Denies the pick_project_folder command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the read_project_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-read-project-file",
+          "markdownDescription": "Denies the read_project_file command without any pre-configured scope."
         },
         {
           "description": "Denies the restart_python_engine command without any pre-configured scope.",

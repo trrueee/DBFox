@@ -139,6 +139,15 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       title: question.slice(0, 80),
       context_tables: [],
     });
+    const summary: ConversationSummary = {
+      id: detail.id,
+      title: detail.title,
+      datasource_id: detail.datasource_id,
+      updated_at: new Date().toISOString(),
+    };
+    set((state) => ({
+      summaries: [summary, ...state.summaries.filter((item) => item.id !== summary.id)],
+    }));
     get().loadConversation(detail);
     return detail;
   },

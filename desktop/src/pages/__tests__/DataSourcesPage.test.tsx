@@ -78,8 +78,9 @@ const datasources: DataSource[] = [
 
 function renderPage(options: {
   initialShowAddForm?: boolean;
-  chrome?: "page" | "workspace";
+  chrome?: "page" | "workspace" | "dialog";
   items?: DataSource[];
+  onClose?: () => void;
 } = {}) {
   testState.datasources = options.items ?? [];
   testState.activeDatasource = testState.datasources[0] ?? null;
@@ -87,6 +88,7 @@ function renderPage(options: {
     <DataSourcesPage
       initialShowAddForm={options.initialShowAddForm}
       chrome={options.chrome}
+      onClose={options.onClose}
     />,
   );
 }
@@ -158,10 +160,21 @@ describe("DataSourcesPage", () => {
     expect(testState.setActiveDatasourceId).toHaveBeenCalledWith("ds-1");
   });
 
-  it("uses embedded chrome without duplicating the workspace title", () => {
-    const view = renderPage({ items: datasources, chrome: "workspace" });
+  it("uses the connection-dialog chrome without duplicating the dialog title", () => {
+    const view = renderPage({ chrome: "dialog", initialShowAddForm: true });
+    expect(view.container.querySelector(".ds-page-title")).not.toBeInTheDocument();
+    expect(view.container.querySelector("form.hifi-datasource-form")).toBeInTheDocument();
+    expect(view.getByText("填写连接信息并测试成功后，连接会出现在左侧连接列表中。")).toBeInTheDocument();
+  });
+
+  it("uses an integrated center header and returns to the conversation", () => {
+    const onClose = vi.fn();
+    const view = renderPage({ items: datasources, chrome: "workspace", onClose });
     expect(view.queryByRole("heading", { name: "数据源管理" })).not.toBeInTheDocument();
+    expect(view.getByRole("heading", { name: "项目连接" })).toBeInTheDocument();
     expect(view.getByRole("button", { name: "新建连接" })).toBeInTheDocument();
+    fireEvent.click(view.getByRole("button", { name: "返回对话" }));
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("synchronizes schema through the query mutation and reports AI enrichment", async () => {

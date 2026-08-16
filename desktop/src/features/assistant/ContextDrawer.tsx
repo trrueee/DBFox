@@ -1,5 +1,5 @@
 import { Info, Sparkles, X } from "lucide-react";
-import type { WorkspaceTab } from "../../types/workspace";
+import type { WorkspaceDockTab } from "../../types/workspace";
 import { useDatasourceState } from "../datasource/useDatasourceState";
 import { getStoredApiConfig } from "../../lib/llmConfig";
 import "./ContextDrawer.css";
@@ -7,7 +7,7 @@ import "./ContextDrawer.css";
 interface ContextDrawerProps {
   open: boolean;
   type: "ai-suggest" | "props";
-  activeTab: WorkspaceTab;
+  activeTab?: WorkspaceDockTab;
   onClose: () => void;
 }
 
@@ -45,11 +45,11 @@ function AiSuggest() {
   );
 }
 
-function PropsPanel({ activeTab }: { activeTab: WorkspaceTab }) {
+function PropsPanel({ activeTab }: { activeTab?: WorkspaceDockTab }) {
   const { tables, activeDatasource: activeDs } = useDatasourceState();
   const apiConfig = getStoredApiConfig();
 
-  if (activeTab.type === "table") {
+  if (activeTab?.kind === "table") {
     const tableId = activeTab.tableId || "";
     const table = tables.find((t) => t.table_name === tableId);
 
@@ -76,7 +76,7 @@ function PropsPanel({ activeTab }: { activeTab: WorkspaceTab }) {
     }
     return <InfoList rows={rows} />;
   }
-  if (activeTab.type === "sql") {
+  if (activeTab?.kind === "console") {
     return (
       <InfoList
         rows={[
@@ -92,7 +92,7 @@ function PropsPanel({ activeTab }: { activeTab: WorkspaceTab }) {
     <InfoList
       rows={[
         ["激活大模型:", apiConfig?.modelName || "—"],
-        ["会话ID:", activeTab.conversationId || "—"],
+        ["会话ID:", activeTab?.conversationId || "—"],
       ]}
     />
   );

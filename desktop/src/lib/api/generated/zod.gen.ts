@@ -115,19 +115,6 @@ export const zArtifactStatus = z.enum([
 ]);
 
 /**
- * ArtifactType
- */
-export const zArtifactType = z.enum([
-    'analysis_plan',
-    'sql',
-    'safety',
-    'result_view',
-    'chart',
-    'markdown',
-    'error'
-]);
-
-/**
  * ArtifactVisibility
  *
  * Product presentation tier, independent from durable audit retention.
@@ -148,13 +135,14 @@ export const zArtifact = z.object({
     provenance: z.record(z.string(), z.unknown()).optional(),
     relations: z.array(zArtifactRelation).optional(),
     run_id: z.string(),
+    schema_version: z.int().gte(1).optional().default(1),
     semantic_key: z.string().nullish(),
     session_id: z.string(),
     status: zArtifactStatus.optional().default('completed'),
     summary: z.string().nullish(),
     title: z.string(),
     turn_id: z.string().nullish(),
-    type: zArtifactType,
+    type: z.string().min(1).max(128),
     version: z.int().gte(1).optional().default(1),
     visibility: zArtifactVisibility.optional().default('primary')
 });
@@ -892,7 +880,8 @@ export const zProblemDetails = z.object({
  */
 export const zProjectCreateRequest = z.object({
     description: z.string().nullish(),
-    name: z.string()
+    name: z.string(),
+    workspace_root: z.string().nullish()
 });
 
 /**
@@ -905,7 +894,8 @@ export const zProjectResponse = z.object({
     id: z.string(),
     name: z.string(),
     status: z.string().nullish(),
-    updated_at: z.string().nullish()
+    updated_at: z.string().nullish(),
+    workspace_root: z.string().nullish()
 });
 
 /**

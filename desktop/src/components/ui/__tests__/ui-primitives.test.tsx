@@ -19,7 +19,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "../hover-card";
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../resizable";
 import { Select } from "../select";
-import { EmptyState, ErrorState, LoadingState } from "../state";
+import { EmptyState, ErrorState, LoadingState, Skeleton } from "../state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../tabs";
 import { ScrollArea } from "../scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../tooltip";
@@ -148,6 +148,25 @@ describe("ui primitives", () => {
     fireEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("status").textContent).toContain("正在加载列信息");
+  });
+
+  it("renders skeleton placeholders hidden from assistive technology", () => {
+    const { container } = render(
+      <>
+        <Skeleton variant="text" data-testid="skeleton-text" />
+        <Skeleton variant="row" data-testid="skeleton-row" />
+        <Skeleton variant="control" data-testid="skeleton-control" />
+      </>
+    );
+
+    const text = screen.getByTestId("skeleton-text");
+    expect(text.className).toContain("dbfox-skeleton--text");
+    expect(text.getAttribute("aria-hidden")).toBe("true");
+    // CSP（style-src-attr 'none'）：尺寸只由 CSS 变体控制，禁止内联 style。
+    expect(text.hasAttribute("style")).toBe(false);
+    expect(screen.getByTestId("skeleton-row").className).toContain("dbfox-skeleton--row");
+    expect(screen.getByTestId("skeleton-control").className).toContain("dbfox-skeleton--control");
+    expect(container.querySelectorAll(".dbfox-skeleton")).toHaveLength(3);
   });
 
   it("wraps Radix Popover as a DBFox primitive", () => {

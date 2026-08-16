@@ -1,0 +1,23 @@
+/* DatabaseBrandIcon — 官方品牌色为数据常量（品牌色不随主题变化），
+   未知数据库类型时保持 muted 中性色，由调用方决定是否回退到 Lucide Database。 */
+.database-brand-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.database-brand-icon[data-db="mysql"] {
+  color: #4479a1;
+}
+
+.database-brand-icon[data-db="postgresql"] {
+  color: #4169e1;
+}
+
+.database-brand-icon[data-db="sqlite"] {
+  color: #003b57;
+}
+
+.database-brand-icon[data-db="duckdb"] {
+  color: #dea800;
+}

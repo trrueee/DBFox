@@ -3,6 +3,7 @@ export type AgentArtifactType = "chart" | "sql" | "result_view" | "markdown";
 export type AgentArtifactBase = {
   id: string;
   type: AgentArtifactType;
+  schemaVersion?: number;
   title: string;
   description?: string;
   depends_on?: string[];

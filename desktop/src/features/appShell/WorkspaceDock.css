@@ -1,0 +1,195 @@
+/* 右侧扩展工作区：与中间对话区同级，Dock 内部使用浏览器式标签。 */
+
+.workspace-dock {
+  display: flex;
+  flex: 0 0 440px;
+  min-width: 320px;
+  max-width: 56%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--agent-surface-muted);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.workspace-dock--collapsed {
+  flex-basis: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.workspace-dock__tabbar {
+  display: flex;
+  min-height: var(--density-toolbar-min-height);
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px 4px 8px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--agent-surface-muted);
+}
+
+.workspace-dock__tabs {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.workspace-dock__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace-dock__tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+  max-width: 200px;
+  border: 1px solid transparent;
+  border-radius: 7px 7px 0 0;
+  color: var(--color-text-secondary);
+  transition: background-color var(--motion-fast) ease-out, color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out;
+}
+
+.workspace-dock__tab:hover {
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.workspace-dock__tab.is-active {
+  background: var(--surface-raised);
+  border-color: var(--hairline);
+  border-bottom-color: var(--surface-raised);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.workspace-dock__tab-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-control);
+  font-weight: inherit;
+}
+
+.workspace-dock__tab-main:focus-visible,
+.workspace-dock__tab-close:focus-visible,
+.workspace-dock__collapse:focus-visible,
+.workspace-dock__expand:focus-visible,
+.workspace-dock__rail-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.workspace-dock__tab-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.workspace-dock__tab--console .workspace-dock__tab-icon,
+.workspace-dock__tab.is-active.workspace-dock__tab--console .workspace-dock__tab-icon {
+  color: var(--color-console-accent);
+}
+
+.workspace-dock__tab--artifacts .workspace-dock__tab-icon,
+.workspace-dock__tab.is-active.workspace-dock__tab--artifacts .workspace-dock__tab-icon {
+  color: var(--color-primary);
+}
+
+.workspace-dock__tab-title {
+  min-width: 0;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-dock__tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin-right: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  opacity: 0.62;
+}
+
+.workspace-dock__tab-close:hover {
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
+  opacity: 1;
+}
+
+.workspace-dock__collapse,
+.workspace-dock__expand,
+.workspace-dock__rail-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.workspace-dock__collapse:hover,
+.workspace-dock__expand:hover,
+.workspace-dock__rail-item:hover {
+  background: var(--control-bg-hover);
+  color: var(--color-primary);
+}
+
+.workspace-dock__content {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace-dock__content > .workspace-shell,
+.workspace-dock__content > .conv-artifact-dock,
+.workspace-dock__content > .hifi-sql-workspace,
+.workspace-dock__content > .table-workspace,
+.workspace-dock__content > .multi-table-workspace {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Dock 内的 ArtifactDock 不再有外侧对话面板边框，保持与现有 dock 同底。 */
+.workspace-dock .conv-artifact-dock {
+  border-left: 0;
+}
