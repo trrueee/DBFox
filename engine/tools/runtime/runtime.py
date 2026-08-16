@@ -13,6 +13,7 @@ from engine.app.safe_errors import (
     fixed_error_detail,
     log_unexpected_exception,
 )
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.tools.runtime.context import ToolRunContext
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.base import BaseTool
@@ -55,6 +56,8 @@ class ToolRuntime:
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
         execution_authority: Any | None = None,
+        scope_refs: tuple[ResourceScopeRef, ...] | None = None,
+        resources: dict[str, Any] | None = None,
     ) -> ToolResult:
         tool = self.registry.require(tool_name)
         if not isinstance(tool, BaseTool):
@@ -96,6 +99,8 @@ class ToolRuntime:
                     cancellation_probe=cancellation_probe,
                     deadline=deadline,
                     execution_authority=execution_authority,
+                    scope_refs=scope_refs,
+                    resources=resources,
                     idempotency_key=idempotency_key,
                 ),
             )
@@ -203,6 +208,8 @@ class ToolRuntime:
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
         execution_authority: Any | None = None,
+        scope_refs: tuple[ResourceScopeRef, ...] | None = None,
+        resources: dict[str, Any] | None = None,
     ) -> ToolResult:
         """Resolve an interrupted action by its stable invocation key."""
 
@@ -232,6 +239,8 @@ class ToolRuntime:
                         cancellation_probe=cancellation_probe,
                         deadline=deadline,
                         execution_authority=execution_authority,
+                        scope_refs=scope_refs,
+                        resources=resources,
                         idempotency_key=idempotency_key,
                     ),
                 )

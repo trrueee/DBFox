@@ -22,11 +22,13 @@ from engine.tools.builtin.results import (
     ResultInspectTool,
     ResultProfileTool,
 )
+from engine.tools.builtin.workspace import WorkspaceFileReadTool
 from engine.tools.runtime import ToolRegistry
 
 CORE_OWNER = "dbfox.core"
 CONVERSATION_OWNER = "dbfox.conversation"
 DATA_OWNER = "dbfox.data"
+WORKSPACE_OWNER = "dbfox.workspace"
 
 
 def register_core_functions(registry: ToolRegistry) -> None:
@@ -63,6 +65,12 @@ def register_data_extension(registry: ToolRegistry) -> None:
     registry.register(ChartCreateTool(), owner=DATA_OWNER)
 
 
+def register_workspace_extension(registry: ToolRegistry) -> None:
+    """Register the Workspace read-only capability family."""
+
+    registry.register(WorkspaceFileReadTool(), owner=WORKSPACE_OWNER)
+
+
 def register_dbfox_tools() -> ToolRegistry:
     """Build the complete model-function registry for one DBFox Agent process.
 
@@ -75,4 +83,5 @@ def register_dbfox_tools() -> ToolRegistry:
     register_core_functions(registry)
     register_conversation_functions(registry)
     register_data_extension(registry)
+    register_workspace_extension(registry)
     return registry.freeze()

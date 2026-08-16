@@ -99,12 +99,12 @@ def test_unknown_new_write_is_rejected_but_historical_read_is_soft() -> None:
     payload = {"path": "src/app.py"}
     with pytest.raises(ValueError, match="Unknown new Artifact type"):
         validate_artifact_payload(
-            "dbfox.workspace.file_snapshot",
+            "dbfox.workspace.future_object",
             payload,
             schema_version=1,
         )
     assert validate_artifact_payload(
-        "dbfox.workspace.file_snapshot",
+        "dbfox.workspace.future_object",
         payload,
         schema_version=1,
         allow_unknown=True,
@@ -114,12 +114,12 @@ def test_unknown_new_write_is_rejected_but_historical_read_is_soft() -> None:
 def test_artifact_draft_accepts_namespaced_type_and_schema_version() -> None:
     draft = ArtifactDraft(
         key="file",
-        type="dbfox.workspace.file_snapshot",
+        type="dbfox.workspace.future_object",
         schema_version=1,
         title="File snapshot",
         payload={"path": "src/app.py"},
     )
-    assert draft.type == "dbfox.workspace.file_snapshot"
+    assert draft.type == "dbfox.workspace.future_object"
     assert draft.schema_version == 1
 
 
@@ -177,7 +177,7 @@ def test_repository_persists_schema_version_and_reads_unknown_soft(
             id="artifact_unknown_soft",
             run_id=admission.run_id,
             session_id=session_id,
-            type="dbfox.workspace.file_snapshot",
+            type="dbfox.workspace.future_object",
             schema_version=1,
             title="Unknown",
             payload_json='{"path":"src/app.py"}',
@@ -188,5 +188,5 @@ def test_repository_persists_schema_version_and_reads_unknown_soft(
             status="completed",
         )
     )
-    assert unknown.type == "dbfox.workspace.file_snapshot"
+    assert unknown.type == "dbfox.workspace.future_object"
     assert unknown.payload == {"path": "src/app.py"}

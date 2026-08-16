@@ -86,8 +86,6 @@ async def lifespan(application: FastAPI) -> Any:
     try:
         _emit_startup_stage(startup_stage)
         initialize_metadata_database()
-        from engine.agent.artifact import freeze_artifact_payload_contracts
-        freeze_artifact_payload_contracts()
 
         from engine.security.credential_lease import reconcile_credential_leases
         reconcile_credential_leases(SessionLocal)
@@ -107,6 +105,11 @@ async def lifespan(application: FastAPI) -> Any:
         # and the event log are database-owned; this coordinator only schedules work.
         startup_stage = "recovering"
         _emit_startup_stage(startup_stage)
+        # Artifact payload contracts freeze after every built-in/extension
+        # module has imported and registered its concrete validators.
+        from engine.agent.artifact import freeze_artifact_payload_contracts
+        freeze_artifact_payload_contracts()
+
         agent_coordinator = SessionCoordinator(
             session_factory=SessionLocal,
             run_loop=RunLoop(session_factory=SessionLocal),

@@ -327,6 +327,7 @@ def test_product_registry_contains_the_analysis_toolset():
         "conversation_read",
         "conversation_search",
         "data_preview",
+        "file_read",
         "request_clarification",
         "result_inspect",
         "result_profile",

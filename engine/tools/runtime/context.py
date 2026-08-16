@@ -4,6 +4,8 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from engine.tools.runtime.attempt import ResourceScopeRef
 from sqlalchemy.orm import Session
 
 
@@ -28,9 +30,16 @@ class ToolRunContext(BaseModel):
     cancellation_probe: Callable[[], bool] | None = Field(default=None, exclude=True)
     deadline: float | None = Field(default=None, exclude=True)
     execution_authority: Any | None = Field(default=None, exclude=True)
+    scope_refs: tuple[ResourceScopeRef, ...] = ()
+    resources: Mapping[str, Any] = Field(default_factory=dict, exclude=True)
 
     def is_cancelled(self) -> bool:
         return bool(self.cancellation_probe and self.cancellation_probe())
+
+    def require_resource(self, kind: str) -> Any:
+        if kind not in self.resources:
+            raise RuntimeError(f"This tool requires the {kind!r} execution resource")
+        return self.resources[kind]
 
     def require_database(self) -> Session:
         if self.db_session is None:
@@ -54,6 +63,8 @@ class ToolRunContext(BaseModel):
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
         execution_authority: Any | None = None,
+        scope_refs: tuple[ResourceScopeRef, ...] | None = None,
+        resources: Mapping[str, Any] | None = None,
     ) -> "ToolRunContext":
         datasource_id = getattr(request, "datasource_id", "") if request is not None else ""
         thread_id = str(getattr(request, "session_id", "") or "")
@@ -68,6 +79,8 @@ class ToolRunContext(BaseModel):
             cancellation_probe=cancellation_probe,
             deadline=deadline,
             execution_authority=execution_authority,
+            scope_refs=scope_refs or (),
+            resources=dict(resources or {}),
         )
 
 

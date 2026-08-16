@@ -10,7 +10,7 @@ RegisteredFunction = BaseTool | ControlCommand
 _OWNER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
 
 IN_PROCESS_CAPABILITIES: frozenset[ToolCapability] = frozenset(
-    {"metadata_read", "metadata_write", "database_read"}
+    {"metadata_read", "metadata_write", "database_read", "filesystem_read"}
 )
 
 

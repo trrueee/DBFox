@@ -48,6 +48,7 @@ from engine.tools.materialization import (
     require_reconciliation_tool,
 )
 from engine.tools.runtime import ToolExecutor, ToolRegistry, ToolRuntime
+from engine.tools.runtime.resource_context import build_tool_scope_context
 from engine.tools.runtime.base import (
     BaseTool,
     ControlCommand,
@@ -478,6 +479,11 @@ class ToolDispatcher:
 
         def execute_leaf(tool_control: ToolExecutionControl) -> ToolResult:
             with self.session_factory() as leaf_db:
+                scope_refs, resources = build_tool_scope_context(
+                    leaf_db,
+                    request,
+                    tool,
+                )
                 result = ToolRuntime(self.registry).invoke(
                     tool_name=invocation.tool_name,
                     raw_input=invocation.authorized_input,
@@ -486,6 +492,8 @@ class ToolDispatcher:
                     cancellation_probe=tool_control.is_cancelled,
                     deadline=tool_control.deadline,
                     execution_authority=execution_authority,
+                    scope_refs=scope_refs,
+                    resources=resources,
                     idempotency_key=invocation.idempotency_key,
                 )
                 if result.status == "success" and not tool_control.is_cancelled():
@@ -518,6 +526,11 @@ class ToolDispatcher:
 
             def reconcile_leaf(tool_control: ToolExecutionControl) -> ToolResult:
                 with self.session_factory() as leaf_db:
+                    scope_refs, resources = build_tool_scope_context(
+                        leaf_db,
+                        request,
+                        tool,
+                    )
                     reconciled = ToolRuntime(self.registry).reconcile(
                         tool_name=invocation.tool_name,
                         raw_input=invocation.authorized_input,
@@ -527,6 +540,8 @@ class ToolDispatcher:
                         cancellation_probe=tool_control.is_cancelled,
                         deadline=tool_control.deadline,
                         execution_authority=execution_authority,
+                        scope_refs=scope_refs,
+                        resources=resources,
                     )
                     leaf_db.rollback()
                     return reconciled
