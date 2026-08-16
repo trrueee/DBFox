@@ -48,6 +48,11 @@ from engine.tools.materialization import (
     require_reconciliation_tool,
 )
 from engine.tools.runtime import ToolExecutor, ToolRegistry, ToolRuntime
+from engine.tools.runtime.attempt import (
+    ToolAttemptRequest,
+    ToolInvocationContext,
+)
+from engine.tools.runtime.attempt_runner import IsolatedProcessAttemptRunner
 from engine.tools.runtime.resource_context import build_tool_scope_context
 from engine.tools.runtime.base import (
     BaseTool,
@@ -117,11 +122,13 @@ class ToolDispatcher:
         registry: ToolRegistry,
         definition: AgentDefinition,
         executor: ToolExecutor,
+        isolated_worker_command: tuple[str, ...] | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.registry = registry
         self.definition = definition
         self.executor = executor
+        self.isolated_runner = IsolatedProcessAttemptRunner(isolated_worker_command)
         self.approval_authority = ApprovalAuthorityVerifier()
 
     def request_and_execute(
@@ -477,7 +484,38 @@ class ToolDispatcher:
         request = prepared.request
         execution_authority = prepared.execution_authority
 
+        def attempt_request(
+            tool_control: ToolExecutionControl,
+            mode: str,
+        ) -> ToolAttemptRequest:
+            with self.session_factory() as leaf_db:
+                scope_refs, _resources = build_tool_scope_context(
+                    leaf_db,
+                    request,
+                    tool,
+                )
+            return ToolAttemptRequest(
+                mode=mode,
+                tool_name=invocation.tool_name,
+                frozen_tool_version=invocation.tool_version,
+                invocation=ToolInvocationContext(
+                    session_id=invocation.session_id,
+                    run_id=invocation.run_id,
+                    turn_id=invocation.turn_id,
+                    invocation_id=invocation.id,
+                    idempotency_key=invocation.idempotency_key,
+                    scope_refs=scope_refs,
+                ),
+                authorized_input=invocation.authorized_input,
+                attempt_timeout_ms=tool.execution.timeout_seconds * 1_000,
+            )
+
         def execute_leaf(tool_control: ToolExecutionControl) -> ToolResult:
+            if tool.execution.backend == "isolated_process":
+                return self.isolated_runner.run(
+                    request=attempt_request(tool_control, "execute"),
+                    control=tool_control,
+                )
             with self.session_factory() as leaf_db:
                 scope_refs, resources = build_tool_scope_context(
                     leaf_db,
@@ -525,6 +563,11 @@ class ToolDispatcher:
         if prepared.needs_reconciliation:
 
             def reconcile_leaf(tool_control: ToolExecutionControl) -> ToolResult:
+                if tool.execution.backend == "isolated_process":
+                    return self.isolated_runner.run(
+                        request=attempt_request(tool_control, "reconcile"),
+                        control=tool_control,
+                    )
                 with self.session_factory() as leaf_db:
                     scope_refs, resources = build_tool_scope_context(
                         leaf_db,

@@ -2,7 +2,11 @@
 
 > 文档类型：交接记录
 >
-> 状态：当前工作树 `main@8266de4c`
+> 状态：当前
+>
+> 最后核验：2026-08-17
+>
+> 基线：`main@72931e08`
 >
 > 用途：交给下一执行者继续完成第二能力族证明，不重复已完成的调查与实现。
 
@@ -47,51 +51,33 @@
   - `artifactRendererRegistry` 注册 `dbfox.workspace.file_snapshot` renderer，点击打开 `workspaceFileStore.openFile` 到现有 File Dock View。
   - 之前的 `WorkspaceDockTabKind` 已开放 string，ShellStore 只负责 layout/identity。
 
-### P6 已落地的 seam / 骨架
+### P6 真实 isolated worker transport
 - `engine/tools/runtime/handler.py`
   - `ToolAttemptHandler` 校验 frozen tool version → resolve scopes → 调 ToolRuntime execute/reconcile。
   - 同一 handler 语义给 in-process / isolated 共用。
 - `engine/tools/runtime/attempt_runner.py`
   - `InProcessAttemptRunner`：执行前检查 cancel，执行后若 late success 则转 TOOL_CANCELLED。
-  - `IsolatedProcessAttemptRunner`：**目前只是 protocol_version=1 的 skeleton**，返回 `TOOL_EXECUTION_BACKEND_UNAVAILABLE`；没有真实 worker transport。
+  - `IsolatedProcessAttemptRunner`：真实 `subprocess.Popen`，带 line-delimited JSON protocol、cancel/deadline、process-tree kill、stdout/stderr 上限、malformed result rejection 和 late result suppression。
+- `engine/tools/runtime/worker_protocol.py`：`protocol_version=1`，单行 JSON frame。
+- `engine/tools/worker.py`：`python -m engine.tools.worker`，decode request → ready/request handshake → build registry/resolver → `ToolAttemptHandler` → encode result。
+- `engine/tools/runtime/resource_context.py`：workspace scope 现在携带 authorized `location`，worker 不需要重建应用容器。
 
 ## 2. 交接后下一步（按顺序）
 
-### A. 完成 P6 真实 isolated worker transport（不要从 UI/前端开始）
-目标文件：
-- `engine/tools/runtime/attempt_runner.py`：替换 skeleton 为真实 `subprocess.Popen`。
-- 新增 worker entry（建议 `engine/tools/worker.py`），入口用 `python -m engine.tools.worker`。
-- `engine/tools/runtime/handler.py`：已可复用。
-- `engine/tools/runtime/executor.py`：把 `backend == "isolated_process"` 从“不可用”改为经 `ToolAttemptRunner` 执行；retry/deadline/cancel 仍只在 ToolExecutor。
+### A. 完成 P6 真实 isolated worker transport
+已实现：
+- `IsolatedProcessAttemptRunner` 真实启动 worker，并保留 ToolExecutor 的 retry/deadline/cancel 所有权。
+- worker 协议 handshake、serializable `ToolAttemptRequest`/`ToolResult`、parent→worker cancel、process-group/tree kill、输出上限、malformed result rejection、late result suppression、worker crash → `TOOL_OUTCOME_UNKNOWN`。
+- 未声称 hostile-code sandbox；Windows 契约测试已覆盖本机，macOS/Linux 仍只在静态代码路径上成立，未真实验证。
 
-必须覆盖：
-- request/result 只传 serializable `ToolAttemptRequest` / `ToolResult`；
-- worker 启动后 decode request → protocol/schema handshake → 校验 frozen tool version → resolve scopes → handler → encode result；
-- parent→worker cancel；process group/tree kill；
-- stdout/stderr、frame、output size 上限；
-- malformed result rejection；
-- late result suppression；
-- worker crash 固定为 TOOL_OUTCOME_UNKNOWN（只在 reconcile 语义下可被 ToolExecutor 收口）；
-- Windows/macOS/Linux 契约测试；
-- 不得声称 hostile-code sandbox。
+### B. P8 `file_write_patch`
+已实现：
+- `engine/workspace/patch_service.py`：canonical relative path、`expected_sha256` CAS、1 MiB 有界内容、temp sibling + fsync + atomic replace、conflict/no-silent-overwrite、纯文件系统状态的 reconcile。
+- `engine/tools/builtin/workspace.py` 新增 `file_write_patch`：`isolated_process`、`filesystem_write`、`recovery="reconcile"`、`dbfox.workspace.code_patch` payload contract。
+- `filesystem_write` 未加入 `IN_PROCESS_CAPABILITIES`。
 
-### B. P8 `file_write_patch`（真正需要 isolated backend 的写能力）
-建议：
-- `engine/workspace/patch_service.py`：
-  - canonical relative path；
-  - `expected_sha256` CAS；
-  - bounded patch（例如单文件 diff/内容上限）；
-  - temp sibling + flush/fsync + atomic replace；
-  - conflict / no-silent-overwrite / crash reconcile。
-- `engine/tools/builtin/workspace.py` 增加 `file_write_patch`：
-  - `execution.backend="isolated_process"`
-  - `capabilities=("filesystem_write",)`
-  - `recovery="reconcile"` 而不是 `retry_safe`
-  - Artifact type 建议 `dbfox.workspace.code_patch`，先注册 payload contract。
-- **不要**把 `filesystem_write` 加进 `IN_PROCESS_CAPABILITIES`；当前 `IN_PROCESS_CAPABILITIES` 只允许新增的 `filesystem_read`。
-- 写能力必须在 A 的 worker transport 完成后才接。
-
-### C. 证明完整链（验收，不是再写框架）
+### C. 证明完整链（仍未作为真实场景验收）
+代码路径已实现并通过 focused tests，但尚未用真实 Provider/桌面场景完成下列端到端验收：
 跑一个真实 scenario：
 1. Project 有 `workspace_root`；
 2. Agent 调 `file_read`；
@@ -110,7 +96,7 @@
 ### D. 保持未完成的诚实状态
 - `DBFOX_MEMORY_V4_CONTEXT` 仍默认关闭；P2 5.6 没有真实 Provider AgentBench 后测，不得打开。
 - P9/P10 仍未实现。
-- `file_write_patch` 未实现前，P8 不能标记完成。
+- `file_write_patch` 已完成 backend 实现和 contract tests；但全链验收 C 未完成前，不把它当作产品级完成。
 
 ## 3. 本地验证命令（已执行过，交接后仍以这些为准）
 
@@ -122,7 +108,7 @@
 .venv/Scripts/python.exe -m pytest engine/agent/tests -q --tb=short   -m "not e2e and not integration and not real_llm"
 
 # focused new tests
-.venv/Scripts/python.exe -m pytest   engine/tests/test_tool_attempt_contract.py   engine/tests/test_tool_attempt_runner.py   engine/tests/test_workspace_read_service.py   engine/tests/test_workspace_file_tool.py   engine/tests/test_workspace_context_fragment.py
+.venv/Scripts/python.exe -m pytest   engine/tests/test_tool_attempt_contract.py   engine/tests/test_tool_attempt_runner.py   engine/tests/test_workspace_read_service.py   engine/tests/test_workspace_file_tool.py   engine/tests/test_workspace_patch_tool.py   engine/tests/test_workspace_context_fragment.py
 
 # frozen sidecar smoke（Windows 本机）
 ./.build_venv/Scripts/python.exe build_sidecar.py
@@ -131,9 +117,8 @@ cd desktop && npm run test:sidecar
 
 ## 4. 当前未监视的 CI 状态
 
-- 最后一次 push 是 `8266de4c`。
-- GitHub Actions run 31959315130 当时仍在运行，后续执行者不要假设它已转绿；先看 run 状态，再决定修复点。
-- 最近一次完全转绿的 push 是 `543661fa`。
+- 当前工作树基线为 `72931e08`。
+- 本阶段 P6/P8 变更尚未推送；推送前先跑完整本地门禁，再决定是否触发远端 CI。
 
 ## 5. 关键文件索引
 
@@ -141,9 +126,12 @@ cd desktop && npm run test:sidecar
 |---|---|
 | serializable attempt | `engine/tools/runtime/attempt.py` |
 | shared handler | `engine/tools/runtime/handler.py` |
-| runner seam | `engine/tools/runtime/attempt_runner.py` |
+| isolated runner / transport | `engine/tools/runtime/attempt_runner.py` |
+| worker protocol | `engine/tools/runtime/worker_protocol.py` |
+| worker entry | `engine/tools/worker.py` |
 | dispatcher scope integration | `engine/agent/tool_dispatcher.py` |
 | workspace read substrate | `engine/workspace/read_service.py` |
+| workspace patch service | `engine/workspace/patch_service.py` |
 | file tools | `engine/tools/builtin/workspace.py` |
 | context fragment seam | `engine/agent/context_fragment.py` |
 | workspace context contributor | `engine/agent/workspace_context.py` |

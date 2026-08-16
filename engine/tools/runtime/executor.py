@@ -69,7 +69,7 @@ class ToolExecutor:
         deadline: float | None = None,
     ) -> ToolResult:
         spec = tool.execution
-        if spec.backend != "in_process":
+        if spec.backend not in {"in_process", "isolated_process"}:
             return ToolResult(
                 name=tool.name,
                 status="failed",

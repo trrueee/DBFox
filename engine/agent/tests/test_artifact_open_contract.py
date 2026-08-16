@@ -66,12 +66,12 @@ def test_registered_extension_payload_can_be_written_without_core_changes() -> N
         content_hash: str | None = None
 
     register_artifact_payload_contract(
-        "dbfox.workspace.code_patch",
+        "dbfox.tests.code_patch_probe",
         1,
         CodePatchPayload,
     )
     payload = validate_artifact_payload(
-        "dbfox.workspace.code_patch",
+        "dbfox.tests.code_patch_probe",
         {"path": "src/app.py"},
         schema_version=1,
     )

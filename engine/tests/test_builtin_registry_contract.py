@@ -15,6 +15,7 @@ from engine.tools.builtin import (
     register_data_extension,
     register_dbfox_tools,
     register_workspace_extension,
+    register_workspace_write_extension,
 )
 from engine.tools.materialization import materialize_tools
 from engine.tools.runtime import ToolRegistry
@@ -53,7 +54,7 @@ class _EchoTool(BaseTool[_EchoInput, _EchoOutput]):
 
 
 FROZEN_MATERIALIZATION_HASH = (
-    "8d7255057ff1b3de6836d5ff7848911a7d20933a80793270969d55aa41adc488"
+    "3ece51e0d5f5a609d51e4c0e7cdcf513fa070f59bf69e1bc604d14dec9e85d95"
 )
 
 FROZEN_BUILTIN_NAMES = (
@@ -65,6 +66,7 @@ FROZEN_BUILTIN_NAMES = (
     "data_preview",
     "file_read",
     "file_search",
+    "file_write_patch",
     "request_clarification",
     "result_inspect",
     "result_profile",
@@ -87,6 +89,7 @@ FROZEN_OWNERS = {
     "data_preview": "dbfox.data",
     "file_read": "dbfox.workspace",
     "file_search": "dbfox.workspace",
+    "file_write_patch": "dbfox.workspace",
     "result_inspect": "dbfox.data",
     "result_profile": "dbfox.data",
     "schema_inspect": "dbfox.data",
@@ -115,11 +118,14 @@ def test_builtin_materialization_hash_is_frozen() -> None:
 
 def test_owner_scoped_composition_matches_facade_exactly() -> None:
     facade = register_dbfox_tools()
-    scoped = ToolRegistry()
+    scoped = ToolRegistry(
+        available_backends=frozenset({"in_process", "isolated_process"})
+    )
     register_core_functions(scoped)
     register_conversation_functions(scoped)
     register_data_extension(scoped)
     register_workspace_extension(scoped)
+    register_workspace_write_extension(scoped)
     scoped.freeze()
 
     assert scoped.tool_names() == facade.tool_names()

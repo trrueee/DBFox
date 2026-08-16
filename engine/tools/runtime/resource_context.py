@@ -61,6 +61,7 @@ def build_tool_scope_context(
                 kind="workspace",
                 id=project_id,
                 version=root_digest,
+                location=workspace_root,
             )
         )
         resources["workspace"] = workspace

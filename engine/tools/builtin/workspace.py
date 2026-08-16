@@ -21,11 +21,17 @@ from engine.tools.runtime.base import (
     ToolPresentation,
 )
 from engine.tools.runtime.context import ToolRunContext
-from engine.tools.runtime.result import ToolOutcome
+from engine.tools.runtime.result import ToolOutcome, ToolReconciliation
 from engine.tools.runtime.semantics import ToolSemanticSpec
 from engine.workspace.read_service import WorkspaceReadError, WorkspaceReadService
+from engine.workspace.patch_service import (
+    WorkspacePatchConflict,
+    WorkspacePatchError,
+    WorkspacePatchService,
+)
 
 MAX_FILE_READ_CHARS = 12_000
+MAX_WORKSPACE_PATCH_CHARS = 1_048_576
 
 
 class FileReadInput(BaseModel):
@@ -213,6 +219,152 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
         return ToolOutcome(output=output, artifacts=(artifact,))
 
 
+class FileWritePatchInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: str = Field(
+        min_length=1,
+        max_length=1_024,
+        description="Workspace-relative UTF-8 text file path.",
+    )
+    content: str = Field(
+        min_length=0,
+        max_length=MAX_WORKSPACE_PATCH_CHARS,
+        description="Bounded replacement file content.",
+    )
+    expected_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-fA-F]{64}$|^$",
+        description="SHA-256 of the current file; empty only when creating a file.",
+    )
+
+
+class FileWritePatchOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: str
+    old_sha256: str | None
+    new_sha256: str = Field(min_length=64, max_length=64)
+    size_bytes: int = Field(ge=0)
+    created: bool
+
+
+class WorkspaceFileWritePatchTool(
+    BaseTool[FileWritePatchInput, FileWritePatchOutput]
+):
+    name = "file_write_patch"
+    group = "workspace"
+    description = (
+        "Atomically replace a bounded UTF-8 workspace file after checking its "
+        "current SHA-256. The file must remain inside the authorized Project "
+        "workspace."
+    )
+    input_model = FileWritePatchInput
+    output_model = FileWritePatchOutput
+    version = "1"
+    policy = ToolPolicy(risk_level="danger", requires_approval=True)
+    execution = ToolExecutionSpec(
+        timeout_seconds=30,
+        recovery="reconcile",
+        retryable=False,
+        max_retries=0,
+        concurrency="sequential",
+        max_output_bytes=1_000_000,
+        backend="isolated_process",
+        capabilities=("filesystem_write",),
+    )
+    semantics = ToolSemanticSpec(
+        produces=("dbfox.workspace.code_patch",),
+        contributes_progress=True,
+        publishes_artifact_references=False,
+    )
+    presentation = ToolPresentation(
+        title="修改项目文件",
+        category="manage",
+        visibility="summary",
+        progress="indeterminate",
+    )
+
+    def run(
+        self,
+        input: FileWritePatchInput,
+        context: ToolRunContext,
+    ) -> ToolOutcome[FileWritePatchOutput]:
+        patch_service = self._patch_service(context)
+        try:
+            result = patch_service.apply_patch(
+                input.path,
+                input.content,
+                input.expected_sha256,
+            )
+        except WorkspacePatchConflict as exc:
+            raise ToolInputError("工作区文件已发生变化，无法安全写入。") from exc
+        except WorkspacePatchError as exc:
+            raise ToolInputError("无法写入该项目文件。") from exc
+
+        output = FileWritePatchOutput(
+            path=result.relative_path,
+            old_sha256=result.old_sha256,
+            new_sha256=result.new_sha256,
+            size_bytes=result.size_bytes,
+            created=result.created,
+        )
+        artifact = ArtifactDraft(
+            key="patch",
+            type="dbfox.workspace.code_patch",
+            schema_version=1,
+            title=result.relative_path,
+            payload={
+                "relativePath": result.relative_path,
+                "oldSha256": result.old_sha256,
+                "newSha256": result.new_sha256,
+                "sizeBytes": result.size_bytes,
+                "created": result.created,
+            },
+            summary=f"Replaced {result.size_bytes} bytes in {result.relative_path}",
+            semantic_key=f"file_write_patch:{result.new_sha256}",
+        )
+        return ToolOutcome(output=output, artifacts=(artifact,))
+
+    def reconcile(
+        self,
+        input: FileWritePatchInput,
+        context: ToolRunContext,
+    ) -> ToolReconciliation:
+        patch_service = self._patch_service(context)
+        try:
+            status, result = patch_service.reconcile(
+                input.path,
+                input.content,
+                input.expected_sha256,
+            )
+        except WorkspacePatchError:
+            return ToolReconciliation(status="unknown")
+        if status == "succeeded" and result is not None:
+            return ToolReconciliation(
+                status="succeeded",
+                output={
+                    "path": result.relative_path,
+                    "old_sha256": result.old_sha256,
+                    "new_sha256": result.new_sha256,
+                    "size_bytes": result.size_bytes,
+                    "created": result.created,
+                },
+            )
+        if status == "not_applied":
+            return ToolReconciliation(status="not_applied")
+        return ToolReconciliation(status="unknown")
+
+    @staticmethod
+    def _patch_service(context: ToolRunContext) -> WorkspacePatchService:
+        workspace = context.require_resource("workspace")
+        if not isinstance(workspace, WorkspaceReadService):
+            raise RuntimeError(
+                "Workspace resource did not resolve to a WorkspaceReadService"
+            )
+        return WorkspacePatchService(workspace)
+
+
 class _WorkspaceFileSnapshotPayloadValidator(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
@@ -226,4 +378,21 @@ register_artifact_payload_contract(
     "dbfox.workspace.file_snapshot",
     1,
     _WorkspaceFileSnapshotPayloadValidator,
+)
+
+
+class _WorkspaceCodePatchPayloadValidator(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+    relative_path: str = Field(alias="relativePath")
+    old_sha256: str | None = Field(default=None, alias="oldSha256")
+    new_sha256: str = Field(min_length=64, max_length=64, alias="newSha256")
+    size_bytes: int = Field(ge=0, alias="sizeBytes")
+    created: bool = False
+
+
+register_artifact_payload_contract(
+    "dbfox.workspace.code_patch",
+    1,
+    _WorkspaceCodePatchPayloadValidator,
 )

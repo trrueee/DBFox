@@ -25,6 +25,7 @@ class ResourceScopeRef(BaseModel):
     kind: str = Field(min_length=1, max_length=64)
     id: str = Field(min_length=1, max_length=256)
     version: str | int | None = Field(default=None)
+    location: str | None = Field(default=None, max_length=4_096)
 
     def canonical(self) -> tuple[str, str]:
         return (self.kind, self.id)

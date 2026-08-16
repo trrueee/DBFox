@@ -6,6 +6,7 @@ from engine.tools.builtin.registry import (
     register_data_extension,
     register_dbfox_tools,
     register_workspace_extension,
+    register_workspace_write_extension,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "register_data_extension",
     "register_dbfox_tools",
     "register_workspace_extension",
+    "register_workspace_write_extension",
 ]

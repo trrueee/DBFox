@@ -22,7 +22,11 @@ from engine.tools.builtin.results import (
     ResultInspectTool,
     ResultProfileTool,
 )
-from engine.tools.builtin.workspace import WorkspaceFileReadTool, WorkspaceFileSearchTool
+from engine.tools.builtin.workspace import (
+    WorkspaceFileReadTool,
+    WorkspaceFileSearchTool,
+    WorkspaceFileWritePatchTool,
+)
 from engine.tools.runtime import ToolRegistry
 
 CORE_OWNER = "dbfox.core"
@@ -72,6 +76,12 @@ def register_workspace_extension(registry: ToolRegistry) -> None:
     registry.register(WorkspaceFileSearchTool(), owner=WORKSPACE_OWNER)
 
 
+def register_workspace_write_extension(registry: ToolRegistry) -> None:
+    """Register the isolated Workspace write capability."""
+
+    registry.register(WorkspaceFileWritePatchTool(), owner=WORKSPACE_OWNER)
+
+
 def register_dbfox_tools() -> ToolRegistry:
     """Build the complete model-function registry for one DBFox Agent process.
 
@@ -80,9 +90,12 @@ def register_dbfox_tools() -> ToolRegistry:
     is removed once every production composition call site has migrated.
     """
 
-    registry = ToolRegistry()
+    registry = ToolRegistry(
+        available_backends=frozenset({"in_process", "isolated_process"})
+    )
     register_core_functions(registry)
     register_conversation_functions(registry)
     register_data_extension(registry)
     register_workspace_extension(registry)
+    register_workspace_write_extension(registry)
     return registry.freeze()
