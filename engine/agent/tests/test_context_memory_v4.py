@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from importlib import reload
 
 import pytest
 
@@ -23,6 +24,14 @@ from engine.models import (
     AgentToolInvocation,
     AgentTurn,
 )
+
+
+def test_memory_v4_context_flag_is_disabled_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("DBFOX_MEMORY_V4_CONTEXT", raising=False)
+    from engine.agent import context as context_module
+
+    reload(context_module)
+    assert context_module.MEMORY_V4_CONTEXT_ENABLED is False
 
 
 def _seed_v4_context(

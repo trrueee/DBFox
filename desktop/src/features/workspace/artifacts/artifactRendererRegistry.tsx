@@ -5,12 +5,14 @@ import { DeferredChartArtifactView } from "./DeferredChartArtifactView";
 import { MarkdownArtifactView } from "./MarkdownArtifactView";
 import { SqlArtifactView } from "./SqlArtifactView";
 import { TableArtifactView } from "./TableArtifactView";
+import { WorkspaceCodePatchArtifactView } from "./WorkspaceCodePatchArtifactView";
 import { WorkspaceFileSnapshotArtifactView } from "./WorkspaceFileSnapshotArtifactView";
 import type {
   ChartArtifact,
   MarkdownArtifact,
   ResultViewArtifact,
   SqlArtifact,
+  WorkspaceCodePatchArtifact,
   WorkspaceFileSnapshotArtifact,
 } from "../../../types/agentArtifact";
 
@@ -161,6 +163,29 @@ function parseWorkspaceFileSnapshotPayload(
   };
 }
 
+function parseWorkspaceCodePatchPayload(
+  value: unknown,
+): WorkspaceCodePatchArtifact {
+  const payload = asRecord(value);
+  return {
+    id: "",
+    type: "dbfox.workspace.code_patch",
+    schemaVersion: 1,
+    title: "",
+    relativePath: requiredString(payload.relativePath, "relativePath"),
+    oldSha256:
+      typeof payload.oldSha256 === "string" && payload.oldSha256
+        ? payload.oldSha256
+        : null,
+    newSha256: requiredString(payload.newSha256, "newSha256"),
+    sizeBytes:
+      typeof payload.sizeBytes === "number" && payload.sizeBytes >= 0
+        ? payload.sizeBytes
+        : 0,
+    created: payload.created === true,
+  };
+}
+
 function parseSqlPayload(value: unknown): SqlArtifact {
   const payload = asRecord(value);
   return {
@@ -200,6 +225,19 @@ const RENDERER_CONTRIBUTIONS: ReadonlyArray<
         title: artifact.title,
       };
       return <WorkspaceFileSnapshotArtifactView artifact={model} />;
+    },
+  },
+  {
+    type: "dbfox.workspace.code_patch",
+    supportedSchemaVersions: [1],
+    parsePayload: parseWorkspaceCodePatchPayload,
+    render: (artifact) => {
+      const model = {
+        ...parseWorkspaceCodePatchPayload(artifact.payload),
+        id: artifact.id,
+        title: artifact.title,
+      };
+      return <WorkspaceCodePatchArtifactView artifact={model} />;
     },
   },
   {

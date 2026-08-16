@@ -68,12 +68,13 @@
 已实现：
 - `IsolatedProcessAttemptRunner` 真实启动 worker，并保留 ToolExecutor 的 retry/deadline/cancel 所有权。
 - worker 协议 handshake、serializable `ToolAttemptRequest`/`ToolResult`、parent→worker cancel、process-group/tree kill、输出上限、malformed result rejection、late result suppression、worker crash → `TOOL_OUTCOME_UNKNOWN`。
-- 未声称 hostile-code sandbox；Windows 契约测试已覆盖本机，macOS/Linux 仍只在静态代码路径上成立，未真实验证。
+- 未声称 hostile-code sandbox；新增 `isolated-worker-platform-contract` CI job 在 `ubuntu-24.04`、`windows-2025`、`macos-14` 上运行 worker transport 与 patch contract 测试。
 
 ### B. P8 `file_write_patch`
 已实现：
 - `engine/workspace/patch_service.py`：canonical relative path、`expected_sha256` CAS、1 MiB 有界内容、temp sibling + fsync + atomic replace、conflict/no-silent-overwrite、纯文件系统状态的 reconcile。
 - `engine/tools/builtin/workspace.py` 新增 `file_write_patch`：`isolated_process`、`filesystem_write`、`recovery="reconcile"`、`dbfox.workspace.code_patch` payload contract。
+- 前端新增 `WorkspaceCodePatchArtifactView` 和 renderer contribution，`dbfox.workspace.code_patch` 不再走 unknown fallback。
 - `filesystem_write` 未加入 `IN_PROCESS_CAPABILITIES`。
 
 ### C. 证明完整链（仍未作为真实场景验收）

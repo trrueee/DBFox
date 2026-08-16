@@ -22,6 +22,9 @@ vi.mock("../SqlArtifactView", () => ({
 vi.mock("../WorkspaceFileSnapshotArtifactView", () => ({
   WorkspaceFileSnapshotArtifactView: () => <div data-testid="workspace-file-snapshot-view" />,
 }));
+vi.mock("../WorkspaceCodePatchArtifactView", () => ({
+  WorkspaceCodePatchArtifactView: () => <div data-testid="workspace-code-patch-view" />,
+}));
 
 describe("artifact renderer registry", () => {
   it("binds known renderers to (type, schemaVersion)", () => {
@@ -31,6 +34,7 @@ describe("artifact renderer registry", () => {
     expect(getArtifactRenderer("sql", 1)).not.toBeNull();
     expect(getArtifactRenderer("result_view", 2)).toBeNull();
     expect(getArtifactRenderer("dbfox.workspace.file_snapshot", 1)).not.toBeNull();
+    expect(getArtifactRenderer("dbfox.workspace.code_patch", 1)).not.toBeNull();
   });
 
   it("renders unknown artifacts through the metadata fallback", () => {
@@ -62,6 +66,24 @@ describe("artifact renderer registry", () => {
     };
     const { container } = render(renderArtifact(artifact, { onToast: vi.fn() }));
     expect(container.querySelector('[data-testid="workspace-file-snapshot-view"]')).toBeTruthy();
+  });
+
+  it("renders workspace code patches through their own contribution", () => {
+    const artifact: ArtifactEnvelope = {
+      id: "artifact-code-patch",
+      type: "dbfox.workspace.code_patch",
+      schema_version: 1,
+      title: "src/main.py",
+      payload: {
+        relativePath: "src/main.py",
+        oldSha256: "a".repeat(64),
+        newSha256: "b".repeat(64),
+        sizeBytes: 42,
+        created: false,
+      },
+    };
+    const { container } = render(renderArtifact(artifact, { onToast: vi.fn() }));
+    expect(container.querySelector('[data-testid="workspace-code-patch-view"]')).toBeTruthy();
   });
 
   it("falls back when a known renderer payload cannot be parsed", () => {

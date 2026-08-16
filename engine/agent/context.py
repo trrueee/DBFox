@@ -507,24 +507,25 @@ class ContextAssembler:
         aggregate: AgentSession,
     ) -> list[dict[str, Any]]:
         from engine.agent.context_fragment import ContextContributionInput
-        from engine.agent.workspace_context import WorkspaceContextContributor
+        from engine.agent.workspace_context import WORKSPACE_CONTEXT_CONTRIBUTORS
 
-        contributor = WorkspaceContextContributor(self.session)
-        fragments = contributor.build(
-            ContextContributionInput(
-                session_id=str(run.session_id),
-                run_id=str(run.id),
-                current_request=str(
-                    self.session.get(AgentSessionInput, run.input_id).content
-                    if run.input_id and self.session.get(AgentSessionInput, run.input_id)
-                    else ""
-                ),
-            )
+        contribution_input = ContextContributionInput(
+            session_id=str(run.session_id),
+            run_id=str(run.id),
+            current_request=str(
+                self.session.get(AgentSessionInput, run.input_id).content
+                if run.input_id and self.session.get(AgentSessionInput, run.input_id)
+                else ""
+            ),
         )
-        return [
-            fragment.model_dump(mode="json")
-            for fragment in fragments
-        ]
+        fragments: list[dict[str, Any]] = []
+        for contributor_cls in WORKSPACE_CONTEXT_CONTRIBUTORS:
+            contributor = contributor_cls(self.session)
+            fragments.extend(
+                fragment.model_dump(mode="json")
+                for fragment in contributor.build(contribution_input)
+            )
+        return fragments
 
     def _previous_run_outcome(
         self,

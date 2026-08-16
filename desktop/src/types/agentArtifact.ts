@@ -71,3 +71,12 @@ export type WorkspaceFileSnapshotArtifact = AgentArtifactBase & {
   sha256: string;
   truncated: boolean;
 };
+
+export type WorkspaceCodePatchArtifact = AgentArtifactBase & {
+  type: "dbfox.workspace.code_patch";
+  relativePath: string;
+  oldSha256?: string | null;
+  newSha256: string;
+  sizeBytes: number;
+  created: boolean;
+};
