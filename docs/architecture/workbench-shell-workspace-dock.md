@@ -16,7 +16,7 @@ DBFox 桌面端收敛为两个 App Mode：
 
 ```text
 Workspace Mode
-Project Sidebar | Conversation Main | optional Workspace Dock
+Entity Sidebar（项目/连接） | Conversation Main | optional Workspace Dock
 
 Settings Mode
 Settings Sidebar | Settings Main
@@ -108,10 +108,10 @@ Shell 不负责：
 ## 5. Workspace Mode
 
 ```text
-┌─────────────────┬────────────────────────┬────────────────────┐
-│ Project Sidebar │ Conversation Main      │ Workspace Dock     │
-│                 │                        │ optional/closed     │
-└─────────────────┴────────────────────────┴────────────────────┘
+┌──────────────────┬────────────────────────┬────────────────────┐
+│ Entity Sidebar   │ Conversation Main      │ Workspace Dock     │
+│ 项目 / 连接      │                        │ optional/closed     │
+└──────────────────┴────────────────────────┴────────────────────┘
 ```
 
 规则：
@@ -123,52 +123,41 @@ Shell 不负责：
 - Conversation 不再拥有第二个 Artifact layout panel；
 - Settings/Project management 不进入 Dock。
 
-## 6. Project Sidebar
+## 6. Entity Sidebar（项目 / 连接）
 
-目标信息层次：
+最终侧栏是「实体列表 + 行内子胶囊」，不是同时展示多个面板：
 
 ```text
-DBFox
-New Conversation
+[ 项目 | 连接 ]                        [+ / 收起]
+Project A            [+新对话]  [ 对话 | 文件 ]
+  会话 1
+  README.md
+Project B            [+新对话]  [ 对话 | 文件 ]
 
-Projects                           +
-Project A
-  [Conversations | Data]
-
-  conversations mode:
-    Conversation 1
-    Conversation 2
-
-  data mode:
-    Datasource A
-      schema / table resources
-    Datasource B
-      schema / table resources
-
-Project B
-
-Settings
+-- 切到连接 --
+[ 项目 | 连接 ]                        [+ / 收起]
+MySQL 生产            [+新对话]  [ 对话 | 数据库 ]
+  会话 2
+  schema/table resources
+Postgres 分析         [+新对话]  [ 对话 | 数据库 ]
 ```
 
-Project 本身不是 Datasource Tree node。Project 行不显示数据库连接状态或品牌 icon；这些属于其 DataSource 子资源。
+规则：
+
+- 顶层「项目 / 连接」是互斥胶囊；每行实体自己有独立的 `[对话|文件]` 或 `[对话|数据库]` 子胶囊，切换后行内内容直接替换。
+- 不再出现「对话列表」「文件」「数据库对象树」等分区标题。
+- 项目用 Folder/FolderOpen 两态图标；连接用数据库图标，当前数据库节点继续使用数据源品牌图标。
+- 每个项目行和连接行都有一个「+ 新对话」按钮。当前 AgentSession 仍 datasource-bound 时，项目新对话沿用该项目首个 DataSource，连接新对话沿用该连接；不伪造 datasource-free Session。
+- 项目文件子模式只显示本地 `workspace_root` 的文件树，点击文件在 Dock 打开只读视图；文件事实不进入 Shell Store。
+- Project 行不显示数据库连接状态。
 
 ### 6.1 Conversation list
 
-Conversation history 就是当前 Project 下的 Conversation summaries，不再有独立 History workspace page。
+Conversation history 就是当前项目/连接下的 Conversation summaries，不再有独立 History workspace page。因为当前 Conversation datasource-bound，项目列表通过 datasource→project 关系归组，连接列表直接按 `datasource_id` 归组。
 
-因为当前 Conversation datasource-bound，列表通过 datasource→project 关系归组。
+### 6.2 Project files
 
-### 6.2 Data list
-
-Data mode 展示当前 Project 的 DataSource 及其 Catalog/Schema/Table 资源。
-
-不混入：
-
-- SQL Console；
-- Settings；
-- Project form；
-- Conversation history 页面；
-- Smart Query 页面。
+新建项目时必须选择本地文件夹并把 `workspace_root` 持久化到 Project。文件树由 Tauri 命令 `list_project_folder` 按需读取一层；目录展开后才读取子目录，并跳过 `.git`、`node_modules`、`.venv`、`target` 等重目录。文本文件经 `read_project_file` 读取后以 `dbfox.workspace.file` Dock 视图渲染，只支持 UTF-8 且不超过 1 MiB；二进制、超大或非 UTF-8 文件显示明确错误。
 
 ## 7. Main Surface
 
@@ -188,9 +177,9 @@ Empty / error
 
 ConversationWorkspace 继续拥有 Message Timeline、Plan、Tool、Approval、Question、Composer、streaming/cancel 和 Artifact references；只移除右侧 Artifact layout ownership。
 
-Project Create 直接使用现有 Project create API 的 name/description contract。若产品需要 Project Edit，先在后端补一个最小、明确的 Project update contract，再接 Main Surface；不能复用 Datasource form 假装 Project form。
+Project Create 使用现有 Project create API 的 `name`/`description`/`workspace_root` contract：`workspace_root` 来自 Tauri 系统文件夹选择器，项目名默认取文件夹 basename，用户仍可修改名称。若产品需要 Project Edit，先在后端补一个最小、明确的 Project update contract，再接 Main Surface；不能复用 Datasource form 假装 Project form。
 
-Datasource create/edit/test/credential/schema sync 始终是 Project 下的 DataSource 管理能力。
+Datasource create/edit/test/credential/schema sync 在 Navicat 式连接管理 Dialog 中完成，不占用 Main Surface，也不进入 Dock。
 
 ## 8. Workspace Dock
 
@@ -213,12 +202,13 @@ core.sql-console
 dbfox.data.table
 dbfox.data.multi-table
 core.artifact
+core.artifacts
+dbfox.workspace.file
 ```
 
 未来：
 
 ```text
-dbfox.workspace.file
 dbfox.workspace.diff
 dbfox.github.pull-request
 dbfox.web.document
@@ -228,45 +218,36 @@ Dock 是开放 contribution point，因为未来确实会增加不同资源 View
 
 ## 9. Dock View contribution
 
+当前实现入口是 `desktop/src/features/appShell/dockViewRegistry.tsx`：
+
 ```typescript
-interface DockViewContribution<TRef> {
+interface DockViewContribution {
+  kind: WorkspaceDockTab["kind"];
   viewType: string;
-  parseResourceRef(value: unknown): TRef;
-  canonicalKey(ref: TRef): string;
-  resolveTitle(ref: TRef): string;
-  render(props: { ref: TRef; viewKey: string }): ReactNode;
+  icon: (tab: WorkspaceDockTab) => ReactNode;
+  resolveTitle: (tab: WorkspaceDockTab) => string;
+  isVisible: (tab: WorkspaceDockTab, context: DockViewContext) => boolean;
+  render: (tab: WorkspaceDockTab, context: DockRenderContext) => ReactNode;
 }
 ```
 
-Registry 可以只是启动时构建并 freeze 的：
-
-```typescript
-ReadonlyMap<string, DockViewContribution<unknown>>
-```
-
-不需要 ViewManager/Factory/Adapter 多层对象。
+Registry 是启动时构建并 freeze 的 `Map<kind, DockViewContribution>`，不需要 ViewManager/Factory/Adapter 多层对象。WorkspaceDock 本身 lazy 加载，让 `core.*`/`dbfox.*` 视图和 Artifact renderer 保持在独立 chunk 中。
 
 ### 9.1 Identity
 
-调用：
-
-```typescript
-openDock({ viewType, projectId, resourceRef, sourceRef? })
-```
-
-流程：
+每个 Shell action 以明确调用参数构造 canonical tab id，重复调用只激活已有 Tab，不用递增序号：
 
 ```text
-lookup contribution
-→ parse/normalize resourceRef once
-→ canonicalKey(ref)
-→ viewKey = projectId + viewType + canonicalKey
-→ activate existing or append
+openDockConsole → console-<projectId|datasourceId>
+openDockTable   → table-<datasourceId>-<tableName>
+openDockArtifact → artifact-<artifactId>
+openDockMultiTable → multi-table-<sorted table set>
+openDockFile    → file-<projectId>-<absolute path>
 ```
 
-`viewKey` 本身就是 Dock identity，不再同时保存一个随机 `tabId` 和另一份 canonical key。
+`tab.id` 就是 Dock identity，Store 不再同时保存随机 `tabId` 和另一份 canonical key。禁止用递增 `_tabSeq` 或裸字符串拼接不同 namespace；新增资源 View 时先补 contract test 固定其 canonical id。
 
-Store 中只保存已经规范化、可 JSON 序列化的 resource ref；render 时不重复 canonicalize。
+Store 中只保存规范化后的 view descriptor；render 时不重复 canonicalize。项目文件的路径和读取结果不进入 Shell Store，`WorkspaceFileDockContent` 在渲染时经 `read_project_file` 按需读取。
 
 ## 10. Dock state 数据结构
 

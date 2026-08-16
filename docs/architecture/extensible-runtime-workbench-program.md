@@ -36,6 +36,12 @@ DBFox 后续统一目标保持不变：
 - **一套算法服务增量与重建。** Memory incremental fold 与 full rebuild 必须调用同一 reducer，只允许输入区间不同。
 - **不为了“可扩展”隐藏真实边界。** 如果新增第二种能力仍要求 Kernel 写领域 `if`，应重新审查 seam，而不是继续加 wrapper。
 
+### 2.1 调查依据与限制
+
+本计划已完成的调查是：当前代码与测试盘点、现有架构/历史 review 文档、现有依赖与锁文件、已工作的 DBFox Runtime 主干。受限环境未重新访问外部官方文档和社区资料，因此本文不声称“已穷尽外部成熟方案”。
+
+后续在进入 P6 isolated process、P9 MCP/API/Command、P10 第二 capability family 前，必须先补充对应外部方案调查并在 PR/ADR 中记录：调查过的方案、采用或未采用原因、新增依赖风险、许可证与供应链影响；无法访问网络时如实写调查限制，不得写“没有成熟方案”。
+
 ## 3. 当前实现中应直接复用的健康主干
 
 以下能力已经存在并应保持：
@@ -97,7 +103,7 @@ accept Runs
 
 ```python
 registries.tools.register(tool, owner="dbfox.data")
-registries.artifacts.register(contract, owner="dbfox.data")
+# 未来真实 Artifact validator registry 出现后再同样直接注册；P1 不预建。
 ```
 
 不建立只用于再映射一次的 `ToolContribution` DTO。

@@ -60,13 +60,23 @@
 4. [`architecture/implementation-map.md`](architecture/implementation-map.md)
 5. [`quality/engineering-gates.md`](quality/engineering-gates.md)
 
+### 修改前端工作区布局或右栏 Dock
+
+1. [`architecture/workbench-shell-workspace-dock.md`](architecture/workbench-shell-workspace-dock.md)（已接受的目标 ADR）
+2. [`architecture/workbench-shell-migration-guide.md`](architecture/workbench-shell-migration-guide.md)（组件复用、迁移顺序与删除条件）
+3. [`architecture/frontend.md`](architecture/frontend.md)（当前迁移中实现）
+4. [`dbfox-design-baseline.md`](dbfox-design-baseline.md)（当前设计基线）
+5. [`dbfox-workspace-dock-design.md`](dbfox-workspace-dock-design.md)（历史交互草案，仅补充细节）
+6. [`architecture/implementation-map.md`](architecture/implementation-map.md)
+
 ### 准备提交或发布
 
 1. [`../CONTRIBUTING.md`](../CONTRIBUTING.md)
 2. [`quality/engineering-gates.md`](quality/engineering-gates.md)
-3. [`quality/supply-chain-security.md`](quality/supply-chain-security.md)
-4. [`quality/release-validation-matrix.md`](quality/release-validation-matrix.md)
-5. [`../AUTHORS.md`](../AUTHORS.md)（作者、署名义务和正式产物来源）
+3. [`quality/technical-investigation-and-reuse.md`](quality/technical-investigation-and-reuse.md)
+4. [`quality/supply-chain-security.md`](quality/supply-chain-security.md)
+5. [`quality/release-validation-matrix.md`](quality/release-validation-matrix.md)
+6. [`../AUTHORS.md`](../AUTHORS.md)（作者、署名义务和正式产物来源）
 
 ## 当前架构文档
 
@@ -86,6 +96,14 @@
 | [`architecture/error-boundary-contract.md`](architecture/error-boundary-contract.md) | 内部错误如何变成可信、可展示、可脱敏的公开错误？ |
 | [`architecture/runtime-foundation-decisions.md`](architecture/runtime-foundation-decisions.md) | 已收敛的 Runtime、Token、Transport、SQLite 与发布决策是什么？ |
 | [`architecture/desktop-release-lifecycle.md`](architecture/desktop-release-lifecycle.md) | 外观、窗口恢复、异常退出、代码签名与自动更新如何协作？ |
+
+## 设计草案
+
+以下文档描述计划中的设计，**不描述当前实现**，不能覆盖当前代码、测试或 [`dbfox-design-baseline.md`](dbfox-design-baseline.md)。
+
+| 文档 | 主要问题 |
+| --- | --- |
+| [`dbfox-workspace-dock-design.md`](dbfox-workspace-dock-design.md) | 历史交互草案；边界决策已被 [`architecture/workbench-shell-workspace-dock.md`](architecture/workbench-shell-workspace-dock.md) 取代，本文只保留交互与视觉细节。 |
 
 ## 文档优先级
 

@@ -65,11 +65,12 @@ later provider failure / user cancel
 
 第一版使用：
 
+> 全局不保存 `projected_through_session_sequence`。水位线只存在于每个 `SessionProjectionEnvelope`，避免多 Projection 各自 lag 时出现第二份全局水位真相；需要聚合视图时由各 envelope 水位现场派生（例如取最小值）。
+
 ```python
 class SessionMemoryStateV4(BaseModel):
     schema_version: Literal[4] = 4
     core_policy_version: int
-    projected_through_session_sequence: int
     core: SessionMemoryCore
     projections: tuple[SessionProjectionEnvelope, ...]
 ```
@@ -142,7 +143,7 @@ catalog_revision
 
 `catalog_revision` 与对应 search-visible publication 必须由**同一个短事务**提交。
 
-现有 AI enrichment 有内部 commit/rollback 行为，实施 `catalog_revision` 前必须先把 transaction ownership 收敛为 caller-owned publication boundary。
+AI enrichment 已收敛为 caller-owned publication boundary：核心发布提交后，LLM 调用不持有数据库写事务；每个成功批次重新校验 schema hash / connection generation，在自己的短事务中写元数据、重建 SearchDoc 并原子递增 `catalog_revision`。
 
 LLM enrichment 不应持有一个长写事务：
 
@@ -260,7 +261,7 @@ objects_by_key: dict[CatalogObjectKey, CatalogObjectState]
 如果 Memory watermark 落后于当前 terminal Run：
 
 ```text
-from = projected_through_session_sequence + 1
+from = 该 Projection envelope 的 `projected_through_session_sequence + 1`
 to   = current terminal run.session_sequence
 ```
 
@@ -314,7 +315,7 @@ cancelled
 - Result Artifact 只在 Core 保存 reference；
 - 模型自然语言 claim 不直接进入确定性 Working State。
 
-同一 terminal Run 重复 apply 必须幂等。水位线使用 `projected_through_session_sequence`；同一个 sequence 不重复 fold。
+同一 terminal Run 重复 apply 必须幂等。水位线使用各 Projection envelope 自己的 `projected_through_session_sequence`；同一个 sequence 对同一 Projection 不重复 fold。
 
 ## 10. Terminal 与 projection transaction boundary
 
@@ -462,7 +463,7 @@ Projection 有 lag 时，Context 只能使用已经成功投影并通过当前 r
 
 ## 15. Migration
 
-采用 shadow migration：
+采用 shadow migration。存储合同固定为：`AgentSessionMemory.memory_json` 在 cutover 前继续只写 v3；新增 nullable `memory_v4_json` 列保存 v4 envelope，watermark 只在 v4 envelope 内。两列并存期间不得把 v4 写入 `memory_json`，否则会破坏“切回 v3 Context”的回滚条件。
 
 ```text
 add catalog_revision
@@ -485,12 +486,11 @@ remove compatibility after rollback window
 ```text
 schema_version
 core_policy_version
-projected_through_session_sequence
 state_hash
 updated_at
 ```
 
-用于 lag/repair 检查，不必每次解析整个 JSON。
+用于快速读取 Core 级版本与 hash。Projection 的 `projected_through_session_sequence` 只保存在各自 `SessionProjectionEnvelope`；行级 metadata 不保存第二份全局水位。
 
 ## 16. 验收
 

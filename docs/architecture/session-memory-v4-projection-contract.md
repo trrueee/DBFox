@@ -366,7 +366,8 @@ credential identity
 unrelated Extension
 ```
 
-若当前 Tool materialization 已能提供需要的 executable contract hash，应复用其值作为 fingerprint 输入，不复制一套 Tool schema hashing 算法。
+Tool materialization 的整 Tool hash 不能直接作为 fingerprint，因为其中包含 title/presentation/description，UI 文案变化会错误触发 Memory rebuild。
+fingerprint 只能取与 Projection 解释相关的字段子集：Tool name/version、input/output schema、execution、policy、semantics 中会影响 reducer 解释的字段。实现上复用 `MaterializedTool` 已经暴露的合同字段做 canonical hash 输入，不复制第二套 schema-hash 算法；presentation 类字段明确排除。
 
 ## 12. Context rehydration
 

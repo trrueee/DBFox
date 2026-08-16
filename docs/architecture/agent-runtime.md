@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-06
+> 最后核验：2026-08-16
 >
 > 适用范围：`engine/agent/`、`engine/tools/runtime/` 和 Agent 持久化
 >
@@ -137,7 +137,7 @@ Provider 的 finish signal 不是最终完成权。Runtime 继续检查：
 - 引用是否全部来自当前 Run 已观察到的 Artifact；
 - 预算是否耗尽以及能否交付部分结果。
 
-CompletionPolicy 不读取用户文本关键词，也不先做 chat/schema/analysis 路由。
+CompletionPolicy 不读取用户文本关键词，也不先做 chat/schema/analysis 路由。领域完成条件以 immutable constraint tuple 组合；当前只有 `DataResultCitationConstraint`，约束只能追加 `MISSING`/`VETO` 要求，不能绕过 pending work、citation ownership 或预算。
 `analysis_review` 是可选的证据覆盖工具，不是完成前置节点。
 
 ## 6. Run 状态机

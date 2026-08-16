@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-10
+> 最后核验：2026-08-16
 >
 > 适用范围：`engine/` 当前生产实现、迁移与自动化测试
 >
@@ -300,7 +300,7 @@ flowchart LR
   SEARCH --> TOOLS["catalog/schema tools"]
 ```
 
-`CatalogIntrospector` 先构造完整 `AuthoritativeInventory`，`SchemaCatalogSync.sync_authoritative` 再在事务中替换 datasource-scoped Catalog。探查失败不是“数据库为空”：失败只能记录脱敏状态，必须保留上一个完整 Catalog。
+`CatalogIntrospector` 先构造完整 `AuthoritativeInventory`，`SchemaCatalogSync.sync_authoritative` 再在事务中替换 datasource-scoped Catalog，并在同一短事务中原子递增 `DataSource.catalog_revision`。AI enrichment 在核心发布事务提交后按批次运行，LLM 调用不持有写事务。探查失败不是“数据库为空”：失败只能记录脱敏状态，不递增 revision，必须保留上一个完整 Catalog。
 
 模型不会拿到整个数据库结构。它按成本逐步调用：
 
@@ -489,7 +489,7 @@ flowchart LR
 | 层 | 负责什么 | 不负责什么 |
 | --- | --- | --- |
 | `BaseTool` | 输入/输出 schema、policy、execution spec、presentation、版本 | Session 状态机 |
-| `ToolRegistry` | 唯一 Tool ID 和定义注册 | Provider 名称映射 |
+| `ToolRegistry` | 唯一 Tool ID、owner ID、重复拒绝和 serving 前 freeze | Provider 名称映射 |
 | materialization | 冻结本 Turn 可用工具与 hash | 动态切换旧调用的实现 |
 | `ToolDispatcher` | Invocation、Policy、Approval、ExecutionAuthority、结算编排 | 具体 SQL/业务实现 |
 | `ToolExecutor` | timeout、retry-safe、scope concurrency、cancel、output bytes | 判断 SQL 是否安全 |
@@ -498,7 +498,7 @@ flowchart LR
 
 ### 当前产品工具
 
-注册入口是 `engine/tools/builtin/registry.py::register_dbfox_tools`：
+生产组合入口是 `engine/tools/builtin/registry.py::register_dbfox_tools`（短期 facade），内部已拆为 `register_core_functions`、`register_conversation_functions`、`register_data_extension` 三个 owner-scoped 注册函数，并在返回前 freeze：
 
 | 组 | 工具 |
 | --- | --- |
@@ -528,7 +528,7 @@ function call 和 function call output 必须使用同一个 provider `call_id`�
 | 概念 | 生命周期 | 内容 | 事实源 |
 | --- | --- | --- | --- |
 | Context Snapshot | 单个 Turn，冻结并带 hash | 当前请求、有限历史、steer、Observation、Artifact 引用、Memory 投影 | 当时的 canonical DB 状态 |
-| Session Memory | 跨 Run、generation-scoped | working set、稳定上下文、Evidence 引用 | `AgentSessionMemory` |
+| Session Memory | 跨 Run、generation/revision-scoped | working set、稳定上下文、Evidence 引用；v4 typed envelope + Catalog reducer | `AgentSessionMemory` + `engine/agent/memory_v4.py` |
 | Conversation Archive | 完整已完成消息档案 | 当前 Session 的历史 user/completed assistant 消息 | `AgentMessage` + search index |
 
 ### 13.1 ContextAssembler 的输入
@@ -552,7 +552,7 @@ function call 和 function call output 必须使用同一个 provider `call_id`�
 
 Session Memory 不复制最近完整问答，因为 canonical messages 已经提供这部分历史。它也不保存模型生成的 `verified_claims`；Artifact 引用证明来源存在，不自动证明模型措辞正确。
 
-Datasource generation 变化后，旧 working set 和 Evidence 引用会被过滤。需要旧数据时应重新查询，而不是把旧值当作当前事实。
+Datasource generation 或 `catalog_revision` 变化后，旧 working set 和 Evidence 引用会被过滤；Memory v4 Catalog reducer 在 revision 变化时确定性重置 revision-scoped state。需要旧数据时应重新查询，而不是把旧值当作当前事实。
 
 ### 13.3 历史对话工具
 
@@ -659,7 +659,7 @@ Event 不是先发再写。前端看到的 committed event 必须对应已提交
 1. 明确是否真的需要模型工具；后端可确定完成的聚合/分页优先做成结果服务；
 2. 在 `engine/tools/builtin/contracts.py` 定义 strict input/output；
 3. 实现 `BaseTool`，声明 group、version、capability、policy、execution spec、recovery；
-4. 在唯一 `register_dbfox_tools` 注册；
+4. 按能力归属在 `register_core_functions` / `register_conversation_functions` / `register_data_extension` 中注册，并保持 `register_dbfox_tools` facade 的 materialization parity；
 5. 定义瞬时 provider payload 与耐久 Observation 投影；
 6. 如产生 Artifact，定义类型、关系和 reference-only payload；
 7. 增加 materialization、Policy、Runtime、RunLoop 和恢复测试。
@@ -855,11 +855,16 @@ python -m alembic heads
 | Agent 循环 | `RunLoop` | `engine/agent/loop.py` |
 | Provider | `OpenAIModelAdapter` | `engine/agent/providers/openai.py` |
 | Context | `ContextAssembler` | `engine/agent/context.py` |
-| Tool 注册 | `register_dbfox_tools` | `engine/tools/builtin/registry.py` |
+| Memory v4 models/reducer | `fold_catalog` / typed envelope | `engine/agent/memory_v4.py` |
+| Memory v4 projection | `project_session_memory` / `rebuild_session_memory`（terminal boundary / shadow write / fail-soft / compare-strict-repair） | `engine/agent/memory_projection.py` |
+| Memory v4 context read | `ContextAssembler._memory_v4`（`DBFOX_MEMORY_V4_CONTEXT=1`，resource fence + prior digest） | `engine/agent/context.py` |
+| Tool 注册 | `register_core_functions` / `register_conversation_functions` / `register_data_extension` / `register_dbfox_tools` facade | `engine/tools/builtin/registry.py` |
 | Tool 编排 | `ToolDispatcher` | `engine/agent/tool_dispatcher.py` |
 | Tool 叶子运行 | `ToolRuntime` | `engine/tools/runtime/runtime.py` |
 | Tool 执行限制 | `ToolExecutor` | `engine/tools/runtime/executor.py` |
-| 完成判断 | `CompletionPolicy` | `engine/agent/completion.py` |
+| Artifact 合同 | `ArtifactDraft` / `Artifact` / `validate_artifact_payload`（open type + `schema_version`） | `engine/agent/artifact.py` |
+| Artifact 持久化 | `ArtifactRepository` | `engine/agent/repositories/artifact.py` |
+| 完成判断 | `CompletionPolicy` + `DataResultCitationConstraint` | `engine/agent/completion.py` |
 | 原子终态 | `Terminalizer` | `engine/agent/terminalizer.py` |
 | 历史召回 | `ConversationRecallService` | `engine/agent/conversation_recall.py` |
 | 事件提交 | `EventRepository` | `engine/agent/repositories/events.py` |

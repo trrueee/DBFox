@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-15
+> 最后核验：2026-08-16
 
 ## 当前整改
 
@@ -12,6 +12,8 @@
 - [2026-08-14 系统级工程审查整改计划](2026-08-14-system-review-remediation.md)：记录当前 P1/P2 修复设计、验收标准和 P3 反证核验清单。
 
 - [工程质量门禁](./engineering-gates.md)：本地与 CI 的 Python、前端、Rust、迁移、Frozen Sidecar 和依赖策略。
+- [技术调研、方案复用与架构克制](./technical-investigation-and-reuse.md)：实现前先调查、复用优先、避免堆叠中间层、兼容层可退出和决策依据要求。
+- [P2 Memory v4 Cutover Gate 本地证据与限制](./2026-08-16-p2-memory-v4-cutover-evidence.md)：当前确定性门禁已通过；真实 Provider AgentBench 后测未执行，`DBFOX_MEMORY_V4_CONTEXT` 保持默认关闭。
 - [Agent 生产评测方法](./agent-evaluation-methodology.md)：分层 Harness、数据集角色、Grader、统计门禁与脱敏 Trace 合同。
 - [DBFox AgentBench](./agentbench-implementation.md)：60 场景数据集、评分器校准、真实 RunLoop、故障注入、CLI 和 CI。
 - [Agent Harness 设计、优化与评测复盘](./agent-harness-evolution-retrospective.md)：从真实故障、边界合同和关键提交理解当前 Harness 为什么这样设计，以及如何科学评价后续优化。

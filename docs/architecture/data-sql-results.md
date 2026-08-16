@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-06
+> 最后核验：2026-08-16
 >
 > 适用范围：数据源连接、目录、SQL 安全、执行、分页和结果制品
 >
@@ -44,7 +44,7 @@ flowchart LR
 
 ## 4. Schema Catalog
 
-`SchemaCatalogSync` 只接受完整的 `AuthoritativeInventory`。成功快照在一个事务内更新表、列、外键和搜索文档；探查失败只记录固定、脱敏的失败状态，不得把“无法探查”解释为权威空目录并删除现有 Catalog。
+`SchemaCatalogSync` 只接受完整的 `AuthoritativeInventory`。成功快照在一个事务内更新表、列、外键和搜索文档，并在同一事务内用 SQL 原子递增 `DataSource.catalog_revision`；探查失败只记录固定、脱敏的失败状态，不递增 revision，也不得把“无法探查”解释为权威空目录并删除现有 Catalog。Catalog Tool 的 output 与 Observation facts 冻结执行时 revision。
 
 Catalog 工具分工：
 
@@ -86,6 +86,8 @@ Catalog 工具分工：
 - `chart_create`：引用 Result Artifact 生成图表定义。
 
 前端分页、筛选、排序、图表和导出只提交 Artifact ID 与视图参数。后端解析 datasource、SQL、generation、权限和血缘，避免客户端成为权威来源。
+
+Artifact wire contract：`type` 为 string，`schema_version` 独立表达 payload schema 版本；现有 `sql/safety/result_view/chart` 固定为 schema v1，`version` 继续表示 semantic-key 工作产品版本。新 Extension type 必须 namespaced；未知历史 type/version 保留 envelope 并 fail-soft，未知新写入拒绝。前端 generated client 已同步 `schema_version`。
 
 ## 7. 失败和安全语义
 

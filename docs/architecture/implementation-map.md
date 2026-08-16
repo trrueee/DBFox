@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-06
+> 最后核验：2026-08-16
 >
 > 适用范围：启动、数据源、SQL、Agent、工具、事件、取消和恢复链路
 >
@@ -54,7 +54,7 @@ flowchart TB
 | 模块 | 主要职责 | 主要输入 | 主要输出 | 权威状态 | 禁止承担 |
 |---|---|---|---|---|---|
 | Tauri Host | sidecar 生命周期、端口/token、窗口与外部导航 | 安装资源、运行参数 | Engine status/config | 进程状态 | Agent 业务状态 |
-| App Shell | Workspace 路由、主题、命令与全局错误边界 | UI command | tab/workspace | UI Store | 推断后端终态 |
+| App Shell | `activeProjectId`/per-project `projectShell`、Workspace 路由、Dock view presentation/visibility/render registry（`dockViewRegistry`）、主题、命令与全局错误边界；真实 Project list/create 经 `projectsApi`/`useProjectState` | UI command | tab/workspace | UI Store + Project API 投影 | 推断后端终态 |
 | Conversation Product | Message、Activity、Approval、Question、Artifact Dock | snapshot/events/live | 用户可理解过程 | 后端投影的前端缓存 | 原始调试 trace、结果历史 |
 | Typed API Client | token、错误映射、AbortSignal、SSE | request DTO | response/event DTO | 无 | 静默 fallback、业务重试 |
 | API Middleware | loopback 安全、输入限制、错误边界 | HTTP | 安全 response | 无 | 返回秘密/异常原文 |
@@ -66,7 +66,7 @@ flowchart TB
 | Session Core | input admission、sequence、lease、event | user command | stable IDs/snapshot | canonical tables | 内存 queue 作为事实源 |
 | ReAct Harness | Turn、model、tool、completion、response | admitted Run | answer/artifacts/evidence | Run/Turn records | 固定 graph、第二 checkpoint |
 | Tool Runtime | 注册、物化、授权、有界执行、结算 | tool call | transient result/observation | Invocation/Observation | 任意函数反射调用 |
-| Artifact/Evidence | 工件关系、来源、citation | tool/response | reference-only products | canonical records | 结果集副本 |
+| Artifact/Evidence | 工件关系、来源、citation；open string type + `schema_version` | tool/response | reference-only products | canonical records | 结果集副本 |
 | Event/Live | replay、notification、前端归并 | domain change/token | event/live item | Event Log；live 无持久权威 | 用 live 代替提交 |
 | Security Audit | 结构化安全动作、保留和导出 | approval/cancel/export | redacted records | SecurityAuditRecord | secret/result rows |
 | Backup/Restore | 备份、校验、隔离恢复、generation cutover | datasource/backup | backup/restore state | metadata + private files | 覆盖当前库后再验证 |
@@ -89,9 +89,17 @@ flowchart TB
 
 ### 4.2 App Shell 与 Workspace
 
-App Shell 组织数据源树、工作区 tab、命令面板、设置和对话。Workspace Store 只保存导航与布局偏好；业务实体由各领域 Store 从后端加载。
+App Shell 组织实体侧栏（顶层项目/连接胶囊 + 每行 `对话|文件` / `对话|数据库` 子胶囊）、固定 Main Surface、Dock registry、命令面板、连接管理 Dialog、设置和对话。Workspace Store 只保存 Shell identity/layout（含 `sidebarEntityMode`、`projectSubMode`、`connectionSubMode`、per-project shell state、SQL console state 与 Dock file tab identity）；业务实体由各领域 Store 从后端加载。
 
-Artifact Dock 的折叠/恢复属于 UI preference，可以本地持久化；Artifact 本身、选择关系和 Result 数据不属于布局 Store。
+本地项目文件链路由 Tauri Host 承担 I/O 并保持有界：
+
+- `pick_project_folder`：新建项目时选择本地工作目录，并把该目录写入应用配置目录的 `project_folder_access.json` 授权根集合；
+- `list_project_folder`：文件树按需读取单层，跳过 `.git`/`node_modules`/`target` 等重目录，最多 600 项；
+- `read_project_file`：只读 UTF-8 文本，≤ 1 MiB；二进制/超大/非 UTF-8 返回明确错误；
+- `list_project_folder` / `read_project_file` 在 Rust 侧 canonicalize 路径并拒绝不在任何已选择授权根之内的路径（含 symlink 逃逸）；
+- 文件内容只进入 `WorkspaceFileDockContent` 的组件内状态，不进入 Shell Store。
+
+Dock 的折叠/恢复属于 UI preference；Artifact 本身、选择关系、Result 数据和项目文件内容不属于 Shell Store。
 
 ### 4.3 Conversation Product Layer
 
@@ -157,7 +165,7 @@ Policy 对规范化工具名和 canonical input 判定。Approval 与具体 Invo
 
 Transient Tool Result 可以在当前 ReAct step 内含有界 rows；它只在进程内 buffer 中短暂存在。Durable Observation 不含 rows，只保存摘要、Artifact IDs、计数、耗时、指纹和安全错误。
 
-Session Memory 保存工作集、未解决问题、最近工件引用和有界摘要。选中工件进入 Context 时只注入 reference metadata；模型若需具体值必须调用 inspect/query。
+Session Memory v3 保存工作集、未解决问题、最近工件引用和有界摘要。Memory v4 的 typed envelope 与纯 Catalog reducer 已落在 [`engine/agent/memory_v4.py`](../../engine/agent/memory_v4.py)：incremental、catch-up、rebuild 共用 `fold_catalog`。Terminal projection 服务在 [`engine/agent/memory_projection.py`](../../engine/agent/memory_projection.py)：completed/failed/cancelled 同一边界，projection 合同失败不阻断 canonical terminalization，watermark 连续 catch-up 且不跨 gap；`rebuild_session_memory` 提供 compare/strict/repair 三种 full rebuild 模式。Context v4 读路径在 [`engine/agent/context.py`](../../engine/agent/context.py) 中由 `DBFOX_MEMORY_V4_CONTEXT=1` 启用，先做 datasource/generation/`catalog_revision` read fence，再确定性选择至多 8 个 prior objects 并回源 canonical Observation 生成 bounded digest。Projection 只保存 bounded footprint，完整 facts 仍回源 canonical Observation。选中工件进入 Context 时只注入 reference metadata；模型若需具体值必须调用 inspect/query。
 
 ### 4.13 Event Log、Snapshot 与 LiveStreamHub
 

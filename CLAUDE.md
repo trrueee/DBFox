@@ -14,6 +14,7 @@ Sidecar 通信；Agent 工具调用与 SQL 只读执行都经过正式合同。
 - `docs/README.md` — 文档中心与阅读路线
 - `docs/architecture/README.md` / `docs/architecture/system-overview.md` — 当前架构
 - `docs/architecture/implementation-map.md` — 功能到代码、测试与数据表的索引
+- `docs/quality/technical-investigation-and-reuse.md` — 实现前先调查、复用优先、架构克制
 
 ## 权威事实源
 
@@ -55,5 +56,6 @@ Sidecar 通信；Agent 工具调用与 SQL 只读执行都经过正式合同。
 - 不要解析 Thought/Action/Observation 文本；Agent 使用原生 Responses Items/function calling。
 - 不要在 React/Zustand 里驱动 Agent 循环或耐久状态机。
 - 不要为掩盖内部合同错配而加 mapper/wrapper/fallback 层；修权威边界。
+- 不要未经调研就自研通用能力、复制已有实现或为“以后可能用到”引入抽象；先复用、再最小适配、最后自研。
 - 运行时 generation 变化后，不要自动重放非幂等请求。
 - 不要用 force-fix 命令静默改写锁文件等可复现构建合同。

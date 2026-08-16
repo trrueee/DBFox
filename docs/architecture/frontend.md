@@ -4,9 +4,11 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-14
+> 最后核验：2026-08-16
 >
 > 适用范围：`desktop/src/` 的工作区、传输、状态和用户交互
+>
+> 目标实施基线：已接受的 [Workbench Shell 与 Workspace Dock](./workbench-shell-workspace-dock.md) 和 [迁移规范](./workbench-shell-migration-guide.md)。本文继续描述当前迁移中的实现；两文档冲突时，当前代码与测试是第一事实源，已接受 ADR 是目标合同。
 
 ## 1. 设计目标
 
@@ -24,9 +26,8 @@ flowchart TB
 
   subgraph Shell["应用外壳"]
     SIDEBAR["Datasource Sidebar"]
-    TABS["Workspace Tabs"]
-    ROUTER["WorkspaceRouter"]
-    COMMAND["Command Palette"]
+    CENTER["ConversationCenter"]
+    DOCK["WorkspaceDock"]
   end
 
   subgraph Features["产品功能"]
@@ -60,7 +61,9 @@ flowchart TB
   end
 
   MAIN --> GATE --> APP --> Shell
-  ROUTER --> Features
+  CENTER --> CONV
+  DOCK --> SQL
+  DOCK --> DS
   CONV --> Conversation
   CONV --> VM
   VM --> STORE
@@ -69,7 +72,8 @@ flowchart TB
   REPO --> API
   REPO --> SSE
   DOCK --> RESULT --> API
-  ROUTER --> WORKSPACE
+  CENTER --> WORKSPACE
+  DOCK --> WORKSPACE
   SIDEBAR --> DATASOURCE
 ```
 
@@ -77,28 +81,41 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-  APP["App Shell"] --> TREE["数据源树"]
-  APP --> TABBAR["工作区标签"]
-  TABBAR --> HOME["智能问数首页"]
-  TABBAR --> CONV["Conversation Workspace"]
-  TABBAR --> SQL["SQL Console"]
-  TABBAR --> TABLE["Table Workspace"]
-  TABBAR --> CONFIG["Datasource / LLM / Diagnostics"]
+  APP["App Shell"] --> TREE["实体侧栏（项目/连接）"]
+  APP --> CENTER["ConversationCenter"]
+  APP --> DOCK["WorkspaceDock"]
+  APP --> MODAL["连接管理 Dialog"]
 
-  CONV --> CENTER["Agent Timeline + Composer"]
-  CONV --> RIGHT["Artifact Dock"]
-  RIGHT --> SQLART["SQL Artifact"]
-  RIGHT --> RESULT["Result View"]
-  RIGHT --> CHART["Chart Artifact"]
-  RIGHT --> EVIDENCE["Evidence navigation"]
+  CENTER --> HOME["智能问数首页"]
+  CENTER --> CONV["Conversation Workspace"]
+  CENTER --> PROJECT["新建项目（本地文件夹）"]
+
+  MODAL --> DS["Datasource Management"]
+
+  DOCK --> SQL["SQL Console"]
+  DOCK --> TABLE["Table Workspace"]
+  DOCK --> FILE["只读项目文件"]
+  DOCK --> ARTIFACTS["✦ 工件总览"]
+  DOCK --> ARTIFACT["工件 Tab"]
+
+  ARTIFACTS --> RESULT["Result View"]
+  ARTIFACTS --> CHART["Chart Artifact"]
+  ARTIFACTS --> NOTE["Markdown Artifact"]
 ```
 
 布局原则：
 
-- 左侧是数据库环境导航；中间是会话和过程；右侧是当前工件。
-- 工件区属于 Conversation Workspace，不作为独立事实源。
-- 窄窗口允许工件区折叠并保存布局状态，但不能丢失选中 Artifact ID。
+- 左侧是实体导航：顶层「项目/连接」胶囊切换。项目行内是「对话/文件」子胶囊，连接行内是「对话/数据库」子胶囊；下方内容随当前实体子模式直接切换，不再出现“对话列表/文件/数据库对象树”这类分区标题。项目图标使用 Folder 激活/非激活两态，连接使用官方数据库图标，当前数据库节点使用数据源品牌图标。
+- 中间只放对话与「新建项目」表单。新建项目由 Tauri `pick_project_folder` 命令弹出系统文件夹选择器，自动用文件夹名作为项目名，并把 `workspace_root` 写入 Project API；表单提交后回到智能问数首页。
+- 新建连接采用 Navicat 式 `Dialog` 弹窗承载 `DataSourcesPage`，不再让数据源管理页占满中间对话区；旧 `centerMode === "datasource"` 分支和 `openDatasourceCenter`/`centerDatasourceMode` Shell 状态已删除，命令面板的「管理连接」动作改为打开该 Dialog。
+- 项目「文件」子模式通过 Tauri `list_project_folder` 逐层懒加载本地目录（跳过 `.git`、`node_modules`、`target` 等重目录），点击文本文件用 `read_project_file` 读取（UTF-8、≤ 1 MiB），并在 Dock 打开只读 `dbfox.workspace.file` 视图；文件内容不进入 Shell Store。
+- 顶部不再显示项目名与连接状态。
+- 右侧 `WorkspaceDock` 是统一 Tab 容器：SQL 控制台、表详情、只读项目文件、工件总览和工件 Tab 都在这里。项目文件 Tab 按 `projectId` 对当前 Project 可见，切换 Project 后其他 Project 的文件 Tab 隐藏。
+- 对话历史只保留在左侧项目卡内的对话列表；不再提供独立的「历史记录」入口，也不再作为 Dock Tab。
+- 「✦ 工件」Tab 的内容是 `ArtifactDock` 的列表 + 预览结构，工件事实仍属于 Conversation Store 与后端制品，不作为独立事实源。
+- Dock 可展开/收起；窄窗口下保持对话可用，打开或关闭 Dock 不丢失选中 Artifact ID。
 - 设置页复用统一 scaffold，状态色只表达状态，品牌色只表达选中和主操作。
+- 旧 `WorkspaceTabs` / `WorkspaceRouter` 及其测试已删除；`AppCommandPalette` 保留并由 `Ctrl/Cmd+K` 接线到新 Shell actions（`showSmartQueryHome` / 连接管理 Dialog / `openDockTable`），历史页命令不再存在。`workspaceStore` 的 legacy `tabs` 状态、`openXxxTab()` actions、`openSqlConsole` 与 `_tabSeq` 已删除。`ConversationWorkspace` 已不再拥有内部 `ArtifactDock` layout container，工件只在右栏 Dock 渲染。`ContextDrawer` 改收 `WorkspaceDockTab`，`WorkspaceTab`/`WorkspaceTabType` legacy 类型已从生产路径移除。
 
 ## 4. 会话数据流
 
@@ -213,7 +230,7 @@ Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecute
 
 | 状态类型 | 所有者 | 示例 |
 |---|---|---|
-| 导航状态 | `workspaceStore` | 活动标签、标签顺序、工件区布局 |
+| 导航状态 | `workspaceStore` | `activeProjectId`、per-project `projectShell` 与 `mainSurfaceByProject`（ConversationCenter 已消费固定 Main Surface）、中间模式、右栏 Dock 开合与 Tab 顺序、**一个 Project 一个 canonical SQL console state**（`sql-{projectId}`）、Table datasource+table dedup 与 MultiTable canonical sorted set identity、工件区布局；真实 Project list/create 由 `projectsApi` / `useProjectState` 投影 |
 | 本机外观偏好 | `ThemeProvider` + localStorage | 主题模式、受控色板、分区字号 |
 | 数据源导航状态 | `datasourceStore` | 当前数据源、Schema 树、同步状态 |
 | 会话公共投影 | `conversationStore` | Run、Run Item、Artifact、Approval、Question、Plan |
@@ -223,7 +240,7 @@ Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecute
 
 ## 8. 扩展边界
 
-- 新工作区类型通过 `WorkspaceRouter` 和 workspace type 注册，不向 App 添加业务分支。
+- 新工作区类型通过 `WorkspaceDock` 的 Tab kind 与渲染器注册，不向 App 添加业务分支；未来 WebView 等 Tab 只增加 kind。当前 presentation/visibility/render 均已收敛到 `dockViewRegistry.tsx` + `dockViewContent.tsx`（`core.sql-console` / `dbfox.data.table` / `core.artifact` 等），`WorkspaceDock` 只按 contribution 渲染，unknown view 走元数据 fallback。
 - 新 Artifact 类型通过统一 Artifact model、renderer 和 dock projection 扩展。
 - 新公共事件先定义后端契约和 reducer，再增加视图；视图不得解析原始调试事件。
 - 新流式 channel 必须定义去重身份、持久化替代物和断流恢复语义。
@@ -304,7 +321,12 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 | 领域 | 文件 |
 |---|---|
 | 启动 | `desktop/src/components/EngineStartupGate.tsx` |
-| Workspace | `desktop/src/features/appShell/WorkspaceRouter.tsx` |
+| Workspace Shell | `desktop/src/stores/workspaceStore.ts`、`desktop/src/features/appShell/WorkspaceDock.tsx` |
+| Dock Registry | `desktop/src/features/appShell/dockViewRegistry.tsx`、`dockViewContent.tsx` |
+| 实体侧栏 | `desktop/src/features/datasource/DataSourceTree.tsx` |
+| 新建项目/本地文件 | `desktop/src/features/projects/ProjectCreateForm.tsx`、`useProjectFolderTree.ts`、`desktop/src/lib/projectFolder.ts`、`desktop/src-tauri/src/project_folder.rs` |
+| 连接管理 Dialog | `desktop/src/features/datasource/ConnectionDialog.tsx`、`desktop/src/pages/DataSourcesPage.tsx` |
+| 只读项目文件视图 | `desktop/src/features/workspace/WorkspaceFileDock.tsx` |
 | Conversation | `desktop/src/features/conversation/workspace/ConversationWorkspace.tsx` |
 | Reducer | `desktop/src/stores/conversationStoreReducer.ts` |
 | Stream | `desktop/src/features/conversation/conversationStreamRuntime.ts`、`conversationRepository.ts` |

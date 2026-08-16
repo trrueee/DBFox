@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-12
+> 最后核验：2026-08-16
 >
 > 适用范围：数据源、系统凭据库、连接管理和数据库目录
 >
@@ -188,7 +188,8 @@ Catalog 是对外部 schema 的投影，不是外部 schema 的替代事实源�
 2. 使用 dialect-aware introspector 读取权威 schema；
 3. 规范化对象、列、类型、主外键等；
 4. 在 metadata 短事务中更新 Catalog 投影；
-5. 记录 datasource/schema identity 和同步状态；
+5. 在同一事务中原子递增 `DataSource.catalog_revision`；
+6. 记录 datasource/schema identity 和同步状态；
 6. 成功后才替换上一份可用投影。
 
 失败时保留上一份可用 Catalog，并标记陈旧/失败信息；不能先清空再同步，否则暂时网络错误会把 Agent 的 schema 认知全部抹掉。

@@ -214,7 +214,7 @@ record fixed/redacted telemetry/log
 commit canonical terminal state + terminal Event
 ```
 
-这不是 silent best-effort：projection lag 由 `latest terminal session_sequence - projected_through_session_sequence` 明确观测。
+这不是 silent best-effort：每个 Projection 的 lag 由 `latest terminal session_sequence - 该 Projection envelope 的 projected_through_session_sequence` 明确观测；不维护全局第二份水位。
 
 下一次 projection 不能直接跳到当前 Run；必须从 `watermark + 1` 开始按 session_sequence 连续 catch up。若中间 sequence 尚未形成可归约 terminal Run，则停在 gap 前，不虚假推进 watermark。
 
@@ -666,15 +666,18 @@ Workbench contribution optional
 
 ## 16. Rollback 原则
 
-- P1：保留旧 Tool registry facade 到 parity 完成；
-- P2：v4 shadow + Context flag；projection lag 可 rebuild/catch-up，不能阻塞 canonical history；
-- P3：compatible read，legacy Artifact schema v1 始终可读；
-- P4：Shell V2 flag 到 entry parity；
-- P5/P6：existing in-process DB path 在新 seam parity 前不删除；
-- P7：Context fragment 切换前保持现有 Catalog renderer parity；
-- P7+：新 capability 可独立 disable，不破坏 Data Agent canonical state。
+每个兼容路径在对应 PR description 中指定负责人；删除条件必须包含可观察证据和期限，不能只写“稳定后删除”。
 
-禁止长期双写/双事实源。Rollback window 结束必须删除兼容路径。
+| 兼容路径 | 负责模块 | 删除条件（可观察） | 期限 |
+| --- | --- | --- | --- |
+| P1 `register_dbfox_tools()` facade | Agent Runtime / Tool Registry | 所有生产组合调用点迁到 owner-scoped 注册函数；反向 grep/import 测试证明旧 facade 无新增调用；materialization parity 测试绿色 | P1 合入后的下一个 PR |
+| P2 v3 Memory + v4 shadow | Agent Runtime / Memory | v4 Context flag 连续稳定窗口无回归；incremental/catch-up/full rebuild hash 一致；failed/cancelled continuity 场景通过；切回演练成功 | 稳定窗口结束后一个版本内删除 v3 写入 |
+| P3 legacy Artifact 缺省 v1 | Artifact / API | 不再有 built-in producer 写入缺 `schema_version` 的新记录；unknown legacy 只读兼容保留，不新增双 schema 写路径 | cutover 后一个版本 |
+| P4 Navigation facade | Frontend Shell | 所有 `openXxxTab()` callsite 迁完；反向 import/grep 测试证明归零；WorkspaceTabs/Router 旧分支删除 | 入口 cutover 完成后下一个 PR |
+| P5/P6 旧 in-process DB path | Agent Runtime / Tool Execution | 新 resource seam + AttemptRunner parity 与平台合同测试全绿；isolated runner 故障矩阵通过；旧路径无新增调用 | P6 gate 通过后一个版本 |
+| P7 旧 Catalog renderer | Agent Context | Catalog + Workspace 两个真实 contributor 通过同一 fragment seam，模型可见内容 parity；旧 renderer 无新增调用 | P7 gate 通过后一个版本 |
+
+禁止长期双写/双事实源。Rollback window 结束必须删除兼容路径；逾期未删的路径按技术债进入下一迭代，不静默续期。
 
 ## 17. 最终完成定义
 
