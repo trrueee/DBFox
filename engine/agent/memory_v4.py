@@ -217,12 +217,17 @@ def catalog_contract_fingerprint() -> str:
     """Fingerprint only inputs that change Catalog projection interpretation.
 
     Presentation, Tool titles and unrelated Extensions are deliberately absent.
+    Durable ToolInvocation versions are content-addressed by materialization;
+    the projector accepts the declared semantic version and the materialized
+    ``sha256:*`` identity so a production invocation is not rejected by a
+    semantic-version-only gate.
     """
 
     payload = {
         "projection_id": CATALOG_PROJECTION_ID,
         "schema_version": CATALOG_PROJECTION_SCHEMA_VERSION,
         "core_policy_version": CORE_POLICY_VERSION,
+        "tool_version_scheme": "declared_or_content_hash",
         "eligible_tools": {
             name: sorted(versions) for name, versions in SUPPORTED_CATALOG_TOOLS.items()
         },
@@ -280,7 +285,10 @@ def fold_catalog(
     versions = SUPPORTED_CATALOG_TOOLS.get(invocation.tool_name)
     if versions is None:
         return CatalogFoldResult(state=state, scope=scope)
-    if invocation.tool_version not in versions:
+    if (
+        invocation.tool_version not in versions
+        and not invocation.tool_version.startswith("sha256:")
+    ):
         raise UnsupportedCatalogInput(
             f"Unsupported {invocation.tool_name} contract version "
             f"{invocation.tool_version!r} for Catalog projection"

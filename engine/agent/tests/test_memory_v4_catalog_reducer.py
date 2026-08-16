@@ -251,6 +251,20 @@ def test_unknown_tool_version_rejects_instead_of_guessing() -> None:
         )
 
 
+def test_materialized_content_hash_tool_version_is_supported() -> None:
+    search_invocation, search_observation = _search_pair(1)
+    folded = fold_catalog(
+        CatalogWorkingState(),
+        scope=_scope(),
+        source_sequence=1,
+        invocation=search_invocation.model_copy(
+            update={"tool_version": "sha256:deadbeef"}
+        ),
+        observation=search_observation,
+    )
+    assert folded.state.searches
+
+
 def test_missing_catalog_revision_fact_rejects() -> None:
     search_invocation, search_observation = _search_pair(1)
     search_observation = search_observation.model_copy(
