@@ -251,6 +251,16 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
     assert "verified_claims" not in memory["stable_context"]
     assert "database_name" not in memory["stable_context"]
     assert "rows" not in memory_row.memory_json
+    assert memory_row.memory_v4_json
+    memory_v4 = json.loads(memory_row.memory_v4_json)
+    assert memory_v4["schema_version"] == 4
+    catalog_projection = next(
+        item
+        for item in memory_v4["projections"]
+        if item["projection_id"] == "dbfox.catalog.working_state"
+    )
+    assert catalog_projection["projected_through_session_sequence"] == 1
+    assert catalog_projection["state_hash"]
     assert (
         db_session.get(AgentSession, "session_terminal").selected_artifact_id
         == artifact.id

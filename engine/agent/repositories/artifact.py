@@ -72,7 +72,8 @@ class ArtifactRepository:
         lease: SessionLease,
         run_id: str,
         turn_id: str,
-        artifact_type: ArtifactType,
+        artifact_type: str,
+        schema_version: int = 1,
         title: str,
         payload: dict[str, Any],
         summary: str | None = None,
@@ -85,7 +86,12 @@ class ArtifactRepository:
         artifact_id: str | None = None,
     ) -> Artifact:
         begin_agent_write(self.session)
-        payload = validate_artifact_payload(artifact_type, payload)
+        artifact_type = str(artifact_type)
+        payload = validate_artifact_payload(
+            artifact_type,
+            payload,
+            schema_version=schema_version,
+        )
         visibility = visibility or default_artifact_visibility(artifact_type)
         version = 1
         if semantic_key:
@@ -103,13 +109,15 @@ class ArtifactRepository:
         artifact_id = artifact_id or f"artifact_{uuid4().hex}"
         value = Artifact(
             id=artifact_id, session_id=lease.session_id, run_id=run_id, turn_id=turn_id,
-            type=artifact_type, title=title, semantic_key=semantic_key, version=version,
+            type=artifact_type, schema_version=schema_version, title=title,
+            semantic_key=semantic_key, version=version,
             status=status, visibility=visibility, summary=summary, payload=payload, payload_ref=payload_ref,
             provenance=provenance or {}, relations=relations or [],
         )
         self.session.add(AgentArtifactRecord(
             id=artifact_id, run_id=run_id, session_id=lease.session_id, turn_id=turn_id,
-            semantic_id=semantic_key, version=version, type=artifact_type.value, title=title,
+            semantic_id=semantic_key, version=version, type=artifact_type,
+            schema_version=schema_version, title=title,
             payload_json=_json(payload),
             presentation_json=_json({"visibility": visibility.value}),
             summary=summary,
@@ -152,12 +160,13 @@ class ArtifactRepository:
                 turn_id=turn_id,
                 artifact_id=item.artifact_id,
                 artifact_type=draft.type,
+                schema_version=draft.schema_version,
                 title=draft.title,
                 payload=item.payload,
                 summary=draft.summary,
                 semantic_key=(
                     draft.semantic_key
-                    or f"{draft.type.value}:{invocation_id}:{draft.key}"
+                    or f"{draft.type}:{invocation_id}:{draft.key}"
                 ),
                 payload_ref=draft.payload_ref,
                 provenance=provenance,
@@ -234,7 +243,11 @@ class ArtifactRepository:
                     _PreparedArtifactDraft(
                         draft=draft,
                         artifact_id=ids[draft.key],
-                        payload=validate_artifact_payload(draft.type, payload),
+                        payload=validate_artifact_payload(
+                            draft.type,
+                            payload,
+                            schema_version=draft.schema_version,
+                        ),
                         relations=tuple(relations),
                     )
                 )
@@ -440,7 +453,8 @@ class ArtifactRepository:
 
     @staticmethod
     def _domain(row: AgentArtifactRecord) -> Artifact:
-        artifact_type = ArtifactType(str(row.type))
+        artifact_type = str(row.type)
+        schema_version = int(row.schema_version or 1)
         presentation = _loads(str(row.presentation_json or "{}"), {})
         try:
             visibility = ArtifactVisibility(str(
@@ -448,15 +462,23 @@ class ArtifactRepository:
             ))
         except (TypeError, ValueError):
             visibility = default_artifact_visibility(artifact_type)
+        payload = _loads(str(row.payload_json or "{}"), {})
+        # Unknown historical type/version keeps its envelope without guessing.
+        validate_artifact_payload(
+            artifact_type,
+            payload,
+            schema_version=schema_version,
+            allow_unknown=True,
+        )
         return Artifact(
             id=str(row.id), session_id=str(row.session_id), run_id=str(row.run_id),
             turn_id=str(row.turn_id) if row.turn_id else None,
-            type=artifact_type, title=str(row.title),
+            type=artifact_type, schema_version=schema_version, title=str(row.title),
             semantic_key=str(row.semantic_id) if row.semantic_id else None,
             version=int(row.version or 1), status=ArtifactStatus(str(row.status)),
             visibility=visibility,
             summary=str(row.summary) if row.summary else None,
-            payload=_loads(str(row.payload_json or "{}"), {}),
+            payload=payload,
             payload_ref=str(row.payload_ref) if row.payload_ref else None,
             provenance=_loads(str(row.provenance_json or "{}"), {}),
             relations=[ArtifactRelation.model_validate(item) for item in _loads(str(row.relations_json or "[]"), [])],

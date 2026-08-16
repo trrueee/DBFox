@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -38,6 +39,8 @@ from engine.models import (
     AgentRunItemRecord,
 )
 from engine.security.audit import SecurityAuditService
+
+logger = logging.getLogger("dbfox.agent.run")
 
 
 def _utcnow() -> datetime:
@@ -144,6 +147,10 @@ class RunRepository:
                         "item": dump_run_item(final_answer_item(assistant, run=run))
                     },
                 )
+        self._project_memory_v4_shadow(
+            session_id=str(run.session_id),
+            through_session_sequence=int(run.session_sequence or 0),
+        )
         self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_CANCELLED,
@@ -617,6 +624,10 @@ class RunRepository:
         if response.selection_suggestion and not aggregate.selected_artifact_id:
             aggregate.selected_artifact_id = response.selection_suggestion.artifact_id
         self._write_memory(aggregate, run, response, memory_delta or {})
+        self._project_memory_v4_shadow(
+            session_id=str(run.session_id),
+            through_session_sequence=int(run.session_sequence or 0),
+        )
         self.session.flush()
         terminal_item: MessageItem | None = None
         if terminal_output_index is not None and terminal_turn_id:
@@ -714,11 +725,58 @@ class RunRepository:
                 turn_id=str(run.current_turn_id) if run.current_turn_id else None,
                 payload={"item": dump_run_item(final_answer_item(assistant, run=run))},
             )
+        self._project_memory_v4_shadow(
+            session_id=str(run.session_id),
+            through_session_sequence=int(run.session_sequence or 0),
+        )
         self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_FAILED,
             run_id=run_id,
             payload={"run": project_run(run)},
+        )
+
+    def _project_memory_v4_shadow(
+        self,
+        *,
+        session_id: str,
+        through_session_sequence: int,
+    ) -> None:
+        """Fold terminal Runs into shadow Memory v4 without blocking terminalization.
+
+        Only derived-projection contract errors are fail-soft. SQLite/ORM
+        failures still propagate and roll back the canonical transaction.
+        """
+
+        from engine.agent.memory_projection import (
+            MemoryProjectionError,
+            project_session_memory,
+        )
+        from engine.app.safe_errors import (
+            SafeLogOperation,
+            log_unexpected_exception,
+        )
+
+        try:
+            outcome = project_session_memory(
+                self.session,
+                session_id,
+                through_session_sequence,
+            )
+        except MemoryProjectionError as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_MEMORY_SAVE_PROJECTION,
+                exc=exc,
+                level="warning",
+            )
+            return
+        logger.info(
+            "agent_memory_projection session=%s watermark=%d lag=%d state_hash=%s",
+            session_id,
+            outcome.projected_through_session_sequence,
+            outcome.projection_lag,
+            outcome.state_hash,
         )
 
     def _write_memory(

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from enum import StrEnum
+import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
 
 
 class ArtifactType(StrEnum):
@@ -44,8 +45,11 @@ _DEFAULT_VISIBILITY_BY_TYPE: dict[ArtifactType, ArtifactVisibility] = {
 }
 
 
-def default_artifact_visibility(artifact_type: ArtifactType) -> ArtifactVisibility:
-    return _DEFAULT_VISIBILITY_BY_TYPE[artifact_type]
+def default_artifact_visibility(artifact_type: str) -> ArtifactVisibility:
+    try:
+        return _DEFAULT_VISIBILITY_BY_TYPE[ArtifactType(str(artifact_type))]
+    except ValueError:
+        return ArtifactVisibility.PRIMARY
 
 
 class ArtifactRelationType(StrEnum):
@@ -81,13 +85,36 @@ class ArtifactRelationDraft(BaseModel):
         return self
 
 
+_ARTIFACT_TYPE_PATTERN = r"^[a-z][a-z0-9_.-]*(?:[.:][a-z][a-z0-9_.-]*)+$"
+_KNOWN_ARTIFACT_TYPES = frozenset(
+    item.value for item in ArtifactType
+)
+
+
+def validate_artifact_type(value: str) -> str:
+    """Allow existing flat IDs and future namespaced Extension IDs only."""
+
+    candidate = str(value).strip()
+    if not candidate:
+        raise ValueError("Artifact type must not be empty")
+    if candidate in _KNOWN_ARTIFACT_TYPES:
+        return candidate
+    if re.fullmatch(_ARTIFACT_TYPE_PATTERN, candidate) is None:
+        raise ValueError(
+            "New Artifact type must use a namespaced ID like "
+            "dbfox.workspace.code_patch"
+        )
+    return candidate
+
+
 class ArtifactDraft(BaseModel):
     """Provider-neutral Artifact description emitted by a data tool."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     key: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
-    type: ArtifactType
+    type: str = Field(min_length=1, max_length=128)
+    schema_version: int = Field(default=1, ge=1)
     title: str = Field(min_length=1, max_length=200)
     payload: dict[str, Any] = Field(default_factory=dict)
     payload_draft_refs: dict[str, str] = Field(default_factory=dict)
@@ -97,6 +124,11 @@ class ArtifactDraft(BaseModel):
     relations: tuple[ArtifactRelationDraft, ...] = ()
     visibility: ArtifactVisibility | None = None
     select_if_none: bool = False
+
+    @field_validator("type")
+    @classmethod
+    def validate_type_namespace(cls, value: str) -> str:
+        return validate_artifact_type(value)
 
 class SqlArtifactPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -155,28 +187,47 @@ class ChartArtifactPayload(BaseModel):
     title: str | None = None
 
 
-_PAYLOAD_MODELS: dict[ArtifactType, type[BaseModel]] = {
-    ArtifactType.SQL: SqlArtifactPayload,
-    ArtifactType.SAFETY: SafetyArtifactPayload,
-    ArtifactType.RESULT_VIEW: ResultViewArtifactPayload,
-    ArtifactType.CHART: ChartArtifactPayload,
+_PAYLOAD_VALIDATORS: dict[tuple[str, int], type[BaseModel]] = {
+    (ArtifactType.SQL.value, 1): SqlArtifactPayload,
+    (ArtifactType.SAFETY.value, 1): SafetyArtifactPayload,
+    (ArtifactType.RESULT_VIEW.value, 1): ResultViewArtifactPayload,
+    (ArtifactType.CHART.value, 1): ChartArtifactPayload,
 }
 _RESULT_VALUE_KEYS = frozenset({"rows", "previewRows", "preview_rows", "series"})
 
 
 def validate_artifact_payload(
-    artifact_type: ArtifactType,
+    artifact_type: str,
     payload: dict[str, Any],
+    *,
+    schema_version: int = 1,
+    allow_unknown: bool = False,
 ) -> dict[str, Any]:
-    """Validate the durable Artifact boundary before any database write."""
+    """Validate the durable Artifact boundary.
+
+    New writes reject unknown type/version combinations. Historical reads use
+    ``allow_unknown=True`` so an unknown historical type keeps its envelope and
+    fails soft instead of being guessed.
+    """
+
     _reject_result_values(payload)
-    model = _PAYLOAD_MODELS.get(artifact_type)
-    if model is None:
+    candidate = str(artifact_type)
+    model = _PAYLOAD_VALIDATORS.get((candidate, int(schema_version)))
+    if model is not None:
+        return model.model_validate(payload).model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=False,
+        )
+    if candidate in _KNOWN_ARTIFACT_TYPES:
+        raise ValueError(
+            f"Artifact type {candidate!r} has no payload contract at "
+            f"schema_version={schema_version}"
+        )
+    if allow_unknown:
         return dict(payload)
-    return model.model_validate(payload).model_dump(
-        mode="json",
-        by_alias=True,
-        exclude_none=False,
+    raise ValueError(
+        f"Unknown new Artifact type {candidate!r} cannot be written"
     )
 
 
@@ -200,7 +251,8 @@ class Artifact(BaseModel):
     session_id: str
     run_id: str
     turn_id: str | None = None
-    type: ArtifactType
+    type: str = Field(min_length=1, max_length=128)
+    schema_version: int = Field(default=1, ge=1)
     title: str
     semantic_key: str | None = None
     version: int = Field(default=1, ge=1)
@@ -212,11 +264,21 @@ class Artifact(BaseModel):
     provenance: dict[str, Any] = Field(default_factory=dict)
     relations: list[ArtifactRelation] = Field(default_factory=list)
 
+    @field_validator("type")
+    @classmethod
+    def validate_type_contract(cls, value: str) -> str:
+        return validate_artifact_type(value)
+
     @model_validator(mode="after")
     def validate_relations(self) -> "Artifact":
         if any(relation.artifact_id == self.id for relation in self.relations):
             raise ValueError("Artifact cannot relate to itself")
-        validate_artifact_payload(self.type, self.payload)
+        validate_artifact_payload(
+            self.type,
+            self.payload,
+            schema_version=self.schema_version,
+            allow_unknown=True,
+        )
         return self
 
 

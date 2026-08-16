@@ -100,6 +100,7 @@ class CatalogOverviewOutput(ToolOutputModel):
     last_sync_at: str | None = None
     table_count: int = Field(ge=0)
     mode: Literal["summary", "full"]
+    catalog_revision: int = Field(ge=0)
     warnings: list[str] = Field(default_factory=list)
     schemas: list[JsonObject] = Field(default_factory=list)
     domains: list[JsonObject] = Field(default_factory=list)
@@ -112,6 +113,7 @@ class CatalogRefreshOutput(ToolOutputModel):
     refreshed_at: str
     table_count: int = Field(ge=0)
     schema_count: int = Field(ge=0)
+    catalog_revision: int = Field(ge=0)
     tables_created: int = Field(ge=0)
     tables_updated: int = Field(ge=0)
     tables_removed: int = Field(ge=0)
@@ -152,6 +154,7 @@ class SchemaListOutput(ToolOutputModel):
     returned_count: int = Field(ge=0)
     has_more: bool
     catalog_status: str
+    catalog_revision: int = Field(ge=0)
 
 
 class SchemaSearchInput(ToolInputModel):
@@ -193,6 +196,7 @@ class SchemaSearchOutput(ToolOutputModel):
     searches: list[SearchResultSet]
     candidates: list[JsonObject]
     returned_count: int = Field(ge=0)
+    catalog_revision: int = Field(ge=0)
 
 
 class SchemaInspectInput(ToolInputModel):
@@ -221,6 +225,7 @@ class SchemaInspection(ToolOutputModel):
 
 class SchemaInspectOutput(ToolOutputModel):
     inspections: list[SchemaInspection]
+    catalog_revision: int = Field(ge=0)
 
 
 FilterScalar = Annotated[str, Field(max_length=4_000)] | int | float | bool | None

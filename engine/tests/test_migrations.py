@@ -21,9 +21,7 @@ from engine.migrations.sqlite_mutex import SQLITE_MIGRATION_LOCKED, sqlite_migra
 from engine.models import (
     AgentMessage,
     AgentSession,
-    DataSource,
     FoundationRuntimeState,
-    Project,
 )
 from engine.security.credential_lease import CredentialLeaseSaga
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
@@ -33,7 +31,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "14cd56ef78a1"
+FOUNDATION_HEAD_REVISION = "d7e8f9a0b1c2"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -210,6 +208,7 @@ def _assert_final_contract(engine) -> None:
 
     data_source_columns = _column_names(engine, "data_sources")
     assert "connection_generation" in data_source_columns
+    assert "catalog_revision" in data_source_columns
     assert "environment_id" not in data_source_columns
     assert {
         "password_credential_id",
@@ -225,6 +224,9 @@ def _assert_final_contract(engine) -> None:
     }
 
     assert "environment_id" not in _column_names(engine, "backup_records")
+    assert "memory_v4_json" in _column_names(engine, "agent_session_memories")
+    assert "schema_version" in _column_names(engine, "agent_artifacts")
+    assert "workspace_root" in _column_names(engine, "projects")
 
     assert {
         "llm_credential_id",
@@ -353,14 +355,34 @@ def test_agent_message_recall_migration_backfills_and_downgrade_keeps_transcript
     engine = create_engine(database_url)
     session = sessionmaker(bind=engine)()
     try:
-        session.add(Project(id="recall-project", name="Recall Project"))
-        session.add(
-            DataSource(
-                id="recall-datasource",
-                project_id="recall-project",
-                name="Recall Datasource",
-                db_type="sqlite",
-                database_name="recall.sqlite",
+        session.execute(
+            text(
+                """
+                INSERT INTO projects (id, name, description, status, created_at, updated_at)
+                VALUES ('recall-project', 'Recall Project', NULL, 'active',
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                INSERT INTO data_sources (
+                    id, project_id, name, db_type, host, port, database_name,
+                    username, password_credential_id, ssh_enabled, ssh_host,
+                    ssh_port, ssh_username, ssh_password_credential_id,
+                    ssh_pkey_path, ssh_key_passphrase_credential_id,
+                    ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
+                    ssl_verify_identity, connection_mode, connection_generation,
+                    is_read_only, env, status, created_at, updated_at
+                ) VALUES (
+                    'recall-datasource', 'recall-project', 'Recall Datasource',
+                    'sqlite', NULL, NULL, 'recall.sqlite', NULL, NULL, 0, NULL,
+                    22, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, 1,
+                    'direct', 1, 0, 'dev', 'active', CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP
+                )
+                """
             )
         )
         session.add(

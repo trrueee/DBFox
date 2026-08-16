@@ -40,6 +40,8 @@ class Project(Base):  # type: ignore[misc,valid-type]
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    # Local-folder Project root. Empty/legacy Projects are DB-project-only.
+    workspace_root = Column(String, nullable=True)
     status = Column(String, nullable=False, default="active")
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
@@ -146,6 +148,10 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
     # reference change.  Reusable pools and SSH tunnels are fenced by this
     # value so a later update can never reuse a prior connection profile.
     connection_generation = Column(Integer, nullable=False, default=1, server_default="1")
+    # Incremented atomically whenever search-visible catalog publication
+    # succeeds. It is the freshness fence for Catalog observations and Memory
+    # projections, not a connection-profile generation.
+    catalog_revision = Column(Integer, nullable=False, default=0, server_default="0")
     is_read_only = Column(Boolean, nullable=False, default=False)
     env = Column(String, nullable=False, default="dev")
     status = Column(String, nullable=False, default="active")
@@ -509,6 +515,9 @@ class AgentSessionMemory(Base):  # type: ignore[misc,valid-type]
     session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
     datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
     memory_json = Column(Text, nullable=False, default="{}")
+    # Shadow Memory v4 projection. ``memory_json`` keeps v3 until cutover;
+    # the v4 watermark lives only inside this typed JSON envelope.
+    memory_v4_json = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
@@ -623,6 +632,9 @@ class AgentArtifactRecord(Base):  # type: ignore[misc,valid-type]
     semantic_id = Column(String, nullable=True)
     version = Column(Integer, nullable=False, default=1)
     type = Column(String, nullable=False)
+    # Payload contract version. ``version`` remains the semantic-key
+    # work-product version; the two are never interchangeable.
+    schema_version = Column(Integer, nullable=False, default=1, server_default="1")
     title = Column(String, nullable=False)
     produced_by_step = Column(String, nullable=True)
     depends_on_json = Column(Text, nullable=True)

@@ -212,6 +212,8 @@ class RunLoop:
         self.session_factory = session_factory
         self.model_factory = model_factory
         self.registry = registry or register_dbfox_tools()
+        if not self.registry.frozen:
+            self.registry.freeze()
         self.definition = definition
         self.live_stream = live_stream
         self._owns_tool_executor = tool_executor is None

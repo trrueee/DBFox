@@ -40,6 +40,13 @@ from engine.json_codec import byte_size
 from engine.tools.runtime.observation import MAX_FACT_BYTES, safe_observation_facts
 
 
+def _catalog_revision(db: Any, datasource_id: str) -> int:
+    datasource = db.get(DataSource, datasource_id)
+    if datasource is None:
+        return 0
+    return int(datasource.catalog_revision or 0)
+
+
 def _bounded_schema_inspections(inspections: list[dict[str, Any]]) -> dict[str, Any]:
     """Preserve every inspected object and as many complete columns as fit."""
 
@@ -137,9 +144,9 @@ class CatalogOverviewTool(BaseTool[EmptyInput, CatalogOverviewOutput]):
     ) -> CatalogOverviewOutput:
         db = context.require_database()
         request = context.require_request()
-        return CatalogOverviewOutput.model_validate(
-            db_observe(db, request.datasource_id)
-        )
+        overview = db_observe(db, request.datasource_id)
+        overview["catalog_revision"] = _catalog_revision(db, request.datasource_id)
+        return CatalogOverviewOutput.model_validate(overview)
 
     def project_observation(self, *, status, output, artifacts):
         if status != "success":
@@ -154,6 +161,7 @@ class CatalogOverviewTool(BaseTool[EmptyInput, CatalogOverviewOutput]):
                     "catalog_status": output.get("catalog_status"),
                     "table_count": output.get("table_count"),
                     "mode": output.get("mode"),
+                    "catalog_revision": output.get("catalog_revision"),
                     "warnings": output.get("warnings") or [],
                 }
             ),
@@ -228,6 +236,7 @@ class CatalogRefreshTool(BaseTool[EmptyInput, CatalogRefreshOutput]):
             refreshed_at=datasource.last_sync_at.isoformat(),
             table_count=int(table_count),
             schema_count=int(schema_count),
+            catalog_revision=int(datasource.catalog_revision or 0),
             tables_created=result.tables_created,
             tables_updated=result.tables_updated,
             tables_removed=result.tables_removed,
@@ -249,6 +258,7 @@ class CatalogRefreshTool(BaseTool[EmptyInput, CatalogRefreshOutput]):
                     "refreshed_at": output.get("refreshed_at"),
                     "table_count": output.get("table_count"),
                     "schema_count": output.get("schema_count"),
+                    "catalog_revision": output.get("catalog_revision"),
                     "tables_created": output.get("tables_created"),
                     "tables_updated": output.get("tables_updated"),
                     "tables_removed": output.get("tables_removed"),
@@ -357,6 +367,7 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
         ]
         return SchemaListOutput(
             tables=tables,
+            catalog_revision=_catalog_revision(db, request.datasource_id),
             next_cursor=(
                 SchemaListCursor(
                     schema_name=tables[-1].schema_name,
@@ -386,6 +397,7 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
                     "returned_count": output.get("returned_count"),
                     "next_cursor": output.get("next_cursor"),
                     "has_more": output.get("has_more"),
+                    "catalog_revision": output.get("catalog_revision"),
                 }
             ),
         )
@@ -470,6 +482,7 @@ class SchemaSearchTool(BaseTool[SchemaSearchInput, SchemaSearchOutput]):
             searches=searches,
             candidates=ranked,
             returned_count=len(ranked),
+            catalog_revision=_catalog_revision(db, request.datasource_id),
         )
 
     def project_observation(self, *, status, output, artifacts):
@@ -482,6 +495,7 @@ class SchemaSearchTool(BaseTool[SchemaSearchInput, SchemaSearchOutput]):
                 {
                     "returned_count": len(candidates),
                     "candidates": candidates[:20],
+                    "catalog_revision": output.get("catalog_revision"),
                 }
             ),
         )
@@ -529,14 +543,17 @@ class SchemaInspectTool(BaseTool[SchemaInspectInput, SchemaInspectOutput]):
                     details,
                     strict=True,
                 )
-            ]
+            ],
+            catalog_revision=_catalog_revision(db, request.datasource_id),
         )
 
     def project_observation(self, *, status, output, artifacts):
         if status != "success":
             return ToolObservationProjection(summary="数据库对象结构检查失败。")
         inspections = list(output.get("inspections") or [])
+        facts = _bounded_schema_inspections(inspections)
+        facts["catalog_revision"] = output.get("catalog_revision")
         return ToolObservationProjection(
             summary=f"已检查 {len(inspections)} 个数据库对象。",
-            facts=_bounded_schema_inspections(inspections),
+            facts=facts,
         )

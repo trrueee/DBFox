@@ -7,6 +7,9 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.agent.context import ContextSnapshot
+from dataclasses import dataclass
+from typing import Literal, Protocol
+
 from engine.agent.evidence import citation_references, has_invalid_citation_syntax
 from engine.agent.turn import ModelTurnResult
 from engine.tools.runtime.semantics import ToolSemanticCapability
@@ -30,8 +33,90 @@ class CompletionDecision(BaseModel):
     evidence_artifact_ids: list[str] = Field(default_factory=list)
 
 
+class CompletionConstraintResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["pass", "missing", "veto"]
+    reason: str
+    requirements: list[str] = Field(default_factory=list)
+
+
+class CompletionConstraint(Protocol):
+    id: str
+
+    def evaluate(
+        self,
+        *,
+        context: ContextSnapshot,
+        model_result: ModelTurnResult,
+    ) -> CompletionConstraintResult: ...
+
+
+@dataclass(frozen=True)
+class DataResultCitationConstraint:
+    """Data-owned citation rule.
+
+    A query-result answer must cite an observed result Artifact inline. The
+    constraint can only add requirements; it cannot bypass pending work,
+    approval, citation ownership or budget.
+    """
+
+    id: str = "dbfox.data.result_citation"
+
+    def evaluate(
+        self,
+        *,
+        context: ContextSnapshot,
+        model_result: ModelTurnResult,
+    ) -> CompletionConstraintResult:
+        result_observations = [
+            item
+            for item in context.observations
+            if item.status == "succeeded"
+            and ToolSemanticCapability.QUERY_RESULT.value in item.capabilities
+        ]
+        if not result_observations:
+            return CompletionConstraintResult(
+                kind="pass",
+                reason="No query-result observations require citation.",
+            )
+        result_artifact_ids = {
+            artifact_id
+            for observation in result_observations
+            for artifact_id in observation.artifact_ids
+        }
+        cited_artifact_ids = {
+            artifact_id
+            for artifact_id, _, _ in citation_references(model_result.answer_text)
+        }
+        supported = cited_artifact_ids & result_artifact_ids
+        if supported:
+            return CompletionConstraintResult(
+                kind="pass",
+                reason="The answer cites observed result Artifacts.",
+            )
+        return CompletionConstraintResult(
+            kind="missing",
+            reason=(
+                "An answer based on query results must cite an observed "
+                "result Artifact inline."
+            ),
+            requirements=["inline_evidence"],
+        )
+
+
 class CompletionPolicy:
     """Provider output is advisory; durable observations decide completion."""
+
+    def __init__(
+        self,
+        constraints: tuple[CompletionConstraint, ...] | None = None,
+    ) -> None:
+        self.constraints = (
+            (DataResultCitationConstraint(),)
+            if constraints is None
+            else constraints
+        )
 
     def evaluate(
         self,
@@ -115,26 +200,81 @@ class CompletionPolicy:
                 missing=["valid_inline_evidence"],
             )
 
-        supported_citations = cited_artifact_ids & result_artifact_ids
-        if result_observations and not supported_citations:
-            return CompletionDecision(
-                kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
-                reason="An answer based on query results must cite an observed result Artifact inline.",
-                missing=["inline_evidence"],
-            )
-
         if turn_budget_reached:
-            return CompletionDecision(
+            decision = CompletionDecision(
                 kind=CompletionKind.PARTIAL,
                 reason="The run reached its turn budget with an answer candidate.",
-                evidence_artifact_ids=sorted(supported_citations),
+                evidence_artifact_ids=sorted(
+                    cited_artifact_ids & result_artifact_ids
+                ),
             )
-
-        return CompletionDecision(
-            kind=CompletionKind.SYNTHESIZE,
-            reason="The answer candidate is supported by the available durable observations.",
-            evidence_artifact_ids=sorted(supported_citations),
+        else:
+            decision = CompletionDecision(
+                kind=CompletionKind.SYNTHESIZE,
+                reason="The answer candidate is supported by the available durable observations.",
+                evidence_artifact_ids=sorted(
+                    cited_artifact_ids & result_artifact_ids
+                ),
+            )
+        return self._apply_constraints(
+            decision,
+            context=context,
+            model_result=model_result,
+            turn_count=turn_count,
+            max_turns=max_turns,
         )
+
+    def _apply_constraints(
+        self,
+        decision: CompletionDecision,
+        *,
+        context: ContextSnapshot,
+        model_result: ModelTurnResult,
+        turn_count: int,
+        max_turns: int,
+    ) -> CompletionDecision:
+        """Compose immutable constraints after Core terminal eligibility.
+
+        Any VETO wins; MISSING requirements are unioned and force another turn
+        unless the budget is exhausted.
+        """
+
+        veto: CompletionConstraintResult | None = None
+        missing: list[str] = []
+        for constraint in self.constraints:
+            result = constraint.evaluate(
+                context=context,
+                model_result=model_result,
+            )
+            if result.kind == "veto":
+                veto = result
+                break
+            if result.kind == "missing":
+                missing.extend(result.requirements)
+
+        if veto is not None:
+            return CompletionDecision(
+                kind=(
+                    CompletionKind.FAIL
+                    if turn_count >= max_turns
+                    else CompletionKind.CONTINUE
+                ),
+                reason=veto.reason,
+                missing=list(dict.fromkeys(veto.requirements)),
+                evidence_artifact_ids=[],
+            )
+        if missing:
+            return CompletionDecision(
+                kind=(
+                    CompletionKind.FAIL
+                    if turn_count >= max_turns
+                    else CompletionKind.CONTINUE
+                ),
+                reason="Extension completion constraints require another model turn.",
+                missing=list(dict.fromkeys(missing)),
+                evidence_artifact_ids=[],
+            )
+        return decision
 
     def evaluate_bounded_partial(
         self,

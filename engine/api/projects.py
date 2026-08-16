@@ -62,6 +62,7 @@ def api_create_project(req: ProjectCreateRequest, db: Session = Depends(get_db))
             id=str(uuid.uuid4()),
             name=name,
             description=(req.description or "").strip() or None,
+            workspace_root=(req.workspace_root or "").strip() or None,
             status="active",
         )
         db.add(project)

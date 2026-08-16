@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session, selectinload
 
 from engine.json_codec import JsonCodecError, loads
@@ -62,6 +62,33 @@ def _table_identity(table_schema: str | None, table_name: str) -> tuple[str, str
 
 def _only_unique(values: list[str]) -> str | None:
     return values[0] if len(values) == 1 else None
+
+
+def bump_catalog_revision(db: Session, datasource_id: str) -> int:
+    """Atomically increment and return the search-visible catalog revision.
+
+    Uses one SQL ``UPDATE ... SET catalog_revision = catalog_revision + 1`` so
+    concurrent publications cannot lose increments. The caller owns the
+    surrounding short publication transaction.
+    """
+
+    updated = db.execute(
+        text(
+            "UPDATE data_sources "
+            "SET catalog_revision = catalog_revision + 1 "
+            "WHERE id = :datasource_id"
+        ),
+        {"datasource_id": datasource_id},
+    )
+    if updated.rowcount != 1:
+        raise LookupError(f"Unknown datasource for catalog revision: {datasource_id}")
+    revision = db.execute(
+        text(
+            "SELECT catalog_revision FROM data_sources WHERE id = :datasource_id"
+        ),
+        {"datasource_id": datasource_id},
+    ).scalar_one()
+    return int(revision)
 
 
 def rebuild_search_docs(db: Session, datasource_id: str) -> None:
@@ -266,34 +293,68 @@ class SchemaCatalogSync:
         ai_api_base: str | None = None,
         ai_model_name: str | None = None,
     ) -> SyncResult:
-        """Reconcile the catalog from one complete, authoritative snapshot."""
+        """Reconcile the catalog from one complete, authoritative snapshot.
+
+        The authoritative publication and SearchDoc rebuild are one short
+        caller-owned transaction. When AI enrichment is requested, that
+        transaction commits first, then enrichment runs in separate short
+        transactions outside the publication boundary.
+        """
         if not isinstance(inventory, AuthoritativeInventory):
             raise TypeError(
                 "SchemaCatalogSync.sync_authoritative requires AuthoritativeInventory."
             )
 
         try:
-            return self._sync_authoritative(
-                db,
-                inventory,
-                ai_enrich=ai_enrich,
-                llm_credential_id=llm_credential_id,
-                ai_api_base=ai_api_base,
-                ai_model_name=ai_model_name,
-            )
+            result = self._sync_authoritative(db, inventory)
         except Exception:
             db.rollback()
             raise
+
+        if not ai_enrich:
+            return result
+
+        db.commit()
+        try:
+            from engine.ai_enrich import ai_enrich_catalog
+            from engine.llm.config import resolve_product_llm_config_from_credential
+
+            llm_config = (
+                resolve_product_llm_config_from_credential(
+                    llm_credential_id=llm_credential_id,
+                    api_base=ai_api_base,
+                    model_name=ai_model_name,
+                )
+                if llm_credential_id
+                else None
+            )
+            enrich_result = ai_enrich_catalog(
+                db,
+                inventory.datasource_id,
+                llm_config=llm_config,
+            )
+        except Exception as exc:
+            logger.warning("AI enrichment failed (%s)", type(exc).__name__)
+            enrich_result = _ai_enrich_failure_result()
+        if not isinstance(enrich_result, dict):
+            logger.warning(
+                "AI enrichment returned an invalid result (%s)",
+                type(enrich_result).__name__,
+            )
+            enrich_result = _ai_enrich_failure_result()
+        logger.info(
+            "AI enrichment finished: enabled=%s enriched_count=%d failures=%d",
+            bool(enrich_result.get("ai_enriched")),
+            int(enrich_result.get("enriched_count", 0)),
+            len(enrich_result.get("errors", [])),
+        )
+        result.ai_enrich_result = enrich_result
+        return result
 
     def _sync_authoritative(
         self,
         db: Session,
         inventory: AuthoritativeInventory,
-        *,
-        ai_enrich: bool = False,
-        llm_credential_id: str | None = None,
-        ai_api_base: str | None = None,
-        ai_model_name: str | None = None,
     ) -> SyncResult:
         """Perform the one transaction after authoritative input validation."""
 
@@ -432,6 +493,9 @@ class SchemaCatalogSync:
             datasource.last_sync_status = "ready"
             datasource.last_sync_error = None
         db.flush()
+        result.catalog_revision = bump_catalog_revision(db, datasource_id)
+        if datasource is not None:
+            db.expire(datasource, ["catalog_revision"])
         result.synced = True
         logger.info(
             "SchemaCatalogSync %s: +%d ~%d -%d tables, +%d ~%d -%d columns",
@@ -443,42 +507,6 @@ class SchemaCatalogSync:
             result.columns_updated,
             result.columns_removed,
         )
-
-        if ai_enrich:
-            try:
-                from engine.ai_enrich import ai_enrich_catalog
-                from engine.llm.config import resolve_product_llm_config_from_credential
-
-                llm_config = (
-                    resolve_product_llm_config_from_credential(
-                        llm_credential_id=llm_credential_id,
-                        api_base=ai_api_base,
-                        model_name=ai_model_name,
-                    )
-                    if llm_credential_id
-                    else None
-                )
-                enrich_result = ai_enrich_catalog(
-                    db,
-                    datasource_id,
-                    llm_config=llm_config,
-                )
-            except Exception as exc:
-                logger.warning("AI enrichment failed (%s)", type(exc).__name__)
-                enrich_result = _ai_enrich_failure_result()
-            if not isinstance(enrich_result, dict):
-                logger.warning(
-                    "AI enrichment returned an invalid result (%s)",
-                    type(enrich_result).__name__,
-                )
-                enrich_result = _ai_enrich_failure_result()
-            logger.info(
-                "AI enrichment finished: enabled=%s enriched_count=%d failures=%d",
-                bool(enrich_result.get("ai_enriched")),
-                int(enrich_result.get("enriched_count", 0)),
-                len(enrich_result.get("errors", [])),
-            )
-            result.ai_enrich_result = enrich_result
 
         return result
 

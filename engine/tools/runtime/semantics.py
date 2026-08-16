@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict
+import re
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class ToolSemanticCapability(StrEnum):
@@ -20,9 +22,34 @@ class ToolSemanticCapability(StrEnum):
     VALIDATED_QUERY = "validated_query"
 
 
+_LEGACY_SEMANTIC_CAPABILITIES = frozenset(
+    item.value for item in ToolSemanticCapability
+)
+_NAMESPACED_CAPABILITY_PATTERN = re.compile(
+    r"^[a-z][a-z0-9_.-]*[.:][a-z][a-z0-9_.-]*$"
+)
+
+
 class ToolSemanticSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    produces: tuple[ToolSemanticCapability, ...] = ()
+    produces: tuple[str, ...] = ()
     contributes_progress: bool = True
     publishes_artifact_references: bool = False
+
+    @field_validator("produces")
+    @classmethod
+    def validate_open_capability_ids(
+        cls,
+        values: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        for value in values:
+            candidate = str(value)
+            if candidate in _LEGACY_SEMANTIC_CAPABILITIES:
+                continue
+            if _NAMESPACED_CAPABILITY_PATTERN.fullmatch(candidate) is None:
+                raise ValueError(
+                    "New semantic capability must use a namespaced ID "
+                    "like dbfox.workspace.file_snapshot"
+                )
+        return tuple(str(value) for value in values)

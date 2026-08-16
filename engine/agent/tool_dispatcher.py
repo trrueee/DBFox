@@ -678,7 +678,7 @@ class ToolDispatcher:
                 facts=observation.facts,
                 capabilities=(
                     tuple(
-                        capability.value for capability in tool.spec.semantics.produces
+                        str(capability) for capability in tool.spec.semantics.produces
                     )
                     if succeeded
                     else ()

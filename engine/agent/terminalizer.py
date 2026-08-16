@@ -67,12 +67,12 @@ class Terminalizer:
                 artifact_repository.referenced_results_for_run(run_id)
             )
             current_result_artifacts = [
-                item for item in artifacts if item.type is ArtifactType.RESULT_VIEW
+                item for item in artifacts if item.type == ArtifactType.RESULT_VIEW.value
             ]
             result_artifacts = [
                 item
                 for item in [*artifacts, *referenced_result_artifacts]
-                if item.type is ArtifactType.RESULT_VIEW
+                if item.type == ArtifactType.RESULT_VIEW.value
             ]
             final_text = (
                 result.answer_text if result.has_completed_answer_candidate else ""

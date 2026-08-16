@@ -16,7 +16,7 @@ from engine.ai_index import (
 )
 from engine.llm.config import LlmConfig
 from engine.json_codec import dumps
-from engine.models import DomainTagRule, SchemaTable
+from engine.models import DataSource, DomainTagRule, SchemaTable
 
 logger = logging.getLogger("dbfox.ai_enrich")
 
@@ -35,7 +35,14 @@ def ai_enrich_catalog(
     table_batch: int = AI_LLM_TABLE_BATCH,
     llm_config: LlmConfig | None = None,
 ) -> dict[str, Any]:
-    """Run AI enrichment on all changed tables for a datasource."""
+    """Run AI enrichment on changed tables for a datasource.
+
+    Transaction contract: structural change detection uses a short read
+    transaction which ends before the first LLM call. Every successful batch
+    writes metadata, rebuilds SearchDocs and bumps ``catalog_revision`` in its
+    own short write transaction after re-checking the expected schema hash and
+    connection generation. LLM calls never run inside a DB write transaction.
+    """
     tables = (
         db.query(SchemaTable)
         .filter(SchemaTable.data_source_id == datasource_id)
@@ -43,35 +50,51 @@ def ai_enrich_catalog(
         .all()
     )
 
-    # 1. Incremental detection via schema_hash
-    changed: list[SchemaTable] = []
+    changed_ids: list[str] = []
+    expected_hashes: dict[str, str | None] = {}
+    datasource = db.get(DataSource, datasource_id)
+    expected_generation = (
+        int(datasource.connection_generation) if datasource is not None else None
+    )
     for t in tables:
         current_hash = compute_schema_hash(t)
         if current_hash != t.schema_hash:
-            changed.append(t)
+            changed_ids.append(str(t.id))
+            # Re-check against the structural hash we saw at detection time,
+            # not against the stale persisted schema_hash.
+            expected_hashes[str(t.id)] = current_hash
 
-    if not changed:
+    # End the detection read transaction before any remote LLM call.
+    db.rollback()
+
+    if not changed_ids:
         return {"ai_enriched": False, "enriched_count": 0, "reason": "no structural changes"}
 
     if llm_config is None:
         return {"ai_enriched": False, "enriched_count": 0, "reason": "请先在设置中配置 LLM API Key。"}
 
-    # 3. Cap total tables per run to avoid overwhelming the LLM
-    total_changed = len(changed)
+    # Cap total tables per run to avoid overwhelming the LLM.
+    total_changed = len(changed_ids)
     capped = False
     if total_changed > AI_LLM_MAX_TABLES_PER_RUN:
-        changed = changed[:AI_LLM_MAX_TABLES_PER_RUN]
+        changed_ids = changed_ids[:AI_LLM_MAX_TABLES_PER_RUN]
         capped = True
         logger.warning(
             "AI enrich: capping to %d/%d changed tables for datasource %s",
             AI_LLM_MAX_TABLES_PER_RUN, total_changed, datasource_id,
         )
 
-    # 4. Batch LLM enrichment
     enriched_count = 0
+    skipped_stale = 0
     errors: list[str] = []
-    for i in range(0, len(changed), table_batch):
-        batch = changed[i : i + table_batch]
+    for i in range(0, len(changed_ids), table_batch):
+        batch_ids = changed_ids[i : i + table_batch]
+        batch = list(
+            db.query(SchemaTable)
+            .filter(SchemaTable.id.in_(batch_ids))
+            .order_by(SchemaTable.table_schema, SchemaTable.table_name)
+            .all()
+        )
         context = _build_table_context(db, batch)
 
         # Context overflow guard — if a single batch exceeds the prompt budget,
@@ -84,6 +107,7 @@ def ai_enrich_catalog(
                 context_size, AI_LLM_MAX_PROMPT_CHARS, len(batch),
             )
             batch = batch[:1]
+            batch_ids = batch_ids[:1]
             context = _build_table_context(db, batch)
             context_size = len(dumps(context))
             if context_size > AI_LLM_MAX_PROMPT_CHARS:
@@ -91,18 +115,61 @@ def ai_enrich_catalog(
                     "AI enrich: single table '%s' context %d chars still exceeds limit — skipping",
                     str(batch[0].table_name), context_size,
                 )
+                db.rollback()
                 continue
+
+        # End the context-build read transaction before the LLM call.
+        db.rollback()
 
         try:
             ai_result = enrich_tables_batch(
                 context,
                 llm_config=llm_config,
             )
-            _write_ai_metadata(db, batch, ai_result)
-            from engine.environment.schema_catalog_sync import rebuild_search_docs
+        except Exception as exc:
+            logger.warning(
+                "AI enrich batch %d failed (%s)",
+                i // table_batch,
+                type(exc).__name__,
+            )
+            errors.append(LLM_ENRICH_FAILED)
+            continue
+
+        try:
+            fresh_batch = list(
+                db.query(SchemaTable)
+                .filter(SchemaTable.id.in_(batch_ids))
+                .order_by(SchemaTable.table_schema, SchemaTable.table_name)
+                .all()
+            )
+            fresh_datasource = db.get(DataSource, datasource_id)
+            if fresh_datasource is None:
+                db.rollback()
+                errors.append(LLM_ENRICH_FAILED)
+                continue
+            current_generation = int(fresh_datasource.connection_generation)
+            stale = any(
+                compute_schema_hash(table) != expected_hashes.get(str(table.id))
+                for table in fresh_batch
+            )
+            if expected_generation != current_generation or stale:
+                logger.warning(
+                    "AI enrich: skipping stale batch for datasource %s",
+                    datasource_id,
+                )
+                skipped_stale += len(fresh_batch)
+                db.rollback()
+                continue
+            _write_ai_metadata(db, fresh_batch, ai_result)
+            from engine.environment.schema_catalog_sync import (
+                bump_catalog_revision,
+                rebuild_search_docs,
+            )
             rebuild_search_docs(db, datasource_id)
-            _update_schema_hashes(batch)
-            enriched_count += len(batch)
+            _update_schema_hashes(fresh_batch)
+            bump_catalog_revision(db, datasource_id)
+            db.commit()
+            enriched_count += len(fresh_batch)
         except Exception as exc:
             logger.warning(
                 "AI enrich batch %d failed (%s)",
@@ -113,11 +180,10 @@ def ai_enrich_catalog(
             db.rollback()
             continue
 
-        if i + table_batch < len(changed):
+        if i + table_batch < len(changed_ids):
             time.sleep(AI_LLM_BATCH_INTERVAL_MS / 1000)
 
-    db.commit()
-    if errors and enriched_count == 0:
+    if errors and enriched_count == 0 and not skipped_stale:
         return {
             "ai_enriched": False,
             "enriched_count": 0,
@@ -127,6 +193,7 @@ def ai_enrich_catalog(
     result: dict[str, Any] = {
         "ai_enriched": enriched_count > 0,
         "enriched_count": enriched_count,
+        "skipped_stale": skipped_stale,
         "reason": "; ".join(errors),
         "errors": errors,
     }

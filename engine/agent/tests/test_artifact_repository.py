@@ -194,9 +194,9 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
             )
         ),
     )
-    sql_artifact = next(item for item in validated if item.type is ArtifactType.SQL)
+    sql_artifact = next(item for item in validated if item.type == ArtifactType.SQL.value)
     safety_artifact = next(
-        item for item in validated if item.type is ArtifactType.SAFETY
+        item for item in validated if item.type == ArtifactType.SAFETY.value
     )
 
     secret = "reference-only-sensitive-cell"
@@ -260,7 +260,7 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
             )
         ),
     )
-    sample = next(item for item in preview if item.type is ArtifactType.RESULT_VIEW)
+    sample = next(item for item in preview if item.type == ArtifactType.RESULT_VIEW.value)
 
     monkeypatch.setattr(
         "engine.tools.builtin.results.ResultViewService.load_verified_source",

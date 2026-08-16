@@ -287,6 +287,6 @@ def _safety_payload(decision: Any) -> dict[str, Any]:
 
 def _artifact_id_by_type(artifacts: list[Artifact], artifact_type: str) -> str | None:
     return next(
-        (artifact.id for artifact in artifacts if artifact.type.value == artifact_type),
+        (artifact.id for artifact in artifacts if artifact.type == artifact_type),
         None,
     )

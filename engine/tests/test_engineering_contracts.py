@@ -490,6 +490,39 @@ def test_current_documentation_relative_links_resolve() -> None:
     assert not broken, broken
 
 
+def test_pull_request_template_requires_investigation_and_reuse_rationale() -> None:
+    template = (ROOT / ".github" / "pull_request_template.md").read_text(
+        encoding="utf-8"
+    )
+    for required_field in (
+        "技术调研与复用决策",
+        "调查过的现有方案",
+        "未采用其他方案的原因",
+        "新增依赖或自研实现的主要风险",
+        "删除条件与负责人",
+        "调查限制",
+    ):
+        assert required_field in template
+
+
+def test_quality_readme_indexes_investigation_and_reuse_guide() -> None:
+    quality_readme = (ROOT / "docs" / "quality" / "README.md").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "[技术调研、方案复用与架构克制](./technical-investigation-and-reuse.md)"
+        in quality_readme
+    )
+
+
+def test_generated_api_artifact_contract_is_open_type_with_schema_version() -> None:
+    generated_types = (
+        ROOT / "desktop" / "src" / "lib" / "api" / "generated" / "types.gen.ts"
+    ).read_text(encoding="utf-8")
+    assert "schema_version?: number;" in generated_types
+    assert "type: string;" in generated_types
+
+
 def test_readme_architecture_diagram_is_static_svg() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     diagram_path = ROOT / "docs" / "images" / "system-architecture.svg"

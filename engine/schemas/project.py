@@ -8,6 +8,7 @@ from engine.schemas import _to_iso
 class ProjectCreateRequest(BaseModel):
     name: str
     description: str | None = None
+    workspace_root: str | None = None
 
 
 class ProjectResponse(BaseModel):
@@ -16,6 +17,7 @@ class ProjectResponse(BaseModel):
     id: str
     name: str
     description: str | None = None
+    workspace_root: str | None = None
     status: str | None = None
     datasource_count: int = 0
     created_at: str | None = None

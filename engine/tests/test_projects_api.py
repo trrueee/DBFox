@@ -4,8 +4,9 @@ import uuid
 
 from sqlalchemy import event
 
-from engine.api.projects import api_list_projects
+from engine.api.projects import api_create_project, api_list_projects
 from engine.models import DEFAULT_PROJECT_ID, DataSource, Project
+from engine.schemas import ProjectCreateRequest
 from engine.projects.service import resolve_project_id
 
 
@@ -32,6 +33,25 @@ def _datasource(project_id: str | None, name: str) -> DataSource:
         connection_generation=1,
         status="active",
     )
+
+
+def test_create_project_strips_and_persists_workspace_root(db_session) -> None:
+    result = api_create_project(
+        ProjectCreateRequest(
+            name="  订单分析  ",
+            description="  desc  ",
+            workspace_root="  C:/demo/orders  ",
+        ),
+        db_session,
+    )
+
+    assert result["name"] == "订单分析"
+    assert result["description"] == "desc"
+    assert result["workspace_root"] == "C:/demo/orders"
+
+    persisted = db_session.get(Project, result["id"])
+    assert persisted is not None
+    assert persisted.workspace_root == "C:/demo/orders"
 
 
 def test_list_projects_counts_datasources_with_grouped_sql(db_session) -> None:
