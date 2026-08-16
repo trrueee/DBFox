@@ -49,6 +49,101 @@ class FileReadOutput(BaseModel):
     readable_chars: int = Field(ge=0)
 
 
+class FileSearchInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    query: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Case-insensitive filename substring.",
+    )
+    path_prefix: str = Field(
+        default="",
+        max_length=1_024,
+        description="Optional workspace-relative directory prefix.",
+    )
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class FileSearchMatch(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: str
+    relative_path: str
+    is_dir: bool
+
+
+class FileSearchOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    query: str
+    path_prefix: str
+    matches: list[FileSearchMatch]
+    returned_count: int = Field(ge=0)
+    truncated: bool
+
+
+class WorkspaceFileSearchTool(BaseTool[FileSearchInput, FileSearchOutput]):
+    name = "file_search"
+    group = "workspace"
+    description = (
+        "List matching file or directory names inside the current Project "
+        "workspace. Results are bounded and workspace-root-relative."
+    )
+    input_model = FileSearchInput
+    output_model = FileSearchOutput
+    version = "1"
+    policy = ToolPolicy(risk_level="safe", requires_approval=False)
+    execution = ToolExecutionSpec(
+        timeout_seconds=30,
+        recovery="retry_safe",
+        retryable=True,
+        max_retries=1,
+        concurrency="parallel_safe",
+        max_output_bytes=200_000,
+        backend="in_process",
+        capabilities=("filesystem_read",),
+    )
+    semantics = ToolSemanticSpec(
+        produces=("dbfox.workspace.file_search",),
+        contributes_progress=True,
+    )
+    presentation = ToolPresentation(
+        title="搜索项目文件",
+        category="explore",
+        visibility="summary",
+        progress="indeterminate",
+    )
+
+    def run(self, input: FileSearchInput, context: ToolRunContext) -> FileSearchOutput:
+        workspace = context.require_resource("workspace")
+        if not isinstance(workspace, WorkspaceReadService):
+            raise RuntimeError("Workspace resource did not resolve to a WorkspaceReadService")
+        try:
+            entries = workspace.list_directory(input.path_prefix)
+        except WorkspaceReadError as exc:
+            raise ToolInputError("无法读取该项目文件夹。") from exc
+        needle = input.query.casefold()
+        matches = [
+            FileSearchMatch(
+                name=entry.name,
+                relative_path=entry.relative_path,
+                is_dir=entry.is_dir,
+            )
+            for entry in entries
+            if needle in entry.name.casefold()
+        ][: input.limit]
+        return FileSearchOutput(
+            query=input.query,
+            path_prefix=input.path_prefix,
+            matches=matches,
+            returned_count=len(matches),
+            truncated=len(matches) < sum(
+                1 for entry in entries if needle in entry.name.casefold()
+            ),
+        )
+
+
 class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
     name = "file_read"
     group = "workspace"

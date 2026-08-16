@@ -22,7 +22,7 @@ from engine.tools.builtin.results import (
     ResultInspectTool,
     ResultProfileTool,
 )
-from engine.tools.builtin.workspace import WorkspaceFileReadTool
+from engine.tools.builtin.workspace import WorkspaceFileReadTool, WorkspaceFileSearchTool
 from engine.tools.runtime import ToolRegistry
 
 CORE_OWNER = "dbfox.core"
@@ -69,6 +69,7 @@ def register_workspace_extension(registry: ToolRegistry) -> None:
     """Register the Workspace read-only capability family."""
 
     registry.register(WorkspaceFileReadTool(), owner=WORKSPACE_OWNER)
+    registry.register(WorkspaceFileSearchTool(), owner=WORKSPACE_OWNER)
 
 
 def register_dbfox_tools() -> ToolRegistry:

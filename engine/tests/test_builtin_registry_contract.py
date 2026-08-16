@@ -53,7 +53,7 @@ class _EchoTool(BaseTool[_EchoInput, _EchoOutput]):
 
 
 FROZEN_MATERIALIZATION_HASH = (
-    "b782aa7c0bf38065c9a3c342f0a3d774837f1c9422364194960effa08de41d82"
+    "8d7255057ff1b3de6836d5ff7848911a7d20933a80793270969d55aa41adc488"
 )
 
 FROZEN_BUILTIN_NAMES = (
@@ -64,6 +64,7 @@ FROZEN_BUILTIN_NAMES = (
     "conversation_search",
     "data_preview",
     "file_read",
+    "file_search",
     "request_clarification",
     "result_inspect",
     "result_profile",
@@ -85,6 +86,7 @@ FROZEN_OWNERS = {
     "chart_create": "dbfox.data",
     "data_preview": "dbfox.data",
     "file_read": "dbfox.workspace",
+    "file_search": "dbfox.workspace",
     "result_inspect": "dbfox.data",
     "result_profile": "dbfox.data",
     "schema_inspect": "dbfox.data",

@@ -52,6 +52,23 @@ def test_file_read_returns_bounded_snapshot_and_artifact(runtime) -> None:
     assert draft.payload["relativePath"] == "src/main.py"
 
 
+def test_file_search_lists_bounded_workspace_matches(runtime) -> None:
+    registry, service, scope = runtime
+    result = ToolRuntime(registry).invoke(
+        tool_name="file_search",
+        raw_input={"query": "main", "path_prefix": "src", "limit": 10},
+        request=None,
+        db=None,
+        idempotency_key="file-search-1",
+        scope_refs=(scope,),
+        resources={"workspace": service},
+    )
+
+    assert result.status == "success"
+    assert result.output["returned_count"] == 1
+    assert result.output["matches"][0]["relative_path"] == "src/main.py"
+
+
 def test_file_read_rejects_path_escape_with_safe_error(runtime) -> None:
     registry, service, scope = runtime
     result = ToolRuntime(registry).invoke(
