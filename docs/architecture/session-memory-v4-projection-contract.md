@@ -15,11 +15,12 @@
 本合同把 Memory v4 约束成一个小而确定的状态投影：
 
 - 输入只来自 canonical durable records；
-- incremental 和 full rebuild 使用同一 reducer；
+- incremental、lag catch-up 和 full rebuild 使用同一 reducer；
 - 所有集合有硬上限；
 - identity、merge、eviction、排序和 hash 都确定；
 - P0 不增加 Session Effect；
-- Context 按 footprint 回 canonical Observation，不复制完整事实。
+- Context 按 footprint 回 canonical Observation，不复制完整事实；
+- derived projection failure 不阻止 canonical Run terminalization。
 
 ## 2. Projection envelope
 
@@ -167,28 +168,28 @@ schema_search
 schema_inspect
 ```
 
-dispatch 必须同时验证 Tool contract/version compatibility；未知版本跳过并记录 telemetry，不猜兼容。
+dispatch 必须同时验证 Tool contract/version compatibility；未知版本不能猜兼容。若该输入不能被当前 projector 解释，projection attempt 失败并保持 watermark，不得把 canonical Run 变回非 terminal。
 
 未来若 Data Tool 改名或拆分，由 Data projector 自己升级 contract fingerprint / rebuild，不修改 Kernel reducer。
 
-## 7. Incremental fold 算法
+## 7. Fold 算法
 
-输入是**一个 terminal Run 中尚未投影的 settled records**。
+### 7.1 单个 terminal Run fold
+
+输入是一个 terminal Run 中的 settled canonical records：
 
 ```text
-load Memory row with lock
-→ verify watermark < run.session_sequence
-→ decode typed projection
+decode typed projection
 → iterate Run observations by durable sequence ASC
 → fold succeeded eligible observations
 → trim bounded collections
 → canonical sort
 → canonical serialize + hash
-→ watermark = run.session_sequence
-→ persist
 ```
 
-### 7.1 Revision transition
+只有整个 candidate 通过 typed validation 后才允许写 Memory row / watermark。
+
+### 7.2 Revision transition
 
 对每个 eligible Observation：
 
@@ -204,7 +205,7 @@ obs_scope = datasource_id + datasource_generation + observation.catalog_revision
 
 这样同一个 Run 内 `catalog_refresh → search → inspect` 可以自然切换到新 revision，不需要 terminal 时读取当前 revision 猜测。
 
-### 7.2 Search merge
+### 7.3 Search merge
 
 `schema_search`：
 
@@ -222,7 +223,7 @@ objects_by_key: dict[tuple[str, str, str, str], CatalogObjectState]
 
 每个 candidate merge 是均摊 O(1)。
 
-### 7.3 Inspect merge
+### 7.4 Inspect merge
 
 `schema_inspect`：
 
@@ -233,7 +234,7 @@ objects_by_key: dict[tuple[str, str, str, str], CatalogObjectState]
 
 完整 inspection detail 仍留在 canonical Observation。
 
-### 7.4 Overview / list / refresh
+### 7.5 Overview / list / refresh
 
 - overview：只更新 bounded orientation provenance；
 - schema_list：可将返回对象作为 seen object，但不保存完整 table summary；
@@ -276,20 +277,33 @@ canonical_object_key ASC
 
 最终持久化按 canonical object key ASC 排序，保证相同逻辑集合得到相同 JSON/hash。
 
-这个策略优先保留已经付出 live inspection 成本的对象，同时保持确定性。
+## 9. Watermark、幂等与 catch-up
 
-## 9. 幂等与 watermark
-
-Terminal fold 以 `session_sequence` 为 watermark。
+`projected_through_session_sequence` 表示**已经成功通过当前 projection contract 归约的连续 terminal prefix**。
 
 规则：
 
-- `run.session_sequence <= projected_through_session_sequence`：no-op；
-- 只能按 Session sequence 连续推进；
-- 发现 gap 时不能假装 incremental complete，应触发 compare/rebuild telemetry；
-- 同一个 Run 重复 terminal callback 不产生第二次状态变化。
+- `run.session_sequence <= watermark`：no-op；
+- 健康路径下当前 terminal Run 应为 `watermark + 1`；
+- watermark 落后时，从 `watermark + 1` 开始按 Session sequence catch up；
+- 每个 sequence 都调用与正常增量完全相同的 fold；
+- 遇到未 terminal/missing sequence，停止在 gap 前；
+- projection 计算/validation 失败，整个 candidate 丢弃，watermark 不变；
+- 绝不因为“当前 Run 已 terminal”就把 watermark 跳过中间 gap。
 
 Object merge 本身还以 canonical key + Observation ID 保持幂等。
+
+正常复杂度：
+
+```text
+O(current terminal Run records + bounded state)
+```
+
+存在 lag 时：
+
+```text
+O(records in catch-up gap + bounded state)
+```
 
 ## 10. Full rebuild
 
@@ -307,7 +321,7 @@ rebuild_session_memory(
 empty typed Memory v4
 → terminal Runs by session_sequence ASC
 → load each Run canonical Invocation + Observation + Artifact refs
-→ call EXACT SAME fold functions as incremental path
+→ call EXACT SAME fold functions as incremental/catch-up
 → canonical serialize/hash
 ```
 
@@ -327,6 +341,8 @@ same memory schema/core policy
 same projection contract_fingerprint
 → same canonical state_hash
 ```
+
+Catch-up 到相同 cutoff 也必须满足同一等价条件。
 
 ## 11. Contract fingerprint
 
@@ -364,6 +380,8 @@ catalog revision
 
 不匹配则整个 Catalog working state 不进入 current Prompt。
 
+Projection lag 表示可能缺少较新的 working-state，并不授权使用 stale scope；revision/generation fence 始终优先。
+
 ### 12.1 Prior digest selection
 
 第一版不使用 LLM/embedding。
@@ -397,23 +415,44 @@ Digest 必须标注：
 
 Digest 不持久化为第二事实源。
 
-## 13. Database / transaction contract
+## 13. Canonical transaction / derived projection boundary
 
-增量 fold 必须与 Run terminal state 同一 application transaction。
+Run terminal state 与 Memory 不具有相同权威性。
 
-Memory row 推荐增加可查询列：
+推荐实现顺序：
 
 ```text
-schema_version
-core_policy_version
-projected_through_session_sequence
-state_hash
-updated_at
+stage canonical terminal records
+→ load Memory/watermark
+→ compute catch-up candidate in memory
+→ validate complete candidate
+→ success: stage Memory upsert
+→ projection error: leave Memory untouched, record lag/error
+→ append terminal Event
+→ commit canonical transaction
 ```
 
-这些列用于 lag/repair/index，不重复 state 内容。
+### 13.1 Fail-soft 范围
 
-P2.1 先修正 Catalog publication transaction ownership：AI enrichment 内部不得自行 commit 一个外层 sync 正在管理的 transaction。
+以下错误不能阻止 canonical terminalization：
+
+- reducer exception；
+- unsupported projection input/contract；
+- projection typed validation failure；
+- state hash/canonicalization contract error。
+
+它们必须：
+
+```text
+no Memory mutation
+no watermark advance
+visible telemetry/logging
+later catch-up or rebuild
+```
+
+### 13.2 不吞数据库基础设施错误
+
+如果 SQLite/ORM transaction/commit 本身失败，仍按 canonical persistence failure 处理。Projection service 应先纯计算/验证 candidate，再修改 ORM row，避免 derived bug 污染 transaction。
 
 ## 14. Migration
 
@@ -423,8 +462,8 @@ P2.1 先修正 Catalog publication transaction ownership：AI enrichment 内部�
 1. catalog_revision + publication transaction contract
 2. Memory v4 typed models/storage metadata
 3. pure Catalog reducer
-4. completed/failed/cancelled terminal integration
-5. v4 shadow incremental write
+4. completed/failed/cancelled projection boundary
+5. v4 shadow incremental/catch-up
 6. compare-mode full rebuild sampling
 7. Context typed read + prior digest behind flag
 8. cutover
@@ -463,6 +502,8 @@ projection_id
 projection_fingerprint
 projection_watermark
 projection_lag
+projection_failure_count
+projection_catchup_run_count
 working_state_bytes
 working_state_context_tokens
 catalog_revision
@@ -478,12 +519,13 @@ prior_observation_digest_count
 ## 17. 性能
 
 ```text
-incremental = O(records in current terminal Run + bounded object state)
-full rebuild = O(total canonical records in Session)
-lookup/merge candidate object = average O(1)
+normal incremental = O(records in current terminal Run + bounded object state)
+lag catch-up       = O(records in catch-up gap + bounded object state)
+full rebuild       = O(total canonical records in Session)
+lookup/merge       = average O(1)
 ```
 
-P0 不引入 vector index、graph、generic cache 或全 Session terminal scan。
+P0 不引入 vector index、graph、generic cache 或健康路径全 Session terminal scan。
 
 ## 18. 功能测试
 
@@ -499,12 +541,15 @@ P0 不引入 vector index、graph、generic cache 或全 Session terminal scan�
 - negative search 不夸大；
 - object merge/eviction determinism；
 - duplicate terminal apply no-op；
-- watermark gap detection；
+- projection exception keeps canonical terminal state；
+- projection failure keeps watermark unchanged；
+- lag catch-up from watermark + 1；
+- gap not crossed；
 - prior digest deterministic selection；
 - 100 Run boundedness；
-- incremental/full rebuild hash equality；
+- incremental/catch-up/full rebuild hash equality；
 - missing projector strict/repair semantics。
 
 ## 19. 非目标
 
-不做 Session Effect P0、Generic Tool Cache、Vector Memory、完整 Schema Memory、统一 live-state TTL、LLM 长期总结、跨 Session 用户记忆或 PreviousRunOutcome 扩容。
+不做 Session Effect P0、Generic Tool Cache、Vector Memory、完整 Schema Memory、统一 live-state TTL、LLM 长期总结、跨 Session 用户记忆、PreviousRunOutcome 扩容或为 fail-soft 预先建设通用 Outbox Framework。

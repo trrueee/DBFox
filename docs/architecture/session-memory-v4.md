@@ -18,7 +18,7 @@ Memory v4 第一版只实现 Catalog Projection，直接从 canonical `ToolInvoc
 
 **P0 不增加 Session Effect storage/registry。** 当前 durable Invocation/Observation 已经保存 search/inspect/refresh 归约所需的信息，再写一份 Effect 会复制事实。
 
-Memory 不是事实源、执行恢复状态、Tool Cache 或模型自由书写的长期记忆。
+Memory 不是事实源、执行恢复状态、Tool Cache 或模型自由书写的长期记忆。**Memory/Projection failure 也不能反向阻止 canonical Run terminalization。**
 
 ## 2. 当前真实问题
 
@@ -59,7 +59,7 @@ later provider failure / user cancel
    actual model-visible input
 ```
 
-删除 Memory 不得删除事实，也不得影响同 Run crash recovery。
+删除 Memory 不得删除事实，也不得影响同 Run crash recovery。Derived projection 的错误最多降低 continuity；它不能改变一个 Run 是否已经真实 completed/failed/cancelled。
 
 ## 4. Memory envelope
 
@@ -144,7 +144,7 @@ catalog_revision
 
 现有 AI enrichment 有内部 commit/rollback 行为，实施 `catalog_revision` 前必须先把 transaction ownership 收敛为 caller-owned publication boundary。
 
-LLM enrichment 不应持有一个长写事务。推荐：
+LLM enrichment 不应持有一个长写事务：
 
 ```text
 read canonical schema snapshot/hash
@@ -212,7 +212,7 @@ Search query 保存在 `SearchFootprint`，并从 Invocation authorized input �
 
 ## 8. Catalog reducer
 
-Reducer 是纯函数，同一实现同时服务 terminal incremental fold 和 full rebuild。
+Reducer 是纯函数，同一实现同时服务 terminal incremental fold、lag catch-up 和 full rebuild。
 
 概念接口：
 
@@ -229,7 +229,7 @@ def fold_catalog(
 
 只处理 `Observation.status == succeeded`。
 
-### 8.1 增量算法
+### 8.1 正常增量算法
 
 Terminal Run 的 Observation 按 durable sequence 升序处理：
 
@@ -238,12 +238,11 @@ for succeeded observation in terminal Run:
     read observation execution-time catalog_revision
     if revision/generation/datasource differs from active scope:
         reset revision-scoped Catalog state
-    dispatch by registered catalog reducer semantics
+    dispatch by Data-owned reducer semantics
     merge searches / object footprints
 trim to policy bounds
 canonical sort
 hash
-persist
 ```
 
 Reducer 可以按 Tool name/version 识别现有 built-in Catalog Tool，但该识别只存在于 **Data-owned projector**，不进入 Kernel。
@@ -256,7 +255,25 @@ objects_by_key: dict[CatalogObjectKey, CatalogObjectState]
 
 这是 O(1) merge 的数据结构，不是第二个持久模型。
 
-### 8.2 Eviction
+### 8.2 Lag catch-up
+
+如果 Memory watermark 落后于当前 terminal Run：
+
+```text
+from = projected_through_session_sequence + 1
+to   = current terminal run.session_sequence
+```
+
+Projection Service 必须按 Session sequence 连续读取可归约 terminal Runs，并对每个 Run 调同一 fold 路径。
+
+- sequence 已经 terminal：fold；
+- sequence gap / 尚未 terminal：停止在 gap 前；
+- 不能直接把 watermark 跳到 `to`；
+- catch-up 成功后的状态必须与相同 cutoff 的 full rebuild hash 相等。
+
+正常健康路径仍是 `O(current terminal Run records + bounded state)`；发生 lag 时复杂度是 `O(records in catch-up gap + bounded state)`。
+
+### 8.3 Eviction
 
 Policy v1：
 
@@ -273,8 +290,6 @@ Object 超限时稳定排序优先保留：
 2. `last_source_sequence` 更新较新的对象；
 3. canonical object key 作为稳定 tie-breaker。
 
-然后保留前 32。
-
 Search 只保留最新 12，按 source sequence + observation ID 稳定排序。
 
 最终持久化 tuple 使用稳定顺序；不能依赖 dict insertion、wall clock、random 或未排序 SQL query。
@@ -289,7 +304,7 @@ failed
 cancelled
 ```
 
-都调用同一个 Session Memory projection service。
+都触发同一个 Session Memory projection boundary。
 
 基础规则：
 
@@ -301,23 +316,47 @@ cancelled
 
 同一 terminal Run 重复 apply 必须幂等。水位线使用 `projected_through_session_sequence`；同一个 sequence 不重复 fold。
 
-## 10. Terminal transaction
+## 10. Terminal 与 projection transaction boundary
 
-目标 transaction：
+Canonical terminal state 与 Memory 的权威性不同：
 
 ```text
-settle active durable children
-→ stage terminal Run/Plan/Message/Evidence state
-→ load current Memory row under lock
-→ apply same pure reducers for this Run
-→ upsert Memory v4
-→ append terminal Event
-→ commit
+Run / Message / Plan / Evidence / terminal Event
+  canonical
+
+Session Memory v4
+  derived / rebuildable
 ```
 
-Memory update 与 Run terminal publication 处在同一个 application transaction。
+推荐 application flow：
 
-如果 Memory projection 失败，terminal transaction 回滚，而不是提交 Run terminal 后留下 projection gap。
+```text
+settle/stage canonical terminal children
+→ load current Memory/watermark
+→ compute typed projection candidate in memory
+→ if candidate valid: stage Memory upsert + watermark advance
+→ if projection computation/contract fails: leave Memory untouched
+→ append terminal Event
+→ commit canonical transaction
+```
+
+### 10.1 Projection fail-soft
+
+Reducer exception、unsupported projection contract、derived-state validation failure：
+
+- **不能阻止 canonical Run terminalization**；
+- 不能修改 Memory row；
+- 不能推进 watermark；
+- 记录 fixed/redacted error + projection lag telemetry；
+- 后续 terminal projection 从旧 watermark catch up，或通过 rebuild/repair 恢复。
+
+这不是把错误静默吞掉：`projection_lag`、`strict_rebuild_incomplete_count` 和日志必须能暴露问题。
+
+### 10.2 数据库基础设施失败不是 fail-soft
+
+如果数据库 transaction/commit 本身失败，仍按当前 canonical persistence failure 处理。不要用 projection fail-soft 去吞掉 SQLite/ORM write failure。
+
+实现应先完成纯 reducer/typed validation，再 mutate Memory ORM row，尽量避免 derived contract error 把 SQLAlchemy transaction 标记为 rollback-only。
 
 同 Run recovery 仍只依赖 Run/Turn/Invocation/Observation/Approval/Question/Plan/lease，不依赖 Memory。
 
@@ -337,18 +376,19 @@ Full rebuild 只用于：
 read Session scope
 → iterate terminal Runs by session_sequence
 → for each Run load canonical Invocation + Observation + Artifact refs
-→ call the same reducer used by incremental fold
+→ call the same reducer used by incremental/catch-up
 → canonical serialize/hash
 ```
 
 复杂度：
 
 ```text
-incremental: O(current terminal Run canonical tool records + bounded state)
-full rebuild: O(Session canonical tool records)
+normal incremental: O(current terminal Run canonical tool records + bounded state)
+lag catch-up:       O(canonical records in lag gap + bounded state)
+full rebuild:       O(Session canonical tool records)
 ```
 
-不能让每次 terminal Run 扫描整个 Session。
+不能让健康路径每次 terminal Run 扫描整个 Session。
 
 ## 12. Prior Observation digest
 
@@ -398,7 +438,7 @@ rendered Session Working State <= 2,000 estimated tokens
 
 `ContextSnapshot.session_memory` 从 raw dict 迁为 typed context-facing model，但不把 persistence envelope 原样 dump 进 Prompt。
 
-渲染分为：
+P2 首版渲染：
 
 ```text
 SESSION_WORKING_STATE
@@ -406,6 +446,10 @@ SESSION_EVIDENCE_INDEX
 ```
 
 当前 Run native function-call/output transcript 与跨 Run Memory 分开预算，避免同一 observation 重复进入多个 lane。
+
+Projection 有 lag 时，Context 只能使用已经成功投影并通过当前 resource fence 的 state；lag 表示“可能缺少更新工作”，不能让旧 revision/generation 越过 freshness fence。
+
+当 Workspace 成为第二个真实跨 Run Context 来源后，再按 Umbrella RFC 从 Catalog + Workspace 提炼统一 bounded Context fragment contract；P2 不提前实现 Context plugin framework。
 
 ## 14. Result / Evidence / selected Artifact
 
@@ -426,7 +470,8 @@ fix Catalog publication transaction ownership
 add Memory v4 storage metadata
 keep v3 current path
 terminal path compute v4 shadow with canonical reducer
-compare incremental vs full rebuild
+projection failure leaves v4 watermark unchanged
+compare incremental/catch-up vs full rebuild
 v4 not yet injected into Prompt
 cut Context read path behind flag
 stop writing v3
@@ -464,8 +509,11 @@ updated_at
 - Result Artifact continuation；
 - selected Artifact 单一所有者；
 - 100 Run boundedness；
+- projection exception 不阻止 Run terminalization；
+- projection failure watermark 不前进；
+- later catch-up from old watermark；
+- catch-up/full rebuild equality；
 - delete/rebuild；
-- incremental/full rebuild equality；
 - missing Projector strict/degraded/migration。
 
-真正的成功标准是：**下一 Run 能继续已经成功完成的工作，同时 stale work 会可靠失效；不是仅仅新增了一张 Memory 表。**
+真正的成功标准是：**下一 Run 能继续已经成功完成的工作，同时 stale work 会可靠失效；Memory 出错也不能改变 canonical history。**
