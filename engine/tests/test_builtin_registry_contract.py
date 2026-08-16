@@ -53,7 +53,7 @@ class _EchoTool(BaseTool[_EchoInput, _EchoOutput]):
 
 
 FROZEN_MATERIALIZATION_HASH = (
-    "6ab515c454cba3867ef0de997869abe90ca8ea81b987e4830e82aa82f880ebac"
+    "b782aa7c0bf38065c9a3c342f0a3d774837f1c9422364194960effa08de41d82"
 )
 
 FROZEN_BUILTIN_NAMES = (
