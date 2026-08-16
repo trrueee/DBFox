@@ -12,7 +12,7 @@
 
 ## 1. 目的
 
-本规范定义扩展执行、安全、Artifact/wire compatibility 和缺失能力语义。目标是在不复制当前 ToolExecutor/ToolRuntime 职责的前提下，支持未来 isolated process、File、Terminal、API、MCP 等执行来源。
+本规范定义扩展执行、安全、Artifact/wire compatibility 和缺失能力语义。目标是在不复制当前 ToolExecutor/ToolRuntime 职责的前提下，支持未来 isolated process、File、Terminal、API、MCP、Remote Job 等能力。
 
 第一阶段 Extension 仍是受信任产品代码；普通子进程不是 hostile-code sandbox。
 
@@ -33,16 +33,33 @@ ToolRuntime
 
 后续不建立另一个 `ExecutionBackend` 再重复拥有 deadline、retry、output limit 和 recovery policy。
 
-### 2.1 AttemptRunner Strategy
+### 2.1 AttemptRunner Strategy 使用 serializable request
 
-当 `isolated_process` 真正实现时，在 `ToolExecutor` 内部抽“一次 attempt 如何执行”的 Strategy：
+`isolated_process` 不能以 Python `Callable`/closure 作为 Runner contract，因为 closure 会捕获 SQLAlchemy Session、request、authority 或其他进程内对象，无法形成稳定 worker wire。
+
+P5B resource seam 完成后定义最小 attempt value：
+
+```python
+class ToolAttemptRequest(BaseModel):
+    mode: Literal["execute", "reconcile"]
+    tool_name: str
+    frozen_tool_version: str
+    invocation: ToolInvocationContext
+    authorized_input: dict[str, JsonValue]
+    resource_grants: tuple[ExecutionResourceGrant, ...] = ()
+    attempt_timeout_ms: int
+```
+
+`ExecutionResourceGrant` 只有在 Database + Workspace 两个真实资源证明现有 ExecutionAuthority 不足时才存在；否则不为字段对称性创建空 Grant 层。
+
+Runner 接口概念上是：
 
 ```python
 class ToolAttemptRunner(Protocol):
     def run(
         self,
         *,
-        operation: ToolOperation,
+        request: ToolAttemptRequest,
         control: ToolExecutionControl,
     ) -> ToolResult: ...
 ```
@@ -54,22 +71,41 @@ InProcessAttemptRunner
 IsolatedProcessAttemptRunner
 ```
 
+父进程 `ToolExecutor` 仍是 deadline authority；`attempt_timeout_ms` 是基于剩余 deadline 产生的相对上限，worker 不能通过自己的时钟延长父级 deadline。
+
+### 2.2 Shared ToolAttemptHandler
+
+In-process 与 isolated worker 必须复用同一 handler 语义：
+
+```text
+ToolAttemptRequest
+→ verify frozen/current Tool contract
+→ resolve authorized resources
+→ ToolRuntime.execute / reconcile
+→ strict ToolResult
+```
+
+不允许实现一套 `run_in_process_tool()` 和另一套具有不同 validation/reconcile 语义的 `run_worker_tool()`。
+
 责任分配：
 
 | 层 | 负责 |
 | --- | --- |
 | ToolDispatcher | durable admission、Policy/Approval、running/settlement、UNKNOWN 语义 |
-| ToolExecutor | 总 deadline、retry loop、scope concurrency、cancel decision、attempt accounting |
-| AttemptRunner | 单次 attempt 的线程/进程 transport 和强制停止能力 |
-| ToolRuntime | Tool input/output contract、Tool implementation、reconcile output contract |
+| ToolExecutor | overall deadline、retry loop、scope concurrency、cancel decision、attempt accounting |
+| AttemptRunner | 单次 attempt 的 thread/process transport 与强制停止能力 |
+| ToolAttemptHandler | Tool contract verification、resource resolution、调用 ToolRuntime |
+| ToolRuntime | Tool input/output contract、implementation、reconcile output contract |
 
-这样 retry/recovery 只有一个 owner。
+这样 retry/recovery 只有一个 owner，execute/reconcile 也只有一条语义链。
 
 ## 3. In-process
 
-当前 in-process 继续只允许 Kernel allowlist capability。线程执行保持现有原则：数据库 Session 在 worker attempt 内创建，不跨线程复用 caller Session。
+当前 in-process 继续只允许 Kernel allowlist capability。数据库 Session 在 worker attempt 内创建，不跨线程复用 caller Session。
 
 Python 无法安全杀死已经运行的线程，因此当前 stuck-thread quarantine / retired pool 行为应保留；late result 不得提交成功状态。
+
+InProcessAttemptRunner 可以在 executor-owned thread 中调用 `ToolAttemptHandler(request)`，但 Runner 的公开 seam 仍然是 serializable request，而不是 closure。这保证后续 isolated runner 不要求再改 ToolExecutor API。
 
 ## 4. Isolated process
 
@@ -79,16 +115,32 @@ Python 无法安全杀死已经运行的线程，因此当前 stuck-thread quara
 
 ```text
 protocol version
-Tool ID / frozen contract version
-invocation identity
-validated authorized input
-resource grant values or opaque references
-attempt deadline
-structured Tool result
-Artifact drafts
+ToolAttemptRequest
+heartbeat / cancellation channel
+structured ToolResult
 bounded diagnostics
 worker exit status
 ```
+
+Worker 启动后：
+
+```text
+decode request
+→ validate protocol/schema
+→ verify current Tool contract == frozen_tool_version
+→ materialize only authorized resources
+→ invoke shared ToolAttemptHandler
+→ validate/encode ToolResult
+```
+
+禁止跨进程传输：
+
+- Python callable/closure；
+- SQLAlchemy Session；
+- DB connection；
+- HTTP client；
+- global application container；
+- plaintext Secret。
 
 如果未来真的引入 Session Effect，再在协议版本中增加，不为 P0 Catalog Memory 预留空字段。
 
@@ -109,30 +161,40 @@ worker exit status
 
 ## 5. Resource / capability boundary
 
-不要在 isolated backend 之前建设万能 Service Locator。
+不要在只有 Database 一种真实资源时建设万能 Service Locator。
 
-第一阶段保持现有 Database resource 方式。Workspace/File 作为第二种真实资源出现时再定义最小 resource resolver/grant contract。
+实施顺序：
+
+```text
+P5A real Workspace resource substrate
+→ P5B extract Database + Workspace common seam
+→ P6 use that seam in ToolAttemptRequest / worker
+→ P7 expose File Tool
+```
+
+这样避免“resource seam 等 File Tool，而 File Tool 又等 resource seam/isolated runner”的循环。
 
 要求：
 
 - invocation 中只保存 serializable scope identity；
-- 执行资源对象不进入 durable JSON；
-- Tool 只能拿到被授权的 scope；
+- execution resource object 不进入 durable JSON/wire；
+- Tool/handler 只能解析已授权 scope；
 - Secret 不作为普通 JSON 字段；
-- 没有 grant 时资源解析失败；
+- 没有 authorization 时资源解析失败；
 - 不注入整个 application container。
 
-如果引入 execution grant，使用 immutable value，直接绑定 invocation/input/scope/version/policy/approval/expiry。第一版不建立独立 grant table 或 `grant_id` lookup 链。
+如果引入 resource grant，使用 immutable value，直接绑定 invocation/input/scope/version/policy/approval/expiry。第一版不建立独立 grant table 或 `grant_id → lookup → materialize` 链。
 
 ## 6. API / MCP / Command 外部执行
 
-外部执行来源仍然是 Tool implementation 的一部分，不能绕过 DBFox durable Tool contract：
+外部执行来源仍然是 Tool contract 背后的实现策略，不能绕过 DBFox durable Tool lifecycle：
 
 ```text
 frozen Tool materialization
 → Policy / Approval
+→ ToolAttemptRequest
 → one execution attempt
-→ output validation
+→ strict output validation
 → durable Observation / Artifact settlement
 ```
 
@@ -203,7 +265,40 @@ subprocess.run(model_generated_string, shell=True)
 
 Generic Terminal 是独立高风险能力，不能伪装成“CommandBinding 的自由模式”。
 
-## 7. Filesystem
+## 7. Remote Job / long-running resource
+
+Runtime compatibility 不等价于所有任务都在一个 ToolInvocation 生命周期内完成。
+
+Spark/Flink/Airflow/Kubernetes/ML training 等长任务采用：
+
+```text
+submit Tool
+→ bounded submission Observation
+→ durable RemoteJobRef
+→ ToolInvocation settles
+→ Run may terminal
+
+later Run
+→ status/read/cancel Tool(RemoteJobRef)
+→ new Observation/Artifact
+```
+
+`RemoteJobRef` 是稳定引用 value，不自动成为通用 global table。至少包含：
+
+```text
+provider/capability ID
+resource kind
+external resource ID
+submission provenance
+contract/schema version
+resource scope/version if applicable
+```
+
+第一种 provider 可以把它放入 capability-owned Artifact payload 或已经必要的 provider-owned canonical state；只有至少两个真实 provider 证明需要统一可变 job aggregate 时，才评审通用 RemoteJob persistence。
+
+禁止在 RemoteJobRef 中保存 credential、完整 log、大结果或 execution authority。
+
+## 8. Filesystem
 
 Workspace File Tool 真正进入实现时必须绑定：
 
@@ -238,7 +333,7 @@ open under authorized root
 
 不得静默覆盖。worker crash 后如果无法证明 replace 是否完成，按 recovery contract reconcile/unknown。
 
-## 8. Network
+## 9. Network
 
 Network Tool/adapter 至少处理：
 
@@ -251,7 +346,7 @@ Network Tool/adapter 至少处理：
 
 网络返回内容只能进入 Kernel 指定的不可信 Context lane。
 
-## 9. Secret
+## 10. Secret
 
 Secret 永远不作为普通 JSON value 跨 Runtime 边界传播。
 
@@ -263,15 +358,16 @@ Observation facts
 Artifact payload
 Session Memory
 Event payload
+ToolAttemptRequest plain fields
 worker diagnostics
 MCP raw model-visible result
 ```
 
 执行位置通过 opaque credential reference/resolver 使用 Secret。写入持久化边界前执行固定 redaction/secret scan。
 
-## 10. Artifact compatibility
+## 11. Artifact compatibility
 
-Artifact wire 第一阶段保持字段名 `type`，新增 `schema_version`：
+Artifact wire 第一阶段保持字段名 `type`，新增独立 `schema_version`：
 
 ```text
 id
@@ -288,12 +384,29 @@ provenance
 relations
 ```
 
+数据库 expand migration 冻结为：
+
+```text
+schema_version INTEGER NOT NULL DEFAULT 1
+```
+
+已有行视为 schema v1；`Artifact.version` 不改语义。
+
+兼容读取规则：
+
+- 已知 legacy type 的历史 snapshot/wire 缺 `schema_version` → 仅按 v1 读取；
+- unknown historical type/version → preserve metadata/envelope + fallback；
+- 绝不把 unknown missing version 猜成 v1 的某个 payload contract；
+- compatibility window 内 built-in write boundary 可补 v1；
+- cutover 后新 Extension write 必须显式 schema version；
+- unknown new write reject。
+
 写入顺序：
 
 ```text
 Kernel envelope checks
 → validator[(type, schema_version)]
-→ persist
+→ persistence
 ```
 
 Kernel 固定负责：
@@ -307,9 +420,7 @@ Kernel 固定负责：
 
 新 Extension type 使用 namespaced ID。已有 `sql/result_view/chart/...` 继续作为 schema v1，避免纯命名迁移。
 
-未知历史 Artifact：保留并 fallback；未知新写入：拒绝。
-
-## 11. Completion safety
+## 12. Completion safety
 
 Extension completion constraint 只读 durable/context input，并只能返回：
 
@@ -339,7 +450,7 @@ Constraint 不得：
 
 第一阶段使用 immutable constraint tuple；只有真实动态启停需求出现后才需要独立 Registry。
 
-## 12. Projection compatibility
+## 13. Projection / Context compatibility
 
 Memory compatibility 是 per-projection contract，不是全局 Tool Registry hash。
 
@@ -357,20 +468,23 @@ state_hash
 
 缺 Projector 时：
 
-- normal read：现有 projection 可保留但不注入 Prompt；
+- normal read：现有 projection 可保留；只有通过当前 resource fence 的已成功 state 才能参与 Context；
 - strict rebuild：incomplete，不覆盖；
 - drop：必须显式 migration/tombstone。
 
-## 13. Version mismatch
+当 Catalog + Workspace 两个真实 Context 来源都存在后，提炼 bounded Context fragment seam。Fragment 只能选择 Kernel allowlist lane，不能控制 system role、最终 priority、budget 或 Provider wire；PromptAssembler 仍是唯一 Provider-input owner。
+
+## 14. Version mismatch
 
 - Turn 使用 frozen Tool materialization；
 - 未执行时实现/contract 变化 → version changed；
 - 已开始且 outcome 无法证明 → UNKNOWN；
 - reconcile 只证明旧 action outcome，不隐式授权 replay；
 - historical unknown Artifact/Projection 保留 envelope；
-- 不猜测未知 schema compatibility。
+- 不猜测未知 schema compatibility；
+- worker 必须在执行 request 前验证 frozen/current Tool contract。
 
-## 14. 测试矩阵
+## 15. 测试矩阵
 
 ### Runtime
 
@@ -380,7 +494,10 @@ state_hash
 - retry/reconcile/unknown；
 - late result；
 - stuck-thread quarantine；
-- isolated worker crash / malformed frame / process-tree kill。
+- AttemptRequest serialization；
+- in-process/isolated shared handler parity；
+- isolated worker crash / malformed frame / process-tree kill；
+- worker contract mismatch。
 
 ### External
 
@@ -388,7 +505,8 @@ state_hash
 - API redirect/network policy；
 - Command argv 不接受 arbitrary shell string；
 - stdout/stderr/output size bound；
-- Secret 不泄露。
+- Secret 不泄露；
+- Remote Job submit settles invocation and later status reuses durable ref。
 
 ### Filesystem
 
@@ -400,12 +518,13 @@ state_hash
 
 ### Compatibility
 
-- legacy Artifact v1；
+- legacy Artifact v1 without wire schema_version；
 - unknown Artifact fallback；
 - missing Projector strict rebuild；
 - existing Tool materialization parity；
-- legacy semantic capability compatibility。
+- legacy semantic capability compatibility；
+- new Context contributor cannot choose privileged role/priority。
 
-## 15. 非目标
+## 16. 非目标
 
-不做 hostile-code sandbox、动态 Extension Host、任意网络代理、任意命令执行、Secret 直传、通用 Artifact relation graph、自动兼容未知 schema、第二套 retry engine 或第二套 Agent Runtime。
+不做 hostile-code sandbox、动态 Extension Host、任意网络代理、任意命令执行、Secret 直传、通用 Artifact relation graph、自动兼容未知 schema、第二套 retry engine、第二套 Agent Runtime、预先建设通用 Remote Job database 或万能 Context plugin framework。
