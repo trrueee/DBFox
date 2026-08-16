@@ -40,13 +40,14 @@ def _run(
     sequence: int,
     status: str = "completed",
     lease_token: int = 1,
+    datasource_generation: int = 1,
 ) -> AgentRun:
     run = AgentRun(
         id=run_id,
         session_id=session_id,
         session_sequence=sequence,
         datasource_id=datasource_id,
-        datasource_generation=1,
+        datasource_generation=datasource_generation,
         question="test",
         status=status,
         lease_token=lease_token,
@@ -164,6 +165,58 @@ def test_terminal_run_folds_into_shadow_memory_v4(
     second = project_session_memory(db_session, session.id, 1)
     db_session.commit()
     assert second.projected_through_session_sequence == 1
+
+
+def test_resource_generation_transition_resets_catalog_working_state(
+    db_session,
+    test_datasource,
+) -> None:
+    session = _session(db_session, str(test_datasource.id), session_id="session-v4-generation")
+    _run(
+        db_session,
+        session.id,
+        datasource_id=str(test_datasource.id),
+        run_id="run-v4-generation-1",
+        sequence=1,
+        datasource_generation=1,
+    )
+    _catalog_search_records(
+        db_session,
+        run_id="run-v4-generation-1",
+        session_id=session.id,
+        revision=1,
+    )
+    _run(
+        db_session,
+        session.id,
+        datasource_id=str(test_datasource.id),
+        run_id="run-v4-generation-2",
+        sequence=2,
+        datasource_generation=2,
+    )
+    db_session.commit()
+
+    outcome = project_session_memory(db_session, session.id, 2)
+    db_session.commit()
+
+    assert outcome.projected_through_session_sequence == 2
+    row = db_session.query(AgentSessionMemory).filter_by(session_id=session.id).one()
+    projection = next(
+        item
+        for item in json.loads(row.memory_v4_json)["projections"]
+        if item["projection_id"] == "dbfox.catalog.working_state"
+    )
+    assert projection["scope"] == {
+        "datasource_id": str(test_datasource.id),
+        "datasource_generation": 2,
+        "catalog_revision": 0,
+    }
+    assert projection["state"]["objects"] == []
+    assert projection["state"]["searches"] == []
+
+    compare = rebuild_session_memory(db_session, session.id, mode="compare")
+    assert compare.complete is True
+    assert compare.matches is True
 
 
 def test_projection_stops_at_a_sequence_gap(

@@ -370,6 +370,58 @@ def test_projection_envelope_and_memory_state_are_typed_and_hashable() -> None:
     assert len(envelope.state_hash) == 64
 
 
+def test_prior_search_hit_only_promotes_its_own_candidate_keys() -> None:
+    orders = CatalogObjectKey(
+        kind="table",
+        schema_name="main",
+        table_name="orders",
+    )
+    states = [CatalogObjectState(
+        key=orders,
+        first_seen_observation_id="obs_orders",
+        last_seen_observation_id="obs_orders",
+        last_source_sequence=0,
+        catalog_revision=1,
+    )]
+    for index in range(1, MAX_PRIOR_DIGEST_OBJECTS + 1):
+        key = CatalogObjectKey(
+            kind="table",
+            schema_name="main",
+            table_name=f"other_{index:02d}",
+        )
+        states.append(CatalogObjectState(
+            key=key,
+            first_seen_observation_id=f"obs_{key.table_name}",
+            last_seen_observation_id=f"obs_{key.table_name}",
+            last_source_sequence=index,
+            catalog_revision=1,
+        ))
+    from engine.agent.memory_v4 import SearchFootprint
+
+    state = CatalogWorkingState(
+        objects=tuple(states),
+        searches=(
+            SearchFootprint(
+                invocation_id="inv_orders",
+                observation_id="obs_search_orders",
+                input_hash="input-orders",
+                queries=("orders",),
+                candidate_keys=(orders,),
+                returned_count=1,
+                catalog_revision=1,
+                source_sequence=1,
+            ),
+        ),
+    )
+
+    selected = select_prior_catalog_objects(
+        state,
+        current_request="请分析 orders 的汇总",
+    )
+    assert len(selected) == MAX_PRIOR_DIGEST_OBJECTS
+    assert selected[0].key.table_name == "orders"
+
+
 def test_prior_object_selection_prefers_explicit_request_identity() -> None:
     keys = []
     for index in range(MAX_PRIOR_DIGEST_OBJECTS + 2):

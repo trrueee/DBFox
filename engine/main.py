@@ -86,6 +86,8 @@ async def lifespan(application: FastAPI) -> Any:
     try:
         _emit_startup_stage(startup_stage)
         initialize_metadata_database()
+        from engine.agent.artifact import freeze_artifact_payload_contracts
+        freeze_artifact_payload_contracts()
 
         from engine.security.credential_lease import reconcile_credential_leases
         reconcile_credential_leases(SessionLocal)

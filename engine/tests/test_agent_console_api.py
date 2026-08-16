@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 import engine.agent.console as console_module
 import engine.api.agent as agent_module
-from engine.models import AgentArtifactRecord, AgentEventRecord, AgentRun, DataSource
+from engine.models import AgentArtifactRecord, AgentEventRecord, AgentRun, AgentSessionMemory, DataSource
 from engine.sql.trust_gate import ExecutionSafetyDecision
 
 
@@ -87,6 +87,10 @@ def test_console_execute_persists_sql_backed_artifact_chain(monkeypatch, db_sess
     )
     monkeypatch.setattr(console_module, "execute_query", fake_execute_query)
 
+    # Production SessionLocal is configured with autoflush=False; the console
+    # path must still create exactly one AgentSessionMemory row before the v4
+    # shadow projection runs.
+    db_session.autoflush = False
     response = execute_api(
         request_model(
             datasourceId="ds-console",
@@ -104,6 +108,12 @@ def test_console_execute_persists_sql_backed_artifact_chain(monkeypatch, db_sess
     assert response.resultArtifactId
     assert response.warnings == ["preview warning"]
     assert response.notices == ["preview notice"]
+    memory_rows = (
+        db_session.query(AgentSessionMemory)
+        .filter(AgentSessionMemory.session_id == "console-session")
+        .all()
+    )
+    assert len(memory_rows) == 1
 
     records = (
             db_session.query(AgentArtifactRecord)

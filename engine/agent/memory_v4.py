@@ -178,10 +178,11 @@ def select_prior_catalog_objects(
     """
 
     request = current_request.casefold()
-    query_terms = {
-        query.casefold()
+    hit_keys = {
+        candidate.canonical_tuple
         for footprint in state.searches
-        for query in footprint.queries
+        if any(query.casefold() in request for query in footprint.queries)
+        for candidate in footprint.candidate_keys
     }
 
     def request_rank(item: CatalogObjectState) -> tuple[int, int, int, tuple[str, str, str, str]]:
@@ -199,9 +200,7 @@ def select_prior_catalog_objects(
         explicit_identity = any(
             term.casefold() in request for term in identity_terms
         )
-        search_hit = any(
-            term in request for term in query_terms
-        )
+        search_hit = item.key.canonical_tuple in hit_keys
         inspected = 0 if item.last_inspected_observation_id is not None else 1
         return (
             0 if explicit_identity or search_hit else 1,

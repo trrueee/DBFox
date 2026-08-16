@@ -872,6 +872,10 @@ class RunRepository:
             row.memory_json = _json(memory)
             row.updated_at = _utcnow()
         aggregate.context_epoch = int(aggregate.context_epoch or 0) + 1
+        # Production sessions run with autoflush=False. Flush the v3 row now
+        # so the immediately following v4 shadow projection observes it via
+        # the database query instead of adding a second unique session row.
+        self.session.flush()
 
     @staticmethod
     def _require_lease(run: AgentRun, lease: SessionLease) -> None:

@@ -7,12 +7,10 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.agent.context import ContextSnapshot
-from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from engine.agent.evidence import citation_references, has_invalid_citation_syntax
 from engine.agent.turn import ModelTurnResult
-from engine.tools.runtime.semantics import ToolSemanticCapability
 
 
 class CompletionKind(StrEnum):
@@ -52,57 +50,23 @@ class CompletionConstraint(Protocol):
     ) -> CompletionConstraintResult: ...
 
 
-@dataclass(frozen=True)
-class DataResultCitationConstraint:
-    """Data-owned citation rule.
+class CompletionSupport(Protocol):
+    """Domain contribution for what counts as durable partial/evidence work.
 
-    A query-result answer must cite an observed result Artifact inline. The
-    constraint can only add requirements; it cannot bypass pending work,
-    approval, citation ownership or budget.
+    Core completion only composes the support decision; it never imports a
+    concrete tool capability or Artifact family.
     """
 
-    id: str = "dbfox.data.result_citation"
+    id: str
 
-    def evaluate(
+    def evidence_artifact_ids(
         self,
         *,
         context: ContextSnapshot,
         model_result: ModelTurnResult,
-    ) -> CompletionConstraintResult:
-        result_observations = [
-            item
-            for item in context.observations
-            if item.status == "succeeded"
-            and ToolSemanticCapability.QUERY_RESULT.value in item.capabilities
-        ]
-        if not result_observations:
-            return CompletionConstraintResult(
-                kind="pass",
-                reason="No query-result observations require citation.",
-            )
-        result_artifact_ids = {
-            artifact_id
-            for observation in result_observations
-            for artifact_id in observation.artifact_ids
-        }
-        cited_artifact_ids = {
-            artifact_id
-            for artifact_id, _, _ in citation_references(model_result.answer_text)
-        }
-        supported = cited_artifact_ids & result_artifact_ids
-        if supported:
-            return CompletionConstraintResult(
-                kind="pass",
-                reason="The answer cites observed result Artifacts.",
-            )
-        return CompletionConstraintResult(
-            kind="missing",
-            reason=(
-                "An answer based on query results must cite an observed "
-                "result Artifact inline."
-            ),
-            requirements=["inline_evidence"],
-        )
+    ) -> list[str]: ...
+
+    def supports_bounded_partial(self, *, context: ContextSnapshot) -> bool: ...
 
 
 class CompletionPolicy:
@@ -111,12 +75,19 @@ class CompletionPolicy:
     def __init__(
         self,
         constraints: tuple[CompletionConstraint, ...] | None = None,
+        support: CompletionSupport | None = None,
     ) -> None:
+        from engine.agent.completion_defaults import (
+            default_completion_constraints,
+            default_completion_support,
+        )
+
         self.constraints = (
-            (DataResultCitationConstraint(),)
+            default_completion_constraints()
             if constraints is None
             else constraints
         )
+        self.support = support or default_completion_support()
 
     def evaluate(
         self,
@@ -134,15 +105,12 @@ class CompletionPolicy:
 
         successes = [item for item in context.observations if item.status == "succeeded"]
         failures = [item for item in context.observations if item.status == "failed"]
-        result_observations = [
-            item for item in successes
-            if ToolSemanticCapability.QUERY_RESULT.value in item.capabilities
-        ]
-        result_artifact_ids = {
-            artifact_id
-            for observation in result_observations
-            for artifact_id in observation.artifact_ids
-        }
+        result_artifact_ids = set(
+            self.support.evidence_artifact_ids(
+                context=context,
+                model_result=model_result,
+            )
+        )
         cited_artifact_ids = {
             artifact_id
             for artifact_id, _, _ in citation_references(model_result.answer_text)
@@ -303,14 +271,7 @@ class CompletionPolicy:
                 return decision.model_copy(update={"reason": reason})
             return decision
 
-        result_artifact_ids = [
-            artifact_id
-            for observation in context.observations
-            if observation.status == "succeeded"
-            and ToolSemanticCapability.QUERY_RESULT.value in observation.capabilities
-            for artifact_id in observation.artifact_ids
-        ]
-        if result_artifact_ids:
+        if self.support.supports_bounded_partial(context=context):
             return CompletionDecision(
                 kind=CompletionKind.PARTIAL,
                 reason=reason,

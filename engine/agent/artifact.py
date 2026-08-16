@@ -187,12 +187,85 @@ class ChartArtifactPayload(BaseModel):
     title: str | None = None
 
 
-_PAYLOAD_VALIDATORS: dict[tuple[str, int], type[BaseModel]] = {
-    (ArtifactType.SQL.value, 1): SqlArtifactPayload,
-    (ArtifactType.SAFETY.value, 1): SafetyArtifactPayload,
-    (ArtifactType.RESULT_VIEW.value, 1): ResultViewArtifactPayload,
-    (ArtifactType.CHART.value, 1): ChartArtifactPayload,
-}
+class ArtifactPayloadContractRegistry:
+    """Direct registrar for concrete Artifact payload contracts.
+
+    New write types register one ``(type, schema_version)`` key without any
+    Manager/Factory indirection. ``freeze()`` makes the registry immutable for
+    the rest of the process.
+    """
+
+    def __init__(self) -> None:
+        self._contracts: dict[tuple[str, int], type[BaseModel]] = {}
+        self._frozen = False
+
+    @property
+    def frozen(self) -> bool:
+        return self._frozen
+
+    def register(
+        self,
+        artifact_type: str,
+        schema_version: int,
+        validator: type[BaseModel],
+    ) -> "ArtifactPayloadContractRegistry":
+        if self._frozen:
+            raise RuntimeError("Artifact payload contracts are frozen.")
+        normalized_type = validate_artifact_type(artifact_type)
+        if int(schema_version) < 1:
+            raise ValueError("Artifact schema_version must be >= 1")
+        if not isinstance(validator, type) or not issubclass(validator, BaseModel):
+            raise TypeError("Artifact payload validator must be a BaseModel subclass")
+        key = (normalized_type, int(schema_version))
+        if key in self._contracts:
+            raise ValueError(
+                f"Artifact payload contract is already registered: "
+                f"{normalized_type} v{schema_version}"
+            )
+        self._contracts[key] = validator
+        return self
+
+    def get(
+        self,
+        artifact_type: str,
+        schema_version: int,
+    ) -> type[BaseModel] | None:
+        return self._contracts.get((str(artifact_type), int(schema_version)))
+
+    def snapshot(self) -> dict[tuple[str, int], type[BaseModel]]:
+        return dict(self._contracts)
+
+    def freeze(self) -> "ArtifactPayloadContractRegistry":
+        self._frozen = True
+        return self
+
+
+artifact_payload_contracts = ArtifactPayloadContractRegistry()
+
+
+def register_artifact_payload_contract(
+    artifact_type: str,
+    schema_version: int,
+    validator: type[BaseModel],
+) -> ArtifactPayloadContractRegistry:
+    """Register a concrete Artifact payload write contract before startup freeze."""
+
+    return artifact_payload_contracts.register(
+        artifact_type,
+        schema_version,
+        validator,
+    )
+
+
+def freeze_artifact_payload_contracts() -> ArtifactPayloadContractRegistry:
+    return artifact_payload_contracts.freeze()
+
+
+register_artifact_payload_contract(ArtifactType.SQL.value, 1, SqlArtifactPayload)
+register_artifact_payload_contract(ArtifactType.SAFETY.value, 1, SafetyArtifactPayload)
+register_artifact_payload_contract(ArtifactType.RESULT_VIEW.value, 1, ResultViewArtifactPayload)
+register_artifact_payload_contract(ArtifactType.CHART.value, 1, ChartArtifactPayload)
+
 _RESULT_VALUE_KEYS = frozenset({"rows", "previewRows", "preview_rows", "series"})
 
 
@@ -212,7 +285,7 @@ def validate_artifact_payload(
 
     _reject_result_values(payload)
     candidate = str(artifact_type)
-    model = _PAYLOAD_VALIDATORS.get((candidate, int(schema_version)))
+    model = artifact_payload_contracts.get(candidate, int(schema_version))
     if model is not None:
         return model.model_validate(payload).model_dump(
             mode="json",
@@ -220,6 +293,10 @@ def validate_artifact_payload(
             exclude_none=False,
         )
     if candidate in _KNOWN_ARTIFACT_TYPES:
+        if allow_unknown:
+            # Historical reads may meet a future schema_version of a known
+            # type. Keep the envelope instead of guessing a newer contract.
+            return dict(payload)
         raise ValueError(
             f"Artifact type {candidate!r} has no payload contract at "
             f"schema_version={schema_version}"

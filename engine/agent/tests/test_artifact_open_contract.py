@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import BaseModel, Field
 
 from engine.agent.artifact import (
     ArtifactDraft,
+    ArtifactPayloadContractRegistry,
     ArtifactType,
+    register_artifact_payload_contract,
     validate_artifact_payload,
     validate_artifact_type,
 )
@@ -26,6 +29,53 @@ def test_new_extension_type_must_be_namespaced() -> None:
     )
     with pytest.raises(ValueError, match="namespaced"):
         validate_artifact_type("code_patch")
+
+
+def test_known_type_with_unknown_future_version_is_soft_on_read() -> None:
+    payload = {"sql": "SELECT 1", "futureField": True}
+    assert validate_artifact_payload(
+        "sql",
+        payload,
+        schema_version=2,
+        allow_unknown=True,
+    ) == payload
+    with pytest.raises(ValueError, match="schema_version=2"):
+        validate_artifact_payload("sql", payload, schema_version=2)
+
+
+def test_artifact_payload_registry_registers_directly_and_freezes() -> None:
+    class CodePatchPayload(BaseModel):
+        path: str = Field(min_length=1)
+        content_hash: str | None = None
+
+    registry = ArtifactPayloadContractRegistry()
+    registry.register("dbfox.workspace.code_patch", 1, CodePatchPayload)
+    assert registry.get("dbfox.workspace.code_patch", 1) is CodePatchPayload
+    with pytest.raises(ValueError, match="already registered"):
+        registry.register("dbfox.workspace.code_patch", 1, CodePatchPayload)
+
+    registry.freeze()
+    assert registry.frozen is True
+    with pytest.raises(RuntimeError, match="frozen"):
+        registry.register("dbfox.workspace.code_patch", 2, CodePatchPayload)
+
+
+def test_registered_extension_payload_can_be_written_without_core_changes() -> None:
+    class CodePatchPayload(BaseModel):
+        path: str = Field(min_length=1)
+        content_hash: str | None = None
+
+    register_artifact_payload_contract(
+        "dbfox.workspace.code_patch",
+        1,
+        CodePatchPayload,
+    )
+    payload = validate_artifact_payload(
+        "dbfox.workspace.code_patch",
+        {"path": "src/app.py"},
+        schema_version=1,
+    )
+    assert payload["path"] == "src/app.py"
 
 
 def test_known_payload_contract_uses_schema_version_1() -> None:

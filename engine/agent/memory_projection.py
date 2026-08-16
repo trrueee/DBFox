@@ -74,19 +74,42 @@ class RebuildOutcome(BaseModel):
     reason: str | None = None
 
 
+def _run_scope(
+    run: AgentRun,
+    state: CatalogWorkingState,
+    scope: CatalogProjectionScope,
+) -> tuple[CatalogWorkingState, CatalogProjectionScope]:
+    run_datasource_id = str(run.datasource_id)
+    run_generation = int(run.datasource_generation or 0)
+    if scope.datasource_id == "":
+        return state, CatalogProjectionScope(
+            datasource_id=run_datasource_id,
+            datasource_generation=run_generation,
+            catalog_revision=0,
+        )
+    if (
+        scope.datasource_id != run_datasource_id
+        or scope.datasource_generation != run_generation
+    ):
+        # A resource-generation transition invalidates every object from the
+        # previous generation even when the new Run contains no Catalog
+        # observation at all. The next Catalog observation still refreshes the
+        # catalog_revision below.
+        return CatalogWorkingState(), CatalogProjectionScope(
+            datasource_id=run_datasource_id,
+            datasource_generation=run_generation,
+            catalog_revision=0,
+        )
+    return state, scope
+
+
 def _fold_terminal_sequence(
     db: Session,
     run: AgentRun,
     state: CatalogWorkingState,
     scope: CatalogProjectionScope,
 ) -> CatalogFoldResult:
-    current_scope = scope
-    if current_scope.datasource_id == "":
-        current_scope = CatalogProjectionScope(
-            datasource_id=str(run.datasource_id),
-            datasource_generation=int(run.datasource_generation or 0),
-            catalog_revision=0,
-        )
+    state, current_scope = _run_scope(run, state, scope)
     folded = CatalogFoldResult(state=state, scope=current_scope)
     try:
         for invocation, observation in _run_observation_pairs(db, str(run.id)):
@@ -117,11 +140,21 @@ def project_session_memory(
     row untouched.
     """
 
-    row = db.execute(
-        select(AgentSessionMemory).where(
-            AgentSessionMemory.session_id == session_id
-        )
-    ).scalar_one_or_none()
+    row = next(
+        (
+            pending
+            for pending in db.new
+            if isinstance(pending, AgentSessionMemory)
+            and str(pending.session_id) == session_id
+        ),
+        None,
+    )
+    if row is None:
+        row = db.execute(
+            select(AgentSessionMemory).where(
+                AgentSessionMemory.session_id == session_id
+            )
+        ).scalar_one_or_none()
     memory = _load_memory_v4(row)
     state, scope, watermark = _catalog_projection(memory)
 
