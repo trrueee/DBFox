@@ -202,6 +202,7 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
             sha256=snapshot.sha256,
             readable_chars=len(snapshot.content),
         )
+        workspace_scope = context.scope("workspace")
         artifact = ArtifactDraft(
             key="snapshot",
             type="dbfox.workspace.file_snapshot",
@@ -212,16 +213,8 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
                 "sizeBytes": snapshot.size_bytes,
                 "sha256": snapshot.sha256,
                 "truncated": snapshot.truncated,
-                "workspaceId": (
-                    str(context.scope("workspace").id)
-                    if context.scope("workspace") is not None
-                    else ""
-                ),
-                "workspaceVersion": (
-                    str(context.scope("workspace").version)
-                    if context.scope("workspace") is not None
-                    else ""
-                ),
+                "workspaceId": str(workspace_scope.id) if workspace_scope else "",
+                "workspaceVersion": str(workspace_scope.version) if workspace_scope else "",
             },
             summary=f"Read {snapshot.size_bytes} bytes from {snapshot.relative_path}",
             semantic_key=f"file_read:{snapshot.sha256}",
@@ -319,6 +312,7 @@ class WorkspaceFileWritePatchTool(
             size_bytes=result.size_bytes,
             created=result.created,
         )
+        workspace_scope = context.scope("workspace")
         artifact = ArtifactDraft(
             key="patch",
             type="dbfox.workspace.code_patch",
@@ -330,16 +324,8 @@ class WorkspaceFileWritePatchTool(
                 "newSha256": result.new_sha256,
                 "sizeBytes": result.size_bytes,
                 "created": result.created,
-                "workspaceId": (
-                    str(context.scope("workspace").id)
-                    if context.scope("workspace") is not None
-                    else ""
-                ),
-                "workspaceVersion": (
-                    str(context.scope("workspace").version)
-                    if context.scope("workspace") is not None
-                    else ""
-                ),
+                "workspaceId": str(workspace_scope.id) if workspace_scope else "",
+                "workspaceVersion": str(workspace_scope.version) if workspace_scope else "",
             },
             summary=f"Replaced {result.size_bytes} bytes in {result.relative_path}",
             semantic_key=f"file_write_patch:{result.new_sha256}",

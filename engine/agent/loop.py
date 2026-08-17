@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from functools import partial
 from threading import Event
 from typing import Any, Literal, Protocol
 
@@ -699,16 +700,17 @@ class RunLoop:
 
         for batch in batches:
             if len(batch) > 1:
+                def run_parallel_entry(invocation: Any) -> Any:
+                    return self.tool_dispatcher.execute_requested_unsettled(
+                        lease,
+                        invocation,
+                        control=state.control,
+                    )
+
                 completed_attempts = self.tool_executor.execute_batch(
                     tasks=[
                         ToolExecutionTask(
-                            operation=lambda invocation=entry.invocation: (
-                                self.tool_dispatcher.execute_requested_unsettled(
-                                    lease,
-                                    invocation,
-                                    control=state.control,
-                                )
-                            )
+                            operation=partial(run_parallel_entry, entry.invocation)
                         )
                         for entry in batch
                     ],

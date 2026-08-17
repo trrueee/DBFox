@@ -111,8 +111,8 @@ def _normalize_chat_completion_usage(usage: Any) -> dict[str, int] | None:
             normalized["prompt_tokens"] = input_tokens
         if isinstance(output_tokens, int):
             normalized["completion_tokens"] = output_tokens
-        if all(isinstance(token, int) for token in (input_tokens, output_tokens)):
-            normalized["total_tokens"] = int(input_tokens) + int(output_tokens)
+        if isinstance(input_tokens, int) and isinstance(output_tokens, int):
+            normalized["total_tokens"] = input_tokens + output_tokens
     return normalized or None
 
 
@@ -601,6 +601,16 @@ class _ChatCompletionEventTranslator:
 
             self._mark_terminal(choice)
 
+    def failed_stream_item(self, failure: _ProviderFailure) -> TurnStreamItem:
+        return self._emit(
+            TurnStreamKind.ERROR,
+            "error",
+            error_code=failure.code,
+            error_message=failure.message,
+            error_retryable=failure.retryable,
+            retry_after_seconds=failure.retry_after_seconds,
+        )
+
     def finalize(self) -> Iterator[TurnStreamItem]:
         if not self.terminal:
             yield self._emit(
@@ -838,7 +848,9 @@ class OpenAIModelAdapter:
         if timeout_seconds is not None:
             request["timeout"] = max(0.01, timeout_seconds)
 
-        translator = _ResponsesEventTranslator()
+        translator: _ResponsesEventTranslator | _ChatCompletionEventTranslator = (
+            _ResponsesEventTranslator()
+        )
         runner = asyncio.Runner()
         events: AsyncIterator[Any] | None = None
         try:

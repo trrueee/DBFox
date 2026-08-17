@@ -202,9 +202,6 @@ class ToolExecutor:
                 return None
             pool = self._pool
             future: Future[TResult] = pool.submit(operation)
-            self._future_pools[future] = pool
-            self._pool_futures.setdefault(pool, set()).add(future)
-            future.add_done_callback(self._future_finished)
             return future
 
     def _await(

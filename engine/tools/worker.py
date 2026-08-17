@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 import traceback
-from typing import Any
+from typing import Any, cast
 
 from engine.tools.builtin.registry import (
     register_conversation_functions,
@@ -24,6 +24,7 @@ from engine.tools.runtime import ToolRegistry
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
     ResourceScopeRef,
+    ScopedResourceResolver,
     ToolAttemptRequest,
 )
 from engine.tools.runtime.handler import ToolAttemptHandler
@@ -71,8 +72,8 @@ def build_worker_resolver() -> CompositeResourceResolver:
             raise ValueError("Workspace scope is missing its authorized root")
         return WorkspaceReadService(ref.location)
 
-    resolver.register("database", resolve_database)
-    resolver.register("workspace", resolve_workspace)
+    resolver.register("database", cast(ScopedResourceResolver, resolve_database))
+    resolver.register("workspace", cast(ScopedResourceResolver, resolve_workspace))
     return resolver.freeze()
 
 

@@ -62,7 +62,8 @@ def _latest_job_row(
 
 def _artifact_payload(row: AgentArtifactRecord) -> dict:
     try:
-        return dict(loads(str(row.payload_json or "{}")))
+        value = loads(str(row.payload_json or "{}"))
+        return dict(value) if isinstance(value, dict) else {}
     except JsonCodecError:
         return {}
 

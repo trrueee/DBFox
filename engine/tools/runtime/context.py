@@ -15,6 +15,7 @@ class ToolInvocationRequest(Protocol):
     question: str
     session_id: str
     run_id: str
+    turn_id: str
     execution_id: str
 
 class ToolRunContext(BaseModel):

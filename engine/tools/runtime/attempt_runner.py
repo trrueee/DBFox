@@ -183,13 +183,15 @@ class IsolatedProcessAttemptRunner:
         }
         try:
             payload = encode_frame(handshake) + b"\n" + encode_frame(request_frame) + b"\n"
-            process.stdin.write(payload)
-            process.stdin.flush()
+            if process.stdin is not None:
+                process.stdin.write(payload)
+                process.stdin.flush()
         except (BrokenPipeError, OSError):
             pass
         finally:
             try:
-                process.stdin.close()
+                if process.stdin is not None:
+                    process.stdin.close()
             except OSError:
                 pass
 
@@ -318,7 +320,11 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
             pass
     else:
         try:
-            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            killpg = getattr(os, "killpg", None)
+            getpgid = getattr(os, "getpgid", None)
+            sigkill = getattr(signal, "SIGKILL", None)
+            if callable(killpg) and callable(getpgid) and sigkill is not None:
+                killpg(getpgid(process.pid), sigkill)
         except (ProcessLookupError, PermissionError, OSError):
             pass
     try:
