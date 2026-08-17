@@ -23,6 +23,7 @@ class AttemptInvocationRequest:
     question: str
     session_id: str
     run_id: str
+    turn_id: str
     execution_id: str
 
 
@@ -36,6 +37,7 @@ def _database_scope_request(request: ToolAttemptRequest) -> AttemptInvocationReq
         question=f"Isolated tool attempt {request.tool_name}",
         session_id=request.invocation.session_id,
         run_id=request.invocation.run_id,
+        turn_id=request.invocation.turn_id,
         execution_id=f"attempt:{request.invocation.invocation_id}",
     )
 
