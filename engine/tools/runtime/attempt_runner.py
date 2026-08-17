@@ -272,7 +272,12 @@ class IsolatedProcessAttemptRunner:
             "stderr": subprocess.PIPE,
         }
         if os.name == "nt":
-            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", None)
+            if not isinstance(creationflags, int):
+                # Do not start a Windows worker without the process group that
+                # makes timeout/cancellation tree termination safe.
+                return None
+            kwargs["creationflags"] = creationflags
         else:
             kwargs["start_new_session"] = True
         try:
