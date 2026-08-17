@@ -13,6 +13,7 @@ from scripts.agentbench.memory_paired import (
     run_memory_paired,
 )
 from scripts.agentbench.reporting import MemoryTrialEvidence, TrialRecord
+from scripts.agentbench.runtime import _classify_memory_evidence, _prior_run_preflight_error
 from scripts.agentbench.schema import load_manifest
 from scripts.agentbench.scoring import correction_obeyed, task_correct, TrialScore, TrialTrace
 from scripts.agentbench.schema import Verdict
@@ -20,6 +21,11 @@ from scripts.agentbench.schema import Verdict
 
 DATASET = Path("scripts/agentbench/datasets/memory-v1.json")
 CANDIDATE_DATASET = Path("scripts/agentbench/datasets/memory-candidate-v1.json")
+
+
+class _RunStatus:
+    def __init__(self, status: str) -> None:
+        self.status = status
 
 
 def _record(
@@ -190,6 +196,32 @@ def test_memory_paired_rejects_missing_evidence(tmp_path: Path) -> None:
     )
     assert exit_code == 1
     assert summary["stopped_reason"] == "invalid_child_evidence"
+
+
+def test_memory_preflight_requires_only_the_prior_run_to_be_settled() -> None:
+    assert _prior_run_preflight_error(
+        [_RunStatus("completed"), _RunStatus("waiting_input")]
+    ) is None
+    assert _prior_run_preflight_error(
+        [_RunStatus("waiting_input"), _RunStatus("completed")]
+    ) == "prior_run_not_terminal"
+
+
+def test_waiting_input_in_run_two_is_model_behavior_not_runtime_defect() -> None:
+    case = load_manifest(DATASET).cases[0]
+    evidence = _record(case.case_id, "v4").memory_evidence
+    assert evidence is not None
+    score = _semantic_score(
+        failed=("terminal_status", "nonempty_answer", "required_terms", "required_numbers")
+    )
+    classified = _classify_memory_evidence(
+        evidence,
+        case=case,
+        trace=TrialTrace(terminal_status="waiting_input"),
+        score=score,
+    )
+    assert classified is not None
+    assert classified.classification == "model_behavior"
 
 
 def _semantic_score(*, failed: tuple[str, ...] = (), safety_veto: bool = False) -> TrialScore:
