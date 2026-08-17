@@ -117,6 +117,15 @@ class _PreparedToolExecution:
     needs_reconciliation: bool
 
 
+@dataclass(frozen=True)
+class _CompletedToolExecution:
+    """One finished attempt awaiting its short durable settlement transaction."""
+
+    tool: BaseTool
+    result: ToolResult
+    needs_reconciliation: bool
+
+
 class ToolDispatcher:
     """Own the durable boundary around model-authored tool calls."""
 
@@ -182,6 +191,7 @@ class ToolDispatcher:
         call: ModelToolCall,
         materialization: ToolMaterialization,
         control: LeaseAwareRunControl,
+        release_on_stopper: bool = True,
     ) -> ToolDispatchResult:
         try:
             materialization.require(call.name)
@@ -262,7 +272,8 @@ class ToolDispatcher:
                     invocation_id=invocation.id,
                     policy_decision=decision,
                 )
-                SessionRepository(db).release(lease=lease)
+                if release_on_stopper:
+                    SessionRepository(db).release(lease=lease)
                 db.commit()
                 return ToolDispatchResult(ToolDispatchOutcome.WAITING_APPROVAL)
             if invocation.status.value == "rejected":
@@ -306,7 +317,8 @@ class ToolDispatcher:
                     db.commit()
                     return self._settled_result(call.id, observation)
                 if command_result.disposition is ControlDisposition.WAITING_INPUT:
-                    SessionRepository(db).release(lease=lease)
+                    if release_on_stopper:
+                        SessionRepository(db).release(lease=lease)
                     db.commit()
                     return ToolDispatchResult(ToolDispatchOutcome.WAITING_INPUT)
                 if command_result.output is None:
@@ -367,6 +379,23 @@ class ToolDispatcher:
         *,
         control: LeaseAwareRunControl,
     ) -> TransientToolOutput | None:
+        completed = self.execute_requested_unsettled(
+            lease,
+            invocation,
+            control=control,
+        )
+        if completed is None:
+            return None
+        return self.settle_executed(lease, invocation, completed, control=control)
+
+    def execute_requested_unsettled(
+        self,
+        lease: SessionLease,
+        invocation: ToolInvocation,
+        *,
+        control: LeaseAwareRunControl,
+    ) -> _CompletedToolExecution | None:
+        """Run one attempt without competing to allocate a durable Observation sequence."""
         prepared = self._prepare_execution(lease, invocation)
         if prepared is None:
             return None
@@ -378,13 +407,28 @@ class ToolDispatcher:
         )
         if result is None:
             return None
+        return _CompletedToolExecution(
+            tool=prepared.tool,
+            result=result,
+            needs_reconciliation=prepared.needs_reconciliation,
+        )
+
+    def settle_executed(
+        self,
+        lease: SessionLease,
+        invocation: ToolInvocation,
+        completed: _CompletedToolExecution,
+        *,
+        control: LeaseAwareRunControl,
+    ) -> TransientToolOutput:
+        """Persist a completed attempt. Callers control ordering across a batch."""
         try:
             provider_output = self._settle_execution_result(
                 lease,
                 invocation,
-                tool=prepared.tool,
-                result=result,
-                needs_reconciliation=prepared.needs_reconciliation,
+                tool=completed.tool,
+                result=completed.result,
+                needs_reconciliation=completed.needs_reconciliation,
             )
         except ArtifactDraftContractError as exc:
             log_unexpected_exception(
@@ -400,8 +444,8 @@ class ToolDispatcher:
             provider_output = self._settle_execution_result(
                 lease,
                 invocation,
-                tool=prepared.tool,
-                result=result.model_copy(
+                tool=completed.tool,
+                result=completed.result.model_copy(
                     update={
                         "status": "failed",
                         "output": {
@@ -413,7 +457,7 @@ class ToolDispatcher:
                         "error_code": "TOOL_OUTPUT_CONTRACT_FAILED",
                     }
                 ),
-                needs_reconciliation=prepared.needs_reconciliation,
+                needs_reconciliation=completed.needs_reconciliation,
             )
         control.checkpoint()
         return provider_output
@@ -433,7 +477,7 @@ class ToolDispatcher:
             request = self._tool_request(run)
             materialization = self._turn_materialization(db, invocation.turn_id)
             needs_reconciliation = (
-                invocation.recovery_policy is ToolRecoveryPolicy.RECONCILE
+                invocation.recovery_policy == ToolRecoveryPolicy.RECONCILE
                 and invocation.attempt_count > 0
             )
             try:

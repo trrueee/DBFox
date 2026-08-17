@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from engine.tools.runtime.base import (
     ToolOutputModel,
 )
 from engine.tools.runtime.context import ToolRunContext
+from engine.tools.runtime.observation import ToolObservationProjection
 from engine.tools.runtime.result import ToolOutcome
 from engine.tools.runtime.semantics import ToolSemanticSpec
 from engine.json_codec import JsonCodecError, loads
@@ -74,7 +75,7 @@ def _latest_remote_job_payload(
     db: Session,
     session_id: str,
     job_id: str,
-) -> tuple[dict, str]:
+) -> dict:
     row = _latest_job_row(db, session_id, job_id)
     from engine.agent.repositories.artifact import validate_artifact_payload
 
@@ -83,7 +84,28 @@ def _latest_remote_job_payload(
         _artifact_payload(row),
         schema_version=int(row.schema_version or 1),
     )
-    return payload, str(row.id)
+    return payload
+
+
+def _project_remote_job_observation(
+    *,
+    tool_name: str,
+    status: str,
+    output: dict,
+) -> ToolObservationProjection:
+    if status != "success":
+        return ToolObservationProjection(summary=f"{tool_name} 未能完成。")
+    return ToolObservationProjection(
+        summary=(
+            f"Remote job {output.get('job_id', '')} is "
+            f"{output.get('status', 'unknown')}."
+        ),
+        facts={
+            key: output[key]
+            for key in ("job_id", "status", "command", "run_id", "turn_id", "updated_at")
+            if key in output
+        },
+    )
 
 
 class RemoteJobSubmitInput(ToolInputModel):
@@ -106,7 +128,6 @@ class _RemoteJobOutput(ToolOutputModel):
     job_id: str = Field(min_length=1, max_length=64)
     status: str = Field(pattern=r"^(queued|running|succeeded|failed|cancelled)$")
     command: str
-    artifact_id: str
     run_id: str
     turn_id: str | None = None
     updated_at: str
@@ -133,9 +154,15 @@ class _RemoteJobArtifactPayload(BaseModel):
     status: str = Field(pattern=r"^(queued|running|succeeded|failed|cancelled)$")
     run_id: str = Field(min_length=1)
     turn_id: str | None = None
-    artifact_id: str = Field(min_length=1, max_length=64)
     updated_at: str
     version: int = 1
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_artifact_id(cls, value):
+        if isinstance(value, dict):
+            return {key: item for key, item in value.items() if key != "artifact_id"}
+        return value
 
 
 register_artifact_payload_contract(_REMOTE_JOB_ARTIFACT_TYPE, 1, _RemoteJobArtifactPayload)
@@ -179,7 +206,6 @@ class RemoteJobSubmitTool(BaseTool[RemoteJobSubmitInput, RemoteJobSubmitOutput])
         request = context.require_request()
         job_id = f"job_{uuid4().hex}"
         now = _utc_now()
-        artifact_id = f"artifact_{uuid4().hex}"
         status = "queued"
         payload = {
             "job_id": job_id,
@@ -188,7 +214,6 @@ class RemoteJobSubmitTool(BaseTool[RemoteJobSubmitInput, RemoteJobSubmitOutput])
             "status": status,
             "run_id": str(request.run_id),
             "turn_id": str(request.turn_id),
-            "artifact_id": artifact_id,
             "updated_at": now,
             "version": 1,
         }
@@ -196,7 +221,6 @@ class RemoteJobSubmitTool(BaseTool[RemoteJobSubmitInput, RemoteJobSubmitOutput])
             job_id=job_id,
             status=status,
             command=input.command,
-            artifact_id=artifact_id,
             run_id=str(request.run_id),
             turn_id=str(request.turn_id),
             updated_at=now,
@@ -211,6 +235,14 @@ class RemoteJobSubmitTool(BaseTool[RemoteJobSubmitInput, RemoteJobSubmitOutput])
             summary=f"Submit remote job: {input.command_type}",
         )
         return ToolOutcome(output=output, artifacts=(artifact,))
+
+    def project_observation(self, *, status, output, artifacts):
+        del artifacts
+        return _project_remote_job_observation(
+            tool_name=self.name,
+            status=status,
+            output=output,
+        )
 
 
 class RemoteJobStatusTool(BaseTool[RemoteJobStatusInput, RemoteJobStatusOutput]):
@@ -249,7 +281,7 @@ class RemoteJobStatusTool(BaseTool[RemoteJobStatusInput, RemoteJobStatusOutput])
         context: ToolRunContext,
     ) -> RemoteJobStatusOutput:
         db = context.require_database()
-        payload, artifact_id = _latest_remote_job_payload(
+        payload = _latest_remote_job_payload(
             db,
             context.thread_id,
             input.job_id,
@@ -259,10 +291,17 @@ class RemoteJobStatusTool(BaseTool[RemoteJobStatusInput, RemoteJobStatusOutput])
             job_id=input.job_id,
             status=status,
             command=str(payload.get("command") or ""),
-            artifact_id=artifact_id,
             run_id=str(payload.get("run_id") or ""),
             turn_id=payload.get("turn_id"),
             updated_at=str(payload.get("updated_at") or ""),
+        )
+
+    def project_observation(self, *, status, output, artifacts):
+        del artifacts
+        return _project_remote_job_observation(
+            tool_name=self.name,
+            status=status,
+            output=output,
         )
 
 
@@ -311,13 +350,15 @@ class RemoteJobCancelTool(BaseTool[RemoteJobCancelInput, RemoteJobCancelOutput])
             _artifact_payload(row),
             schema_version=int(row.schema_version or 1),
         )
+        # A legacy v1 payload may still carry the formerly self-generated ID;
+        # carry only the canonical job state into the next Artifact version.
+        payload.pop("artifact_id", None)
         status = _remote_job_status_from_payload(payload)
         if status in {"succeeded", "failed", "cancelled"}:
             return RemoteJobCancelOutput(
                 job_id=input.job_id,
                 status=status,
                 command=str(payload.get("command") or ""),
-                artifact_id=str(payload.get("artifact_id") or row.id),
                 run_id=str(row.run_id),
                 turn_id=str(row.turn_id) if row.turn_id else None,
                 updated_at=str(payload.get("updated_at") or ""),
@@ -332,13 +373,12 @@ class RemoteJobCancelTool(BaseTool[RemoteJobCancelInput, RemoteJobCancelOutput])
                 "updated_at": now,
             }
         )
-        artifact_id = f"artifact_{uuid4().hex}"
         cancel_draft = ArtifactDraft(
             key="remote_job",
             type=_REMOTE_JOB_ARTIFACT_TYPE,
             schema_version=1,
             title=f"Remote Job {input.job_id} cancelled",
-            payload=payload | {"artifact_id": artifact_id},
+            payload=payload,
             semantic_key=_remote_job_semantic_id(input.job_id),
             summary="Remote job was cancelled by operator.",
         )
@@ -347,10 +387,17 @@ class RemoteJobCancelTool(BaseTool[RemoteJobCancelInput, RemoteJobCancelOutput])
                 job_id=input.job_id,
                 status="cancelled",
                 command=str(payload.get("command") or ""),
-                artifact_id=artifact_id,
                 run_id=str(request.run_id),
                 turn_id=str(request.turn_id),
                 updated_at=now,
             ),
             artifacts=(cancel_draft,),
+        )
+
+    def project_observation(self, *, status, output, artifacts):
+        del artifacts
+        return _project_remote_job_observation(
+            tool_name=self.name,
+            status=status,
+            output=output,
         )

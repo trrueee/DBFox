@@ -296,9 +296,9 @@ def cancel_run(
         from engine.query_registry import QUERY_REGISTRY
 
         QUERY_REGISTRY.cancel(execution_id)
-    for invocation_id in running_invocations:
-        from engine.query_registry import QUERY_REGISTRY
+    from engine.query_registry import QUERY_REGISTRY
 
+    for invocation_id in running_invocations:
         QUERY_REGISTRY.cancel(invocation_id)
     active_coordinator.wake(str(run.session_id))
     return {"run_id": str(run.id), "status": str(run.status), "version": int(run.version or 0)}

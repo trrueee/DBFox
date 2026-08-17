@@ -155,7 +155,7 @@ def test_workspace_file_read_vertical_chain_lands_artifact_and_context(
 
     snapshot = ContextAssembler(db_session).build(admission.run_id)
     assert len(snapshot.context_fragments) == 1
-    assert snapshot.context_fragments[0]["lane"] == "resource"
+    assert snapshot.context_fragments[0].lane == "resource"
 
 
 def test_vertical_chain_handoff_after_failed_run(
@@ -543,6 +543,7 @@ def test_vertical_chain_file_write_patch_approval_recovery(
 
     lease = sessions.claim(session_id="session-vertical-write", owner="vertical-write")
     assert lease is not None
+    sessions.bind_run(lease=lease, run_id=admission.run_id)
     invocations = ToolInvocationRepository(db_session)
     invocations.mark_running(
         lease=lease,
@@ -602,10 +603,10 @@ def test_vertical_chain_file_write_patch_approval_recovery(
     )
     assert target.read_text(encoding="utf-8") == "new-content\n"
     context_lanes = {
-        context["lane"]
+        context.lane
         for context in ContextAssembler(db_session).build(admission.run_id).context_fragments
     }
-    assert context_lanes == {"resource"}
+    assert context_lanes == set()
 
 
 def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
@@ -704,8 +705,8 @@ def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
     assert submit_result.outcome is ToolDispatchOutcome.SETTLED
     assert submit_result.provider_output is not None
     submit_payload = json.loads(submit_result.provider_output.output)
-    job_id = str(submit_payload["job_id"])
-    assert submit_payload["status"] == "queued"
+    job_id = str(submit_payload["facts"]["job_id"])
+    assert submit_payload["facts"]["status"] == "queued"
 
     db_session.expire_all()
     submit_artifacts = (
@@ -793,15 +794,15 @@ def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
     assert status_result.outcome is ToolDispatchOutcome.SETTLED
     assert status_result.provider_output is not None
     status_payload = json.loads(status_result.provider_output.output)
-    assert status_payload["status"] == "queued"
-    assert status_payload["job_id"] == job_id
+    assert status_payload["facts"]["status"] == "queued"
+    assert status_payload["facts"]["job_id"] == job_id
 
     assert cancel_result.outcome is ToolDispatchOutcome.SETTLED
     assert cancel_result.provider_output is not None
     cancel_payload = json.loads(cancel_result.provider_output.output)
-    assert cancel_payload["status"] == "cancelled"
-    assert cancel_payload["job_id"] == job_id
-    assert cancel_payload["artifact_id"]
+    assert cancel_payload["facts"]["status"] == "cancelled"
+    assert cancel_payload["facts"]["job_id"] == job_id
+    assert "artifact_id" not in cancel_payload
 
     remote_job_artifacts = (
         db_session.query(AgentArtifactRecord)
@@ -811,3 +812,7 @@ def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
     )
     assert len(remote_job_artifacts) >= 2
     assert json.loads(remote_job_artifacts[-1].payload_json).get("status") == "cancelled"
+    assert all(
+        "artifact_id" not in json.loads(artifact.payload_json)
+        for artifact in remote_job_artifacts
+    )

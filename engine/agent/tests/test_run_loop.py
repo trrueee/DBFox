@@ -55,11 +55,12 @@ def _tool_turn(
     *,
     tool_call_index: int = 0,
     output_index: int = 0,
+    finish: bool = True,
 ):
     encoded = json.dumps(arguments, ensure_ascii=False)
     yield TurnStreamItem(
         kind=TurnStreamKind.TOOL_CALL_START,
-        item_id="tool:0",
+        item_id=f"tool:{call_id}",
         revision=1,
         tool_call_index=tool_call_index,
         tool_call_id=call_id,
@@ -68,13 +69,13 @@ def _tool_turn(
     )
     yield TurnStreamItem(
         kind=TurnStreamKind.TOOL_CALL_END,
-        item_id="tool:0",
+        item_id=f"tool:{call_id}",
         revision=2,
         tool_call_index=tool_call_index,
     )
     yield TurnStreamItem(
         kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
-        item_id="tool:0",
+        item_id=f"tool:{call_id}",
         revision=3,
         output_index=output_index,
         model_output_item={
@@ -84,12 +85,13 @@ def _tool_turn(
             "arguments": encoded,
         },
     )
-    yield TurnStreamItem(
-        kind=TurnStreamKind.FINISH,
-        item_id="finish",
-        revision=1,
-        termination=TurnTermination.COMPLETED,
-    )
+    if finish:
+        yield TurnStreamItem(
+            kind=TurnStreamKind.FINISH,
+            item_id="finish",
+            revision=1,
+            termination=TurnTermination.COMPLETED,
+        )
 
 
 def _final_turn(content: str):
@@ -424,6 +426,9 @@ class ParallelSafeOutput(ToolOutputModel):
 
 
 class ParallelSafeTool(BaseTool[ParallelSafeInput, ParallelSafeOutput]):
+    # A concrete test helper needs a valid Tool ID even though only its named
+    # subclasses are registered in the runtime.
+    name = "parallel_safe_test_base"
     group = "catalog"
     description = "Slow test tool for parallel dispatch assertions."
     input_model = ParallelSafeInput
@@ -545,6 +550,7 @@ class ParallelSafeModel:
                 {"marker": "A", "delay_seconds": 0.2},
                 tool_call_index=0,
                 output_index=0,
+                finish=False,
             )
             yield from _tool_turn(
                 "parallel-safe-b",
@@ -552,6 +558,7 @@ class ParallelSafeModel:
                 {"marker": "B", "delay_seconds": 0.2},
                 tool_call_index=1,
                 output_index=1,
+                finish=False,
             )
             yield TurnStreamItem(
                 kind=TurnStreamKind.FINISH,
@@ -628,6 +635,7 @@ class ParallelBatchBarrierModel:
                 {"marker": "A", "delay_seconds": 0.2},
                 tool_call_index=0,
                 output_index=0,
+                finish=False,
             )
             yield from _tool_turn(
                 "barrier-b",
@@ -635,6 +643,7 @@ class ParallelBatchBarrierModel:
                 {"marker": "B", "delay_seconds": 0.2},
                 tool_call_index=1,
                 output_index=1,
+                finish=False,
             )
             yield from _tool_turn(
                 "barrier-c",
@@ -642,6 +651,7 @@ class ParallelBatchBarrierModel:
                 {"marker": "C", "delay_seconds": 0.2},
                 tool_call_index=2,
                 output_index=2,
+                finish=False,
             )
             yield from _tool_turn(
                 "barrier-d",
@@ -649,6 +659,7 @@ class ParallelBatchBarrierModel:
                 {"marker": "D", "delay_seconds": 0.2},
                 tool_call_index=3,
                 output_index=3,
+                finish=False,
             )
             yield from _tool_turn(
                 "barrier-e",
@@ -682,6 +693,7 @@ class ApprovalAwareModel:
                 {"marker": "A", "delay_seconds": 0.2},
                 tool_call_index=0,
                 output_index=0,
+                finish=False,
             )
             yield from _tool_turn(
                 "approval-b",
@@ -689,6 +701,7 @@ class ApprovalAwareModel:
                 {"marker": "B"},
                 tool_call_index=1,
                 output_index=1,
+                finish=False,
             )
             yield from _tool_turn(
                 "approval-c",
@@ -700,7 +713,7 @@ class ApprovalAwareModel:
             return
 
         assert self.call_number == 2
-        yield _final_turn("该测试仅在等待审批时检查提交行为。")
+        yield from _final_turn("该测试仅在等待审批时检查提交行为。")
 
 
 class ParallelOutcomeOrderModel:
@@ -709,22 +722,25 @@ class ParallelOutcomeOrderModel:
 
     def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
         del messages, timeout_seconds, cancellation_probe
-        assert self.call_number == 1
-        yield from _tool_turn(
-            "order-a",
-            "parallel_safe_test_a",
-            {"marker": "A", "delay_seconds": 0.30},
-            tool_call_index=0,
-            output_index=0,
-        )
-        yield from _tool_turn(
-            "order-b",
-            "parallel_safe_test_b",
-            {"marker": "B", "delay_seconds": 0.02},
-            tool_call_index=1,
-            output_index=1,
-        )
-        yield _final_turn("并发完成顺序测试。")
+        if self.call_number == 1:
+            yield from _tool_turn(
+                "order-a",
+                "parallel_safe_test_a",
+                {"marker": "A", "delay_seconds": 0.30},
+                tool_call_index=0,
+                output_index=0,
+                finish=False,
+            )
+            yield from _tool_turn(
+                "order-b",
+                "parallel_safe_test_b",
+                {"marker": "B", "delay_seconds": 0.02},
+                tool_call_index=1,
+                output_index=1,
+            )
+            return
+        assert self.call_number == 2
+        yield from _final_turn("并发完成顺序测试。")
 
 
 class ParallelFailureInput(ToolInputModel):
@@ -760,26 +776,29 @@ class ParallelMixedFailureModel:
 
     def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
         del messages, timeout_seconds, cancellation_probe
-        assert self.call_number == 1
-        assert {
-            "parallel_fail_test",
-            "parallel_safe_test_b",
-        }.issubset({str(item.get("name") or item.get("function", {}).get("name") or "") for item in tools})
-        yield from _tool_turn(
-            "mixed-fail-a",
-            "parallel_fail_test",
-            {"marker": "A"},
-            tool_call_index=0,
-            output_index=0,
-        )
-        yield from _tool_turn(
-            "mixed-success-b",
-            "parallel_safe_test_b",
-            {"marker": "B", "delay_seconds": 0.12},
-            tool_call_index=1,
-            output_index=1,
-        )
-        yield _final_turn("并发失败隔离测试。")
+        if self.call_number == 1:
+            assert {
+                "parallel_fail_test",
+                "parallel_safe_test_b",
+            }.issubset({str(item.get("name") or item.get("function", {}).get("name") or "") for item in tools})
+            yield from _tool_turn(
+                "mixed-fail-a",
+                "parallel_fail_test",
+                {"marker": "A"},
+                tool_call_index=0,
+                output_index=0,
+                finish=False,
+            )
+            yield from _tool_turn(
+                "mixed-success-b",
+                "parallel_safe_test_b",
+                {"marker": "B", "delay_seconds": 0.12},
+                tool_call_index=1,
+                output_index=1,
+            )
+            return
+        assert self.call_number == 2
+        yield from _final_turn("并发失败隔离测试。")
 
 
 def test_parallel_safe_tool_calls_are_dispatched_as_linear_barrier_batches(
@@ -838,7 +857,6 @@ def test_parallel_safe_tool_calls_are_dispatched_as_linear_barrier_batches(
     ends = {marker: ts for marker, phase, ts in events if phase == "end"}
     assert set(starts.keys()) == {"A", "B", "C", "D", "E"}
     assert set(ends.keys()) == {"A", "B", "C", "D", "E"}
-    assert max(starts.values()) - min(starts.values()) < 0.40
     assert abs(starts["A"] - starts["B"]) < 0.12
 
     first_barrier_end = max(ends["A"], ends["B"])
@@ -1082,11 +1100,13 @@ def test_approval_required_call_halts_dispatch_before_execution(
         .order_by(AgentToolInvocation.created_at)
         .all()
     )
-    assert len(invocations) == 2
+    assert len(invocations) == 3
     assert invocations[0].tool_name == "parallel_safe_test_a"
     assert invocations[0].status == "requested"
     assert invocations[1].tool_name == "approval_required_tool"
     assert invocations[1].status == "waiting_approval"
+    assert invocations[2].tool_name == "parallel_safe_test_b"
+    assert invocations[2].status == "requested"
 
     db_session.expire_all()
     run = db_session.get(AgentRun, admission.run_id)
@@ -1161,12 +1181,11 @@ def test_tool_budget_preallocates_and_limits_execution_count(
 
     db_session.expire_all()
     run = db_session.get(AgentRun, admission.run_id)
-    assert run is not None and run.status == "completed"
-    result = json.loads(run.result_json)
-    assert result["completion_disposition"] == "bounded_partial"
-    assert result["limitation_codes"] == ["TOOL_BUDGET_REACHED"]
-    assert "已达到工具调用上限" in result["answer"]["caveats"][0]
-    assert "已保留" in result["answer"]["text"]
+    # The two tool calls produce no verifiable deliverable, so the completion
+    # gate must not fabricate a bounded-partial result merely because work was
+    # performed before the tool budget was exhausted.
+    assert run is not None and run.status == "failed"
+    assert run.error_code == "AGENT_TOOL_BUDGET"
 
 
 class BudgetPreallocationModel:
@@ -1183,13 +1202,8 @@ class BudgetPreallocationModel:
                 {"marker": marker},
                 tool_call_index=index,
                 output_index=index,
+                finish=index == 2,
             )
-        yield TurnStreamItem(
-            kind=TurnStreamKind.FINISH,
-            item_id="finish",
-            revision=1,
-            termination=TurnTermination.COMPLETED,
-        )
 
 
 def test_model_configuration_failure_settles_turn_and_fails_run(

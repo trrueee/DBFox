@@ -388,6 +388,7 @@ def test_tool_execution_registry_is_indexed_by_invocation_id(
         run_id=admission.run_id,
         agent_definition_version=definition.version,
         prompt_version="test",
+        prompt_hash="prompt",
         context_snapshot={},
         context_hash="context",
         tool_materialization=tools.model_dump(mode="json"),

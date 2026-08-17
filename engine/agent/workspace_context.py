@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session
 from engine.agent.context_fragment import ContextContributionInput, ContextFragment
 from engine.json_codec import loads
 from engine.models import AgentArtifactRecord, AgentObservationRecord
+from engine.workspace.read_service import WorkspaceReadError, WorkspaceReadService
 
 WORKSPACE_FILE_SNAPSHOT_CAPABILITY = "dbfox.workspace.file_snapshot"
 _MAX_FRAGMENTS = 8
+_MAX_REHYDRATED_CONTENT_CHARS = 3_600
 
 
 def _json_list(value: str | None) -> list[str]:
@@ -47,6 +49,17 @@ class WorkspaceContextContributor:
             for scope in input.resource_refs
             if scope.kind == "workspace" and scope.id
         }
+        if not workspace_scopes:
+            return ()
+        workspaces: dict[tuple[str, str], WorkspaceReadService] = {}
+        for scope in input.resource_refs:
+            if scope.kind != "workspace" or not scope.id:
+                continue
+            key = (str(scope.id), str(scope.version or ""))
+            try:
+                workspaces[key] = WorkspaceReadService(scope.location or "")
+            except WorkspaceReadError:
+                continue
         rows = self.session.execute(
             select(AgentObservationRecord)
             .where(
@@ -85,11 +98,16 @@ class WorkspaceContextContributor:
                 workspace_version = str(payload.get("workspaceVersion") or "")
                 if not relative_path:
                     continue
-                if workspace_scopes and (
-                    workspace_id,
-                    workspace_version,
-                ) not in workspace_scopes:
+                workspace = workspaces.get((workspace_id, workspace_version))
+                if workspace is None:
                     continue
+                try:
+                    snapshot = workspace.read_text_file(relative_path)
+                except WorkspaceReadError:
+                    continue
+                if snapshot.sha256 != sha256:
+                    continue
+                content = snapshot.content[:_MAX_REHYDRATED_CONTENT_CHARS]
                 fragments.append(
                     ContextFragment(
                         source_id="dbfox.workspace",
@@ -97,12 +115,15 @@ class WorkspaceContextContributor:
                         lane="resource",
                         content=(
                             f"workspace file snapshot: {relative_path}\n"
-                            f"sha256: {sha256}"
+                            f"sha256: {sha256}\n"
+                            f"content:\n{content}"
                         ),
                         provenance={
                             "artifact_id": str(artifact.id),
                             "observation_id": str(observation.id),
                             "relative_path": relative_path,
+                            "content_truncated": len(snapshot.content)
+                            > _MAX_REHYDRATED_CONTENT_CHARS,
                         },
                     )
                 )

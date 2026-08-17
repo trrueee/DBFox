@@ -627,6 +627,7 @@ class RunLoop:
                 call=call,
                 materialization=prepared.tools,
                 control=state.control,
+                release_on_stopper=False,
             )
             if dispatch.provider_output is not None:
                 state.transient_tool_outputs[
@@ -638,7 +639,6 @@ class RunLoop:
                     ToolDispatchOutcome.WAITING_INPUT,
                 }:
                     next_stopper = dispatch.outcome
-                    break
                 continue
             if dispatch.invocation is None:
                 raise RuntimeError("Requested invocation is missing its identity")
@@ -653,9 +653,12 @@ class RunLoop:
             )
 
         if next_stopper is not None:
-            # Do not execute any invocation before approval/input is resolved.
-            # Admission is intentionally durably sequenced; execution waits for the
-            # next execution phase after user confirmation/steer input.
+            # A Turn's calls are all durably admitted before it waits. Nothing
+            # executes while any approval/input stopper is unresolved, so resume
+            # uses the canonical invocation set rather than a partial transcript.
+            with self.session_factory() as db:
+                SessionRepository(db).release(lease=lease)
+                db.commit()
             state.tool_count = next_tool_count
             return True
 
@@ -682,7 +685,8 @@ class RunLoop:
         for entry in planned_calls:
             if (
                 entry.frozen_tool is None
-                or entry.frozen_tool.execution.concurrency != "parallel_safe"
+                or str(entry.frozen_tool.execution.get("concurrency") or "sequential")
+                != "parallel_safe"
             ):
                 if current_batch:
                     batches.append(current_batch)
@@ -695,11 +699,11 @@ class RunLoop:
 
         for batch in batches:
             if len(batch) > 1:
-                results = self.tool_executor.execute_batch(
+                completed_attempts = self.tool_executor.execute_batch(
                     tasks=[
                         ToolExecutionTask(
                             operation=lambda invocation=entry.invocation: (
-                                self.tool_dispatcher.execute_requested(
+                                self.tool_dispatcher.execute_requested_unsettled(
                                     lease,
                                     invocation,
                                     control=state.control,
@@ -711,15 +715,24 @@ class RunLoop:
                     max_parallel=len(batch),
                 )
             else:
-                results = [
-                    self.tool_dispatcher.execute_requested(
+                completed_attempts = [
+                    self.tool_dispatcher.execute_requested_unsettled(
                         lease,
                         batch[0].invocation,
                         control=state.control,
                     )
                 ]
-            for _entry, output in zip(batch, results):
-                if output is not None:
+            # Tool execution may finish in any order. Settlement is intentionally
+            # serial and follows provider call order, so Observation.sequence has
+            # one deterministic owner and never races on SQLite's unique key.
+            for entry, completed in zip(batch, completed_attempts):
+                if completed is not None:
+                    output = self.tool_dispatcher.settle_executed(
+                        lease,
+                        entry.invocation,
+                        completed,
+                        control=state.control,
+                    )
                     state.transient_tool_outputs[output.call_id] = output.output
         state.tool_count = max(state.tool_count, next_tool_count)
 

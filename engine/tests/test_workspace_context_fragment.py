@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from engine.agent.context_fragment import ContextContributionInput
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.workspace_context import WorkspaceContextContributor
@@ -12,7 +14,10 @@ from engine.models import (
     AgentSession,
     AgentTurn,
     AgentToolInvocation,
+    Project,
 )
+from engine.tools.runtime.attempt import ResourceScopeRef
+from engine.workspace.read_service import WorkspaceReadService
 
 
 def _turn_and_invocation(db_session, *, run_id, session_id):
@@ -59,7 +64,26 @@ def _turn_and_invocation(db_session, *, run_id, session_id):
 def test_workspace_contributor_returns_bounded_file_snapshot_fragments(
     db_session,
     test_datasource,
+    tmp_path,
 ) -> None:
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    source_file = workspace_root / "src" / "main.py"
+    source_file.parent.mkdir()
+    source_content = "print('fresh workspace context')\n"
+    source_file.write_text(source_content, encoding="utf-8")
+    initial_snapshot = WorkspaceReadService(workspace_root).read_text_file(
+        "src/main.py"
+    )
+    workspace_id = "project-workspace-context"
+    db_session.add(
+        Project(
+            id=workspace_id,
+            name="Workspace context test",
+            workspace_root=str(workspace_root),
+        )
+    )
+    test_datasource.project_id = workspace_id
     session_id = "session-workspace-context"
     db_session.add(
         AgentSession(
@@ -99,9 +123,13 @@ def test_workspace_contributor_returns_bounded_file_snapshot_fragments(
             payload_json=dumps(
                 {
                     "relativePath": "src/main.py",
-                    "sizeBytes": 12,
-                    "sha256": "a" * 64,
+                    "sizeBytes": initial_snapshot.size_bytes,
+                    "sha256": initial_snapshot.sha256,
                     "truncated": False,
+                    "workspaceId": workspace_id,
+                    "workspaceVersion": hashlib.sha256(
+                        str(workspace_root.resolve()).encode("utf-8")
+                    ).hexdigest()[:16],
                 }
             ),
             presentation_json="{}",
@@ -134,10 +162,54 @@ def test_workspace_contributor_returns_bounded_file_snapshot_fragments(
             session_id=session_id,
             run_id=admission.run_id,
             current_request="read src/main.py",
+            resource_refs=(
+                ResourceScopeRef(
+                    kind="workspace",
+                    id=workspace_id,
+                    version=hashlib.sha256(
+                        str(workspace_root.resolve()).encode("utf-8")
+                    ).hexdigest()[:16],
+                    location=str(workspace_root),
+                ),
+            ),
         )
     )
 
     assert len(fragments) == 1
     assert fragments[0].lane == "resource"
     assert "src/main.py" in fragments[0].content
+    assert initial_snapshot.content in fragments[0].content
     assert fragments[0].provenance["artifact_id"] == artifact_id
+
+    source_file.write_text("print('stale')\n", encoding="utf-8")
+    assert WorkspaceContextContributor(db_session).build(
+        ContextContributionInput(
+            session_id=session_id,
+            run_id=admission.run_id,
+            current_request="read src/main.py",
+            resource_refs=(
+                ResourceScopeRef(
+                    kind="workspace",
+                    id=workspace_id,
+                    version=hashlib.sha256(
+                        str(workspace_root.resolve()).encode("utf-8")
+                    ).hexdigest()[:16],
+                    location=str(workspace_root),
+                ),
+            ),
+        )
+    ) == ()
+
+
+def test_workspace_contributor_omits_snapshots_without_an_active_workspace(
+    db_session,
+    test_datasource,
+) -> None:
+    del test_datasource
+    assert WorkspaceContextContributor(db_session).build(
+        ContextContributionInput(
+            session_id="any-session",
+            run_id="any-run",
+            current_request="read src/main.py",
+        )
+    ) == ()

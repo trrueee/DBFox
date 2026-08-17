@@ -133,9 +133,10 @@ def test_scope_context_resolves_authorized_workspace_from_project(
     )()
     scope_refs, resources = build_tool_scope_context(db_session, request, tool)
 
-    assert [ref.kind for ref in scope_refs] == ["database", "workspace"]
-    assert scope_refs[0].version == 3
-    assert scope_refs[1].id == project.id
+    # file_read only has filesystem capability, so it must not receive a
+    # database scope or Session through the resource boundary.
+    assert [ref.kind for ref in scope_refs] == ["workspace"]
+    assert scope_refs[0].id == project.id
     assert resources["workspace"].root == tmp_path.resolve()
 
 

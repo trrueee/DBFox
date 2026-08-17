@@ -10,7 +10,7 @@ from engine.tools.runtime.attempt import (
     ToolAttemptRequest,
 )
 from engine.tools.materialization import current_tool_contract_hash
-from engine.tools.runtime.base import BaseTool
+from engine.tools.runtime.base import BaseTool, ToolRecoveryPolicy
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.result import ToolResult
 from engine.tools.runtime.runtime import ToolRuntime
@@ -101,7 +101,18 @@ class ToolAttemptHandler:
             raise TypeError(
                 f"{request.tool_name} is a Runtime control command, not an executable tool"
             )
-        if current_tool_contract_hash(tool) != request.frozen_tool_contract_hash:
+        contract_changed = (
+            current_tool_contract_hash(tool) != request.frozen_tool_contract_hash
+        )
+        # Reconciliation never replays an action.  A policy or presentation
+        # change must not prevent a RECONCILE-capable tool from determining the
+        # outcome of an already-started external action; the dispatcher has
+        # already verified the frozen reconciliation contract before this
+        # worker boundary.  Executions still require an exact current contract.
+        if contract_changed and not (
+            request.mode == "reconcile"
+            and tool.execution.recovery == ToolRecoveryPolicy.RECONCILE
+        ):
             return ToolResult(
                 name=request.tool_name,
                 status="failed",

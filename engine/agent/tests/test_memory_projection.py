@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import json
+import pytest
+from sqlalchemy.orm import sessionmaker
+
+from engine.agent.context import ContextAssembler
+from engine.agent.definition import AgentDefinition
+from engine.agent.events import LiveStreamHub
+from engine.agent.loop import RunLoop
 from engine.agent.memory_projection import (
     project_session_memory,
     rebuild_session_memory,
 )
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.prompt import PromptAssembler
+from engine.agent.turn import TurnStreamItem, TurnStreamKind, TurnTermination
 from engine.json_codec import dumps
 from engine.models import (
     AgentObservationRecord,
@@ -18,6 +27,7 @@ from engine.models import (
     AgentToolInvocation,
     AgentTurn,
 )
+from engine.tools.runtime import ToolRegistry
 
 
 def _session(db_session, datasource_id: str, session_id: str = "session-v4-proj") -> AgentSession:
@@ -433,3 +443,246 @@ def test_rebuild_repair_writes_only_a_complete_candidate(
     )
     assert projection["state_hash"] == repair.rebuilt_state_hash
     assert projection["projected_through_session_sequence"] == 1
+
+
+def test_failed_run_projection_is_consumed_by_the_next_run_context(
+    db_session,
+    test_datasource,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prove the complete durable projection -> later Context handoff."""
+
+    monkeypatch.setattr("engine.agent.context.MEMORY_V4_CONTEXT_ENABLED", True)
+    session = _session(
+        db_session,
+        str(test_datasource.id),
+        session_id="session-v4-failed-to-context",
+    )
+    _run(
+        db_session,
+        session.id,
+        datasource_id=str(test_datasource.id),
+        run_id="run-v4-failed-to-context-1",
+        sequence=1,
+        status="failed",
+    )
+    _catalog_search_records(
+        db_session,
+        run_id="run-v4-failed-to-context-1",
+        session_id=session.id,
+        revision=7,
+    )
+    test_datasource.catalog_revision = 7
+    session.input_sequence = 1
+    session.message_sequence = 2
+    admitted = SessionRepository(db_session).admit(
+        session_id=session.id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="继续使用已经确认的订单表。",
+        idempotency_key="v4-failed-to-context-2",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    db_session.commit()
+
+    outcome = project_session_memory(db_session, session.id, 1)
+    db_session.commit()
+
+    snapshot = ContextAssembler(db_session).build(admitted.run_id)
+    working = snapshot.session_memory["SESSION_WORKING_STATE"]
+    prompt = PromptAssembler().assemble(
+        definition=AgentDefinition(),
+        context=snapshot,
+    )
+
+    assert outcome.projected_through_session_sequence == 1
+    assert working["selected_count"] == 1
+    assert working["objects"][0]["key"]["table_name"] == "orders"
+    assert working["objects"][0]["source_observation_id"] == (
+        "observation_run-v4-failed-to-context-1_1"
+    )
+    assert any(
+        segment["role"] == "user"
+        and "SESSION_WORKING_STATE" in str(segment["content"])
+        and "orders" in str(segment["content"])
+        for segment in prompt.messages
+    )
+
+
+def test_generation_transition_removes_projected_objects_from_later_context(
+    db_session,
+    test_datasource,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("engine.agent.context.MEMORY_V4_CONTEXT_ENABLED", True)
+    session = _session(
+        db_session,
+        str(test_datasource.id),
+        session_id="session-v4-generation-context",
+    )
+    _run(
+        db_session,
+        session.id,
+        datasource_id=str(test_datasource.id),
+        run_id="run-v4-generation-context-1",
+        sequence=1,
+        datasource_generation=1,
+    )
+    _catalog_search_records(
+        db_session,
+        run_id="run-v4-generation-context-1",
+        session_id=session.id,
+        revision=4,
+    )
+    _run(
+        db_session,
+        session.id,
+        datasource_id=str(test_datasource.id),
+        run_id="run-v4-generation-context-2",
+        sequence=2,
+        datasource_generation=2,
+        status="completed",
+    )
+    session.input_sequence = 2
+    session.message_sequence = 4
+    admitted = SessionRepository(db_session).admit(
+        session_id=session.id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=2,
+        content="数据库连接已切换，请继续。",
+        idempotency_key="v4-generation-context-2",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    db_session.commit()
+
+    project_session_memory(db_session, session.id, 2)
+    db_session.commit()
+
+    snapshot = ContextAssembler(db_session).build(admitted.run_id)
+
+    assert snapshot.session_memory["freshness"]["resource_fence"] == "matched"
+    assert snapshot.session_memory["SESSION_WORKING_STATE"]["objects"] == []
+    assert "orders" not in json.dumps(snapshot.session_memory)
+
+
+class _ScriptedPriorSchemaConsumer:
+    """A deterministic Provider that can only use the constructed Prompt."""
+
+    def __init__(self) -> None:
+        self.prompt_checked = False
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        del timeout_seconds, cancellation_probe
+        assert tools == []
+        rendered = "\n".join(str(message.get("content") or "") for message in messages)
+        assert '<dbfox_context source="session_memory">' in rendered
+        assert '"table_name":"orders"' in rendered
+        self.prompt_checked = True
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_START,
+            item_id="answer",
+            revision=1,
+            output_index=0,
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_DELTA,
+            item_id="answer",
+            revision=2,
+            content="已复用前一运行确认的 orders 表结构。",
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_END,
+            item_id="answer",
+            revision=3,
+            output_index=0,
+            message_status="completed",
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
+            item_id="answer",
+            revision=4,
+            output_index=0,
+            model_output_item={
+                "type": "message",
+                "role": "assistant",
+                "content": "已复用前一运行确认的 orders 表结构。",
+            },
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.FINISH,
+            item_id="finish",
+            revision=1,
+            termination=TurnTermination.COMPLETED,
+        )
+
+
+def test_scripted_continuation_consumes_memory_without_rediscovery(
+    db_session,
+    test_datasource,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """B-layer proof: a later Run receives Memory through the real RunLoop Prompt."""
+
+    monkeypatch.setattr("engine.agent.context.MEMORY_V4_CONTEXT_ENABLED", True)
+    session = _session(
+        db_session,
+        str(test_datasource.id),
+        session_id="session-v4-scripted-continuation",
+    )
+    _run(
+        db_session,
+        session.id,
+        datasource_id=str(test_datasource.id),
+        run_id="run-v4-scripted-continuation-1",
+        sequence=1,
+        status="failed",
+    )
+    _catalog_search_records(
+        db_session,
+        run_id="run-v4-scripted-continuation-1",
+        session_id=session.id,
+    )
+    test_datasource.catalog_revision = 1
+    session.input_sequence = 1
+    session.message_sequence = 2
+    admitted = SessionRepository(db_session).admit(
+        session_id=session.id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="继续使用 orders 表完成分析。",
+        idempotency_key="v4-scripted-continuation-2",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="scripted",
+        request_payload={},
+    )
+    db_session.commit()
+    project_session_memory(db_session, session.id, 1)
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    lease = sessions.claim(session_id=session.id, owner="memory-v4-scripted")
+    assert lease is not None
+    assert sessions.promote_next_input(lease=lease) == admitted.run_id
+    db_session.commit()
+
+    provider = _ScriptedPriorSchemaConsumer()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=lambda _settings: provider,
+        registry=ToolRegistry(),
+        definition=AgentDefinition(allowed_tool_groups=()),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admitted.run_id)
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admitted.run_id)
+    assert provider.prompt_checked is True
+    assert run is not None and run.status == "completed"
+    assert db_session.query(AgentToolInvocation).filter_by(run_id=admitted.run_id).count() == 0
