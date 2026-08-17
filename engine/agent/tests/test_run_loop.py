@@ -1,5 +1,7 @@
 import json
 import re
+import threading
+import time
 
 import pytest
 from sqlalchemy.orm import sessionmaker
@@ -37,6 +39,7 @@ from engine.tools.runtime import (
     ToolInputModel,
     ToolOutputModel,
     ToolOutcome,
+    ToolExecutionSpec,
     ToolPresentation,
     ToolRegistry,
 )
@@ -384,6 +387,144 @@ class InvalidArtifactTool(BaseTool[InvalidArtifactInput, InvalidArtifactOutput])
         if status != "success":
             return ToolObservationProjection(summary="图表产物合同校验失败。")
         return ToolObservationProjection(summary="图表产物已生成。")
+
+
+_PARALLEL_TOOL_LOCK = threading.Lock()
+_PARALLEL_TOOL_EVENTS: list[tuple[str, str, float]] = []
+
+
+def _record_parallel_tool_event(phase: str, marker: str) -> None:
+    with _PARALLEL_TOOL_LOCK:
+        _PARALLEL_TOOL_EVENTS.append((marker, phase, time.perf_counter()))
+
+
+def _consume_parallel_tool_events() -> list[tuple[str, str, float]]:
+    with _PARALLEL_TOOL_LOCK:
+        events = list(_PARALLEL_TOOL_EVENTS)
+        _PARALLEL_TOOL_EVENTS.clear()
+    return events
+
+
+class ParallelSafeInput(ToolInputModel):
+    marker: str
+    delay_seconds: float = 0.2
+
+
+class ParallelSafeOutput(ToolOutputModel):
+    marker: str
+    status: str
+
+
+class ParallelSafeTool(BaseTool[ParallelSafeInput, ParallelSafeOutput]):
+    group = "catalog"
+    description = "Slow test tool for parallel dispatch assertions."
+    input_model = ParallelSafeInput
+    output_model = ParallelSafeOutput
+    presentation = ToolPresentation(
+        title="Parallel safe test",
+        category="query",
+        visibility="summary",
+    )
+    execution = ToolExecutionSpec(concurrency="parallel_safe", timeout_seconds=2)
+
+    def run(self, tool_input, context):
+        del context
+        _record_parallel_tool_event("start", tool_input.marker)
+        time.sleep(tool_input.delay_seconds)
+        _record_parallel_tool_event("end", tool_input.marker)
+        return ToolOutcome(
+            output=ParallelSafeOutput(
+                marker=tool_input.marker,
+                status="ok",
+            ),
+        )
+
+
+class ParallelSafeToolA(ParallelSafeTool):
+    name = "parallel_safe_test_a"
+
+
+class ParallelSafeToolB(ParallelSafeTool):
+    name = "parallel_safe_test_b"
+
+
+class ParallelSafeModel:
+    def __init__(self, call_number: int):
+        self.call_number = call_number
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        del timeout_seconds, cancellation_probe
+        if self.call_number == 1:
+            available = {
+                str(item.get("name") or item.get("function", {}).get("name") or "")
+                for item in tools
+            }
+            assert "parallel_safe_test_a" in available
+            assert "parallel_safe_test_b" in available
+            yield from _tool_turn(
+                "parallel-safe-a",
+                "parallel_safe_test_a",
+                {"marker": "A", "delay_seconds": 0.2},
+            )
+            yield from _tool_turn(
+                "parallel-safe-b",
+                "parallel_safe_test_b",
+                {"marker": "B", "delay_seconds": 0.2},
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.FINISH,
+                item_id="finish",
+                revision=1,
+                termination=TurnTermination.COMPLETED,
+            )
+            return
+
+        assert self.call_number == 2
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_START,
+            item_id="answer",
+            revision=1,
+            output_index=0,
+        )
+        content = "两个工具并行执行完成。"
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_DELTA,
+            item_id="answer",
+            revision=2,
+            content=content,
+            output_index=0,
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_END,
+            item_id="answer",
+            revision=3,
+            output_index=0,
+            phase="final_answer",
+            message_status="completed",
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
+            item_id="answer",
+            revision=4,
+            output_index=0,
+            model_output_item={
+                "type": "message",
+                "role": "assistant",
+                "content": content,
+            },
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.USAGE,
+            item_id="usage",
+            revision=1,
+            usage={"input_tokens": 10, "output_tokens": 8, "total_tokens": 18},
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.FINISH,
+            item_id="finish",
+            revision=1,
+            termination=TurnTermination.COMPLETED,
+        )
 
 
 def test_model_configuration_failure_settles_turn_and_fails_run(
@@ -1661,6 +1802,81 @@ def test_failed_tool_does_not_publish_capabilities_or_progress(
     assert observation.status == "failed"
     assert json.loads(observation.semantic_capabilities_json) == []
     assert observation.contributes_progress is False
+
+
+def test_parallel_safe_tool_calls_are_dispatched_concurrently(
+    db_session,
+    test_datasource,
+) -> None:
+    _consume_parallel_tool_events()
+
+    session_id = "session_parallel_dispatch"
+    db_session.add(
+        AgentSession(
+            id=session_id,
+            datasource_id=str(test_datasource.id),
+            title="Parallel dispatch",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="启动两个并行工具调用。",
+        idempotency_key="parallel-safe",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id=session_id, owner="worker", ttl_seconds=120)
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    calls = {"count": 0}
+
+    def model_factory(_settings):
+        calls["count"] += 1
+        return ParallelSafeModel(calls["count"])
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=ToolRegistry().register(ParallelSafeToolA()).register(
+            ParallelSafeToolB()
+        ),
+        definition=AgentDefinition(),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    events = _consume_parallel_tool_events()
+    start_times = [ts for _, phase, ts in events if phase == "start"]
+    assert len(start_times) == 2
+    assert max(start_times) - min(start_times) < 0.12
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None
+    assert run.status == "completed"
+    answer = db_session.get(AgentMessage, admission.assistant_message_id)
+    assert answer is not None and "并行执行" in answer.content
+
+    invocations = (
+        db_session.query(AgentToolInvocation)
+        .filter_by(run_id=admission.run_id)
+        .order_by(AgentToolInvocation.created_at)
+        .all()
+    )
+    assert len(invocations) == 2
+    assert {invocation.tool_name for invocation in invocations} == {
+        "parallel_safe_test_a",
+        "parallel_safe_test_b",
+    }
+    assert all(invocation.status == "succeeded" for invocation in invocations)
 
 
 def test_tool_budget_returns_bounded_partial_when_verified_result_exists(
