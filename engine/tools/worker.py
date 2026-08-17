@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         request = ToolAttemptRequest.model_validate(request_frame["request"])
-    except Exception as exc:
+    except Exception:
         write_error_frame(
             stdout,
             "TOOL_WORKER_INVALID_REQUEST",

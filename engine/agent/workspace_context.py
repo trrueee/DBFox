@@ -39,6 +39,14 @@ class WorkspaceContextContributor:
         self,
         input: ContextContributionInput,
     ) -> tuple[ContextFragment, ...]:
+        workspace_scopes = {
+            (
+                str(scope.id),
+                str(scope.version or ""),
+            )
+            for scope in input.resource_refs
+            if scope.kind == "workspace" and scope.id
+        }
         rows = self.session.execute(
             select(AgentObservationRecord)
             .where(
@@ -73,15 +81,14 @@ class WorkspaceContextContributor:
                     continue
                 relative_path = str(payload.get("relativePath") or "")
                 sha256 = str(payload.get("sha256") or "")
+                workspace_id = str(payload.get("workspaceId") or "")
+                workspace_version = str(payload.get("workspaceVersion") or "")
                 if not relative_path:
                     continue
-                if input.workspace_id and str(
-                    payload.get("workspaceId") or ""
-                ) != input.workspace_id:
-                    continue
-                if input.workspace_version and str(
-                    payload.get("workspaceVersion") or ""
-                ) != input.workspace_version:
+                if workspace_scopes and (
+                    workspace_id,
+                    workspace_version,
+                ) not in workspace_scopes:
                     continue
                 fragments.append(
                     ContextFragment(

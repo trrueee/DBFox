@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from engine.tools.runtime.attempt import ResourceScopeRef
 
 
 ContextLane = Literal["working_state", "resource", "evidence"]
@@ -34,8 +35,7 @@ class ContextContributionInput(BaseModel):
     session_id: str
     run_id: str
     current_request: str
-    workspace_id: str | None = None
-    workspace_version: str | None = None
+    resource_refs: tuple[ResourceScopeRef, ...] = ()
 
 
 class ContextContributor(Protocol):

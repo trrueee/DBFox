@@ -6,8 +6,6 @@ import hashlib
 import threading
 import time
 
-import pytest
-
 from engine.agent.artifact import validate_artifact_payload
 from engine.errors import ToolInputError
 from engine.tools.builtin.registry import register_workspace_write_extension

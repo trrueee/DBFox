@@ -450,19 +450,32 @@ class ContextAssembler:
         )
         context_fragments = self._context_fragments(run, aggregate)
         if context_fragments:
-            sources.append(
-                ContextSource(
-                    kind="workspace_context",
-                    source_id="dbfox.workspace",
-                    version=context_fragments[0].get("source_version", ""),
-                    included=True,
-                    reason=(
-                        f"included {len(context_fragments)} bounded Workspace "
-                        "file snapshot references"
-                    ),
-                    provenance={"canonical_table": "agent_observations"},
+            fragment_stats: dict[str, tuple[str, int]] = {}
+            for fragment in context_fragments:
+                source_id = str(fragment.get("source_id") or "")
+                if not source_id:
+                    continue
+                if source_id not in fragment_stats:
+                    fragment_stats[source_id] = (
+                        str(fragment.get("source_version", "")),
+                        0,
+                    )
+                source_version, count = fragment_stats[source_id]
+                fragment_stats[source_id] = (source_version, count + 1)
+            for source_id, (source_version, count) in fragment_stats.items():
+                sources.append(
+                    ContextSource(
+                        kind="context_fragment",
+                        source_id=source_id,
+                        version=source_version,
+                        included=True,
+                        reason=f"included {count} bounded runtime context fragment(s)",
+                        provenance={
+                            "canonical_table": "agent_observations",
+                            "source_id": source_id,
+                        },
+                    )
                 )
-            )
         workspace_context = _json_object(admitted.workspace_context_json)
         run_focus = _json_object(run.result_json).get("focus", {})
         previous_run_outcome = self._previous_run_outcome(run, sources)
@@ -537,11 +550,23 @@ class ContextAssembler:
         from engine.tools.runtime.resource_context import (
             resolve_workspace_scope_ref,
         )
+        from engine.tools.runtime.attempt import ResourceScopeRef
 
         workspace_ref = resolve_workspace_scope_ref(
             self.session,
             str(run.datasource_id),
         )
+        resource_refs: list[ResourceScopeRef] = []
+        if run.datasource_id:
+            resource_refs.append(
+                ResourceScopeRef(
+                    kind="database",
+                    id=str(run.datasource_id),
+                    version=int(run.datasource_generation or 0),
+                )
+            )
+        if workspace_ref is not None:
+            resource_refs.append(workspace_ref)
 
         contribution_input = ContextContributionInput(
             session_id=str(run.session_id),
@@ -551,12 +576,7 @@ class ContextAssembler:
                 if run.input_id and self.session.get(AgentSessionInput, run.input_id)
                 else ""
             ),
-            workspace_id=workspace_ref.id if workspace_ref is not None else None,
-            workspace_version=(
-                str(workspace_ref.version)
-                if workspace_ref is not None and workspace_ref.version is not None
-                else None
-            ),
+            resource_refs=tuple(resource_refs),
         )
         fragments: list[dict[str, Any]] = []
         for contributor_cls in CONTEXT_CONTRIBUTORS:

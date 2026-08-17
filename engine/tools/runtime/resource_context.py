@@ -25,7 +25,7 @@ class _InvocationRequestLike:
 
 
 _DATABASE_CAPABILITIES = frozenset(
-    {"database_read", "metadata_read", "metadata_write"}
+    {"database_read", "database_write", "metadata_read", "metadata_write"}
 )
 _WORKSPACE_CAPABILITIES = frozenset({"filesystem_read", "filesystem_write"})
 
