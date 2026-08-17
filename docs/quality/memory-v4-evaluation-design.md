@@ -1,6 +1,10 @@
 # Memory v4 测评设计
 
-> 状态：待实施
+> 文档类型：质量设计
+>
+> 状态：草案
+>
+> 最后核验：2026-08-18
 >
 > 目标：在不把 Provider 波动、工具合同错误或运行时故障误判为 Memory 效果的前提下，决定是否将 `DBFOX_MEMORY_V4_CONTEXT` 从 shadow/candidate 切换为默认能力。
 

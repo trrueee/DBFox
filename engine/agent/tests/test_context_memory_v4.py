@@ -215,10 +215,20 @@ def test_v4_context_rehydrates_bounded_prior_objects(
     assert snapshot.session_memory["freshness"]["resource_fence"] == "matched"
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("datasource_generation", 99),
+        ("catalog_revision", 99),
+        ("datasource_id", "other-datasource"),
+    ),
+)
 def test_v4_context_omits_stale_resource_fence(
     db_session,
     test_datasource,
     monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: int | str,
 ) -> None:
     monkeypatch.setattr("engine.agent.context.MEMORY_V4_CONTEXT_ENABLED", True)
     run_id = _seed_v4_context(db_session, test_datasource, generation=1, revision=0)
@@ -226,7 +236,7 @@ def test_v4_context_omits_stale_resource_fence(
         session_id="session-v4-context"
     ).one()
     payload = json.loads(row.memory_v4_json)
-    payload["projections"][0]["scope"]["datasource_generation"] = 99
+    payload["projections"][0]["scope"][field] = value
     row.memory_v4_json = canonical_dumps(payload)
     db_session.commit()
 
@@ -239,3 +249,42 @@ def test_v4_context_omits_stale_resource_fence(
         if item.kind == "session_memory"
     )
     assert "outside the current resource fence" in source.reason
+
+
+@pytest.mark.parametrize(
+    ("corruption", "expected_reason"),
+    (
+        ("invalid_json", "invalid Memory v4 projection contract"),
+        ("invalid_typed_state", "Catalog projection envelope does not match typed scope/state"),
+        ("fingerprint_mismatch", "missing or incompatible Catalog projection"),
+    ),
+)
+def test_v4_context_safely_omits_corrupted_persisted_memory(
+    db_session,
+    test_datasource,
+    monkeypatch: pytest.MonkeyPatch,
+    corruption: str,
+    expected_reason: str,
+) -> None:
+    monkeypatch.setattr("engine.agent.context.MEMORY_V4_CONTEXT_ENABLED", True)
+    run_id = _seed_v4_context(db_session, test_datasource)
+    row = db_session.query(AgentSessionMemory).filter_by(
+        session_id="session-v4-context"
+    ).one()
+    if corruption == "invalid_json":
+        row.memory_v4_json = "{not-json"
+    else:
+        payload = json.loads(row.memory_v4_json)
+        if corruption == "invalid_typed_state":
+            payload["projections"][0]["state"] = {"objects": "not-a-list"}
+        else:
+            payload["projections"][0]["contract_fingerprint"] = "sha256:stale"
+        row.memory_v4_json = canonical_dumps(payload)
+    db_session.commit()
+
+    snapshot = ContextAssembler(db_session).build(run_id)
+
+    assert snapshot.session_memory == {}
+    source = next(item for item in snapshot.sources if item.kind == "session_memory")
+    assert source.included is False
+    assert source.reason == expected_reason

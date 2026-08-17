@@ -407,6 +407,16 @@ def test_rebuild_strict_is_incomplete_on_a_sequence_gap(
     assert outcome.projected_through_session_sequence == 1
     assert outcome.written is False
 
+    repair = rebuild_session_memory(db_session, session.id, mode="repair")
+    assert repair.complete is False
+    assert repair.written is False
+    assert (
+        db_session.query(AgentSessionMemory)
+        .filter_by(session_id=session.id)
+        .scalar()
+        is None
+    )
+
 
 def test_rebuild_repair_writes_only_a_complete_candidate(
     db_session,
@@ -445,10 +455,12 @@ def test_rebuild_repair_writes_only_a_complete_candidate(
     assert projection["projected_through_session_sequence"] == 1
 
 
-def test_failed_run_projection_is_consumed_by_the_next_run_context(
+@pytest.mark.parametrize("terminal_status", ("failed", "cancelled"))
+def test_unsuccessful_run_projection_is_consumed_by_the_next_run_context(
     db_session,
     test_datasource,
     monkeypatch: pytest.MonkeyPatch,
+    terminal_status: str,
 ) -> None:
     """Prove the complete durable projection -> later Context handoff."""
 
@@ -456,19 +468,19 @@ def test_failed_run_projection_is_consumed_by_the_next_run_context(
     session = _session(
         db_session,
         str(test_datasource.id),
-        session_id="session-v4-failed-to-context",
+        session_id=f"session-v4-{terminal_status}-to-context",
     )
     _run(
         db_session,
         session.id,
         datasource_id=str(test_datasource.id),
-        run_id="run-v4-failed-to-context-1",
+        run_id=f"run-v4-{terminal_status}-to-context-1",
         sequence=1,
-        status="failed",
+        status=terminal_status,
     )
     _catalog_search_records(
         db_session,
-        run_id="run-v4-failed-to-context-1",
+        run_id=f"run-v4-{terminal_status}-to-context-1",
         session_id=session.id,
         revision=7,
     )
@@ -480,7 +492,7 @@ def test_failed_run_projection_is_consumed_by_the_next_run_context(
         datasource_id=str(test_datasource.id),
         datasource_generation=1,
         content="继续使用已经确认的订单表。",
-        idempotency_key="v4-failed-to-context-2",
+        idempotency_key=f"v4-{terminal_status}-to-context-2",
         llm_credential_id="credential",
         api_base=None,
         model_name="model",
@@ -502,7 +514,7 @@ def test_failed_run_projection_is_consumed_by_the_next_run_context(
     assert working["selected_count"] == 1
     assert working["objects"][0]["key"]["table_name"] == "orders"
     assert working["objects"][0]["source_observation_id"] == (
-        "observation_run-v4-failed-to-context-1_1"
+        f"observation_run-v4-{terminal_status}-to-context-1_1"
     )
     assert any(
         segment["role"] == "user"
