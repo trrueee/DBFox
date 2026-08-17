@@ -37,14 +37,14 @@
       "tags": ["memory", "real_provider"],
       "expected_memory_consumption": "required",
       "prompts": [
-        "执行只读查询，统计 orders 中 completed 状态的订单数量，并保留可验证结果。",
+        "先使用目录/schema 工具确认 orders 表及其 status 列，再执行只读查询统计 completed 状态的订单数量，并保留可验证结果。",
         "更正：现在只查询 pending。当前请求优先，不要继续回答 completed。执行只读查询并在最终答案中包含 pending 和 200。"
       ],
       "answer": {"required_terms": ["pending"], "forbidden_terms": ["400"], "required_numbers": [200]},
       "result": {"golden_sql": "SELECT COUNT(*) AS pending_count FROM orders WHERE status = 'pending'"},
       "trace": {
         "all_run_statuses": ["completed"],
-        "required_tools": ["sql_validate", "sql_execute_readonly"],
+        "required_tools": ["schema_search", "schema_inspect", "sql_validate", "sql_execute_readonly"],
         "required_artifacts": ["result_view"],
         "max_tool_calls": 8,
         "max_turns": 10,
