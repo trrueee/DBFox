@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 import time as _time
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
+from openai import APIStatusError
 
 from engine.agent.artifact import Artifact
 from engine.agent.console import ConsoleExecutionRequest, ConsoleRunService
@@ -20,6 +22,7 @@ from engine.app.safe_errors import (
 from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.llm.config import DEFAULT_LLM_MODEL_NAME, resolve_product_llm_config_from_credential
+from engine.agent.providers.openai import _responses_not_found_falls_back_to_chat
 from engine.llm.providers.openai import create_openai_responses_client
 from engine.api.agent_results import router as result_router
 
@@ -44,6 +47,32 @@ class LlmTestResponse(BaseModel):
     error_message: str | None = None
 
 
+def _probe_llm_service(*, client: Any, model_name: str) -> None:
+    """Probe the configured LLM endpoint with legacy-compatible fallback.
+
+    DBFox runtime prefers Responses; if the endpoint does not expose it (404),
+    fallback to Chat Completions, which is what many OpenAI-compatible
+    gateways (including MiMo) currently support.
+    """
+
+    try:
+        client.responses.create(
+            model=model_name,
+            input="ping",
+            max_output_tokens=16,
+            store=False,
+        )
+        return
+    except APIStatusError as exc:
+        if not _responses_not_found_falls_back_to_chat(exc):
+            raise
+        client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": "ping"}],
+            max_completion_tokens=16,
+        )
+
+
 @router.post("/agent/llm/test", response_model=LlmTestResponse)
 def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
     """Test the exact Responses capability required by the Agent runtime.
@@ -63,12 +92,7 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
             api_base=config.api_base,
             timeout=10.0,
         )
-        client.responses.create(
-            model=config.model_name,
-            input="ping",
-            max_output_tokens=16,
-            store=False,
-        )
+        _probe_llm_service(client=client, model_name=config.model_name)
         latency_ms = int((_time.monotonic() - t0) * 1000)
         return LlmTestResponse(
             ok=True,

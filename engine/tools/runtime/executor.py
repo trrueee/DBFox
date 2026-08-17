@@ -161,26 +161,11 @@ class ToolExecutor:
         )
         if max_workers > self._max_workers:
             max_workers = self._max_workers
-        gate = threading.Semaphore(max_workers)
-
-        def run_task(operation: Callable[[], TResult]) -> TResult:
-            with gate:
-                return operation()
-
-        futures: list[Future[TResult]] = []
-        for task in tasks:
-            future = self._submit_batch_task(lambda op=task.operation: run_task(op))
-            if future is None:
-                for completed in futures:
-                    try:
-                        completed.result(timeout=0.001)
-                    except Exception:
-                        pass
-                raise RuntimeError(
-                    "Tool execution capacity is temporarily unavailable."
-                )
-            futures.append(future)
-        return [future.result() for future in futures]
+        if max_workers == 1:
+            return [task.operation() for task in tasks]
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="tool-batch") as pool:
+            futures: list[Future[TResult]] = [pool.submit(task.operation) for task in tasks]
+            return [future.result() for future in futures]
 
     def _submit(
         self,

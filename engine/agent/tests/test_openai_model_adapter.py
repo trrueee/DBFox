@@ -138,6 +138,36 @@ class _Client:
         self.responses = _Responses(events)
 
 
+class _ChatCompletionEventStream:
+    def __init__(self, events: list[dict[str, Any]]) -> None:
+        self._events = iter(events)
+        self.closed = False
+
+    def __aiter__(self) -> "_ChatCompletionEventStream":
+        return self
+
+    async def __anext__(self) -> dict[str, Any]:
+        try:
+            return next(self._events)
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class _ChatCompletions:
+    def __init__(self, events: list[dict[str, Any]]) -> None:
+        self.events = events
+        self.stream: _ChatCompletionEventStream | None = None
+        self.request: dict[str, object] | None = None
+
+    async def create(self, **request: object) -> _ChatCompletionEventStream:
+        self.request = request
+        self.stream = _ChatCompletionEventStream(self.events)
+        return self.stream
+
+
 def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
     completed_message = _message(
         "msg_1",
@@ -872,3 +902,92 @@ def test_responses_stream_honors_cancellation_and_closes_sdk_stream() -> None:
 
     assert client.responses.stream is not None
     assert client.responses.stream.closed
+
+
+def test_fallback_to_chat_completion_on_responses_404_with_tool_call() -> None:
+    request = httpx.Request("POST", "https://provider.test/v1/responses")
+    response = httpx.Response(404, request=request)
+
+    class _FailingResponses:
+        async def create(self, **_request: object) -> object:
+            raise APIStatusError(
+                "route not found",
+                response=response,
+                body={"error": {"code": "route_not_found"}},
+            )
+
+    completions = _ChatCompletions(
+        [
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "schema_inspect",
+                                        "arguments": "{\"table_name\":\"orders\"}",
+                                    },
+                                }
+                            ]
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 8,
+                    "completion_tokens": 3,
+                    "total_tokens": 11,
+                },
+            }
+        ]
+    )
+    client = SimpleNamespace(
+        responses=_FailingResponses(),
+        chat=SimpleNamespace(completions=completions),
+    )
+
+    result = TurnStreamAssembler().consume(
+        OpenAIModelAdapter(
+            client=client,  # type: ignore[arg-type]
+            model_name="mimo-v2-pro",
+        ).stream(
+            messages=[{"role": "user", "content": "读取订单表结构"}],
+            tools=[
+                {
+                    "type": "function",
+                    "name": "schema_inspect",
+                    "description": "读取表结构",
+                    "parameters": {"type": "object", "properties": {}},
+                }
+            ],
+        )
+    )
+
+    assert result.tool_calls[0].id == "call_1"
+    assert result.tool_calls[0].name == "schema_inspect"
+    assert result.tool_calls[0].arguments == {"table_name": "orders"}
+    assert result.output_items == [
+        {
+            "type": "function_call",
+            "id": "call_1",
+            "call_id": "call_1",
+            "name": "schema_inspect",
+            "arguments": "{\"table_name\":\"orders\"}",
+            "status": "completed",
+        }
+    ]
+    assert result.messages == []
+    assert result.usage == {
+        "prompt_tokens": 8,
+        "completion_tokens": 3,
+        "total_tokens": 11,
+    }
+    assert completions.request is not None
+    assert "messages" in completions.request
+    assert "input" not in completions.request
+    assert "store" not in completions.request

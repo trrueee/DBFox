@@ -48,6 +48,8 @@ from engine.json_codec import (
     loads,
 )
 from engine.app.safe_errors import fixed_error_detail
+from engine.tools.runtime.attempt import ResourceScopeRef
+from engine.tools.runtime.resource_context import resolve_workspace_scope_ref
 
 
 MAX_HISTORY_MESSAGES = 24
@@ -547,7 +549,6 @@ class ContextAssembler:
     ) -> list[dict[str, Any]]:
         from engine.agent.context_fragment import ContextContributionInput
         from engine.agent.context_contributors import CONTEXT_CONTRIBUTORS
-        from engine.tools.runtime.attempt import ResourceScopeRef
 
         contribution_input = ContextContributionInput(
             session_id=str(run.session_id),
@@ -569,8 +570,6 @@ class ContextAssembler:
         return fragments
 
     def _resource_refs_for_run(self, run: AgentRun) -> tuple[ResourceScopeRef, ...]:
-        from engine.tools.runtime.resource_context import resolve_workspace_scope_ref
-
         resource_refs: list[ResourceScopeRef] = []
         if run.datasource_id:
             resource_refs.append(
@@ -580,9 +579,10 @@ class ContextAssembler:
                     version=int(run.datasource_generation or 0),
                 )
             )
-        workspace_ref = resolve_workspace_scope_ref(
-            self.session,
-            str(run.datasource_id),
+        workspace_ref = (
+            resolve_workspace_scope_ref(self.session, str(run.datasource_id))
+            if run.datasource_id
+            else None
         )
         if workspace_ref is not None:
             resource_refs.append(workspace_ref)
