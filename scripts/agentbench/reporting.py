@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import platform
 import subprocess
-from typing import Any
+from typing import Any, Literal
 from xml.etree import ElementTree
 
 from pydantic import BaseModel, ConfigDict
@@ -34,6 +34,37 @@ class TrialRecord(BaseModel):
     repetition: int
     trace: TrialTrace
     score: TrialScore
+    memory_evidence: "MemoryTrialEvidence | None" = None
+
+
+class MemoryTrialEvidence(BaseModel):
+    """Durable Memory v4 evidence captured by the production real runner."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    case_id: str
+    memory_variant: Literal["v3", "v4"]
+    projection_written: bool
+    projection_typed_valid: bool
+    projection_fingerprint_valid: bool
+    projection_consumed: bool
+    projection_watermark: int | None = None
+    projection_lag: int | None = None
+    scope_match: bool | None = None
+    generation_match: bool | None = None
+    catalog_revision_match: bool | None = None
+    run2_schema_search_calls: int = 0
+    run2_schema_inspect_calls: int = 0
+    run2_discovery_calls: int = 0
+    duplicate_discovery_calls: int = 0
+    stale_reuse_count: int = 0
+    correction_obeyed: bool | None = None
+    result_equivalent: bool | None = None
+    expected_memory_consumption: Literal["required", "forbidden", "optional"]
+    projection_error_code: str | None = None
+    classification: Literal[
+        "scored", "runtime_defect", "infrastructure", "model_behavior", "efficiency_regression"
+    ]
 
 
 def _git(command: str) -> str:

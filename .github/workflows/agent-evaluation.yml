@@ -11,7 +11,7 @@ on:
         required: true
         default: nightly
         type: choice
-        options: [nightly, weekly]
+        options: [nightly, weekly, memory-smoke]
       repetitions:
         description: Repetitions (1-5; blank uses the profile default)
         required: false
@@ -150,8 +150,9 @@ jobs:
         shell: bash
         run: |
           test -n "$DBFOX_REAL_LLM_API_KEY"
+          test -n "$DBFOX_REAL_LLM_API_BASE"
           test -n "$DBFOX_REAL_LLM_MODEL"
-      - name: Select the nightly or weekly profile
+      - name: Select the evaluation profile
         id: profile
         shell: bash
         env:
@@ -162,7 +163,9 @@ jobs:
           profile="${DISPATCH_PROFILE:-nightly}"
           if [[ "$SCHEDULE" == "25 2 * * 0" ]]; then profile="weekly"; fi
           repetitions="$DISPATCH_REPETITIONS"
-          if [[ -z "$repetitions" ]]; then
+          if [[ "$profile" == "memory-smoke" ]]; then
+            repetitions=1
+          elif [[ -z "$repetitions" ]]; then
             if [[ "$profile" == "weekly" ]]; then repetitions=5; else repetitions=3; fi
           fi
           if [[ ! "$repetitions" =~ ^[1-5]$ ]]; then
@@ -177,9 +180,16 @@ jobs:
           PROFILE: ${{ steps.profile.outputs.profile }}
           REPETITIONS: ${{ steps.profile.outputs.repetitions }}
         run: |
-          args=(--tag real_provider --repetitions "$REPETITIONS" --output output/agent-evaluation/real-provider)
-          if [[ "$PROFILE" == "nightly" ]]; then args+=(--tag nightly); fi
-          python -m scripts.agentbench real "${args[@]}"
+          if [[ "$PROFILE" == "memory-smoke" ]]; then
+            python -m scripts.agentbench memory-paired \
+              --dataset scripts/agentbench/datasets/memory-v1.json \
+              --profile smoke \
+              --output output/agent-evaluation/memory-paired-smoke
+          else
+            args=(--tag real_provider --repetitions "$REPETITIONS" --output output/agent-evaluation/real-provider)
+            if [[ "$PROFILE" == "nightly" ]]; then args+=(--tag nightly); fi
+            python -m scripts.agentbench real "${args[@]}"
+          fi
       - name: Upload real-provider evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 from datetime import UTC, datetime
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
 
 from scripts.agentbench.calibration import load_calibration, run_calibration
 from scripts.agentbench.comparison import compare_summaries, load_summary
+from scripts.agentbench.memory_paired import run_memory_paired
 from scripts.agentbench.reporting import (
     TrialRecord,
     environment_evidence,
@@ -63,6 +65,13 @@ def _parser() -> argparse.ArgumentParser:
         default=ROOT / "output" / "agent-evaluation" / f"agentbench-{_stamp()}",
     )
 
+    paired = subparsers.add_parser(
+        "memory-paired", help="run one isolated Memory v3/v4 ABBA smoke block"
+    )
+    paired.add_argument("--dataset", type=Path, required=True)
+    paired.add_argument("--profile", choices=["smoke"], default="smoke")
+    paired.add_argument("--output", type=Path, required=True)
+
     replay = subparsers.add_parser("replay", help="offline re-score stored trials")
     replay.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     replay.add_argument("--trials", type=Path, required=True)
@@ -104,6 +113,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "calibrate":
         return _write_calibration(args.output, args.suite)
+    if args.command == "memory-paired":
+        manifest = load_manifest(args.dataset)
+        try:
+            _summary, exit_code = run_memory_paired(
+                manifest=manifest,
+                dataset=args.dataset,
+                profile=args.profile,
+                output=args.output,
+                environment=dict(os.environ),
+            )
+        except EvaluationConfigurationError as exc:
+            print(f"AGENTBENCH_NOT_CONFIGURED: {exc}", file=sys.stderr)
+            return 2
+        print(f"MEMORY_PAIRED_REPORT={args.output / 'memory-paired-report.md'}")
+        return exit_code
     if args.command == "compare":
         result = compare_summaries(
             load_summary(args.baseline),

@@ -71,7 +71,7 @@ Run 3: 可选 scope 变化或反向纠正
 3. `failed-preview-then-query`：Run 1 失败后 Run 2 仍复用已验证 schema。
 4. `missing-column-repair`：Run 2 不复用已被证伪的列。
 5. `generation-change-invalidates`：generation 变化后 Run 2 必须重新发现。
-6. `no-progress-does-not-poison`：失败/拒绝工具输出不应成为 working state。
+6. `no-progress-does-not-poison`：真实 `AGENT_NO_PROGRESS` terminal Run 不应产生虚假 Catalog working state；失败/拒绝工具输出另有独立覆盖。
 
 每个场景记录：Run 2 结果等价性、工具调用序列、重复 discovery 调用数、注入 fragment 的 provenance，以及是否发生 projection 错误。
 
@@ -151,7 +151,7 @@ Run 3: 可选 scope 变化或反向纠正
 1. 在现有 Memory projection/Context 测试中补齐 A 层表格中的缺口。
 2. 在 Agent harness 添加 B 层的 six-case scripted provider suite，并让每个 case 产出上述断言字段。
 3. 扩展 AgentBench reporting/comparison，增加 Memory 专项 case-level evidence；不要替换通用比较器。
-4. 先跑专项集 3 repetitions 的 v3/v4 ABBA smoke，审查报告和成本。
+4. 先使用 `python -m scripts.agentbench memory-paired --dataset scripts/agentbench/datasets/memory-v1.json --profile smoke --output <dir>` 跑一个三 case、十二 trial 的 v3/v4 ABBA smoke。该命令只启动现有 `real` 子进程：每个 trial 独立进程、runtime、metadata DB、datasource fixture 和 Session；child 在关闭 production DB 前写出 durable Memory evidence。
 5. 专项集全绿后，运行完整 60 case paired candidate；通过后再提交默认 flag 切换。
 
 ## 7. 当前真实 Provider 结果的使用方式
