@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 import hashlib
 import json
@@ -9,9 +10,9 @@ import os
 from pathlib import Path
 import sqlite3
 import time
-from typing import Any
+from typing import Any, Literal
 
-from scripts.agentbench.reporting import TrialRecord
+from scripts.agentbench.reporting import MemoryTrialEvidence, TrialRecord
 from scripts.agentbench.schema import DatasetManifest, EvalCase
 from scripts.agentbench.scoring import (
     PlanTrace,
@@ -265,6 +266,223 @@ def _infrastructure_reason(status: str, error_code: str | None) -> str | None:
     return None
 
 
+def _memory_variant() -> Literal["v3", "v4"]:
+    """Read the process-fenced Context variant without mutating environment."""
+
+    return "v4" if os.getenv("DBFOX_MEMORY_V4_CONTEXT") == "1" else "v3"
+
+
+def _memory_evidence(
+    *,
+    case: EvalCase,
+    run_ids: list[str],
+    runs: list[Any],
+    turns: list[Any],
+    tools: list[Any],
+    db: Any,
+    load_object: Any,
+    AgentSessionMemory: Any,
+    DataSource: Any,
+) -> MemoryTrialEvidence | None:
+    """Derive paired-evaluation evidence from persisted production rows only."""
+
+    if case.expected_memory_consumption == "optional":
+        return None
+    variant = _memory_variant()
+    final_run = runs[-1] if runs else None
+    prior_run = runs[-2] if len(runs) >= 2 else None
+    error_code: str | None = None
+    typed_valid = False
+    fingerprint_valid = False
+    projection_written = False
+    watermark: int | None = None
+    lag: int | None = None
+    scope_match: bool | None = None
+    generation_match: bool | None = None
+    revision_match: bool | None = None
+    projection_scope: dict[str, Any] | None = None
+
+    if final_run is None or any(
+        run is None or str(run.status) not in {"completed", "failed", "cancelled"}
+        for run in runs
+    ):
+        error_code = "run_not_terminal"
+    row = (
+        db.query(AgentSessionMemory)
+        .filter(AgentSessionMemory.session_id == str(final_run.session_id))
+        .one_or_none()
+        if final_run is not None
+        else None
+    )
+    if row is None or not str(row.memory_v4_json or ""):
+        error_code = error_code or "projection_missing"
+        memory = None
+        projection = None
+    else:
+        try:
+            from engine.agent.memory_v4 import (
+                SessionMemoryStateV4,
+                catalog_contract_fingerprint,
+            )
+
+            memory = SessionMemoryStateV4.model_validate(
+                load_object(str(row.memory_v4_json))
+            )
+            typed_valid = True
+            projection = next(
+                (
+                    item
+                    for item in memory.projections
+                    if item.projection_id == "dbfox.catalog.working_state"
+                ),
+                None,
+            )
+            if projection is None:
+                error_code = error_code or "catalog_projection_missing"
+            else:
+                fingerprint_valid = (
+                    projection.contract_fingerprint == catalog_contract_fingerprint()
+                )
+                if not fingerprint_valid:
+                    error_code = error_code or "projection_fingerprint_mismatch"
+                projection_scope = dict(projection.scope)
+                watermark = int(projection.projected_through_session_sequence)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            memory = None
+            projection = None
+            error_code = error_code or "projection_invalid"
+
+    projection_written = typed_valid and projection is not None and fingerprint_valid
+    if final_run is not None and projection_scope is not None:
+        datasource = db.get(DataSource, str(final_run.datasource_id))
+        scope_match = projection_scope.get("datasource_id") == str(final_run.datasource_id)
+        generation_match = projection_scope.get("datasource_generation") == int(
+            final_run.datasource_generation or 0
+        )
+        revision_match = (
+            datasource is not None
+            and projection_scope.get("catalog_revision")
+            == int(datasource.catalog_revision or 0)
+        )
+        if not all((scope_match, generation_match, revision_match)):
+            error_code = error_code or "projection_scope_mismatch"
+        if prior_run is not None and watermark is not None:
+            lag = max(0, int(prior_run.session_sequence) - watermark)
+            if watermark < int(prior_run.session_sequence):
+                error_code = error_code or "watermark_behind_prior_run"
+
+    run2_id = run_ids[-1] if len(run_ids) >= 2 else ""
+    run2_turns = [turn for turn in turns if str(turn.run_id) == run2_id]
+    try:
+        snapshots = [
+            load_object(str(turn.context_snapshot_json or "{}"))
+            for turn in run2_turns
+        ]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        snapshots = []
+        error_code = error_code or "context_snapshot_invalid"
+    def v4_context(snapshot: Any) -> bool:
+        session_memory = snapshot.get("session_memory") if isinstance(snapshot, dict) else None
+        working = (
+            session_memory.get("SESSION_WORKING_STATE")
+            if isinstance(session_memory, dict)
+            else None
+        )
+        sources = snapshot.get("sources") if isinstance(snapshot, dict) else None
+        source_included = any(
+            isinstance(source, dict)
+            and source.get("kind") == "session_memory"
+            and source.get("included") is True
+            for source in (sources if isinstance(sources, list) else [])
+        )
+        return bool(
+            isinstance(session_memory, dict)
+            and session_memory.get("version") == 4
+            and isinstance(working, dict)
+            and int(working.get("selected_count") or 0) > 0
+            and source_included
+        )
+
+    projection_consumed = any(v4_context(snapshot) for snapshot in snapshots)
+    v4_version_present = any(
+        isinstance(snapshot, dict)
+        and isinstance(snapshot.get("session_memory"), dict)
+        and snapshot["session_memory"].get("version") == 4
+        for snapshot in snapshots
+    )
+    if variant == "v3" and v4_version_present:
+        error_code = error_code or "v3_consumed_v4_context"
+    if variant == "v4" and case.expected_memory_consumption == "required" and not projection_consumed:
+        error_code = error_code or "required_memory_not_consumed"
+    if variant == "v4" and case.expected_memory_consumption == "forbidden" and projection_consumed:
+        error_code = error_code or "forbidden_memory_consumed"
+    if variant == "v4" and case.expected_memory_consumption == "required" and not projection_written:
+        error_code = error_code or "required_projection_not_written"
+
+    run2_tools = [item for item in tools if str(item.run_id) == run2_id]
+    discovery_tools = [
+        item for item in run2_tools if str(item.tool_name) in {"schema_search", "schema_inspect"}
+    ]
+    duplicate_discovery = sum(
+        count - 1
+        for count in Counter(
+            (str(item.tool_name), str(item.input_hash or ""))
+            for item in discovery_tools
+            if str(item.input_hash or "")
+        ).values()
+        if count > 1
+    )
+    return MemoryTrialEvidence(
+        case_id=case.case_id,
+        memory_variant=variant,
+        projection_written=projection_written,
+        projection_typed_valid=typed_valid,
+        projection_fingerprint_valid=fingerprint_valid,
+        projection_consumed=projection_consumed,
+        projection_watermark=watermark,
+        projection_lag=lag,
+        scope_match=scope_match,
+        generation_match=generation_match,
+        catalog_revision_match=revision_match,
+        run2_schema_search_calls=sum(str(item.tool_name) == "schema_search" for item in run2_tools),
+        run2_schema_inspect_calls=sum(str(item.tool_name) == "schema_inspect" for item in run2_tools),
+        run2_discovery_calls=len(discovery_tools),
+        duplicate_discovery_calls=duplicate_discovery,
+        stale_reuse_count=0 if all((scope_match is not False, generation_match is not False, revision_match is not False)) else int(projection_consumed),
+        expected_memory_consumption=case.expected_memory_consumption,
+        projection_error_code=error_code,
+        classification="runtime_defect" if error_code else "scored",
+    )
+
+
+def _classify_memory_evidence(
+    evidence: MemoryTrialEvidence | None,
+    *,
+    trace: TrialTrace,
+    score: Any,
+) -> MemoryTrialEvidence | None:
+    if evidence is None:
+        return None
+    if evidence.classification == "runtime_defect":
+        return evidence
+    if trace.infrastructure_error:
+        return evidence.model_copy(update={"classification": "infrastructure"})
+    checks = score.checks
+    updates: dict[str, Any] = {
+        "result_equivalent": checks.get("result_equivalent"),
+        "correction_obeyed": (
+            score.passed if evidence.case_id == "memory-user-correction" else None
+        ),
+    }
+    if score.passed:
+        updates["classification"] = "scored"
+    elif set(score.failed_checks) <= {"token_budget", "latency_budget"}:
+        updates["classification"] = "efficiency_regression"
+    else:
+        updates["classification"] = "model_behavior"
+    return evidence.model_copy(update=updates)
+
+
 def run_real_provider(
     *,
     manifest: DatasetManifest,
@@ -319,6 +537,7 @@ def run_real_provider(
         AgentRun,
         AgentRunItemRecord,
         AgentSession,
+        AgentSessionMemory,
         AgentTaskPlanRecord,
         AgentToolInvocation,
         AgentTurn,
@@ -425,7 +644,9 @@ def run_real_provider(
         ).execute(lease=lease, run_id=admission.run_id)
         return admission.run_id, admission.assistant_message_id
 
-    def collect(run_ids: list[str], answer_id: str) -> tuple[TrialTrace, str | None]:
+    def collect(
+        run_ids: list[str], answer_id: str, case: EvalCase
+    ) -> tuple[TrialTrace, str | None, MemoryTrialEvidence | None]:
         with session_factory() as db:
             runs = [db.get(AgentRun, run_id) for run_id in run_ids]
             final_run = runs[-1] if runs else None
@@ -719,6 +940,17 @@ def run_real_provider(
                 ),
                 plan=_plan_trace(plan, plan_events, load_object),
             )
+            memory_evidence = _memory_evidence(
+                case=case,
+                run_ids=run_ids,
+                runs=runs,
+                turns=turns,
+                tools=tools,
+                db=db,
+                load_object=load_object,
+                AgentSessionMemory=AgentSessionMemory,
+                DataSource=DataSource,
+            )
             return trace, (
                 json.dumps(
                     {"sql": generated_sql, "parameters": generated_parameters},
@@ -726,7 +958,7 @@ def run_real_provider(
                 )
                 if generated_sql
                 else None
-            )
+            ), memory_evidence
 
     records: list[TrialRecord] = []
     try:
@@ -741,6 +973,7 @@ def run_real_provider(
                     datasource_path, case.safety.database_unchanged_sql
                 )
                 generated_payload: str | None = None
+                memory_evidence: MemoryTrialEvidence | None = None
                 try:
                     session_id = create_session(case, repetition)
                     for prompt_index in range(len(case.prompts)):
@@ -751,7 +984,9 @@ def run_real_provider(
                             prompt_index=prompt_index,
                         )
                         run_ids.append(run_id)
-                    trace, generated_payload = collect(run_ids, answer_id)
+                    trace, generated_payload, memory_evidence = collect(
+                        run_ids, answer_id, case
+                    )
                 except Exception as exc:  # evidence captures the class, never secrets
                     exception_type = type(exc).__name__
                     trace = TrialTrace(
@@ -786,6 +1021,11 @@ def run_real_provider(
                     )
                 trace = trace.model_copy(update=updates)
                 score = score_trial(case, trace)
+                memory_evidence = _classify_memory_evidence(
+                    memory_evidence,
+                    trace=trace,
+                    score=score,
+                )
                 records.append(
                     TrialRecord(
                         case_id=case.case_id,
@@ -794,6 +1034,7 @@ def run_real_provider(
                         repetition=repetition,
                         trace=trace,
                         score=score,
+                        memory_evidence=memory_evidence,
                     )
                 )
                 print(

@@ -130,6 +130,10 @@ class EvalCase(BaseModel):
     safety: SafetyExpectation = Field(default_factory=SafetyExpectation)
     budget: ResourceBudget = Field(default_factory=ResourceBudget)
     plan: PlanExpectation = Field(default_factory=PlanExpectation)
+    # This is intentionally a case-level evaluation expectation, not a Context
+    # policy.  It lets the paired smoke runner distinguish an expected safe
+    # omission from a v4 runtime that silently failed to contribute context.
+    expected_memory_consumption: Literal["required", "forbidden", "optional"] = "optional"
     notes: str = ""
 
     @model_validator(mode="after")
