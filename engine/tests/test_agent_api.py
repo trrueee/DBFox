@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from openai import APIStatusError
 from pydantic import ValidationError
 
 import engine.api.agent as agent_module
@@ -76,6 +77,92 @@ def test_llm_test_uses_product_config_and_factory(monkeypatch):
         "llm_credential_id": "cred_llm_api_key_test",
         "api_base": "https://example.test/v1",
         "model_name": "qwen-plus",
+    }
+
+
+def test_llm_test_falls_back_to_chat_completion_on_responses_404(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakeResponse:
+        def __init__(self, url: str) -> None:
+            self.status_code = 404
+            self.headers = {"x-request-id": "x-request-id"}
+            self.request = SimpleNamespace(url=url)
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            captured["response"] = kwargs
+            raise APIStatusError(
+                message="Not Found",
+                response=_FakeResponse("https://example.test/v1/responses"),
+                body={"error": {"message": "not found"}},
+            )
+
+    class FakeChatCompletion:
+        def create(self, **kwargs):
+            captured["chat"] = kwargs
+
+    class FakeChat:
+        def __init__(self) -> None:
+            self.completions = FakeChatCompletion()
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.responses = FakeResponses()
+            self.chat = FakeChat()
+
+    def fake_create_client(**kwargs):
+        captured["client_kwargs"] = kwargs
+        return FakeClient()
+
+    def fake_resolve_product_config(**kwargs):
+        captured["resolve_kwargs"] = kwargs
+        return SimpleNamespace(
+            model_name="mimo-v2.5-pro",
+            api_key="test-secret",
+            api_base="https://example.test/v1",
+            source="product",
+        )
+
+    monkeypatch.setattr(
+        agent_module,
+        "resolve_product_llm_config_from_credential",
+        fake_resolve_product_config,
+    )
+    monkeypatch.setattr(agent_module, "create_openai_responses_client", fake_create_client)
+
+    response = agent_module.api_llm_test(
+        agent_module.LlmTestRequest(
+            llm_credential_id="cred_llm_api_key_test",
+            api_base="https://example.test/v1",
+            model_name="mimo-v2.5-pro",
+        )
+    )
+
+    resolve_kwargs = captured["resolve_kwargs"]
+    assert response.ok is True
+    assert response.model == "mimo-v2.5-pro"
+    assert response.api_base == "https://example.test/v1"
+    assert captured["response"] == {
+        "model": "mimo-v2.5-pro",
+        "input": "ping",
+        "max_output_tokens": 16,
+        "store": False,
+    }
+    assert captured["chat"] == {
+        "model": "mimo-v2.5-pro",
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_completion_tokens": 16,
+    }
+    assert captured["client_kwargs"] == {
+        "api_key": "test-secret",
+        "api_base": "https://example.test/v1",
+        "timeout": 10.0,
+    }
+    assert resolve_kwargs == {
+        "llm_credential_id": "cred_llm_api_key_test",
+        "api_base": "https://example.test/v1",
+        "model_name": "mimo-v2.5-pro",
     }
 
 
