@@ -38,6 +38,7 @@ from engine.tools.runtime import (
     BaseTool,
     ToolInputModel,
     ToolOutputModel,
+    ToolPolicy,
     ToolOutcome,
     ToolExecutionSpec,
     ToolPresentation,
@@ -47,13 +48,20 @@ from engine.tools.runtime.observation import ToolObservationProjection
 from engine.tools.runtime.semantics import ToolSemanticCapability
 
 
-def _tool_turn(call_id: str, name: str, arguments: dict[str, object]):
+def _tool_turn(
+    call_id: str,
+    name: str,
+    arguments: dict[str, object],
+    *,
+    tool_call_index: int = 0,
+    output_index: int = 0,
+):
     encoded = json.dumps(arguments, ensure_ascii=False)
     yield TurnStreamItem(
         kind=TurnStreamKind.TOOL_CALL_START,
         item_id="tool:0",
         revision=1,
-        tool_call_index=0,
+        tool_call_index=tool_call_index,
         tool_call_id=call_id,
         tool_name=name,
         arguments_delta=encoded,
@@ -62,13 +70,13 @@ def _tool_turn(call_id: str, name: str, arguments: dict[str, object]):
         kind=TurnStreamKind.TOOL_CALL_END,
         item_id="tool:0",
         revision=2,
-        tool_call_index=0,
+        tool_call_index=tool_call_index,
     )
     yield TurnStreamItem(
         kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
         item_id="tool:0",
         revision=3,
-        output_index=0,
+        output_index=output_index,
         model_output_item={
             "type": "function_call",
             "call_id": call_id,
@@ -448,6 +456,76 @@ class ParallelSafeToolB(ParallelSafeTool):
     name = "parallel_safe_test_b"
 
 
+class ParallelSafeToolC(ParallelSafeTool):
+    name = "parallel_safe_test_c"
+    execution = ToolExecutionSpec(concurrency="sequential", timeout_seconds=2)
+
+
+class BudgetCountInput(ToolInputModel):
+    marker: str
+
+
+class BudgetCountOutput(ToolOutputModel):
+    marker: str
+
+
+class BudgetCountTool(BaseTool[BudgetCountInput, BudgetCountOutput]):
+    group = "catalog"
+    name = "budget_count_tool"
+    description = "Count for budget-admission regression."
+    input_model = BudgetCountInput
+    output_model = BudgetCountOutput
+    presentation = ToolPresentation(
+        title="Budget count",
+        category="query",
+        visibility="summary",
+    )
+    execution = ToolExecutionSpec(timeout_seconds=1)
+
+    def run(self, tool_input, context):
+        del context
+        _record_parallel_tool_event("start", tool_input.marker)
+        _record_parallel_tool_event("end", tool_input.marker)
+        return ToolOutcome(
+            output=BudgetCountOutput(
+                marker=tool_input.marker,
+            ),
+        )
+
+
+class ApprovalAwareInput(ToolInputModel):
+    marker: str
+
+
+class ApprovalAwareOutput(ToolOutputModel):
+    marker: str
+
+
+class ApprovalAwareTool(BaseTool[ApprovalAwareInput, ApprovalAwareOutput]):
+    name = "approval_required_tool"
+    group = "catalog"
+    description = "Tool requiring approval that must stop dispatch before execution."
+    input_model = ApprovalAwareInput
+    output_model = ApprovalAwareOutput
+    policy = ToolPolicy(requires_approval=True)
+    presentation = ToolPresentation(
+        title="Approval required test",
+        category="manage",
+        visibility="summary",
+    )
+    execution = ToolExecutionSpec(timeout_seconds=1)
+
+    def run(self, tool_input, context):
+        del context
+        _record_parallel_tool_event("start", tool_input.marker)
+        _record_parallel_tool_event("end", tool_input.marker)
+        return ToolOutcome(
+            output=ApprovalAwareOutput(
+                marker=tool_input.marker,
+            ),
+        )
+
+
 class ParallelSafeModel:
     def __init__(self, call_number: int):
         self.call_number = call_number
@@ -465,11 +543,15 @@ class ParallelSafeModel:
                 "parallel-safe-a",
                 "parallel_safe_test_a",
                 {"marker": "A", "delay_seconds": 0.2},
+                tool_call_index=0,
+                output_index=0,
             )
             yield from _tool_turn(
                 "parallel-safe-b",
                 "parallel_safe_test_b",
                 {"marker": "B", "delay_seconds": 0.2},
+                tool_call_index=1,
+                output_index=1,
             )
             yield TurnStreamItem(
                 kind=TurnStreamKind.FINISH,
@@ -519,6 +601,589 @@ class ParallelSafeModel:
             revision=1,
             usage={"input_tokens": 10, "output_tokens": 8, "total_tokens": 18},
         )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.FINISH,
+            item_id="finish",
+            revision=1,
+            termination=TurnTermination.COMPLETED,
+        )
+
+
+class ParallelBatchBarrierModel:
+    def __init__(self, call_number: int):
+        self.call_number = call_number
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        del messages, timeout_seconds, cancellation_probe
+        if self.call_number == 1:
+            available = {str(item.get("name") or "") for item in tools}
+            assert {
+                "parallel_safe_test_a",
+                "parallel_safe_test_b",
+                "parallel_safe_test_c",
+            }.issubset(available)
+            yield from _tool_turn(
+                "barrier-a",
+                "parallel_safe_test_a",
+                {"marker": "A", "delay_seconds": 0.2},
+                tool_call_index=0,
+                output_index=0,
+            )
+            yield from _tool_turn(
+                "barrier-b",
+                "parallel_safe_test_b",
+                {"marker": "B", "delay_seconds": 0.2},
+                tool_call_index=1,
+                output_index=1,
+            )
+            yield from _tool_turn(
+                "barrier-c",
+                "parallel_safe_test_c",
+                {"marker": "C", "delay_seconds": 0.2},
+                tool_call_index=2,
+                output_index=2,
+            )
+            yield from _tool_turn(
+                "barrier-d",
+                "parallel_safe_test_a",
+                {"marker": "D", "delay_seconds": 0.2},
+                tool_call_index=3,
+                output_index=3,
+            )
+            yield from _tool_turn(
+                "barrier-e",
+                "parallel_safe_test_b",
+                {"marker": "E", "delay_seconds": 0.2},
+                tool_call_index=4,
+                output_index=4,
+            )
+            return
+
+        assert self.call_number == 2
+        yield from _final_turn("A/B/C/D/E 执行路径已完成。")
+
+
+class ApprovalAwareModel:
+    def __init__(self, call_number: int):
+        self.call_number = call_number
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        del messages, timeout_seconds, cancellation_probe
+        if self.call_number == 1:
+            available = {str(item.get("name") or "") for item in tools}
+            assert {
+                "parallel_safe_test_a",
+                "approval_required_tool",
+                "parallel_safe_test_b",
+            }.issubset(available)
+            yield from _tool_turn(
+                "approval-a",
+                "parallel_safe_test_a",
+                {"marker": "A", "delay_seconds": 0.2},
+                tool_call_index=0,
+                output_index=0,
+            )
+            yield from _tool_turn(
+                "approval-b",
+                "approval_required_tool",
+                {"marker": "B"},
+                tool_call_index=1,
+                output_index=1,
+            )
+            yield from _tool_turn(
+                "approval-c",
+                "parallel_safe_test_b",
+                {"marker": "C", "delay_seconds": 0.2},
+                tool_call_index=2,
+                output_index=2,
+            )
+            return
+
+        assert self.call_number == 2
+        yield _final_turn("该测试仅在等待审批时检查提交行为。")
+
+
+class ParallelOutcomeOrderModel:
+    def __init__(self, call_number: int):
+        self.call_number = call_number
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        del messages, timeout_seconds, cancellation_probe
+        assert self.call_number == 1
+        yield from _tool_turn(
+            "order-a",
+            "parallel_safe_test_a",
+            {"marker": "A", "delay_seconds": 0.30},
+            tool_call_index=0,
+            output_index=0,
+        )
+        yield from _tool_turn(
+            "order-b",
+            "parallel_safe_test_b",
+            {"marker": "B", "delay_seconds": 0.02},
+            tool_call_index=1,
+            output_index=1,
+        )
+        yield _final_turn("并发完成顺序测试。")
+
+
+class ParallelFailureInput(ToolInputModel):
+    marker: str
+
+
+class ParallelFailureOutput(ToolOutputModel):
+    marker: str
+
+
+class ParallelFailingTool(BaseTool[ParallelFailureInput, ParallelFailureOutput]):
+    name = "parallel_fail_test"
+    group = "catalog"
+    description = "Intentionally failing parallel-safe tool."
+    input_model = ParallelFailureInput
+    output_model = ParallelFailureOutput
+    execution = ToolExecutionSpec(concurrency="parallel_safe", timeout_seconds=2)
+    presentation = ToolPresentation(
+        title="Parallel failing test",
+        category="query",
+        visibility="summary",
+    )
+
+    def run(self, tool_input, context):
+        del context
+        _record_parallel_tool_event("start", tool_input.marker)
+        raise RuntimeError(f"intentional failure: {tool_input.marker}")
+
+
+class ParallelMixedFailureModel:
+    def __init__(self, call_number: int):
+        self.call_number = call_number
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        del messages, timeout_seconds, cancellation_probe
+        assert self.call_number == 1
+        assert {
+            "parallel_fail_test",
+            "parallel_safe_test_b",
+        }.issubset({str(item.get("name") or item.get("function", {}).get("name") or "") for item in tools})
+        yield from _tool_turn(
+            "mixed-fail-a",
+            "parallel_fail_test",
+            {"marker": "A"},
+            tool_call_index=0,
+            output_index=0,
+        )
+        yield from _tool_turn(
+            "mixed-success-b",
+            "parallel_safe_test_b",
+            {"marker": "B", "delay_seconds": 0.12},
+            tool_call_index=1,
+            output_index=1,
+        )
+        yield _final_turn("并发失败隔离测试。")
+
+
+def test_parallel_safe_tool_calls_are_dispatched_as_linear_barrier_batches(
+    db_session,
+    test_datasource,
+) -> None:
+    _consume_parallel_tool_events()
+
+    session_id = "session_parallel_barrier_dispatch"
+    db_session.add(
+        AgentSession(
+            id=session_id,
+            datasource_id=str(test_datasource.id),
+            title="Parallel barrier dispatch",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="请在允许并行时并发执行，顺序调用顺序保护。"
+        " 验证并行、安全屏障与并发顺序。",
+        idempotency_key="parallel-barrier",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id=session_id, owner="worker", ttl_seconds=120)
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    calls = {"count": 0}
+
+    def model_factory(_settings):
+        calls["count"] += 1
+        return ParallelBatchBarrierModel(calls["count"])
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=ToolRegistry()
+        .register(ParallelSafeToolA())
+        .register(ParallelSafeToolB())
+        .register(ParallelSafeToolC()),
+        definition=AgentDefinition(),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    events = _consume_parallel_tool_events()
+    starts = {marker: ts for marker, phase, ts in events if phase == "start"}
+    ends = {marker: ts for marker, phase, ts in events if phase == "end"}
+    assert set(starts.keys()) == {"A", "B", "C", "D", "E"}
+    assert set(ends.keys()) == {"A", "B", "C", "D", "E"}
+    assert max(starts.values()) - min(starts.values()) < 0.40
+    assert abs(starts["A"] - starts["B"]) < 0.12
+
+    first_barrier_end = max(ends["A"], ends["B"])
+    assert starts["C"] >= first_barrier_end
+    second_barrier_end = ends["C"]
+    assert starts["D"] >= second_barrier_end
+    assert starts["E"] >= second_barrier_end
+    assert abs(starts["D"] - starts["E"]) < 0.12
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None
+    assert run.status == "completed"
+
+    invocations = (
+        db_session.query(AgentToolInvocation)
+        .filter_by(run_id=admission.run_id)
+        .order_by(AgentToolInvocation.created_at)
+        .all()
+    )
+    assert len(invocations) == 5
+    assert all(invocation.status == "succeeded" for invocation in invocations)
+
+
+def test_parallel_settlement_is_stable_in_provider_call_order(
+    db_session,
+    test_datasource,
+) -> None:
+    session_id = "session_parallel_order_settlement"
+    db_session.add(
+        AgentSession(
+            id=session_id,
+            datasource_id=str(test_datasource.id),
+            title="Parallel settlement order",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="并发工具应按调用顺序沉淀观察。",
+        idempotency_key="parallel-order-settle",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id=session_id, owner="worker", ttl_seconds=120)
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    calls = {"count": 0}
+
+    def model_factory(_settings):
+        calls["count"] += 1
+        return ParallelOutcomeOrderModel(calls["count"])
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=ToolRegistry()
+        .register(ParallelSafeToolA())
+        .register(ParallelSafeToolB()),
+        definition=AgentDefinition(),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    db_session.expire_all()
+    observations = (
+        db_session.query(AgentObservationRecord)
+        .join(
+            AgentToolInvocation,
+            AgentObservationRecord.tool_invocation_id == AgentToolInvocation.id,
+        )
+        .filter(AgentToolInvocation.run_id == admission.run_id)
+        .order_by(AgentObservationRecord.sequence)
+        .all()
+    )
+    assert len(observations) == 2
+    assert all(item.status == "succeeded" for item in observations)
+
+    invocation_ids = [
+        obs.tool_invocation_id
+        for obs in observations
+    ]
+    invocation_by_id = {
+        invocation.id: invocation
+        for invocation in db_session.query(AgentToolInvocation)
+        .filter(AgentToolInvocation.run_id == admission.run_id)
+        .all()
+    }
+    assert [
+        invocation_by_id[invocation_id].provider_call_id for invocation_id in invocation_ids
+    ] == ["order-a", "order-b"]
+
+
+def test_parallel_failed_tool_does_not_block_sibling_settlement(
+    db_session,
+    test_datasource,
+) -> None:
+    _consume_parallel_tool_events()
+
+    session_id = "session_parallel_batch_failure"
+    db_session.add(
+        AgentSession(
+            id=session_id,
+            datasource_id=str(test_datasource.id),
+            title="Parallel mixed failure",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="并行时一项失败不应阻断另一项。",
+        idempotency_key="parallel-batch-failure",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id=session_id, owner="worker", ttl_seconds=120)
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    calls = {"count": 0}
+
+    def model_factory(_settings):
+        calls["count"] += 1
+        return ParallelMixedFailureModel(calls["count"])
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=ToolRegistry()
+        .register(ParallelFailingTool())
+        .register(ParallelSafeToolB()),
+        definition=AgentDefinition(),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    events = _consume_parallel_tool_events()
+    assert {marker for marker, phase, _ in events} == {"A", "B"}
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None
+    assert run.status == "completed"
+
+    invocations = (
+        db_session.query(AgentToolInvocation)
+        .filter_by(run_id=admission.run_id)
+        .order_by(AgentToolInvocation.created_at)
+        .all()
+    )
+    assert len(invocations) == 2
+    assert [invocation.status for invocation in invocations] == [
+        "failed",
+        "succeeded",
+    ]
+    observations = (
+        db_session.query(AgentObservationRecord)
+        .join(
+            AgentToolInvocation,
+            AgentObservationRecord.tool_invocation_id == AgentToolInvocation.id,
+        )
+        .filter(AgentToolInvocation.run_id == admission.run_id)
+        .order_by(AgentObservationRecord.sequence)
+        .all()
+    )
+    assert [obs.tool_invocation_id for obs in observations] == [
+        invocations[0].id,
+        invocations[1].id,
+    ]
+
+
+def test_approval_required_call_halts_dispatch_before_execution(
+    db_session,
+    test_datasource,
+) -> None:
+    _consume_parallel_tool_events()
+
+    session_id = "session_approval_halts_dispatch"
+    db_session.add(
+        AgentSession(
+            id=session_id,
+            datasource_id=str(test_datasource.id),
+            title="Approval halts execution",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="先执行一个并行安全工具，再请求审批。",
+        idempotency_key="approval-halts-dispatch",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id=session_id, owner="worker", ttl_seconds=120)
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    calls = {"count": 0}
+
+    def model_factory(_settings):
+        calls["count"] += 1
+        return ApprovalAwareModel(calls["count"])
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=ToolRegistry()
+        .register(ParallelSafeToolA())
+        .register(ApprovalAwareTool())
+        .register(ParallelSafeToolB()),
+        definition=AgentDefinition(allowed_tool_groups=("catalog",)),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    events = _consume_parallel_tool_events()
+    assert events == []
+
+    invocations = (
+        db_session.query(AgentToolInvocation)
+        .filter_by(run_id=admission.run_id)
+        .order_by(AgentToolInvocation.created_at)
+        .all()
+    )
+    assert len(invocations) == 2
+    assert invocations[0].tool_name == "parallel_safe_test_a"
+    assert invocations[0].status == "requested"
+    assert invocations[1].tool_name == "approval_required_tool"
+    assert invocations[1].status == "waiting_approval"
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None and run.status == "waiting_approval"
+
+
+def test_tool_budget_preallocates_and_limits_execution_count(
+    db_session,
+    test_datasource,
+) -> None:
+    _consume_parallel_tool_events()
+
+    session_id = "session_tool_budget_prealloc"
+    db_session.add(
+        AgentSession(
+            id=session_id,
+            datasource_id=str(test_datasource.id),
+            title="Tool budget preallocation",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="预算上限为两次，但模型一次输出三次工具调用。",
+        idempotency_key="tool-budget-prealloc",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id=session_id, owner="worker", ttl_seconds=120)
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    db_session.commit()
+
+    calls = {"count": 0}
+
+    def model_factory(_settings):
+        calls["count"] += 1
+        return BudgetPreallocationModel(calls["count"])
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    RunLoop(
+        session_factory=factory,
+        model_factory=model_factory,
+        registry=ToolRegistry().register(BudgetCountTool()),
+        definition=AgentDefinition(limits=RunLimits(max_tool_invocations=2)),
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    events = _consume_parallel_tool_events()
+    start_markers = {marker for marker, phase, _ in events if phase == "start"}
+    end_markers = {marker for marker, phase, _ in events if phase == "end"}
+    assert start_markers == {"A", "B"}
+    assert end_markers == {"A", "B"}
+
+    invocations = (
+        db_session.query(AgentToolInvocation)
+        .filter_by(run_id=admission.run_id)
+        .all()
+    )
+    assert len(invocations) == 2
+    assert all(invocation.tool_name == "budget_count_tool" for invocation in invocations)
+    markers = sorted(
+        json.loads(invocation.input_json or "{}").get("marker", "")
+        for invocation in invocations
+    )
+    assert markers == ["A", "B"]
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None and run.status == "completed"
+    result = json.loads(run.result_json)
+    assert result["completion_disposition"] == "bounded_partial"
+    assert result["limitation_codes"] == ["TOOL_BUDGET_REACHED"]
+    assert "已达到工具调用上限" in result["answer"]["caveats"][0]
+    assert "已保留" in result["answer"]["text"]
+
+
+class BudgetPreallocationModel:
+    def __init__(self, call_number: int):
+        self.call_number = call_number
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        del tools, timeout_seconds, cancellation_probe
+        assert self.call_number == 1
+        for index, marker in enumerate(["A", "B", "C"]):
+            yield from _tool_turn(
+                f"budget-{index}",
+                "budget_count_tool",
+                {"marker": marker},
+                tool_call_index=index,
+                output_index=index,
+            )
         yield TurnStreamItem(
             kind=TurnStreamKind.FINISH,
             item_id="finish",

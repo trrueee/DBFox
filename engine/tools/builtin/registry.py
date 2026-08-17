@@ -27,12 +27,18 @@ from engine.tools.builtin.workspace import (
     WorkspaceFileSearchTool,
     WorkspaceFileWritePatchTool,
 )
+from engine.tools.builtin.remote_job import (
+    RemoteJobCancelTool,
+    RemoteJobStatusTool,
+    RemoteJobSubmitTool,
+)
 from engine.tools.runtime import ToolRegistry
 
 CORE_OWNER = "dbfox.core"
 CONVERSATION_OWNER = "dbfox.conversation"
 DATA_OWNER = "dbfox.data"
 WORKSPACE_OWNER = "dbfox.workspace"
+REMOTE_JOB_OWNER = "dbfox.remote_job"
 
 
 def register_core_functions(registry: ToolRegistry) -> None:
@@ -82,6 +88,14 @@ def register_workspace_write_extension(registry: ToolRegistry) -> None:
     registry.register(WorkspaceFileWritePatchTool(), owner=WORKSPACE_OWNER)
 
 
+def register_remote_job_extension(registry: ToolRegistry) -> None:
+    """Register the built-in Remote Job capability family."""
+
+    registry.register(RemoteJobSubmitTool(), owner=REMOTE_JOB_OWNER)
+    registry.register(RemoteJobStatusTool(), owner=REMOTE_JOB_OWNER)
+    registry.register(RemoteJobCancelTool(), owner=REMOTE_JOB_OWNER)
+
+
 def register_dbfox_tools() -> ToolRegistry:
     """Build the complete model-function registry for one DBFox Agent process.
 
@@ -98,4 +112,5 @@ def register_dbfox_tools() -> ToolRegistry:
     register_data_extension(registry)
     register_workspace_extension(registry)
     register_workspace_write_extension(registry)
+    register_remote_job_extension(registry)
     return registry.freeze()

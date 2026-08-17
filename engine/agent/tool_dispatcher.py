@@ -87,6 +87,7 @@ class ToolRequest(BaseModel):
 
 
 class ToolDispatchOutcome(StrEnum):
+    REQUESTED = "requested"
     SETTLED = "settled"
     WAITING_APPROVAL = "waiting_approval"
     WAITING_INPUT = "waiting_input"
@@ -104,6 +105,7 @@ class TransientToolOutput:
 class ToolDispatchResult:
     outcome: ToolDispatchOutcome
     provider_output: TransientToolOutput | None = None
+    invocation: ToolInvocation | None = None
 
 
 @dataclass(frozen=True)
@@ -139,6 +141,39 @@ class ToolDispatcher:
         self.approval_authority = ApprovalAuthorityVerifier()
 
     def request_and_execute(
+        self,
+        *,
+        lease: SessionLease,
+        run_id: str,
+        turn_id: str,
+        call: ModelToolCall,
+        materialization: ToolMaterialization,
+        control: LeaseAwareRunControl,
+    ) -> ToolDispatchResult:
+        dispatch = self.request(
+            lease=lease,
+            run_id=run_id,
+            turn_id=turn_id,
+            call=call,
+            materialization=materialization,
+            control=control,
+        )
+        if dispatch.outcome is not ToolDispatchOutcome.REQUESTED or dispatch.invocation is None:
+            return ToolDispatchResult(
+                outcome=dispatch.outcome,
+                provider_output=dispatch.provider_output,
+            )
+        provider_output = self.execute_requested(
+            lease,
+            dispatch.invocation,
+            control=control,
+        )
+        return ToolDispatchResult(
+            ToolDispatchOutcome.SETTLED,
+            provider_output=provider_output,
+        )
+
+    def request(
         self,
         *,
         lease: SessionLease,
@@ -244,12 +279,11 @@ class ToolDispatcher:
                 db.commit()
                 return self._settled_result(call.id, observation)
             if isinstance(registered_function, ControlCommand):
-                parsed = registered_function.input_model.model_validate(
-                    invocation.authorized_input
-                )
                 try:
                     command_result = registered_function.handle(
-                        parsed,
+                        registered_function.input_model.model_validate(
+                            invocation.authorized_input
+                        ),
                         ControlCommandContext(
                             db=db,
                             lease=lease,
@@ -296,15 +330,9 @@ class ToolDispatcher:
                 db.commit()
                 return self._settled_result(call.id, observation)
             db.commit()
-
-        provider_output = self.execute_requested(
-            lease,
-            invocation,
-            control=control,
-        )
         return ToolDispatchResult(
-            ToolDispatchOutcome.SETTLED,
-            provider_output=provider_output,
+            ToolDispatchOutcome.REQUESTED,
+            invocation=invocation,
         )
 
     def _reject_unavailable_call(
@@ -641,7 +669,7 @@ class ToolDispatcher:
                     db.commit()
                 result = None
 
-        execution_id = str(state.get("execution_id") or "")
+        execution_id = str(invocation.id)
 
         if execution_id:
             QUERY_REGISTRY.reserve(execution_id, request.datasource_id)

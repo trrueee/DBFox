@@ -6,7 +6,7 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Generic, Sequence, TypeVar
 
 from engine.json_codec import byte_size
 from engine.tools.runtime.base import BaseTool, ToolRecoveryPolicy
@@ -23,6 +23,12 @@ class ToolExecutionControl:
 
 
 ToolOperation = Callable[[ToolExecutionControl], ToolResult]
+TResult = TypeVar("TResult")
+
+
+@dataclass(frozen=True)
+class ToolExecutionTask(Generic[TResult]):
+    operation: Callable[[], TResult]
 
 
 class ToolExecutor:
@@ -135,6 +141,47 @@ class ToolExecutor:
             if not can_retry:
                 return result.model_copy(update={"attempts": attempts})
 
+    def execute_batch(
+        self,
+        *,
+        tasks: Sequence[ToolExecutionTask[TResult]],
+        max_parallel: int | None = None,
+    ) -> list[TResult]:
+        """Execute callables in bounded parallel while preserving input order."""
+        if not tasks:
+            return []
+        if self._closed:
+            raise RuntimeError("Tool executor is no longer accepting work.")
+        max_workers = max(
+            1,
+            min(
+                len(tasks),
+                max_parallel if max_parallel is not None else self._max_workers,
+            ),
+        )
+        if max_workers > self._max_workers:
+            max_workers = self._max_workers
+        gate = threading.Semaphore(max_workers)
+
+        def run_task(operation: Callable[[], TResult]) -> TResult:
+            with gate:
+                return operation()
+
+        futures: list[Future[TResult]] = []
+        for task in tasks:
+            future = self._submit_batch_task(lambda op=task.operation: run_task(op))
+            if future is None:
+                for completed in futures:
+                    try:
+                        completed.result(timeout=0.001)
+                    except Exception:
+                        pass
+                raise RuntimeError(
+                    "Tool execution capacity is temporarily unavailable."
+                )
+            futures.append(future)
+        return [future.result() for future in futures]
+
     def _submit(
         self,
         tool: BaseTool,
@@ -157,6 +204,19 @@ class ToolExecutor:
                 return None
             pool = self._pool
             future = pool.submit(invoke)
+            self._future_pools[future] = pool
+            self._pool_futures.setdefault(pool, set()).add(future)
+            future.add_done_callback(self._future_finished)
+            return future
+
+    def _submit_batch_task(self, operation: Callable[[], TResult]) -> Future[TResult] | None:
+        with self._pool_guard:
+            if self._closed:
+                return None
+            if len(self._abandoned_futures) >= self._max_abandoned_workers:
+                return None
+            pool = self._pool
+            future: Future[TResult] = pool.submit(operation)
             self._future_pools[future] = pool
             self._pool_futures.setdefault(pool, set()).add(future)
             future.add_done_callback(self._future_finished)

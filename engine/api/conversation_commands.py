@@ -15,6 +15,7 @@ from engine.agent.repositories.approval import ApprovalRepository
 from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.run_item import project_run
 from engine.app.safe_errors import FixedErrorCode, fixed_error_detail
 from engine.api.conversation_common import coordinator
@@ -284,6 +285,9 @@ def cancel_run(
     try:
         run = RunRepository(db).request_cancel(run_id=run_id)
         execution_id = str(run.execution_id or "")
+        running_invocations = ToolInvocationRepository(db).running_invocation_ids_for_run(
+            run_id=run_id,
+        )
         db.commit()
     except Exception:
         db.rollback()
@@ -292,5 +296,9 @@ def cancel_run(
         from engine.query_registry import QUERY_REGISTRY
 
         QUERY_REGISTRY.cancel(execution_id)
+    for invocation_id in running_invocations:
+        from engine.query_registry import QUERY_REGISTRY
+
+        QUERY_REGISTRY.cancel(invocation_id)
     active_coordinator.wake(str(run.session_id))
     return {"run_id": str(run.id), "status": str(run.status), "version": int(run.version or 0)}

@@ -305,3 +305,154 @@ def test_recovery_reconciles_by_invocation_key_before_repeating_an_action(
     assert observation.status == "succeeded"
     assert reconciliation_keys == [invocation.idempotency_key]
     assert execution_keys == [invocation.idempotency_key] * expected_execution_count
+
+
+def test_tool_execution_registry_is_indexed_by_invocation_id(
+    db_session,
+    test_datasource,
+    monkeypatch,
+) -> None:
+    reserved_execution_ids: list[str] = []
+    released_execution_ids: list[str] = []
+
+    def fake_reserve(execution_id: str, _datasource_id: str) -> None:
+        reserved_execution_ids.append(execution_id)
+
+    def fake_unregister(execution_id: str) -> None:
+        released_execution_ids.append(execution_id)
+
+    monkeypatch.setattr(
+        "engine.agent.tool_dispatcher.QUERY_REGISTRY.reserve",
+        fake_reserve,
+    )
+    monkeypatch.setattr(
+        "engine.agent.tool_dispatcher.QUERY_REGISTRY.unregister",
+        fake_unregister,
+    )
+
+    class _NoopExecutionInput(ToolInputModel):
+        marker: str
+
+    class _NoopExecutionOutput(ToolOutputModel):
+        marker: str
+
+    class _NoopExecutionTool(BaseTool[_NoopExecutionInput, _NoopExecutionOutput]):
+        name = "noop_execution_tool"
+        group = "schema"
+        description = "No-op tool to verify execution keying."
+        input_model = _NoopExecutionInput
+        output_model = _NoopExecutionOutput
+        presentation = ToolPresentation(title="Noop execution", category="query")
+        execution = ToolExecutionSpec(timeout_seconds=2)
+
+        def run(self, tool_input: _NoopExecutionInput, context: ToolRunContext):
+            del context
+            return {"marker": tool_input.marker}
+
+    db_session.add(
+        AgentSession(
+            id="session_invocation_execution_key",
+            datasource_id=str(test_datasource.id),
+            title="Execution key",
+        )
+    )
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session_invocation_execution_key",
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        content="执行两个工具并验证执行标识",
+        idempotency_key="request_execution_key",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="test",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id="session_invocation_execution_key", owner="worker")
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+
+    registry = ToolRegistry().register(_NoopExecutionTool())
+    definition = AgentDefinition(
+        allowed_tool_groups=("schema",),
+        execution_mode="user_requested_read",
+    )
+    tools = materialize_tools(
+        registry,
+        allowed_groups={"schema"},
+        execution_mode=definition.execution_mode,
+    )
+    turn = sessions.start_turn(
+        lease=lease,
+        run_id=admission.run_id,
+        agent_definition_version=definition.version,
+        prompt_version="test",
+        context_snapshot={},
+        context_hash="context",
+        tool_materialization=tools.model_dump(mode="json"),
+        tool_materialization_hash=tools.hash,
+        provider="test",
+        model_name="test",
+    )
+
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    dispatcher = ToolDispatcher(
+        session_factory=factory,
+        registry=registry,
+        definition=definition,
+        executor=ToolExecutor(max_workers=2),
+    )
+    control = LeaseAwareRunControl(
+        run=run,
+        limits=RunLimits(),
+        cancellation_probe=lambda: False,
+        lease_lost_probe=None,
+    )
+    first = ToolInvocationRepository(db_session).request(
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(turn.id),
+        provider_call_id="call-noop-1",
+        tool_name="noop_execution_tool",
+        raw_input={"marker": "A"},
+        materialization=tools,
+        policy_decision={
+            "status": "allowed",
+            "safe_args": {"marker": "A"},
+        },
+    )
+    second = ToolInvocationRepository(db_session).request(
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(turn.id),
+        provider_call_id="call-noop-2",
+        tool_name="noop_execution_tool",
+        raw_input={"marker": "B"},
+        materialization=tools,
+        policy_decision={
+            "status": "allowed",
+            "safe_args": {"marker": "B"},
+        },
+    )
+    db_session.commit()
+
+    try:
+        dispatcher.execute_requested(
+            lease=lease,
+            invocation=first,
+            control=control,
+        )
+        dispatcher.execute_requested(
+            lease=lease,
+            invocation=second,
+            control=control,
+        )
+    finally:
+        dispatcher.executor.close(wait=False)
+
+    db_session.expire_all()
+    assert set(reserved_execution_ids) == {first.id, second.id}
+    assert set(released_execution_ids) == {first.id, second.id}

@@ -149,6 +149,13 @@ class SessionRepository:
             runs.request_cancel(run_id=str(run.id))
             if run.execution_id:
                 execution_ids.append(str(run.execution_id))
+            from engine.agent.repositories.tool import ToolInvocationRepository
+
+            execution_ids.extend(
+                ToolInvocationRepository(self.session).running_invocation_ids_for_run(
+                    run_id=str(run.id),
+                )
+            )
         self.session.flush()
         return SessionDeletion(
             status="deleting",

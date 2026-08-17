@@ -164,7 +164,24 @@ def test_interrupted_recoverable_tool_is_requeued_with_the_same_invocation_id(
 def test_run_cancellation_terminalizes_a_running_tool_invocation(
     db_session,
     test_datasource,
+    monkeypatch,
 ) -> None:
+    canceled: list[str] = []
+
+    def fake_cancel(execution_id: str) -> dict[str, object]:
+        canceled.append(execution_id)
+        return {
+            "success": True,
+            "cancelled": True,
+            "executionId": execution_id,
+            "message": "mocked",
+        }
+
+    monkeypatch.setattr(
+        "engine.agent.repositories.tool.QUERY_REGISTRY.cancel",
+        fake_cancel,
+    )
+
     db_session.add(
         AgentSession(
             id="session_cancel_tool",
@@ -232,3 +249,4 @@ def test_run_cancellation_terminalizes_a_running_tool_invocation(
     ).one()
     assert observation.status == "cancelled"
     assert observation.error_code == "TOOL_CANCELLED"
+    assert canceled == [invocation.id]

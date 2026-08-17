@@ -15,7 +15,11 @@ from engine.tools.runtime.base import (
     ToolSpec,
 )
 from engine.tools.runtime.context import ToolRunContext
-from engine.tools.runtime.executor import ToolExecutionControl, ToolExecutor
+from engine.tools.runtime.executor import (
+    ToolExecutionControl,
+    ToolExecutionTask,
+    ToolExecutor,
+)
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.result import ToolOutcome, ToolReconciliation, ToolResult
 from engine.tools.runtime.observation import ToolObservationProjection
@@ -37,6 +41,7 @@ __all__ = [
     "ToolExecutionBackend",
     "ToolExecutionSpec",
     "ToolExecutionControl",
+    "ToolExecutionTask",
     "ToolExecutor",
     "ToolPolicy",
     "ToolPresentation",

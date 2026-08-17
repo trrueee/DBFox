@@ -5,8 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Event, Lock
+from threading import Event
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
@@ -55,7 +54,7 @@ from engine.models import (
 )
 from engine.tools.builtin import register_dbfox_tools
 from engine.tools.materialization import ToolMaterialization, materialize_tools
-from engine.tools.runtime import ToolExecutor, ToolRegistry
+from engine.tools.runtime import ToolExecutionTask, ToolExecutor, ToolRegistry
 from engine.tools.runtime.semantics import ToolSemanticCapability
 from engine.agent.terminalizer import Terminalizer
 from engine.agent.working_state import RunWorkingStateAssembler
@@ -123,6 +122,15 @@ class _ExecutionState:
         self.last_result = result
         if result.has_completed_answer_candidate:
             self.best_answer_result = result
+
+
+@dataclass(frozen=True)
+class _PlannedToolCall:
+    call: Any
+    invocation: Any
+    frozen_tool: Any | None
+    counts_toward_budget: bool
+    provider_call_index: int
 
 
 def _relevant_tool_groups(
@@ -583,14 +591,15 @@ class RunLoop:
         result: ModelTurnResult,
         state: _ExecutionState,
     ) -> bool:
-        planned_calls: list[tuple[Any, Any, bool]] = []
+        planned_calls: list[_PlannedToolCall] = []
         next_tool_count = state.tool_count
-        state_lock = Lock() if len(result.tool_calls) > 1 else None
+        next_stopper: ToolDispatchOutcome | None = None
+        budget_reached = False
 
         def _counts_toward_budget(frozen_tool: Any | None) -> bool:
             return frozen_tool is not None and frozen_tool.kind != "control"
 
-        for call in result.tool_calls:
+        for call_index, call in enumerate(result.tool_calls):
             state.control.checkpoint()
             try:
                 frozen_tool = prepared.tools.require(call.name)
@@ -600,11 +609,58 @@ class RunLoop:
                 # a provider-authored call outside this Turn's frozen contract into
                 # a Run-level infrastructure failure.
                 frozen_tool = None
+
             counts_toward_budget = _counts_toward_budget(frozen_tool)
             if (
                 counts_toward_budget
                 and next_tool_count >= self.definition.limits.max_tool_invocations
             ):
+                budget_reached = True
+                break
+            if counts_toward_budget:
+                next_tool_count += 1
+
+            dispatch = self.tool_dispatcher.request(
+                lease=lease,
+                run_id=run_id,
+                turn_id=prepared.turn_id,
+                call=call,
+                materialization=prepared.tools,
+                control=state.control,
+            )
+            if dispatch.provider_output is not None:
+                state.transient_tool_outputs[
+                    dispatch.provider_output.call_id
+                ] = dispatch.provider_output.output
+            if dispatch.outcome is not ToolDispatchOutcome.REQUESTED:
+                if dispatch.outcome in {
+                    ToolDispatchOutcome.WAITING_APPROVAL,
+                    ToolDispatchOutcome.WAITING_INPUT,
+                }:
+                    next_stopper = dispatch.outcome
+                    break
+                continue
+            if dispatch.invocation is None:
+                raise RuntimeError("Requested invocation is missing its identity")
+            planned_calls.append(
+                _PlannedToolCall(
+                    call=call,
+                    invocation=dispatch.invocation,
+                    frozen_tool=frozen_tool,
+                    counts_toward_budget=counts_toward_budget,
+                    provider_call_index=call_index,
+                )
+            )
+
+        if next_stopper is not None:
+            # Do not execute any invocation before approval/input is resolved.
+            # Admission is intentionally durably sequenced; execution waits for the
+            # next execution phase after user confirmation/steer input.
+            state.tool_count = next_tool_count
+            return True
+
+        if not planned_calls:
+            if budget_reached:
                 if not self._complete_for_limit(
                     lease,
                     run_id,
@@ -619,103 +675,71 @@ class RunLoop:
                         "工具调用已达到本次分析上限。",
                     )
                 return True
-            planned_calls.append((call, frozen_tool, counts_toward_budget))
-            if counts_toward_budget:
-                next_tool_count += 1
+            return next_stopper is not None
 
-        parallel_safe = all(
-            frozen_tool is not None
-            and frozen_tool.kind != "control"
-            and not frozen_tool.policy.requires_approval
-            and frozen_tool.execution.concurrency == "parallel_safe"
-            for _, frozen_tool, _ in planned_calls
-        )
+        batches: list[list[_PlannedToolCall]] = []
+        current_batch: list[_PlannedToolCall] = []
+        for entry in planned_calls:
+            if (
+                entry.frozen_tool is None
+                or entry.frozen_tool.execution.concurrency != "parallel_safe"
+            ):
+                if current_batch:
+                    batches.append(current_batch)
+                    current_batch = []
+                batches.append([entry])
+            else:
+                current_batch.append(entry)
+        if current_batch:
+            batches.append(current_batch)
 
-        if not parallel_safe or len(planned_calls) <= 1:
-            for call, _frozen_tool, counts_toward_budget in planned_calls:
-                outcome = self._dispatch_tool_call(
-                    lease=lease,
-                    run_id=run_id,
-                    prepared=prepared,
-                    state=state,
-                    control=state.control,
-                    call=call,
-                    state_lock=state_lock,
-                    counts_toward_budget=counts_toward_budget,
-                )
-                if outcome in {
-                    ToolDispatchOutcome.WAITING_APPROVAL,
-                    ToolDispatchOutcome.WAITING_INPUT,
-                }:
-                    return True
-            return False
-
-        with ThreadPoolExecutor(max_workers=min(len(planned_calls), 4)) as executor:
-            outcomes = [
-                future.result()
-                for future in as_completed(
-                    [
-                        executor.submit(
-                            self._dispatch_tool_call,
-                            lease=lease,
-                            run_id=run_id,
-                            prepared=prepared,
-                            state=state,
-                            control=state.control,
-                            call=call,
-                            state_lock=state_lock,
-                            counts_toward_budget=counts_toward_budget,
+        for batch in batches:
+            if len(batch) > 1:
+                results = self.tool_executor.execute_batch(
+                    tasks=[
+                        ToolExecutionTask(
+                            operation=lambda invocation=entry.invocation: (
+                                self.tool_dispatcher.execute_requested(
+                                    lease,
+                                    invocation,
+                                    control=state.control,
+                                )
+                            )
                         )
-                        for call, _frozen_tool, counts_toward_budget in planned_calls
-                    ]
-                )
-            ]
-
-        return any(
-            outcome in {
-                ToolDispatchOutcome.WAITING_APPROVAL,
-                ToolDispatchOutcome.WAITING_INPUT,
-            }
-            for outcome in outcomes
-        )
-
-    def _dispatch_tool_call(
-        self,
-        *,
-        lease: SessionLease,
-        run_id: str,
-        prepared: _PreparedTurn,
-        control: Any,
-        state: _ExecutionState,
-        call: Any,
-        state_lock: Lock | None,
-        counts_toward_budget: bool,
-    ) -> ToolDispatchOutcome:
-        dispatch = self.tool_dispatcher.request_and_execute(
-            lease=lease,
-            run_id=run_id,
-            turn_id=prepared.turn_id,
-            call=call,
-            materialization=prepared.tools,
-            control=control,
-        )
-        if dispatch.provider_output is not None:
-            if state_lock is None:
-                state.transient_tool_outputs[dispatch.provider_output.call_id] = (
-                    dispatch.provider_output.output
+                        for entry in batch
+                    ],
+                    max_parallel=len(batch),
                 )
             else:
-                with state_lock:
-                    state.transient_tool_outputs[
-                        dispatch.provider_output.call_id
-                    ] = dispatch.provider_output.output
-        if counts_toward_budget:
-            if state_lock is None:
-                state.tool_count += 1
-            else:
-                with state_lock:
-                    state.tool_count += 1
-        return dispatch.outcome
+                results = [
+                    self.tool_dispatcher.execute_requested(
+                        lease,
+                        batch[0].invocation,
+                        control=state.control,
+                    )
+                ]
+            for _entry, output in zip(batch, results):
+                if output is not None:
+                    state.transient_tool_outputs[output.call_id] = output.output
+        state.tool_count = max(state.tool_count, next_tool_count)
+
+        if budget_reached:
+            if not self._complete_for_limit(
+                lease,
+                run_id,
+                state.answer_result,
+                code=CompletionLimitationCode.TOOL_BUDGET_REACHED,
+                context=prepared.context,
+            ):
+                self._fail(
+                    lease,
+                    run_id,
+                    "AGENT_TOOL_BUDGET",
+                    "工具调用已达到本次分析上限。",
+                )
+            return True
+
+        return next_stopper is not None
 
     def _record_continuation(
         self,

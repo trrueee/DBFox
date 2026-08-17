@@ -14,6 +14,7 @@ from engine.tools.builtin import (
     register_core_functions,
     register_data_extension,
     register_dbfox_tools,
+    register_remote_job_extension,
     register_workspace_extension,
     register_workspace_write_extension,
 )
@@ -54,7 +55,7 @@ class _EchoTool(BaseTool[_EchoInput, _EchoOutput]):
 
 
 FROZEN_MATERIALIZATION_HASH = (
-    "3ece51e0d5f5a609d51e4c0e7cdcf513fa070f59bf69e1bc604d14dec9e85d95"
+    "42e1989cf6b6618f863b62d172af3016f0cbad736d1c36ddead7d6c904ba8e94"
 )
 
 FROZEN_BUILTIN_NAMES = (
@@ -67,6 +68,9 @@ FROZEN_BUILTIN_NAMES = (
     "file_read",
     "file_search",
     "file_write_patch",
+    "remote_job_cancel",
+    "remote_job_status",
+    "remote_job_submit",
     "request_clarification",
     "result_inspect",
     "result_profile",
@@ -97,6 +101,9 @@ FROZEN_OWNERS = {
     "schema_search": "dbfox.data",
     "sql_execute_readonly": "dbfox.data",
     "sql_validate": "dbfox.data",
+    "remote_job_cancel": "dbfox.remote_job",
+    "remote_job_status": "dbfox.remote_job",
+    "remote_job_submit": "dbfox.remote_job",
 }
 
 
@@ -126,6 +133,7 @@ def test_owner_scoped_composition_matches_facade_exactly() -> None:
     register_data_extension(scoped)
     register_workspace_extension(scoped)
     register_workspace_write_extension(scoped)
+    register_remote_job_extension(scoped)
     scoped.freeze()
 
     assert scoped.tool_names() == facade.tool_names()

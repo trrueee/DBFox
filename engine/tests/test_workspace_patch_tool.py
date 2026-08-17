@@ -7,7 +7,6 @@ import threading
 import time
 
 from engine.agent.artifact import validate_artifact_payload
-from engine.errors import ToolInputError
 from engine.tools.builtin.registry import register_workspace_write_extension
 from engine.tools.runtime import ToolRegistry, ToolRuntime
 from engine.tools.runtime.attempt import (

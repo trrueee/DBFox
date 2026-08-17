@@ -547,26 +547,7 @@ class ContextAssembler:
     ) -> list[dict[str, Any]]:
         from engine.agent.context_fragment import ContextContributionInput
         from engine.agent.context_contributors import CONTEXT_CONTRIBUTORS
-        from engine.tools.runtime.resource_context import (
-            resolve_workspace_scope_ref,
-        )
         from engine.tools.runtime.attempt import ResourceScopeRef
-
-        workspace_ref = resolve_workspace_scope_ref(
-            self.session,
-            str(run.datasource_id),
-        )
-        resource_refs: list[ResourceScopeRef] = []
-        if run.datasource_id:
-            resource_refs.append(
-                ResourceScopeRef(
-                    kind="database",
-                    id=str(run.datasource_id),
-                    version=int(run.datasource_generation or 0),
-                )
-            )
-        if workspace_ref is not None:
-            resource_refs.append(workspace_ref)
 
         contribution_input = ContextContributionInput(
             session_id=str(run.session_id),
@@ -576,7 +557,7 @@ class ContextAssembler:
                 if run.input_id and self.session.get(AgentSessionInput, run.input_id)
                 else ""
             ),
-            resource_refs=tuple(resource_refs),
+            resource_refs=self._resource_refs_for_run(run),
         )
         fragments: list[dict[str, Any]] = []
         for contributor_cls in CONTEXT_CONTRIBUTORS:
@@ -586,6 +567,26 @@ class ContextAssembler:
                 for fragment in contributor.build(contribution_input)
             )
         return fragments
+
+    def _resource_refs_for_run(self, run: AgentRun) -> tuple[ResourceScopeRef, ...]:
+        from engine.tools.runtime.resource_context import resolve_workspace_scope_ref
+
+        resource_refs: list[ResourceScopeRef] = []
+        if run.datasource_id:
+            resource_refs.append(
+                ResourceScopeRef(
+                    kind="database",
+                    id=str(run.datasource_id),
+                    version=int(run.datasource_generation or 0),
+                )
+            )
+        workspace_ref = resolve_workspace_scope_ref(
+            self.session,
+            str(run.datasource_id),
+        )
+        if workspace_ref is not None:
+            resource_refs.append(workspace_ref)
+        return tuple(resource_refs)
 
     def _previous_run_outcome(
         self,
