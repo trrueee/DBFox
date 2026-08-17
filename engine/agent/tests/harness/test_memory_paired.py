@@ -19,6 +19,7 @@ from scripts.agentbench.schema import Verdict
 
 
 DATASET = Path("scripts/agentbench/datasets/memory-v1.json")
+CANDIDATE_DATASET = Path("scripts/agentbench/datasets/memory-candidate-v1.json")
 
 
 def _record(
@@ -268,3 +269,24 @@ def test_paired_summary_separates_task_correctness_from_overall_gate(tmp_path: P
     assert summary["v4_task_correctness"] == {"passed": 6, "valid": 6}
     assert summary["v3_overall_gate"] == {"passed": 0, "valid": 6}
     assert summary["v4_overall_gate"] == {"passed": 0, "valid": 6}
+
+
+def test_candidate_profile_runs_three_abba_blocks(tmp_path: Path) -> None:
+    calls = 0
+
+    def child(command: list[str], environment: dict[str, str]) -> ChildResult:
+        nonlocal calls
+        calls += 1
+        case_id = command[command.index("--case") + 1]
+        output = Path(command[command.index("--output") + 1])
+        variant: Literal["v3", "v4"] = "v4" if environment["DBFOX_MEMORY_V4_CONTEXT"] == "1" else "v3"
+        _write_child(output, _record(case_id, variant))
+        return ChildResult(returncode=0, process_id=calls)
+
+    summary, exit_code = run_memory_paired(
+        manifest=load_manifest(CANDIDATE_DATASET), dataset=CANDIDATE_DATASET,
+        profile="candidate", output=tmp_path / "candidate", environment={}, child_runner=child,
+    )
+    assert exit_code == 0
+    assert calls == 96
+    assert summary["planned_trials"] == summary["executed_trials"] == 96

@@ -502,7 +502,11 @@ def correction_obeyed(case: EvalCase, score: TrialScore) -> bool | None:
     if case.case_id != "memory-user-correction":
         return None
     checks = score.checks
-    required = ("required_terms", "forbidden_terms", "required_numbers")
+    required: tuple[str, ...] = (
+        "required_terms",
+        "forbidden_terms",
+        "required_numbers",
+    )
     if case.result is not None:
         required += (
             "generated_result_available",

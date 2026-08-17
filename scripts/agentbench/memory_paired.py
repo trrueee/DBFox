@@ -229,12 +229,16 @@ def run_memory_paired(
     environment: dict[str, str],
     child_runner: ChildRunner = _run_child,
 ) -> tuple[dict[str, Any], int]:
-    """Run exactly one ABBA block, stopping immediately on a runtime defect."""
+    """Run fixed ABBA blocks, stopping immediately on a runtime defect."""
 
-    if profile != "smoke":
-        raise ValueError("memory-paired currently supports only the smoke profile")
-    if len(manifest.cases) != 3:
+    profile_blocks = {"smoke": 1, "candidate": 3}
+    blocks = profile_blocks.get(profile)
+    if blocks is None:
+        raise ValueError("memory-paired profile is not supported")
+    if profile == "smoke" and len(manifest.cases) != 3:
         raise ValueError("memory-paired smoke requires exactly three dataset cases")
+    if profile == "candidate" and not 8 <= len(manifest.cases) <= 12:
+        raise ValueError("memory-paired candidate requires eight to twelve dataset cases")
     if any(case.expected_memory_consumption == "optional" for case in manifest.cases):
         raise ValueError("memory-paired cases must declare Memory consumption expectations")
     output.mkdir(parents=True, exist_ok=False)
@@ -242,60 +246,65 @@ def run_memory_paired(
     stopped_reason: str | None = None
     consecutive_infrastructure = 0
     case_by_id = {case.case_id: case for case in manifest.cases}
-    for case_id, position, variant in abba_schedule(tuple(case.case_id for case in manifest.cases)):
-        trial_id = uuid4().hex
-        child_output = output / "children" / f"{len(rows) + 1:02d}-{case_id}-{variant}"
-        command = child_command(dataset=dataset, case_id=case_id, output=child_output)
-        child_environment = dict(environment)
-        child_environment["DBFOX_MEMORY_V4_CONTEXT"] = "1" if variant == "v4" else "0"
-        started_at = datetime.now(UTC).isoformat()
-        result = child_runner(command, child_environment)
-        completed_at = datetime.now(UTC).isoformat()
-        record, read_error, child_environment_report = _read_child_record(child_output)
-        if record is not None:
-            evidence = record.memory_evidence
-            if evidence is None and not record.trace.infrastructure_error:
-                read_error = "memory_evidence_invalid"
-                record = None
-            elif evidence is not None and evidence.memory_variant != variant:
-                read_error = "memory_variant_invalid"
-                record = None
-            elif record.case_id != case_id:
-                read_error = "child_case_mismatch"
-                record = None
-        row = _trial_row(
-            case_id=case_id,
-            position=position,
-            variant=variant,
-            trial_id=trial_id,
-            process_id=result.process_id,
-            case=case_by_id[case_id],
-            record=record,
-            failure=read_error,
-            environment=child_environment_report,
-        )
-        row["dataset_id"] = manifest.dataset_id
-        row["dataset_version"] = manifest.dataset_version
-        row["started_at"] = started_at
-        row["completed_at"] = completed_at
-        if result.returncode != 0 and record is None and read_error is None:
-            row["classification"] = "infrastructure"
-            row["projection_error_code"] = "child_exit_nonzero"
-        rows.append(row)
-        if row["classification"] == "runtime_defect":
-            stopped_reason = "runtime_defect"
-            break
-        if row["classification"] == "invalid":
-            stopped_reason = "invalid_child_evidence"
-            break
-        if row["classification"] == "infrastructure":
-            consecutive_infrastructure += 1
-            if consecutive_infrastructure >= 2:
-                stopped_reason = "consecutive_infrastructure_failures"
+    schedule = abba_schedule(tuple(case.case_id for case in manifest.cases))
+    for block_index in range(1, blocks + 1):
+        for case_id, position, variant in schedule:
+            trial_id = uuid4().hex
+            child_output = output / "children" / f"{len(rows) + 1:03d}-b{block_index}-{case_id}-{variant}"
+            command = child_command(dataset=dataset, case_id=case_id, output=child_output)
+            child_environment = dict(environment)
+            child_environment["DBFOX_MEMORY_V4_CONTEXT"] = "1" if variant == "v4" else "0"
+            started_at = datetime.now(UTC).isoformat()
+            result = child_runner(command, child_environment)
+            completed_at = datetime.now(UTC).isoformat()
+            record, read_error, child_environment_report = _read_child_record(child_output)
+            if record is not None:
+                evidence = record.memory_evidence
+                if evidence is None and not record.trace.infrastructure_error:
+                    read_error = "memory_evidence_invalid"
+                    record = None
+                elif evidence is not None and evidence.memory_variant != variant:
+                    read_error = "memory_variant_invalid"
+                    record = None
+                elif record.case_id != case_id:
+                    read_error = "child_case_mismatch"
+                    record = None
+            row = _trial_row(
+                case_id=case_id,
+                position=position,
+                variant=variant,
+                trial_id=trial_id,
+                process_id=result.process_id,
+                case=case_by_id[case_id],
+                record=record,
+                failure=read_error,
+                environment=child_environment_report,
+            )
+            row["block_index"] = block_index
+            row["dataset_id"] = manifest.dataset_id
+            row["dataset_version"] = manifest.dataset_version
+            row["started_at"] = started_at
+            row["completed_at"] = completed_at
+            if result.returncode != 0 and record is None and read_error is None:
+                row["classification"] = "infrastructure"
+                row["projection_error_code"] = "child_exit_nonzero"
+            rows.append(row)
+            if row["classification"] == "runtime_defect":
+                stopped_reason = "runtime_defect"
                 break
-        else:
-            consecutive_infrastructure = 0
-    summary = _summary(rows, planned=12, stopped_reason=stopped_reason)
+            if row["classification"] == "invalid":
+                stopped_reason = "invalid_child_evidence"
+                break
+            if row["classification"] == "infrastructure":
+                consecutive_infrastructure += 1
+                if consecutive_infrastructure >= 2:
+                    stopped_reason = "consecutive_infrastructure_failures"
+                    break
+            else:
+                consecutive_infrastructure = 0
+        if stopped_reason is not None:
+            break
+    summary = _summary(rows, planned=len(schedule) * blocks, stopped_reason=stopped_reason)
     _json(output / "memory-paired-trials.json", rows)
     _json(output / "memory-paired-summary.json", summary)
     (output / "memory-paired-report.md").write_text(

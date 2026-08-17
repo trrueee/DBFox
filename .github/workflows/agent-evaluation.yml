@@ -11,7 +11,7 @@ on:
         required: true
         default: nightly
         type: choice
-        options: [nightly, weekly, memory-smoke]
+        options: [nightly, weekly, memory-smoke, memory-candidate]
       repetitions:
         description: Repetitions (1-5; blank uses the profile default)
         required: false
@@ -163,7 +163,7 @@ jobs:
           profile="${DISPATCH_PROFILE:-nightly}"
           if [[ "$SCHEDULE" == "25 2 * * 0" ]]; then profile="weekly"; fi
           repetitions="$DISPATCH_REPETITIONS"
-          if [[ "$profile" == "memory-smoke" ]]; then
+          if [[ "$profile" == "memory-smoke" || "$profile" == "memory-candidate" ]]; then
             repetitions=1
           elif [[ -z "$repetitions" ]]; then
             if [[ "$profile" == "weekly" ]]; then repetitions=5; else repetitions=3; fi
@@ -185,6 +185,11 @@ jobs:
               --dataset scripts/agentbench/datasets/memory-v1.json \
               --profile smoke \
               --output output/agent-evaluation/memory-paired-smoke
+          elif [[ "$PROFILE" == "memory-candidate" ]]; then
+            python -m scripts.agentbench memory-paired \
+              --dataset scripts/agentbench/datasets/memory-candidate-v1.json \
+              --profile candidate \
+              --output output/agent-evaluation/memory-paired-candidate
           else
             args=(--tag real_provider --repetitions "$REPETITIONS" --output output/agent-evaluation/real-provider)
             if [[ "$PROFILE" == "nightly" ]]; then args+=(--tag nightly); fi

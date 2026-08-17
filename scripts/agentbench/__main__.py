@@ -69,7 +69,7 @@ def _parser() -> argparse.ArgumentParser:
         "memory-paired", help="run one isolated Memory v3/v4 ABBA smoke block"
     )
     paired.add_argument("--dataset", type=Path, required=True)
-    paired.add_argument("--profile", choices=["smoke"], default="smoke")
+    paired.add_argument("--profile", choices=["smoke", "candidate"], default="smoke")
     paired.add_argument("--output", type=Path, required=True)
 
     replay = subparsers.add_parser("replay", help="offline re-score stored trials")
