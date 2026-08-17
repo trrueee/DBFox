@@ -14,7 +14,8 @@ from typing import Any, Callable, Literal
 from uuid import uuid4
 
 from scripts.agentbench.reporting import TrialRecord
-from scripts.agentbench.schema import DatasetManifest
+from scripts.agentbench.schema import DatasetManifest, EvalCase
+from scripts.agentbench.scoring import task_correct
 
 
 Variant = Literal["v3", "v4"]
@@ -105,6 +106,7 @@ def _trial_row(
     variant: Variant,
     trial_id: str,
     process_id: int | None,
+    case: EvalCase,
     record: TrialRecord | None,
     failure: str | None,
     environment: dict[str, Any],
@@ -130,7 +132,12 @@ def _trial_row(
         "model": environment.get("model_alias"),
         "api_base_identity": _identity(environment.get("api_base")),
         "classification": classification,
-        "correct": score.passed if score is not None else None,
+        "task_correct": task_correct(case, score) if score is not None else None,
+        "overall_gate_passed": score.passed if score is not None else None,
+        "safety_passed": (not score.safety_veto) if score is not None else None,
+        "failed_checks": list(score.failed_checks) if score is not None else [],
+        "result_equivalent": evidence.result_equivalent if evidence else None,
+        "correction_obeyed": evidence.correction_obeyed if evidence else None,
         "projection_written": evidence.projection_written if evidence else None,
         "projection_consumed": evidence.projection_consumed if evidence else None,
         "scope_match": evidence.scope_match if evidence else None,
@@ -157,22 +164,24 @@ def _summary(rows: list[dict[str, Any]], *, planned: int, stopped_reason: str | 
             and not isinstance(value, bool)
         ]
 
-    def correctness(variant: Variant) -> dict[str, int]:
+    def metric(variant: Variant, field: str) -> dict[str, int]:
         valid = [
             row for row in rows
             if row["variant"] == variant
             and row["classification"] in {"scored", "model_behavior", "efficiency_regression"}
         ]
-        return {"passed": sum(row["correct"] is True for row in valid), "valid": len(valid)}
+        return {"passed": sum(row[field] is True for row in valid), "valid": len(valid)}
 
     return {
         "planned_trials": planned,
         "executed_trials": len(rows),
         "stopped_reason": stopped_reason,
-        "v3_valid_trials": correctness("v3")["valid"],
-        "v4_valid_trials": correctness("v4")["valid"],
-        "v3_correctness": correctness("v3"),
-        "v4_correctness": correctness("v4"),
+        "v3_valid_trials": metric("v3", "task_correct")["valid"],
+        "v4_valid_trials": metric("v4", "task_correct")["valid"],
+        "v3_task_correctness": metric("v3", "task_correct"),
+        "v4_task_correctness": metric("v4", "task_correct"),
+        "v3_overall_gate": metric("v3", "overall_gate_passed"),
+        "v4_overall_gate": metric("v4", "overall_gate_passed"),
         "v3_median_run2_discovery": _median(values("v3", "run2_discovery")),
         "v4_median_run2_discovery": _median(values("v4", "run2_discovery")),
         "v3_median_turns": _median(values("v3", "turns")),
@@ -196,12 +205,12 @@ def _markdown(rows: list[dict[str, Any]], summary: dict[str, Any]) -> str:
         f"- Runtime defects: {summary['runtime_defect_count']}",
         f"- Infrastructure exclusions: {summary['infrastructure_unscored_count']}",
         "",
-        "| Case | Position | Variant | Classification | Correct | Consumed | Discovery | Tokens | Latency ms |",
-        "|---|---:|---|---|---|---|---:|---:|---:|",
+        "| Case | Position | Variant | Classification | Task correct | Overall gate | Safety | Result | Correction | Consumed | Discovery | Tokens | Latency ms |",
+        "|---|---:|---|---|---|---|---|---|---|---|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
-            "| {case_id} | {position} | {variant} | {classification} | {correct} | {projection_consumed} | {run2_discovery} | {tokens} | {latency} |".format(**row)
+            "| {case_id} | {position} | {variant} | {classification} | {task_correct} | {overall_gate_passed} | {safety_passed} | {result_equivalent} | {correction_obeyed} | {projection_consumed} | {run2_discovery} | {tokens} | {latency} |".format(**row)
         )
     lines.extend([
         "",
@@ -232,6 +241,7 @@ def run_memory_paired(
     rows: list[dict[str, Any]] = []
     stopped_reason: str | None = None
     consecutive_infrastructure = 0
+    case_by_id = {case.case_id: case for case in manifest.cases}
     for case_id, position, variant in abba_schedule(tuple(case.case_id for case in manifest.cases)):
         trial_id = uuid4().hex
         child_output = output / "children" / f"{len(rows) + 1:02d}-{case_id}-{variant}"
@@ -259,6 +269,7 @@ def run_memory_paired(
             variant=variant,
             trial_id=trial_id,
             process_id=result.process_id,
+            case=case_by_id[case_id],
             record=record,
             failure=read_error,
             environment=child_environment_report,

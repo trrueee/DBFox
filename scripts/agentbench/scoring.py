@@ -463,6 +463,55 @@ def score_trial(case: EvalCase, trace: TrialTrace) -> TrialScore:
     )
 
 
+def task_correct(case: EvalCase, score: TrialScore) -> bool:
+    """Return answer/result/citation correctness independent of runtime gates.
+
+    This deliberately excludes trajectory, plan, duplicate-work and budget
+    checks.  Those remain part of ``TrialScore.passed`` and classification.
+    """
+
+    checks = score.checks
+    answer_checks = (
+        "nonempty_answer",
+        "required_terms",
+        "any_of_terms",
+        "forbidden_terms",
+        "required_numbers",
+    )
+    citation_checks = ("citation_syntax", "citations_resolve", "min_citations")
+    answer_correct = all(checks[name] for name in answer_checks if name in checks)
+    citation_correct = all(checks[name] for name in citation_checks if name in checks)
+    result_correct = (
+        all(
+            checks.get(name) is True
+            for name in (
+                "generated_result_available",
+                "golden_result_available",
+                "result_equivalent",
+            )
+        )
+        if case.result is not None
+        else True
+    )
+    return answer_correct and result_correct and citation_correct
+
+
+def correction_obeyed(case: EvalCase, score: TrialScore) -> bool | None:
+    """Check current-request authority without importing unrelated gate failures."""
+
+    if case.case_id != "memory-user-correction":
+        return None
+    checks = score.checks
+    required = ("required_terms", "forbidden_terms", "required_numbers")
+    if case.result is not None:
+        required += (
+            "generated_result_available",
+            "golden_result_available",
+            "result_equivalent",
+        )
+    return all(name in checks and checks[name] is True for name in required)
+
+
 def duplicate_tool_call_ratio(trace: TrialTrace) -> float:
     signatures = [
         (

@@ -21,6 +21,7 @@ from scripts.agentbench.scoring import (
     ToolTrace,
     TrialTrace,
     TurnEfficiencyTrace,
+    correction_obeyed,
     score_trial,
 )
 
@@ -458,6 +459,7 @@ def _memory_evidence(
 def _classify_memory_evidence(
     evidence: MemoryTrialEvidence | None,
     *,
+    case: EvalCase,
     trace: TrialTrace,
     score: Any,
 ) -> MemoryTrialEvidence | None:
@@ -470,9 +472,7 @@ def _classify_memory_evidence(
     checks = score.checks
     updates: dict[str, Any] = {
         "result_equivalent": checks.get("result_equivalent"),
-        "correction_obeyed": (
-            score.passed if evidence.case_id == "memory-user-correction" else None
-        ),
+        "correction_obeyed": correction_obeyed(case, score),
     }
     if score.passed:
         updates["classification"] = "scored"
@@ -1023,6 +1023,7 @@ def run_real_provider(
                 score = score_trial(case, trace)
                 memory_evidence = _classify_memory_evidence(
                     memory_evidence,
+                    case=case,
                     trace=trace,
                     score=score,
                 )

@@ -14,7 +14,7 @@ from scripts.agentbench.memory_paired import (
 )
 from scripts.agentbench.reporting import MemoryTrialEvidence, TrialRecord
 from scripts.agentbench.schema import load_manifest
-from scripts.agentbench.scoring import TrialScore, TrialTrace
+from scripts.agentbench.scoring import correction_obeyed, task_correct, TrialScore, TrialTrace
 from scripts.agentbench.schema import Verdict
 
 
@@ -189,3 +189,82 @@ def test_memory_paired_rejects_missing_evidence(tmp_path: Path) -> None:
     )
     assert exit_code == 1
     assert summary["stopped_reason"] == "invalid_child_evidence"
+
+
+def _semantic_score(*, failed: tuple[str, ...] = (), safety_veto: bool = False) -> TrialScore:
+    checks = {
+        "nonempty_answer": True,
+        "required_terms": True,
+        "any_of_terms": True,
+        "forbidden_terms": True,
+        "required_numbers": True,
+        "citation_syntax": True,
+        "citations_resolve": True,
+        "min_citations": True,
+        "generated_result_available": True,
+        "golden_result_available": True,
+        "result_equivalent": True,
+    }
+    checks.update({name: False for name in failed})
+    return TrialScore(
+        verdict=Verdict.PASS if not failed and not safety_veto else Verdict.FAIL,
+        passed=not failed and not safety_veto,
+        safety_veto=safety_veto,
+        checks=checks,
+        failed_checks=failed,
+    )
+
+
+def test_task_correct_is_independent_of_budget_and_trajectory_gates() -> None:
+    manifest = load_manifest(DATASET)
+    case = manifest.cases[0]
+    budget_only = _semantic_score(failed=("token_budget",))
+    trajectory_only = _semantic_score(failed=("required_tools",))
+    assert task_correct(case, budget_only) is True
+    assert budget_only.passed is False
+    assert task_correct(case, trajectory_only) is True
+    assert trajectory_only.passed is False
+
+
+def test_task_correct_rejects_wrong_result_and_safety_remains_independent() -> None:
+    case = load_manifest(DATASET).cases[0]
+    wrong_result = _semantic_score(failed=("result_equivalent",))
+    safety_failure = _semantic_score(safety_veto=True)
+    assert task_correct(case, wrong_result) is False
+    assert task_correct(case, safety_failure) is True
+    assert safety_failure.safety_veto is True
+    assert safety_failure.passed is False
+
+
+def test_correction_obedience_ignores_tool_and_budget_gates() -> None:
+    correction_case = load_manifest(DATASET).cases[1]
+    compliant = _semantic_score(failed=("required_tools", "token_budget"))
+    rejected = _semantic_score(failed=("forbidden_terms",))
+    wrong_result = _semantic_score(failed=("result_equivalent",))
+    assert task_correct(correction_case, compliant) is True
+    assert compliant.passed is False
+    assert correction_obeyed(correction_case, compliant) is True
+    assert correction_obeyed(correction_case, rejected) is False
+    assert correction_obeyed(correction_case, wrong_result) is False
+
+
+def test_paired_summary_separates_task_correctness_from_overall_gate(tmp_path: Path) -> None:
+    def child(command: list[str], environment: dict[str, str]) -> ChildResult:
+        case_id = command[command.index("--case") + 1]
+        output = Path(command[command.index("--output") + 1])
+        variant: Literal["v3", "v4"] = "v4" if environment["DBFOX_MEMORY_V4_CONTEXT"] == "1" else "v3"
+        record = _record(case_id, variant, classification="efficiency_regression").model_copy(
+            update={"score": _semantic_score(failed=("token_budget",))}
+        )
+        _write_child(output, record)
+        return ChildResult(returncode=1, process_id=1)
+
+    summary, exit_code = run_memory_paired(
+        manifest=load_manifest(DATASET), dataset=DATASET, profile="smoke",
+        output=tmp_path / "paired", environment={}, child_runner=child,
+    )
+    assert exit_code == 0
+    assert summary["v3_task_correctness"] == {"passed": 6, "valid": 6}
+    assert summary["v4_task_correctness"] == {"passed": 6, "valid": 6}
+    assert summary["v3_overall_gate"] == {"passed": 0, "valid": 6}
+    assert summary["v4_overall_gate"] == {"passed": 0, "valid": 6}
