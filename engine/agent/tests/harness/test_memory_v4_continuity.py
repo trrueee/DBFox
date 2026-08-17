@@ -13,6 +13,7 @@ from engine.agent.loop import RunLoop
 from engine.agent.memory_v4 import SessionMemoryStateV4
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.turn import TurnStreamError, TurnStreamItem, TurnStreamKind, TurnTermination
+from engine.agent.tests.harness.test_agentbench_faults import _NoProgressTool
 from engine.environment.schema_catalog_sync import ensure_catalog
 from engine.json_codec import loads
 from engine.models import (
@@ -23,6 +24,7 @@ from engine.models import (
     AgentToolInvocation,
     AgentTurn,
 )
+from engine.tools.runtime import ToolRegistry
 
 
 def _tool_turn(call_id: str, name: str, arguments: dict[str, object]):
@@ -216,6 +218,37 @@ class _RejectedToolProvider:
         yield from _final_turn("该无效预览不构成已验证的结构事实。")
 
 
+class _NoProgressProvider:
+    """Repeats one real, empty tool result until ProgressGuard terminates the Run."""
+
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        del timeout_seconds, cancellation_probe
+        assert "agentbench_no_progress" in _tool_names(tools)
+        call_number = sum(
+            item.get("type") == "function_call_output" for item in messages
+        ) + 1
+        yield from _tool_turn(
+            f"no-progress-{call_number}", "agentbench_no_progress", {}
+        )
+
+
+class _NoProgressRecoveryProvider(_RediscoverProvider):
+    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+        del timeout_seconds, cancellation_probe
+        rendered = "\n".join(str(item.get("content") or "") for item in messages)
+        if '<dbfox_context source="session_memory">' in rendered:
+            assert '"selected_count":0' in rendered
+            assert '"objects":[]' in rendered
+        assert "schema_search" in _tool_names(tools)
+        self.prompt_checked = True
+        if not _has_output(messages, "rediscover-orders"):
+            yield from _tool_turn(
+                "rediscover-orders", "schema_search", {"queries": ["orders"]}
+            )
+            return
+        yield from _final_turn("已从当前可验证结构重新发现 orders。")
+
+
 def _execute_run(
     db_session,
     *,
@@ -225,6 +258,7 @@ def _execute_run(
     content: str,
     idempotency_key: str,
     provider,
+    registry=None,
 ):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
@@ -243,10 +277,12 @@ def _execute_run(
     assert sessions.promote_next_input(lease=lease) == admission.run_id
     db_session.commit()
     factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    loop_kwargs = {"registry": registry} if registry is not None else {}
     RunLoop(
         session_factory=factory,
         model_factory=lambda _settings: provider,
         live_stream=LiveStreamHub(),
+        **loop_kwargs,
     ).execute(lease=lease, run_id=admission.run_id)
     db_session.expire_all()
     return admission
@@ -427,3 +463,46 @@ def test_memory_v4_failed_tool_does_not_poison_next_run(
     assert consumer.prompt_checked is True
     assert _run_tools(db_session, second.run_id) == ["schema_search"]
     assert "重新发现" in _answer(db_session, second)
+
+
+def test_memory_v4_no_progress_terminal_does_not_create_catalog_truth(
+    db_session, test_datasource, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("engine.agent.context.MEMORY_V4_CONTEXT_ENABLED", True)
+    session_id = _new_session(db_session, str(test_datasource.id), "no-progress-terminal")
+    first = _execute_run(
+        db_session,
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        generation=1,
+        content="重复空操作。",
+        idempotency_key="no-progress-1",
+        provider=_NoProgressProvider(),
+        registry=ToolRegistry().register(_NoProgressTool()),
+    )
+    run = db_session.get(AgentRun, first.run_id)
+    assert run is not None and run.status == "failed"
+    assert run.error_code == "AGENT_NO_PROGRESS"
+    row = db_session.query(AgentSessionMemory).filter_by(session_id=session_id).one()
+    memory = SessionMemoryStateV4.model_validate(loads(str(row.memory_v4_json)))
+    projection = next(item for item in memory.projections if item.projection_id == "dbfox.catalog.working_state")
+    assert projection.state["objects"] == []
+
+    consumer = _NoProgressRecoveryProvider()
+    second = _execute_run(
+        db_session,
+        session_id=session_id,
+        datasource_id=str(test_datasource.id),
+        generation=1,
+        content="从可靠结构继续。",
+        idempotency_key="no-progress-2",
+        provider=consumer,
+    )
+    turns = db_session.query(AgentTurn).filter_by(run_id=second.run_id).all()
+    assert turns
+    for turn in turns:
+        snapshot = loads(str(turn.context_snapshot_json))
+        working = snapshot.get("session_memory", {}).get("SESSION_WORKING_STATE", {})
+        assert working.get("objects", []) == []
+    assert _run_tools(db_session, second.run_id) == ["schema_search"]
+    assert consumer.prompt_checked is True
