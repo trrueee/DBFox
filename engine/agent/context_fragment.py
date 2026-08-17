@@ -34,6 +34,8 @@ class ContextContributionInput(BaseModel):
     session_id: str
     run_id: str
     current_request: str
+    workspace_id: str | None = None
+    workspace_version: str | None = None
 
 
 class ContextContributor(Protocol):

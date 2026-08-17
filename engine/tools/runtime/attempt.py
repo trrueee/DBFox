@@ -65,7 +65,8 @@ class ToolAttemptRequest(BaseModel):
 
     mode: Literal["execute", "reconcile"]
     tool_name: str
-    frozen_tool_version: str
+    frozen_tool_declared_version: str
+    frozen_tool_contract_hash: str
     invocation: ToolInvocationContext
     authorized_input: dict[str, JsonValue]
     attempt_timeout_ms: int = Field(ge=1, le=3_600_000)

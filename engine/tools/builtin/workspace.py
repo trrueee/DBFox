@@ -212,6 +212,16 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
                 "sizeBytes": snapshot.size_bytes,
                 "sha256": snapshot.sha256,
                 "truncated": snapshot.truncated,
+                "workspaceId": (
+                    str(context.scope("workspace").id)
+                    if context.scope("workspace") is not None
+                    else ""
+                ),
+                "workspaceVersion": (
+                    str(context.scope("workspace").version)
+                    if context.scope("workspace") is not None
+                    else ""
+                ),
             },
             summary=f"Read {snapshot.size_bytes} bytes from {snapshot.relative_path}",
             semantic_key=f"file_read:{snapshot.sha256}",
@@ -320,6 +330,16 @@ class WorkspaceFileWritePatchTool(
                 "newSha256": result.new_sha256,
                 "sizeBytes": result.size_bytes,
                 "created": result.created,
+                "workspaceId": (
+                    str(context.scope("workspace").id)
+                    if context.scope("workspace") is not None
+                    else ""
+                ),
+                "workspaceVersion": (
+                    str(context.scope("workspace").version)
+                    if context.scope("workspace") is not None
+                    else ""
+                ),
             },
             summary=f"Replaced {result.size_bytes} bytes in {result.relative_path}",
             semantic_key=f"file_write_patch:{result.new_sha256}",
@@ -372,6 +392,8 @@ class _WorkspaceFileSnapshotPayloadValidator(BaseModel):
     size_bytes: int = Field(alias="sizeBytes", ge=0)
     sha256: str = Field(min_length=64, max_length=64)
     truncated: bool = False
+    workspace_id: str = Field(default="", alias="workspaceId")
+    workspace_version: str = Field(default="", alias="workspaceVersion")
 
 
 register_artifact_payload_contract(
@@ -389,6 +411,8 @@ class _WorkspaceCodePatchPayloadValidator(BaseModel):
     new_sha256: str = Field(min_length=64, max_length=64, alias="newSha256")
     size_bytes: int = Field(ge=0, alias="sizeBytes")
     created: bool = False
+    workspace_id: str = Field(default="", alias="workspaceId")
+    workspace_version: str = Field(default="", alias="workspaceVersion")
 
 
 register_artifact_payload_contract(

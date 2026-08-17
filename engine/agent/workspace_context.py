@@ -75,6 +75,14 @@ class WorkspaceContextContributor:
                 sha256 = str(payload.get("sha256") or "")
                 if not relative_path:
                     continue
+                if input.workspace_id and str(
+                    payload.get("workspaceId") or ""
+                ) != input.workspace_id:
+                    continue
+                if input.workspace_version and str(
+                    payload.get("workspaceVersion") or ""
+                ) != input.workspace_version:
+                    continue
                 fragments.append(
                     ContextFragment(
                         source_id="dbfox.workspace",

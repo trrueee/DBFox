@@ -24,46 +24,71 @@ class _InvocationRequestLike:
     datasource_generation: int
 
 
+_DATABASE_CAPABILITIES = frozenset(
+    {"database_read", "metadata_read", "metadata_write"}
+)
+_WORKSPACE_CAPABILITIES = frozenset({"filesystem_read", "filesystem_write"})
+
+
+def resolve_workspace_scope_ref(
+    db: Session,
+    datasource_id: str,
+) -> ResourceScopeRef | None:
+    datasource = db.get(DataSource, datasource_id)
+    project_id = (
+        str(datasource.project_id)
+        if datasource and datasource.project_id
+        else ""
+    )
+    project = db.get(Project, project_id) if project_id else None
+    workspace_root = str(project.workspace_root or "").strip() if project else ""
+    if not workspace_root:
+        return None
+    try:
+        workspace = WorkspaceReadService(workspace_root)
+    except WorkspaceReadError:
+        return None
+    root_digest = hashlib.sha256(
+        str(workspace.root).encode("utf-8")
+    ).hexdigest()[:16]
+    return ResourceScopeRef(
+        kind="workspace",
+        id=project_id,
+        version=root_digest,
+        location=workspace_root,
+    )
+
+
 def build_tool_scope_context(
     db: Session,
     request: Any,
     tool: BaseTool[Any, Any],
 ) -> tuple[tuple[ResourceScopeRef, ...], dict[str, Any]]:
-    scope_refs = [
-        ResourceScopeRef(
-            kind="database",
-            id=str(getattr(request, "datasource_id", "")),
-            version=int(getattr(request, "datasource_generation", 0) or 0),
-        )
-    ]
+    capabilities = set(tool.execution.capabilities)
+    scope_refs: list[ResourceScopeRef] = []
     resources: dict[str, Any] = {}
 
-    if "filesystem_read" in tool.execution.capabilities:
-        datasource = db.get(DataSource, scope_refs[0].id)
-        project_id = str(datasource.project_id) if datasource and datasource.project_id else ""
-        project = db.get(Project, project_id) if project_id else None
-        workspace_root = str(project.workspace_root or "").strip() if project else ""
-        if not workspace_root:
-            raise ToolInputError(
-                "当前项目没有已授权的本地工作目录。"
-            )
-        try:
-            workspace = WorkspaceReadService(workspace_root)
-        except WorkspaceReadError as exc:
-            raise ToolInputError(
-                "当前项目工作目录不可用。"
-            ) from exc
-        root_digest = hashlib.sha256(
-            str(workspace.root).encode("utf-8")
-        ).hexdigest()[:16]
+    if capabilities & _DATABASE_CAPABILITIES:
         scope_refs.append(
             ResourceScopeRef(
-                kind="workspace",
-                id=project_id,
-                version=root_digest,
-                location=workspace_root,
+                kind="database",
+                id=str(getattr(request, "datasource_id", "")),
+                version=int(getattr(request, "datasource_generation", 0) or 0),
             )
         )
-        resources["workspace"] = workspace
+        resources["database"] = db
+
+    if capabilities & _WORKSPACE_CAPABILITIES:
+        workspace_ref = resolve_workspace_scope_ref(
+            db,
+            str(getattr(request, "datasource_id", "") or ""),
+        )
+        if workspace_ref is None:
+            raise ToolInputError("当前项目没有已授权的本地工作目录。")
+        scope_refs.append(workspace_ref)
+        try:
+            resources["workspace"] = WorkspaceReadService(workspace_ref.location or "")
+        except WorkspaceReadError as exc:
+            raise ToolInputError("当前项目工作目录不可用。") from exc
 
     return tuple(scope_refs), resources

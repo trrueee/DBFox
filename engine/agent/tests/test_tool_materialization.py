@@ -120,7 +120,7 @@ def test_pending_call_cannot_cross_a_tool_version_boundary() -> None:
         allowed_groups={"schema"},
         execution_mode="user_requested_read",
     )
-    frozen_contract = materialization.require("schema_read").version
+    frozen_contract = materialization.require("schema_read").contract_hash
 
     class _ReadToolV2(_ReadTool):
         version = "2"
@@ -131,7 +131,7 @@ def test_pending_call_cannot_cross_a_tool_version_boundary() -> None:
             current_registry,
             materialization,
             name="schema_read",
-            version=frozen_contract,
+            contract_hash=frozen_contract,
         )
 
     with pytest.raises(ToolVersionMismatch):
@@ -139,7 +139,7 @@ def test_pending_call_cannot_cross_a_tool_version_boundary() -> None:
             ToolRegistry(),
             materialization,
             name="schema_read",
-            version=frozen_contract,
+            contract_hash=frozen_contract,
         )
 
 
@@ -149,7 +149,7 @@ def test_pending_call_cannot_cross_a_contract_change_with_same_declared_version(
         allowed_groups={"schema"},
         execution_mode="user_requested_read",
     )
-    frozen_contract = materialization.require("schema_read").version
+    frozen_contract = materialization.require("schema_read").contract_hash
 
     class _ChangedInput(ToolInputModel):
         value: int
@@ -163,7 +163,7 @@ def test_pending_call_cannot_cross_a_contract_change_with_same_declared_version(
             ToolRegistry().register(_ReadToolChangedContract()),
             materialization,
             name="schema_read",
-            version=frozen_contract,
+            contract_hash=frozen_contract,
         )
 
 
@@ -173,7 +173,7 @@ def test_pending_call_cannot_cross_a_policy_change_with_same_declared_version() 
         allowed_groups={"schema"},
         execution_mode="user_requested_read",
     )
-    frozen_contract = materialization.require("schema_read").version
+    frozen_contract = materialization.require("schema_read").contract_hash
 
     class _ReadToolChangedPolicy(_ReadTool):
         policy = ToolPolicy(requires_approval=True)
@@ -183,7 +183,7 @@ def test_pending_call_cannot_cross_a_policy_change_with_same_declared_version() 
             ToolRegistry().register(_ReadToolChangedPolicy()),
             materialization,
             name="schema_read",
-            version=frozen_contract,
+            contract_hash=frozen_contract,
         )
 
 

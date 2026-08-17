@@ -21,6 +21,7 @@ from engine.tools.runtime.attempt_runner import (
     IsolatedProcessAttemptRunner,
     default_isolated_worker_command,
 )
+from engine.tools.materialization import current_tool_contract_hash
 from engine.workspace.read_service import WorkspaceReadService
 
 
@@ -176,10 +177,13 @@ def test_code_patch_artifact_contract_is_registered() -> None:
 def test_isolated_runner_executes_file_write_patch(tmp_path) -> None:
     root = tmp_path / "project"
     root.mkdir()
+    registry = _write_registry()
+    contract_hash = current_tool_contract_hash(registry.require("file_write_patch"))
     request = ToolAttemptRequest(
         mode="execute",
         tool_name="file_write_patch",
-        frozen_tool_version="1",
+        frozen_tool_declared_version="1",
+        frozen_tool_contract_hash=contract_hash,
         invocation=ToolInvocationContext(
             session_id="s",
             run_id="r",

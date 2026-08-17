@@ -49,7 +49,13 @@ def _safe_input_contract_reason(
 
 _RuleFunc = Callable[..., PolicyDecision | None]
 _AGENT_KERNEL_CAPABILITIES = frozenset(
-    {"metadata_read", "metadata_write", "database_read"}
+    {
+        "metadata_read",
+        "metadata_write",
+        "database_read",
+        "filesystem_read",
+        "filesystem_write",
+    }
 )
 
 

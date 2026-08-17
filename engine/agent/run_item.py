@@ -442,7 +442,7 @@ def function_call_item(
         payload=FunctionCallPayload(
             call_id=str(invocation.provider_call_id),
             name=str(invocation.tool_name),
-            tool_version=str(invocation.tool_version),
+            tool_version=str(invocation.contract_hash),
             presentation=presentation,
             arguments=cast(
                 dict[str, Any],

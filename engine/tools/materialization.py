@@ -21,7 +21,10 @@ class MaterializedTool(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: str
-    version: str = Field(
+    declared_version: str = Field(
+        description="Domain semantic version used for historical interpretation."
+    )
+    contract_hash: str = Field(
         description="Content-addressed identifier of the complete executable tool contract."
     )
     group: str
@@ -93,7 +96,7 @@ def require_current_tool(
     materialization: ToolMaterialization,
     *,
     name: str,
-    version: str,
+    contract_hash: str,
 ) -> Any:
     try:
         frozen = materialization.require(name)
@@ -103,10 +106,13 @@ def require_current_tool(
             f"Tool {name} is not available in both the frozen and current registries"
         ) from exc
     current_contract = _materialize_tool(current)
-    if version != frozen.version or current_contract.version != frozen.version:
+    if (
+        contract_hash != frozen.contract_hash
+        or current_contract.contract_hash != frozen.contract_hash
+    ):
         raise ToolVersionMismatch(
-            f"Tool {name} contract {version!r} cannot run against "
-            f"frozen={frozen.version!r}, current={current_contract.version!r}"
+            f"Tool {name} contract {contract_hash!r} cannot run against "
+            f"frozen={frozen.contract_hash!r}, current={current_contract.contract_hash!r}"
         )
     return current
 
@@ -116,7 +122,7 @@ def require_reconciliation_tool(
     materialization: ToolMaterialization,
     *,
     name: str,
-    version: str,
+    contract_hash: str,
 ) -> Any:
     """Resolve only the read-only reconciler for an already-attempted call.
 
@@ -135,7 +141,7 @@ def require_reconciliation_tool(
             f"Tool {name} is not available for reconciliation"
         ) from exc
     if (
-        version != frozen.version
+        contract_hash != frozen.contract_hash
         or frozen.recovery_policy is not ToolRecoveryPolicy.RECONCILE
         or current.execution.recovery is not ToolRecoveryPolicy.RECONCILE
     ):
@@ -170,7 +176,8 @@ def _materialize_tool(
     }
     return MaterializedTool(
         name=spec.name,
-        version=f"sha256:{_canonical_digest(contract_payload)}",
+        declared_version=str(spec.version),
+        contract_hash=f"sha256:{_canonical_digest(contract_payload)}",
         group=spec.group,
         description=spec.description,
         input_schema=input_schema,
@@ -182,6 +189,14 @@ def _materialize_tool(
         recovery_policy=spec.execution.recovery,
         kind=spec.kind,
     )
+
+
+def current_tool_contract_hash(
+    tool: BaseTool[Any, Any] | ControlCommand[Any, Any],
+) -> str:
+    """Return the current executable contract hash for a registered tool."""
+
+    return _materialize_tool(tool).contract_hash
 
 
 def _canonical_digest(value: Any) -> str:

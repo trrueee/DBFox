@@ -83,7 +83,7 @@ class ToolInvocationRepository:
                 "turn_id": turn_id,
                 "provider_call_id": provider_call_id,
                 "tool": tool.name,
-                "version": tool.version,
+                "contract_hash": tool.contract_hash,
                 "authorized_input_hash": authorized_input_hash,
             }
         )
@@ -101,7 +101,8 @@ class ToolInvocationRepository:
             turn_id=turn_id,
             provider_call_id=provider_call_id,
             tool_name=tool.name,
-            tool_version=tool.version,
+            declared_version=tool.declared_version,
+            contract_hash=tool.contract_hash,
             # The durable invocation is the action the policy authorized, not
             # the provider's untrusted request. Approval and leaf execution
             # therefore bind to exactly the same canonical input.
@@ -178,7 +179,8 @@ class ToolInvocationRepository:
                 turn_id=turn_id,
                 provider_call_id=provider_call_id,
                 tool_name=tool_name,
-                tool_version="unmaterialized",
+                declared_version="unmaterialized",
+                contract_hash="unmaterialized",
                 # Unknown tools have no trusted input contract. Do not persist
                 # model-authored arguments that could contain arbitrary data.
                 input_json=_json({}),
@@ -189,7 +191,7 @@ class ToolInvocationRepository:
                         "turn_id": turn_id,
                         "provider_call_id": provider_call_id,
                         "tool": tool_name,
-                        "version": "unmaterialized",
+                        "contract_hash": "unmaterialized",
                     }
                 ),
                 status=ToolInvocationStatus.REJECTED.value,
@@ -531,7 +533,8 @@ class ToolInvocationRepository:
             turn_id=str(row.turn_id),
             provider_call_id=str(row.provider_call_id),
             tool_name=str(row.tool_name),
-            tool_version=str(row.tool_version),
+            declared_version=str(row.declared_version),
+            contract_hash=str(row.contract_hash),
             authorized_input=load_object(str(row.input_json)),
             authorized_input_hash=str(row.input_hash),
             idempotency_key=str(row.idempotency_key),
@@ -550,7 +553,7 @@ class ToolInvocationRepository:
             turn_id=str(row.turn_id),
             tool_invocation_id=str(row.tool_invocation_id),
             tool_name=str(invocation.tool_name),
-            tool_version=str(invocation.tool_version),
+            tool_version=str(invocation.contract_hash),
             status=ObservationStatus(str(row.status)),
             model_visible_summary=str(row.model_visible_summary),
             model_output=str(row.model_output_json),

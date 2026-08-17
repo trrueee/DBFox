@@ -31,7 +31,8 @@ class ToolInvocation(BaseModel):
     turn_id: str
     provider_call_id: str
     tool_name: str
-    tool_version: str
+    declared_version: str
+    contract_hash: str
     authorized_input: dict[str, Any]
     authorized_input_hash: str
     idempotency_key: str

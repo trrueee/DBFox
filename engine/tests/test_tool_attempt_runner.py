@@ -20,6 +20,7 @@ from engine.tools.runtime.attempt_runner import (
 from engine.tools.runtime.handler import ToolAttemptHandler
 from engine.tools.runtime import ToolRegistry
 from engine.tools.builtin.registry import register_workspace_extension
+from engine.tools.materialization import current_tool_contract_hash
 from engine.workspace.read_service import WorkspaceReadService
 
 
@@ -34,7 +35,7 @@ class _Control:
         return self.cancelled.is_set()
 
 
-def _request(workspace, version="1"):
+def _request(workspace, version="1", registry=None):
     location = (
         str(workspace.root)
         if isinstance(workspace, WorkspaceReadService)
@@ -46,10 +47,20 @@ def _request(workspace, version="1"):
         version="root-v1",
         location=location,
     )
+    contract_hash = (
+        "sha256:99"
+        if version == "99"
+        else (
+            current_tool_contract_hash(registry.require("file_read"))
+            if registry is not None
+            else "sha256:1"
+        )
+    )
     return ToolAttemptRequest(
         mode="execute",
         tool_name="file_read",
-        frozen_tool_version=version,
+        frozen_tool_declared_version=version,
+        frozen_tool_contract_hash=contract_hash,
         invocation=ToolInvocationContext(
             session_id="session-1",
             run_id="run-1",
@@ -74,7 +85,7 @@ def test_shared_handler_runs_a_workspace_attempt(tmp_path) -> None:
     resolver.register("workspace", lambda ref: WorkspaceReadService(root))
     handler = ToolAttemptHandler(registry=registry, resolver=resolver)
 
-    result = handler.run(_request(WorkspaceReadService(root)))
+    result = handler.run(_request(WorkspaceReadService(root), registry=registry))
     assert result.status == "success"
     assert result.artifact_drafts[0].type == "dbfox.workspace.file_snapshot"
 
@@ -114,9 +125,14 @@ def test_isolated_runner_executes_worker_attempt(tmp_path) -> None:
     root = tmp_path / "project"
     (root / "src").mkdir(parents=True)
     (root / "src" / "main.py").write_bytes(bytes([112, 114, 105, 110, 116, 40, 41, 10]))
+    registry = ToolRegistry(
+        available_backends=frozenset({"in_process", "isolated_process"})
+    )
+    register_workspace_extension(registry)
+    registry.freeze()
     runner = IsolatedProcessAttemptRunner(default_isolated_worker_command())
     result = runner.run(
-        request=_request(WorkspaceReadService(root)),
+        request=_request(WorkspaceReadService(root), registry=registry),
         control=_Control(),
     )
     assert result.status == "success"

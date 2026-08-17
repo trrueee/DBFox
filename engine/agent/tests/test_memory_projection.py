@@ -64,7 +64,8 @@ def _catalog_search_records(
     session_id: str,
     sequence: int = 1,
     revision: int = 1,
-    tool_version: str = "1",
+    declared_version: str = "1",
+    contract_hash: str = "sha256:1",
 ) -> None:
     turn = AgentTurn(
         id=f"turn_{run_id}_{sequence}",
@@ -91,7 +92,8 @@ def _catalog_search_records(
         turn_id=turn.id,
         provider_call_id=f"call_{run_id}_{sequence}",
         tool_name="schema_search",
-        tool_version=tool_version,
+        declared_version=declared_version,
+        contract_hash=contract_hash,
         input_json=dumps({"queries": ["orders"]}),
         input_hash=f"input_{run_id}_{sequence}",
         idempotency_key=f"idem_{run_id}_{sequence}",
@@ -272,7 +274,8 @@ def test_projection_contract_error_does_not_block_run_failure(
         db_session,
         run_id=admission.run_id,
         session_id=session.id,
-        tool_version="2",
+        declared_version="2",
+        contract_hash="sha256:2",
     )
     db_session.commit()
 

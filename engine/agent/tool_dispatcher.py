@@ -49,10 +49,13 @@ from engine.tools.materialization import (
 )
 from engine.tools.runtime import ToolExecutor, ToolRegistry, ToolRuntime
 from engine.tools.runtime.attempt import (
+    CompositeResourceResolver,
+    ResourceScopeRef,
     ToolAttemptRequest,
     ToolInvocationContext,
 )
 from engine.tools.runtime.attempt_runner import IsolatedProcessAttemptRunner
+from engine.tools.runtime.handler import ToolAttemptHandler
 from engine.tools.runtime.resource_context import build_tool_scope_context
 from engine.tools.runtime.base import (
     BaseTool,
@@ -129,6 +132,10 @@ class ToolDispatcher:
         self.definition = definition
         self.executor = executor
         self.isolated_runner = IsolatedProcessAttemptRunner(isolated_worker_command)
+        self.attempt_handler = ToolAttemptHandler(
+            registry=registry,
+            resolver=CompositeResourceResolver(),
+        )
         self.approval_authority = ApprovalAuthorityVerifier()
 
     def request_and_execute(
@@ -358,7 +365,7 @@ class ToolDispatcher:
                 exc=exc,
                 fingerprint_subject={
                     "tool": invocation.tool_name,
-                    "version": invocation.tool_version,
+                    "contract_hash": invocation.contract_hash,
                     "error_type": type(exc).__name__,
                 },
             )
@@ -411,7 +418,7 @@ class ToolDispatcher:
                     self.registry,
                     materialization,
                     name=invocation.tool_name,
-                    version=invocation.tool_version,
+                    contract_hash=invocation.contract_hash,
                 )
                 if not isinstance(tool, BaseTool):
                     raise ToolVersionMismatch(
@@ -485,19 +492,14 @@ class ToolDispatcher:
         execution_authority = prepared.execution_authority
 
         def attempt_request(
-            tool_control: ToolExecutionControl,
             mode: str,
+            scope_refs: tuple[ResourceScopeRef, ...],
         ) -> ToolAttemptRequest:
-            with self.session_factory() as leaf_db:
-                scope_refs, _resources = build_tool_scope_context(
-                    leaf_db,
-                    request,
-                    tool,
-                )
             return ToolAttemptRequest(
                 mode=mode,
                 tool_name=invocation.tool_name,
-                frozen_tool_version=invocation.tool_version,
+                frozen_tool_declared_version=invocation.declared_version,
+                frozen_tool_contract_hash=invocation.contract_hash,
                 invocation=ToolInvocationContext(
                     session_id=invocation.session_id,
                     run_id=invocation.run_id,
@@ -512,8 +514,14 @@ class ToolDispatcher:
 
         def execute_leaf(tool_control: ToolExecutionControl) -> ToolResult:
             if tool.execution.backend == "isolated_process":
+                with self.session_factory() as leaf_db:
+                    scope_refs, _resources = build_tool_scope_context(
+                        leaf_db,
+                        request,
+                        tool,
+                    )
                 return self.isolated_runner.run(
-                    request=attempt_request(tool_control, "execute"),
+                    request=attempt_request("execute", scope_refs),
                     control=tool_control,
                 )
             with self.session_factory() as leaf_db:
@@ -522,17 +530,12 @@ class ToolDispatcher:
                     request,
                     tool,
                 )
-                result = ToolRuntime(self.registry).invoke(
-                    tool_name=invocation.tool_name,
-                    raw_input=invocation.authorized_input,
-                    request=request,
-                    db=leaf_db,
+                result = self.attempt_handler.run_with_resources(
+                    attempt_request("execute", scope_refs),
+                    resources,
                     cancellation_probe=tool_control.is_cancelled,
                     deadline=tool_control.deadline,
                     execution_authority=execution_authority,
-                    scope_refs=scope_refs,
-                    resources=resources,
-                    idempotency_key=invocation.idempotency_key,
                 )
                 if result.status == "success" and not tool_control.is_cancelled():
                     leaf_db.commit()
@@ -564,8 +567,14 @@ class ToolDispatcher:
 
             def reconcile_leaf(tool_control: ToolExecutionControl) -> ToolResult:
                 if tool.execution.backend == "isolated_process":
+                    with self.session_factory() as leaf_db:
+                        scope_refs, _resources = build_tool_scope_context(
+                            leaf_db,
+                            request,
+                            tool,
+                        )
                     return self.isolated_runner.run(
-                        request=attempt_request(tool_control, "reconcile"),
+                        request=attempt_request("reconcile", scope_refs),
                         control=tool_control,
                     )
                 with self.session_factory() as leaf_db:
@@ -574,17 +583,12 @@ class ToolDispatcher:
                         request,
                         tool,
                     )
-                    reconciled = ToolRuntime(self.registry).reconcile(
-                        tool_name=invocation.tool_name,
-                        raw_input=invocation.authorized_input,
-                        request=request,
-                        db=leaf_db,
-                        idempotency_key=invocation.idempotency_key,
+                    reconciled = self.attempt_handler.run_with_resources(
+                        attempt_request("reconcile", scope_refs),
+                        resources,
                         cancellation_probe=tool_control.is_cancelled,
                         deadline=tool_control.deadline,
                         execution_authority=execution_authority,
-                        scope_refs=scope_refs,
-                        resources=resources,
                     )
                     leaf_db.rollback()
                     return reconciled
@@ -605,7 +609,7 @@ class ToolDispatcher:
                             self.registry,
                             self._turn_materialization(db, invocation.turn_id),
                             name=invocation.tool_name,
-                            version=invocation.tool_version,
+                            contract_hash=invocation.contract_hash,
                         )
                     except ToolVersionMismatch:
                         return ToolResult(

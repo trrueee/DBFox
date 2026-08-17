@@ -41,7 +41,8 @@ def _invocation(
         turn_id="turn-memory-v4",
         provider_call_id=f"call_{tool_name}_{sequence}",
         tool_name=tool_name,
-        tool_version=version,
+        declared_version=version,
+        contract_hash=f"sha256:{version}",
         authorized_input=authorized_input or {},
         authorized_input_hash=f"input-{tool_name}-{sequence}",
         idempotency_key=f"idem-{tool_name}-{sequence}",
@@ -64,7 +65,7 @@ def _observation(
         turn_id="turn-memory-v4",
         tool_invocation_id=f"invocation_{tool_name}_{sequence}",
         tool_name=tool_name,
-        tool_version="1",
+        tool_version="sha256:1",
         status=status,
         model_visible_summary="summary",
         model_output="{}",
@@ -251,14 +252,14 @@ def test_unknown_tool_version_rejects_instead_of_guessing() -> None:
         )
 
 
-def test_materialized_content_hash_tool_version_is_supported() -> None:
+def test_declared_version_drives_projection_while_contract_hash_is_independent() -> None:
     search_invocation, search_observation = _search_pair(1)
     folded = fold_catalog(
         CatalogWorkingState(),
         scope=_scope(),
         source_sequence=1,
         invocation=search_invocation.model_copy(
-            update={"tool_version": "sha256:deadbeef"}
+            update={"contract_hash": "sha256:deadbeef"}
         ),
         observation=search_observation,
     )

@@ -47,7 +47,8 @@ def test_attempt_request_is_serializable_and_excludes_live_objects() -> None:
     request = ToolAttemptRequest(
         mode="execute",
         tool_name="schema_search",
-        frozen_tool_version="1",
+        frozen_tool_declared_version="1",
+        frozen_tool_contract_hash="sha256:1",
         invocation=ToolInvocationContext(
             session_id="session-1",
             run_id="run-1",
@@ -67,7 +68,8 @@ def test_attempt_request_is_serializable_and_excludes_live_objects() -> None:
         ToolAttemptRequest(
             mode="execute",
             tool_name="bad",
-            frozen_tool_version="1",
+            frozen_tool_declared_version="1",
+            frozen_tool_contract_hash="sha256:1",
             invocation=request.invocation,
             authorized_input={"callback": lambda: True},  # type: ignore[dict-item]
             attempt_timeout_ms=100,

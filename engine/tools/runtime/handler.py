@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
     ToolAttemptRequest,
 )
+from engine.tools.materialization import current_tool_contract_hash
 from engine.tools.runtime.base import BaseTool
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.result import ToolResult
@@ -58,22 +59,67 @@ class ToolAttemptHandler:
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
     ) -> ToolResult:
+        tool = self._resolve_tool(request)
+        if isinstance(tool, ToolResult):
+            return tool
+        resources = self.resolver.resolve(request.invocation.scope_refs)
+        return self._invoke(
+            request,
+            tool,
+            resources,
+            cancellation_probe=cancellation_probe,
+            deadline=deadline,
+            execution_authority=None,
+        )
+
+    def run_with_resources(
+        self,
+        request: ToolAttemptRequest,
+        resources: dict[str, Any],
+        *,
+        cancellation_probe: Callable[[], bool] | None = None,
+        deadline: float | None = None,
+        execution_authority: Any | None = None,
+    ) -> ToolResult:
+        tool = self._resolve_tool(request)
+        if isinstance(tool, ToolResult):
+            return tool
+        return self._invoke(
+            request,
+            tool,
+            resources,
+            cancellation_probe=cancellation_probe,
+            deadline=deadline,
+            execution_authority=execution_authority,
+        )
+
+    def _resolve_tool(self, request: ToolAttemptRequest) -> BaseTool | ToolResult:
         tool = self.registry.require(request.tool_name)
         if not isinstance(tool, BaseTool):
             raise TypeError(
                 f"{request.tool_name} is a Runtime control command, not an executable tool"
             )
-        if tool.version != request.frozen_tool_version:
+        if current_tool_contract_hash(tool) != request.frozen_tool_contract_hash:
             return ToolResult(
                 name=request.tool_name,
                 status="failed",
                 input=dict(request.authorized_input),
-                error="The frozen tool contract is no longer current.",
+                error="The frozen tool contract hash is no longer current.",
                 error_code="TOOL_VERSION_CHANGED",
                 latency_ms=0,
             )
+        return tool
 
-        resources = self.resolver.resolve(request.invocation.scope_refs)
+    def _invoke(
+        self,
+        request: ToolAttemptRequest,
+        tool: BaseTool,
+        resources: dict[str, Any],
+        *,
+        cancellation_probe: Callable[[], bool] | None,
+        deadline: float | None,
+        execution_authority: Any | None,
+    ) -> ToolResult:
         invocation_request = _database_scope_request(request)
         runtime = ToolRuntime(self.registry)
         if request.mode == "reconcile":
@@ -85,6 +131,7 @@ class ToolAttemptHandler:
                 idempotency_key=request.invocation.idempotency_key,
                 cancellation_probe=cancellation_probe,
                 deadline=deadline,
+                execution_authority=execution_authority,
                 scope_refs=request.invocation.scope_refs,
                 resources=resources,
             )
@@ -96,6 +143,7 @@ class ToolAttemptHandler:
             idempotency_key=request.invocation.idempotency_key,
             cancellation_probe=cancellation_probe,
             deadline=deadline,
+            execution_authority=execution_authority,
             scope_refs=request.invocation.scope_refs,
             resources=resources,
         )

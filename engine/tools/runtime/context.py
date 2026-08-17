@@ -41,6 +41,12 @@ class ToolRunContext(BaseModel):
             raise RuntimeError(f"This tool requires the {kind!r} execution resource")
         return self.resources[kind]
 
+    def scope(self, kind: str) -> ResourceScopeRef | None:
+        return next(
+            (ref for ref in self.scope_refs if ref.kind == kind),
+            None,
+        )
+
     def require_database(self) -> Session:
         if self.db_session is None:
             raise RuntimeError("This tool requires a database session")
