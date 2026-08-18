@@ -36,6 +36,7 @@
       "capability": "keep the current user correction authoritative when verified prior state is present",
       "tags": ["memory", "real_provider"],
       "expected_memory_consumption": "required",
+      "correction_evidence": true,
       "prompts": [
         "先使用目录/schema 工具确认 orders 表及其 status 列，再执行只读查询统计 completed 状态的订单数量，并保留可验证结果。",
         "更正：现在只查询 pending。当前请求优先，不要继续回答 completed。执行只读查询并在最终答案中包含 pending 和 200。"

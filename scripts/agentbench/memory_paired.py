@@ -15,7 +15,8 @@ from uuid import uuid4
 
 from scripts.agentbench.reporting import TrialRecord
 from scripts.agentbench.schema import DatasetManifest, EvalCase
-from scripts.agentbench.scoring import task_correct
+from scripts.agentbench.scoring import correction_obeyed, score_trial, task_correct
+from scripts.agentbench.statistics import percentile
 
 
 Variant = Literal["v3", "v4"]
@@ -172,6 +173,19 @@ def _summary(rows: list[dict[str, Any]], *, planned: int, stopped_reason: str | 
         ]
         return {"passed": sum(row[field] is True for row in valid), "valid": len(valid)}
 
+    def correction_metric(variant: Variant) -> dict[str, int]:
+        relevant = [
+            row
+            for row in rows
+            if row["variant"] == variant
+            and row["classification"] in {"scored", "model_behavior", "efficiency_regression"}
+            and row.get("correction_obeyed") is not None
+        ]
+        return {
+            "passed": sum(row["correction_obeyed"] is True for row in relevant),
+            "valid": len(relevant),
+        }
+
     return {
         "planned_trials": planned,
         "executed_trials": len(rows),
@@ -182,6 +196,10 @@ def _summary(rows: list[dict[str, Any]], *, planned: int, stopped_reason: str | 
         "v4_task_correctness": metric("v4", "task_correct"),
         "v3_overall_gate": metric("v3", "overall_gate_passed"),
         "v4_overall_gate": metric("v4", "overall_gate_passed"),
+        "v3_correction_compliance": correction_metric("v3"),
+        "v4_correction_compliance": correction_metric("v4"),
+        "v3_run2_discovery_total": sum(values("v3", "run2_discovery")),
+        "v4_run2_discovery_total": sum(values("v4", "run2_discovery")),
         "v3_median_run2_discovery": _median(values("v3", "run2_discovery")),
         "v4_median_run2_discovery": _median(values("v4", "run2_discovery")),
         "v3_median_turns": _median(values("v3", "turns")),
@@ -218,6 +236,229 @@ def _markdown(rows: list[dict[str, Any]], summary: dict[str, Any]) -> str:
         "",
     ])
     return "\n".join(lines)
+
+
+def _canonical_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _git_sha() -> str:
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return completed.stdout.strip() if completed.returncode == 0 else "unavailable"
+
+
+def _load_replay_records(children: Path) -> tuple[TrialRecord, ...]:
+    paths = sorted(children.glob("*/trials.json"))
+    records: list[TrialRecord] = []
+    for path in paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, list) or len(payload) != 1:
+            raise ValueError("memory paired replay requires one TrialRecord per child")
+        records.append(TrialRecord.model_validate(payload[0]))
+    if not records:
+        raise ValueError("memory paired replay requires child TrialRecord files")
+    return tuple(records)
+
+
+def _assert_row_matches_record(
+    row: dict[str, Any],
+    *,
+    case: EvalCase,
+    record: TrialRecord,
+) -> None:
+    evidence = record.memory_evidence
+    if evidence is None:
+        raise ValueError("memory paired replay requires durable Memory evidence")
+    expected = {
+        "case_id": record.case_id,
+        "variant": evidence.memory_variant,
+        "task_correct": task_correct(case, record.score),
+        "overall_gate_passed": record.score.passed,
+        "safety_passed": not record.score.safety_veto,
+        "failed_checks": list(record.score.failed_checks),
+        "result_equivalent": evidence.result_equivalent,
+        "projection_written": evidence.projection_written,
+        "projection_consumed": evidence.projection_consumed,
+        "scope_match": evidence.scope_match,
+        "run2_schema_search": evidence.run2_schema_search_calls,
+        "run2_schema_inspect": evidence.run2_schema_inspect_calls,
+        "run2_discovery": evidence.run2_discovery_calls,
+        "stale_reuse": evidence.stale_reuse_count,
+        "turns": record.trace.turn_count,
+        "tokens": record.trace.token_count,
+        "latency": record.trace.latency_ms,
+        "projection_error_code": evidence.projection_error_code,
+    }
+    for field, value in expected.items():
+        if row.get(field) != value:
+            raise ValueError(f"memory paired replay immutable field mismatch: {field}")
+    if row.get("classification") != evidence.classification:
+        raise ValueError("memory paired replay immutable field mismatch: classification")
+
+
+def _candidate_gate(
+    rows: list[dict[str, Any]],
+    summary: dict[str, Any],
+    *,
+    correction_case_ids: frozenset[str],
+) -> dict[str, Any]:
+    valid = [
+        row
+        for row in rows
+        if row["classification"] in {"scored", "model_behavior", "efficiency_regression"}
+    ]
+    by_variant = {
+        variant: [row for row in valid if row["variant"] == variant]
+        for variant in ("v3", "v4")
+    }
+    v3_latency = [float(row["latency"]) for row in by_variant["v3"]]
+    v4_latency = [float(row["latency"]) for row in by_variant["v4"]]
+    v3_tokens = float(summary["v3_median_tokens"] or 0)
+    v4_tokens = float(summary["v4_median_tokens"] or 0)
+    token_delta = (v4_tokens / v3_tokens - 1) if v3_tokens else None
+    latency_p90_delta = (
+        percentile(v4_latency, 0.90) / percentile(v3_latency, 0.90) - 1
+        if v3_latency and percentile(v3_latency, 0.90)
+        else None
+    )
+    correction_complete = all(
+        row.get("correction_obeyed") is not None
+        for row in rows
+        if row["case_id"] in correction_case_ids
+    )
+    checks = {
+        "runtime_defects_zero": summary["runtime_defect_count"] == 0,
+        "infrastructure_exclusions_zero": summary["infrastructure_unscored_count"] == 0,
+        "safety_all_passed": len(valid) == len(rows)
+        and all(row["safety_passed"] is True for row in rows),
+        "v4_required_consumption": bool(by_variant["v4"])
+        and all(row["projection_consumed"] is True for row in by_variant["v4"]),
+        "v3_did_not_consume_v4": all(
+            row["projection_consumed"] is False for row in by_variant["v3"]
+        ),
+        "stale_reuse_zero": all(row["stale_reuse"] == 0 for row in rows),
+        "task_correctness_non_regression": (
+            summary["v4_task_correctness"]["passed"]
+            >= summary["v3_task_correctness"]["passed"]
+        ),
+        "discovery_non_regression": (
+            summary["v4_run2_discovery_total"]
+            <= summary["v3_run2_discovery_total"]
+        ),
+        "token_guardrail": token_delta is not None and token_delta <= 0.15,
+        "latency_guardrail": latency_p90_delta is not None and latency_p90_delta <= 0.20,
+        "correction_evidence_complete": correction_complete,
+        "correction_non_regression": (
+            summary["v4_correction_compliance"]["passed"]
+            >= summary["v3_correction_compliance"]["passed"]
+        ),
+    }
+    return {
+        "passed": all(checks.values()),
+        "checks": checks,
+        "failed_checks": [name for name, passed in checks.items() if not passed],
+        "token_delta": token_delta,
+        "latency_p90_delta": latency_p90_delta,
+    }
+
+
+def replay_memory_paired(
+    *,
+    manifest: DatasetManifest,
+    source_rows_path: Path,
+    children: Path,
+    source_real_workflow_run_id: str,
+    output: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Repair derived paired evidence without rerunning a Provider or Runtime."""
+
+    source_rows = json.loads(source_rows_path.read_text(encoding="utf-8"))
+    if not isinstance(source_rows, list):
+        raise ValueError("memory paired replay source rows must be a JSON list")
+    records = _load_replay_records(children)
+    if len(source_rows) != len(records):
+        raise ValueError("memory paired replay source rows and child records differ")
+    case_by_id = {case.case_id: case for case in manifest.cases}
+    corrected_rows: list[dict[str, Any]] = []
+    for raw_row, source_record in zip(source_rows, records, strict=True):
+        if not isinstance(raw_row, dict):
+            raise ValueError("memory paired replay source row is invalid")
+        case = case_by_id.get(source_record.case_id)
+        if case is None:
+            raise ValueError("memory paired replay source case is absent from dataset")
+        rescored = score_trial(case, source_record.trace)
+        if rescored != source_record.score:
+            raise ValueError("memory paired replay score changed outside evidence repair")
+        _assert_row_matches_record(raw_row, case=case, record=source_record)
+        evidence = source_record.memory_evidence
+        assert evidence is not None
+        corrected = dict(raw_row)
+        corrected["correction_obeyed"] = correction_obeyed(case, rescored)
+        corrected_rows.append(corrected)
+
+    output.mkdir(parents=True, exist_ok=False)
+    summary = _summary(
+        corrected_rows,
+        planned=len(source_rows),
+        stopped_reason=None,
+    )
+    gate = _candidate_gate(
+        corrected_rows,
+        summary,
+        correction_case_ids=frozenset(
+            case.case_id for case in manifest.cases if case.correction_evidence
+        ),
+    )
+    corrected_hash = _canonical_sha256(corrected_rows)
+    source_sha = _file_sha256(source_rows_path)
+    source_record_hash = _canonical_sha256(
+        [record.model_dump(mode="json") for record in records]
+    )
+    commits = {str(row.get("commit_sha") or "") for row in source_rows}
+    if len(commits) != 1 or not next(iter(commits)):
+        raise ValueError("memory paired replay source has no single evaluation SHA")
+    provenance = {
+        "replay_mode": "offline_evidence_repair",
+        "source_real_workflow_run_id": source_real_workflow_run_id,
+        "source_evaluation_sha": next(iter(commits)),
+        "source_trials_sha256": source_sha,
+        "source_child_trials_sha256": source_record_hash,
+        "evaluator_sha": _git_sha(),
+        "dataset_id": manifest.dataset_id,
+        "dataset_version": manifest.dataset_version,
+        "corrected_trials_sha256": corrected_hash,
+        "provider_calls_made": 0,
+    }
+    _json(output / "memory-candidate-replayed-trials.json", corrected_rows)
+    _json(output / "memory-candidate-replayed-summary.json", summary)
+    _json(output / "memory-candidate-replayed-gate.json", gate)
+    _json(output / "memory-candidate-replay-provenance.json", provenance)
+    (output / "memory-candidate-replayed-report.md").write_text(
+        "# DBFox Memory candidate offline evidence repair\n\n"
+        f"- Source workflow: `{source_real_workflow_run_id}`\n"
+        f"- Source trials SHA-256: `{source_sha}`\n"
+        f"- Corrected trials SHA-256: `{corrected_hash}`\n"
+        f"- Candidate gate: `{'PASS' if gate['passed'] else 'BLOCKED'}`\n\n"
+        + _markdown(corrected_rows, summary),
+        encoding="utf-8",
+    )
+    return summary, gate
 
 
 def run_memory_paired(

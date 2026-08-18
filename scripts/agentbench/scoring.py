@@ -499,7 +499,7 @@ def task_correct(case: EvalCase, score: TrialScore) -> bool:
 def correction_obeyed(case: EvalCase, score: TrialScore) -> bool | None:
     """Check current-request authority without importing unrelated gate failures."""
 
-    if case.case_id != "memory-user-correction":
+    if not case.correction_evidence:
         return None
     checks = score.checks
     required: tuple[str, ...] = (

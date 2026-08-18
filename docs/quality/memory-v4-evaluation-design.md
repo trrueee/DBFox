@@ -152,7 +152,20 @@ Run 3: 可选 scope 变化或反向纠正
 2. 在 Agent harness 添加 B 层的 six-case scripted provider suite，并让每个 case 产出上述断言字段。
 3. 扩展 AgentBench reporting/comparison，增加 Memory 专项 case-level evidence；不要替换通用比较器。
 4. 先使用 `python -m scripts.agentbench memory-paired --dataset scripts/agentbench/datasets/memory-v1.json --profile smoke --output <dir>` 跑一个三 case、十二 trial 的 v3/v4 ABBA smoke。该命令只启动现有 `real` 子进程：每个 trial 独立进程、runtime、metadata DB、datasource fixture 和 Session；child 在关闭 production DB 前写出 durable Memory evidence。
-5. 专项集全绿后，运行完整 60 case paired candidate；通过后再提交默认 flag 切换。
+5. 专项集全绿后，运行 8–12 个 memory candidate cases、每个 3 个 ABBA block；通过后才提交默认 flag 切换。全量 60-case 回归属于最后的发布验证，不替代该专项集。
+
+### Correction evidence 合同
+
+需要验证“当前请求优先”的 case 必须在 versioned dataset 中显式声明
+`"correction_evidence": true`。`correction_obeyed` 只由该声明和语义
+checks（required/forbidden terms、numbers，以及存在时的 result equivalence）
+推导；它不依赖 case id、tool trajectory、budget 或 overall gate。
+
+若只发现 evaluator-derived evidence 字段漏算，可使用已有 `replay` 命令的
+`--memory-paired` 模式重放 immutable TrialRecord artifact。该模式不调用
+Provider、RunLoop、工具或 fixture，并记录 source workflow、source hash、
+evaluator SHA 和 corrected evidence hash；重放不能改变 answer、trace、结果表、
+Memory evidence、provider identity 或资源指标。
 
 ## 7. 当前真实 Provider 结果的使用方式
 

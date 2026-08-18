@@ -134,6 +134,9 @@ class EvalCase(BaseModel):
     # policy.  It lets the paired smoke runner distinguish an expected safe
     # omission from a v4 runtime that silently failed to contribute context.
     expected_memory_consumption: Literal["required", "forbidden", "optional"] = "optional"
+    # Explicitly opt in to current-request authority evidence.  This belongs
+    # to the versioned dataset contract rather than to a case-id convention.
+    correction_evidence: bool = False
     notes: str = ""
 
     @model_validator(mode="after")
