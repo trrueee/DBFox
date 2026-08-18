@@ -35,7 +35,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from engine.api import router
 from engine.db import SessionLocal, initialize_metadata_database
 from engine.agent.coordinator import SessionCoordinator
-from engine.agent.loop import RunLoop
+from engine.runtime_composition import build_product_run_loop
 from engine.app.request_limits import AgentInputRequestBodyLimitMiddleware
 from engine.app.safe_errors import FixedErrorCode, fixed_error_detail
 from engine.diagnostics.logs import configure_diagnostic_logging
@@ -112,7 +112,7 @@ async def lifespan(application: FastAPI) -> Any:
 
         agent_coordinator = SessionCoordinator(
             session_factory=SessionLocal,
-            run_loop=RunLoop(session_factory=SessionLocal),
+            run_loop=build_product_run_loop(session_factory=SessionLocal),
         )
         agent_coordinator.start()
         application.state.agent_coordinator = agent_coordinator

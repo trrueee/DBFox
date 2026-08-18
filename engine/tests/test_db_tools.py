@@ -13,7 +13,7 @@ from engine.tools.builtin.catalog import (
     SchemaListTool,
     SchemaSearchTool,
 )
-from engine.tools.builtin.registry import register_dbfox_tools
+from engine.runtime_composition import build_product_tool_registry
 from engine.tools.builtin.contracts import (
     ChartCreateInput,
     EmptyInput,
@@ -669,7 +669,7 @@ def test_data_preview_runtime_returns_actionable_safe_input_error(
 ) -> None:
     sync_schema(db_session, test_datasource.id)
 
-    result = ToolRuntime(register_dbfox_tools()).invoke(
+    result = ToolRuntime(build_product_tool_registry()).invoke(
         tool_name="data_preview",
         raw_input={"table": "main.users", "columns": ["missing"], "limit": 5},
         request=SimpleNamespace(

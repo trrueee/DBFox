@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from collections.abc import Callable
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -30,7 +31,11 @@ from engine.agent.context_budget import (
     ContextPriority,
     ContextSegmentKind,
 )
-from engine.agent.context_fragment import ContextContributionInput, ContextFragment
+from engine.agent.context_fragment import (
+    ContextContributionInput,
+    ContextContributor,
+    ContextFragment,
+)
 from engine.agent.conversation_recall import ConversationRecallService
 from engine.agent.memory_v4 import (
     CatalogProjectionScope,
@@ -409,8 +414,14 @@ class ContextSnapshot(BaseModel):
 
 
 class ContextAssembler:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        contributors: tuple[Callable[[Session], ContextContributor], ...] = (),
+    ) -> None:
         self.session = session
+        self.contributors = contributors
 
     def build(self, run_id: str) -> ContextSnapshot:
         run = self.session.get(AgentRun, run_id)
@@ -562,8 +573,6 @@ class ContextAssembler:
         run: AgentRun,
         aggregate: AgentSession,
     ) -> list[ContextFragment]:
-        from engine.agent.context_contributors import CONTEXT_CONTRIBUTORS
-
         contribution_input = ContextContributionInput(
             session_id=str(run.session_id),
             run_id=str(run.id),
@@ -575,8 +584,8 @@ class ContextAssembler:
             resource_refs=self._resource_refs_for_run(run),
         )
         fragments: list[ContextFragment] = []
-        for contributor_cls in CONTEXT_CONTRIBUTORS:
-            contributor = contributor_cls(self.session)
+        for contributor_factory in self.contributors:
+            contributor = contributor_factory(self.session)
             fragments.extend(contributor.build(contribution_input))
         return fragments
 

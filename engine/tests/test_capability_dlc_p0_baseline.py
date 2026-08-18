@@ -1,15 +1,14 @@
 """Capability DLC P0 characterization of the pre-migration runtime boundary.
 
-This deliberately freezes current behavior rather than introducing the P1
-composition root.  In particular, the isolated worker omits RemoteJob tools;
-that difference is an observed baseline for the later composition migration,
-not a behavior change made here.
+P1 replaces the former parent/worker registrar duplication with one product
+composition root. RemoteJob remains in-process-only, so exposing its frozen
+tool definitions to the isolated worker does not change model materialization
+or select a different execution backend.
 """
 
 from __future__ import annotations
 
-from engine.tools.builtin import register_dbfox_tools
-from engine.tools.worker import build_worker_registry
+from engine.runtime_composition import build_product_tool_registry
 
 
 PARENT_TOOL_NAMES = (
@@ -36,23 +35,17 @@ PARENT_TOOL_NAMES = (
     "update_plan",
 )
 
-WORKER_TOOL_NAMES = tuple(
-    name for name in PARENT_TOOL_NAMES if not name.startswith("remote_job_")
-)
+WORKER_TOOL_NAMES = PARENT_TOOL_NAMES
 
 
-def test_p0_freezes_parent_and_worker_tool_composition_difference() -> None:
-    """P1 must consciously remove this duplicated composition, not erase it silently."""
+def test_p1_derives_parent_and_worker_from_one_product_composition() -> None:
+    """Worker receives all frozen definitions; RemoteJob is still in-process only."""
 
-    parent = register_dbfox_tools()
-    worker = build_worker_registry()
+    parent = build_product_tool_registry()
+    worker = build_product_tool_registry()
 
     assert parent.frozen is True
     assert worker.frozen is True
     assert parent.tool_names() == PARENT_TOOL_NAMES
     assert worker.tool_names() == WORKER_TOOL_NAMES
-    assert set(parent.tool_names()) - set(worker.tool_names()) == {
-        "remote_job_cancel",
-        "remote_job_status",
-        "remote_job_submit",
-    }
+    assert parent.tool_names() == worker.tool_names()

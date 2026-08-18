@@ -1,4 +1,5 @@
-from engine.agent.completion import CompletionKind, CompletionPolicy
+from engine.agent.completion import CompletionKind
+from engine.runtime_composition import build_default_completion_policy as CompletionPolicy
 from engine.agent.context import ContextObservation, ContextSnapshot
 from engine.agent.definition import DEFAULT_AGENT_DEFINITION
 from engine.agent.prompt import PromptAssembler

@@ -10,7 +10,7 @@ from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.tool import ToolInvocationStatus
 from engine.models import AgentObservationRecord, AgentSession, AgentToolInvocation
-from engine.tools.builtin import register_dbfox_tools
+from engine.runtime_composition import build_product_tool_registry
 from engine.tools.materialization import materialize_tools
 from engine.tools.runtime.base import ToolRecoveryPolicy
 
@@ -33,7 +33,7 @@ def test_tool_intent_is_durable_before_running_and_settles_once(db_session, test
     lease = sessions.claim(session_id="session_tool", owner="worker")
     assert lease is not None
     sessions.promote_next_input(lease=lease)
-    registry = register_dbfox_tools()
+    registry = build_product_tool_registry()
     tools = materialize_tools(registry, allowed_groups={"catalog"}, execution_mode="user_requested_read")
     turn = sessions.start_turn(
         lease=lease,
@@ -135,7 +135,7 @@ def test_interrupted_recoverable_tool_is_requeued_with_the_same_invocation_id(
     lease = sessions.claim(session_id="session_recovery", owner="worker")
     sessions.promote_next_input(lease=lease)
     tools = materialize_tools(
-        register_dbfox_tools(), allowed_groups={"catalog"}, execution_mode="user_requested_read"
+        build_product_tool_registry(), allowed_groups={"catalog"}, execution_mode="user_requested_read"
     )
     turn = sessions.start_turn(
         lease=lease, run_id=admission.run_id, agent_definition_version="1", prompt_version="1",
@@ -206,7 +206,7 @@ def test_run_cancellation_terminalizes_a_running_tool_invocation(
     assert lease is not None
     sessions.promote_next_input(lease=lease)
     tools = materialize_tools(
-        register_dbfox_tools(),
+        build_product_tool_registry(),
         allowed_groups={"catalog"},
         execution_mode="user_requested_read",
     )

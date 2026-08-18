@@ -26,6 +26,7 @@ from engine.models import (
     AgentToolInvocation,
     Project,
 )
+from engine.runtime_composition import default_context_contributors
 from engine.tools.builtin.registry import (
     register_workspace_extension,
     register_workspace_write_extension,
@@ -153,7 +154,10 @@ def test_workspace_file_read_vertical_chain_lands_artifact_and_context(
     assert observation.status == "succeeded"
     assert artifact.type == "dbfox.workspace.file_snapshot"
 
-    snapshot = ContextAssembler(db_session).build(admission.run_id)
+    snapshot = ContextAssembler(
+        db_session,
+        contributors=default_context_contributors(),
+    ).build(admission.run_id)
     assert len(snapshot.context_fragments) == 1
     assert snapshot.context_fragments[0].lane == "resource"
 
@@ -604,7 +608,10 @@ def test_vertical_chain_file_write_patch_approval_recovery(
     assert target.read_text(encoding="utf-8") == "new-content\n"
     context_lanes = {
         context.lane
-        for context in ContextAssembler(db_session).build(admission.run_id).context_fragments
+        for context in ContextAssembler(
+            db_session,
+            contributors=default_context_contributors(),
+        ).build(admission.run_id).context_fragments
     }
     assert context_lanes == set()
 

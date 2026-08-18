@@ -11,22 +11,11 @@ from __future__ import annotations
 
 import sys
 import traceback
-from typing import Any, cast
-
-from engine.tools.builtin.registry import (
-    register_conversation_functions,
-    register_core_functions,
-    register_data_extension,
-    register_workspace_extension,
-    register_workspace_write_extension,
+from engine.runtime_composition import (
+    build_attempt_resource_resolver,
+    build_product_tool_registry,
 )
-from engine.tools.runtime import ToolRegistry
-from engine.tools.runtime.attempt import (
-    CompositeResourceResolver,
-    ResourceScopeRef,
-    ScopedResourceResolver,
-    ToolAttemptRequest,
-)
+from engine.tools.runtime.attempt import ToolAttemptRequest
 from engine.tools.runtime.handler import ToolAttemptHandler
 from engine.tools.runtime.result import ToolResult
 from engine.tools.runtime.worker_protocol import (
@@ -36,47 +25,6 @@ from engine.tools.runtime.worker_protocol import (
     write_error_frame,
     write_frame,
 )
-from engine.workspace.read_service import WorkspaceReadService
-
-
-def build_worker_registry() -> ToolRegistry:
-    """Build the worker-side registry without assuming in-process transport."""
-
-    registry = ToolRegistry(
-        available_backends=frozenset({"in_process", "isolated_process"})
-    )
-    register_core_functions(registry)
-    register_conversation_functions(registry)
-    register_data_extension(registry)
-    register_workspace_extension(registry)
-    register_workspace_write_extension(registry)
-    return registry.freeze()
-
-
-def build_worker_resolver() -> CompositeResourceResolver:
-    """Build resource resolvers from only serializable scope references."""
-
-    from engine.db import SessionLocal
-
-    resolver = CompositeResourceResolver()
-
-    def resolve_database(_ref: ResourceScopeRef) -> Any:
-        # The worker process is short-lived; ToolRuntime/leaf tools manage
-        # commit/rollback on this Session, and process exit closes it.
-        return SessionLocal()
-
-    def resolve_workspace(ref: ResourceScopeRef) -> WorkspaceReadService:
-        if ref.kind != "workspace":
-            raise KeyError(ref.kind)
-        if not ref.location:
-            raise ValueError("Workspace scope is missing its authorized root")
-        return WorkspaceReadService(ref.location)
-
-    resolver.register("database", cast(ScopedResourceResolver, resolve_database))
-    resolver.register("workspace", cast(ScopedResourceResolver, resolve_workspace))
-    return resolver.freeze()
-
-
 def _public_failure(request: ToolAttemptRequest, code: str = "TOOL_EXECUTION_FAILED") -> ToolResult:
     return ToolResult(
         name=request.tool_name,
@@ -148,8 +96,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         handler = ToolAttemptHandler(
-            registry=build_worker_registry(),
-            resolver=build_worker_resolver(),
+            registry=build_product_tool_registry(),
+            resolver=build_attempt_resource_resolver(),
         )
         result = handler.run(request)
     except Exception:

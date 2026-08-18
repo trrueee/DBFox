@@ -69,12 +69,12 @@ def collect_release_contracts() -> dict[str, Any]:
     from sqlalchemy.orm import Session
 
     from engine.policy.gate import PolicyGate
-    from engine.tools.builtin.registry import register_dbfox_tools
+    from engine.runtime_composition import build_product_tool_registry
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     try:
         with Session(engine) as db:
-            decision = PolicyGate(register_dbfox_tools(), db).check(
+            decision = PolicyGate(build_product_tool_registry(), db).check(
                 {
                     "session_id": "release-contract",
                     "run_id": "release-contract",

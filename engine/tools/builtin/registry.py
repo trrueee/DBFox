@@ -94,23 +94,3 @@ def register_remote_job_extension(registry: ToolRegistry) -> None:
     registry.register(RemoteJobSubmitTool(), owner=REMOTE_JOB_OWNER)
     registry.register(RemoteJobStatusTool(), owner=REMOTE_JOB_OWNER)
     registry.register(RemoteJobCancelTool(), owner=REMOTE_JOB_OWNER)
-
-
-def register_dbfox_tools() -> ToolRegistry:
-    """Build the complete model-function registry for one DBFox Agent process.
-
-    Short-term facade: new call sites should use the owner-scoped registration
-    functions above, then freeze the Registry before serving Runs. This function
-    is removed once every production composition call site has migrated.
-    """
-
-    registry = ToolRegistry(
-        available_backends=frozenset({"in_process", "isolated_process"})
-    )
-    register_core_functions(registry)
-    register_conversation_functions(registry)
-    register_data_extension(registry)
-    register_workspace_extension(registry)
-    register_workspace_write_extension(registry)
-    register_remote_job_extension(registry)
-    return registry.freeze()

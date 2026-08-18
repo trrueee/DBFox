@@ -10,7 +10,7 @@ from engine.agent.run import SessionLeaseConflict
 from engine.agent.tool import ToolInvocationStatus
 from engine.models import AgentApproval, AgentRun, AgentSession, AgentSessionInput, AgentToolInvocation
 from engine.models import AgentObservationRecord
-from engine.tools.builtin import register_dbfox_tools
+from engine.runtime_composition import build_product_tool_registry
 from engine.tools.materialization import materialize_tools
 
 
@@ -26,7 +26,7 @@ def test_approval_resolves_once_and_resumes_exact_invocation(db_session, test_da
     lease = sessions.claim(session_id="session_approval", owner="worker")
     sessions.promote_next_input(lease=lease)
     tools = materialize_tools(
-        register_dbfox_tools(), allowed_groups={"query"}, execution_mode="agent_autonomous_read"
+        build_product_tool_registry(), allowed_groups={"query"}, execution_mode="agent_autonomous_read"
     )
     turn = sessions.start_turn(
         lease=lease, run_id=admission.run_id, agent_definition_version="1", prompt_version="1",
@@ -71,7 +71,7 @@ def test_rejected_approval_becomes_a_model_visible_observation(db_session, test_
     )
     lease = sessions.claim(session_id="session_rejection", owner="worker")
     sessions.promote_next_input(lease=lease)
-    tools = materialize_tools(register_dbfox_tools(), allowed_groups={"query"}, execution_mode="agent_autonomous_read")
+    tools = materialize_tools(build_product_tool_registry(), allowed_groups={"query"}, execution_mode="agent_autonomous_read")
     turn = sessions.start_turn(
         lease=lease, run_id=admission.run_id, agent_definition_version="1", prompt_version="1",
         prompt_hash="prompt", context_snapshot={}, context_hash="context",
@@ -112,7 +112,7 @@ def test_exact_rejected_action_requires_new_formal_input_before_reapproval(db_se
     )
     lease = sessions.claim(session_id="session_repeat_rejection", owner="worker")
     sessions.promote_next_input(lease=lease)
-    tools = materialize_tools(register_dbfox_tools(), allowed_groups={"query"}, execution_mode="agent_autonomous_read")
+    tools = materialize_tools(build_product_tool_registry(), allowed_groups={"query"}, execution_mode="agent_autonomous_read")
     turn = sessions.start_turn(
         lease=lease, run_id=admission.run_id, agent_definition_version="1", prompt_version="1",
         prompt_hash="prompt", context_snapshot={}, context_hash="context",
@@ -178,7 +178,7 @@ def test_expired_approval_is_durably_rejected_and_run_resumes(db_session, test_d
     lease = sessions.claim(session_id="session_expired_approval", owner="worker")
     sessions.promote_next_input(lease=lease)
     tools = materialize_tools(
-        register_dbfox_tools(),
+        build_product_tool_registry(),
         allowed_groups={"query"},
         execution_mode="agent_autonomous_read",
     )

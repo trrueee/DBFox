@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from engine.policy.gate import PolicyGate
-from engine.tools.builtin.registry import register_dbfox_tools
+from engine.runtime_composition import build_product_tool_registry
 from engine.tools.runtime import (
     BaseTool,
     ToolExecutionSpec,
@@ -110,7 +110,7 @@ def test_input_contract_reason_names_schema_locations_without_reflecting_values(
 
 
 def test_update_plan_empty_call_reports_missing_required_fields(db_session):
-    decision = PolicyGate(register_dbfox_tools(), db_session).check(
+    decision = PolicyGate(build_product_tool_registry(), db_session).check(
         _state(allowed_tool_groups=["manage"]),
         "update_plan",
         {},
@@ -122,7 +122,7 @@ def test_update_plan_empty_call_reports_missing_required_fields(db_session):
 
 
 def test_schema_list_empty_arguments_apply_canonical_model_defaults(db_session):
-    decision = PolicyGate(register_dbfox_tools(), db_session).check(
+    decision = PolicyGate(build_product_tool_registry(), db_session).check(
         _state(allowed_tool_groups=["catalog"]),
         "schema_list",
         {},

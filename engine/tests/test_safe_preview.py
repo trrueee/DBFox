@@ -3,7 +3,7 @@
 import pytest
 
 from engine.errors import ToolInputError
-from engine.tools.builtin import register_dbfox_tools
+from engine.runtime_composition import build_product_tool_registry
 from engine.tools.builtin.contracts import DataPreviewInput
 from engine.tools.db.preview import db_preview
 from engine.tools.materialization import materialize_tools
@@ -55,7 +55,7 @@ def test_preview_input_accepts_explicit_null_order_by() -> None:
 
 def test_materialized_preview_schema_preserves_nullable_order_by() -> None:
     materialization = materialize_tools(
-        register_dbfox_tools(),
+        build_product_tool_registry(),
         allowed_groups={"query"},
         execution_mode="agent_autonomous_read",
     )
