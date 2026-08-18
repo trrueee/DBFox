@@ -58,7 +58,19 @@ MAX_MESSAGE_CHARS = 32_768
 MAX_SELECTED_ARTIFACTS = 10
 MAX_OBSERVATIONS = 24
 MAX_CURRENT_REQUEST_CHARS = 40_000
-MEMORY_V4_CONTEXT_ENABLED = os.environ.get("DBFOX_MEMORY_V4_CONTEXT") == "1"
+def _memory_v4_context_enabled(value: str | None) -> bool:
+    """Enable v4 by default while retaining the explicit v3 rollback fence."""
+
+    if value is None or value == "1":
+        return True
+    if value == "0":
+        return False
+    raise ValueError("DBFOX_MEMORY_V4_CONTEXT must be '0' or '1' when set")
+
+
+MEMORY_V4_CONTEXT_ENABLED = _memory_v4_context_enabled(
+    os.environ.get("DBFOX_MEMORY_V4_CONTEXT")
+)
 
 
 def _load_json(value: object | None) -> Any:

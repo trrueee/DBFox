@@ -12,7 +12,7 @@ import sys
 
 from scripts.agentbench.calibration import load_calibration, run_calibration
 from scripts.agentbench.comparison import compare_summaries, load_summary
-from scripts.agentbench.memory_paired import run_memory_paired
+from scripts.agentbench.memory_paired import replay_memory_paired, run_memory_paired
 from scripts.agentbench.reporting import (
     TrialRecord,
     environment_evidence,
@@ -69,13 +69,16 @@ def _parser() -> argparse.ArgumentParser:
         "memory-paired", help="run one isolated Memory v3/v4 ABBA smoke block"
     )
     paired.add_argument("--dataset", type=Path, required=True)
-    paired.add_argument("--profile", choices=["smoke"], default="smoke")
+    paired.add_argument("--profile", choices=["smoke", "candidate"], default="smoke")
     paired.add_argument("--output", type=Path, required=True)
 
     replay = subparsers.add_parser("replay", help="offline re-score stored trials")
     replay.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     replay.add_argument("--trials", type=Path, required=True)
     replay.add_argument("--output", type=Path, required=True)
+    replay.add_argument("--memory-paired", action="store_true")
+    replay.add_argument("--children", type=Path)
+    replay.add_argument("--source-real-workflow-run-id")
 
     compare = subparsers.add_parser("compare", help="apply paired regression gates")
     compare.add_argument("--baseline", type=Path, required=True)
@@ -143,6 +146,20 @@ def main(argv: list[str] | None = None) -> int:
 
     manifest = load_manifest(args.dataset)
     if args.command == "replay":
+        if args.memory_paired:
+            if args.children is None or not args.source_real_workflow_run_id:
+                raise SystemExit(
+                    "memory-paired replay requires --children and --source-real-workflow-run-id"
+                )
+            _summary, gate = replay_memory_paired(
+                manifest=manifest,
+                source_rows_path=args.trials,
+                children=args.children,
+                source_real_workflow_run_id=args.source_real_workflow_run_id,
+                output=args.output,
+            )
+            print(f"MEMORY_CANDIDATE_REPLAY={args.output / 'memory-candidate-replayed-report.md'}")
+            return 0 if gate["passed"] else 1
         case_by_id = {case.case_id: case for case in manifest.cases}
         source = json.loads(args.trials.read_text(encoding="utf-8"))
         records = tuple(

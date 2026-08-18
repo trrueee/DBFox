@@ -273,6 +273,26 @@ def _memory_variant() -> Literal["v3", "v4"]:
     return "v4" if os.getenv("DBFOX_MEMORY_V4_CONTEXT") == "1" else "v3"
 
 
+def _prior_run_preflight_error(runs: list[Any]) -> str | None:
+    """Require the source Run to be settled, not the current model attempt.
+
+    Memory consumption in Run 2 is valid evidence even when that Run ends in
+    ``waiting_input``.  That outcome is a model-behavior failure for a
+    benchmark case requiring an answer; it is not a Memory runtime defect.
+    """
+
+    if len(runs) < 2 or runs[-1] is None:
+        return "run_missing"
+    prior_run = runs[-2]
+    if prior_run is None or str(prior_run.status) not in {
+        "completed",
+        "failed",
+        "cancelled",
+    }:
+        return "prior_run_not_terminal"
+    return None
+
+
 def _memory_evidence(
     *,
     case: EvalCase,
@@ -303,11 +323,7 @@ def _memory_evidence(
     revision_match: bool | None = None
     projection_scope: dict[str, Any] | None = None
 
-    if final_run is None or any(
-        run is None or str(run.status) not in {"completed", "failed", "cancelled"}
-        for run in runs
-    ):
-        error_code = "run_not_terminal"
+    error_code = _prior_run_preflight_error(runs)
     row = (
         db.query(AgentSessionMemory)
         .filter(AgentSessionMemory.session_id == str(final_run.session_id))
