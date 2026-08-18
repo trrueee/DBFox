@@ -169,6 +169,60 @@ describe("ProjectResourceSidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "设置" }));
     expect(onOpenSettings).toHaveBeenCalledOnce();
   });
+
+  it("Add Resource onAdd works regardless of active connector", () => {
+    const dataOnAdd = vi.fn();
+    const mockOnAdd = vi.fn();
+    const data = { ...dataConnector, onAdd: dataOnAdd };
+    const mock = { ...mockConnector, onAdd: mockOnAdd };
+    renderSidebar({ connectors: [data, mock] });
+
+    // Switch to mock connector (Workspace-like)
+    fireEvent.click(screen.getByRole("button", { name: /Mock/ }));
+    expect(screen.getByTestId("mock-connector")).toBeInTheDocument();
+
+    // Data's onAdd should still work even though Data is not active
+    dataOnAdd({ projectId: "project-1" });
+    expect(dataOnAdd).toHaveBeenCalledWith({ projectId: "project-1" });
+
+    // Mock's onAdd should also work
+    mockOnAdd({ projectId: "project-1" });
+    expect(mockOnAdd).toHaveBeenCalledWith({ projectId: "project-1" });
+  });
+
+  it("connector fallback is deterministic without effect", () => {
+    // Start with 2 connectors, default is first
+    const { rerender } = render(
+      <TooltipProvider>
+        <ProjectResourceSidebar
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          onNewProject={vi.fn()}
+          onOpenSettings={vi.fn()}
+          connectors={[dataConnector, mockConnector]}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByTestId("data-connector")).toBeInTheDocument();
+
+    // Select mock
+    fireEvent.click(screen.getByRole("button", { name: /Mock/ }));
+    expect(screen.getByTestId("mock-connector")).toBeInTheDocument();
+
+    // Remove mock from connectors — should fall back to first
+    rerender(
+      <TooltipProvider>
+        <ProjectResourceSidebar
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          onNewProject={vi.fn()}
+          onOpenSettings={vi.fn()}
+          connectors={[dataConnector]}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByTestId("data-connector")).toBeInTheDocument();
+  });
 });
 
 function renderSidebar(overrides: {

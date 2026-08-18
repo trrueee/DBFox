@@ -7,7 +7,6 @@ import type {
 import type { AppSettingsSection } from "../types/settings";
 
 export interface ProjectShellState {
-  activeDatasourceId?: string;
   activeConversationId?: string;
 }
 
@@ -26,7 +25,6 @@ interface WorkspaceState {
 
 interface WorkspaceActions {
   setActiveProject: (projectId: string) => void;
-  setProjectActiveDatasource: (projectId: string, datasourceId: string) => void;
   setProjectActiveConversation: (projectId: string, conversationId: string) => void;
   setProjectMainSurface: (projectId: string, surface: MainSurfaceRef) => void;
   openSettings: (section?: AppSettingsSection) => void;
@@ -58,17 +56,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   settingsSection: "appearance",
 
   setActiveProject: (projectId) => set({ activeProjectId: projectId }),
-
-  setProjectActiveDatasource: (projectId, datasourceId) =>
-    set((state) => ({
-      projectShell: {
-        ...state.projectShell,
-        [projectId]: {
-          ...(state.projectShell[projectId] ?? {}),
-          activeDatasourceId: datasourceId,
-        },
-      },
-    })),
 
   setProjectActiveConversation: (projectId, conversationId) =>
     set((state) => ({

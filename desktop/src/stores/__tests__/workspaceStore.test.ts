@@ -19,20 +19,18 @@ function reset() {
 describe("workspaceStore — Shell", () => {
   beforeEach(reset);
 
-  it("keeps datasource and conversation selections scoped per Project", () => {
+  it("keeps conversation selections scoped per Project", () => {
     useWorkspaceStore.getState().setActiveProject("project-1");
-    useWorkspaceStore.getState().setProjectActiveDatasource("project-1", "ds-a");
     useWorkspaceStore.getState().setProjectActiveConversation("project-1", "conv-1");
 
     useWorkspaceStore.getState().setActiveProject("project-2");
-    useWorkspaceStore.getState().setProjectActiveDatasource("project-2", "ds-b");
+    useWorkspaceStore.getState().setProjectActiveConversation("project-2", "conv-2");
 
     expect(useWorkspaceStore.getState().projectShell["project-1"]).toEqual({
-      activeDatasourceId: "ds-a",
       activeConversationId: "conv-1",
     });
     expect(useWorkspaceStore.getState().projectShell["project-2"]).toEqual({
-      activeDatasourceId: "ds-b",
+      activeConversationId: "conv-2",
     });
   });
 

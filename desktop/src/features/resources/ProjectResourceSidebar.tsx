@@ -55,21 +55,18 @@ export function ProjectResourceSidebar({
 
   const restoredConversationProjectRef = useRef("");
   const [conversationError, setConversationError] = useState("");
-  const [activeConnectorId, setActiveConnectorId] = useState<string | undefined>(
-    connectors[0]?.id,
-  );
+  const [selectedConnectorId, setSelectedConnectorId] = useState<string | undefined>();
+
+  const activeConnectorId =
+    selectedConnectorId && connectors.some((c) => c.id === selectedConnectorId)
+      ? selectedConnectorId
+      : connectors[0]?.id;
 
   // Auto-select first project
   useEffect(() => {
     if (activeProjectId || loadingProjects || projects.length === 0) return;
     setActiveProject(projects[0].id);
   }, [activeProjectId, loadingProjects, projects, setActiveProject]);
-
-  // Keep active connector valid
-  useEffect(() => {
-    if (activeConnectorId && connectors.some((c) => c.id === activeConnectorId)) return;
-    setActiveConnectorId(connectors[0]?.id);
-  }, [activeConnectorId, connectors]);
 
   // Restore conversation for active project
   useEffect(() => {
@@ -264,7 +261,7 @@ export function ProjectResourceSidebar({
                       key={connector.id}
                       type="button"
                       className={`ds-entity-sub-switch__button ${activeConnectorId === connector.id ? "is-active" : ""}`}
-                      onClick={() => setActiveConnectorId(connector.id)}
+                      onClick={() => setSelectedConnectorId(connector.id)}
                     >
                       {connector.icon}
                       <span>{connector.title}</span>

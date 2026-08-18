@@ -1,6 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type MouseEvent } from "react";
-import { ChevronDown, Database, FileText, Plus } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui";
+import { ChevronDown, Database, FileText } from "lucide-react";
 import { useDatasourceState } from "../datasource/useDatasourceState";
 import { useTableWorkspaceStore } from "../../stores/tableWorkspaceStore";
 import { useSqlConsoleStore } from "../../stores/sqlConsoleStore";
@@ -8,13 +7,8 @@ import { DatabaseBrandIcon } from "../datasource/DatabaseBrandIcon";
 import { isDatabaseBrandType } from "../datasource/databaseBrandData";
 import type { ContextMenuState } from "../../types/workspace";
 import type { ResourceConnectorContribution } from "./types";
-import { onOpenDatabaseDialog, emitOpenDatabaseDialog } from "./dataConnectorEvents";
+import { useConnectionDialogStore } from "./connectionDialogStore";
 
-const ConnectionDialog = lazy(() =>
-  import("../datasource/ConnectionDialog").then((module) => ({
-    default: module.ConnectionDialog,
-  })),
-);
 const DataSourceContextMenu = lazy(() =>
   import("../datasource/DataSourceContextMenu").then((module) => ({
     default: module.DataSourceContextMenu,
@@ -37,7 +31,7 @@ export function createDataContribution(
       />
     ),
     addLabel: "新建数据库",
-    onAdd: () => emitOpenDatabaseDialog(),
+    onAdd: () => useConnectionDialogStore.getState().openCreate(),
   };
 }
 
@@ -48,10 +42,6 @@ function DataConnectorContent({
   projectId: string;
   toast: (message: string) => void;
 }) {
-  const [connectionDialog, setConnectionDialog] = useState<{ open: boolean; createMode: boolean }>({
-    open: false,
-    createMode: true,
-  });
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, type: "database", targetNode: "" });
   const [schemaCollapsed, setSchemaCollapsed] = useState(false);
 
@@ -70,10 +60,6 @@ function DataConnectorContent({
   const selectedTables = useTableWorkspaceStore((s) => s.selectedTables);
 
   const visibleTables = typeof tables === "object" && Array.isArray(tables) ? tables : [];
-
-  const openConnectionDialog = useCallback((mode: "detail" | "create" = "create") => {
-    setConnectionDialog({ open: true, createMode: mode === "create" });
-  }, []);
 
   const openDockTableForActiveDatasource = useCallback(
     (tableName: string, initialSubtab?: string) => {
@@ -129,19 +115,11 @@ function DataConnectorContent({
     return () => window.removeEventListener("click", handleDocumentClick);
   }, []);
 
-  useEffect(() => onOpenDatabaseDialog(() => {
-    setConnectionDialog({ open: true, createMode: true });
-  }), []);
-
-  const handleSelectDatasource = (datasourceId: string) => {
-    setActiveDatasourceId(datasourceId);
-  };
-
   return (
     <>
       <div className="ds-entity-list">
         {!loading && !activeDatasource && datasources.length === 0 && (
-          <div className="ds-tree-status">还没有连接。点击下方 + 新建数据库连接。</div>
+          <div className="ds-tree-status">还没有连接。点击 + 新建数据库连接。</div>
         )}
         {datasources.map((datasource) => {
           const isActive = datasource.id === activeDatasourceId;
@@ -151,7 +129,7 @@ function DataConnectorContent({
                 <button
                   type="button"
                   className="ds-entity-row__trigger"
-                  onClick={() => handleSelectDatasource(datasource.id)}
+                  onClick={() => setActiveDatasourceId(datasource.id)}
                   aria-current={isActive ? "page" : undefined}
                 >
                   {isDatabaseBrandType(datasource.db_type) ? (
@@ -217,34 +195,6 @@ function DataConnectorContent({
           );
         })}
       </div>
-
-      {/* Add Database button */}
-      <div className="ds-add-database-wrapper">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              className="ds-tree-icon-btn ds-add-database-btn"
-              onClick={() => openConnectionDialog("create")}
-              aria-label="新建数据库连接"
-            >
-              <Plus size={13} />
-              <span className="ds-add-database-label">新建数据库</span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>新建数据库连接</TooltipContent>
-        </Tooltip>
-      </div>
-
-      {connectionDialog.open && (
-        <Suspense fallback={null}>
-          <ConnectionDialog
-            open
-            createMode={connectionDialog.createMode}
-            onOpenChange={(open) => setConnectionDialog((prev) => ({ ...prev, open }))}
-          />
-        </Suspense>
-      )}
 
       {contextMenu.visible && (
         <Suspense fallback={null}>

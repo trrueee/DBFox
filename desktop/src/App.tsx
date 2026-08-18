@@ -20,8 +20,8 @@ import { LoadingState } from "./components/ui";
 import { ConversationCenter } from "./features/appShell/ConversationCenter";
 import { ResizableWorkspaceLayout } from "./features/appShell/ResizableWorkspaceLayout";
 import { ProjectResourceSidebar } from "./features/resources/ProjectResourceSidebar";
-import { productResourceConnectors } from "./features/resources/resourceConnectorComposition";
-import { emitOpenDatabaseDialog } from "./features/resources/dataConnectorEvents";
+import { productResourceConnectors, ResourceConnectorDialog } from "./features/resources/resourceConnectorComposition";
+import { useConnectionDialogStore } from "./features/resources/connectionDialogStore";
 
 const AppCommandPalette = lazy(() =>
   import("./features/appShell/AppCommandPalette").then((module) => ({
@@ -290,6 +290,8 @@ export default function App() {
             />
           </Suspense>
 
+          <ResourceConnectorDialog />
+
           {showCommandPalette && (
             <Suspense fallback={null}>
               <AppCommandPalette
@@ -298,7 +300,7 @@ export default function App() {
                 showSmartQueryHome={showSmartQueryHome}
                 openConversation={openConversationFromPalette}
                 openSettings={openSettings}
-                openConnectionDialog={() => emitOpenDatabaseDialog()}
+                openConnectionDialog={() => useConnectionDialogStore.getState().openCreate()}
                 openTable={(tableName) => {
                   const openDockTable = useTableWorkspaceStore.getState().openTable;
                   openDockTable(
