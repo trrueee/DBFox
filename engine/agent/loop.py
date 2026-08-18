@@ -23,6 +23,7 @@ from engine.agent.control import (
     UsageCharge,
 )
 from engine.agent.context import ContextAssembler, ContextSnapshot
+from engine.agent.context_fragment import ContextContributor
 from engine.agent.definition import AgentDefinition, DEFAULT_AGENT_DEFINITION
 from engine.agent.events import LiveStreamHub
 from engine.agent.progress_guard import ProgressGuard
@@ -53,7 +54,6 @@ from engine.json_codec import load_object
 from engine.models import (
     AgentTurn,
 )
-from engine.tools.builtin import register_dbfox_tools
 from engine.tools.materialization import ToolMaterialization, materialize_tools
 from engine.tools.runtime import ToolExecutionTask, ToolExecutor, ToolRegistry
 from engine.tools.runtime.semantics import ToolSemanticCapability
@@ -212,6 +212,8 @@ class RunLoop:
             [ProviderSettings], ModelAdapter
         ] = _default_model_factory,
         registry: ToolRegistry | None = None,
+        context_contributors: tuple[Callable[[Session], ContextContributor], ...] | None = None,
+        completion: CompletionGate | None = None,
         definition: AgentDefinition = DEFAULT_AGENT_DEFINITION,
         live_stream: LiveStreamHub = LIVE_STREAM_HUB,
         tool_executor: ToolExecutor | None = None,
@@ -221,7 +223,23 @@ class RunLoop:
     ) -> None:
         self.session_factory = session_factory
         self.model_factory = model_factory
-        self.registry = registry or register_dbfox_tools()
+        if registry is None or context_contributors is None or completion is None:
+            # This fallback keeps direct test construction ergonomic. Production
+            # startup injects all three values from runtime_composition.
+            from engine.runtime_composition import (
+                build_default_completion_policy,
+                build_product_tool_registry,
+                default_context_contributors,
+            )
+
+            registry = registry or build_product_tool_registry()
+            context_contributors = (
+                context_contributors or default_context_contributors()
+            )
+            completion = completion or CompletionGate(
+                build_default_completion_policy()
+            )
+        self.registry = registry
         if not self.registry.frozen:
             self.registry.freeze()
         self.definition = definition
@@ -230,7 +248,8 @@ class RunLoop:
         self.tool_executor = tool_executor or ToolExecutor()
         self.pricing_resolver = pricing_resolver or (lambda _settings: None)
         self.prompts = PromptAssembler()
-        self.completion = CompletionGate()
+        self.context_contributors = context_contributors
+        self.completion = completion
         self.tool_dispatcher = ToolDispatcher(
             session_factory=self.session_factory,
             registry=self.registry,
@@ -798,7 +817,10 @@ class RunLoop:
             # so queued inputs belonging to later Runs cannot leak into this Turn.
             SessionRepository(db).consume_steering_inputs(lease=lease, run_id=run_id)
             run = RunRepository(db).get(run_id)
-            context = ContextAssembler(db).build(run_id)
+            context = ContextAssembler(
+                db,
+                contributors=self.context_contributors,
+            ).build(run_id)
             state = RunWorkingStateAssembler(
                 db,
                 self.definition,
@@ -1078,7 +1100,10 @@ class RunLoop:
         with self.session_factory() as db:
             guard = ProgressGuard(db)
             fingerprint = guard.fingerprint(run_id)
-            snapshot = context or ContextAssembler(db).build(run_id)
+            snapshot = context or ContextAssembler(
+                db,
+                contributors=self.context_contributors,
+            ).build(run_id)
             decision = self.completion.evaluate_bounded_partial(
                 context=snapshot,
                 model_result=result,
@@ -1134,7 +1159,10 @@ class RunLoop:
         context: ContextSnapshot | None = None,
     ) -> bool:
         with self.session_factory() as db:
-            snapshot = context or ContextAssembler(db).build(run_id)
+            snapshot = context or ContextAssembler(
+                db,
+                contributors=self.context_contributors,
+            ).build(run_id)
             decision = self.completion.evaluate_bounded_partial(
                 context=snapshot,
                 model_result=result,

@@ -40,7 +40,8 @@ class CompletionConstraintResult(BaseModel):
 
 
 class CompletionConstraint(Protocol):
-    id: str
+    @property
+    def id(self) -> str: ...
 
     def evaluate(
         self,
@@ -57,7 +58,8 @@ class CompletionSupport(Protocol):
     concrete tool capability or Artifact family.
     """
 
-    id: str
+    @property
+    def id(self) -> str: ...
 
     def evidence_artifact_ids(
         self,
@@ -74,20 +76,11 @@ class CompletionPolicy:
 
     def __init__(
         self,
-        constraints: tuple[CompletionConstraint, ...] | None = None,
-        support: CompletionSupport | None = None,
+        constraints: tuple[CompletionConstraint, ...],
+        support: CompletionSupport,
     ) -> None:
-        from engine.agent.completion_defaults import (
-            default_completion_constraints,
-            default_completion_support,
-        )
-
-        self.constraints = (
-            default_completion_constraints()
-            if constraints is None
-            else constraints
-        )
-        self.support = support or default_completion_support()
+        self.constraints = constraints
+        self.support = support
 
     def evaluate(
         self,
@@ -287,8 +280,8 @@ class CompletionPolicy:
 class CompletionGate:
     """Owns terminal eligibility independently from orchestration."""
 
-    def __init__(self, policy: CompletionPolicy | None = None) -> None:
-        self.policy = policy or CompletionPolicy()
+    def __init__(self, policy: CompletionPolicy) -> None:
+        self.policy = policy
 
     def evaluate(
         self,

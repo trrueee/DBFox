@@ -9,15 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine.tools.builtin import (
-    register_conversation_functions,
-    register_core_functions,
-    register_data_extension,
-    register_dbfox_tools,
-    register_remote_job_extension,
-    register_workspace_extension,
-    register_workspace_write_extension,
-)
+from engine.runtime_composition import build_product_tool_registry
 from engine.tools.materialization import materialize_tools
 from engine.tools.runtime import ToolRegistry
 from engine.tools.runtime.base import (
@@ -115,41 +107,24 @@ def _materialization_hash(registry: ToolRegistry) -> str:
 
 
 def test_builtin_tool_names_are_frozen() -> None:
-    registry = register_dbfox_tools()
+    registry = build_product_tool_registry()
     assert registry.tool_names() == FROZEN_BUILTIN_NAMES
 
 
 def test_builtin_materialization_hash_is_frozen() -> None:
-    assert _materialization_hash(register_dbfox_tools()) == FROZEN_MATERIALIZATION_HASH
-
-
-def test_owner_scoped_composition_matches_facade_exactly() -> None:
-    facade = register_dbfox_tools()
-    scoped = ToolRegistry(
-        available_backends=frozenset({"in_process", "isolated_process"})
-    )
-    register_core_functions(scoped)
-    register_conversation_functions(scoped)
-    register_data_extension(scoped)
-    register_workspace_extension(scoped)
-    register_workspace_write_extension(scoped)
-    register_remote_job_extension(scoped)
-    scoped.freeze()
-
-    assert scoped.tool_names() == facade.tool_names()
-    assert _materialization_hash(scoped) == _materialization_hash(facade)
+    assert _materialization_hash(build_product_tool_registry()) == FROZEN_MATERIALIZATION_HASH
 
 
 def test_builtin_owner_partition_is_correct() -> None:
-    registry = register_dbfox_tools()
+    registry = build_product_tool_registry()
     assert {name: registry.owner_of(name) for name in registry.tool_names()} == (
         FROZEN_OWNERS
     )
     assert set(FROZEN_OWNERS) == set(FROZEN_BUILTIN_NAMES)
 
 
-def test_builtin_facade_returns_a_frozen_registry() -> None:
-    registry = register_dbfox_tools()
+def test_product_composition_returns_a_frozen_registry() -> None:
+    registry = build_product_tool_registry()
     assert registry.frozen is True
 
 

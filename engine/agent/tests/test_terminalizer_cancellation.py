@@ -28,7 +28,7 @@ from engine.models import (
     AgentToolInvocation,
     AgentTurn,
 )
-from engine.tools.builtin import register_dbfox_tools
+from engine.runtime_composition import build_product_tool_registry
 from engine.tools.materialization import ToolMaterialization, materialize_tools
 
 
@@ -93,7 +93,7 @@ def test_cancellation_terminalizes_pending_approval_and_blocks_late_resolution(
     test_datasource,
 ) -> None:
     tools = materialize_tools(
-        register_dbfox_tools(),
+        build_product_tool_registry(),
         allowed_groups={"query"},
         execution_mode="agent_autonomous_read",
     )
@@ -154,7 +154,7 @@ def test_cancellation_terminalizes_pending_question_and_blocks_late_response(
     test_datasource,
 ) -> None:
     tools = materialize_tools(
-        register_dbfox_tools(),
+        build_product_tool_registry(),
         allowed_groups={"control"},
         execution_mode="user_requested_read",
     )
@@ -328,7 +328,7 @@ def test_failure_terminalizes_pending_children_in_one_transaction(
     test_datasource,
 ) -> None:
     tools = materialize_tools(
-        register_dbfox_tools(),
+        build_product_tool_registry(),
         allowed_groups={"query"},
         execution_mode="agent_autonomous_read",
     )

@@ -317,9 +317,9 @@ def test_runtime_rejects_non_json_tool_output() -> None:
 
 
 def test_product_registry_contains_the_analysis_toolset():
-    from engine.tools.builtin import register_dbfox_tools
+    from engine.runtime_composition import build_product_tool_registry
 
-    names = {tool.name for tool in register_dbfox_tools().list_tools()}
+    names = {tool.name for tool in build_product_tool_registry().list_tools()}
     assert names == {
         "catalog_overview",
         "catalog_refresh",
@@ -346,9 +346,9 @@ def test_product_registry_contains_the_analysis_toolset():
 
 
 def test_every_product_function_has_strict_input_and_output_contracts():
-    from engine.tools.builtin import register_dbfox_tools
+    from engine.runtime_composition import build_product_tool_registry
 
-    for function in register_dbfox_tools().list_tools():
+    for function in build_product_tool_registry().list_tools():
         assert function.input_model.model_config.get("extra") == "forbid"
         assert function.output_model.model_config.get("extra") == "forbid"
 

@@ -130,6 +130,3 @@ class WorkspaceContextContributor:
                 if len(fragments) >= _MAX_FRAGMENTS:
                     return tuple(fragments)
         return tuple(fragments)
-
-
-WORKSPACE_CONTEXT_CONTRIBUTORS = (WorkspaceContextContributor,)

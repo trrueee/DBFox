@@ -15,7 +15,7 @@ architecture proposal.
 | Contract | Current observed behavior | Characterization coverage |
 | --- | --- | --- |
 | Agent session ownership | `AgentSession` and admission are datasource-rooted; admission rejects a different datasource. | `engine/agent/tests/test_session_repository.py` |
-| Tool composition | Parent registers Data, Workspace and RemoteJob; the isolated worker independently registers the same set except RemoteJob. Both registries freeze. | `engine/tests/test_capability_dlc_p0_baseline.py`, `engine/tests/test_builtin_registry_contract.py` |
+| Tool composition | P1 replaces the duplicate parent/worker registrar lists with `engine.runtime_composition.build_product_tool_registry()`. Both registries freeze and expose the same names; RemoteJob remains in-process-only. | `engine/tests/test_capability_dlc_p0_baseline.py`, `engine/tests/test_builtin_registry_contract.py`, `engine/tests/test_runtime_composition.py` |
 | Execution resources | Database and Workspace are serializable `ResourceScopeRef`s; a worker attempt carries `ToolAttemptRequest`; `ToolRunContext` still has both `db_session` and `resources["database"]`. | `engine/tests/test_tool_attempt_contract.py`, `engine/tests/test_workspace_context_fragment.py` |
 | Context | Production contributors return bounded `ContextFragment`s with provenance. | `engine/tests/test_workspace_context_fragment.py` |
 | Memory | Memory v4 context is on by default; `DBFOX_MEMORY_V4_CONTEXT=0` selects the v3 context path. | `engine/agent/tests/test_context_memory_v4.py` |
@@ -30,9 +30,11 @@ does **not** perform the following Issue #42 phases: shared backend composition
 root, resource single-source cleanup, connector slot, project-scoped sessions,
 tool prerequisites, Dock envelope migration, or selection.
 
-The parent/worker registration difference and `ToolRunContext` dual database
-access path are recorded as current facts. They remain owned by P1 and P2,
-respectively; this phase must not repair either one incidentally.
+The former parent/worker registration difference was deliberately replaced in
+P1 by a single product composition contract: every RemoteJob tool remains
+`in_process`, so worker registry visibility does not alter its execution
+backend or model-visible tool materialization. `ToolRunContext` dual database
+access remains a P2 fact and is not changed here.
 
 ## Verification map
 

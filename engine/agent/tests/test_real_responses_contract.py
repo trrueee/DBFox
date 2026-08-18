@@ -7,7 +7,8 @@ import json
 
 import pytest
 
-from engine.agent.completion import CompletionKind, CompletionPolicy
+from engine.agent.completion import CompletionKind
+from engine.runtime_composition import build_default_completion_policy as CompletionPolicy
 from engine.agent.context import ContextSnapshot
 from engine.agent.providers.openai import OpenAIModelAdapter
 from engine.agent.turn import TurnStreamAssembler, TurnTermination

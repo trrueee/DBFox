@@ -530,11 +530,17 @@ def run_real_provider(
 
     from sqlalchemy.orm import sessionmaker
 
+    from engine.agent.completion import CompletionGate
     from engine.agent.events import LiveStreamHub
     from engine.agent.evidence import citation_references
     from engine.agent.loop import RunLoop
     from engine.agent.providers.openai import OpenAIModelAdapter
     from engine.agent.repositories.session import SessionRepository
+    from engine.runtime_composition import (
+        build_default_completion_policy,
+        build_product_tool_registry,
+        default_context_contributors,
+    )
     from engine.db import (
         DATABASE_URL,
         SessionLocal,
@@ -656,6 +662,9 @@ def run_real_provider(
         RunLoop(
             session_factory=session_factory,
             model_factory=lambda _settings: OpenAIModelAdapter.from_config(config),
+            registry=build_product_tool_registry(),
+            context_contributors=default_context_contributors(),
+            completion=CompletionGate(build_default_completion_policy()),
             live_stream=LiveStreamHub(),
         ).execute(lease=lease, run_id=admission.run_id)
         return admission.run_id, admission.assistant_message_id

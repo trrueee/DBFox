@@ -7,7 +7,7 @@ from engine.tools.materialization import (
     materialize_tools,
     require_current_tool,
 )
-from engine.tools.builtin import register_dbfox_tools
+from engine.runtime_composition import build_product_tool_registry
 from engine.tools.runtime.base import (
     BaseTool,
     ToolExecutionSpec,
@@ -69,7 +69,7 @@ def test_materialization_is_filtered_versioned_and_stable() -> None:
 
 
 def test_materialization_can_narrow_a_group_to_an_explicit_completion_set() -> None:
-    registry = register_dbfox_tools()
+    registry = build_product_tool_registry()
 
     materialization = materialize_tools(
         registry,
@@ -189,7 +189,7 @@ def test_pending_call_cannot_cross_a_policy_change_with_same_declared_version() 
 
 def test_dbfox_tools_publish_openai_strict_schemas() -> None:
     materialization = materialize_tools(
-        register_dbfox_tools(),
+        build_product_tool_registry(),
         execution_mode="user_requested_read",
     )
 
@@ -228,7 +228,7 @@ def test_dbfox_tools_publish_openai_strict_schemas() -> None:
 
 
 def test_dbfox_tool_capabilities_are_the_single_resource_access_contract() -> None:
-    registry = register_dbfox_tools()
+    registry = build_product_tool_registry()
 
     assert registry.require("catalog_overview").execution.capabilities == (
         "metadata_read",
