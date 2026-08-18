@@ -13,13 +13,25 @@ from typing import TYPE_CHECKING, Any, cast
 from sqlalchemy.orm import Session
 
 from engine.agent.completion import CompletionPolicy
+from engine.agent.completion_data import DataCompletionSupport, DataResultCitationConstraint
 from engine.agent.context_fragment import ContextContributor
+from engine.agent.workspace_context import WorkspaceContextContributor
+from engine.db import SessionLocal
+from engine.tools.builtin.registry import (
+    register_conversation_functions,
+    register_core_functions,
+    register_data_extension,
+    register_remote_job_extension,
+    register_workspace_extension,
+    register_workspace_write_extension,
+)
 from engine.tools.runtime import ToolRegistry
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
     ResourceScopeRef,
     ScopedResourceResolver,
 )
+from engine.workspace.read_service import WorkspaceReadService
 
 if TYPE_CHECKING:
     from engine.agent.loop import RunLoop
@@ -27,15 +39,6 @@ if TYPE_CHECKING:
 
 def build_product_tool_registry() -> ToolRegistry:
     """Build the complete frozen Tool Registry for the DBFox product."""
-
-    from engine.tools.builtin.registry import (
-        register_conversation_functions,
-        register_core_functions,
-        register_data_extension,
-        register_remote_job_extension,
-        register_workspace_extension,
-        register_workspace_write_extension,
-    )
 
     registry = ToolRegistry(
         available_backends=frozenset({"in_process", "isolated_process"})
@@ -51,9 +54,6 @@ def build_product_tool_registry() -> ToolRegistry:
 
 def build_attempt_resource_resolver() -> CompositeResourceResolver:
     """Build unchanged default Database and Workspace attempt resolvers."""
-
-    from engine.db import SessionLocal
-    from engine.workspace.read_service import WorkspaceReadService
 
     resolver = CompositeResourceResolver()
 
@@ -77,18 +77,11 @@ def build_attempt_resource_resolver() -> CompositeResourceResolver:
 def default_context_contributors() -> tuple[Callable[[Session], ContextContributor], ...]:
     """Return the built-in contributors; Context Kernel owns their use."""
 
-    from engine.agent.workspace_context import WorkspaceContextContributor
-
     return (WorkspaceContextContributor,)
 
 
 def build_default_completion_policy() -> CompletionPolicy:
     """Compose the current Data completion contributions for DBFox."""
-
-    from engine.agent.completion_data import (
-        DataCompletionSupport,
-        DataResultCitationConstraint,
-    )
 
     return CompletionPolicy(
         constraints=(DataResultCitationConstraint(),),
