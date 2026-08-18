@@ -87,4 +87,11 @@ describe("dock view registry", () => {
     expect(dockViewTitle(tab({ kind: "console", title: "ignored" }))).toBe("SQL 控制台");
     expect(dockViewTitle(tab())).toBe("orders");
   });
+
+  it("fails soft for an unknown view contribution", () => {
+    const unknown = tab({ kind: "future-webview" as WorkspaceDockTab["kind"], title: "Future view" });
+
+    expect(getDockView(unknown.kind)).toBeNull();
+    expect(dockViewTitle(unknown)).toBe("Future view");
+  });
 });

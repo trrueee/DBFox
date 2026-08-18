@@ -63,6 +63,16 @@ def test_admission_is_atomic_ordered_and_idempotent(db_session, test_datasource)
     ]
 
 
+def test_admit_keeps_the_session_datasource_fence(db_session, test_datasource) -> None:
+    """P0 baseline: an AgentSession is still rooted in one datasource."""
+
+    datasource_id = str(test_datasource.id)
+    _session(db_session, datasource_id)
+
+    with pytest.raises(ValueError, match="Session datasource does not match admitted input"):
+        _admit(SessionRepository(db_session), "different-datasource")
+
+
 def test_concurrent_admission_serializes_sqlite_aggregate_writes(db_session, test_datasource) -> None:
     datasource_id = str(test_datasource.id)
     _session(db_session, datasource_id)
