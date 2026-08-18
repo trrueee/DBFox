@@ -232,13 +232,12 @@ class RunLoop:
                 default_context_contributors,
             )
 
-            registry = registry or build_product_tool_registry()
-            context_contributors = (
-                context_contributors or default_context_contributors()
-            )
-            completion = completion or CompletionGate(
-                build_default_completion_policy()
-            )
+            if registry is None:
+                registry = build_product_tool_registry()
+            if context_contributors is None:
+                context_contributors = default_context_contributors()
+            if completion is None:
+                completion = CompletionGate(build_default_completion_policy())
         self.registry = registry
         if not self.registry.frozen:
             self.registry.freeze()
