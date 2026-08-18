@@ -4,9 +4,6 @@ import { useWorkspaceStore } from "../workspaceStore";
 function reset() {
   useWorkspaceStore.setState({
     activeProjectId: "",
-    sidebarEntityMode: "connections",
-    projectSubMode: {},
-    connectionSubMode: {},
     projectShell: {},
     mainSurfaceByProject: {},
     centerMode: "home",
@@ -22,20 +19,18 @@ function reset() {
 describe("workspaceStore — Shell", () => {
   beforeEach(reset);
 
-  it("keeps sidebar and datasource selections scoped per real Project", () => {
+  it("keeps conversation selections scoped per Project", () => {
     useWorkspaceStore.getState().setActiveProject("project-1");
-    useWorkspaceStore.getState().setProjectSidebarMode("project-1", "conversations");
-    useWorkspaceStore.getState().setProjectActiveDatasource("project-1", "ds-a");
+    useWorkspaceStore.getState().setProjectActiveConversation("project-1", "conv-1");
 
     useWorkspaceStore.getState().setActiveProject("project-2");
-    useWorkspaceStore.getState().setProjectSidebarMode("project-2", "data");
+    useWorkspaceStore.getState().setProjectActiveConversation("project-2", "conv-2");
 
     expect(useWorkspaceStore.getState().projectShell["project-1"]).toEqual({
-      sidebarMode: "conversations",
-      activeDatasourceId: "ds-a",
+      activeConversationId: "conv-1",
     });
     expect(useWorkspaceStore.getState().projectShell["project-2"]).toEqual({
-      sidebarMode: "data",
+      activeConversationId: "conv-2",
     });
   });
 
@@ -76,18 +71,6 @@ describe("workspaceStore — Shell", () => {
 
     useWorkspaceStore.getState().showSmartQueryHome();
     expect(useWorkspaceStore.getState().centerMode).toBe("home");
-  });
-
-  it("switches sidebar entity mode and keeps per-entity sub modes independent", () => {
-    useWorkspaceStore.getState().setSidebarEntityMode("projects");
-    useWorkspaceStore.getState().setProjectSubMode("project-1", "files");
-    useWorkspaceStore.getState().setSidebarEntityMode("connections");
-    useWorkspaceStore.getState().setConnectionSubMode("ds-1", "database");
-
-    const state = useWorkspaceStore.getState();
-    expect(state.sidebarEntityMode).toBe("connections");
-    expect(state.projectSubMode["project-1"]).toBe("files");
-    expect(state.connectionSubMode["ds-1"]).toBe("database");
   });
 });
 

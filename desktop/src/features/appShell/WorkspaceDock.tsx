@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { EmptyState, Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui";
 import { useDatasourceState } from "../datasource/useDatasourceState";
+import { useDatasourceSelectionStore } from "../../stores/datasourceSelectionStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useSqlConsoleStore } from "../../stores/sqlConsoleStore";
 import { useArtifactDockStore } from "../../stores/artifactDockStore";
@@ -14,7 +15,6 @@ import { dockViewTitle, getDockView } from "./dockViewRegistry";
 import "./WorkspaceDock.css";
 
 interface WorkspaceDockProps {
-  activeDatasourceId: string;
   activeConversationId: string | null;
   showToast: (message: string, type?: "success" | "error" | "warning" | "info") => void;
 }
@@ -23,7 +23,7 @@ function dockTabIcon(tab: WorkspaceDockTab) {
   return getDockView(tab.kind)?.icon(tab) ?? null;
 }
 
-export function WorkspaceDock({ activeDatasourceId, activeConversationId, showToast }: WorkspaceDockProps) {
+export function WorkspaceDock({ activeConversationId, showToast }: WorkspaceDockProps) {
   const dock = useWorkspaceStore((s) => s.dock);
   const dockTabs = useWorkspaceStore((s) => s.dockTabs);
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
@@ -32,6 +32,7 @@ export function WorkspaceDock({ activeDatasourceId, activeConversationId, showTo
   const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
   const openDockArtifacts = useArtifactDockStore((s) => s.openArtifacts);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
+  const activeDatasourceId = useDatasourceSelectionStore((s) => s.activeDatasourceId);
   const { activeDatasource } = useDatasourceState();
 
   const visibleTabs = useMemo(() => {

@@ -752,3 +752,25 @@
 .ds-project-file-node--depth-10 {
   padding-left: 150px;
 }
+
+/* Resource connector sections */
+.ds-resource-section {
+  margin-top: 8px;
+}
+
+.ds-resource-header {
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ds-resource-header-label {
+  font-size: var(--ui-font-label);
+  font-weight: 500;
+}
+
+.ds-add-resource-btn {
+  width: 22px;
+  height: 22px;
+}
