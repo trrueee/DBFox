@@ -31,6 +31,7 @@ from engine.tools.runtime.attempt import (
     ResourceScopeRef,
     ScopedResourceResolver,
 )
+from engine.tools.runtime.resource_context import resolve_workspace_resource
 from engine.workspace.read_service import WorkspaceReadService
 
 if TYPE_CHECKING:
@@ -63,11 +64,8 @@ def build_attempt_resource_resolver() -> CompositeResourceResolver:
         return SessionLocal()
 
     def resolve_workspace(ref: ResourceScopeRef) -> WorkspaceReadService:
-        if ref.kind != "workspace":
-            raise KeyError(ref.kind)
-        if not ref.location:
-            raise ValueError("Workspace scope is missing its authorized root")
-        return WorkspaceReadService(ref.location)
+        with SessionLocal() as db:
+            return resolve_workspace_resource(db, ref)
 
     resolver.register("database", cast(ScopedResourceResolver, resolve_database))
     resolver.register("workspace", cast(ScopedResourceResolver, resolve_workspace))

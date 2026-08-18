@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
 
 from engine.agent.completion import CompletionGate
 from engine.agent.loop import RunLoop
+from engine import runtime_composition
+from engine.models import Project
 from engine.runtime_composition import (
     build_attempt_resource_resolver,
     build_default_completion_policy,
@@ -36,20 +39,59 @@ def test_product_registry_is_frozen_and_keeps_owner_and_backend_contracts() -> N
 
 def test_default_attempt_resolver_preserves_database_and_workspace_contracts(
     tmp_path: Path,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    root_a = tmp_path / "workspace-a"
+    root_b = tmp_path / "workspace-b"
+    root_a.mkdir()
+    root_b.mkdir()
+    project = Project(
+        id="workspace-1",
+        name="Workspace resolver test",
+        workspace_root=str(root_a),
+    )
+    db_session.add(project)
+    db_session.commit()
+
+    class _SessionScope:
+        def __enter__(self):
+            return db_session
+
+        def __exit__(self, _type, _value, _traceback):
+            return False
+
+    monkeypatch.setattr(runtime_composition, "SessionLocal", lambda: _SessionScope())
     resolver = build_attempt_resource_resolver()
+    version_a = hashlib.sha256(str(root_a.resolve()).encode("utf-8")).hexdigest()[:16]
     workspace = resolver.resolve(
         (
             ResourceScopeRef(
                 kind="workspace",
                 id="workspace-1",
-                location=str(tmp_path),
+                version=version_a,
             ),
         )
     )["workspace"]
 
     assert isinstance(workspace, WorkspaceReadService)
-    assert workspace.root == tmp_path.resolve()
+    assert workspace.root == root_a.resolve()
+
+    project.workspace_root = str(root_b)
+    db_session.commit()
+    with pytest.raises(ValueError, match="version"):
+        resolver.resolve(
+            (ResourceScopeRef(kind="workspace", id=project.id, version=version_a),)
+        )
+    project.workspace_root = ""
+    db_session.commit()
+    with pytest.raises(ValueError, match="canonical root"):
+        resolver.resolve((ResourceScopeRef(kind="workspace", id=project.id, version=None),))
+    db_session.delete(project)
+    db_session.commit()
+    with pytest.raises(ValueError, match="canonical root"):
+        resolver.resolve((ResourceScopeRef(kind="workspace", id="missing-project", version=None),))
+
     with pytest.raises(RuntimeError, match="frozen"):
         resolver.register("test", lambda _ref: None)
     with pytest.raises(KeyError, match="No resolver"):

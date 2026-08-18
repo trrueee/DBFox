@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from engine.agent.context_fragment import ContextContributionInput, ContextFragment
 from engine.json_codec import loads
 from engine.models import AgentArtifactRecord, AgentObservationRecord
+from engine.tools.runtime.resource_context import resolve_workspace_resource
 from engine.workspace.read_service import WorkspaceReadError, WorkspaceReadService
 
 WORKSPACE_FILE_SNAPSHOT_CAPABILITY = "dbfox.workspace.file_snapshot"
@@ -57,8 +58,8 @@ class WorkspaceContextContributor:
                 continue
             key = (str(scope.id), str(scope.version or ""))
             try:
-                workspaces[key] = WorkspaceReadService(scope.location or "")
-            except WorkspaceReadError:
+                workspaces[key] = resolve_workspace_resource(self.session, scope)
+            except ValueError:
                 continue
         rows = self.session.execute(
             select(AgentObservationRecord)

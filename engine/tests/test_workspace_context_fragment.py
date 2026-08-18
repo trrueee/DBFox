@@ -169,7 +169,6 @@ def test_workspace_contributor_returns_bounded_file_snapshot_fragments(
                     version=hashlib.sha256(
                         str(workspace_root.resolve()).encode("utf-8")
                     ).hexdigest()[:16],
-                    location=str(workspace_root),
                 ),
             ),
         )
@@ -194,7 +193,6 @@ def test_workspace_contributor_returns_bounded_file_snapshot_fragments(
                     version=hashlib.sha256(
                         str(workspace_root.resolve()).encode("utf-8")
                     ).hexdigest()[:16],
-                    location=str(workspace_root),
                 ),
             ),
         )

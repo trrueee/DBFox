@@ -75,8 +75,8 @@ def test_sql_result_keeps_artifact_draft_while_bounding_immediate_model_output(
                 tool_name=tool.name,
                 raw_input={"validation_artifact_id": "artifact_sql_bounds"},
                 request=request,
-                db=db_session,
                 idempotency_key="invocation_bounds",
+                resources={"database": db_session},
             ),
         )
     finally:
