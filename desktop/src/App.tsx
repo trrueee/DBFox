@@ -4,12 +4,10 @@ import {
   useCallback,
   useEffect,
   useState,
-  type MouseEvent,
 } from "react";
 import "./App.css";
 import { setDialogContainer } from "./components/ui/dialogContainer";
 import { setToastRoot, useToast } from "./components/toastState";
-import type { ContextMenuState } from "./types/workspace";
 import { installClientErrorLogging, recordClientLog } from "./lib/diagnostics/clientLog";
 import { useDatasourceState } from "./features/datasource/useDatasourceState";
 import { useWorkspaceStore } from "./stores/workspaceStore";
@@ -21,6 +19,9 @@ import { DesktopLifecycleMonitor } from "./features/appShell/DesktopLifecycleMon
 import { LoadingState } from "./components/ui";
 import { ConversationCenter } from "./features/appShell/ConversationCenter";
 import { ResizableWorkspaceLayout } from "./features/appShell/ResizableWorkspaceLayout";
+import { ProjectResourceSidebar } from "./features/resources/ProjectResourceSidebar";
+import { productResourceConnectors } from "./features/resources/resourceConnectorComposition";
+import { emitOpenDatabaseDialog } from "./features/resources/dataConnectorEvents";
 
 const AppCommandPalette = lazy(() =>
   import("./features/appShell/AppCommandPalette").then((module) => ({
@@ -32,16 +33,6 @@ const ContextDrawer = lazy(() =>
     default: module.ContextDrawer,
   })),
 );
-const DataSourceContextMenu = lazy(() =>
-  import("./features/datasource/DataSourceContextMenu").then((module) => ({
-    default: module.DataSourceContextMenu,
-  })),
-);
-const DataSourceTree = lazy(() =>
-  import("./features/datasource/DataSourceTree").then((module) => ({
-    default: module.DataSourceTree,
-  })),
-);
 const SettingsPage = lazy(() =>
   import("./features/settings/SettingsPage").then((module) => ({
     default: module.SettingsPage,
@@ -50,11 +41,6 @@ const SettingsPage = lazy(() =>
 const ProjectCreateForm = lazy(() =>
   import("./features/projects/ProjectCreateForm").then((module) => ({
     default: module.ProjectCreateForm,
-  })),
-);
-const ConnectionDialog = lazy(() =>
-  import("./features/datasource/ConnectionDialog").then((module) => ({
-    default: module.ConnectionDialog,
   })),
 );
 const WorkspaceDock = lazy(() =>
@@ -108,13 +94,7 @@ function AppLayoutFallback() {
 
 export default function App() {
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
-  const [rightDrawerType, setRightDrawerType] = useState<"ai-suggest" | "props">("props");
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, type: "database", targetNode: "" });
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [connectionDialog, setConnectionDialog] = useState<{ open: boolean; createMode: boolean }>({
-    open: false,
-    createMode: true,
-  });
 
   const { toast } = useToast();
 
@@ -135,9 +115,7 @@ export default function App() {
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
   const setDockActiveTab = useWorkspaceStore((s) => s.setDockActiveTab);
   const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
-  const openDockTable = useTableWorkspaceStore((s) => s.openTable);
   const openDockArtifacts = useArtifactDockStore((s) => s.openArtifacts);
-  const openDockMultiTable = useTableWorkspaceStore((s) => s.openMultiTable);
   const showSmartQueryHome = useWorkspaceStore((s) => s.showSmartQueryHome);
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
   const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
@@ -147,17 +125,6 @@ export default function App() {
   const closeSettings = useWorkspaceStore((s) => s.closeSettings);
   const setSettingsSection = useWorkspaceStore((s) => s.setSettingsSection);
 
-  const openDockTableForActiveDatasource = useCallback(
-    (tableName: string, initialSubtab?: string) => {
-      openDockTable(
-        tableName,
-        initialSubtab,
-        activeDatasource ? { id: activeDatasource.id, dbType: activeDatasource.db_type ?? null } : undefined,
-      );
-    },
-    [activeDatasource, openDockTable],
-  );
-
   const openDockConsoleForActiveDatasource = useCallback(
     (initialSql?: string) => {
       if (!activeDatasource) return;
@@ -165,10 +132,6 @@ export default function App() {
     },
     [activeDatasource, openDockConsole],
   );
-
-  const openConnectionDialog = useCallback((mode: "detail" | "create" = "create") => {
-    setConnectionDialog({ open: true, createMode: mode === "create" });
-  }, []);
 
   const openConversationFromPalette = useCallback(
     (conversationId: string) => {
@@ -179,6 +142,9 @@ export default function App() {
     [openConversationCenter],
   );
 
+  // Resource connector composition
+  const connectors = productResourceConnectors(toast);
+
   // Layout UI states
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const toggleSidebarCollapse = useCallback(() => setSidebarCollapsed((value) => !value), []);
@@ -186,35 +152,6 @@ export default function App() {
     setSidebarCollapsed(false);
     openSettings("appearance");
   }, [openSettings]);
-
-  useEffect(() => {
-    const handleDocumentClick = () => setContextMenu((prev) => ({ ...prev, visible: false }));
-    window.addEventListener("click", handleDocumentClick);
-    return () => window.removeEventListener("click", handleDocumentClick);
-  }, []);
-
-  const handleTableClick = (tableName: string, event: MouseEvent) => {
-    if (event.ctrlKey || event.metaKey) {
-      useTableWorkspaceStore.getState().setSelectedTables((prev) => (
-        prev.includes(tableName) ? prev.filter((table) => table !== tableName) : [...prev, tableName]
-      ));
-      return;
-    }
-    openDockTableForActiveDatasource(tableName);
-  };
-
-  const handleNodeContextMenu = (event: MouseEvent, type: "database" | "schema" | "table", nodeName: string) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const selectedTables = useTableWorkspaceStore.getState().selectedTables;
-    const setSelectedTables = useTableWorkspaceStore.getState().setSelectedTables;
-    if (type === "table" && selectedTables.length > 1 && selectedTables.includes(nodeName)) {
-      setContextMenu({ visible: true, x: event.clientX, y: event.clientY, type: "multi-table", targetNode: nodeName });
-      return;
-    }
-    if (type === "table") setSelectedTables([nodeName]);
-    setContextMenu({ visible: true, x: event.clientX, y: event.clientY, type, targetNode: nodeName });
-  };
 
   // ── V3 快捷键：焦点与 Dock，不再承担全局搜索 ──
   useEffect(() => {
@@ -264,14 +201,6 @@ export default function App() {
     showSmartQueryHome,
   ]);
 
-  const toggleRightDrawer = (type: "ai-suggest" | "props") => {
-    if (rightDrawerOpen && rightDrawerType === type) setRightDrawerOpen(false);
-    else {
-      setRightDrawerOpen(true);
-      setRightDrawerType(type);
-    }
-  };
-
   const activeDockTab = dockTabs.find((tab) => tab.id === dock.activeTabId);
 
   return (
@@ -300,18 +229,13 @@ export default function App() {
                   />
                 </Suspense>
               ) : (
-                <Suspense fallback={<SidebarFallback />}>
-                  <DataSourceTree
-                    collapsed={sidebarCollapsed && !settingsOpen}
-                    onToggleCollapse={toggleSidebarCollapse}
-                    onTableClick={handleTableClick}
-                    onTableDoubleClick={(tableName) => openDockTableForActiveDatasource(tableName)}
-                    onNodeContextMenu={handleNodeContextMenu}
-                    onNewConnection={() => openConnectionDialog("create")}
-                    onNewProject={() => useWorkspaceStore.getState().openProjectCreate()}
-                    onOpenSettings={handleOpenSettings}
-                  />
-                </Suspense>
+                <ProjectResourceSidebar
+                  collapsed={sidebarCollapsed && !settingsOpen}
+                  onToggleCollapse={toggleSidebarCollapse}
+                  onNewProject={() => useWorkspaceStore.getState().openProjectCreate()}
+                  onOpenSettings={handleOpenSettings}
+                  connectors={connectors}
+                />
               )}
               workspace={
                 settingsOpen ? (
@@ -339,7 +263,6 @@ export default function App() {
                     </section>
                     <Suspense fallback={<WorkspaceDockFallback />}>
                       <WorkspaceDock
-                        activeDatasourceId={activeDatasourceId}
                         activeConversationId={activeConversationId}
                         showToast={toast}
                       />
@@ -357,7 +280,6 @@ export default function App() {
                     </section>
                     <Suspense fallback={<WorkspaceDockFallback />}>
                       <WorkspaceDock
-                        activeDatasourceId={activeDatasourceId}
                         activeConversationId={activeConversationId}
                         showToast={toast}
                       />
@@ -368,16 +290,6 @@ export default function App() {
             />
           </Suspense>
 
-          {connectionDialog.open && (
-            <Suspense fallback={null}>
-              <ConnectionDialog
-                open
-                createMode={connectionDialog.createMode}
-                onOpenChange={(open) => setConnectionDialog((prev) => ({ ...prev, open }))}
-              />
-            </Suspense>
-          )}
-
           {showCommandPalette && (
             <Suspense fallback={null}>
               <AppCommandPalette
@@ -386,8 +298,15 @@ export default function App() {
                 showSmartQueryHome={showSmartQueryHome}
                 openConversation={openConversationFromPalette}
                 openSettings={openSettings}
-                openConnectionDialog={openConnectionDialog}
-                openTable={openDockTableForActiveDatasource}
+                openConnectionDialog={() => emitOpenDatabaseDialog()}
+                openTable={(tableName) => {
+                  const openDockTable = useTableWorkspaceStore.getState().openTable;
+                  openDockTable(
+                    tableName,
+                    undefined,
+                    activeDatasource ? { id: activeDatasource.id, dbType: activeDatasource.db_type ?? null } : undefined,
+                  );
+                }}
                 activeDatasource={
                   activeDatasource
                     ? { id: activeDatasource.id, dbType: activeDatasource.db_type ?? null }
@@ -402,27 +321,13 @@ export default function App() {
             <Suspense fallback={null}>
               <ContextDrawer
                 open
-                type={rightDrawerType}
+                type="props"
                 activeTab={activeDockTab}
                 onClose={() => setRightDrawerOpen(false)}
               />
             </Suspense>
           )}
         </main>
-
-        {contextMenu.visible && (
-          <Suspense fallback={null}>
-            <DataSourceContextMenu
-              contextMenu={contextMenu}
-              onOpenSqlConsole={openDockConsoleForActiveDatasource}
-              onOpenTable={(tableName, subTab) => openDockTableForActiveDatasource(tableName, subTab)}
-              onOpenMultiTableWorkspace={openDockMultiTable}
-              onClose={() => setContextMenu((prev) => ({ ...prev, visible: false }))}
-              onToast={toast}
-              onOpenProps={() => toggleRightDrawer("props")}
-            />
-          </Suspense>
-        )}
       </div>
     </div>
   );

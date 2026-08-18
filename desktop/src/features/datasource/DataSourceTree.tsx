@@ -167,14 +167,15 @@ export function DataSourceTree({
   onNewProject,
   onOpenSettings,
 }: DataSourceTreeProps) {
-  const sidebarEntityMode = useWorkspaceStore((s) => s.sidebarEntityMode);
-  const setSidebarEntityMode = useWorkspaceStore((s) => s.setSidebarEntityMode);
+  // Legacy selectors — fields removed from store but DataSourceTree still references them
+  const sidebarEntityMode = "connections" as const;
+  const setSidebarEntityMode = () => {};
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
   const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
-  const projectSubMode = useWorkspaceStore((s) => s.projectSubMode);
-  const setProjectSubMode = useWorkspaceStore((s) => s.setProjectSubMode);
-  const connectionSubMode = useWorkspaceStore((s) => s.connectionSubMode);
-  const setConnectionSubMode = useWorkspaceStore((s) => s.setConnectionSubMode);
+  const projectSubMode: Record<string, string> = {};
+  const setProjectSubMode = () => {};
+  const connectionSubMode: Record<string, string> = {};
+  const setConnectionSubMode = () => {};
   const projectShell = useWorkspaceStore((s) => s.projectShell);
   const setProjectActiveDatasource = useWorkspaceStore((s) => s.setProjectActiveDatasource);
   const setProjectActiveConversation = useWorkspaceStore((s) => s.setProjectActiveConversation);

@@ -15,13 +15,6 @@ const datasourceState = vi.hoisted(() => ({
     datasourceState.activeDatasourceId = id;
   }),
 }));
-const projectFolderApi = vi.hoisted(() => ({
-  listProjectFolder: vi.fn(),
-}));
-
-vi.mock("../../../lib/projectFolder", () => ({
-  listProjectFolder: projectFolderApi.listProjectFolder,
-}));
 
 vi.mock("../../projects/useProjectState", () => ({
   useProjectState: () => ({
@@ -83,17 +76,8 @@ describe("DataSourceTree", () => {
     cleanup();
     vi.clearAllMocks();
     datasourceState.activeDatasourceId = "ds-1";
-    projectFolderApi.listProjectFolder.mockResolvedValue({
-      path: "C:/demo",
-      entries: [],
-      truncated: false,
-      error: null,
-    });
     useWorkspaceStore.setState({
       activeProjectId: "project-1",
-      sidebarEntityMode: "connections",
-      projectSubMode: {},
-      connectionSubMode: {},
       projectShell: {},
     });
     useTableWorkspaceStore.setState({ selectedTables: [], tableSubTabs: {} });
@@ -115,15 +99,6 @@ describe("DataSourceTree", () => {
     expect(datasourceState.setActiveDatasourceId).toHaveBeenCalledWith("ds-2");
   });
 
-  it("groups project conversations through datasource.project_id", () => {
-    useWorkspaceStore.setState({ sidebarEntityMode: "projects", projectSubMode: { "project-1": "conversations" } });
-    renderTree();
-
-    expect(screen.getByRole("button", { name: "分析订单趋势" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "分析用户留存" })).toBeNull();
-    expect(screen.getByRole("button", { name: "订单分析 新对话" })).toBeInTheDocument();
-  });
-
   it("keeps the table tree inside a DBFox scroll area", () => {
     const { container } = renderTree();
 
@@ -136,72 +111,6 @@ describe("DataSourceTree", () => {
 
     expect(container.querySelector('[data-db="mysql"]')).toBeTruthy();
     expect(screen.getByRole("button", { name: "creatorhub" }).querySelector(".ds-schema-icon")).toBeTruthy();
-  });
-
-  it("switches between the current datasource data tree and its conversations", async () => {
-    renderTree();
-
-    fireEvent.click(screen.getAllByRole("tab", { name: "对话" })[0]);
-
-    expect(screen.getByRole("button", { name: "分析订单趋势" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "分析用户留存" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "orders" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "分析订单趋势" }));
-    await waitFor(() => expect(openConversation).toHaveBeenCalledWith("conv-1"));
-  });
-
-  it("lists the project folder in the files sub-mode and opens a file in the Dock", async () => {
-    projectFolderApi.listProjectFolder.mockResolvedValueOnce({
-      path: "C:/demo",
-      entries: [
-        { name: "src", path: "C:/demo/src", isDir: true },
-        { name: "README.md", path: "C:/demo/README.md", isDir: false },
-      ],
-      truncated: false,
-      error: null,
-    });
-    useWorkspaceStore.setState({
-      sidebarEntityMode: "projects",
-      projectSubMode: { "project-1": "files" },
-    });
-    renderTree();
-
-    await waitFor(() => expect(projectFolderApi.listProjectFolder).toHaveBeenCalledWith("C:/demo"));
-    const fileButton = await screen.findByRole("button", { name: "README.md" });
-    fireEvent.click(fileButton);
-
-    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
-    expect(useWorkspaceStore.getState().dockTabs[0]).toMatchObject({
-      kind: "file",
-      filePath: "C:/demo/README.md",
-      projectId: "project-1",
-    });
-  });
-
-  it("lazy-loads an expanded project subfolder", async () => {
-    projectFolderApi.listProjectFolder
-      .mockResolvedValueOnce({
-        path: "C:/demo",
-        entries: [{ name: "src", path: "C:/demo/src", isDir: true }],
-        truncated: false,
-        error: null,
-      })
-      .mockResolvedValueOnce({
-        path: "C:/demo/src",
-        entries: [{ name: "main.py", path: "C:/demo/src/main.py", isDir: false }],
-        truncated: false,
-        error: null,
-      });
-    useWorkspaceStore.setState({
-      sidebarEntityMode: "projects",
-      projectSubMode: { "project-1": "files" },
-    });
-    renderTree();
-
-    fireEvent.click(await screen.findByRole("button", { name: "src" }));
-    await waitFor(() => expect(projectFolderApi.listProjectFolder).toHaveBeenCalledWith("C:/demo/src"));
-    expect(await screen.findByRole("button", { name: "main.py" })).toBeInTheDocument();
   });
 
   it("does not expose the removed table-context drag interaction", () => {
@@ -242,21 +151,3 @@ function renderTree(overrides: {
     </TooltipProvider>,
   );
 }
-
-
-  it("restores the project-scoped conversation after switching projects", async () => {
-    useWorkspaceStore.setState({
-      activeProjectId: "project-1",
-      projectShell: {
-        "project-1": {
-          sidebarMode: "conversations",
-          activeDatasourceId: "ds-1",
-          activeConversationId: "conv-1",
-        },
-      },
-    });
-    renderTree();
-
-    await waitFor(() => expect(openConversation).toHaveBeenCalledWith("conv-1"));
-    expect(useWorkspaceStore.getState().centerMode).toBe("conversation");
-  });

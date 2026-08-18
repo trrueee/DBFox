@@ -6,22 +6,13 @@ import type {
 } from "../types/workspace";
 import type { AppSettingsSection } from "../types/settings";
 
-export type ProjectSidebarMode = "data" | "conversations";
-export type SidebarEntityMode = "projects" | "connections";
-export type ProjectSubMode = "conversations" | "files";
-export type ConnectionSubMode = "conversations" | "database";
-
 export interface ProjectShellState {
-  sidebarMode: ProjectSidebarMode;
   activeDatasourceId?: string;
   activeConversationId?: string;
 }
 
 interface WorkspaceState {
   activeProjectId: string;
-  sidebarEntityMode: SidebarEntityMode;
-  projectSubMode: Record<string, ProjectSubMode>;
-  connectionSubMode: Record<string, ConnectionSubMode>;
   projectShell: Record<string, ProjectShellState>;
   mainSurfaceByProject: Record<string, MainSurfaceRef>;
   centerMode: WorkspaceCenterMode;
@@ -35,10 +26,6 @@ interface WorkspaceState {
 
 interface WorkspaceActions {
   setActiveProject: (projectId: string) => void;
-  setSidebarEntityMode: (mode: SidebarEntityMode) => void;
-  setProjectSubMode: (projectId: string, mode: ProjectSubMode) => void;
-  setConnectionSubMode: (connectionId: string, mode: ConnectionSubMode) => void;
-  setProjectSidebarMode: (projectId: string, mode: ProjectSidebarMode) => void;
   setProjectActiveDatasource: (projectId: string, datasourceId: string) => void;
   setProjectActiveConversation: (projectId: string, conversationId: string) => void;
   setProjectMainSurface: (projectId: string, surface: MainSurfaceRef) => void;
@@ -60,9 +47,6 @@ export type WorkspaceStore = WorkspaceState & WorkspaceActions;
 
 export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   activeProjectId: "",
-  sidebarEntityMode: "connections",
-  projectSubMode: {},
-  connectionSubMode: {},
   projectShell: {},
   mainSurfaceByProject: {},
   centerMode: "home",
@@ -74,33 +58,13 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   settingsSection: "appearance",
 
   setActiveProject: (projectId) => set({ activeProjectId: projectId }),
-  setSidebarEntityMode: (mode) => set({ sidebarEntityMode: mode }),
-  setProjectSubMode: (projectId, mode) =>
-    set((state) => ({
-      projectSubMode: { ...state.projectSubMode, [projectId]: mode },
-    })),
-  setConnectionSubMode: (connectionId, mode) =>
-    set((state) => ({
-      connectionSubMode: { ...state.connectionSubMode, [connectionId]: mode },
-    })),
-
-  setProjectSidebarMode: (projectId, mode) =>
-    set((state) => ({
-      projectShell: {
-        ...state.projectShell,
-        [projectId]: {
-          ...(state.projectShell[projectId] ?? { sidebarMode: "data" }),
-          sidebarMode: mode,
-        },
-      },
-    })),
 
   setProjectActiveDatasource: (projectId, datasourceId) =>
     set((state) => ({
       projectShell: {
         ...state.projectShell,
         [projectId]: {
-          ...(state.projectShell[projectId] ?? { sidebarMode: "data" }),
+          ...(state.projectShell[projectId] ?? {}),
           activeDatasourceId: datasourceId,
         },
       },
@@ -111,7 +75,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
       projectShell: {
         ...state.projectShell,
         [projectId]: {
-          ...(state.projectShell[projectId] ?? { sidebarMode: "data" }),
+          ...(state.projectShell[projectId] ?? {}),
           activeConversationId: conversationId,
         },
       },

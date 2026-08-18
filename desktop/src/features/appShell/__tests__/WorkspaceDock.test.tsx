@@ -2,12 +2,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
 import { useSqlConsoleStore } from "../../../stores/sqlConsoleStore";
+import { useDatasourceSelectionStore } from "../../../stores/datasourceSelectionStore";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import { WorkspaceDock } from "../WorkspaceDock";
-
-const datasourceState = vi.hoisted(() => ({
-  activeDatasourceId: "ds-1",
-}));
 
 vi.mock("../../datasource/useDatasourceState", () => ({
   useDatasourceState: () => ({
@@ -19,7 +16,7 @@ vi.mock("../../datasource/useDatasourceState", () => ({
       database_name: "creatorhub",
       connection_generation: 1,
     }],
-    activeDatasourceId: datasourceState.activeDatasourceId,
+    activeDatasourceId: "ds-1",
     activeDatasource: {
       id: "ds-1",
       name: "creatorhub",
@@ -55,7 +52,6 @@ function renderDock() {
   return render(
     <TooltipProvider>
       <WorkspaceDock
-        activeDatasourceId="ds-1"
         activeConversationId={null}
         showToast={vi.fn()}
       />
@@ -66,7 +62,7 @@ function renderDock() {
 describe("WorkspaceDock", () => {
   beforeEach(() => {
     cleanup();
-    datasourceState.activeDatasourceId = "ds-1";
+    useDatasourceSelectionStore.setState({ activeDatasourceId: "ds-1" });
     useWorkspaceStore.setState({
       centerMode: "home",
       pendingAsk: null,
@@ -128,7 +124,7 @@ describe("WorkspaceDock", () => {
     });
     const view = render(
       <TooltipProvider>
-        <WorkspaceDock activeDatasourceId="ds-1" activeConversationId="conv-1" showToast={vi.fn()} />
+        <WorkspaceDock activeConversationId="conv-1" showToast={vi.fn()} />
       </TooltipProvider>,
     );
 
