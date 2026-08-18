@@ -293,8 +293,8 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
                     session_id=lease.session_id,
                     run_id=admission.run_id,
                 ),
-            db=db_session,
             idempotency_key="chart-create-test",
+            resources={"database": db_session},
         ),
     )
     chart = repository.persist_drafts(

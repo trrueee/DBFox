@@ -101,7 +101,7 @@ def test_runtime_exposes_only_explicit_execution_context():
     registry.register(EchoTool())
     result = ToolRuntime(registry).invoke(
         tool_name="test_echo", raw_input={"value": "hello"},
-        request=SimpleNamespace(session_id="session-1"), db=None,
+        request=SimpleNamespace(session_id="session-1"),
         idempotency_key="invocation-1",
     )
     assert result == ToolResult(
@@ -133,7 +133,6 @@ def test_runtime_reconciliation_receives_the_durable_idempotency_key():
         tool_name="test_reconcile",
         raw_input={"value": "hello"},
         request=SimpleNamespace(session_id="session-1"),
-        db=None,
         idempotency_key="stable-invocation-key",
     )
 
@@ -148,14 +147,12 @@ def test_runtime_rejects_unknown_or_encoded_arguments_instead_of_coercing_them()
         tool_name="test_echo",
         raw_input={"value": "hello", "legacy_value": "ignored-before"},
         request=None,
-        db=None,
         idempotency_key="invocation-unknown",
     )
     encoded = ToolRuntime(registry).invoke(
         tool_name="test_echo",
         raw_input={"value": '{"not":"a string contract"}'},
         request=None,
-        db=None,
         idempotency_key="invocation-encoded",
     )
 
@@ -181,11 +178,11 @@ def test_runtime_validation_and_execution_failures_are_safe(monkeypatch, caplog)
     with monkeypatch.context() as patch:
         patch.setattr("engine.tools.runtime.runtime.logger", logger)
         invalid = ToolRuntime(registry).invoke(
-            tool_name="test_failing", raw_input={}, request=None, db=None,
+            tool_name="test_failing", raw_input={}, request=None,
             idempotency_key="invocation-invalid",
         )
         failed = ToolRuntime(registry).invoke(
-            tool_name="test_failing", raw_input={"value": "x"}, request=None, db=None,
+            tool_name="test_failing", raw_input={"value": "x"}, request=None,
             idempotency_key="invocation-failed",
         )
     assert invalid.status == "failed"
@@ -209,7 +206,6 @@ def test_runtime_uses_registered_public_contract_for_domain_error() -> None:
         tool_name="test_domain_failure",
         raw_input={"value": "x"},
         request=None,
-        db=None,
         idempotency_key="invocation-domain-failure",
     )
 
@@ -238,7 +234,6 @@ def test_runtime_collapses_unregistered_domain_error_to_internal_error() -> None
         tool_name="test_unregistered_domain_failure",
         raw_input={"value": "x"},
         request=None,
-        db=None,
         idempotency_key="invocation-unregistered-domain-failure",
     )
 
@@ -264,7 +259,6 @@ def test_runtime_bounds_explicitly_public_tool_input_errors() -> None:
         tool_name="test_bounded_tool_input_error",
         raw_input={"value": "x"},
         request=None,
-        db=None,
         idempotency_key="invocation-bounded-input-error",
     )
 
@@ -289,7 +283,6 @@ def test_validation_error_raised_inside_tool_is_an_execution_failure():
         tool_name="test_internal_validation",
         raw_input={"value": "x"},
         request=None,
-        db=None,
         idempotency_key="invocation-internal-validation",
     )
 
@@ -308,7 +301,6 @@ def test_runtime_rejects_non_json_tool_output() -> None:
         tool_name="test_non_json_output",
         raw_input={"value": "x"},
         request=None,
-        db=None,
         idempotency_key="invocation-non-json",
     )
 

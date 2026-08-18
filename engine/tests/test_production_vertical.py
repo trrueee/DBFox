@@ -424,6 +424,7 @@ def test_vertical_chain_file_write_patch_approval_recovery(
     db_session,
     test_datasource,
     tmp_path,
+    monkeypatch,
 ) -> None:
     root = tmp_path / "project"
     (root / "src").mkdir(parents=True)
@@ -493,6 +494,9 @@ def test_vertical_chain_file_write_patch_approval_recovery(
         model_name="test",
     )
     db_session.commit()
+    # The isolated worker rehydrates the workspace from the canonical Project
+    # binding in metadata, so point its fresh process at this test's database.
+    monkeypatch.setenv("DBFOX_DATABASE_URL", str(db_session.get_bind().url))
 
     factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
     executor = ToolExecutor(max_workers=1)

@@ -293,7 +293,7 @@ class ValidateTool(SqlValidateTool):
         return ToolOutcome(
             output=output,
             artifacts=sql_validation_drafts(
-                context.db_session,
+                context.require_database(),
                 context.request.datasource_id,
                 output,
             ),
@@ -302,7 +302,7 @@ class ValidateTool(SqlValidateTool):
 
 class ExecuteTool(SqlExecuteReadonlyTool):
     def run(self, tool_input, context):
-        validated = ArtifactRepository(context.db_session).require_validated_sql(
+        validated = ArtifactRepository(context.require_database()).require_validated_sql(
             session_id=context.request.session_id,
             run_id=context.request.run_id,
             sql_artifact_id=tool_input.validation_artifact_id,
@@ -326,7 +326,7 @@ class ExecuteTool(SqlExecuteReadonlyTool):
             output=output,
             artifacts=(
                 query_result_draft(
-                    context.db_session,
+                    context.require_database(),
                     context.request.datasource_id,
                     tool_input.validation_artifact_id,
                     context.request.datasource_generation,

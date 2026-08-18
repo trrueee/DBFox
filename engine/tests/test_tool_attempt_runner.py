@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 import sys
 
+from sqlalchemy.orm import sessionmaker
+
+from engine.models import Project
+from engine.tests.support.metadata import create_migrated_metadata_engine
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
     ResourceScopeRef,
@@ -19,6 +24,13 @@ from engine.tools.runtime.attempt_runner import (
 )
 from engine.tools.runtime.handler import ToolAttemptHandler
 from engine.tools.runtime import ToolRegistry
+from engine.tools.runtime.base import (
+    BaseTool,
+    ToolExecutionSpec,
+    ToolInputModel,
+    ToolOutputModel,
+    ToolPresentation,
+)
 from engine.tools.builtin.registry import register_workspace_extension
 from engine.tools.materialization import current_tool_contract_hash
 from engine.workspace.read_service import WorkspaceReadService
@@ -35,17 +47,37 @@ class _Control:
         return self.cancelled.is_set()
 
 
+class _DatabaseProbeInput(ToolInputModel):
+    pass
+
+
+class _DatabaseProbeOutput(ToolOutputModel):
+    has_database: bool
+
+
+class _DatabaseProbeTool(BaseTool[_DatabaseProbeInput, _DatabaseProbeOutput]):
+    name = "test_database_probe"
+    group = "test"
+    description = "Records the database resource supplied to one attempt."
+    input_model = _DatabaseProbeInput
+    output_model = _DatabaseProbeOutput
+    presentation = ToolPresentation(title="Database probe", category="manage")
+    execution = ToolExecutionSpec(capabilities=("database_read",))
+
+    def __init__(self) -> None:
+        self.seen_database: object | None = None
+
+    def run(self, _tool_input, context):
+        self.seen_database = context.require_database()
+        return _DatabaseProbeOutput(has_database=True)
+
+
 def _request(workspace, version="1", registry=None):
-    location = (
-        str(workspace.root)
-        if isinstance(workspace, WorkspaceReadService)
-        else None
-    )
+    del workspace
     scope = ResourceScopeRef(
         kind="workspace",
         id="project-1",
         version="root-v1",
-        location=location,
     )
     contract_hash = (
         "sha256:99"
@@ -90,6 +122,35 @@ def test_shared_handler_runs_a_workspace_attempt(tmp_path) -> None:
     assert result.artifact_drafts[0].type == "dbfox.workspace.file_snapshot"
 
 
+def test_handler_preserves_exact_in_process_database_resource_identity() -> None:
+    tool = _DatabaseProbeTool()
+    registry = ToolRegistry().register(tool).freeze()
+    request = ToolAttemptRequest(
+        mode="execute",
+        tool_name=tool.name,
+        frozen_tool_declared_version=tool.version,
+        frozen_tool_contract_hash=current_tool_contract_hash(tool),
+        invocation=ToolInvocationContext(
+            session_id="session-1",
+            run_id="run-1",
+            turn_id="turn-1",
+            invocation_id="invocation-1",
+            idempotency_key="idem-1",
+            scope_refs=(ResourceScopeRef(kind="database", id="datasource-1", version=1),),
+        ),
+        authorized_input={},
+        attempt_timeout_ms=10_000,
+    )
+    database = object()
+    result = ToolAttemptHandler(
+        registry=registry,
+        resolver=CompositeResourceResolver(),
+    ).run_with_resources(request, {"database": database})
+
+    assert result.status == "success"
+    assert tool.seen_database is database
+
+
 def test_handler_rejects_stale_frozen_tool_version(tmp_path) -> None:
     registry = ToolRegistry()
     register_workspace_extension(registry)
@@ -121,7 +182,7 @@ def test_in_process_runner_suppresses_late_success_after_cancel(tmp_path) -> Non
     assert result.error_code == "TOOL_CANCELLED"
 
 
-def test_isolated_runner_executes_worker_attempt(tmp_path) -> None:
+def test_isolated_runner_rehydrates_canonical_workspace_binding(tmp_path, monkeypatch) -> None:
     root = tmp_path / "project"
     (root / "src").mkdir(parents=True)
     (root / "src" / "main.py").write_bytes(bytes([112, 114, 105, 110, 116, 40, 41, 10]))
@@ -130,13 +191,40 @@ def test_isolated_runner_executes_worker_attempt(tmp_path) -> None:
     )
     register_workspace_extension(registry)
     registry.freeze()
+    metadata_path = tmp_path / "worker-metadata.db"
+    metadata_engine = create_migrated_metadata_engine(metadata_path)
+    SessionLocal = sessionmaker(bind=metadata_engine)
+    with SessionLocal() as db:
+        db.add(Project(id="project-1", name="Worker Project", workspace_root=str(root)))
+        db.commit()
+    monkeypatch.setenv("DBFOX_DATABASE_URL", f"sqlite:///{metadata_path}")
     runner = IsolatedProcessAttemptRunner(default_isolated_worker_command())
-    result = runner.run(
-        request=_request(WorkspaceReadService(root), registry=registry),
-        control=_Control(),
-    )
-    assert result.status == "success"
-    assert result.artifact_drafts[0].type == "dbfox.workspace.file_snapshot"
+    try:
+        version = current_tool_contract_hash(registry.require("file_read"))
+        request = _request(WorkspaceReadService(root), registry=registry)
+        request = request.model_copy(
+            update={
+                "invocation": request.invocation.model_copy(
+                    update={
+                        "scope_refs": (
+                            ResourceScopeRef(
+                                kind="workspace",
+                                id="project-1",
+                                version=hashlib.sha256(
+                                    str(root.resolve()).encode("utf-8")
+                                ).hexdigest()[:16],
+                            ),
+                        ),
+                    }
+                ),
+                "frozen_tool_contract_hash": version,
+            }
+        )
+        result = runner.run(request=request, control=_Control())
+        assert result.status == "success"
+        assert result.artifact_drafts[0].type == "dbfox.workspace.file_snapshot"
+    finally:
+        metadata_engine.dispose()
 
 
 def test_isolated_runner_reports_missing_worker_as_unavailable(tmp_path) -> None:

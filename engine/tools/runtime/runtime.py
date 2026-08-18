@@ -51,7 +51,6 @@ class ToolRuntime:
         tool_name: str,
         raw_input: dict[str, Any],
         request: Any | None,
-        db: Any | None,
         idempotency_key: str,
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
@@ -94,7 +93,6 @@ class ToolRuntime:
                 parsed_input,
                 ToolRunContext.for_invocation(
                     request=request,
-                    db=db,
                     raw_input=raw_input,
                     cancellation_probe=cancellation_probe,
                     deadline=deadline,
@@ -203,7 +201,6 @@ class ToolRuntime:
         tool_name: str,
         raw_input: dict[str, Any],
         request: Any | None,
-        db: Any | None,
         idempotency_key: str,
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
@@ -234,7 +231,6 @@ class ToolRuntime:
                     parsed_input,
                     ToolRunContext.for_invocation(
                         request=request,
-                        db=db,
                         raw_input=raw_input,
                         cancellation_probe=cancellation_probe,
                         deadline=deadline,

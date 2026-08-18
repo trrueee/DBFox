@@ -26,7 +26,6 @@ class ToolRunContext(BaseModel):
     db_dialect: str = "mysql"
     idempotency_key: str
     raw_input: Mapping[str, Any] = Field(default_factory=dict)
-    db_session: Any | None = Field(default=None, exclude=True)
     request: Any | None = Field(default=None, exclude=True)
     cancellation_probe: Callable[[], bool] | None = Field(default=None, exclude=True)
     deadline: float | None = Field(default=None, exclude=True)
@@ -49,9 +48,7 @@ class ToolRunContext(BaseModel):
         )
 
     def require_database(self) -> Session:
-        if self.db_session is None:
-            raise RuntimeError("This tool requires a database session")
-        return cast(Session, self.db_session)
+        return cast(Session, self.require_resource("database"))
 
     def require_request(self) -> ToolInvocationRequest:
         if self.request is None:
@@ -63,7 +60,6 @@ class ToolRunContext(BaseModel):
         cls,
         *,
         request: Any | None,
-        db: Any | None,
         idempotency_key: str,
         db_dialect: str = "mysql",
         raw_input: dict[str, Any] | None = None,
@@ -81,7 +77,6 @@ class ToolRunContext(BaseModel):
             db_dialect=db_dialect,
             idempotency_key=idempotency_key,
             raw_input=MappingProxyType(dict(raw_input or {})),
-            db_session=db,
             request=request,
             cancellation_probe=cancellation_probe,
             deadline=deadline,

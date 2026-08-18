@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from inspect import signature
 
 import pytest
 
@@ -13,6 +14,7 @@ from engine.tools.runtime.attempt import (
     ToolInvocationContext,
 )
 from engine.tools.runtime.context import ToolRunContext
+from engine.tools.runtime.runtime import ToolRuntime
 
 
 def _scope(kind: str = "database", version: str | int | None = 11) -> ResourceScopeRef:
@@ -55,7 +57,10 @@ def test_attempt_request_is_serializable_and_excludes_live_objects() -> None:
             turn_id="turn-1",
             invocation_id="invocation-1",
             idempotency_key="idem-1",
-            scope_refs=(_scope(),),
+            scope_refs=(
+                _scope(),
+                _scope(kind="workspace", version="workspace-root-v1"),
+            ),
         ),
         authorized_input={"queries": ["orders"]},
         attempt_timeout_ms=15_000,
@@ -63,6 +68,12 @@ def test_attempt_request_is_serializable_and_excludes_live_objects() -> None:
     payload = request.model_dump(mode="json")
     assert payload["mode"] == "execute"
     assert payload["invocation"]["scope_refs"][0]["kind"] == "database"
+    assert payload["invocation"]["scope_refs"][1] == {
+        "kind": "workspace",
+        "id": "workspace-1",
+        "version": "workspace-root-v1",
+    }
+    assert "location" not in str(payload)
 
     with pytest.raises(Exception):
         ToolAttemptRequest(
@@ -96,7 +107,6 @@ def test_composite_resolver_registers_capability_resolvers_and_freezes() -> None
 def test_tool_run_context_exposes_only_authorized_resources() -> None:
     context = ToolRunContext.for_invocation(
         request=None,
-        db=None,
         idempotency_key="idem-1",
         scope_refs=(_scope(kind="workspace", version=1),),
         resources={"workspace": {"root": "C:/demo"}},
@@ -104,3 +114,35 @@ def test_tool_run_context_exposes_only_authorized_resources() -> None:
     assert context.require_resource("workspace") == {"root": "C:/demo"}
     with pytest.raises(RuntimeError, match="resource"):
         context.require_resource("database")
+
+
+def test_database_resource_has_one_context_access_path() -> None:
+    database = object()
+    context = ToolRunContext.for_invocation(
+        request=None,
+        idempotency_key="idem-database",
+        scope_refs=(_scope(),),
+        resources={"database": database},
+    )
+
+    assert context.require_database() is database
+    assert "db_session" not in ToolRunContext.model_fields
+    assert "db" not in signature(ToolRuntime.invoke).parameters
+    assert "db" not in signature(ToolRuntime.reconcile).parameters
+
+
+def test_resource_scope_ref_is_identity_only_and_rejects_transport_location() -> None:
+    workspace = ResourceScopeRef(kind="workspace", id="project-1", version="root-v1")
+
+    assert workspace.model_dump(mode="json") == {
+        "kind": "workspace",
+        "id": "project-1",
+        "version": "root-v1",
+    }
+    with pytest.raises(Exception):
+        ResourceScopeRef(
+            kind="workspace",
+            id="project-1",
+            version="root-v1",
+            location="C:/must-not-cross-wire",
+        )

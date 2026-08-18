@@ -6,7 +6,11 @@ import hashlib
 import threading
 import time
 
+from sqlalchemy.orm import sessionmaker
+
 from engine.agent.artifact import validate_artifact_payload
+from engine.models import Project
+from engine.tests.support.metadata import create_migrated_metadata_engine
 from engine.tools.builtin.registry import register_workspace_write_extension
 from engine.tools.runtime import ToolRegistry, ToolRuntime
 from engine.tools.runtime.attempt import (
@@ -50,14 +54,12 @@ def test_file_write_patch_creates_file_with_artifact(tmp_path) -> None:
         tool_name="file_write_patch",
         raw_input={"path": "new.txt", "content": "hello\n"},
         request=None,
-        db=None,
         idempotency_key="write-create-1",
         scope_refs=(
             ResourceScopeRef(
                 kind="workspace",
                 id="project-1",
                 version="v1",
-                location=str(root),
             ),
         ),
         resources={"workspace": service},
@@ -79,14 +81,12 @@ def test_file_write_patch_requires_current_sha_for_existing_file(tmp_path) -> No
         tool_name="file_write_patch",
         raw_input={"path": "existing.txt", "content": "new\n"},
         request=None,
-        db=None,
         idempotency_key="write-existing-1",
         scope_refs=(
             ResourceScopeRef(
                 kind="workspace",
                 id="project-1",
                 version="v1",
-                location=str(root),
             ),
         ),
         resources={"workspace": service},
@@ -112,14 +112,12 @@ def test_file_write_patch_updates_only_when_cas_matches(tmp_path) -> None:
             "expected_sha256": old_sha,
         },
         request=None,
-        db=None,
         idempotency_key="write-cas-1",
         scope_refs=(
             ResourceScopeRef(
                 kind="workspace",
                 id="project-1",
                 version="v1",
-                location=str(root),
             ),
         ),
         resources={"workspace": service},
@@ -140,14 +138,12 @@ def test_file_write_patch_reconcile_uses_filesystem_state(tmp_path) -> None:
         tool_name="file_write_patch",
         raw_input={"path": "reconcile.txt", "content": "done\n"},
         request=None,
-        db=None,
         idempotency_key="write-reconcile-1",
         scope_refs=(
             ResourceScopeRef(
                 kind="workspace",
                 id="project-1",
                 version="v1",
-                location=str(root),
             ),
         ),
         resources={"workspace": service},
@@ -171,7 +167,10 @@ def test_code_patch_artifact_contract_is_registered() -> None:
     assert payload["created"] is True
 
 
-def test_isolated_runner_executes_file_write_patch(tmp_path) -> None:
+def test_isolated_runner_rehydrates_canonical_workspace_for_file_write(
+    tmp_path,
+    monkeypatch,
+) -> None:
     root = tmp_path / "project"
     root.mkdir()
     registry = _write_registry()
@@ -191,17 +190,28 @@ def test_isolated_runner_executes_file_write_patch(tmp_path) -> None:
                 ResourceScopeRef(
                     kind="workspace",
                     id="project-1",
-                    version="v1",
-                    location=str(root),
+                    version=hashlib.sha256(
+                        str(root.resolve()).encode("utf-8")
+                    ).hexdigest()[:16],
                 ),
             ),
         ),
         authorized_input={"path": "created.txt", "content": "isolated\n"},
         attempt_timeout_ms=10_000,
     )
+    metadata_path = tmp_path / "worker-metadata.db"
+    metadata_engine = create_migrated_metadata_engine(metadata_path)
+    SessionLocal = sessionmaker(bind=metadata_engine)
+    with SessionLocal() as db:
+        db.add(Project(id="project-1", name="Worker Project", workspace_root=str(root)))
+        db.commit()
+    monkeypatch.setenv("DBFOX_DATABASE_URL", f"sqlite:///{metadata_path}")
     runner = IsolatedProcessAttemptRunner(default_isolated_worker_command())
-    result = runner.run(request=request, control=_control())
+    try:
+        result = runner.run(request=request, control=_control())
 
-    assert result.status == "success"
-    assert (root / "created.txt").read_text(encoding="utf-8") == "isolated\n"
-    assert result.artifact_drafts[0].type == "dbfox.workspace.code_patch"
+        assert result.status == "success"
+        assert (root / "created.txt").read_text(encoding="utf-8") == "isolated\n"
+        assert result.artifact_drafts[0].type == "dbfox.workspace.code_patch"
+    finally:
+        metadata_engine.dispose()

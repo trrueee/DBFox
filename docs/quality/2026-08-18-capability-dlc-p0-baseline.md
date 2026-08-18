@@ -16,7 +16,7 @@ architecture proposal.
 | --- | --- | --- |
 | Agent session ownership | `AgentSession` and admission are datasource-rooted; admission rejects a different datasource. | `engine/agent/tests/test_session_repository.py` |
 | Tool composition | P1 replaces the duplicate parent/worker registrar lists with `engine.runtime_composition.build_product_tool_registry()`. Both registries freeze and expose the same names; RemoteJob remains in-process-only. | `engine/tests/test_capability_dlc_p0_baseline.py`, `engine/tests/test_builtin_registry_contract.py`, `engine/tests/test_runtime_composition.py` |
-| Execution resources | Database and Workspace are serializable `ResourceScopeRef`s; a worker attempt carries `ToolAttemptRequest`; `ToolRunContext` still has both `db_session` and `resources["database"]`. | `engine/tests/test_tool_attempt_contract.py`, `engine/tests/test_workspace_context_fragment.py` |
+| Execution resources | P0 observed a dual Database path and a Workspace `location` transport field. P2 replaces both with identity-only `ResourceScopeRef(kind, id, version)` and per-attempt `ToolRunContext.resources`; `require_database()` is a typed accessor over `resources["database"]`. | `engine/tests/test_tool_attempt_contract.py`, `engine/tests/test_runtime_composition.py`, `engine/tests/test_tool_attempt_runner.py` |
 | Context | Production contributors return bounded `ContextFragment`s with provenance. | `engine/tests/test_workspace_context_fragment.py` |
 | Memory | Memory v4 context is on by default; `DBFOX_MEMORY_V4_CONTEXT=0` selects the v3 context path. | `engine/agent/tests/test_context_memory_v4.py` |
 | Agent loop | Result artifact checks and finalization tool allow-list remain in `RunLoop`. | `engine/agent/tests/test_run_loop.py` |
@@ -33,8 +33,10 @@ tool prerequisites, Dock envelope migration, or selection.
 The former parent/worker registration difference was deliberately replaced in
 P1 by a single product composition contract: every RemoteJob tool remains
 `in_process`, so worker registry visibility does not alter its execution
-backend or model-visible tool materialization. `ToolRunContext` dual database
-access remains a P2 fact and is not changed here.
+backend or model-visible tool materialization. P2 subsequently deleted the
+P0-observed duplicate Database path and Workspace `location` transport field;
+the frozen request now carries identity only and the worker rehydrates the
+canonical Project workspace binding with a version fence.
 
 ## Verification map
 

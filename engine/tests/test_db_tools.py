@@ -169,8 +169,8 @@ def test_schema_list_queries_only_requested_cursor_page(
                     datasource_id=datasource_id,
                     session_id="session_test",
                 ),
-                db=db_session,
                 idempotency_key="schema-list-test",
+                resources={"database": db_session},
             ),
         )
     finally:
@@ -212,8 +212,8 @@ def test_schema_list_cursor_preserves_same_named_tables_across_schemas(
             datasource_id=test_datasource.id,
             session_id="session_schema_identity",
         ),
-        db=db_session,
         idempotency_key="schema-list-identity",
+        resources={"database": db_session},
     )
 
     first = SchemaListTool().run(
@@ -261,8 +261,8 @@ def test_schema_search_deduplicates_by_full_schema_identity(
                 datasource_id=test_datasource.id,
                 session_id="session_search_identity",
             ),
-            db=db_session,
             idempotency_key="schema-search-identity",
+            resources={"database": db_session},
         ),
     )
 
@@ -289,8 +289,8 @@ def test_catalog_refresh_leaves_commit_to_tool_runtime(
                 datasource_id=test_datasource.id,
                 session_id="session_catalog_refresh",
             ),
-            db=db_session,
             idempotency_key="catalog-refresh",
+            resources={"database": db_session},
         ),
     )
 
@@ -676,8 +676,8 @@ def test_data_preview_runtime_returns_actionable_safe_input_error(
             datasource_id=str(test_datasource.id),
             datasource_generation=1,
         ),
-        db=db_session,
         idempotency_key="preview-invalid-column",
+        resources={"database": db_session},
     )
 
     assert result.status == "failed"

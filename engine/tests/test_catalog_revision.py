@@ -97,9 +97,9 @@ def test_catalog_overview_freezes_execution_time_revision(
             run_id="run-revision",
             execution_id="exec-revision",
         ),
-        db=db_session,
         idempotency_key="catalog-revision-overview",
         raw_input={},
+        resources={"database": db_session},
     )
     output = CatalogOverviewTool().run(EmptyInput(), context)
     facts = CatalogOverviewTool().project_observation(
