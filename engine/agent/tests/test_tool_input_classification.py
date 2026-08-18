@@ -8,6 +8,7 @@ from engine.agent.events import LiveStreamHub
 from engine.agent.loop import RunLoop
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.turn import TurnStreamItem, TurnStreamKind, TurnTermination
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentMessage,
     AgentObservationRecord,
@@ -174,8 +175,7 @@ def test_invalid_tool_arguments_have_a_distinct_durable_classification(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="制定一个分析计划。",
         idempotency_key="tool-input-invalid",
         llm_credential_id="deterministic-fixture",
@@ -238,8 +238,7 @@ def test_control_command_domain_input_error_does_not_fail_the_run(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="把之前的结果写入计划。",
         idempotency_key="control-domain-input-invalid",
         llm_credential_id="deterministic-fixture",

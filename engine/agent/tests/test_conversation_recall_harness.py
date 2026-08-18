@@ -8,6 +8,7 @@ from engine.agent.events import LiveStreamHub
 from engine.agent.loop import RunLoop
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.turn import TurnStreamItem, TurnStreamKind, TurnTermination
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import AgentMessage, AgentObservationRecord, AgentRun, AgentSession
 from engine.tools.builtin.conversation import (
     ConversationReadTool,
@@ -171,8 +172,7 @@ def test_long_conversation_recalls_evicted_message_through_the_real_run_loop(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="本轮最早决定的发布代号是什么？",
         idempotency_key="recall-harness",
         llm_credential_id="credential",

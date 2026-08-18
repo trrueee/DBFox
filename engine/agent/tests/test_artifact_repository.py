@@ -14,6 +14,7 @@ from engine.agent.repositories.artifact import (
     ArtifactRepository,
 )
 from engine.agent.repositories.session import SessionRepository
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import AgentArtifactRecord, AgentRun, AgentSession
 from engine.tools.builtin.artifacts import (
     preview_drafts,
@@ -42,8 +43,7 @@ def _active_run(db_session, test_datasource, session_id: str):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="统计订单",
         idempotency_key=f"request-{session_id}",
         llm_credential_id="credential",

@@ -31,7 +31,8 @@ from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.json_codec import loads as json_loads
 from engine.llm.config import LlmConfigurationError, normalize_product_llm_preferences
-from engine.models import AgentRun, AgentRunItemRecord, AgentSession, DataSource
+from engine.models import AgentRun, AgentRunItemRecord, AgentSession, DataSource, Project
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.schemas.api_responses import (
     ArtifactSelectionResponse,
     ConversationDeleteResponse,
@@ -49,13 +50,29 @@ def create_conversation(
     payload: ConversationCreateRequest,
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
-    if db.get(DataSource, payload.datasource_id) is None:
+    project = db.get(Project, payload.project_id)
+    if project is None:
         raise HTTPException(
             status_code=404,
-            detail={"code": "DATASOURCE_NOT_FOUND", "message": "Datasource not found."},
+            detail={"code": "PROJECT_NOT_FOUND", "message": "Project not found."},
         )
+    datasource_id: str | None = None
+    if payload.datasource_id is not None:
+        datasource = db.get(DataSource, payload.datasource_id)
+        if datasource is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "DATASOURCE_NOT_FOUND", "message": "Datasource not found."},
+            )
+        if str(datasource.project_id) != payload.project_id:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "DATASOURCE_PROJECT_MISMATCH", "message": "Datasource does not belong to the specified Project."},
+            )
+        datasource_id = str(datasource.id)
     row = SessionRepository(db).create(
-        datasource_id=payload.datasource_id,
+        project_id=payload.project_id,
+        datasource_id=datasource_id,
         title=payload.title or "New conversation",
         context_tables=payload.context_tables,
     )
@@ -130,12 +147,36 @@ def admit_conversation_input(
             status_code=404,
             detail={"code": "CONVERSATION_NOT_FOUND", "message": "Conversation not found."},
         )
-    datasource = db.get(DataSource, aggregate.datasource_id)
-    if datasource is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "DATASOURCE_NOT_FOUND", "message": "Datasource not found."},
-        )
+
+    # Build frozen resource refs for this admission
+    resource_refs: list[ResourceScopeRef] = []
+    if aggregate.datasource_id is not None:
+        datasource = db.get(DataSource, str(aggregate.datasource_id))
+        if datasource is not None:
+            resource_refs.append(
+                ResourceScopeRef(
+                    kind="database",
+                    id=str(datasource.id),
+                    version=int(datasource.connection_generation or 0),
+                )
+            )
+            # Add workspace ref if project has workspace_root
+            if datasource.project_id is not None:
+                project = db.get(Project, str(datasource.project_id))
+                if project is not None and project.workspace_root:
+                    from engine.agent.workspace_context import resolve_workspace_scope_ref
+                    ws_ref = resolve_workspace_scope_ref(db, str(datasource.id))
+                    if ws_ref is not None:
+                        resource_refs.append(ws_ref)
+    elif aggregate.project_id is not None:
+        # Workspace-only session: add workspace ref from project
+        project = db.get(Project, str(aggregate.project_id))
+        if project is not None and project.workspace_root:
+            from engine.agent.workspace_context import resolve_workspace_scope_ref
+            ws_ref = resolve_workspace_scope_ref(db, None, project_id=str(aggregate.project_id))
+            if ws_ref is not None:
+                resource_refs.append(ws_ref)
+
     try:
         preferences = normalize_product_llm_preferences(
             llm_credential_id=payload.llm_credential_id,
@@ -144,8 +185,7 @@ def admit_conversation_input(
         )
         admission = SessionRepository(db).admit(
             session_id=conversation_id,
-            datasource_id=str(datasource.id),
-            datasource_generation=int(datasource.connection_generation or 0),
+            resource_refs=tuple(resource_refs),
             content=payload.content,
             idempotency_key=payload.idempotency_key,
             llm_credential_id=payload.llm_credential_id,

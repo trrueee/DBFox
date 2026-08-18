@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from engine.agent.conversation_recall import ConversationRecallService
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import AgentMessage, AgentSession
 from engine.tools.builtin.contracts import (
     ConversationReadInput,

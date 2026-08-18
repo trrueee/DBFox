@@ -421,12 +421,14 @@ class QueryHistorySearchDoc(Base):  # type: ignore[misc,valid-type]
 class AgentSession(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "agent_sessions"
     __table_args__ = (
+        Index("ix_agent_sessions_project", "project_id"),
         Index("ix_agent_sessions_datasource", "datasource_id"),
         Index("ix_agent_sessions_created", "created_at"),
     )
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
+    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="SET NULL"), nullable=True)
     title = Column(String, nullable=True)
     context_tables_json = Column(Text, nullable=False, default="[]")
     input_sequence = Column(Integer, nullable=False, default=0)
@@ -453,7 +455,7 @@ class AgentSession(Base):  # type: ignore[misc,valid-type]
     memory = relationship("AgentSessionMemory", back_populates="session", cascade="all, delete-orphan", uselist=False)
 
     def __repr__(self) -> str:
-        return f"<AgentSession id={self.id!r} title={self.title!r} datasource_id={self.datasource_id!r}>"
+        return f"<AgentSession id={self.id!r} title={self.title!r} project_id={self.project_id!r}>"
 
 
 class AgentMessage(Base):  # type: ignore[misc,valid-type]
@@ -537,7 +539,7 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
     input_id = Column(String, ForeignKey("agent_session_inputs.id", ondelete="RESTRICT"), nullable=True)
     session_sequence = Column(Integer, nullable=False, default=0)
     parent_run_id = Column(String, nullable=True)
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="SET NULL"), nullable=True)
     datasource_generation = Column(Integer, nullable=False, default=0)
     llm_credential_id = Column(String, nullable=True)
     api_base = Column(String, nullable=True)
@@ -658,6 +660,7 @@ class AgentSessionInput(Base):  # type: ignore[misc,valid-type]
         UniqueConstraint("session_id", "sequence", name="uq_agent_session_inputs_sequence"),
         UniqueConstraint("session_id", "idempotency_key", name="uq_agent_session_inputs_idempotency"),
         Index("ix_agent_session_inputs_status", "session_id", "status", "sequence"),
+        Index("ix_agent_session_inputs_run", "run_id"),
     )
 
     id = Column(String, primary_key=True, default=generate_uuid)
@@ -670,6 +673,7 @@ class AgentSessionInput(Base):  # type: ignore[misc,valid-type]
     delivery_mode = Column(String, nullable=False, default="queue")
     selected_artifact_ids_json = Column(Text, nullable=False, default="[]")
     workspace_context_json = Column(Text, nullable=False, default="{}")
+    resource_refs_json = Column(Text, nullable=True)
     reply_to_request_id = Column(String, nullable=True)
     status = Column(String, nullable=False, default="admitted")
     admitted_at = Column(DateTime, nullable=False, default=utcnow)

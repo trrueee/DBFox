@@ -16,6 +16,7 @@ from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.run import RunLimits
 from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
 from engine.agent.turn import ModelToolCall
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentArtifactRecord,
     AgentApproval,
@@ -57,17 +58,23 @@ def test_workspace_file_read_vertical_chain_lands_artifact_and_context(
     db_session.add(
         AgentSession(
             id="session-vertical",
+            project_id="project-vertical",
             datasource_id=str(test_datasource.id),
             title="Vertical",
         )
     )
     db_session.commit()
 
+    # Compute workspace version for the resource ref
+    ws_digest = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:16]
+
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session-vertical",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(
+            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="workspace", id="project-vertical", version=ws_digest),
+        ),
         content="read src/main.py",
         idempotency_key="vertical-file-read",
         llm_credential_id="credential",
@@ -177,8 +184,7 @@ def test_vertical_chain_handoff_after_failed_run(
     sessions = SessionRepository(db_session)
     first = sessions.admit(
         session_id="session-vertical-failed",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="首次分析失败",
         idempotency_key="vertical-failed-first",
         llm_credential_id="credential",
@@ -201,8 +207,7 @@ def test_vertical_chain_handoff_after_failed_run(
 
     second = sessions.admit(
         session_id="session-vertical-failed",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="上次失败，继续重试。",
         idempotency_key="vertical-failed-second",
         llm_credential_id="credential",
@@ -253,8 +258,7 @@ def test_vertical_chain_handoff_after_failed_tool_run(
     sessions = SessionRepository(db_session)
     first = sessions.admit(
         session_id="session-vertical-tool-failed",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="先读文件再失败",
         idempotency_key="vertical-tool-failed-first",
         llm_credential_id="credential",
@@ -344,8 +348,7 @@ def test_vertical_chain_handoff_after_failed_tool_run(
 
     second = sessions.admit(
         session_id="session-vertical-tool-failed",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="从失败工具链路继续。",
         idempotency_key="vertical-tool-failed-second",
         llm_credential_id="credential",
@@ -381,8 +384,7 @@ def test_vertical_chain_handoff_after_cancelled_run(
     sessions = SessionRepository(db_session)
     first = sessions.admit(
         session_id="session-vertical-cancel",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="首次分析取消",
         idempotency_key="vertical-cancel-first",
         llm_credential_id="credential",
@@ -402,8 +404,7 @@ def test_vertical_chain_handoff_after_cancelled_run(
 
     second = sessions.admit(
         session_id="session-vertical-cancel",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="取消后再发起重试。",
         idempotency_key="vertical-cancel-second",
         llm_credential_id="credential",
@@ -453,8 +454,7 @@ def test_vertical_chain_file_write_patch_approval_recovery(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session-vertical-write",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="更新文件",
         idempotency_key="vertical-file-write-approval",
         llm_credential_id="credential",
@@ -637,8 +637,7 @@ def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
 
     first = sessions.admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="提交远端任务",
         idempotency_key="vertical-remote-job-first",
         llm_credential_id="credential",
@@ -730,8 +729,7 @@ def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
 
     second = sessions.admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="查询远端任务并取消",
         idempotency_key="vertical-remote-job-second",
         llm_credential_id="credential",

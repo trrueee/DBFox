@@ -25,7 +25,8 @@ export type ConversationDeliveryMode = "queue" | "steer" | "cancel_and_replace";
 export interface ConversationSummary {
   id: string;
   title: string;
-  datasource_id: string;
+  project_id?: string | null;
+  datasource_id?: string | null;
   updated_at: string | null;
   selected_artifact_id?: string | null;
   last_message?: string;

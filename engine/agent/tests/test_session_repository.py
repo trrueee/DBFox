@@ -21,20 +21,23 @@ from engine.models import (
     AgentSessionInput,
     AgentTurn,
 )
+from engine.tools.runtime.attempt import ResourceScopeRef
 
 
-def _session(db_session, datasource_id: str) -> AgentSession:
-    value = AgentSession(id="session_1", datasource_id=datasource_id, title="Test")
+def _session(db_session, datasource_id: str, project_id: str | None = None) -> AgentSession:
+    value = AgentSession(id="session_1", project_id=project_id, datasource_id=datasource_id, title="Test")
     db_session.add(value)
     db_session.commit()
     return value
 
 
 def _admit(repository: SessionRepository, datasource_id: str, key: str = "request_1"):
+    resource_refs = (
+        ResourceScopeRef(kind="database", id=datasource_id, version=1),
+    ) if datasource_id else ()
     return repository.admit(
         session_id="session_1",
-        datasource_id=datasource_id,
-        datasource_generation=1,
+        resource_refs=resource_refs,
         content="统计订单数量",
         idempotency_key=key,
         llm_credential_id="credential_1",
@@ -64,13 +67,39 @@ def test_admission_is_atomic_ordered_and_idempotent(db_session, test_datasource)
 
 
 def test_admit_keeps_the_session_datasource_fence(db_session, test_datasource) -> None:
-    """P0 baseline: an AgentSession is still rooted in one datasource."""
+    """P4: a database ref outside the Session's Project is rejected."""
+
+    from engine.models import DataSource, Project
 
     datasource_id = str(test_datasource.id)
-    _session(db_session, datasource_id)
 
-    with pytest.raises(ValueError, match="Session datasource does not match admitted input"):
-        _admit(SessionRepository(db_session), "different-datasource")
+    # Create two projects
+    project_a = Project(id="proj-a", name="Project A")
+    project_b = Project(id="proj-b", name="Project B")
+    db_session.add_all([project_a, project_b])
+    db_session.commit()
+
+    # Assign datasource to project A
+    test_datasource.project_id = "proj-a"
+    db_session.commit()
+
+    # Create session under project A
+    _session(db_session, datasource_id, project_id="proj-a")
+
+    # Create a datasource under project B
+    ds_b = DataSource(
+        id="ds-b",
+        name="other",
+        db_type="sqlite",
+        database_name=":memory:",
+        project_id="proj-b",
+    )
+    db_session.add(ds_b)
+    db_session.commit()
+
+    # Admit with database ref from project B should fail
+    with pytest.raises(ValueError, match="Database ref does not belong"):
+        _admit(SessionRepository(db_session), "ds-b")
 
 
 def test_concurrent_admission_serializes_sqlite_aggregate_writes(db_session, test_datasource) -> None:
@@ -295,8 +324,9 @@ def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(
 
     steered = repository.admit(
         session_id="session_1",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(
+            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+        ),
         content="只看华东区域",
         idempotency_key="request-steer",
         llm_credential_id="credential_1",
@@ -326,8 +356,9 @@ def test_orphaned_steer_cannot_revive_a_terminal_run(
     assert repository.promote_next_input(lease=lease) == original.run_id
     steered = repository.admit(
         session_id="session_1",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(
+            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+        ),
         content="改成按地区统计",
         idempotency_key="request-orphan-steer",
         llm_credential_id="credential_1",
@@ -364,8 +395,9 @@ def test_cancel_and_replace_requests_cancellation_before_admitting_one_new_run(
 
     replacement = repository.admit(
         session_id="session_1",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(
+            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+        ),
         content="改为统计退款",
         idempotency_key="request-replacement",
         llm_credential_id="credential_1",

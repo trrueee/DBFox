@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.json_codec import byte_size
 from engine.tools.builtin.query import SqlExecuteReadonlyTool

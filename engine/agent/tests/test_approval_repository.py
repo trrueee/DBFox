@@ -9,17 +9,18 @@ from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.run import SessionLeaseConflict
 from engine.agent.tool import ToolInvocationStatus
 from engine.models import AgentApproval, AgentRun, AgentSession, AgentSessionInput, AgentToolInvocation
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import AgentObservationRecord
 from engine.runtime_composition import build_product_tool_registry
 from engine.tools.materialization import materialize_tools
 
 
 def test_approval_resolves_once_and_resumes_exact_invocation(db_session, test_datasource):
-    db_session.add(AgentSession(id="session_approval", datasource_id=str(test_datasource.id), title="Approval"))
+    db_session.add(AgentSession(id="session_approval", project_id=None, datasource_id=str(test_datasource.id), title="Approval"))
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
-        session_id="session_approval", datasource_id=str(test_datasource.id), datasource_generation=1,
+        session_id="session_approval", resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="执行查询", idempotency_key="approval", llm_credential_id="credential",
         api_base=None, model_name="model", request_payload={},
     )
@@ -61,11 +62,11 @@ def test_approval_resolves_once_and_resumes_exact_invocation(db_session, test_da
 
 
 def test_rejected_approval_becomes_a_model_visible_observation(db_session, test_datasource):
-    db_session.add(AgentSession(id="session_rejection", datasource_id=str(test_datasource.id), title="Reject"))
+    db_session.add(AgentSession(id="session_rejection", project_id=None, datasource_id=str(test_datasource.id), title="Reject"))
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
-        session_id="session_rejection", datasource_id=str(test_datasource.id), datasource_generation=1,
+        session_id="session_rejection", resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="执行查询", idempotency_key="rejection", llm_credential_id="credential",
         api_base=None, model_name="model", request_payload={},
     )
@@ -102,11 +103,11 @@ def test_rejected_approval_becomes_a_model_visible_observation(db_session, test_
 
 
 def test_exact_rejected_action_requires_new_formal_input_before_reapproval(db_session, test_datasource):
-    db_session.add(AgentSession(id="session_repeat_rejection", datasource_id=str(test_datasource.id), title="Reject"))
+    db_session.add(AgentSession(id="session_repeat_rejection", project_id=None, datasource_id=str(test_datasource.id), title="Reject"))
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
-        session_id="session_repeat_rejection", datasource_id=str(test_datasource.id), datasource_generation=1,
+        session_id="session_repeat_rejection", resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="执行查询", idempotency_key="repeat-rejection", llm_credential_id="credential",
         api_base=None, model_name="model", request_payload={},
     )
@@ -159,6 +160,7 @@ def test_exact_rejected_action_requires_new_formal_input_before_reapproval(db_se
 def test_expired_approval_is_durably_rejected_and_run_resumes(db_session, test_datasource):
     db_session.add(AgentSession(
         id="session_expired_approval",
+        project_id=None,
         datasource_id=str(test_datasource.id),
         title="Expired approval",
     ))
@@ -166,8 +168,7 @@ def test_expired_approval_is_durably_rejected_and_run_resumes(db_session, test_d
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_expired_approval",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="执行查询",
         idempotency_key="expired-approval",
         llm_credential_id="credential",

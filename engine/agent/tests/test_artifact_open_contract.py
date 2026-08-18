@@ -15,6 +15,7 @@ from engine.agent.artifact import (
 )
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.session import SessionRepository
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import AgentArtifactRecord, AgentSession
 
 
@@ -138,8 +139,7 @@ def test_repository_persists_schema_version_and_reads_unknown_soft(
     db_session.commit()
     admission = SessionRepository(db_session).admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="test",
         idempotency_key="open-artifact",
         llm_credential_id="credential",

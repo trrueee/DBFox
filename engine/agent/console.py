@@ -88,29 +88,38 @@ class ConsoleRunService:
         safe_sql = str(decision.safe_sql or "").strip()
         safety = _safety_payload(decision)
         session_id = (request.session_id or f"console_session_{uuid4().hex}").strip()
+        project_id = str(datasource.project_id) if datasource.project_id else None
         begin_agent_write(self.session)
         aggregate = self.session.get(AgentSession, session_id)
         if aggregate is None:
             self.session.add(
                 AgentSession(
                     id=session_id,
+                    project_id=project_id,
                     datasource_id=request.datasource_id,
                     title="SQL Console",
                     context_tables_json="[]",
                 )
             )
             self.session.flush()
-        elif str(aggregate.datasource_id) != request.datasource_id:
+        elif aggregate.datasource_id is not None and str(aggregate.datasource_id) != request.datasource_id:
             raise DBFoxError(
                 "Console Session belongs to a different datasource.",
                 code="CONSOLE_SESSION_DATASOURCE_MISMATCH",
             )
 
+        from engine.tools.runtime.attempt import ResourceScopeRef
+        resource_refs = (
+            ResourceScopeRef(
+                kind="database",
+                id=request.datasource_id,
+                version=int(datasource.connection_generation),
+            ),
+        )
         sessions = SessionRepository(self.session)
         admission = sessions.admit(
             session_id=session_id,
-            datasource_id=request.datasource_id,
-            datasource_generation=int(datasource.connection_generation),
+            resource_refs=resource_refs,
             content=question,
             idempotency_key=f"console:{request.execution_id or uuid4().hex}",
             llm_credential_id="sql-console",

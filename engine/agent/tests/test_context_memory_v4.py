@@ -16,6 +16,7 @@ from engine.agent.memory_v4 import (
 )
 from engine.agent.repositories.session import SessionRepository
 from engine.json_codec import canonical_dumps
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentObservationRecord,
     AgentSession,
@@ -62,8 +63,7 @@ def _seed_v4_context(
     db_session.flush()
     admission = SessionRepository(db_session).admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=generation,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=generation),),
         content="现在有哪些订单字段？",
         idempotency_key="v4-context",
         llm_credential_id="credential",

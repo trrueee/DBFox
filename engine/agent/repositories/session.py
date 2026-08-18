@@ -32,6 +32,7 @@ from engine.models import (
     AgentSessionInput,
     AgentTurn,
 )
+from engine.tools.runtime.attempt import ResourceScopeRef
 
 
 def _utcnow() -> datetime:
@@ -70,13 +71,15 @@ class SessionRepository:
     def create(
         self,
         *,
-        datasource_id: str,
+        project_id: str,
+        datasource_id: str | None = None,
         title: str,
         context_tables: list[str],
     ) -> AgentSession:
         begin_agent_write(self.session)
         now = _utcnow()
         aggregate = AgentSession(
+            project_id=project_id,
             datasource_id=datasource_id,
             title=title,
             context_tables_json=_json(context_tables),
@@ -166,8 +169,7 @@ class SessionRepository:
         self,
         *,
         session_id: str,
-        datasource_id: str,
-        datasource_generation: int,
+        resource_refs: tuple[ResourceScopeRef, ...],
         content: str,
         idempotency_key: str,
         llm_credential_id: str,
@@ -192,8 +194,19 @@ class SessionRepository:
         aggregate = self._session_for_update(session_id)
         if aggregate.deleted_at is not None:
             raise ValueError("Cannot admit input to a deleted Session")
-        if str(aggregate.datasource_id) != datasource_id:
-            raise ValueError("Session datasource does not match admitted input")
+        # Derive datasource compatibility fields from frozen resource refs
+        database_ref = next(
+            (ref for ref in resource_refs if ref.kind == "database"), None
+        )
+        datasource_id = str(database_ref.id) if database_ref else None
+        datasource_generation = int(database_ref.version or 0) if database_ref else 0
+
+        # Validate database ref belongs to session project if present
+        if datasource_id is not None and aggregate.project_id is not None:
+            from engine.models import DataSource
+            ds = self.session.get(DataSource, datasource_id)
+            if ds is None or str(ds.project_id) != str(aggregate.project_id):
+                raise ValueError("Database ref does not belong to the Session's Project")
 
         if delivery_mode is DeliveryMode.STEER:
             active_run = self.session.execute(
@@ -239,6 +252,7 @@ class SessionRepository:
             delivery_mode=delivery_mode.value,
             selected_artifact_ids_json=_json(selected_artifact_ids or []),
             workspace_context_json=_json(workspace_context or {}),
+            resource_refs_json=_json([ref.model_dump() for ref in resource_refs]),
             reply_to_request_id=reply_to_request_id,
             status=SessionInputStatus.ADMITTED.value,
             admitted_at=now,
@@ -617,6 +631,15 @@ class SessionRepository:
         selected_artifact_ids: list[str] | None,
         workspace_context: dict[str, Any] | None,
     ) -> Admission:
+        # Inherit frozen resource refs from the run's original input.
+        # A steer cannot change the active Run's resource authority.
+        original_input = self.session.get(AgentSessionInput, str(run.input_id))
+        inherited_refs_json = (
+            str(original_input.resource_refs_json)
+            if original_input is not None and original_input.resource_refs_json is not None
+            else None
+        )
+
         aggregate.input_sequence = int(aggregate.input_sequence or 0) + 1
         aggregate.message_sequence = int(aggregate.message_sequence or 0) + 1
         now = _utcnow()
@@ -645,6 +668,7 @@ class SessionRepository:
             delivery_mode=DeliveryMode.STEER.value,
             selected_artifact_ids_json=_json(selected_artifact_ids or []),
             workspace_context_json=_json(workspace_context or {}),
+            resource_refs_json=inherited_refs_json,
             status=SessionInputStatus.ADMITTED.value,
             admitted_at=now,
         )

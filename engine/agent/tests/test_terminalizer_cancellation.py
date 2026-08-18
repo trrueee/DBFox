@@ -18,6 +18,7 @@ from engine.agent.projection import conversation_snapshot
 from engine.agent.run_item import RunItemStatus
 from engine.agent.turn import TurnTermination
 from engine.agent.tool import ToolInvocationStatus
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentApproval,
     AgentQuestionRequest,
@@ -50,8 +51,7 @@ def _start_run(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="继续分析",
         idempotency_key=f"{session_id}:start",
         llm_credential_id="credential",

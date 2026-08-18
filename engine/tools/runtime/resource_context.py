@@ -32,15 +32,22 @@ _WORKSPACE_CAPABILITIES = frozenset({"filesystem_read", "filesystem_write"})
 
 def resolve_workspace_scope_ref(
     db: Session,
-    datasource_id: str,
+    datasource_id: str | None = None,
+    *,
+    project_id: str | None = None,
 ) -> ResourceScopeRef | None:
-    datasource = db.get(DataSource, datasource_id)
-    project_id = (
-        str(datasource.project_id)
-        if datasource and datasource.project_id
-        else ""
-    )
-    return _workspace_scope_ref_for_project(db, project_id)
+    if datasource_id is not None:
+        datasource = db.get(DataSource, datasource_id)
+        resolved_project = (
+            str(datasource.project_id)
+            if datasource and datasource.project_id
+            else ""
+        )
+    elif project_id is not None:
+        resolved_project = project_id
+    else:
+        return None
+    return _workspace_scope_ref_for_project(db, resolved_project)
 
 
 def _workspace_scope_ref_for_project(

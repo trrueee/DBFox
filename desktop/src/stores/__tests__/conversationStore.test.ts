@@ -45,6 +45,12 @@ vi.mock("../datasourceSelectionStore", () => ({
   },
 }));
 
+vi.mock("../workspaceStore", () => ({
+  useWorkspaceStore: {
+    getState: () => ({ activeProjectId: "project-1" }),
+  },
+}));
+
 import { useConversationStore } from "../conversationStore";
 
 const initialDetail: ConversationDetail = {
@@ -83,6 +89,7 @@ describe("conversationStore admission projection", () => {
     await useConversationStore.getState().createAndOpenConversation("分析最近订单");
 
     expect(mocks.create).toHaveBeenCalledWith({
+      project_id: "project-1",
       datasource_id: "datasource-1",
       title: "分析最近订单",
       context_tables: [],
