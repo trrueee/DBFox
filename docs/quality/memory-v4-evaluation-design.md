@@ -167,6 +167,11 @@ Provider、RunLoop、工具或 fixture，并记录 source workflow、source hash
 evaluator SHA 和 corrected evidence hash；重放不能改变 answer、trace、结果表、
 Memory evidence、provider identity 或资源指标。
 
+通过 candidate gate 后，Context 默认使用 v4：未设置
+`DBFOX_MEMORY_V4_CONTEXT` 或设置为 `1` 都选择 v4；设置为 `0` 明确回退至
+v3。v3 在默认启用后的稳定观察期内仍是 rollback 路径，不能与 default-on
+change 一并删除。
+
 ## 7. 当前真实 Provider 结果的使用方式
 
 `mimo-memory-v3-live` 与 `mimo-memory-v4-live` 是连通性 smoke，不是 cutover evidence。二者都完成且无基础设施错误；v4 得到结果等价，但单次运行 token/latency 较高且超过 Turn 限制。该结果应进入模型行为/效率诊断，不应用于修改 projection 逻辑或打开默认开关。

@@ -10,7 +10,9 @@ from engine.models import AgentRun, AgentSession, AgentSessionMemory
 def test_context_omits_memory_from_an_older_datasource_generation(
     db_session,
     test_datasource,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setattr("engine.agent.context.MEMORY_V4_CONTEXT_ENABLED", False)
     session_id = "session-memory-generation"
     db_session.add(
         AgentSession(

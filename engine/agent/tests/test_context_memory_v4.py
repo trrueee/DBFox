@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from importlib import reload
 
 import pytest
 
@@ -26,12 +25,23 @@ from engine.models import (
 )
 
 
-def test_memory_v4_context_flag_is_disabled_by_default(monkeypatch) -> None:
-    monkeypatch.delenv("DBFOX_MEMORY_V4_CONTEXT", raising=False)
+@pytest.mark.parametrize(
+    ("value", "enabled"),
+    ((None, True), ("1", True), ("0", False)),
+)
+def test_memory_v4_context_flag_defaults_on_with_explicit_v3_rollback(
+    value: str | None, enabled: bool
+) -> None:
     from engine.agent import context as context_module
 
-    reload(context_module)
-    assert context_module.MEMORY_V4_CONTEXT_ENABLED is False
+    assert context_module._memory_v4_context_enabled(value) is enabled
+
+
+def test_memory_v4_context_flag_rejects_invalid_value() -> None:
+    from engine.agent import context as context_module
+
+    with pytest.raises(ValueError, match="DBFOX_MEMORY_V4_CONTEXT"):
+        context_module._memory_v4_context_enabled("enabled")
 
 
 def _seed_v4_context(
@@ -213,6 +223,20 @@ def test_v4_context_rehydrates_bounded_prior_objects(
         "runtime_evidence_references": [],
     }
     assert snapshot.session_memory["freshness"]["resource_fence"] == "matched"
+
+
+def test_explicit_v3_rollback_does_not_inject_v4_working_state(
+    db_session,
+    test_datasource,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("engine.agent.context.MEMORY_V4_CONTEXT_ENABLED", False)
+    run_id = _seed_v4_context(db_session, test_datasource)
+
+    snapshot = ContextAssembler(db_session).build(run_id)
+
+    assert snapshot.session_memory.get("version") != 4
+    assert "SESSION_WORKING_STATE" not in snapshot.session_memory
 
 
 @pytest.mark.parametrize(
