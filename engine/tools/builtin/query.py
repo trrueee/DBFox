@@ -108,6 +108,7 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
+        required_resource_kinds=("database",),
     )
     semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SAMPLE_ROWS,))
 
@@ -171,6 +172,7 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read",),
+        required_resource_kinds=("database",),
     )
     semantics = ToolSemanticSpec(
         produces=(ToolSemanticCapability.VALIDATED_QUERY,),
@@ -256,6 +258,7 @@ class SqlExecuteReadonlyTool(BaseTool[SqlExecuteReadonlyInput, QueryResultOutput
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
+        required_resource_kinds=("database",),
     )
     semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.QUERY_RESULT,))
 

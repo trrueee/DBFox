@@ -61,7 +61,13 @@ def test_artifact_payload_registry_registers_directly_and_freezes() -> None:
         registry.register("dbfox.workspace.code_patch", 2, CodePatchPayload)
 
 
-def test_registered_extension_payload_can_be_written_without_core_changes() -> None:
+def test_registered_extension_payload_can_be_written_without_core_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from engine.agent.artifact import artifact_payload_contracts
+
+    monkeypatch.setattr(artifact_payload_contracts, "_frozen", False)
+
     class CodePatchPayload(BaseModel):
         path: str = Field(min_length=1)
         content_hash: str | None = None

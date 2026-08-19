@@ -71,9 +71,10 @@ class ToolExecutionSpec(BaseModel):
     max_output_bytes: int = Field(default=1_000_000, ge=1_024, le=16_000_000)
     backend: ToolExecutionBackend = "in_process"
     capabilities: tuple[ToolCapability, ...] = ()
+    required_resource_kinds: tuple[str, ...] = ()
 
     @model_validator(mode="after")
-    def validate_retry_contract(self) -> "ToolExecutionSpec":
+    def validate_execution_spec(self) -> "ToolExecutionSpec":
         if (
             self.retryable
             and self.recovery is not ToolRecoveryPolicy.RETRY_SAFE
@@ -87,6 +88,15 @@ class ToolExecutionSpec(BaseModel):
             )
         if len(set(self.capabilities)) != len(self.capabilities):
             raise ValueError("Tool capabilities must not contain duplicates")
+        if len(self.required_resource_kinds) > 8:
+            raise ValueError("Tool required_resource_kinds cannot exceed 8 items")
+        if len(set(self.required_resource_kinds)) != len(self.required_resource_kinds):
+            raise ValueError("Tool required_resource_kinds must not contain duplicates")
+        for kind in self.required_resource_kinds:
+            if not isinstance(kind, str) or not kind.strip():
+                raise ValueError("Resource kind must be a non-empty string")
+            if len(kind) > 64:
+                raise ValueError("Resource kind cannot exceed 64 characters")
         return self
 
 
