@@ -426,12 +426,6 @@ if __name__ == "__main__":
         action="store_true",
         help="Execute frozen provider-neutral release contracts and exit",
     )
-    parser.add_argument(
-        "--probe-dlc-loader",
-        type=str,
-        default="",
-        help="Execute dynamic DLC package loading probe on the specified directory and exit",
-    )
     args = parser.parse_args()
     if args.runtime_manifest:
         from engine.runtime_manifest import collect_runtime_manifest
@@ -446,14 +440,7 @@ if __name__ == "__main__":
             flush=True,
         )
         raise SystemExit(0)
-    if args.probe_dlc_loader:
-        from engine.runtime_manifest import collect_dlc_loader_probe
-
-        print(
-            f"DBFOX_DLC_LOADER_PROBE {dumps(collect_dlc_loader_probe(args.probe_dlc_loader))}",
-            flush=True,
-        )
-        raise SystemExit(0)
     run_engine_server(reload=args.reload)
+
 
 
