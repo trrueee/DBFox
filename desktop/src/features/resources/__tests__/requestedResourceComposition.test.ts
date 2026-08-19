@@ -1,105 +1,129 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   collectProductRequestedResources,
-  dataRequestedResourceCollector,
-  githubRequestedResourceCollector,
-  workspaceRequestedResourceCollector,
+  dataRequestedResourceContributor,
+  githubRequestedResourceContributor,
+  workspaceRequestedResourceContributor,
 } from "../requestedResourceComposition";
+import { queryClient } from "../../../lib/queryClient";
+import { projectQueryKeys } from "../../projects/useProjectState";
+import { useGithubStore } from "../../github/githubStore";
 
-describe("Requested Resource Composition", () => {
-  it("collects data resource ref when datasourceId is present", () => {
-    const refs = dataRequestedResourceCollector({
-      projectId: "proj-1",
-      datasourceId: "ds-1",
+describe("Requested Resource Composition Contributors", () => {
+  beforeEach(() => {
+    queryClient.clear();
+    useGithubStore.setState({
+      activeBindingIdByProject: {},
+      bindingsByProject: {},
+      filesByBinding: {},
+      selectedFileByBinding: {},
+      loadingByBinding: {},
+      errorByBinding: {},
     });
-    expect(refs).toEqual([{ kind: "database", id: "ds-1" }]);
   });
 
-  it("returns undefined for data collector when datasourceId is missing", () => {
-    const refs = dataRequestedResourceCollector({
+  it("data contributor returns database ref when datasourceId is present", () => {
+    const result = dataRequestedResourceContributor({
       projectId: "proj-1",
+      conversationId: "conv-1",
+      datasourceId: "ds-1",
+    });
+    expect(result.complete).toBe(true);
+    expect(result.refs).toEqual([{ kind: "database", id: "ds-1" }]);
+  });
+
+  it("data contributor returns empty refs when datasourceId is null", () => {
+    const result = dataRequestedResourceContributor({
+      projectId: "proj-1",
+      conversationId: "conv-1",
       datasourceId: null,
     });
-    expect(refs).toBeUndefined();
+    expect(result.complete).toBe(true);
+    expect(result.refs).toEqual([]);
   });
 
-  it("collects workspace resource ref when workspaceRoot is present", () => {
-    const refs = workspaceRequestedResourceCollector({
+  it("workspace contributor returns complete=false when project catalog is not cached", () => {
+    const result = workspaceRequestedResourceContributor({
       projectId: "proj-1",
-      workspaceRoot: "/path/to/project",
+      conversationId: "conv-1",
     });
-    expect(refs).toEqual([{ kind: "workspace", id: "proj-1" }]);
+    expect(result.complete).toBe(false);
   });
 
-  it("returns undefined for workspace collector when workspaceRoot is missing", () => {
-    const refs = workspaceRequestedResourceCollector({
+  it("workspace contributor returns workspace ref when project has workspace_root", () => {
+    queryClient.setQueryData(projectQueryKeys.all, [
+      { id: "proj-1", name: "Project 1", workspace_root: "/path/to/work" },
+    ]);
+    const result = workspaceRequestedResourceContributor({
       projectId: "proj-1",
-      workspaceRoot: null,
+      conversationId: "conv-1",
     });
-    expect(refs).toBeUndefined();
+    expect(result.complete).toBe(true);
+    expect(result.refs).toEqual([{ kind: "workspace", id: "proj-1" }]);
   });
 
-  it("collects github resource ref when activeGithubBindingId is present", () => {
-    const refs = githubRequestedResourceCollector({
+  it("workspace contributor returns empty refs when project explicitly has no workspace_root", () => {
+    queryClient.setQueryData(projectQueryKeys.all, [
+      { id: "proj-1", name: "Project 1", workspace_root: null },
+    ]);
+    const result = workspaceRequestedResourceContributor({
       projectId: "proj-1",
-      activeGithubBindingId: "gh-binding-1",
+      conversationId: "conv-1",
     });
-    expect(refs).toEqual([{ kind: "github.repository", id: "gh-binding-1" }]);
+    expect(result.complete).toBe(true);
+    expect(result.refs).toEqual([]);
   });
 
-  it("returns undefined for github collector when bindingId is missing", () => {
-    const refs = githubRequestedResourceCollector({
-      projectId: "proj-1",
-      activeGithubBindingId: null,
+  it("github contributor returns github.repository ref when active binding exists in store", () => {
+    useGithubStore.setState({
+      activeBindingIdByProject: { "proj-1": "gh-bind-123" },
     });
-    expect(refs).toBeUndefined();
+    const result = githubRequestedResourceContributor({
+      projectId: "proj-1",
+      conversationId: "conv-1",
+    });
+    expect(result.complete).toBe(true);
+    expect(result.refs).toEqual([{ kind: "github.repository", id: "gh-bind-123" }]);
   });
 
-  it("combines all active resources and deduplicates refs", () => {
-    const refs = collectProductRequestedResources({
+  it("github contributor returns empty refs when no active binding exists", () => {
+    const result = githubRequestedResourceContributor({
       projectId: "proj-1",
+      conversationId: "conv-1",
+    });
+    expect(result.complete).toBe(true);
+    expect(result.refs).toEqual([]);
+  });
+
+  it("collectProductRequestedResources returns complete snapshot when all contributors are proven", () => {
+    queryClient.setQueryData(projectQueryKeys.all, [
+      { id: "proj-1", name: "Project 1", workspace_root: "/path/to/work" },
+    ]);
+    useGithubStore.setState({
+      activeBindingIdByProject: { "proj-1": "gh-bind-1" },
+    });
+
+    const snapshot = collectProductRequestedResources({
+      projectId: "proj-1",
+      conversationId: "conv-1",
       datasourceId: "ds-1",
-      workspaceRoot: "/workspace",
-      activeGithubBindingId: "gh-1",
     });
-    expect(refs).toEqual([
+
+    expect(snapshot.complete).toBe(true);
+    expect(snapshot.refs).toEqual([
       { kind: "database", id: "ds-1" },
       { kind: "workspace", id: "proj-1" },
-      { kind: "github.repository", id: "gh-1" },
+      { kind: "github.repository", id: "gh-bind-1" },
     ]);
   });
 
-  it("returns undefined when workspaceRoot is undefined (unproven workspace authority)", () => {
-    const refs = collectProductRequestedResources({
+  it("collectProductRequestedResources returns complete=false when workspace catalog is unproven", () => {
+    const snapshot = collectProductRequestedResources({
       projectId: "proj-1",
+      conversationId: "conv-1",
       datasourceId: "ds-1",
-      workspaceRoot: undefined,
-      activeGithubBindingId: "gh-1",
     });
-    // Must fail safe and return undefined so server preserves legacy session authority
-    expect(refs).toBeUndefined();
-  });
-
-  it("returns Database and GitHub without Workspace when workspaceRoot is explicitly null", () => {
-    const refs = collectProductRequestedResources({
-      projectId: "proj-1",
-      datasourceId: "ds-1",
-      workspaceRoot: null,
-      activeGithubBindingId: "gh-1",
-    });
-    expect(refs).toEqual([
-      { kind: "database", id: "ds-1" },
-      { kind: "github.repository", id: "gh-1" },
-    ]);
-  });
-
-  it("returns undefined when no resources are active", () => {
-    const refs = collectProductRequestedResources({
-      projectId: "proj-1",
-      datasourceId: null,
-      workspaceRoot: null,
-      activeGithubBindingId: null,
-    });
-    expect(refs).toBeUndefined();
+    expect(snapshot.complete).toBe(false);
+    expect(snapshot.refs).toEqual([]);
   });
 });

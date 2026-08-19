@@ -1,63 +1,103 @@
 import type { RequestedResourceRef } from "../../lib/api/generated/types.gen";
+import { queryClient } from "../../lib/queryClient";
+import { projectQueryKeys } from "../projects/useProjectState";
+import type { ProjectResponse } from "../../lib/api/generated/types.gen";
+import { useGithubStore } from "../github/githubStore";
 
-export interface RequestedResourceContext {
+export interface ConversationSendResourceContext {
   projectId: string;
+  conversationId: string;
   datasourceId?: string | null;
-  workspaceRoot?: string | null;
-  githubBindingId?: string | null;
-  activeGithubBindingId?: string | null;
 }
 
-export type RequestedResourceCollector = (
-  context: RequestedResourceContext,
-) => readonly RequestedResourceRef[] | undefined;
+export interface RequestedResourceContributionResult {
+  /**
+   * Whether this capability was able to prove a complete and definite authority decision.
+   * If false, the overall snapshot cannot be proven complete -> omit requested_resources (fallback).
+   */
+  complete: boolean;
+  /**
+   * The requested resources for this capability (empty if none selected/active).
+   */
+  refs?: readonly RequestedResourceRef[];
+}
 
-export const dataRequestedResourceCollector: RequestedResourceCollector = (context) => {
-  if (!context.datasourceId) return undefined;
-  return [{ kind: "database", id: context.datasourceId }];
+export type RequestedResourceContributor = (
+  context: ConversationSendResourceContext,
+) => RequestedResourceContributionResult;
+
+export const dataRequestedResourceContributor: RequestedResourceContributor = (context) => {
+  if (!context.datasourceId) {
+    return { complete: true, refs: [] };
+  }
+  return { complete: true, refs: [{ kind: "database", id: context.datasourceId }] };
 };
 
-export const workspaceRequestedResourceCollector: RequestedResourceCollector = (context) => {
-  if (!context.workspaceRoot || !context.projectId) return undefined;
-  return [{ kind: "workspace", id: context.projectId }];
+export const workspaceRequestedResourceContributor: RequestedResourceContributor = (context) => {
+  if (!context.projectId) {
+    return { complete: true, refs: [] };
+  }
+  const projects = queryClient.getQueryData<ProjectResponse[]>(projectQueryKeys.all);
+  if (!projects) {
+    // Project state not yet cached in client: unproven complete authority
+    return { complete: false };
+  }
+  const project = projects.find((p) => p.id === context.projectId);
+  if (!project) {
+    return { complete: false };
+  }
+  const workspaceRoot = project.workspace_root?.trim();
+  if (!workspaceRoot) {
+    // Proven: project exists and explicitly has no local workspace
+    return { complete: true, refs: [] };
+  }
+  return { complete: true, refs: [{ kind: "workspace", id: context.projectId }] };
 };
 
-export const githubRequestedResourceCollector: RequestedResourceCollector = (context) => {
-  const bindingId = context.githubBindingId || context.activeGithubBindingId;
-  if (!bindingId) return undefined;
-  return [{ kind: "github.repository", id: bindingId }];
+export const githubRequestedResourceContributor: RequestedResourceContributor = (context) => {
+  if (!context.projectId) {
+    return { complete: true, refs: [] };
+  }
+  const activeBindingId = useGithubStore.getState().activeBindingIdByProject[context.projectId];
+  if (!activeBindingId) {
+    return { complete: true, refs: [] };
+  }
+  return { complete: true, refs: [{ kind: "github.repository", id: activeBindingId }] };
 };
 
-export const PRODUCT_REQUESTED_RESOURCE_COLLECTORS: readonly RequestedResourceCollector[] = [
-  dataRequestedResourceCollector,
-  workspaceRequestedResourceCollector,
-  githubRequestedResourceCollector,
+export const PRODUCT_REQUESTED_RESOURCE_CONTRIBUTORS: readonly RequestedResourceContributor[] = [
+  dataRequestedResourceContributor,
+  workspaceRequestedResourceContributor,
+  githubRequestedResourceContributor,
 ];
 
-export function collectProductRequestedResources(
-  context: RequestedResourceContext,
-  collectors: readonly RequestedResourceCollector[] = PRODUCT_REQUESTED_RESOURCE_COLLECTORS,
-): readonly RequestedResourceRef[] | undefined {
-  // If workspace authority is unproven (undefined), fail safe by omitting requested_resources
-  // so the server preserves full legacy session authority without dropping workspace tools.
-  if (context.projectId && context.workspaceRoot === undefined) {
-    return undefined;
-  }
+export interface ProductRequestedResourcesSnapshot {
+  complete: boolean;
+  refs: readonly RequestedResourceRef[];
+}
 
+export function collectProductRequestedResources(
+  context: ConversationSendResourceContext,
+  contributors: readonly RequestedResourceContributor[] = PRODUCT_REQUESTED_RESOURCE_CONTRIBUTORS,
+): ProductRequestedResourcesSnapshot {
   const refs: RequestedResourceRef[] = [];
   const seen = new Set<string>();
 
-  for (const collector of collectors) {
-    const collected = collector(context);
-    if (!collected) continue;
-    for (const ref of collected) {
-      const key = `${ref.kind}:${ref.id}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        refs.push(ref);
+  for (const contributor of contributors) {
+    const result = contributor(context);
+    if (!result.complete) {
+      return { complete: false, refs: [] };
+    }
+    if (result.refs) {
+      for (const ref of result.refs) {
+        const key = `${ref.kind}:${ref.id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          refs.push(ref);
+        }
       }
     }
   }
 
-  return refs.length > 0 ? refs : undefined;
+  return { complete: true, refs };
 }

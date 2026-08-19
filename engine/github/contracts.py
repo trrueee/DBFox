@@ -26,7 +26,7 @@ class GithubFileSnapshotArtifactPayload(BaseModel):
     repository: str = Field(min_length=1, max_length=100)
     revision: str = Field(min_length=1, max_length=64)
     relativePath: str = Field(min_length=1, max_length=1024)
-    blobSha: str | None = None
+    blobSha: str = Field(min_length=1, max_length=64)
     contentSha256: str = Field(min_length=1, max_length=64)
     sizeBytes: int = Field(ge=0)
     truncated: bool = False

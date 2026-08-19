@@ -254,6 +254,47 @@ def test_github_read_service_read_file_text_and_binary_rejection() -> None:
         service.read_file("huge_file.txt")
 
 
+def test_github_read_service_large_file_1_to_2_mib_via_raw_media() -> None:
+    large_text = ("a,b,c\n1,2,3\n" * 150_000)  # ~1.8 MB UTF-8 text
+    large_bytes = large_text.encode("utf-8")
+    assert 1_000_000 < len(large_bytes) <= MAX_FILE_BYTES
+
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/repos/octocat/Hello-World/contents/data.csv":
+            accept = request.headers.get("accept", "")
+            if "application/vnd.github.raw" in accept:
+                return httpx.Response(200, content=large_bytes)
+            # GitHub omits base64 content in standard JSON for files > 1 MB
+            return httpx.Response(
+                200,
+                json={
+                    "type": "file",
+                    "path": "data.csv",
+                    "sha": "blob_sha_large_csv",
+                    "size": len(large_bytes),
+                    "encoding": "none",
+                },
+            )
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(mock_handler)
+    service = GithubReadService(
+        owner="octocat",
+        repository="Hello-World",
+        revision="rev_large_123",
+        custom_transport=transport,
+    )
+
+    path, rev, size, sha256, content, truncated, blob_sha = service.read_file("data.csv")
+    assert path == "data.csv"
+    assert rev == "rev_large_123"
+    assert size == len(large_bytes)
+    assert sha256 == hashlib.sha256(large_bytes).hexdigest()
+    assert truncated is True
+    assert len(content) == 12_000
+    assert blob_sha == "blob_sha_large_csv"
+
+
 def test_resolve_public_repository_revision() -> None:
     def mock_handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/repos/octocat/Hello-World":

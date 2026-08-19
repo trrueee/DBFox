@@ -246,7 +246,10 @@ class GithubReadService:
         if not isinstance(data, dict) or data.get("type") != "file":
             raise GithubFileNotFoundError(f"Path is not a file: {norm_path}")
 
-        blob_sha = str(data.get("sha") or "")
+        blob_sha = str(data.get("sha") or "").strip()
+        if not blob_sha:
+            raise GithubServiceError(f"GitHub repository file missing blob SHA: {norm_path}")
+
         reported_size = int(data.get("size") or 0)
         if reported_size > MAX_FILE_BYTES:
             raise GithubFileTooLargeError(
@@ -256,13 +259,26 @@ class GithubReadService:
         encoding = str(data.get("encoding") or "")
         raw_content = str(data.get("content") or "")
 
-        if encoding == "base64":
+        if encoding == "base64" and raw_content:
             try:
                 decoded_bytes = base64.b64decode(raw_content)
             except Exception as exc:
                 raise GithubServiceError("Failed to decode file base64 content.") from exc
         else:
-            decoded_bytes = raw_content.encode("utf-8")
+            # When content is omitted in JSON (e.g. files > 1 MiB up to 2 MiB),
+            # fetch raw bytes using documented GitHub Contents raw media header
+            raw_resp = self._request(
+                "GET",
+                endpoint,
+                params={"ref": self.revision},
+                headers={"Accept": "application/vnd.github.raw"},
+            )
+            raw_content_bytes = raw_resp.content
+            if len(raw_content_bytes) > MAX_FILE_BYTES:
+                raise GithubFileTooLargeError(
+                    f"File '{norm_path}' ({len(raw_content_bytes)} bytes) exceeds maximum size limit of {MAX_FILE_BYTES} bytes."
+                )
+            decoded_bytes = raw_content_bytes
 
         actual_size = len(decoded_bytes)
         if actual_size > MAX_FILE_BYTES:
@@ -286,7 +302,7 @@ class GithubReadService:
         truncated = len(text_content) > MAX_FILE_CHARS
         bounded_content = text_content[:MAX_FILE_CHARS]
 
-        return norm_path, self.revision, size_bytes, content_sha256, bounded_content, truncated, blob_sha  # type: ignore[return-value]
+        return norm_path, self.revision, size_bytes, content_sha256, bounded_content, truncated, blob_sha
 
 
 def resolve_public_repository_revision(
