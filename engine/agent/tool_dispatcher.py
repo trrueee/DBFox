@@ -37,7 +37,7 @@ from engine.agent.turn import ModelToolCall
 from engine.agent.working_state import RunWorkingStateAssembler
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.errors import ToolInputError
-from engine.models import AgentApproval, AgentRun, AgentToolInvocation, AgentTurn
+from engine.models import AgentApproval, AgentRun, AgentSessionInput, AgentToolInvocation, AgentTurn
 from engine.policy.authority import ExecutionAuthority
 from engine.policy.gate import PolicyGate
 from engine.query_registry import QUERY_REGISTRY
@@ -77,13 +77,14 @@ _OUTPUT_CONTRACT_SUMMARY = "工具输出未通过合同校验。"
 class ToolRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    datasource_id: str
-    datasource_generation: int
+    datasource_id: str | None = None
+    datasource_generation: int = 0
     question: str
     session_id: str
     run_id: str
     execution_id: str
     execution_mode: str
+    frozen_resource_refs: tuple[ResourceScopeRef, ...] = ()
 
 
 class ToolDispatchOutcome(StrEnum):
@@ -474,7 +475,7 @@ class ToolDispatcher:
                 db,
                 self.definition,
             ).build(run)
-            request = self._tool_request(run)
+            request = self._tool_request(run, db)
             materialization = self._turn_materialization(db, invocation.turn_id)
             needs_reconciliation = (
                 invocation.recovery_policy == ToolRecoveryPolicy.RECONCILE
@@ -1003,13 +1004,27 @@ class ToolDispatcher:
             str(turn.tool_materialization_json)
         )
 
-    def _tool_request(self, run: AgentRun) -> ToolRequest:
+    def _tool_request(self, run: AgentRun, db: Session) -> ToolRequest:
+        from engine.agent.resource_refs import load_resource_refs
+
+        # Read frozen resource refs from the input
+        frozen_refs: tuple[ResourceScopeRef, ...] = ()
+        if run.input_id:
+            input_row = db.get(AgentSessionInput, str(run.input_id))
+            if input_row is not None:
+                refs = load_resource_refs(
+                    str(input_row.resource_refs_json) if input_row.resource_refs_json is not None else None
+                )
+                if refs is not None:
+                    frozen_refs = refs
+
         return ToolRequest(
-            datasource_id=str(run.datasource_id),
-            datasource_generation=int(run.datasource_generation),
+            datasource_id=str(run.datasource_id) if run.datasource_id else None,
+            datasource_generation=int(run.datasource_generation or 0),
             question=str(run.question),
             session_id=str(run.session_id),
             run_id=str(run.id),
             execution_id=str(run.execution_id or ""),
             execution_mode=self.definition.execution_mode,
+            frozen_resource_refs=frozen_refs,
         )

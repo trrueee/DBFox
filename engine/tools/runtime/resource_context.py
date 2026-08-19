@@ -103,26 +103,46 @@ def build_tool_scope_context(
     scope_refs: list[ResourceScopeRef] = []
     resources: dict[str, Any] = {}
 
+    # Check if request carries frozen input resource refs (P4+)
+    frozen_refs = tuple(getattr(request, "frozen_resource_refs", None) or ())
+
     if capabilities & _DATABASE_CAPABILITIES:
-        scope_refs.append(
-            ResourceScopeRef(
-                kind="database",
-                id=str(getattr(request, "datasource_id", "")),
-                version=int(getattr(request, "datasource_generation", 0) or 0),
+        # Prefer frozen ref; fall back to legacy request fields only if frozen_refs is empty
+        db_ref = next((r for r in frozen_refs if r.kind == "database"), None)
+        if db_ref is not None:
+            scope_refs.append(db_ref)
+        elif not frozen_refs:
+            ds_id = str(getattr(request, "datasource_id", "") or "")
+            if not ds_id:
+                raise ToolInputError("此工具需要数据库资源，但请求中没有授权的数据库。")
+            scope_refs.append(
+                ResourceScopeRef(
+                    kind="database",
+                    id=ds_id,
+                    version=int(getattr(request, "datasource_generation", 0) or 0),
+                )
             )
-        )
+        else:
+            raise ToolInputError("此工具需要数据库资源，但请求中没有授权的数据库。")
         resources["database"] = db
 
     if capabilities & _WORKSPACE_CAPABILITIES:
-        workspace_ref = resolve_workspace_scope_ref(
-            db,
-            str(getattr(request, "datasource_id", "") or ""),
-        )
-        if workspace_ref is None:
+        # Prefer frozen workspace ref; fall back to frozen database ref or legacy derivation
+        ws_ref = next((r for r in frozen_refs if r.kind == "workspace"), None)
+        if ws_ref is None:
+            db_ref = next((r for r in frozen_refs if r.kind == "database"), None)
+            ds_id = (
+                db_ref.id
+                if db_ref is not None
+                else (str(getattr(request, "datasource_id", "") or "") if not frozen_refs else "")
+            )
+            if ds_id:
+                ws_ref = resolve_workspace_scope_ref(db, datasource_id=ds_id)
+        if ws_ref is None:
             raise ToolInputError("当前项目没有已授权的本地工作目录。")
-        scope_refs.append(workspace_ref)
+        scope_refs.append(ws_ref)
         try:
-            resources["workspace"] = resolve_workspace_resource(db, workspace_ref)
+            resources["workspace"] = resolve_workspace_resource(db, ws_ref)
         except ValueError as exc:
             raise ToolInputError("当前项目工作目录不可用。") from exc
 

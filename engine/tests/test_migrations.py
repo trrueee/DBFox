@@ -18,10 +18,8 @@ from sqlalchemy.orm import sessionmaker
 
 from engine.db import Base
 from engine.migrations.sqlite_mutex import SQLITE_MIGRATION_LOCKED, sqlite_migration_mutex
-from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentMessage,
-    AgentSession,
     FoundationRuntimeState,
 )
 from engine.security.credential_lease import CredentialLeaseSaga

@@ -6,7 +6,6 @@ from typing import Any
 
 import pytest
 
-from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.agent.memory_v4 import (
     MAX_CATALOG_OBJECTS,
     MAX_PRIOR_DIGEST_OBJECTS,

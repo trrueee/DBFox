@@ -515,7 +515,7 @@ class AgentSessionMemory(Base):  # type: ignore[misc,valid-type]
 
     id = Column(String, primary_key=True, default=generate_uuid)
     session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="SET NULL"), nullable=True)
     memory_json = Column(Text, nullable=False, default="{}")
     # Shadow Memory v4 projection. ``memory_json`` keeps v3 until cutover;
     # the v4 watermark lives only inside this typed JSON envelope.

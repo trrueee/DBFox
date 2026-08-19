@@ -32,7 +32,6 @@ from engine.tools.db.preview import db_preview
 from engine.tools.db.search import MAX_SEARCH_TOKENS, _tokenize_search_query, db_search
 from engine.tools.db.sql_execution import sql_execute_readonly, sql_validate
 from engine.tools.runtime import ToolRunContext, ToolRuntime
-from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import DomainTagRule, QueryHistory, SchemaSearchDoc, SchemaTable
 from engine.environment.schema_catalog_sync import ensure_catalog
 from engine.json_codec import byte_size

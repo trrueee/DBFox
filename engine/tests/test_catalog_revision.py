@@ -18,7 +18,6 @@ from engine.environment.schema_catalog_sync import (
     bump_catalog_revision,
     ensure_catalog,
 )
-from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import DataSource, SchemaColumn, SchemaTable
 from engine.tools.builtin.catalog import CatalogOverviewTool
 from engine.tools.builtin.contracts import EmptyInput

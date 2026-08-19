@@ -24,6 +24,7 @@ from engine.agent.run_item import (
 )
 from engine.agent.session import DeliveryMode, SessionInputStatus, SessionLease
 from engine.agent.repositories.write_transaction import begin_agent_write
+from engine.agent.resource_refs import dump_resource_refs
 from engine.json_codec import canonical_dumps as _json
 from engine.models import (
     AgentMessage,
@@ -252,7 +253,7 @@ class SessionRepository:
             delivery_mode=delivery_mode.value,
             selected_artifact_ids_json=_json(selected_artifact_ids or []),
             workspace_context_json=_json(workspace_context or {}),
-            resource_refs_json=_json([ref.model_dump() for ref in resource_refs]),
+            resource_refs_json=dump_resource_refs(resource_refs),
             reply_to_request_id=reply_to_request_id,
             status=SessionInputStatus.ADMITTED.value,
             admitted_at=now,

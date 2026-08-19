@@ -551,7 +551,6 @@ def run_real_provider(
     )
     from engine.environment.schema_catalog_sync import ensure_catalog
     from engine.json_codec import load_object
-    from engine.tools.runtime.attempt import ResourceScopeRef
     from engine.models import (
         AgentArtifactRecord,
         AgentEventRecord,

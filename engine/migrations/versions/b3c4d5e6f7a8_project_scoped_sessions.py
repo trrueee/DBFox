@@ -98,6 +98,28 @@ def upgrade() -> None:
             ondelete="SET NULL",
         )
 
+    # 3.5. Make datasource_id nullable and update FK for agent_session_memories
+    with op.batch_alter_table(
+        "agent_session_memories",
+        naming_convention=_NAMING_CONVENTION,
+    ) as batch:
+        batch.alter_column(
+            "datasource_id",
+            existing_type=sa.String(),
+            nullable=True,
+        )
+        batch.drop_constraint(
+            "fk_agent_session_memories_datasource_id_data_sources",
+            type_="foreignkey",
+        )
+        batch.create_foreign_key(
+            "fk_agent_session_memories_datasource_id_data_sources",
+            "data_sources",
+            ["datasource_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+
     # 4. Add resource_refs_json to agent_session_inputs
     op.add_column(
         "agent_session_inputs",
@@ -126,6 +148,27 @@ def downgrade() -> None:
         )
         batch.create_foreign_key(
             "fk_agent_runs_datasource_id_data_sources",
+            "data_sources",
+            ["datasource_id"],
+            ["id"],
+            ondelete="CASCADE",
+        )
+        batch.alter_column(
+            "datasource_id",
+            existing_type=sa.String(),
+            nullable=False,
+        )
+
+    with op.batch_alter_table(
+        "agent_session_memories",
+        naming_convention=_NAMING_CONVENTION,
+    ) as batch:
+        batch.drop_constraint(
+            "fk_agent_session_memories_datasource_id_data_sources",
+            type_="foreignkey",
+        )
+        batch.create_foreign_key(
+            "fk_agent_session_memories_datasource_id_data_sources",
             "data_sources",
             ["datasource_id"],
             ["id"],
