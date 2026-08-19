@@ -9,7 +9,7 @@ function reset() {
     centerMode: "home",
     centerReturnMode: "home",
     pendingAsk: null,
-    dock: { open: false, activeTabId: null },
+    dock: { open: false, activeViewKey: null, activeTabId: null },
     dockTabs: [],
     settingsOpen: false,
     settingsSection: "appearance",
@@ -84,55 +84,52 @@ describe("workspaceStore — Dock shell", () => {
     useWorkspaceStore.getState().setDockActiveTab("tab-1");
     expect(useWorkspaceStore.getState().dock).toEqual({
       open: true,
+      activeViewKey: "tab-1",
       activeTabId: "tab-1",
     });
   });
 
-  it("adds, updates, and deduplicates generic Dock tabs", () => {
+  it("adds, updates, and deduplicates canonical Dock tabs by viewKey", () => {
     useWorkspaceStore.getState().openDockTab({
-      id: "table-ds-1-orders",
-      kind: "table",
+      viewKey: "dbfox.data.table:ds-1:orders",
+      viewType: "dbfox.data.table",
       title: "orders",
       closeable: true,
-      tableId: "orders",
-      datasourceId: "ds-1",
+      target: { type: "resource", kind: "database", id: "ds-1" },
     });
     useWorkspaceStore.getState().openDockTab({
-      id: "table-ds-1-orders",
-      kind: "table",
+      viewKey: "dbfox.data.table:ds-1:orders",
+      viewType: "dbfox.data.table",
       title: "orders",
       closeable: true,
-      tableId: "orders",
-      datasourceId: "ds-1",
-      datasourceDbType: "mysql",
+      target: { type: "resource", kind: "database", id: "ds-1" },
     });
 
     expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
-    expect(useWorkspaceStore.getState().dockTabs[0].datasourceDbType).toBe("mysql");
 
-    useWorkspaceStore.getState().updateDockTab("table-ds-1-orders", { title: "orders v2" });
+    useWorkspaceStore.getState().updateDockTab("dbfox.data.table:ds-1:orders", { title: "orders v2" });
     expect(useWorkspaceStore.getState().dockTabs[0].title).toBe("orders v2");
   });
 
   it("closes the active Dock tab and advances to its neighbor", () => {
     useWorkspaceStore.getState().openDockTab({
-      id: "table-ds-1-orders",
-      kind: "table",
+      viewKey: "dbfox.data.table:ds-1:orders",
+      viewType: "dbfox.data.table",
       title: "orders",
       closeable: true,
-      datasourceId: "ds-1",
+      target: { type: "resource", kind: "database", id: "ds-1" },
     });
     useWorkspaceStore.getState().openDockTab({
-      id: "table-ds-1-users",
-      kind: "table",
+      viewKey: "dbfox.data.table:ds-1:users",
+      viewType: "dbfox.data.table",
       title: "users",
       closeable: true,
-      datasourceId: "ds-1",
+      target: { type: "resource", kind: "database", id: "ds-1" },
     });
-    useWorkspaceStore.getState().closeDockTab("table-ds-1-orders");
+    useWorkspaceStore.getState().closeDockTab("dbfox.data.table:ds-1:orders");
 
     const state = useWorkspaceStore.getState();
-    expect(state.dockTabs.map((tab) => tab.id)).toEqual(["table-ds-1-users"]);
-    expect(state.dock.activeTabId).toBe("table-ds-1-users");
+    expect(state.dockTabs.map((tab) => tab.viewKey)).toEqual(["dbfox.data.table:ds-1:users"]);
+    expect(state.dock.activeViewKey).toBe("dbfox.data.table:ds-1:users");
   });
 });

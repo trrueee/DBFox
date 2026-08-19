@@ -17,7 +17,7 @@ interface WorkspaceState {
   centerMode: WorkspaceCenterMode;
   centerReturnMode: WorkspaceCenterMode;
   pendingAsk: string | null;
-  dock: { open: boolean; activeTabId: string | null };
+  dock: { open: boolean; activeViewKey: string | null; activeTabId: string | null };
   dockTabs: WorkspaceDockTab[];
   settingsOpen: boolean;
   settingsSection: AppSettingsSection;
@@ -31,14 +31,14 @@ interface WorkspaceActions {
   closeSettings: () => void;
   setSettingsSection: (section: AppSettingsSection) => void;
   setDockOpen: (open: boolean) => void;
-  setDockActiveTab: (tabId: string) => void;
-  closeDockTab: (tabId: string) => void;
+  setDockActiveTab: (viewKey: string) => void;
+  closeDockTab: (viewKey: string) => void;
   showSmartQueryHome: (initialAsk?: string) => void;
   openConversationCenter: (conversationId?: string) => void;
   openProjectCreate: () => void;
   clearPendingAsk: () => void;
   openDockTab: (tab: WorkspaceDockTab, activate?: boolean) => void;
-  updateDockTab: (tabId: string, patch: Partial<WorkspaceDockTab>) => void;
+  updateDockTab: (viewKey: string, patch: Partial<WorkspaceDockTab>) => void;
 }
 
 export type WorkspaceStore = WorkspaceState & WorkspaceActions;
@@ -50,7 +50,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   centerMode: "home",
   centerReturnMode: "home",
   pendingAsk: null,
-  dock: { open: false, activeTabId: null },
+  dock: { open: false, activeViewKey: null, activeTabId: null },
   dockTabs: [],
   settingsOpen: false,
   settingsSection: "appearance",
@@ -85,40 +85,48 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
 
   setDockOpen: (open) => set((state) => ({ dock: { ...state.dock, open } })),
 
-  setDockActiveTab: (tabId) =>
-    set(() => ({ dock: { open: true, activeTabId: tabId }, settingsOpen: false })),
+  setDockActiveTab: (viewKey) =>
+    set((state) => ({
+      dock: { ...state.dock, open: true, activeViewKey: viewKey, activeTabId: viewKey },
+      settingsOpen: false,
+    })),
 
-  closeDockTab: (tabId) => {
+  closeDockTab: (viewKey) => {
     const { dock, dockTabs } = get();
-    const nextTabs = dockTabs.filter((tab) => tab.id !== tabId);
-    const activeIndex = dockTabs.findIndex((tab) => tab.id === dock.activeTabId);
-    const nextActiveId =
-      activeIndex >= 0 && dockTabs[activeIndex]?.id === tabId
-        ? (nextTabs[Math.min(activeIndex, nextTabs.length - 1)]?.id ?? null)
-        : dock.activeTabId;
-    set({ dockTabs: nextTabs, dock: { ...dock, activeTabId: nextActiveId } });
+    const nextTabs = dockTabs.filter((tab) => tab.viewKey !== viewKey);
+    const currentActiveKey = dock.activeViewKey ?? dock.activeTabId;
+    const activeIndex = dockTabs.findIndex((tab) => tab.viewKey === currentActiveKey);
+    const nextActiveKey =
+      activeIndex >= 0 && dockTabs[activeIndex]?.viewKey === viewKey
+        ? (nextTabs[Math.min(activeIndex, nextTabs.length - 1)]?.viewKey ?? null)
+        : currentActiveKey;
+    set({
+      dockTabs: nextTabs,
+      dock: { ...dock, activeViewKey: nextActiveKey, activeTabId: nextActiveKey },
+    });
   },
-
 
   openDockTab: (tab, activate = true) =>
     set((state) => {
-      const tabExists = state.dockTabs.some((item) => item.id === tab.id);
+      const tabExists = state.dockTabs.some((item) => item.viewKey === tab.viewKey);
+      const nextActiveKey = activate ? tab.viewKey : (state.dock.activeViewKey ?? state.dock.activeTabId);
       return {
         dock: {
           open: activate ? true : state.dock.open,
-          activeTabId: activate ? tab.id : state.dock.activeTabId,
+          activeViewKey: nextActiveKey,
+          activeTabId: nextActiveKey,
         },
         dockTabs: tabExists
-          ? state.dockTabs.map((item) => (item.id === tab.id ? { ...item, ...tab } : item))
+          ? state.dockTabs.map((item) => (item.viewKey === tab.viewKey ? { ...item, ...tab } : item))
           : [...state.dockTabs, tab],
         settingsOpen: false,
       };
     }),
 
-  updateDockTab: (tabId, patch) =>
+  updateDockTab: (viewKey, patch) =>
     set((state) => ({
       dockTabs: state.dockTabs.map((tab) =>
-        tab.id === tabId ? { ...tab, ...patch } : tab
+        tab.viewKey === viewKey ? { ...tab, ...patch } : tab
       ),
     })),
 
@@ -160,5 +168,4 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     })),
 
   clearPendingAsk: () => set({ pendingAsk: null }),
-
 }));

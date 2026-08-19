@@ -9,12 +9,19 @@ import { useWorkspaceStore } from "../workspaceStore";
 function reset() {
   useWorkspaceStore.setState({
     activeProjectId: "",
-    dock: { open: false, activeTabId: null },
+    dock: { open: false, activeViewKey: null, activeTabId: null },
     dockTabs: [],
     settingsOpen: false,
   });
   useSqlConsoleStore.setState({ sqlConsoleState: {} });
-  useTableWorkspaceStore.setState({ selectedTables: [], tableSubTabs: {} });
+  useTableWorkspaceStore.setState({
+    selectedTables: [],
+    tableSubTabs: {},
+    tableStateByTabId: {},
+    multiTableStateByTabId: {},
+  });
+  useWorkspaceFileStore.setState({ fileStateByKey: {} });
+  useArtifactDockStore.setState({ artifactById: {}, conversationIdByArtifactId: {} });
 }
 
 describe("sqlConsoleStore", () => {
@@ -27,23 +34,24 @@ describe("sqlConsoleStore", () => {
     let shell = useWorkspaceStore.getState();
     expect(shell.dockTabs).toHaveLength(1);
     expect(shell.dockTabs[0]).toMatchObject({
-      id: "console-project-1",
+      viewKey: "dbfox.data.sql-console:project-1",
+      viewType: "dbfox.data.sql-console",
       stateKey: "sql-project-1",
-      datasourceId: "ds-a",
     });
     expect(useSqlConsoleStore.getState().sqlConsoleState["sql-project-1"].draftSql).toBe("SELECT 1");
+    expect(useSqlConsoleStore.getState().sqlConsoleState["sql-project-1"].datasourceId).toBe("ds-a");
 
     useSqlConsoleStore.getState().openConsole("ds-b", "postgresql", undefined);
     shell = useWorkspaceStore.getState();
     expect(shell.dockTabs).toHaveLength(1);
-    expect(shell.dockTabs[0].datasourceId).toBe("ds-b");
+    expect(useSqlConsoleStore.getState().sqlConsoleState["sql-project-1"].datasourceId).toBe("ds-b");
     expect(useSqlConsoleStore.getState().sqlConsoleState["sql-project-1"].draftSql).toBe("SELECT 1");
 
     useWorkspaceStore.getState().setActiveProject("project-2");
     useSqlConsoleStore.getState().openConsole("ds-c", "sqlite", "SELECT 2");
-    expect(useWorkspaceStore.getState().dockTabs.map((tab) => tab.id)).toEqual([
-      "console-project-1",
-      "console-project-2",
+    expect(useWorkspaceStore.getState().dockTabs.map((tab) => tab.viewKey)).toEqual([
+      "dbfox.data.sql-console:project-1",
+      "dbfox.data.sql-console:project-2",
     ]);
     expect(useSqlConsoleStore.getState().sqlConsoleState["sql-project-2"].draftSql).toBe("SELECT 2");
   });
@@ -67,15 +75,23 @@ describe("tableWorkspaceStore", () => {
     useTableWorkspaceStore.getState().openTable("users", "schema", { id: "ds-1", dbType: "mysql" });
 
     const shell = useWorkspaceStore.getState();
-    expect(shell.dockTabs.filter((tab) => tab.kind === "table")).toHaveLength(1);
-    expect(shell.dock.activeTabId).toBe("table-ds-1-users");
-    expect(useTableWorkspaceStore.getState().tableSubTabs["table-ds-1-users"]).toBe("schema");
+    expect(shell.dockTabs.filter((tab) => tab.viewType === "dbfox.data.table")).toHaveLength(1);
+    expect(shell.dock.activeViewKey).toBe("dbfox.data.table:ds-1:users");
+    expect(useTableWorkspaceStore.getState().tableSubTabs["dbfox.data.table:ds-1:users"]).toBe("schema");
+    expect(useTableWorkspaceStore.getState().tableStateByTabId["dbfox.data.table:ds-1:users"]).toEqual({
+      tableName: "users",
+      datasourceId: "ds-1",
+      datasourceDbType: "mysql",
+    });
   });
 
   it("deduplicates MultiTable by the canonical sorted object set", () => {
     useTableWorkspaceStore.getState().openMultiTable(["orders", "users", "orders"]);
     expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
-    expect(useWorkspaceStore.getState().dockTabs[0].selectedTables).toEqual(["orders", "users"]);
+    expect(useTableWorkspaceStore.getState().multiTableStateByTabId["dbfox.data.multi-table:orders|users"]).toEqual([
+      "orders",
+      "users",
+    ]);
 
     useTableWorkspaceStore.getState().openMultiTable(["users", "orders"]);
     expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
@@ -101,6 +117,7 @@ describe("artifactDockStore", () => {
     useArtifactDockStore.getState().openArtifact(artifact, "conv-1");
     useArtifactDockStore.getState().openArtifact(artifact, "conv-1");
     expect(useWorkspaceStore.getState().dockTabs).toHaveLength(2);
+    expect(useArtifactDockStore.getState().artifactById["artifact-1"]).toBe(artifact);
   });
 });
 
@@ -114,11 +131,19 @@ describe("workspaceFileStore", () => {
     const shell = useWorkspaceStore.getState();
     expect(shell.dockTabs).toHaveLength(1);
     expect(shell.dockTabs[0]).toMatchObject({
-      kind: "file",
-      id: "file-project-1-C:/demo/src/main.py",
+      viewType: "dbfox.workspace.file",
+      viewKey: "dbfox.workspace.file:project-1:C:/demo/src/main.py",
       title: "main.py",
       projectId: "project-1",
+    });
+    expect(
+      useWorkspaceFileStore.getState().fileStateByKey[
+        "dbfox.workspace.file:project-1:C:/demo/src/main.py"
+      ],
+    ).toEqual({
+      projectId: "project-1",
       filePath: "C:/demo/src/main.py",
+      fileName: "main.py",
     });
   });
 });

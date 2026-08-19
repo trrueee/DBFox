@@ -11,6 +11,7 @@ import { isPrimaryConversationArtifact } from "../conversation/workspace/convers
 import { renderArtifact, type ArtifactEnvelope } from "../workspace/artifacts/artifactRendererRegistry";
 import { WorkspaceShell } from "./WorkspaceShell";
 import type { WorkspaceDockTab } from "../../types/workspace";
+import type { DockShowToast } from "../dock/types";
 
 const SqlConsoleWorkspace = lazy(() =>
   import("../workspace/SqlConsoleWorkspace").then((module) => ({ default: module.SqlConsoleWorkspace })),
@@ -22,10 +23,7 @@ const ArtifactDock = lazy(() =>
   import("../conversation/workspace/ArtifactDock").then((module) => ({ default: module.ArtifactDock })),
 );
 
-export type DockShowToast = (
-  message: string,
-  type?: "success" | "error" | "warning" | "info",
-) => void;
+export type { DockShowToast };
 
 export function DockSuspense({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<LoadingState label="正在载入工作台" />}>{children}</Suspense>;
@@ -44,18 +42,25 @@ export function ConsoleDockContent({
   const sqlConsoleState = useSqlConsoleStore((s) => s.sqlConsoleState);
   const patchSqlConsoleState = useSqlConsoleStore((s) => s.patchSqlConsoleState);
   const appendSqlConsoleEntries = useSqlConsoleStore((s) => s.appendSqlConsoleEntries);
-  const tabId = tab.stateKey ?? `sql-${tab.datasourceId}`;
-  const state = sqlConsoleState[tabId] ?? { draftSql: defaultSql, entries: [], running: false };
+  const stateKey = tab.stateKey ?? tab.viewKey;
+  const tabState = sqlConsoleState[stateKey];
+  const state = tabState ?? {
+    datasourceId: (tab.target?.type === "resource" ? tab.target.id : "") || activeDatasourceId,
+    draftSql: defaultSql,
+    entries: [],
+    running: false,
+  };
+  const datasourceId = tabState?.datasourceId || (tab.target?.type === "resource" ? tab.target.id : "") || activeDatasourceId;
 
   return (
     <SqlConsoleWorkspace
-      tabId={tabId}
+      tabId={stateKey}
       state={state}
       onPatchState={(id, patch) => patchSqlConsoleState(id, patch)}
       onAppendEntries={(id, newEntries: ConsoleEntry[]) => appendSqlConsoleEntries(id, newEntries)}
       onToast={showToast}
       datasources={datasources}
-      activeDatasourceId={tab.datasourceId || activeDatasourceId}
+      activeDatasourceId={datasourceId}
     />
   );
 }
@@ -70,19 +75,22 @@ export function TableDockContent({
   const tableSubTabs = useTableWorkspaceStore((s) => s.tableSubTabs);
   const setTableSubTabs = useTableWorkspaceStore((s) => s.setTableSubTabs);
   const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
-  const tableId = tab.tableId ?? "";
-  const datasourceId = tab.datasourceId ?? "";
-  const subTabKey = tab.id || tableId;
+  const tableState = useTableWorkspaceStore((s) => s.tableStateByTabId[tab.stateKey ?? tab.viewKey]);
+
+  const tableId = tableState?.tableName ?? tab.title;
+  const datasourceId = tableState?.datasourceId ?? (tab.target?.type === "resource" ? tab.target.id : "");
+  const datasourceDbType = tableState?.datasourceDbType;
+  const subTabKey = tab.stateKey ?? tab.viewKey;
 
   return (
     <TableWorkspace
-      key={tab.id}
+      key={tab.viewKey}
       tableId={tableId}
       datasourceId={datasourceId}
-      datasourceDbType={tab.datasourceDbType}
+      datasourceDbType={datasourceDbType}
       currentSubTab={tableSubTabs[subTabKey] || tableSubTabs[tableId] || "preview"}
       onSubTabChange={(subTab) => setTableSubTabs((prev) => ({ ...prev, [subTabKey]: subTab }))}
-      onOpenSqlConsole={(initialSql) => openDockConsole(datasourceId, tab.datasourceDbType, initialSql)}
+      onOpenSqlConsole={(initialSql) => openDockConsole(datasourceId, datasourceDbType, initialSql)}
       onToast={showToast}
     />
   );
@@ -185,8 +193,25 @@ export function ArtifactDockContent({
   tab: WorkspaceDockTab;
   showToast: DockShowToast;
 }) {
-  const artifact = tab.artifact;
-  if (!artifact) return null;
+  const artifactId = tab.target?.type === "artifact" ? tab.target.id : "";
+  const artifact = useArtifactDockStore((s) => s.artifactById[artifactId]);
+  const conversationId = useArtifactDockStore((s) => s.conversationIdByArtifactId[artifactId]);
+
+  if (!artifact) {
+    return (
+      <WorkspaceShell
+        title={tab.title}
+        description="基于工件 ID 实时分页查询，当前表格不是历史结果快照。"
+        bodyClassName="workspace-shell__body--artifact-result"
+      >
+        <EmptyState
+          title="工件不可用"
+          description="该工件已关闭或未在当前会话中载入。"
+        />
+      </WorkspaceShell>
+    );
+  }
+
   const envelope: ArtifactEnvelope = {
     id: artifact.id,
     type: artifact.type,
@@ -203,6 +228,7 @@ export function ArtifactDockContent({
       truncated: artifact.truncated,
     },
   };
+
   return (
     <WorkspaceShell
       title={artifact.title}
@@ -213,7 +239,7 @@ export function ArtifactDockContent({
         onToast: showToast,
         mode: "workspace",
         onOpenResultTab: (value) => {
-          useArtifactDockStore.getState().openArtifact(value, tab.conversationId);
+          useArtifactDockStore.getState().openArtifact(value, conversationId);
         },
       })}
     </WorkspaceShell>

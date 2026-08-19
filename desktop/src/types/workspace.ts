@@ -1,26 +1,32 @@
-/** Core workspace types. */
+export type DockTargetRef =
+  | {
+      type: "resource";
+      kind: string;
+      id: string;
+      version?: string | number | null;
+    }
+  | {
+      type: "artifact";
+      id: string;
+    }
+  | {
+      type: "conversation";
+      id: string;
+    };
 
-import type { ResultViewArtifact } from "./agentArtifact";
-
-/** Dock view kind is an open Extension string; unknown kinds render a fallback. */
-export type WorkspaceDockTabKind = string;
-
-/** 右栏 Dock Tab（V3）：固定 Tab 不可关闭，临时 Tab 可关闭。 */
+/**
+ * 右栏 Dock Tab（P6 Canonical Envelope）：
+ * Dock Shell 仅持有 viewKey、viewType、title、closeable 及可选的 projectId/target/stateKey。
+ * 领域 payload 全部归 capability-owned store。
+ */
 export interface WorkspaceDockTab {
-  id: string;
-  kind: WorkspaceDockTabKind;
+  viewKey: string;
+  viewType: string;
   title: string;
   closeable: boolean;
-  stateKey?: string;
-  datasourceId?: string;
-  datasourceDbType?: string | null;
-  tableId?: string;
-  conversationId?: string;
-  artifact?: ResultViewArtifact;
-  selectedTables?: string[];
   projectId?: string;
-  filePath?: string;
-  fileName?: string;
+  target?: DockTargetRef;
+  stateKey?: string;
 }
 
 export type WorkspaceCenterMode = "home" | "conversation" | "project-create";

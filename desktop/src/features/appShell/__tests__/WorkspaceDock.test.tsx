@@ -2,7 +2,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
 import { useSqlConsoleStore } from "../../../stores/sqlConsoleStore";
-import { useDatasourceSelectionStore } from "../../../stores/datasourceSelectionStore";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import { WorkspaceDock } from "../WorkspaceDock";
 
@@ -48,10 +47,12 @@ vi.mock("../../conversation/workspace/ArtifactDock", () => ({
 vi.mock("../../workspace/artifacts/TableArtifactView", () => ({
   TableArtifactView: () => <div data-testid="table-artifact" />,
 }));
+
 function renderDock() {
   return render(
     <TooltipProvider>
       <WorkspaceDock
+        activeDatasourceId="ds-1"
         activeConversationId={null}
         showToast={vi.fn()}
       />
@@ -62,24 +63,29 @@ function renderDock() {
 describe("WorkspaceDock", () => {
   beforeEach(() => {
     cleanup();
-    useDatasourceSelectionStore.setState({ activeDatasourceId: "ds-1" });
     useWorkspaceStore.setState({
       centerMode: "home",
       pendingAsk: null,
-      dock: { open: true, activeTabId: "console-ds-1" },
+      dock: { open: true, activeViewKey: "dbfox.data.sql-console:ds-1", activeTabId: "dbfox.data.sql-console:ds-1" },
       dockTabs: [{
-        id: "console-ds-1",
-        kind: "console",
+        viewKey: "dbfox.data.sql-console:ds-1",
+        viewType: "dbfox.data.sql-console",
         title: "SQL 控制台",
         closeable: false,
-        datasourceId: "ds-1",
-        datasourceDbType: "mysql",
+        stateKey: "sql-ds-1",
+        target: { type: "resource", kind: "database", id: "ds-1" },
       }],
       settingsOpen: false,
     });
     useSqlConsoleStore.setState({
       sqlConsoleState: {
-        "sql-ds-1": { draftSql: "SELECT 1", entries: [], running: false },
+        "sql-ds-1": {
+          datasourceId: "ds-1",
+          datasourceDbType: "mysql",
+          draftSql: "SELECT 1",
+          entries: [],
+          running: false,
+        },
       },
     });
   });
@@ -101,7 +107,9 @@ describe("WorkspaceDock", () => {
   });
 
   it("renders a collapsed rail when the dock is closed", async () => {
-    useWorkspaceStore.setState({ dock: { open: false, activeTabId: "console-ds-1" } });
+    useWorkspaceStore.setState({
+      dock: { open: false, activeViewKey: "dbfox.data.sql-console:ds-1", activeTabId: "dbfox.data.sql-console:ds-1" },
+    });
     renderDock();
 
     expect(screen.getByRole("button", { name: "展开工作台 Dock" })).toBeTruthy();
@@ -110,21 +118,25 @@ describe("WorkspaceDock", () => {
 
   it("opens the selected rail tool instead of an unrelated fallback tab", async () => {
     useWorkspaceStore.setState({
-      dock: { open: false, activeTabId: null },
+      dock: { open: false, activeViewKey: null, activeTabId: null },
       dockTabs: [
         ...useWorkspaceStore.getState().dockTabs,
         {
-          id: "artifacts-conv-1",
-          kind: "artifacts",
+          viewKey: "core.artifacts:conv-1",
+          viewType: "core.artifacts",
           title: "工件",
           closeable: false,
-          conversationId: "conv-1",
+          target: { type: "conversation", id: "conv-1" },
         },
       ],
     });
     const view = render(
       <TooltipProvider>
-        <WorkspaceDock activeConversationId="conv-1" showToast={vi.fn()} />
+        <WorkspaceDock
+          activeDatasourceId="ds-1"
+          activeConversationId="conv-1"
+          showToast={vi.fn()}
+        />
       </TooltipProvider>,
     );
 
