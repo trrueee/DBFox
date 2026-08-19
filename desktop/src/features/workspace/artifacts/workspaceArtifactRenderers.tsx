@@ -35,7 +35,10 @@ function parseWorkspaceCodePatchPayload(
     schemaVersion: 1,
     title: "",
     relativePath: requiredString(payload.relativePath, "relativePath"),
-    oldSha256: requiredString(payload.oldSha256, "oldSha256"),
+    oldSha256:
+      typeof payload.oldSha256 === "string" && payload.oldSha256
+        ? payload.oldSha256
+        : null,
     newSha256: requiredString(payload.newSha256, "newSha256"),
     sizeBytes: typeof payload.sizeBytes === "number" ? payload.sizeBytes : 0,
     created: payload.created === true,

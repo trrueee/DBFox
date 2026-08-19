@@ -119,6 +119,49 @@ describe("artifact renderer registry", () => {
     expect(container.querySelector('[data-testid="workspace-code-patch-view"]')).toBeTruthy();
   });
 
+  it("renders newly created workspace code patches with oldSha256 = null", () => {
+    const artifact: ArtifactEnvelope = {
+      id: "artifact-code-patch-new",
+      type: "dbfox.workspace.code_patch",
+      schema_version: 1,
+      title: "src/new_service.py",
+      payload: {
+        relativePath: "src/new_service.py",
+        oldSha256: null,
+        newSha256: "c".repeat(64),
+        sizeBytes: 128,
+        created: true,
+      },
+    };
+    const { container } = render(renderArtifact(artifact, { onToast: vi.fn() }));
+    expect(container.querySelector('[data-testid="workspace-code-patch-view"]')).toBeTruthy();
+    expect(screen.queryByText(/payload 解析失败/)).toBeNull();
+  });
+
+  it("supports configuring data actions via productArtifactRenderers or createDataArtifactRenderers", () => {
+    const onOpenResultTab = vi.fn();
+    const onOpenSqlConsole = vi.fn();
+    const customRenderers = productArtifactRenderers({
+      dataActions: {
+        onOpenResultTab,
+        onOpenSqlConsole,
+      },
+    });
+    const registry = createArtifactRendererRegistry(customRenderers);
+
+    const sqlArtifact: ArtifactEnvelope = {
+      id: "sql-1",
+      type: "sql",
+      schema_version: 1,
+      title: "SELECT 1",
+      payload: { sql: "SELECT 1" },
+    };
+    const { container } = render(
+      renderArtifact(sqlArtifact, { onToast: vi.fn() }, registry),
+    );
+    expect(container.querySelector('[data-testid="sql-artifact-view"]')).toBeTruthy();
+  });
+
   it("falls back when a known renderer payload cannot be parsed", () => {
     const artifact: ArtifactEnvelope = {
       id: "artifact-bad-result",

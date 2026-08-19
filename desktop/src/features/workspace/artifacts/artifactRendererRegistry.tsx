@@ -2,7 +2,11 @@ import type { ReactNode } from "react";
 import { FileWarning } from "lucide-react";
 import { ArtifactCard } from "./ArtifactCard";
 import { coreArtifactRenderers } from "./coreArtifactRenderers";
-import { dataArtifactRenderers } from "./dataArtifactRenderers";
+import {
+  createDataArtifactRenderers,
+  dataArtifactRenderers,
+  type DataArtifactRendererActions,
+} from "./dataArtifactRenderers";
 import { workspaceArtifactRenderers } from "./workspaceArtifactRenderers";
 import type {
   ArtifactEnvelope,
@@ -14,6 +18,14 @@ export type {
   ArtifactEnvelope,
   ArtifactRendererContext,
   ArtifactRendererContribution,
+  DataArtifactRendererActions,
+};
+
+export {
+  coreArtifactRenderers,
+  createDataArtifactRenderers,
+  dataArtifactRenderers,
+  workspaceArtifactRenderers,
 };
 
 export interface ArtifactRendererRegistry {
@@ -45,10 +57,14 @@ export function createArtifactRendererRegistry(
   };
 }
 
-export function productArtifactRenderers(): readonly ArtifactRendererContribution<unknown>[] {
+export function productArtifactRenderers(options?: {
+  dataActions?: DataArtifactRendererActions;
+}): readonly ArtifactRendererContribution<unknown>[] {
   return [
     ...coreArtifactRenderers,
-    ...dataArtifactRenderers,
+    ...(options?.dataActions
+      ? createDataArtifactRenderers(options.dataActions)
+      : dataArtifactRenderers),
     ...workspaceArtifactRenderers,
   ];
 }
