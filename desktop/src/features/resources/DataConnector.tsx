@@ -202,7 +202,12 @@ function DataConnectorContent({
             contextMenu={contextMenu}
             onOpenSqlConsole={openDockConsoleForActiveDatasource}
             onOpenTable={(tableName, subTab) => openDockTableForActiveDatasource(tableName, subTab)}
-            onOpenMultiTableWorkspace={openDockMultiTable}
+            onOpenMultiTableWorkspace={(tables) => {
+              openDockMultiTable(
+                tables,
+                activeDatasource ? { id: activeDatasource.id, dbType: activeDatasource.db_type ?? null } : undefined,
+              );
+            }}
             onClose={() => setContextMenu((prev) => ({ ...prev, visible: false }))}
             onToast={toast}
             onOpenProps={() => {}}

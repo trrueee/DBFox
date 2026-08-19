@@ -4,12 +4,14 @@ import { dataDockViews } from "./dataDockViews";
 import type { DockViewContribution } from "./types";
 import { workspaceDockViews } from "./workspaceDockViews";
 
-export function createDockViewRegistry(
-  contributions: readonly DockViewContribution[],
-): {
+export interface DockViewRegistry {
   get: (viewType: string) => DockViewContribution | null;
   all: () => readonly DockViewContribution[];
-} {
+}
+
+export function createDockViewRegistry(
+  contributions: readonly DockViewContribution[],
+): DockViewRegistry {
   const map = new Map<string, DockViewContribution>();
   for (const contribution of contributions) {
     if (map.has(contribution.viewType)) {
@@ -33,12 +35,15 @@ export function productDockViews(): readonly DockViewContribution[] {
   ];
 }
 
-const DEFAULT_REGISTRY = createDockViewRegistry(productDockViews());
+export const DEFAULT_REGISTRY = createDockViewRegistry(productDockViews());
 
 export function getDockView(viewType: string): DockViewContribution | null {
   return DEFAULT_REGISTRY.get(viewType);
 }
 
-export function dockViewTitle(view: WorkspaceDockTab): string {
-  return getDockView(view.viewType)?.resolveTitle(view) ?? view.title;
+export function dockViewTitle(
+  view: WorkspaceDockTab,
+  registry: DockViewRegistry = DEFAULT_REGISTRY,
+): string {
+  return registry.get(view.viewType)?.resolveTitle(view) ?? view.title;
 }

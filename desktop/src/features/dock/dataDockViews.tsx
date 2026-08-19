@@ -64,11 +64,19 @@ export const dataDockViews: readonly DockViewContribution[] = [
     viewType: "dbfox.data.multi-table",
     icon: () => <GitMerge {...iconProps} />,
     resolveTitle: (view) => view.title,
-    isVisible: () => true,
+    isVisible: (view, context) => {
+      const stateKey = view.stateKey ?? view.viewKey;
+      const dsId =
+        (view.target?.type === "resource" && view.target.kind === "database"
+          ? view.target.id
+          : "")
+        || useTableWorkspaceStore.getState().multiTableStateByTabId[stateKey]?.datasourceId;
+      return !dsId || dsId === context.activeDatasourceId;
+    },
     render: (view, context) => {
       const stateKey = view.stateKey ?? view.viewKey;
       const tables =
-        useTableWorkspaceStore.getState().multiTableStateByTabId[stateKey] ?? [];
+        useTableWorkspaceStore.getState().multiTableStateByTabId[stateKey]?.tables ?? [];
       return (
         <DockSuspense>
           <MultiTableWorkspace

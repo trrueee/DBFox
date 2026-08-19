@@ -210,7 +210,7 @@ export default function App() {
   ]);
 
   const activeDockTab = dockTabs.find(
-    (tab) => tab.viewKey === (dock.activeViewKey ?? dock.activeTabId),
+    (tab) => tab.viewKey === dock.activeViewKey,
   );
 
   return (

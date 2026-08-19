@@ -9,7 +9,7 @@ function reset() {
     centerMode: "home",
     centerReturnMode: "home",
     pendingAsk: null,
-    dock: { open: false, activeViewKey: null, activeTabId: null },
+    dock: { open: false, activeViewKey: null },
     dockTabs: [],
     settingsOpen: false,
     settingsSection: "appearance",
@@ -85,7 +85,6 @@ describe("workspaceStore — Dock shell", () => {
     expect(useWorkspaceStore.getState().dock).toEqual({
       open: true,
       activeViewKey: "tab-1",
-      activeTabId: "tab-1",
     });
   });
 
@@ -109,6 +108,43 @@ describe("workspaceStore — Dock shell", () => {
 
     useWorkspaceStore.getState().updateDockTab("dbfox.data.table:ds-1:orders", { title: "orders v2" });
     expect(useWorkspaceStore.getState().dockTabs[0].title).toBe("orders v2");
+  });
+
+  it("disallows modifying viewKey and viewType through updateDockTab", () => {
+    useWorkspaceStore.getState().openDockTab({
+      viewKey: "dbfox.data.table:ds-1:orders",
+      viewType: "dbfox.data.table",
+      title: "orders",
+      closeable: true,
+    });
+
+    (useWorkspaceStore.getState().updateDockTab as (key: string, patch: Record<string, unknown>) => void)(
+      "dbfox.data.table:ds-1:orders",
+      { viewKey: "illegal:key", viewType: "illegal.type", title: "orders updated" },
+    );
+
+    const tab = useWorkspaceStore.getState().dockTabs[0];
+    expect(tab.viewKey).toBe("dbfox.data.table:ds-1:orders");
+    expect(tab.viewType).toBe("dbfox.data.table");
+    expect(tab.title).toBe("orders updated");
+  });
+
+  it("throws when opening the same viewKey with mismatched viewType", () => {
+    useWorkspaceStore.getState().openDockTab({
+      viewKey: "conflict:1",
+      viewType: "type.one",
+      title: "One",
+      closeable: true,
+    });
+
+    expect(() => {
+      useWorkspaceStore.getState().openDockTab({
+        viewKey: "conflict:1",
+        viewType: "type.two",
+        title: "Two",
+        closeable: true,
+      });
+    }).toThrow(/already registered with viewType "type\.one"/);
   });
 
   it("closes the active Dock tab and advances to its neighbor", () => {

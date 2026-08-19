@@ -17,7 +17,7 @@ interface WorkspaceState {
   centerMode: WorkspaceCenterMode;
   centerReturnMode: WorkspaceCenterMode;
   pendingAsk: string | null;
-  dock: { open: boolean; activeViewKey: string | null; activeTabId: string | null };
+  dock: { open: boolean; activeViewKey: string | null };
   dockTabs: WorkspaceDockTab[];
   settingsOpen: boolean;
   settingsSection: AppSettingsSection;
@@ -38,7 +38,10 @@ interface WorkspaceActions {
   openProjectCreate: () => void;
   clearPendingAsk: () => void;
   openDockTab: (tab: WorkspaceDockTab, activate?: boolean) => void;
-  updateDockTab: (viewKey: string, patch: Partial<WorkspaceDockTab>) => void;
+  updateDockTab: (
+    viewKey: string,
+    patch: Partial<Omit<WorkspaceDockTab, "viewKey" | "viewType">>,
+  ) => void;
 }
 
 export type WorkspaceStore = WorkspaceState & WorkspaceActions;
@@ -50,7 +53,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   centerMode: "home",
   centerReturnMode: "home",
   pendingAsk: null,
-  dock: { open: false, activeViewKey: null, activeTabId: null },
+  dock: { open: false, activeViewKey: null },
   dockTabs: [],
   settingsOpen: false,
   settingsSection: "appearance",
@@ -87,14 +90,14 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
 
   setDockActiveTab: (viewKey) =>
     set((state) => ({
-      dock: { ...state.dock, open: true, activeViewKey: viewKey, activeTabId: viewKey },
+      dock: { ...state.dock, open: true, activeViewKey: viewKey },
       settingsOpen: false,
     })),
 
   closeDockTab: (viewKey) => {
     const { dock, dockTabs } = get();
     const nextTabs = dockTabs.filter((tab) => tab.viewKey !== viewKey);
-    const currentActiveKey = dock.activeViewKey ?? dock.activeTabId;
+    const currentActiveKey = dock.activeViewKey;
     const activeIndex = dockTabs.findIndex((tab) => tab.viewKey === currentActiveKey);
     const nextActiveKey =
       activeIndex >= 0 && dockTabs[activeIndex]?.viewKey === viewKey
@@ -102,33 +105,44 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
         : currentActiveKey;
     set({
       dockTabs: nextTabs,
-      dock: { ...dock, activeViewKey: nextActiveKey, activeTabId: nextActiveKey },
+      dock: { ...dock, activeViewKey: nextActiveKey },
     });
   },
 
   openDockTab: (tab, activate = true) =>
     set((state) => {
-      const tabExists = state.dockTabs.some((item) => item.viewKey === tab.viewKey);
-      const nextActiveKey = activate ? tab.viewKey : (state.dock.activeViewKey ?? state.dock.activeTabId);
+      const existing = state.dockTabs.find((item) => item.viewKey === tab.viewKey);
+      if (existing && existing.viewType !== tab.viewType) {
+        throw new Error(
+          `Cannot open tab with viewKey "${tab.viewKey}" and viewType "${tab.viewType}": already registered with viewType "${existing.viewType}".`,
+        );
+      }
+      const nextActiveKey = activate ? tab.viewKey : state.dock.activeViewKey;
       return {
         dock: {
           open: activate ? true : state.dock.open,
           activeViewKey: nextActiveKey,
-          activeTabId: nextActiveKey,
         },
-        dockTabs: tabExists
-          ? state.dockTabs.map((item) => (item.viewKey === tab.viewKey ? { ...item, ...tab } : item))
+        dockTabs: existing
+          ? state.dockTabs.map((item) =>
+              item.viewKey === tab.viewKey ? { ...item, ...tab } : item,
+            )
           : [...state.dockTabs, tab],
         settingsOpen: false,
       };
     }),
 
   updateDockTab: (viewKey, patch) =>
-    set((state) => ({
-      dockTabs: state.dockTabs.map((tab) =>
-        tab.viewKey === viewKey ? { ...tab, ...patch } : tab
-      ),
-    })),
+    set((state) => {
+      const safePatch = { ...patch };
+      delete (safePatch as Record<string, unknown>).viewKey;
+      delete (safePatch as Record<string, unknown>).viewType;
+      return {
+        dockTabs: state.dockTabs.map((tab) =>
+          tab.viewKey === viewKey ? { ...tab, ...safePatch } : tab,
+        ),
+      };
+    }),
 
   showSmartQueryHome: (initialAsk) =>
     set((state) => ({

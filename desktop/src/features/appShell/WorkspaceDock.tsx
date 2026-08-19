@@ -8,23 +8,26 @@ import {
 import { EmptyState, Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import type { WorkspaceDockTab } from "../../types/workspace";
-import { dockViewTitle, getDockView } from "../dock/dockViewComposition";
+import type { DockViewRegistry } from "../dock/dockViewComposition";
+import { DEFAULT_REGISTRY, dockViewTitle } from "../dock/dockViewComposition";
 import "./WorkspaceDock.css";
 
-interface WorkspaceDockProps {
+export interface WorkspaceDockProps {
   activeDatasourceId?: string;
   activeConversationId: string | null;
   showToast: (message: string, type?: "success" | "error" | "warning" | "info") => void;
+  registry?: DockViewRegistry;
 }
 
-function dockTabIcon(tab: WorkspaceDockTab) {
-  return getDockView(tab.viewType)?.icon(tab) ?? <HelpCircle size={13} aria-hidden="true" />;
+function dockTabIcon(tab: WorkspaceDockTab, registry: DockViewRegistry) {
+  return registry.get(tab.viewType)?.icon(tab) ?? <HelpCircle size={13} aria-hidden="true" />;
 }
 
 export function WorkspaceDock({
   activeDatasourceId = "",
   activeConversationId,
   showToast,
+  registry = DEFAULT_REGISTRY,
 }: WorkspaceDockProps) {
   const dock = useWorkspaceStore((s) => s.dock);
   const dockTabs = useWorkspaceStore((s) => s.dockTabs);
@@ -35,7 +38,7 @@ export function WorkspaceDock({
 
   const visibleTabs = useMemo(() => {
     return dockTabs.filter((tab) => {
-      const contribution = getDockView(tab.viewType);
+      const contribution = registry.get(tab.viewType);
       if (!contribution) {
         // Unknown viewType fallback: visible so it can be viewed and closed
         return true;
@@ -46,9 +49,9 @@ export function WorkspaceDock({
         activeConversationId,
       });
     });
-  }, [activeConversationId, activeDatasourceId, activeProjectId, dockTabs]);
+  }, [activeConversationId, activeDatasourceId, activeProjectId, dockTabs, registry]);
 
-  const activeKey = dock.activeViewKey ?? dock.activeTabId;
+  const activeKey = dock.activeViewKey;
   const activeTab =
     visibleTabs.find((tab) => tab.viewKey === activeKey) ?? visibleTabs.at(-1) ?? null;
 
@@ -74,10 +77,10 @@ export function WorkspaceDock({
               <button
                 type="button"
                 className="workspace-dock__rail-item"
-                aria-label={dockViewTitle(tab)}
+                aria-label={dockViewTitle(tab, registry)}
                 onClick={() => setDockActiveTab(tab.viewKey)}
               >
-                {dockTabIcon(tab)}
+                {dockTabIcon(tab, registry)}
               </button>
             </TooltipTrigger>
             <TooltipContent>{tab.title}</TooltipContent>
@@ -107,7 +110,7 @@ export function WorkspaceDock({
                   onClick={() => setDockActiveTab(tab.viewKey)}
                 >
                   <span className="workspace-dock__tab-icon" aria-hidden="true">
-                    {dockTabIcon(tab)}
+                    {dockTabIcon(tab, registry)}
                   </span>
                   <span className="workspace-dock__tab-title">{tab.title}</span>
                 </button>
@@ -151,6 +154,7 @@ export function WorkspaceDock({
           activeDatasourceId,
           activeConversationId,
           showToast,
+          registry,
         )}
       </div>
     </aside>
@@ -163,17 +167,18 @@ function renderDockTab(
   activeDatasourceId: string,
   activeConversationId: string | null,
   showToast: WorkspaceDockProps["showToast"],
+  registry: DockViewRegistry,
 ) {
   if (!tab) {
     return (
       <EmptyState
         title="没有打开的标签"
-        description="从左侧数据树打开表，或从对话里发送 SQL 到控制台。"
+        description="从左侧资源或对话打开对象后，会在这里继续查看和操作。"
       />
     );
   }
 
-  const contribution = getDockView(tab.viewType);
+  const contribution = registry.get(tab.viewType);
   if (!contribution) {
     return (
       <EmptyState

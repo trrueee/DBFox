@@ -9,7 +9,7 @@ import { useWorkspaceStore } from "../workspaceStore";
 function reset() {
   useWorkspaceStore.setState({
     activeProjectId: "",
-    dock: { open: false, activeViewKey: null, activeTabId: null },
+    dock: { open: false, activeViewKey: null },
     dockTabs: [],
     settingsOpen: false,
   });
@@ -85,15 +85,17 @@ describe("tableWorkspaceStore", () => {
     });
   });
 
-  it("deduplicates MultiTable by the canonical sorted object set", () => {
-    useTableWorkspaceStore.getState().openMultiTable(["orders", "users", "orders"]);
+  it("deduplicates MultiTable by the canonical sorted object set and scopes to datasource", () => {
+    useTableWorkspaceStore.getState().openMultiTable(["orders", "users", "orders"], { id: "ds-1", dbType: "mysql" });
     expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
-    expect(useTableWorkspaceStore.getState().multiTableStateByTabId["dbfox.data.multi-table:orders|users"]).toEqual([
-      "orders",
-      "users",
-    ]);
+    expect(useWorkspaceStore.getState().dockTabs[0].viewKey).toBe("dbfox.data.multi-table:ds-1:orders|users");
+    expect(useTableWorkspaceStore.getState().multiTableStateByTabId["dbfox.data.multi-table:ds-1:orders|users"]).toEqual({
+      datasourceId: "ds-1",
+      datasourceDbType: "mysql",
+      tables: ["orders", "users"],
+    });
 
-    useTableWorkspaceStore.getState().openMultiTable(["users", "orders"]);
+    useTableWorkspaceStore.getState().openMultiTable(["users", "orders"], { id: "ds-1", dbType: "mysql" });
     expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
   });
 });

@@ -66,7 +66,7 @@ describe("WorkspaceDock", () => {
     useWorkspaceStore.setState({
       centerMode: "home",
       pendingAsk: null,
-      dock: { open: true, activeViewKey: "dbfox.data.sql-console:ds-1", activeTabId: "dbfox.data.sql-console:ds-1" },
+      dock: { open: true, activeViewKey: "dbfox.data.sql-console:ds-1" },
       dockTabs: [{
         viewKey: "dbfox.data.sql-console:ds-1",
         viewType: "dbfox.data.sql-console",
@@ -108,7 +108,7 @@ describe("WorkspaceDock", () => {
 
   it("renders a collapsed rail when the dock is closed", async () => {
     useWorkspaceStore.setState({
-      dock: { open: false, activeViewKey: "dbfox.data.sql-console:ds-1", activeTabId: "dbfox.data.sql-console:ds-1" },
+      dock: { open: false, activeViewKey: "dbfox.data.sql-console:ds-1" },
     });
     renderDock();
 
@@ -118,7 +118,7 @@ describe("WorkspaceDock", () => {
 
   it("opens the selected rail tool instead of an unrelated fallback tab", async () => {
     useWorkspaceStore.setState({
-      dock: { open: false, activeViewKey: null, activeTabId: null },
+      dock: { open: false, activeViewKey: null },
       dockTabs: [
         ...useWorkspaceStore.getState().dockTabs,
         {
