@@ -2884,7 +2884,7 @@ export type RunProjection = {
     /**
      * Datasource Id
      */
-    datasource_id: string;
+    datasource_id?: string | null;
     error?: RunError | null;
     /**
      * Id

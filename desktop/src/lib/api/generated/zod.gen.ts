@@ -1258,7 +1258,7 @@ export const zRunStatus = z.enum([
 export const zRunProjection = z.object({
     cancel_requested: z.boolean(),
     current_turn_id: z.string().nullish(),
-    datasource_id: z.string(),
+    datasource_id: z.string().nullish(),
     error: zRunError.nullish(),
     id: z.string(),
     input_id: z.string(),

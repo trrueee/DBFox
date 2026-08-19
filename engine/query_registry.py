@@ -31,7 +31,7 @@ class QueryRegistry:
         self._queries: dict[str, RunningQuery] = {}
         self._connection_factory = connection_factory or ConnectionFactory()
 
-    def reserve(self, execution_id: str, datasource_id: str) -> None:
+    def reserve(self, execution_id: str, datasource_id: str | None = None) -> None:
         """Publish an execution before it is queued on a worker thread."""
         with self._lock:
             existing = self._queries.get(execution_id)

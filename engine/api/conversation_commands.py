@@ -164,7 +164,7 @@ def admit_conversation_input(
             if datasource.project_id is not None:
                 project = db.get(Project, str(datasource.project_id))
                 if project is not None and project.workspace_root:
-                    from engine.agent.workspace_context import resolve_workspace_scope_ref
+                    from engine.tools.runtime.resource_context import resolve_workspace_scope_ref
                     ws_ref = resolve_workspace_scope_ref(db, str(datasource.id))
                     if ws_ref is not None:
                         resource_refs.append(ws_ref)
@@ -172,7 +172,7 @@ def admit_conversation_input(
         # Workspace-only session: add workspace ref from project
         project = db.get(Project, str(aggregate.project_id))
         if project is not None and project.workspace_root:
-            from engine.agent.workspace_context import resolve_workspace_scope_ref
+            from engine.tools.runtime.resource_context import resolve_workspace_scope_ref
             ws_ref = resolve_workspace_scope_ref(db, None, project_id=str(aggregate.project_id))
             if ws_ref is not None:
                 resource_refs.append(ws_ref)

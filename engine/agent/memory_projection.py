@@ -79,7 +79,7 @@ def _run_scope(
     state: CatalogWorkingState,
     scope: CatalogProjectionScope,
 ) -> tuple[CatalogWorkingState, CatalogProjectionScope]:
-    run_datasource_id = str(run.datasource_id)
+    run_datasource_id = str(run.datasource_id) if run.datasource_id else ""
     run_generation = int(run.datasource_generation or 0)
     if scope.datasource_id == "":
         return state, CatalogProjectionScope(
@@ -195,7 +195,7 @@ def project_session_memory(
         row = AgentSessionMemory(
             id=f"memory_v4_{session_id}",
             session_id=session_id,
-            datasource_id=str(session.datasource_id),
+            datasource_id=str(session.datasource_id) if session.datasource_id else None,
             memory_json="{}",
             memory_v4_json=payload_text,
         )
@@ -330,7 +330,7 @@ def rebuild_session_memory(
             row = AgentSessionMemory(
                 id=f"memory_v4_{session_id}",
                 session_id=session_id,
-                datasource_id=str(session.datasource_id),
+                datasource_id=str(session.datasource_id) if session.datasource_id else None,
                 memory_json="{}",
                 memory_v4_json=payload_text,
             )

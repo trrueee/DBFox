@@ -20,18 +20,18 @@ class RunWorkingStateAssembler:
         self.definition = definition
 
     def build(self, run: AgentRun) -> dict[str, Any]:
-        datasource = self.db.get(DataSource, run.datasource_id)
+        datasource = self.db.get(DataSource, str(run.datasource_id)) if run.datasource_id else None
         state: dict[str, Any] = {
             "thread_id": str(run.session_id),
             "session_id": str(run.session_id),
             "run_id": str(run.id),
-            "datasource_id": str(run.datasource_id),
+            "datasource_id": str(run.datasource_id) if run.datasource_id else None,
             "execution_id": str(run.execution_id or ""),
-            "datasource_generation": int(run.datasource_generation),
+            "datasource_generation": int(run.datasource_generation or 0),
             "execute": True,
             "allowed_tool_groups": list(self.definition.allowed_tool_groups),
             "environment_profile": {
-                "env": str(getattr(datasource, "env", "unknown"))
+                "env": str(getattr(datasource, "env", "unknown")) if datasource else "unknown"
             },
         }
         return state

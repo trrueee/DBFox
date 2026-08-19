@@ -218,7 +218,7 @@ class RunProjection(BaseModel):
     input_id: str
     session_sequence: int = Field(ge=1)
     user_message_id: str
-    datasource_id: str
+    datasource_id: str | None = None
     question: str
     status: RunStatus
     version: int = Field(ge=0)
@@ -261,7 +261,7 @@ def project_run(run: Any) -> dict[str, Any]:
         "status": str(run.status),
         "version": int(run.version or 0),
         "session_sequence": int(run.session_sequence),
-        "datasource_id": str(run.datasource_id),
+        "datasource_id": str(run.datasource_id) if run.datasource_id else None,
         "question": str(run.question),
         "user_message_id": str(run.user_message_id),
         "current_turn_id": str(run.current_turn_id) if run.current_turn_id else None,

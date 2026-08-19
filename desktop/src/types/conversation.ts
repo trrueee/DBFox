@@ -41,7 +41,7 @@ export interface ConversationRun {
   input_id: string;
   session_sequence: number;
   user_message_id: string;
-  datasource_id: string;
+  datasource_id?: string | null;
   question: string;
   status: AgentRunStatus;
   version: number;
@@ -211,7 +211,8 @@ export interface ConversationDetail {
   protocol_version: 2;
   id: string;
   title: string;
-  datasource_id: string;
+  project_id?: string | null;
+  datasource_id?: string | null;
   context_tables: string[];
   selected_artifact_id?: string | null;
   context_epoch?: number;
@@ -225,7 +226,8 @@ export interface ConversationDetail {
 }
 
 export interface ConversationCreateInput {
-  datasource_id: string;
+  project_id: string;
+  datasource_id?: string | null;
   title?: string;
   context_tables: string[];
 }
