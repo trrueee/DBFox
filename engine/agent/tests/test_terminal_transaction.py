@@ -23,6 +23,7 @@ from engine.agent.run_item import RunItemStatus
 from engine.agent.session import DeliveryMode
 from engine.agent.terminalizer import Terminalizer
 from engine.agent.turn import ModelTurnResult, TurnAssistantMessage, TurnTermination
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentEvidenceRecord,
     AgentMessage,
@@ -47,8 +48,7 @@ def test_successful_terminalization_yields_to_pending_steer(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_pending_steer",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="先分析订单",
         idempotency_key="pending-steer-start",
         llm_credential_id="credential",
@@ -61,8 +61,7 @@ def test_successful_terminalization_yields_to_pending_steer(
     sessions.promote_next_input(lease=lease)
     sessions.admit(
         session_id="session_pending_steer",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="只看华东",
         idempotency_key="pending-steer-input",
         llm_credential_id="credential",
@@ -103,8 +102,7 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_terminal",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="统计订单",
         idempotency_key="terminal",
         llm_credential_id="credential",
@@ -280,8 +278,7 @@ def test_terminal_transaction_rolls_back_as_a_unit(db_session, test_datasource):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_rollback",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="test",
         idempotency_key="rollback",
         llm_credential_id="credential",
@@ -337,8 +334,7 @@ def test_terminal_response_uses_the_answer_candidates_own_turn(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_cross_turn_terminal",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="保留早期答案",
         idempotency_key="cross-turn-terminal",
         llm_credential_id="credential",
@@ -444,8 +440,7 @@ def test_interrupted_model_turn_is_closed_before_run_recovery(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_turn_recovery",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="分析趋势",
         idempotency_key="turn-recovery",
         llm_credential_id="credential",

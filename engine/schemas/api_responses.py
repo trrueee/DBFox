@@ -162,7 +162,8 @@ class ConversationSummaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    datasource_id: str
+    project_id: str | None = None
+    datasource_id: str | None = None
     title: str
     selected_artifact_id: str | None = None
     updated_at: str
@@ -172,7 +173,8 @@ class ConversationSessionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    datasource_id: str
+    project_id: str | None = None
+    datasource_id: str | None = None
     title: str
     context_epoch: int
     selected_artifact_id: str | None = None

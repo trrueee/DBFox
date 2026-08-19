@@ -59,7 +59,8 @@ def conversation_snapshot(
         "protocol_version": 2,
         "session": {
             "id": str(aggregate.id),
-            "datasource_id": str(aggregate.datasource_id),
+            "project_id": str(aggregate.project_id) if aggregate.project_id else None,
+            "datasource_id": str(aggregate.datasource_id) if aggregate.datasource_id else None,
             "title": str(aggregate.title),
             "context_epoch": int(aggregate.context_epoch or 0),
             "selected_artifact_id": (

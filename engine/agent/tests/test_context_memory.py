@@ -4,6 +4,7 @@ import json
 
 from engine.agent.context import ContextAssembler
 from engine.agent.repositories.session import SessionRepository
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import AgentRun, AgentSession, AgentSessionMemory
 
 
@@ -24,8 +25,7 @@ def test_context_omits_memory_from_an_older_datasource_generation(
     db_session.commit()
     admission = SessionRepository(db_session).admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=2,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=2),),
         content="现在有多少订单？",
         idempotency_key="memory-generation",
         llm_credential_id="credential",

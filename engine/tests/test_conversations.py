@@ -11,19 +11,23 @@ from engine.agent.repositories.session import SessionRepository
 from engine.agent.run_item import dump_run_item, function_call_item
 from engine.agent.session import DeliveryMode
 from engine.main import LOCAL_SECURE_TOKEN, app
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentRun,
     AgentSession,
     AgentToolInvocation,
     DataSource,
+    Project,
 )
 
 
 @pytest.fixture(autouse=True)
 def conversation_datasource(db_session):
+    db_session.add(Project(id="proj-test", name="Test Project"))
     db_session.add(DataSource(
         id="ds-1", name="Conversation datasource", db_type="sqlite",
         host="", port=0, database_name=":memory:", username="",
+        project_id="proj-test",
     ))
     db_session.commit()
 
@@ -35,7 +39,7 @@ def _headers() -> dict[str, str]:
 def test_create_patch_list_and_delete_conversation(client):
     created = client.post(
         "/api/v1/conversations",
-        json={"datasource_id": "ds-1", "title": "Revenue", "context_tables": ["orders"]},
+        json={"project_id": "proj-test", "datasource_id": "ds-1", "title": "Revenue", "context_tables": ["orders"]},
         headers=_headers(),
     )
     assert created.status_code == 200
@@ -66,7 +70,7 @@ def test_snapshot_restores_messages_run_artifact_and_event_cursor(client, db_ses
     ))
     db_session.flush()
     admitted = SessionRepository(db_session).admit(
-        session_id="conversation-1", datasource_id="ds-1", datasource_generation=1,
+        session_id="conversation-1", resource_refs=(ResourceScopeRef(kind="database", id="ds-1", version=1),),
         content="分析订单", idempotency_key="request-0001", llm_credential_id="credential-1",
         api_base="https://api.openai.com/v1", model_name="gpt-4.1-mini",
         request_payload={"content": "分析订单"}, delivery_mode=DeliveryMode.QUEUE,
@@ -147,7 +151,7 @@ def test_snapshot_restores_messages_run_artifact_and_event_cursor(client, db_ses
 def test_unknown_datasource_is_rejected(client):
     response = client.post(
         "/api/v1/conversations",
-        json={"datasource_id": "missing", "title": "Missing"},
+        json={"project_id": "proj-test", "datasource_id": "missing", "title": "Missing"},
         headers=_headers(),
     )
     assert response.status_code == 404
@@ -156,7 +160,7 @@ def test_unknown_datasource_is_rejected(client):
 def test_admission_returns_authoritative_projection_for_immediate_ui(client, monkeypatch):
     created = client.post(
         "/api/v1/conversations",
-        json={"datasource_id": "ds-1", "title": "Streaming", "context_tables": ["orders"]},
+        json={"project_id": "proj-test", "datasource_id": "ds-1", "title": "Streaming", "context_tables": ["orders"]},
         headers=_headers(),
     )
     conversation_id = created.json()["session"]["id"]
@@ -204,7 +208,7 @@ def test_request_contract_rejects_missing_llm_credential_before_creating_a_run(
 ):
     created = client.post(
         "/api/v1/conversations",
-        json={"datasource_id": "ds-1", "title": "No credential"},
+        json={"project_id": "proj-test", "datasource_id": "ds-1", "title": "No credential"},
         headers=_headers(),
     )
     conversation_id = created.json()["session"]["id"]
@@ -245,7 +249,7 @@ def test_admission_returns_cataloged_endpoint_policy_error_without_creating_a_ru
 ):
     created = client.post(
         "/api/v1/conversations",
-        json={"datasource_id": "ds-1", "title": "Unsafe endpoint"},
+        json={"project_id": "proj-test", "datasource_id": "ds-1", "title": "Unsafe endpoint"},
         headers=_headers(),
     )
     conversation_id = created.json()["session"]["id"]
@@ -286,8 +290,7 @@ def test_snapshot_pages_messages_and_exposes_history_cursor(client, db_session):
     for sequence in (1, 2, 3):
         repository.admit(
             session_id="conversation-paged",
-            datasource_id="ds-1",
-            datasource_generation=1,
+            resource_refs=(ResourceScopeRef(kind="database", id="ds-1", version=1),),
             content=f"message {sequence}",
             idempotency_key=f"paged-{sequence}",
             llm_credential_id="credential-1",
@@ -329,8 +332,7 @@ def test_delete_active_conversation_soft_deletes_and_requests_cancel(
     db_session.flush()
     admitted = SessionRepository(db_session).admit(
         session_id="conversation-delete-active",
-        datasource_id="ds-1",
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id="ds-1", version=1),),
         content="分析订单",
         idempotency_key="delete-active",
         llm_credential_id="credential",

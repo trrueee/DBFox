@@ -590,6 +590,17 @@ class ContextAssembler:
         return fragments
 
     def _resource_refs_for_run(self, run: AgentRun) -> tuple[ResourceScopeRef, ...]:
+        from engine.agent.resource_refs import load_resource_refs
+
+        # Primary: read frozen resource refs from the input
+        if run.input_id:
+            input_row = self.session.get(AgentSessionInput, str(run.input_id))
+            if input_row is not None:
+                refs = load_resource_refs(str(input_row.resource_refs_json) if input_row.resource_refs_json is not None else None)
+                if refs is not None:
+                    return refs
+
+        # Legacy fallback: derive from run.datasource_id (pre-P4 inputs)
         resource_refs: list[ResourceScopeRef] = []
         if run.datasource_id:
             resource_refs.append(

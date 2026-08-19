@@ -10,7 +10,10 @@ from engine.models import DataSource, Project
 from engine.tools.runtime import ToolRegistry, ToolRuntime
 from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.tools.builtin.registry import register_workspace_extension
-from engine.tools.runtime.resource_context import build_tool_scope_context
+from engine.tools.runtime.resource_context import (
+    build_tool_scope_context,
+    resolve_workspace_scope_ref,
+)
 from engine.workspace.read_service import WorkspaceReadService
 
 
@@ -163,3 +166,65 @@ def test_scope_context_rejects_project_without_workspace_root(db_session) -> Non
     )()
     with pytest.raises(ToolInputError, match="工作目录"):
         build_tool_scope_context(db_session, request, tool)
+
+
+def test_scope_context_uses_frozen_resource_refs_without_datasource_id(
+    db_session,
+    tmp_path,
+) -> None:
+    project = Project(
+        id="project-frozen-ws",
+        name="Frozen WS Project",
+        workspace_root=str(tmp_path),
+    )
+    db_session.add(project)
+    db_session.commit()
+
+    ws_ref = resolve_workspace_scope_ref(db_session, project_id=project.id)
+    assert ws_ref is not None
+    registry = ToolRegistry()
+    register_workspace_extension(registry)
+    tool = registry.require("file_read")
+
+    # Request has NO datasource_id or datasource_generation, but has frozen_resource_refs
+    request = type(
+        "Request",
+        (),
+        {
+            "datasource_id": None,
+            "datasource_generation": 0,
+            "frozen_resource_refs": (ws_ref,),
+        },
+    )()
+    scope_refs, resources = build_tool_scope_context(db_session, request, tool)
+
+    assert scope_refs == (ws_ref,)
+    assert resources["workspace"].root == tmp_path.resolve()
+
+
+def test_scope_context_rejects_database_tool_when_frozen_refs_has_no_database(
+    db_session,
+    tmp_path,
+) -> None:
+    ws_ref = ResourceScopeRef(
+        kind="workspace",
+        id="project-ws-only",
+        version="v1",
+    )
+    from engine.tools.builtin.catalog import SchemaListTool
+
+    tool = SchemaListTool()
+
+    # Request carries frozen_resource_refs with workspace only, NO database ref
+    request = type(
+        "Request",
+        (),
+        {
+            "datasource_id": "legacy-ds-id",
+            "datasource_generation": 1,
+            "frozen_resource_refs": (ws_ref,),
+        },
+    )()
+    with pytest.raises(ToolInputError, match="没有授权的数据库"):
+        build_tool_scope_context(db_session, request, tool)
+

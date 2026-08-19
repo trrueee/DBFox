@@ -132,9 +132,12 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
 
   createAndOpenConversation: async (question) => {
     requireConversationLlmPayload();
-    const datasourceId = useDatasourceSelectionStore.getState().activeDatasourceId;
-    if (!datasourceId) throw new Error("Please select a datasource first.");
+    const { useWorkspaceStore } = await import("../stores/workspaceStore");
+    const projectId = useWorkspaceStore.getState().activeProjectId;
+    if (!projectId) throw new Error("Please select a project first.");
+    const datasourceId = useDatasourceSelectionStore.getState().activeDatasourceId || undefined;
     const detail = await createConversation({
+      project_id: projectId,
       datasource_id: datasourceId,
       title: question.slice(0, 80),
       context_tables: [],
@@ -142,6 +145,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     const summary: ConversationSummary = {
       id: detail.id,
       title: detail.title,
+      project_id: detail.project_id ?? projectId,
       datasource_id: detail.datasource_id,
       updated_at: new Date().toISOString(),
     };

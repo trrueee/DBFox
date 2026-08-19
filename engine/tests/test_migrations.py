@@ -20,7 +20,6 @@ from engine.db import Base
 from engine.migrations.sqlite_mutex import SQLITE_MIGRATION_LOCKED, sqlite_migration_mutex
 from engine.models import (
     AgentMessage,
-    AgentSession,
     FoundationRuntimeState,
 )
 from engine.security.credential_lease import CredentialLeaseSaga
@@ -31,7 +30,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "a2b3c4d5e6f7"
+FOUNDATION_HEAD_REVISION = "b3c4d5e6f7a8"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -385,11 +384,19 @@ def test_agent_message_recall_migration_backfills_and_downgrade_keeps_transcript
                 """
             )
         )
-        session.add(
-            AgentSession(
-                id="recall-session",
-                datasource_id="recall-datasource",
-                title="Recall",
+        session.execute(
+            text(
+                """
+                INSERT INTO agent_sessions (
+                    id, datasource_id, title, context_tables_json,
+                    input_sequence, event_sequence, event_floor_sequence,
+                    lease_token, context_epoch, message_sequence,
+                    created_at, updated_at
+                ) VALUES (
+                    'recall-session', 'recall-datasource', 'Recall', '[]',
+                    0, 0, 0, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
             )
         )
         session.add(

@@ -12,6 +12,7 @@ from engine.agent.repositories.session import SessionRepository
 from engine.agent.turn import TurnStreamItem, TurnStreamKind, TurnTermination
 from engine.models import AgentMessage, AgentRun, AgentSession, AgentToolInvocation
 from engine.tools.runtime import ToolRegistry
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.tools.runtime.base import (
     BaseTool,
     ToolExecutionSpec,
@@ -99,6 +100,7 @@ def _admit(db_session, test_datasource, case_id: str):
     db_session.add(
         AgentSession(
             id=session_id,
+            project_id=None,
             datasource_id=str(test_datasource.id),
             title=case_id,
         )
@@ -107,8 +109,7 @@ def _admit(db_session, test_datasource, case_id: str):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content=f"fault scenario {case_id}",
         idempotency_key=case_id,
         llm_credential_id="deterministic-fixture",

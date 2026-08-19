@@ -16,6 +16,7 @@ from engine.agent.turn import TurnStreamError, TurnStreamItem, TurnStreamKind, T
 from engine.agent.tests.harness.test_agentbench_faults import _NoProgressTool
 from engine.environment.schema_catalog_sync import ensure_catalog
 from engine.json_codec import loads
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentMessage,
     AgentRun,
@@ -263,8 +264,7 @@ def _execute_run(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        datasource_id=datasource_id,
-        datasource_generation=generation,
+        resource_refs=(ResourceScopeRef(kind="database", id=datasource_id, version=generation),),
         content=content,
         idempotency_key=idempotency_key,
         llm_credential_id="deterministic-fixture",
@@ -290,7 +290,7 @@ def _execute_run(
 
 def _new_session(db_session, datasource_id: str, case_id: str) -> str:
     session_id = f"memory-v4-{case_id}"
-    db_session.add(AgentSession(id=session_id, datasource_id=datasource_id, title=case_id))
+    db_session.add(AgentSession(id=session_id, project_id=None, datasource_id=datasource_id, title=case_id))
     db_session.commit()
     return session_id
 

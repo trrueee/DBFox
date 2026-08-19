@@ -9,6 +9,7 @@ from engine.agent.context import ContextAssembler
 from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.run import SessionLeaseConflict
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentMessage,
     AgentQuestionRequest,
@@ -67,8 +68,7 @@ def test_question_persists_user_response_and_resumes_original_run_once(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_question",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="统计收入",
         idempotency_key="question-start",
         llm_credential_id="credential",
@@ -167,17 +167,15 @@ def test_question_persists_user_response_and_resumes_original_run_once(
 
 
 def test_expired_question_terminalizes_the_waiting_run(db_session, test_datasource) -> None:
-    db_session.add(AgentSession(
-        id="session_expired_question",
-        datasource_id=str(test_datasource.id),
+    db_session.add(AgentSession(id="session_expired_question", project_id=None,
+            datasource_id=str(test_datasource.id),
         title="Expired question",
     ))
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_expired_question",
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="统计收入",
         idempotency_key="expired-question",
         llm_credential_id="credential",

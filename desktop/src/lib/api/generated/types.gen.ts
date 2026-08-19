@@ -653,7 +653,11 @@ export type ConversationCreateRequest = {
     /**
      * Datasource Id
      */
-    datasource_id: string;
+    datasource_id?: string | null;
+    /**
+     * Project Id
+     */
+    project_id: string;
     /**
      * Title
      */
@@ -805,11 +809,15 @@ export type ConversationSessionResponse = {
     /**
      * Datasource Id
      */
-    datasource_id: string;
+    datasource_id?: string | null;
     /**
      * Id
      */
     id: string;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
     /**
      * Selected Artifact Id
      */
@@ -851,11 +859,15 @@ export type ConversationSummaryResponse = {
     /**
      * Datasource Id
      */
-    datasource_id: string;
+    datasource_id?: string | null;
     /**
      * Id
      */
     id: string;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
     /**
      * Selected Artifact Id
      */

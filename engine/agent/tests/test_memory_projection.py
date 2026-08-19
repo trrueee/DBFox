@@ -19,6 +19,7 @@ from engine.agent.repositories.session import SessionRepository
 from engine.agent.prompt import PromptAssembler
 from engine.agent.turn import TurnStreamItem, TurnStreamKind, TurnTermination
 from engine.json_codec import dumps
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentObservationRecord,
     AgentRun,
@@ -268,8 +269,7 @@ def test_projection_contract_error_does_not_block_run_failure(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session.id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="test",
         idempotency_key="memory-v4-fail",
         llm_credential_id="credential",
@@ -315,8 +315,7 @@ def test_cancelled_run_still_folds_succeeded_observations(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session.id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="test",
         idempotency_key="memory-v4-cancel",
         llm_credential_id="credential",
@@ -489,8 +488,7 @@ def test_unsuccessful_run_projection_is_consumed_by_the_next_run_context(
     session.message_sequence = 2
     admitted = SessionRepository(db_session).admit(
         session_id=session.id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="继续使用已经确认的订单表。",
         idempotency_key=f"v4-{terminal_status}-to-context-2",
         llm_credential_id="credential",
@@ -562,8 +560,7 @@ def test_generation_transition_removes_projected_objects_from_later_context(
     session.message_sequence = 4
     admitted = SessionRepository(db_session).admit(
         session_id=session.id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=2,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=2),),
         content="数据库连接已切换，请继续。",
         idempotency_key="v4-generation-context-2",
         llm_credential_id="credential",
@@ -665,8 +662,7 @@ def test_scripted_continuation_consumes_memory_without_rediscovery(
     session.message_sequence = 2
     admitted = SessionRepository(db_session).admit(
         session_id=session.id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="继续使用 orders 表完成分析。",
         idempotency_key="v4-scripted-continuation-2",
         llm_credential_id="credential",

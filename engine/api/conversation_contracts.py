@@ -6,7 +6,8 @@ from engine.agent.session import DeliveryMode
 
 
 class ConversationCreateRequest(BaseModel):
-    datasource_id: str
+    project_id: str
+    datasource_id: str | None = None
     title: str | None = None
     context_tables: list[str] = Field(default_factory=list)
 

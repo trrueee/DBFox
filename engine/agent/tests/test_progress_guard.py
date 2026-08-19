@@ -3,6 +3,7 @@ import json
 from engine.agent.progress_guard import ProgressGuard, observation_evidence_signatures
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
+from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import AgentArtifactRecord, AgentRun, AgentSession
 from engine.tools.builtin.query import SqlValidateTool
 
@@ -13,8 +14,7 @@ def _admit(db_session, test_datasource, session_id: str):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="分析数据",
         idempotency_key=f"{session_id}:input",
         llm_credential_id="credential",

@@ -302,7 +302,8 @@ export const zConsoleExecuteResponse = z.object({
  */
 export const zConversationCreateRequest = z.object({
     context_tables: z.array(z.string()).optional(),
-    datasource_id: z.string(),
+    datasource_id: z.string().nullish(),
+    project_id: z.string(),
     title: z.string().nullish()
 });
 
@@ -328,8 +329,9 @@ export const zConversationPatchRequest = z.object({
 export const zConversationSessionResponse = z.object({
     context_epoch: z.int(),
     context_tables: z.array(z.string()),
-    datasource_id: z.string(),
+    datasource_id: z.string().nullish(),
     id: z.string(),
+    project_id: z.string().nullish(),
     selected_artifact_id: z.string().nullish(),
     title: z.string()
 });
@@ -338,8 +340,9 @@ export const zConversationSessionResponse = z.object({
  * ConversationSummaryResponse
  */
 export const zConversationSummaryResponse = z.object({
-    datasource_id: z.string(),
+    datasource_id: z.string().nullish(),
     id: z.string(),
+    project_id: z.string().nullish(),
     selected_artifact_id: z.string().nullish(),
     title: z.string(),
     updated_at: z.string()

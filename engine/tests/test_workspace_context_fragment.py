@@ -96,8 +96,7 @@ def test_workspace_contributor_returns_bounded_file_snapshot_fragments(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
+        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
         content="read src/main.py",
         idempotency_key="workspace-context",
         llm_credential_id="credential",

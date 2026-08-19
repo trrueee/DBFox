@@ -89,10 +89,14 @@ export function ProjectResourceSidebar({
 
   const conversationsForProject = useMemo(() => {
     if (!activeProjectId) return [];
+    // Primary: group by project_id (P4+)
+    const direct = summaries.filter((c) => c.project_id === activeProjectId);
+    if (direct.length > 0) return direct;
+    // Legacy fallback: group via datasource → project
     const datasourceIds = new Set(
       datasources.filter((item) => item.project_id === activeProjectId).map((item) => item.id),
     );
-    return summaries.filter((conversation) => datasourceIds.has(conversation.datasource_id));
+    return summaries.filter((c) => c.datasource_id && datasourceIds.has(c.datasource_id));
   }, [activeProjectId, datasources, summaries]);
 
   const handleOpenConversation = async (conversationId: string) => {
