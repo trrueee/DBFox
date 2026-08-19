@@ -34,7 +34,6 @@ from engine.models import (
     Project,
 )
 from engine.runtime_composition import (
-    build_attempt_resource_resolver,
     build_default_completion_policy,
     build_product_tool_registry,
     default_context_contributors,
