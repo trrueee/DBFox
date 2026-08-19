@@ -8,7 +8,12 @@ import { defaultSql } from "../workspace/defaultSql";
 import type { ConsoleEntry } from "../workspace/SqlConsoleWorkspace";
 import { useConversationViewModel } from "../conversation/workspace/useConversationViewModel";
 import { isPrimaryConversationArtifact } from "../conversation/workspace/conversationArtifactModels";
-import { renderArtifact, type ArtifactEnvelope } from "../workspace/artifacts/artifactRendererRegistry";
+import {
+  createArtifactRendererRegistry,
+  productArtifactRenderers,
+  renderArtifact,
+  type ArtifactEnvelope,
+} from "../workspace/artifacts/artifactRendererRegistry";
 import { WorkspaceShell } from "./WorkspaceShell";
 import type { WorkspaceDockTab } from "../../types/workspace";
 import type { DockShowToast } from "../dock/types";
@@ -197,6 +202,20 @@ export function ArtifactDockContent({
   const artifact = useArtifactDockStore((s) => s.artifactById[artifactId]);
   const conversationId = useArtifactDockStore((s) => s.conversationIdByArtifactId[artifactId]);
 
+  const rendererRegistry = useMemo(
+    () =>
+      createArtifactRendererRegistry(
+        productArtifactRenderers({
+          dataActions: {
+            onOpenResultTab: (value) => {
+              useArtifactDockStore.getState().openArtifact(value, conversationId);
+            },
+          },
+        }),
+      ),
+    [conversationId],
+  );
+
   if (!artifact) {
     return (
       <WorkspaceShell
@@ -235,13 +254,14 @@ export function ArtifactDockContent({
       description="基于工件 ID 实时分页查询，当前表格不是历史结果快照。"
       bodyClassName="workspace-shell__body--artifact-result"
     >
-      {renderArtifact(envelope, {
-        onToast: showToast,
-        mode: "workspace",
-        onOpenResultTab: (value) => {
-          useArtifactDockStore.getState().openArtifact(value, conversationId);
+      {renderArtifact(
+        envelope,
+        {
+          onToast: showToast,
+          mode: "workspace",
         },
-      })}
+        rendererRegistry,
+      )}
     </WorkspaceShell>
   );
 }

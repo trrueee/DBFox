@@ -1,8 +1,4 @@
 import type { ReactNode } from "react";
-import type {
-  ResultViewArtifact,
-  SqlArtifact,
-} from "../../../types/agentArtifact";
 
 export interface ArtifactEnvelope<TPayload = Record<string, unknown>> {
   id: string;
@@ -21,9 +17,6 @@ export interface ArtifactEnvelope<TPayload = Record<string, unknown>> {
 
 export interface ArtifactRendererContext {
   onToast: (message: string) => void;
-  onOpenSqlConsole?: (initialSql?: string) => void;
-  onOpenResultTab?: (artifact: ResultViewArtifact) => void;
-  sourceSqlArtifact?: SqlArtifact;
   compact?: boolean;
   mode?: "inline" | "workspace";
 }

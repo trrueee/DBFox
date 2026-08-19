@@ -1,10 +1,11 @@
-"""Production-shaped Capability DLC Conformance Tests for Data and Workspace (P8).
+"""Production-shaped Capability DLC Conformance Tests for Data and Workspace (P8/P8.1).
 
 Verifies the complete end-to-end DLC chain for both built-in capabilities:
 1. ResourceRef -> Tool Materialization -> Execution -> Observation -> Artifact -> Context / Completion.
 2. Frozen selected artifact semantics per admitted input.
-3. Freshness fences (SHA256 on workspace, generation on data).
-4. Resource authority isolation (database vs workspace).
+3. Freshness fences (SHA256 & canonical version on workspace, generation on data).
+4. Full ContextAssembler composition and isolation (no user database resource required for workspace).
+5. Resource authority isolation (database vs workspace).
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import hashlib
 import json
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import sessionmaker
 
 from engine.agent.completion import CompletionGate
@@ -26,6 +28,7 @@ from engine.agent.run import RunLimits
 from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
 from engine.agent.turn import ModelToolCall
 from engine.agent.workspace_context import WorkspaceContextContributor
+from engine.errors import ToolInputError
 from engine.models import (
     AgentArtifactRecord,
     AgentObservationRecord,
@@ -244,11 +247,11 @@ def test_data_dlc_production_conformance(db_session, test_datasource) -> None:
 def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
     """Prove the complete Workspace DLC chain:
 
-    Project (no datasource) -> Workspace ResourceRef -> Tool materialization ->
+    Project (no user datasource required) -> Workspace ResourceRef -> Tool materialization ->
     file_read real Tool -> Succeeded Observation -> file_snapshot Artifact ->
-    WorkspaceContextContributor -> Freshness fences (SHA & version) -> Database independence.
+    ContextAssembler + WorkspaceContextContributor -> Freshness fences (SHA & version) -> Database independence.
     """
-    # 1. Setup workspace project without datasource
+    # 1. Setup workspace project without user datasource
     workspace_root = tmp_path / "ws_conformance"
     (workspace_root / "src").mkdir(parents=True)
     file_path = workspace_root / "src" / "service.py"
@@ -270,7 +273,7 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
         AgentSession(
             id=session_id,
             project_id=project_id,
-            datasource_id=None,  # Pure workspace session, no datasource
+            datasource_id=None,  # Pure workspace session, no user datasource
             title="Workspace Pure Session",
         )
     )
@@ -350,18 +353,14 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
         name="file_read",
         arguments={"path": "src/service.py"},
     )
-    try:
-        outcome = dispatcher.request_and_execute(
-            lease=lease,
-            run_id=first_admission.run_id,
-            turn_id=str(turn.id),
-            call=call,
-            materialization=materialized,
-            control=control,
-        )
-    finally:
-        executor.close(wait=False)
-
+    outcome = dispatcher.request_and_execute(
+        lease=lease,
+        run_id=first_admission.run_id,
+        turn_id=str(turn.id),
+        call=call,
+        materialization=materialized,
+        control=control,
+    )
     assert outcome.outcome is ToolDispatchOutcome.SETTLED
 
     # 5. Verify Observation & file_snapshot Artifact
@@ -379,7 +378,7 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
     assert payload["relativePath"] == "src/service.py"
     assert payload["sha256"] == hashlib.sha256(initial_content.encode("utf-8")).hexdigest()
 
-    # 6. Subsequent Run: WorkspaceContextContributor rehydrates file snapshot
+    # 6. Subsequent Run: ContextAssembler + WorkspaceContextContributor rehydrate file snapshot
     second_admission = sessions.admit(
         session_id=session_id,
         resource_refs=(ws_ref,),
@@ -392,6 +391,7 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
     )
     db_session.commit()
 
+    # 6a: Verify WorkspaceContextContributor directly
     contributor = WorkspaceContextContributor(db_session)
     contribution_input = ContextContributionInput(
         session_id=session_id,
@@ -404,10 +404,23 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
     assert fragments[0].source_id == "dbfox.workspace"
     assert "calculate_total" in fragments[0].content
 
+    # 6b: Verify through full ContextAssembler pipeline
+    assembler = ContextAssembler(
+        db_session,
+        contributors=default_context_contributors(),
+    )
+    snapshot = assembler.build(second_admission.run_id)
+    ws_fragments = [f for f in snapshot.context_fragments if f.source_id == "dbfox.workspace"]
+    assert len(ws_fragments) == 1
+    assert "calculate_total" in ws_fragments[0].content
+
     # 7. SHA Freshness Fence: If file on disk changes, stale fragment is NOT included
     file_path.write_bytes(b"def calculate_total_v2(): pass\n")
     stale_fragments = contributor.build(contribution_input)
     assert len(stale_fragments) == 0  # fail-soft on SHA mismatch
+
+    stale_snapshot = assembler.build(second_admission.run_id)
+    assert len([f for f in stale_snapshot.context_fragments if f.source_id == "dbfox.workspace"]) == 0
 
     # 8. ResourceRef Fence: If workspace ResourceRef is absent, fragment is NOT included
     file_path.write_bytes(initial_content.encode("utf-8"))  # restore content
@@ -418,6 +431,83 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
         resource_refs=(),  # No workspace ref authorized
     )
     assert len(contributor.build(unauth_input)) == 0
+
+    # 9. Workspace Version Fence: Same project id, but wrong version
+    wrong_version_ref = ResourceScopeRef(kind="workspace", id=project_id, version="wrong-version-1234")
+
+    # 9a: WorkspaceContextContributor & ContextAssembler reject wrong version
+    wrong_ver_input = ContextContributionInput(
+        session_id=session_id,
+        run_id=second_admission.run_id,
+        current_request="继续重构",
+        resource_refs=(wrong_version_ref,),
+    )
+    assert len(contributor.build(wrong_ver_input)) == 0
+
+    # 9b: Tool execution with wrong workspace version is rejected
+    wrong_ver_session_id = "session-ws-wrong-ver"
+    db_session.add(
+        AgentSession(
+            id=wrong_ver_session_id,
+            project_id=project_id,
+            datasource_id=None,
+            title="Workspace Wrong Version Session",
+        )
+    )
+    db_session.commit()
+
+    third_admission = sessions.admit(
+        session_id=wrong_ver_session_id,
+        resource_refs=(wrong_version_ref,),
+        content="尝试用错误版本读取",
+        idempotency_key="ws-input-wrong-ver",
+        llm_credential_id="cred-1",
+        api_base="https://api.example.test/v1",
+        model_name="model-test",
+        request_payload={},
+    )
+    third_lease = sessions.claim(session_id=wrong_ver_session_id, owner="conformance-worker-wrong-ver")
+    assert third_lease is not None
+    sessions.promote_next_input(lease=third_lease)
+    db_session.commit()
+
+    turn_wrong_ver = sessions.start_turn(
+        lease=third_lease,
+        run_id=third_admission.run_id,
+        agent_definition_version=definition.version,
+        prompt_version="test",
+        prompt_hash="prompt",
+        context_snapshot={},
+        context_hash="context",
+        tool_materialization=materialized.model_dump(mode="json"),
+        tool_materialization_hash=materialized.hash,
+        provider="test",
+        model_name="test",
+    )
+    db_session.commit()
+
+    run_wrong_ver = db_session.get(AgentRun, third_admission.run_id)
+    assert run_wrong_ver is not None
+    control_wrong_ver = LeaseAwareRunControl(
+        run=run_wrong_ver,
+        limits=RunLimits(),
+        cancellation_probe=lambda: False,
+        lease_lost_probe=lambda: False,
+    )
+    call_wrong_ver = ModelToolCall(
+        id=f"call_{uuid4().hex[:8]}",
+        name="file_read",
+        arguments={"path": "src/service.py"},
+    )
+    with pytest.raises(ToolInputError, match="当前项目工作目录不可用"):
+        dispatcher.request_and_execute(
+            lease=third_lease,
+            run_id=third_admission.run_id,
+            turn_id=str(turn_wrong_ver.id),
+            call=call_wrong_ver,
+            materialization=materialized,
+            control=control_wrong_ver,
+        )
 
 
 def test_data_and_workspace_authority_isolation(db_session, test_datasource, tmp_path) -> None:

@@ -11,6 +11,12 @@ import type {
   SqlArtifact,
 } from "../../../types/agentArtifact";
 
+export interface DataArtifactRendererActions {
+  onOpenSqlConsole?: (initialSql?: string) => void;
+  onOpenResultTab?: (artifact: ResultViewArtifact) => void;
+  sourceSqlArtifact?: SqlArtifact;
+}
+
 function parseResultViewPayload(value: unknown): ResultViewArtifact {
   const payload = asRecord(value);
   const columns = payload.columns;
@@ -91,67 +97,71 @@ function parseSqlPayload(value: unknown): SqlArtifact {
   };
 }
 
-export const dataArtifactRenderers: ReadonlyArray<
-  ArtifactRendererContribution<unknown>
-> = [
-  {
-    type: "result_view",
-    supportedSchemaVersions: [1],
-    parsePayload: parseResultViewPayload,
-    render: (artifact, context) => {
-      const parsed = parseResultViewPayload(artifact.payload);
-      const model = { ...parsed, id: artifact.id, title: artifact.title };
-      return (
-        <TableArtifactView
-          artifact={model}
-          onToast={context.onToast}
-          onOpenResultTab={context.onOpenResultTab}
-          sourceSqlArtifact={context.sourceSqlArtifact}
-          onOpenSqlConsole={context.onOpenSqlConsole}
-          mode={context.mode ?? "inline"}
-        />
-      );
+export function createDataArtifactRenderers(
+  actions: DataArtifactRendererActions = {},
+): ReadonlyArray<ArtifactRendererContribution<unknown>> {
+  return [
+    {
+      type: "result_view",
+      supportedSchemaVersions: [1],
+      parsePayload: parseResultViewPayload,
+      render: (artifact, context) => {
+        const parsed = parseResultViewPayload(artifact.payload);
+        const model = { ...parsed, id: artifact.id, title: artifact.title };
+        return (
+          <TableArtifactView
+            artifact={model}
+            onToast={context.onToast}
+            onOpenResultTab={actions.onOpenResultTab}
+            sourceSqlArtifact={actions.sourceSqlArtifact}
+            onOpenSqlConsole={actions.onOpenSqlConsole}
+            mode={context.mode ?? "inline"}
+          />
+        );
+      },
     },
-  },
-  {
-    type: "chart",
-    supportedSchemaVersions: [1],
-    parsePayload: parseChartPayload,
-    render: (artifact, context) => {
-      const model = {
-        ...parseChartPayload(artifact.payload),
-        id: artifact.id,
-        title: artifact.title,
-      };
-      return (
-        <DeferredChartArtifactView
-          artifact={model}
-          onToast={context.onToast}
-          compact={context.compact}
-        />
-      );
+    {
+      type: "chart",
+      supportedSchemaVersions: [1],
+      parsePayload: parseChartPayload,
+      render: (artifact, context) => {
+        const model = {
+          ...parseChartPayload(artifact.payload),
+          id: artifact.id,
+          title: artifact.title,
+        };
+        return (
+          <DeferredChartArtifactView
+            artifact={model}
+            onToast={context.onToast}
+            compact={context.compact}
+          />
+        );
+      },
     },
-  },
-  {
-    type: "sql",
-    supportedSchemaVersions: [1],
-    parsePayload: parseSqlPayload,
-    render: (artifact, context) => {
-      if (!context.onOpenSqlConsole) {
-        throw new Error("SQL renderer requires a console action");
-      }
-      const model = {
-        ...parseSqlPayload(artifact.payload),
-        id: artifact.id,
-        title: artifact.title,
-      };
-      return (
-        <SqlArtifactView
-          artifact={model}
-          onOpenSqlConsole={context.onOpenSqlConsole}
-          onToast={context.onToast}
-        />
-      );
+    {
+      type: "sql",
+      supportedSchemaVersions: [1],
+      parsePayload: parseSqlPayload,
+      render: (artifact, context) => {
+        if (!actions.onOpenSqlConsole) {
+          throw new Error("SQL renderer requires a console action");
+        }
+        const model = {
+          ...parseSqlPayload(artifact.payload),
+          id: artifact.id,
+          title: artifact.title,
+        };
+        return (
+          <SqlArtifactView
+            artifact={model}
+            onOpenSqlConsole={actions.onOpenSqlConsole}
+            onToast={context.onToast}
+          />
+        );
+      },
     },
-  },
-];
+  ];
+}
+
+export const dataArtifactRenderers = createDataArtifactRenderers();
