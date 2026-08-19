@@ -609,6 +609,7 @@ class ToolDispatcher:
                     cancellation_probe=tool_control.is_cancelled,
                     deadline=tool_control.deadline,
                     execution_authority=execution_authority,
+                    metadata_session=leaf_db,
                 )
                 if result.status == "success" and not tool_control.is_cancelled():
                     leaf_db.commit()
@@ -662,6 +663,7 @@ class ToolDispatcher:
                         cancellation_probe=tool_control.is_cancelled,
                         deadline=tool_control.deadline,
                         execution_authority=execution_authority,
+                        metadata_session=leaf_db,
                     )
                     leaf_db.rollback()
                     return reconciled

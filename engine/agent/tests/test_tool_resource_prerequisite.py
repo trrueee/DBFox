@@ -10,7 +10,7 @@ from engine.agent.loop import RunLoop
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.tool_dispatcher import ToolRequest
 from engine.errors import ToolInputError
-from engine.models import AgentSession, Project
+from engine.models import AgentSession, DataSource, Project
 from engine.runtime_composition import build_product_tool_registry
 from engine.tools.materialization import (
     current_tool_contract_hash,
@@ -27,7 +27,10 @@ from engine.tools.runtime import (
     ToolRunContext,
 )
 from engine.tools.runtime.attempt import ResourceScopeRef
-from engine.tools.runtime.resource_context import build_tool_scope_context
+from engine.tools.runtime.resource_context import (
+    build_tool_scope_context,
+    legacy_available_resource_kinds,
+)
 
 
 class _DummyInput(ToolInputModel):
@@ -78,20 +81,20 @@ def test_materialization_empty_available_resources() -> None:
     assert "result_inspect" not in names
     assert "result_profile" not in names
     assert "chart_create" not in names
-    assert "conversation_search" not in names
-    assert "conversation_read" not in names
-    assert "remote_job_status" not in names
-    assert "remote_job_cancel" not in names
 
     # Workspace tools must be absent
     assert "file_read" not in names
     assert "file_search" not in names
     assert "file_write_patch" not in names
 
-    # Resource-free tools must remain
+    # Resource-free tools (metadata kernel tools and generic tools) must remain
     assert "request_clarification" in names
     assert "update_plan" in names
     assert "remote_job_submit" in names
+    assert "conversation_search" in names
+    assert "conversation_read" in names
+    assert "remote_job_status" in names
+    assert "remote_job_cancel" in names
 
 
 def test_materialization_database_only() -> None:
@@ -115,10 +118,6 @@ def test_materialization_database_only() -> None:
     assert "result_inspect" in names
     assert "result_profile" in names
     assert "chart_create" in names
-    assert "conversation_search" in names
-    assert "conversation_read" in names
-    assert "remote_job_status" in names
-    assert "remote_job_cancel" in names
 
     # Workspace tools must be absent
     assert "file_read" not in names
@@ -129,6 +128,10 @@ def test_materialization_database_only() -> None:
     assert "request_clarification" in names
     assert "update_plan" in names
     assert "remote_job_submit" in names
+    assert "conversation_search" in names
+    assert "conversation_read" in names
+    assert "remote_job_status" in names
+    assert "remote_job_cancel" in names
 
 
 def test_materialization_workspace_only() -> None:
@@ -145,6 +148,7 @@ def test_materialization_workspace_only() -> None:
     assert "sql_execute_readonly" not in names
     assert "data_preview" not in names
     assert "result_inspect" not in names
+    assert "chart_create" not in names
 
     # Workspace tools must be present
     assert "file_read" in names
@@ -155,6 +159,10 @@ def test_materialization_workspace_only() -> None:
     assert "request_clarification" in names
     assert "update_plan" in names
     assert "remote_job_submit" in names
+    assert "conversation_search" in names
+    assert "conversation_read" in names
+    assert "remote_job_status" in names
+    assert "remote_job_cancel" in names
 
 
 def test_materialization_both_database_and_workspace() -> None:
@@ -520,3 +528,291 @@ def test_run_loop_turn_preparation_zero_resources_filters_all_resource_tools(
     assert "request_clarification" in tool_names
     assert "update_plan" in tool_names
     assert "remote_job_submit" in tool_names
+    assert "conversation_search" in tool_names
+    assert "conversation_read" in tool_names
+    assert "remote_job_status" in tool_names
+    assert "remote_job_cancel" in tool_names
+
+
+# ==============================================================================
+# F. P5.1: Core Metadata Store Separation & Legacy Consistency
+# ==============================================================================
+
+
+def test_conversation_tools_available_and_executable_in_workspace_only_session(
+    tmp_path,
+    db_session,
+) -> None:
+    db = db_session
+    project = Project(
+        name="Workspace Only Project",
+        workspace_root=str(tmp_path),
+    )
+    db.add(project)
+    db.flush()
+
+    session = AgentSession(
+        project_id=project.id,
+        datasource_id=None,
+        title="Workspace Only Session",
+    )
+    db.add(session)
+    db.flush()
+
+    sessions = SessionRepository(db)
+    # Add a user message to recall
+    sessions.admit(
+        session_id=str(session.id),
+        resource_refs=(ResourceScopeRef(kind="workspace", id=str(project.id), version="v1"),),
+        content="hello database-free conversation recall",
+        idempotency_key="admit_ws_conv",
+        llm_credential_id="cred_1",
+        api_base="https://api.example.test/v1",
+        model_name="model-test",
+        request_payload={"question": "hello database-free conversation recall"},
+    )
+    db.commit()
+
+    registry = build_product_tool_registry()
+    materialized = materialize_tools(
+        registry,
+        execution_mode="agent_autonomous_read",
+        available_resource_kinds=frozenset({"workspace"}),
+    )
+    names = {t.name for t in materialized.tools}
+    # Conversation search and read MUST be visible
+    assert "conversation_search" in names
+    assert "conversation_read" in names
+
+    # Execute conversation_search using metadata_session (WITHOUT database resource)
+    search_tool = registry.require("conversation_search")
+    from engine.tools.builtin.contracts import ConversationSearchInput
+    from types import SimpleNamespace
+
+    req = SimpleNamespace(
+        datasource_id="",
+        datasource_generation=0,
+        question="search",
+        session_id=str(session.id),
+        run_id="run_1",
+        turn_id="turn_1",
+        execution_id="exec_1",
+    )
+    ctx = ToolRunContext.for_invocation(
+        request=req,
+        idempotency_key="search_key",
+        metadata_session=db,
+        resources={},  # No database resource!
+    )
+    res = search_tool.run(
+        ConversationSearchInput(query="hello"),
+        ctx,
+    )
+    assert res.returned_count >= 1
+    assert any("hello" in m.snippet for m in res.matches)
+
+
+def test_remote_job_lifecycle_in_zero_resource_session(
+    tmp_path,
+    db_session,
+) -> None:
+    db = db_session
+    project = Project(
+        name="Zero Resource Project",
+        workspace_root=str(tmp_path),
+    )
+    db.add(project)
+    db.flush()
+
+    session = AgentSession(
+        project_id=project.id,
+        datasource_id=None,
+        title="Zero Resource Session",
+    )
+    db.add(session)
+    db.flush()
+
+    sessions = SessionRepository(db)
+    admission = sessions.admit(
+        session_id=str(session.id),
+        resource_refs=(),
+        content="submit remote job",
+        idempotency_key="admit_rj_0",
+        llm_credential_id="cred_1",
+        api_base="https://api.example.test/v1",
+        model_name="model-test",
+        request_payload={"question": "submit remote job"},
+    )
+    db.commit()
+
+    registry = build_product_tool_registry()
+    materialized = materialize_tools(
+        registry,
+        execution_mode="agent_autonomous_read",
+        available_resource_kinds=frozenset(),
+    )
+    names = {t.name for t in materialized.tools}
+    assert "remote_job_submit" in names
+    assert "remote_job_status" in names
+    assert "remote_job_cancel" in names
+
+    from types import SimpleNamespace
+    from engine.tools.builtin.remote_job import (
+        RemoteJobSubmitInput,
+        RemoteJobStatusInput,
+        RemoteJobCancelInput,
+    )
+
+    req = SimpleNamespace(
+        datasource_id="",
+        datasource_generation=0,
+        question="run remote job",
+        session_id=str(session.id),
+        run_id=str(admission.run_id),
+        turn_id=None,
+        execution_id="exec_rj_1",
+    )
+    submit_tool = registry.require("remote_job_submit")
+    status_tool = registry.require("remote_job_status")
+    cancel_tool = registry.require("remote_job_cancel")
+
+    ctx = ToolRunContext.for_invocation(
+        request=req,
+        idempotency_key="rj_key_1",
+        metadata_session=db,
+        resources={},  # No database resource!
+    )
+    # 1. Submit
+    outcome = submit_tool.run(
+        RemoteJobSubmitInput(command="python test.py"),
+        ctx,
+    )
+    job_id = outcome.output.job_id
+    assert job_id
+
+    # Persist the drafted artifact record to the session DB for status/cancel lookup
+    from engine.models import AgentArtifactRecord
+    import json
+    for draft in outcome.artifacts:
+        rec = AgentArtifactRecord(
+            session_id=str(session.id),
+            run_id=str(admission.run_id),
+            turn_id=None,
+            type=draft.type,
+            schema_version=draft.schema_version,
+            title=draft.title,
+            payload_json=json.dumps(draft.payload),
+            presentation_json="{}",
+            semantic_id=draft.semantic_key,
+            summary=draft.summary,
+            version=1,
+        )
+        db.add(rec)
+    db.commit()
+
+    # 2. Status check
+    status_out = status_tool.run(
+        RemoteJobStatusInput(job_id=job_id),
+        ctx,
+    )
+    assert status_out.job_id == job_id
+    assert status_out.status in {"queued", "submitted", "running", "succeeded"}
+
+    # 3. Cancel
+    cancel_outcome = cancel_tool.run(
+        RemoteJobCancelInput(job_id=job_id),
+        ctx,
+    )
+    assert cancel_outcome.output.status == "cancelled"
+
+
+def test_legacy_materialization_and_execution_consistency_with_workspace(
+    tmp_path,
+    db_session,
+) -> None:
+    db = db_session
+    # Project with valid workspace
+    project = Project(
+        name="Legacy WS Project",
+        workspace_root=str(tmp_path),
+    )
+    db.add(project)
+    db.flush()
+
+    ds = DataSource(
+        name="Legacy DS",
+        db_type="sqlite",
+        database_name="test.db",
+        project_id=project.id,
+    )
+    db.add(ds)
+    db.flush()
+
+    # Derived kinds must be {"database", "workspace"}
+    derived = legacy_available_resource_kinds(db, str(ds.id))
+    assert derived == frozenset({"database", "workspace"})
+
+    # Legacy execution scope context resolution:
+    # 1. Database tool resolves database
+    registry = build_product_tool_registry()
+    db_tool = registry.require("catalog_overview")
+    ws_tool = registry.require("file_read")
+
+    from types import SimpleNamespace
+    legacy_req = SimpleNamespace(
+        datasource_id=str(ds.id),
+        datasource_generation=1,
+        question="legacy test",
+        session_id="leg_sess_1",
+        run_id="leg_run_1",
+        execution_id="leg_exec_1",
+        frozen_resource_refs=None,  # Legacy pre-P4
+    )
+
+    db_scopes, db_res = build_tool_scope_context(db, legacy_req, db_tool)
+    assert len(db_scopes) == 1
+    assert db_scopes[0].kind == "database"
+    assert "database" in db_res
+
+    # 2. Workspace tool resolves workspace from project
+    ws_scopes, ws_res = build_tool_scope_context(db, legacy_req, ws_tool)
+    assert len(ws_scopes) == 1
+    assert ws_scopes[0].kind == "workspace"
+    assert "workspace" in ws_res
+
+
+def test_legacy_materialization_without_project_workspace(
+    db_session,
+) -> None:
+    db = db_session
+    # Project without workspace root
+    project = Project(
+        name="Legacy No-WS Project",
+        workspace_root=None,
+    )
+    db.add(project)
+    db.flush()
+
+    ds = DataSource(
+        name="Legacy No-WS DS",
+        db_type="sqlite",
+        database_name="test.db",
+        project_id=project.id,
+    )
+    db.add(ds)
+    db.flush()
+
+    # Derived kinds must be only {"database"}
+    derived = legacy_available_resource_kinds(db, str(ds.id))
+    assert derived == frozenset({"database"})
+
+    registry = build_product_tool_registry()
+    materialized = materialize_tools(
+        registry,
+        execution_mode="agent_autonomous_read",
+        available_resource_kinds=derived,
+    )
+    names = {t.name for t in materialized.tools}
+    assert "catalog_overview" in names
+    assert "file_read" not in names
+    assert "file_search" not in names

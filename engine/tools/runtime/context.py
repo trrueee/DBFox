@@ -32,6 +32,7 @@ class ToolRunContext(BaseModel):
     execution_authority: Any | None = Field(default=None, exclude=True)
     scope_refs: tuple[ResourceScopeRef, ...] = ()
     resources: Mapping[str, Any] = Field(default_factory=dict, exclude=True)
+    metadata_session: Session | None = Field(default=None, exclude=True)
 
     def is_cancelled(self) -> bool:
         return bool(self.cancellation_probe and self.cancellation_probe())
@@ -49,6 +50,11 @@ class ToolRunContext(BaseModel):
 
     def require_database(self) -> Session:
         return cast(Session, self.require_resource("database"))
+
+    def require_metadata(self) -> Session:
+        if self.metadata_session is None:
+            raise RuntimeError("This tool requires the core metadata session")
+        return self.metadata_session
 
     def require_request(self) -> ToolInvocationRequest:
         if self.request is None:
@@ -68,6 +74,7 @@ class ToolRunContext(BaseModel):
         execution_authority: Any | None = None,
         scope_refs: tuple[ResourceScopeRef, ...] | None = None,
         resources: Mapping[str, Any] | None = None,
+        metadata_session: Session | None = None,
     ) -> "ToolRunContext":
         datasource_id = getattr(request, "datasource_id", "") if request is not None else ""
         thread_id = str(getattr(request, "session_id", "") or "")
@@ -83,6 +90,7 @@ class ToolRunContext(BaseModel):
             execution_authority=execution_authority,
             scope_refs=scope_refs or (),
             resources=dict(resources or {}),
+            metadata_session=metadata_session,
         )
 
 
