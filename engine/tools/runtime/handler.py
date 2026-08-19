@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
@@ -14,6 +14,9 @@ from engine.tools.runtime.base import BaseTool, ToolRecoveryPolicy
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.result import ToolResult
 from engine.tools.runtime.runtime import ToolRuntime
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,7 @@ class ToolAttemptHandler:
         *,
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
+        metadata_session: Session | None = None,
     ) -> ToolResult:
         tool = self._resolve_tool(request)
         if isinstance(tool, ToolResult):
@@ -72,6 +76,7 @@ class ToolAttemptHandler:
             cancellation_probe=cancellation_probe,
             deadline=deadline,
             execution_authority=None,
+            metadata_session=metadata_session,
         )
 
     def run_with_resources(
@@ -82,6 +87,7 @@ class ToolAttemptHandler:
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
         execution_authority: Any | None = None,
+        metadata_session: Session | None = None,
     ) -> ToolResult:
         tool = self._resolve_tool(request)
         if isinstance(tool, ToolResult):
@@ -93,6 +99,7 @@ class ToolAttemptHandler:
             cancellation_probe=cancellation_probe,
             deadline=deadline,
             execution_authority=execution_authority,
+            metadata_session=metadata_session,
         )
 
     def _resolve_tool(self, request: ToolAttemptRequest) -> BaseTool | ToolResult:
@@ -132,6 +139,7 @@ class ToolAttemptHandler:
         cancellation_probe: Callable[[], bool] | None,
         deadline: float | None,
         execution_authority: Any | None,
+        metadata_session: Session | None = None,
     ) -> ToolResult:
         invocation_request = _database_scope_request(request)
         runtime = ToolRuntime(self.registry)
@@ -146,6 +154,7 @@ class ToolAttemptHandler:
                 execution_authority=execution_authority,
                 scope_refs=request.invocation.scope_refs,
                 resources=resources,
+                metadata_session=metadata_session,
             )
         return runtime.invoke(
             tool_name=request.tool_name,
@@ -157,4 +166,5 @@ class ToolAttemptHandler:
             execution_authority=execution_authority,
             scope_refs=request.invocation.scope_refs,
             resources=resources,
+            metadata_session=metadata_session,
         )

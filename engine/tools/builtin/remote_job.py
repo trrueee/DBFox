@@ -263,8 +263,8 @@ class RemoteJobStatusTool(BaseTool[RemoteJobStatusInput, RemoteJobStatusOutput])
         concurrency="sequential",
         max_output_bytes=1_000_000,
         backend="in_process",
-        capabilities=("database_read",),
-        required_resource_kinds=("database",),
+        capabilities=("metadata_read",),
+        required_resource_kinds=(),
     )
     semantics = ToolSemanticSpec(
         produces=("dbfox.remote_job",),
@@ -283,7 +283,7 @@ class RemoteJobStatusTool(BaseTool[RemoteJobStatusInput, RemoteJobStatusOutput])
         input: RemoteJobStatusInput,
         context: ToolRunContext,
     ) -> RemoteJobStatusOutput:
-        db = context.require_database()
+        db = context.require_metadata()
         payload = _latest_remote_job_payload(
             db,
             context.thread_id,
@@ -324,8 +324,8 @@ class RemoteJobCancelTool(BaseTool[RemoteJobCancelInput, RemoteJobCancelOutput])
         concurrency="sequential",
         max_output_bytes=1_000_000,
         backend="in_process",
-        capabilities=("database_read",),
-        required_resource_kinds=("database",),
+        capabilities=("metadata_read",),
+        required_resource_kinds=(),
     )
     semantics = ToolSemanticSpec(
         produces=("dbfox.remote_job",),
@@ -344,7 +344,7 @@ class RemoteJobCancelTool(BaseTool[RemoteJobCancelInput, RemoteJobCancelOutput])
         input: RemoteJobCancelInput,
         context: ToolRunContext,
     ) -> ToolOutcome[RemoteJobCancelOutput]:
-        db = context.require_database()
+        db = context.require_metadata()
         request = context.require_request()
         row = _latest_job_row(db, context.thread_id, input.job_id)
         from engine.agent.repositories.artifact import validate_artifact_payload

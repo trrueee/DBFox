@@ -839,9 +839,14 @@ class RunLoop:
                     frozen_refs = load_resource_refs(str(input_row.resource_refs_json))
                     if frozen_refs is not None:
                         available_resource_kinds = frozenset(r.kind for r in frozen_refs)
-            if available_resource_kinds is None and run.datasource_id:
+            if available_resource_kinds is None:
                 # Legacy pre-P4 compatibility
-                available_resource_kinds = frozenset({"database"})
+                from engine.tools.runtime.resource_context import legacy_available_resource_kinds
+
+                available_resource_kinds = legacy_available_resource_kinds(
+                    db,
+                    str(run.datasource_id or "") if run.datasource_id else None,
+                )
 
             tools = materialize_tools(
                 self.registry,

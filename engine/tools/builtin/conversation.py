@@ -71,7 +71,7 @@ class ConversationSearchTool(
         concurrency="parallel_safe",
         max_output_bytes=65_536,
         capabilities=("metadata_read",),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(),
     )
 
     def run(
@@ -79,7 +79,7 @@ class ConversationSearchTool(
         tool_input: ConversationSearchInput,
         context: ToolRunContext,
     ) -> ConversationSearchOutput:
-        db = context.require_database()
+        db = context.require_metadata()
         session_id = context.require_request().session_id
         messages, mode = ConversationRecallService(db).search(
             session_id=session_id,
@@ -145,7 +145,7 @@ class ConversationReadTool(BaseTool[ConversationReadInput, ConversationReadOutpu
         concurrency="parallel_safe",
         max_output_bytes=65_536,
         capabilities=("metadata_read",),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(),
     )
 
     def run(
@@ -153,7 +153,7 @@ class ConversationReadTool(BaseTool[ConversationReadInput, ConversationReadOutpu
         tool_input: ConversationReadInput,
         context: ToolRunContext,
     ) -> ConversationReadOutput:
-        db = context.require_database()
+        db = context.require_metadata()
         session_id = context.require_request().session_id
         messages, has_more = ConversationRecallService(db).read(
             session_id=session_id,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Callable, Final, Literal
+from typing import TYPE_CHECKING, Any, Callable, Final, Literal
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
@@ -17,6 +17,9 @@ from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.tools.runtime.context import ToolRunContext
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.base import BaseTool
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger("dbfox.tools.runtime")
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
@@ -57,6 +60,7 @@ class ToolRuntime:
         execution_authority: Any | None = None,
         scope_refs: tuple[ResourceScopeRef, ...] | None = None,
         resources: dict[str, Any] | None = None,
+        metadata_session: Session | None = None,
     ) -> ToolResult:
         tool = self.registry.require(tool_name)
         if not isinstance(tool, BaseTool):
@@ -100,6 +104,7 @@ class ToolRuntime:
                     scope_refs=scope_refs,
                     resources=resources,
                     idempotency_key=idempotency_key,
+                    metadata_session=metadata_session,
                 ),
             )
             if isinstance(outcome, ToolOutcome):
@@ -207,6 +212,7 @@ class ToolRuntime:
         execution_authority: Any | None = None,
         scope_refs: tuple[ResourceScopeRef, ...] | None = None,
         resources: dict[str, Any] | None = None,
+        metadata_session: Session | None = None,
     ) -> ToolResult:
         """Resolve an interrupted action by its stable invocation key."""
 
@@ -238,6 +244,7 @@ class ToolRuntime:
                         scope_refs=scope_refs,
                         resources=resources,
                         idempotency_key=idempotency_key,
+                        metadata_session=metadata_session,
                     ),
                 )
             )

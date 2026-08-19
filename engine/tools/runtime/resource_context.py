@@ -26,6 +26,19 @@ class _InvocationRequestLike:
 
 
 
+def legacy_available_resource_kinds(
+    db: Session,
+    datasource_id: str | None,
+) -> frozenset[str]:
+    """Derive available resource kinds for legacy pre-P4 runs without frozen resource refs."""
+    if not datasource_id:
+        return frozenset()
+    kinds = {"database"}
+    if resolve_workspace_scope_ref(db, datasource_id=datasource_id) is not None:
+        kinds.add("workspace")
+    return frozenset(kinds)
+
+
 def resolve_workspace_scope_ref(
     db: Session,
     datasource_id: str | None = None,

@@ -58,6 +58,7 @@ def _context(db_session, datasource_id: str, session_id: str) -> ToolRunContext:
         request=request,
         idempotency_key="recall-test",
         resources={"database": db_session},
+        metadata_session=db_session,
     )
 
 
