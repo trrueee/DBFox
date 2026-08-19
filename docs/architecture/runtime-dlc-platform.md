@@ -12,7 +12,6 @@
 
 ## 1. Product Vision & Protocol-First Principle
 
-
 ### Product Vision
 Any developer can build an extension conforming to the DBFox DLC Protocol, package it into a single `.dbfox-dlc` file, and distribute it directly to users. The user installs the package via **Install from File** in DBFox DLC Center, verifies and enables it, and all contributed capabilities (Tools, Resources, Context, Connectors, Dock Views, Artifact Renderers, Operations) become active after a controlled restart without modifying DBFox source code or recompiling the DBFox binary.
 
@@ -55,14 +54,14 @@ The DBFox product capabilities (Data, Workspace, GitHub) currently assemble at e
 An immutable ZIP-based archive with strict bounds and deterministic entry layout:
 ```text
 <package_root>/
-├── manifest.json       # Lifecycle metadata, compatibility bounds, permission declarations
-├── integrity.json      # File SHA256 digest mapping for all package files (excluding signature.sig)
-├── signature.sig       # Ed25519 digital signature of canonical manifest + integrity bytes
-├── backend/            # Backend Python extension code
+├── manifest.json       # Control file: Lifecycle metadata, compatibility bounds, permission declarations
+├── integrity.json      # Control file: SHA256 digest mapping for all payload files (excludes integrity.json and signature.sig)
+├── signature.sig       # Control file: Ed25519 digital signature of canonical manifest + integrity bytes
+├── backend/            # Payload files: Backend Python extension code
 │   ├── __init__.py
 │   ├── entry.py        # def register(host: BackendExtensionHost) -> None
 │   └── vendor/         # Optional pure-Python vendored dependencies
-├── frontend/           # Frontend pre-compiled ES module & styles
+├── frontend/           # Payload files: Frontend pre-compiled ES module & styles
 │   ├── index.js        # export function register(host: FrontendExtensionHost): void
 │   ├── index.css       # Scoped stylesheet
 │   └── assets/         # Static icons / images
@@ -74,10 +73,11 @@ To guarantee deterministic signature generation and verification across platform
    - Keys sorted lexicographically by Unicode code point (`sort_keys=True`).
    - Compact separators with no extraneous whitespace: `separators=(',', ':')`.
    - UTF-8 character encoding with no ASCII escaping of non-ASCII characters (`ensure_ascii=False`).
-2. **`integrity.json` Entry Contract**:
-   - Maps normalized POSIX relative file paths (`backend/entry.py`, `frontend/index.js`, etc.) to lowercase 64-character SHA256 hex digests.
-   - `signature.sig` is **STRICTLY EXCLUDED** from `integrity.json`.
-   - `manifest.json` and all other files inside the archive **MUST** be listed in `integrity.json`.
+   - No trailing newline inside signed canonical byte strings.
+2. **`integrity.json` Entry Contract (Payload-Only)**:
+   - Maps normalized POSIX relative file paths of **payload files only** (`backend/entry.py`, `frontend/index.js`, etc.) to lowercase 64-character SHA256 hex digests.
+   - `integrity.json` and `signature.sig` are **STRICTLY EXCLUDED** from `integrity.json` (eliminating self-referential hash recursion).
+   - `manifest.json` is independently authenticated because its exact canonical bytes are directly included in the signed message.
 3. **Signed Message Bytes**:
    ```text
    b"DBFOX-DLC-V1\n" + canonical_manifest_bytes + b"\n" + canonical_integrity_bytes
@@ -85,12 +85,12 @@ To guarantee deterministic signature generation and verification across platform
 4. **Signature Verification**:
    - Verified using Ed25519 against the publisher's public key.
    - Publisher Key ID: SHA256 fingerprint of raw Ed25519 public key bytes.
-5. **Path Normalization & Archive Validation**:
+5. **Path Normalization & Archive Allowlist**:
    - Forward slashes `/` as path separators.
    - No leading `./` or `/`.
    - Rejection of `..` path traversal segments, absolute paths, symlinks, hardlinks, and device files.
    - Rejection of duplicate normalized paths (case-insensitive collisions).
-   - Rejection of unlisted archive entries (every file in the ZIP must match an entry in `integrity.json`).
+   - **Archive Allowlist**: The ZIP archive must contain ONLY `{ "manifest.json", "integrity.json", "signature.sig" }` plus every normalized path listed in `integrity.json`. Any unlisted archive entry causes immediate validation failure.
 
 ### Package Bounds
 - **Manifest size**: $\le 64\text{ KiB}$
@@ -106,6 +106,14 @@ To guarantee deterministic signature generation and verification across platform
 
 ### Execution & Loading Strategy (v1)
 - **Loading Mechanism**: In-process dynamic loading via `importlib.util.spec_from_file_location` from the verified content-addressed directory (`APP_DATA/dlcs/packages/sha256-<digest>/backend/entry.py`).
+- **Module Namespace Isolation**:
+  - Each DLC's Python code loads under a dedicated, unique top-level package namespace derived from its DLC id and package digest prefix:
+    ```text
+    _dbfox_dlc_<safe_id>_<digestprefix>
+    ```
+  - Pure-Python vendored dependencies are imported relative to the DLC package root (e.g. `from .vendor.commonlib import ...`).
+  - **No Global `sys.path` Mutation**: DLC loading MUST NOT mutate process-global `sys.path` or install into `site-packages`.
+  - **Collision Resistance**: DLC A and DLC B can each vendor their own version of `commonlib` under their respective namespaces without collision or ordering dependence.
 - **Registration Surface**:
   ```python
   class BackendExtensionHost:
@@ -115,13 +123,13 @@ To guarantee deterministic signature generation and verification across platform
       artifacts: ArtifactRegistrationScope
       operations: OperationRegistrationScope
   ```
-- **Transactional Staging**: Each DLC registers into an isolated staging scope. If any registration fails or conflicts, the staging scope is discarded and the DLC is marked `BROKEN` without corrupting committed host registries.
+- **Transactional Staging**: Each DLC registers into an isolated staging scope. If any registration fails or conflicts, the staging scope is discarded, temporary `sys.modules` entries are purged, and the DLC is marked `BROKEN` without corrupting committed host registries.
 
 ### Dependency Policy (FROZEN)
 1. **Allowed**:
    - Python Standard Library.
    - DBFox Host Extension SDK (pre-bundled in host binary).
-   - Pure-Python vendored dependencies inside the DLC package directory (e.g. `backend/vendor/` or subpackages).
+   - Pure-Python vendored dependencies inside the DLC package directory (under `backend/vendor/` or package submodules).
 2. **Prohibited**:
    - Native compiled C/Rust extensions (`.pyd`, `.so`, `.dylib`) are **STRICTLY PROHIBITED** in v1 in-process DLCs (deferred to R8 subprocess host).
    - Runtime package managers (`pip install`, `uv pip`, `setuptools`) are **STRICTLY PROHIBITED**.
@@ -136,7 +144,11 @@ To guarantee deterministic signature generation and verification across platform
 
 ## 5. Frontend Extension Host & Tauri Asset Protocol
 
-### Tauri Custom Protocol
+### Feasibility Status & Roadmap
+- **Frontend Feasibility**: Accepted and characterized in R0/R0.1.
+- **Frontend Runtime Implementation**: Gated for **R3**. R0 and R1 do not alter production `tauri.conf.json` or implement the Tauri URI handler in Rust.
+
+### Target Tauri Custom Protocol (R3)
 - **URI Scheme**: `dlc-asset://localhost/<package_digest>/frontend/<path>`
 - **Rust Handler**:
   - Registered via `tauri::Builder::default().register_uri_scheme_protocol("dlc-asset", ...)`.
@@ -144,7 +156,7 @@ To guarantee deterministic signature generation and verification across platform
   - Enforces canonical path containment within `APP_DATA/dlcs/packages/sha256-<digest>/frontend/`.
   - Sets exact MIME types: `.js`/`.mjs` $\rightarrow$ `text/javascript; charset=utf-8`, `.css` $\rightarrow$ `text/css; charset=utf-8`, `.svg` $\rightarrow$ `image/svg+xml`, `.png` $\rightarrow$ `image/png`.
 
-### Production CSP (`tauri.conf.json`)
+### Target Production CSP (`tauri.conf.json` in R3)
 ```text
 default-src 'self';
 script-src 'self' dlc-asset:;
@@ -168,21 +180,24 @@ frame-ancestors 'none';
 
 ## 6. Permission Grammar & Tool Capability Contract
 
-### Manifest Permission Grammar
-```text
-Permission := "network" | "network:" Domain
-            | "credentials" | "credentials:" CredentialType
-            | "filesystem_read" | "filesystem_read:" Scope
-            | "filesystem_write" | "filesystem_write:" Scope
-            | "subprocess"
-```
+### Two Distinct Concepts: Host Execution Capability vs DLC Declared Scope
+1. **Host Execution Capability**: `ToolExecutionSpec.capabilities: tuple[ToolCapability, ...]`
+   - Defined in DBFox tool runtime: `metadata_read`, `metadata_write`, `database_read`, `database_write`, `filesystem_read`, `filesystem_write`, `network`, `subprocess`.
+2. **DLC Declared Scope**: Manifest `permissions`
+   - Scoped strings declared in `manifest.json`: e.g. `network:api.github.com`, `credentials:github`, `filesystem_read:project_workspace`.
 
-### Deterministic Checking Contract
-When a DLC registers a Tool with `ToolExecutionSpec.security.required_capabilities`:
-- `required_capabilities.network == true` $\implies$ Requires package permission `network` or matching `network:<domain>`.
-- `required_capabilities.filesystem == true` $\implies$ Requires package permission `filesystem_read` or `filesystem_write`.
-- `required_capabilities.subprocess == true` $\implies$ Requires package permission `subprocess`.
-- **Enforcement**: If a Tool declares capabilities exceeding the package's declared permissions, tool registration is rejected during staging and the DLC is marked `BROKEN`.
+### Deterministic Coverage Mapping
+When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
+- `ToolCapability.network` $\implies$ Requires package permission `network` or matching `network:<domain>`.
+- `ToolCapability.filesystem_read` $\implies$ Requires package permission `filesystem_read` or `filesystem_read:<scope>`.
+- `ToolCapability.filesystem_write` $\implies$ Requires package permission `filesystem_write` or `filesystem_write:<scope>`.
+- `ToolCapability.subprocess` $\implies$ Requires package permission `subprocess`.
+- `ToolCapability.database_read` $\implies$ Requires package permission `database_read`.
+- `ToolCapability.database_write` $\implies$ Requires package permission `database_write`.
+- `ToolCapability.metadata_read` $\implies$ Requires package permission `metadata_read`.
+- `ToolCapability.metadata_write` $\implies$ Requires package permission `metadata_write`.
+
+*Note: The package permission grants the authority to register tools requiring the generic ToolCapability. Hostname/domain/path scope metadata (e.g. `api.github.com`) remains package policy metadata for disclosure and future mediated enforcement.*
 
 ---
 
@@ -226,8 +241,8 @@ When a DLC registers a Tool with `ToolExecutionSpec.security.required_capabiliti
 
 ## 9. Implementation Roadmap
 
-- **R0 / R0.1**: Architecture Specification & Production Feasibility Closure (CURRENT).
-- **R1**: Package Protocol, Verifier, Signature Engine & Installed Registry (No code execution).
+- **R0 / R0.1**: Architecture Specification & Production Feasibility Closure (CLOSED).
+- **R1**: Package Protocol, Verifier, Signature Engine & Installed Registry (CURRENT).
 - **R2**: Backend Runtime DLC Host (In-process transactional registration & fault isolation).
 - **R3**: Frontend Runtime DLC Host (Tauri custom asset protocol & dynamic ESM loader).
 - **R4**: Install from File UI & DLC Center in Desktop App.
