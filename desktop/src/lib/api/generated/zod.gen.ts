@@ -354,7 +354,7 @@ export const zConversationSummaryResponse = z.object({
  * Request payload to create a new GitHub repository binding.
  */
 export const zCreateGithubBindingRequest = z.object({
-    ref_name: z.string().optional().default('main'),
+    ref_name: z.string().optional().default(''),
     repository: z.string()
 });
 

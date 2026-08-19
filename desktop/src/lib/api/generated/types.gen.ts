@@ -895,7 +895,7 @@ export type CreateGithubBindingRequest = {
     /**
      * Ref Name
      *
-     * Target branch or reference name (e.g. 'main', 'master').
+     * Target branch, tag, or ref name (empty/omitted resolves to repository default branch).
      */
     ref_name?: string;
     /**

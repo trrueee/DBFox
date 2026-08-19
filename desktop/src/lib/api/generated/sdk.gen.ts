@@ -432,7 +432,7 @@ export const createBindingApiV1ProjectsProjectIdGithubBindingsPost = <ThrowOnErr
 /**
  * Delete Binding Route
  *
- * Delete a GitHub repository binding.
+ * Delete a GitHub repository binding within the scoped project.
  */
 export const deleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDelete = <ThrowOnError extends boolean = false>(options: Options<DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteData, ThrowOnError>): RequestResult<DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteResponses, DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteErrors, ThrowOnError> => (options.client ?? client).delete<DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteResponses, DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteErrors, ThrowOnError>({ url: '/api/v1/projects/{project_id}/github/bindings/{binding_id}', ...options });
 
