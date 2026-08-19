@@ -41,12 +41,24 @@ import { useDatasourceSelectionStore } from "./datasourceSelectionStore";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useGithubStore } from "../features/github/githubStore";
 import { collectProductRequestedResources } from "../features/resources/requestedResourceComposition";
+import { queryClient } from "../lib/queryClient";
+import { projectQueryKeys } from "../features/projects/useProjectState";
+import type { ProjectResponse } from "../lib/api/generated/types.gen";
 import {
   reduceStreamEvent,
   removeConversationState,
   upsertArtifacts,
   upsertRun,
 } from "./conversationStoreReducer";
+
+function resolveProjectWorkspaceRoot(projectId: string): string | null | undefined {
+  if (!projectId) return undefined;
+  const projects = queryClient.getQueryData<ProjectResponse[]>(projectQueryKeys.all);
+  if (!projects) return undefined;
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) return undefined;
+  return project.workspace_root?.trim() || null;
+}
 
 export interface ConversationState {
   summaries: ConversationSummary[];
@@ -220,10 +232,11 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     const activeGithubBindingId = projectId
       ? useGithubStore.getState().activeBindingIdByProject[projectId]
       : null;
+    const workspaceRoot = resolveProjectWorkspaceRoot(projectId);
     const requestedResources = collectProductRequestedResources({
       projectId,
       datasourceId: detail.datasource_id,
-      workspaceRoot: null,
+      workspaceRoot,
       activeGithubBindingId,
     });
     const created = await admitConversationInput(conversationId, {

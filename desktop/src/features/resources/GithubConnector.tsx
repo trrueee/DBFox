@@ -345,7 +345,7 @@ export function AddGithubRepoDialog() {
   const addBinding = useGithubStore((s) => s.addBinding);
 
   const [repoInput, setRepoInput] = useState("");
-  const [refName, setRefName] = useState("main");
+  const [refName, setRefName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -358,9 +358,9 @@ export function AddGithubRepoDialog() {
     setSubmitting(true);
     setError(null);
     try {
-      await addBinding(projectId, cleanRepo, refName.trim() || "main");
+      await addBinding(projectId, cleanRepo, refName.trim());
       setRepoInput("");
-      setRefName("main");
+      setRefName("");
       close();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
@@ -399,13 +399,13 @@ export function AddGithubRepoDialog() {
 
           <div className="ds-form-group ds-form-group--spaced">
             <label className="ds-form-label" htmlFor="github-ref-input">
-              分支 / 标签（默认 main）
+              分支 / 标签（留空自动使用默认分支）
             </label>
             <input
               id="github-ref-input"
               type="text"
               className="ds-form-input"
-              placeholder="main"
+              placeholder="留空自动使用默认分支（如 main、master）"
               value={refName}
               onChange={(e) => setRefName(e.target.value)}
               disabled={submitting}

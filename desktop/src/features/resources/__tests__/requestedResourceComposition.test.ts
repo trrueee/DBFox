@@ -69,6 +69,30 @@ describe("Requested Resource Composition", () => {
     ]);
   });
 
+  it("returns undefined when workspaceRoot is undefined (unproven workspace authority)", () => {
+    const refs = collectProductRequestedResources({
+      projectId: "proj-1",
+      datasourceId: "ds-1",
+      workspaceRoot: undefined,
+      activeGithubBindingId: "gh-1",
+    });
+    // Must fail safe and return undefined so server preserves legacy session authority
+    expect(refs).toBeUndefined();
+  });
+
+  it("returns Database and GitHub without Workspace when workspaceRoot is explicitly null", () => {
+    const refs = collectProductRequestedResources({
+      projectId: "proj-1",
+      datasourceId: "ds-1",
+      workspaceRoot: null,
+      activeGithubBindingId: "gh-1",
+    });
+    expect(refs).toEqual([
+      { kind: "database", id: "ds-1" },
+      { kind: "github.repository", id: "gh-1" },
+    ]);
+  });
+
   it("returns undefined when no resources are active", () => {
     const refs = collectProductRequestedResources({
       projectId: "proj-1",

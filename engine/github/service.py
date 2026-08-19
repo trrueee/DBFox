@@ -14,6 +14,7 @@ from engine.github.contracts import (
     GithubFileBinaryError,
     GithubFileEntry,
     GithubFileNotFoundError,
+    GithubFileTooLargeError,
     GithubInvalidInputError,
     GithubNetworkUnavailableError,
     GithubNotFoundError,
@@ -25,6 +26,7 @@ from engine.github.contracts import (
 )
 
 GITHUB_API_ORIGIN = "https://api.github.com"
+MAX_FILE_BYTES = 2 * 1024 * 1024  # 2 MiB hard limit for raw response/body
 MAX_FILE_CHARS = 12_000
 MAX_DIRECTORY_ENTRIES = 100
 DEFAULT_DIRECTORY_ENTRIES = 50
@@ -97,6 +99,7 @@ class GithubReadService:
         repository: str,
         revision: str,
         binding_id: str = "",
+        ref_name: str = "main",
         *,
         http_client: httpx.Client | None = None,
         custom_transport: httpx.BaseTransport | None = None,
@@ -105,6 +108,7 @@ class GithubReadService:
         self.repository = repository
         self.revision = revision
         self.binding_id = binding_id
+        self.ref_name = ref_name
         self._custom_transport = custom_transport
         self._http_client = http_client
 
@@ -150,8 +154,9 @@ class GithubReadService:
 
         return resp
 
-    def get_repo_overview(self, ref_name: str = "main") -> GithubRepoOverviewOutput:
+    def get_repo_overview(self, ref_name: str | None = None) -> GithubRepoOverviewOutput:
         """Fetch repository overview and metadata."""
+        effective_ref = ref_name or self.ref_name
         resp = self._request("GET", f"/repos/{self.owner}/{self.repository}")
         data = resp.json()
         if data.get("private", False):
@@ -160,7 +165,7 @@ class GithubReadService:
         return GithubRepoOverviewOutput(
             owner=self.owner,
             repository=self.repository,
-            ref_name=ref_name,
+            ref_name=effective_ref,
             resolved_revision=self.revision,
             description=data.get("description"),
             default_branch=data.get("default_branch"),
@@ -225,6 +230,9 @@ class GithubReadService:
     ) -> tuple[str, str, int, str, str, bool, str]:
         """Read text file contents at the authorized revision.
 
+        Enforces hard byte limit (2 MiB), rejects binary files (NUL bytes),
+        and strictly validates UTF-8 decoding without silent replacement.
+
         Returns (path, revision, size_bytes, content_sha256, content, truncated, blob_sha).
         """
         norm_path = normalize_repository_relative_path(path)
@@ -239,7 +247,12 @@ class GithubReadService:
             raise GithubFileNotFoundError(f"Path is not a file: {norm_path}")
 
         blob_sha = str(data.get("sha") or "")
-        size_bytes = int(data.get("size") or 0)
+        reported_size = int(data.get("size") or 0)
+        if reported_size > MAX_FILE_BYTES:
+            raise GithubFileTooLargeError(
+                f"File '{norm_path}' ({reported_size} bytes) exceeds maximum size limit of {MAX_FILE_BYTES} bytes."
+            )
+
         encoding = str(data.get("encoding") or "")
         raw_content = str(data.get("content") or "")
 
@@ -251,16 +264,24 @@ class GithubReadService:
         else:
             decoded_bytes = raw_content.encode("utf-8")
 
+        actual_size = len(decoded_bytes)
+        if actual_size > MAX_FILE_BYTES:
+            raise GithubFileTooLargeError(
+                f"File '{norm_path}' ({actual_size} bytes) exceeds maximum size limit of {MAX_FILE_BYTES} bytes."
+            )
+
         # Reject binary files
         if b"\x00" in decoded_bytes:
             raise GithubFileBinaryError(f"Binary file cannot be read as text: {norm_path}")
 
+        # Strict UTF-8 validation (reject non-UTF-8 content without silent replacement)
         try:
-            text_content = decoded_bytes.decode("utf-8", errors="replace")
-        except Exception as exc:
-            raise GithubFileBinaryError(f"Failed to decode text file: {norm_path}") from exc
+            text_content = decoded_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise GithubFileBinaryError(f"File contains non-UTF-8 or binary content: {norm_path}") from exc
 
-        content_sha256 = hashlib.sha256(text_content.encode("utf-8")).hexdigest()
+        content_sha256 = hashlib.sha256(decoded_bytes).hexdigest()
+        size_bytes = actual_size or reported_size
 
         truncated = len(text_content) > MAX_FILE_CHARS
         bounded_content = text_content[:MAX_FILE_CHARS]
@@ -271,19 +292,19 @@ class GithubReadService:
 def resolve_public_repository_revision(
     owner: str,
     repository: str,
-    ref_name: str = "main",
+    ref_name: str = "",
     *,
     custom_transport: httpx.BaseTransport | None = None,
     http_client: httpx.Client | None = None,
-) -> tuple[str, str | None, str | None]:
-    """Resolve repository validity, default branch, description, and canonical commit revision.
+) -> tuple[str, str, str | None, str | None]:
+    """Resolve repository validity, effective ref, default branch, description, and canonical commit revision.
 
-    Returns (resolved_revision_sha, default_branch, description).
+    Returns (resolved_revision_sha, effective_ref_name, default_branch, description).
     """
     service = GithubReadService(
         owner=owner,
         repository=repository,
-        revision=ref_name,
+        revision=ref_name or "HEAD",
         custom_transport=custom_transport,
         http_client=http_client,
     )
@@ -294,15 +315,15 @@ def resolve_public_repository_revision(
     if repo_data.get("private", False):
         raise GithubPrivateRepoError("Private repositories are not supported.")
 
-    default_branch = repo_data.get("default_branch") or "main"
+    default_branch = str(repo_data.get("default_branch") or "main")
     description = repo_data.get("description")
-    effective_ref = ref_name if ref_name else default_branch
+    effective_ref = ref_name.strip() if ref_name and ref_name.strip() else default_branch
 
-    # 2. Resolve commit SHA for the target ref
+    # 2. Resolve commit SHA for the target effective ref
     commit_resp = service._request("GET", f"/repos/{owner}/{repository}/commits/{effective_ref}")
     commit_data = commit_resp.json()
     sha = str(commit_data.get("sha") or "")
     if not sha or len(sha) < 7:
         raise GithubRevisionUnavailableError(f"Could not resolve commit revision for ref: {effective_ref}")
 
-    return sha, default_branch, description
+    return sha, effective_ref, default_branch, description

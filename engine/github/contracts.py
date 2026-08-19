@@ -119,8 +119,8 @@ class CreateGithubBindingRequest(BaseModel):
         description="Public GitHub repository input: 'owner/repo' or 'https://github.com/owner/repo'",
     )
     ref_name: str = Field(
-        default="main",
-        description="Target branch or reference name (e.g. 'main', 'master').",
+        default="",
+        description="Target branch, tag, or ref name (empty/omitted resolves to repository default branch).",
     )
 
 

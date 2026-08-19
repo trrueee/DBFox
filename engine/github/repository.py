@@ -28,18 +28,27 @@ def list_github_bindings(db: Session, project_id: str) -> list[GithubRepositoryB
     )
 
 
-def get_github_binding(db: Session, binding_id: str) -> GithubRepositoryBinding | None:
-    """Find a single GitHub repository binding by primary key."""
-    if not binding_id:
+def get_github_binding(
+    db: Session,
+    project_id: str,
+    binding_id: str,
+) -> GithubRepositoryBinding | None:
+    """Find a single GitHub repository binding scoped strictly to its project."""
+    if not project_id or not binding_id:
         return None
-    return db.get(GithubRepositoryBinding, binding_id)
+    return db.execute(
+        select(GithubRepositoryBinding).where(
+            GithubRepositoryBinding.id == binding_id,
+            GithubRepositoryBinding.project_id == project_id,
+        )
+    ).scalar_one_or_none()
 
 
 def create_github_binding(
     db: Session,
     project_id: str,
     repo_input: str,
-    ref_name: str = "main",
+    ref_name: str = "",
     *,
     custom_transport: httpx.BaseTransport | None = None,
     http_client: httpx.Client | None = None,
@@ -50,25 +59,10 @@ def create_github_binding(
         raise GithubNotFoundError(f"Project not found: {project_id}")
 
     owner, repo = normalize_github_repository(repo_input)
-    clean_ref = (ref_name or "main").strip()
+    clean_ref = (ref_name or "").strip()
 
-    # Check for existing binding
-    existing = db.execute(
-        select(GithubRepositoryBinding).where(
-            GithubRepositoryBinding.project_id == project_id,
-            GithubRepositoryBinding.owner == owner,
-            GithubRepositoryBinding.repository == repo,
-            GithubRepositoryBinding.ref_name == clean_ref,
-        )
-    ).scalar_one_or_none()
-
-    if existing is not None:
-        raise GithubInvalidInputError(
-            f"Binding for {owner}/{repo}@{clean_ref} already exists in this project."
-        )
-
-    # Resolve immutable revision from GitHub
-    revision, default_branch, description = resolve_public_repository_revision(
+    # Resolve immutable revision and effective ref (discovering default branch if clean_ref is empty)
+    revision, effective_ref, default_branch, description = resolve_public_repository_revision(
         owner=owner,
         repository=repo,
         ref_name=clean_ref,
@@ -76,11 +70,26 @@ def create_github_binding(
         http_client=http_client,
     )
 
+    # Check for existing binding with the effective ref
+    existing = db.execute(
+        select(GithubRepositoryBinding).where(
+            GithubRepositoryBinding.project_id == project_id,
+            GithubRepositoryBinding.owner == owner,
+            GithubRepositoryBinding.repository == repo,
+            GithubRepositoryBinding.ref_name == effective_ref,
+        )
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        raise GithubInvalidInputError(
+            f"Binding for {owner}/{repo}@{effective_ref} already exists in this project."
+        )
+
     binding = GithubRepositoryBinding(
         project_id=project_id,
         owner=owner,
         repository=repo,
-        ref_name=clean_ref,
+        ref_name=effective_ref,
         resolved_revision=revision,
         default_branch=default_branch,
         description=description,
@@ -91,9 +100,13 @@ def create_github_binding(
     return binding
 
 
-def delete_github_binding(db: Session, binding_id: str) -> bool:
-    """Delete a GitHub repository binding."""
-    binding = db.get(GithubRepositoryBinding, binding_id)
+def delete_github_binding(
+    db: Session,
+    project_id: str,
+    binding_id: str,
+) -> bool:
+    """Delete a GitHub repository binding scoped strictly to its project."""
+    binding = get_github_binding(db, project_id, binding_id)
     if binding is None:
         return False
     db.delete(binding)
@@ -103,17 +116,18 @@ def delete_github_binding(db: Session, binding_id: str) -> bool:
 
 def refresh_github_binding(
     db: Session,
+    project_id: str,
     binding_id: str,
     *,
     custom_transport: httpx.BaseTransport | None = None,
     http_client: httpx.Client | None = None,
 ) -> GithubRepositoryBinding:
     """Re-resolve the immutable commit revision for an existing binding."""
-    binding = db.get(GithubRepositoryBinding, binding_id)
+    binding = get_github_binding(db, project_id, binding_id)
     if binding is None:
-        raise GithubNotFoundError(f"GitHub binding not found: {binding_id}")
+        raise GithubNotFoundError(f"GitHub binding not found in project {project_id}: {binding_id}")
 
-    revision, default_branch, description = resolve_public_repository_revision(
+    revision, effective_ref, default_branch, description = resolve_public_repository_revision(
         owner=binding.owner,
         repository=binding.repository,
         ref_name=binding.ref_name,
@@ -122,6 +136,7 @@ def refresh_github_binding(
     )
 
     binding.resolved_revision = revision
+    binding.ref_name = effective_ref
     if default_branch:
         binding.default_branch = default_branch
     if description is not None:

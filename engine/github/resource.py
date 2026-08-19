@@ -66,5 +66,6 @@ def resolve_github_repository(
         repository=binding.repository,
         revision=str(ref.version),
         binding_id=str(binding.id),
+        ref_name=binding.ref_name,
         custom_transport=custom_transport,
     )

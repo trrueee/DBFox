@@ -202,12 +202,33 @@ def test_github_production_vertical_slice(db_session, monkeypatch) -> None:
     assert payload["relativePath"] == "README.md"
     assert payload["revision"] == rev
 
-    # 6. Context Assembler with GitHub contributor for next turn
+    # 6. Complete Run 1 and release lease
+    run.status = "completed"
+    sessions.release(lease=lease)
+    db_session.commit()
+
+    # 7. True Second Admission (Run 2 in the same session)
+    admission_2 = sessions.admit(
+        session_id=session_id,
+        resource_refs=authorized_scopes,
+        content="Summarize the uv README you read in the previous turn.",
+        idempotency_key="uv-idem-2",
+        llm_credential_id="cred-1",
+        api_base="https://api.example.test/v1",
+        model_name="model-test",
+        request_payload={},
+    )
+    lease_2 = sessions.claim(session_id=session_id, owner="github-worker-2")
+    assert lease_2 is not None
+    sessions.promote_next_input(lease=lease_2)
+    db_session.commit()
+
+    # 8. Context Assembler with GitHub contributor on True Second Run (Run 2)
     assembler = ContextAssembler(
         session=db_session,
         contributors=default_context_contributors(),
     )
-    snapshot = assembler.build(admission.run_id)
+    snapshot = assembler.build(admission_2.run_id)
     github_fragments = [f for f in snapshot.context_fragments if f.source_id == "dbfox.github"]
     assert len(github_fragments) == 1
     assert "astral-sh/uv" in github_fragments[0].content

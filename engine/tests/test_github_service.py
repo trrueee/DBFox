@@ -10,11 +10,13 @@ import pytest
 
 from engine.github.contracts import (
     GithubFileBinaryError,
+    GithubFileTooLargeError,
     GithubInvalidInputError,
     GithubPrivateRepoError,
     GithubRateLimitedError,
 )
 from engine.github.service import (
+    MAX_FILE_BYTES,
     GithubReadService,
     normalize_github_repository,
     normalize_repository_relative_path,
@@ -194,6 +196,32 @@ def test_github_read_service_read_file_text_and_binary_rejection() -> None:
                     "content": b64,
                 },
             )
+        elif request.url.path == "/repos/octocat/Hello-World/contents/non_utf8.bin":
+            non_utf8 = bytes([0xFF, 0xFE, 0xFD, 0xFC])
+            b64 = base64.b64encode(non_utf8).decode("ascii")
+            return httpx.Response(
+                200,
+                json={
+                    "type": "file",
+                    "path": "non_utf8.bin",
+                    "sha": "blob_sha_non_utf8",
+                    "size": len(non_utf8),
+                    "encoding": "base64",
+                    "content": b64,
+                },
+            )
+        elif request.url.path == "/repos/octocat/Hello-World/contents/huge_file.txt":
+            return httpx.Response(
+                200,
+                json={
+                    "type": "file",
+                    "path": "huge_file.txt",
+                    "sha": "blob_sha_huge",
+                    "size": MAX_FILE_BYTES + 1024,
+                    "encoding": "base64",
+                    "content": "eA==",
+                },
+            )
         return httpx.Response(404)
 
     transport = httpx.MockTransport(mock_handler)
@@ -213,9 +241,17 @@ def test_github_read_service_read_file_text_and_binary_rejection() -> None:
     assert truncated is False
     assert blob_sha == "blob_sha_123"
 
-    # Reading binary file raises GithubFileBinaryError
-    with pytest.raises(GithubFileBinaryError):
+    # Reading binary file (with NUL bytes) raises GithubFileBinaryError
+    with pytest.raises(GithubFileBinaryError, match="Binary file cannot be read"):
         service.read_file("image.png")
+
+    # Reading invalid UTF-8 bytes strictly raises GithubFileBinaryError without replacement
+    with pytest.raises(GithubFileBinaryError, match="non-UTF-8 or binary"):
+        service.read_file("non_utf8.bin")
+
+    # Reading oversized file (> 2 MiB) raises GithubFileTooLargeError
+    with pytest.raises(GithubFileTooLargeError, match="exceeds maximum size limit"):
+        service.read_file("huge_file.txt")
 
 
 def test_resolve_public_repository_revision() -> None:
@@ -226,24 +262,43 @@ def test_resolve_public_repository_revision() -> None:
                 json={
                     "name": "Hello-World",
                     "private": False,
-                    "default_branch": "main",
+                    "default_branch": "master",
                     "description": "Repo description",
                 },
             )
-        elif request.url.path == "/repos/octocat/Hello-World/commits/main":
+        elif request.url.path == "/repos/octocat/Hello-World/commits/master":
             return httpx.Response(
                 200,
                 json={"sha": "4a736a61b8f042617f1a3ec958742b6a5b9e0721"},
             )
+        elif request.url.path == "/repos/octocat/Hello-World/commits/dev":
+            return httpx.Response(
+                200,
+                json={"sha": "devdevdevdevdevdevdevdevdevdevdevdevdev1"},
+            )
         return httpx.Response(404)
 
     transport = httpx.MockTransport(mock_handler)
-    sha, default_branch, description = resolve_public_repository_revision(
+
+    # 1. Explicit ref
+    sha, effective_ref, default_branch, description = resolve_public_repository_revision(
         owner="octocat",
         repository="Hello-World",
-        ref_name="main",
+        ref_name="dev",
         custom_transport=transport,
     )
-    assert sha == "4a736a61b8f042617f1a3ec958742b6a5b9e0721"
-    assert default_branch == "main"
+    assert sha == "devdevdevdevdevdevdevdevdevdevdevdevdev1"
+    assert effective_ref == "dev"
+    assert default_branch == "master"
     assert description == "Repo description"
+
+    # 2. Empty ref discovers default_branch ("master")
+    sha2, effective_ref2, default_branch2, _desc = resolve_public_repository_revision(
+        owner="octocat",
+        repository="Hello-World",
+        ref_name="",
+        custom_transport=transport,
+    )
+    assert sha2 == "4a736a61b8f042617f1a3ec958742b6a5b9e0721"
+    assert effective_ref2 == "master"
+    assert default_branch2 == "master"

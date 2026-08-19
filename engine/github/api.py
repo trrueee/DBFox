@@ -95,9 +95,8 @@ def delete_binding_route(
     binding_id: str,
     db: Session = Depends(get_db),
 ) -> None:
-    """Delete a GitHub repository binding."""
-    del project_id
-    success = delete_github_binding(db, binding_id)
+    """Delete a GitHub repository binding within the scoped project."""
+    success = delete_github_binding(db, project_id, binding_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Binding not found")
 
@@ -109,9 +108,8 @@ def refresh_binding_route(
     db: Session = Depends(get_db),
 ) -> GithubBindingResponse:
     """Refresh the resolved immutable commit revision for an existing binding."""
-    del project_id
     try:
-        binding = refresh_github_binding(db, binding_id)
+        binding = refresh_github_binding(db, project_id, binding_id)
         return _to_binding_response(binding)
     except GithubNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -128,8 +126,7 @@ def list_binding_files(
     db: Session = Depends(get_db),
 ) -> GithubFileListResponse:
     """List directory contents at the binding's resolved revision."""
-    del project_id
-    binding = get_github_binding(db, binding_id)
+    binding = get_github_binding(db, project_id, binding_id)
     if binding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Binding not found")
 
@@ -138,6 +135,7 @@ def list_binding_files(
         repository=binding.repository,
         revision=binding.resolved_revision,
         binding_id=binding.id,
+        ref_name=binding.ref_name,
     )
     try:
         entries, truncated = service.list_files(path=path, limit=limit)
@@ -159,8 +157,7 @@ def read_binding_file(
     db: Session = Depends(get_db),
 ) -> GithubFileContentResponse:
     """Read a text file at the binding's resolved revision for the Dock view."""
-    del project_id
-    binding = get_github_binding(db, binding_id)
+    binding = get_github_binding(db, project_id, binding_id)
     if binding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Binding not found")
 
@@ -169,6 +166,7 @@ def read_binding_file(
         repository=binding.repository,
         revision=binding.resolved_revision,
         binding_id=binding.id,
+        ref_name=binding.ref_name,
     )
     try:
         norm_path, rev, size, sha256, content, truncated, _blob = service.read_file(path)

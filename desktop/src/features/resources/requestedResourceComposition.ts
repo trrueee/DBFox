@@ -38,6 +38,12 @@ export function collectProductRequestedResources(
   context: RequestedResourceContext,
   collectors: readonly RequestedResourceCollector[] = PRODUCT_REQUESTED_RESOURCE_COLLECTORS,
 ): readonly RequestedResourceRef[] | undefined {
+  // If workspace authority is unproven (undefined), fail safe by omitting requested_resources
+  // so the server preserves full legacy session authority without dropping workspace tools.
+  if (context.projectId && context.workspaceRoot === undefined) {
+    return undefined;
+  }
+
   const refs: RequestedResourceRef[] = [];
   const seen = new Set<string>();
 

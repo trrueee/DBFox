@@ -68,21 +68,24 @@ def test_github_repository_binding_crud(db_session) -> None:
     assert binding.resolved_revision == "e91c3da45831964177d465d6c8b9db1a2b3c4d5e"
     assert binding.default_branch == "main"
 
-    # 2. Get binding
-    fetched = get_github_binding(db_session, binding.id)
+    # 2. Get binding scoped to project
+    fetched = get_github_binding(db_session, "proj-gh-1", binding.id)
     assert fetched is not None
     assert fetched.id == binding.id
 
-    # 3. List bindings
+    # 3. Foreign project lookup returns None
+    assert get_github_binding(db_session, "foreign-proj", binding.id) is None
+
+    # 4. List bindings
     bindings = list_github_bindings(db_session, "proj-gh-1")
     assert len(bindings) == 1
     assert bindings[0].id == binding.id
 
-    # 4. Refresh binding
-    refreshed = refresh_github_binding(db_session, binding.id, custom_transport=transport)
+    # 5. Refresh binding
+    refreshed = refresh_github_binding(db_session, "proj-gh-1", binding.id, custom_transport=transport)
     assert refreshed.resolved_revision == "e91c3da45831964177d465d6c8b9db1a2b3c4d5e"
 
-    # 5. Duplicate rejection
+    # 6. Duplicate rejection
     with pytest.raises(GithubInvalidInputError, match="already exists"):
         create_github_binding(
             db=db_session,
@@ -92,10 +95,75 @@ def test_github_repository_binding_crud(db_session) -> None:
             custom_transport=transport,
         )
 
-    # 6. Delete binding
-    assert delete_github_binding(db_session, binding.id) is True
-    assert get_github_binding(db_session, binding.id) is None
+    # 7. Delete binding (fails closed on foreign project)
+    assert delete_github_binding(db_session, "foreign-proj", binding.id) is False
+    assert delete_github_binding(db_session, "proj-gh-1", binding.id) is True
+    assert get_github_binding(db_session, "proj-gh-1", binding.id) is None
     assert len(list_github_bindings(db_session, "proj-gh-1")) == 0
+
+
+def test_cross_project_binding_isolation_fails_closed(db_session) -> None:
+    p1 = Project(id="proj-alpha", name="Project Alpha")
+    p2 = Project(id="proj-beta", name="Project Beta")
+    db_session.add_all([p1, p2])
+    db_session.commit()
+
+    transport = _mock_github_transport()
+
+    binding_alpha = create_github_binding(
+        db=db_session,
+        project_id="proj-alpha",
+        repo_input="facebook/react",
+        ref_name="main",
+        custom_transport=transport,
+    )
+
+    # Project Beta cannot read, refresh, or delete Alpha's binding
+    assert get_github_binding(db_session, "proj-beta", binding_alpha.id) is None
+    with pytest.raises(Exception):
+        refresh_github_binding(db_session, "proj-beta", binding_alpha.id, custom_transport=transport)
+    assert delete_github_binding(db_session, "proj-beta", binding_alpha.id) is False
+
+    # Alpha's binding remains unharmed
+    assert get_github_binding(db_session, "proj-alpha", binding_alpha.id) is not None
+
+
+def test_default_branch_resolution_when_ref_name_empty(db_session) -> None:
+    project = Project(id="proj-default-branch", name="Default Branch Project")
+    db_session.add(project)
+    db_session.commit()
+
+    def mock_default_branch_transport() -> httpx.BaseTransport:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/repos/astral-sh/uv":
+                return httpx.Response(
+                    200,
+                    json={
+                        "name": "uv",
+                        "private": False,
+                        "default_branch": "main",
+                        "description": "Fast Python package manager",
+                    },
+                )
+            elif request.url.path == "/repos/astral-sh/uv/commits/main":
+                return httpx.Response(
+                    200,
+                    json={"sha": "4444555566667777888899990000111122223333"},
+                )
+            return httpx.Response(404)
+
+        return httpx.MockTransport(handler)
+
+    binding = create_github_binding(
+        db=db_session,
+        project_id="proj-default-branch",
+        repo_input="astral-sh/uv",
+        ref_name="",  # empty ref_name must auto-discover default_branch
+        custom_transport=mock_default_branch_transport(),
+    )
+    assert binding.ref_name == "main"
+    assert binding.default_branch == "main"
+    assert binding.resolved_revision == "4444555566667777888899990000111122223333"
 
 
 def test_github_resource_provider_discovery(db_session) -> None:
@@ -149,6 +217,7 @@ def test_github_resource_resolver_freshness_and_stale_fence(db_session) -> None:
     assert service.repository == "flask"
     assert service.revision == "aabbccddeeff0011223344556677889900aabbcc"
     assert service.binding_id == "bind-valid"
+    assert service.ref_name == "main"
 
     # Stale revision rejection (raises ValueError)
     stale_ref = ResourceScopeRef(
