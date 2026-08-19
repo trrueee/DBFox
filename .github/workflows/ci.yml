@@ -30,8 +30,49 @@ env:
   PIP_NO_INPUT: "1"
 
 jobs:
+  changes:
+    name: Classify changed paths
+    runs-on: ubuntu-24.04
+    outputs:
+      full: ${{ steps.classify.outputs.full }}
+      backend: ${{ steps.classify.outputs.backend }}
+      python_quality: ${{ steps.classify.outputs.python_quality }}
+      migration: ${{ steps.classify.outputs.migration }}
+      agent_runtime: ${{ steps.classify.outputs.agent_runtime }}
+      isolated_worker: ${{ steps.classify.outputs.isolated_worker }}
+      sidecar: ${{ steps.classify.outputs.sidecar }}
+      frontend: ${{ steps.classify.outputs.frontend }}
+      rust: ${{ steps.classify.outputs.rust }}
+      supply_chain: ${{ steps.classify.outputs.supply_chain }}
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # v5.6.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Classify repository changes for fast CI routing
+        id: classify
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            python scripts/ci_changed_paths.py \
+              --event-name "${{ github.event_name }}" \
+              --base-ref "origin/${{ github.base_ref }}" \
+              --head-ref "HEAD"
+          else
+            python scripts/ci_changed_paths.py \
+              --event-name "${{ github.event_name }}"
+          fi
+
   migration-and-python-quality:
     name: Migration contract and Python quality
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.python_quality == 'true' || needs.changes.outputs.migration == 'true'
     runs-on: ubuntu-24.04
     env:
       DBFOX_MIGRATE_ONLY: "1"
@@ -91,7 +132,8 @@ jobs:
 
   backend-core:
     name: Backend core regression
-    needs: migration-and-python-quality
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     steps:
       - name: Configure runner-local paths
@@ -123,7 +165,8 @@ jobs:
 
   isolated-worker-platform-contract:
     name: Isolated worker contract (${{ matrix.os }})
-    needs: migration-and-python-quality
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.isolated_worker == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -158,7 +201,8 @@ jobs:
 
   production-python-compatibility:
     name: Production Python compatibility regression
-    needs: migration-and-python-quality
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     steps:
       - name: Configure runner-local paths
@@ -193,7 +237,8 @@ jobs:
 
   agent-runtime:
     name: Agent runtime regression
-    needs: migration-and-python-quality
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.agent_runtime == 'true'
     runs-on: ubuntu-24.04
     steps:
       - name: Configure runner-local paths
@@ -225,7 +270,8 @@ jobs:
 
   sidecar-build:
     name: Frozen sidecar build smoke
-    needs: migration-and-python-quality
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.sidecar == 'true'
     runs-on: ubuntu-24.04
     steps:
       # v4.2.2
@@ -266,6 +312,8 @@ jobs:
 
   supply-chain-audit:
     name: Locked dependency security audit
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.supply_chain == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -338,6 +386,8 @@ jobs:
 
   frontend:
     name: Frontend test, lint, and build
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -388,6 +438,8 @@ jobs:
 
   rust:
     name: Rust format, lint, and test
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -545,3 +597,79 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
+
+  ci-required:
+    name: All required checks
+    if: always()
+    needs:
+      - changes
+      - migration-and-python-quality
+      - backend-core
+      - isolated-worker-platform-contract
+      - production-python-compatibility
+      - agent-runtime
+      - sidecar-build
+      - supply-chain-audit
+      - frontend
+      - rust
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify required check outcomes
+        shell: python
+        run: |
+          import sys
+
+          results = {
+              "changes": "${{ needs.changes.result }}",
+              "migration-and-python-quality": "${{ needs.migration-and-python-quality.result }}",
+              "backend-core": "${{ needs.backend-core.result }}",
+              "isolated-worker-platform-contract": "${{ needs.isolated-worker-platform-contract.result }}",
+              "production-python-compatibility": "${{ needs.production-python-compatibility.result }}",
+              "agent-runtime": "${{ needs.agent-runtime.result }}",
+              "sidecar-build": "${{ needs.sidecar-build.result }}",
+              "supply-chain-audit": "${{ needs.supply-chain-audit.result }}",
+              "frontend": "${{ needs.frontend.result }}",
+              "rust": "${{ needs.rust.result }}",
+          }
+
+          expected = {
+              "migration-and-python-quality": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.python_quality == 'true' || needs.changes.outputs.migration == 'true' }}",
+              "backend-core": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true' }}",
+              "isolated-worker-platform-contract": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.isolated_worker == 'true' }}",
+              "production-python-compatibility": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true' }}",
+              "agent-runtime": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.agent_runtime == 'true' }}",
+              "sidecar-build": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.sidecar == 'true' }}",
+              "supply-chain-audit": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.supply_chain == 'true' }}",
+              "frontend": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.frontend == 'true' }}",
+              "rust": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.rust == 'true' }}",
+          }
+
+          print("--- CI JOB RESULTS ---")
+          for k, v in results.items():
+              print(f"  {k}: result={v}, expected={expected.get(k, 'N/A')}")
+
+          if results["changes"] != "success":
+              print(f"FAILED: 'changes' job did not succeed: {results['changes']}")
+              sys.exit(1)
+
+          failed = False
+          for job, res in results.items():
+              if job == "changes":
+                  continue
+              is_expected = expected.get(job) == "true"
+              if is_expected:
+                  if res != "success":
+                      print(f"FAILED: Expected job '{job}' had result '{res}', expected 'success'")
+                      failed = True
+                  else:
+                      print(f"OK: Expected job '{job}' passed with success")
+              else:
+                  if res not in ("skipped", "success"):
+                      print(f"FAILED: Unselected job '{job}' had unexpected result '{res}'")
+                      failed = True
+                  else:
+                      print(f"OK: Unselected job '{job}' was safely skipped (or succeeded): {res}")
+
+          if failed:
+              sys.exit(1)
+          print("ALL REQUIRED CI CHECKS COMPLETED SUCCESSFULLY.")
