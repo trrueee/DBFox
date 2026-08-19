@@ -2,6 +2,11 @@ import { lazy, Suspense } from "react";
 import type { ResourceConnectorContribution } from "./types";
 import { createDataContribution, DATA_CONNECTOR_ID } from "./DataConnector";
 import { createWorkspaceContribution, WORKSPACE_CONNECTOR_ID } from "./WorkspaceConnector";
+import {
+  createGithubContribution,
+  GITHUB_CONNECTOR_ID,
+  AddGithubRepoDialog,
+} from "./GithubConnector";
 import { useConnectionDialogStore } from "./connectionDialogStore";
 
 const ConnectionDialog = lazy(() =>
@@ -16,21 +21,26 @@ export function productResourceConnectors(
   return [
     createDataContribution(toast),
     createWorkspaceContribution(),
+    createGithubContribution(toast),
   ];
 }
 
 export function ResourceConnectorDialog() {
   const { open, createMode, close } = useConnectionDialogStore();
-  if (!open) return null;
   return (
-    <Suspense fallback={null}>
-      <ConnectionDialog
-        open
-        createMode={createMode}
-        onOpenChange={(isOpen) => { if (!isOpen) close(); }}
-      />
-    </Suspense>
+    <>
+      {open ? (
+        <Suspense fallback={null}>
+          <ConnectionDialog
+            open
+            createMode={createMode}
+            onOpenChange={(isOpen) => { if (!isOpen) close(); }}
+          />
+        </Suspense>
+      ) : null}
+      <AddGithubRepoDialog />
+    </>
   );
 }
 
-export { DATA_CONNECTOR_ID, WORKSPACE_CONNECTOR_ID };
+export { DATA_CONNECTOR_ID, WORKSPACE_CONNECTOR_ID, GITHUB_CONNECTOR_ID };

@@ -38,6 +38,8 @@ import type {
   QuestionItem,
 } from "../types/conversation";
 import { useDatasourceSelectionStore } from "./datasourceSelectionStore";
+import { useWorkspaceStore } from "./workspaceStore";
+import { collectProductRequestedResources } from "../features/resources/requestedResourceComposition";
 import {
   reduceStreamEvent,
   removeConversationState,
@@ -213,6 +215,17 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     const llmPayload = requireConversationLlmPayload();
     const detail = get().detailById[conversationId]
       || await get().openConversation(conversationId);
+    const projectId = detail.project_id || useWorkspaceStore.getState().activeProjectId || "";
+    const authoritySnapshot = collectProductRequestedResources({
+      projectId,
+      conversationId,
+      datasourceId: detail.datasource_id,
+    });
+    const requested_resources = authoritySnapshot.complete && authoritySnapshot.refs.length > 0
+      ? [...authoritySnapshot.refs]
+      : authoritySnapshot.complete
+        ? []
+        : undefined;
     const created = await admitConversationInput(conversationId, {
       content,
       idempotency_key: idempotencyKey,
@@ -221,6 +234,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       llm_credential_id: llmPayload.llm_credential_id,
       api_base: llmPayload.api_base,
       model_name: llmPayload.model_name,
+      requested_resources,
       workspace_context: {
         datasource_id: detail.datasource_id,
         selected_table_names: detail.context_tables,

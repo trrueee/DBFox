@@ -944,3 +944,31 @@ class DomainTagRule(Base):  # type: ignore[misc,valid-type]
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class GithubRepositoryBinding(Base):  # type: ignore[misc,valid-type]
+    """Durable project binding to a public GitHub repository at a resolved revision."""
+
+    __tablename__ = "github_repository_bindings"
+    __table_args__ = (
+        Index("ix_github_repository_bindings_project", "project_id"),
+        UniqueConstraint(
+            "project_id",
+            "owner",
+            "repository",
+            "ref_name",
+            name="uq_github_repository_bindings_project_repo_ref",
+        ),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    owner = Column(String, nullable=False)
+    repository = Column(String, nullable=False)
+    ref_name = Column(String, nullable=False, default="main")
+    resolved_revision = Column(String, nullable=False)
+    default_branch = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+

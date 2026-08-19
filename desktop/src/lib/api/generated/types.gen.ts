@@ -887,6 +887,26 @@ export type ConversationSummaryResponse = {
 };
 
 /**
+ * CreateGithubBindingRequest
+ *
+ * Request payload to create a new GitHub repository binding.
+ */
+export type CreateGithubBindingRequest = {
+    /**
+     * Ref Name
+     *
+     * Target branch, tag, or ref name (empty/omitted resolves to repository default branch).
+     */
+    ref_name?: string;
+    /**
+     * Repository
+     *
+     * Public GitHub repository input: 'owner/repo' or 'https://github.com/owner/repo'
+     */
+    repository: string;
+};
+
+/**
  * CredentialEnrollmentBatchRequest
  *
  * Transient, all-or-cleaned enrollment input for related credentials.
@@ -1933,6 +1953,134 @@ export type FunctionCallPayload = {
      * Tool Version
      */
     tool_version: string;
+};
+
+/**
+ * GithubBindingResponse
+ *
+ * Response schema for a single GitHub repository binding.
+ */
+export type GithubBindingResponse = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Default Branch
+     */
+    default_branch?: string | null;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Owner
+     */
+    owner: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Ref Name
+     */
+    ref_name: string;
+    /**
+     * Repository
+     */
+    repository: string;
+    /**
+     * Resolved Revision
+     */
+    resolved_revision: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * GithubFileContentResponse
+ *
+ * Response schema for repository file read API.
+ */
+export type GithubFileContentResponse = {
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Content Sha256
+     */
+    content_sha256: string;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Revision
+     */
+    revision: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Truncated
+     */
+    truncated?: boolean;
+};
+
+/**
+ * GithubFileEntry
+ *
+ * Entry in a GitHub repository directory listing.
+ */
+export type GithubFileEntry = {
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Sha
+     */
+    sha?: string | null;
+    /**
+     * Size Bytes
+     */
+    size_bytes?: number | null;
+    /**
+     * Type
+     */
+    type: 'file' | 'dir' | 'submodule';
+};
+
+/**
+ * GithubFileListResponse
+ *
+ * Response schema for repository file listing API.
+ */
+export type GithubFileListResponse = {
+    /**
+     * Entries
+     */
+    entries: Array<GithubFileEntry>;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Revision
+     */
+    revision: string;
+    /**
+     * Truncated
+     */
+    truncated?: boolean;
 };
 
 /**
@@ -6076,6 +6224,390 @@ export type ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponses = {
 };
 
 export type ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponse = ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponses[keyof ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponses];
+
+export type GetBindingsApiV1ProjectsProjectIdGithubBindingsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/v1/projects/{project_id}/github/bindings';
+};
+
+export type GetBindingsApiV1ProjectsProjectIdGithubBindingsGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type GetBindingsApiV1ProjectsProjectIdGithubBindingsGetError = GetBindingsApiV1ProjectsProjectIdGithubBindingsGetErrors[keyof GetBindingsApiV1ProjectsProjectIdGithubBindingsGetErrors];
+
+export type GetBindingsApiV1ProjectsProjectIdGithubBindingsGetResponses = {
+    /**
+     * Response Get Bindings Api V1 Projects  Project Id  Github Bindings Get
+     *
+     * Successful Response
+     */
+    200: Array<GithubBindingResponse>;
+};
+
+export type GetBindingsApiV1ProjectsProjectIdGithubBindingsGetResponse = GetBindingsApiV1ProjectsProjectIdGithubBindingsGetResponses[keyof GetBindingsApiV1ProjectsProjectIdGithubBindingsGetResponses];
+
+export type CreateBindingApiV1ProjectsProjectIdGithubBindingsPostData = {
+    body: CreateGithubBindingRequest;
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/v1/projects/{project_id}/github/bindings';
+};
+
+export type CreateBindingApiV1ProjectsProjectIdGithubBindingsPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type CreateBindingApiV1ProjectsProjectIdGithubBindingsPostError = CreateBindingApiV1ProjectsProjectIdGithubBindingsPostErrors[keyof CreateBindingApiV1ProjectsProjectIdGithubBindingsPostErrors];
+
+export type CreateBindingApiV1ProjectsProjectIdGithubBindingsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: GithubBindingResponse;
+};
+
+export type CreateBindingApiV1ProjectsProjectIdGithubBindingsPostResponse = CreateBindingApiV1ProjectsProjectIdGithubBindingsPostResponses[keyof CreateBindingApiV1ProjectsProjectIdGithubBindingsPostResponses];
+
+export type DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Binding Id
+         */
+        binding_id: string;
+    };
+    query?: never;
+    url: '/api/v1/projects/{project_id}/github/bindings/{binding_id}';
+};
+
+export type DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteError = DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteErrors[keyof DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteErrors];
+
+export type DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteResponse = DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteResponses[keyof DeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteResponses];
+
+export type ReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Binding Id
+         */
+        binding_id: string;
+    };
+    query: {
+        /**
+         * Path
+         *
+         * Repository-relative file path
+         */
+        path: string;
+    };
+    url: '/api/v1/projects/{project_id}/github/bindings/{binding_id}/file';
+};
+
+export type ReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetError = ReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetErrors[keyof ReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetErrors];
+
+export type ReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GithubFileContentResponse;
+};
+
+export type ReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetResponse = ReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetResponses[keyof ReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetResponses];
+
+export type ListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Binding Id
+         */
+        binding_id: string;
+    };
+    query?: {
+        /**
+         * Path
+         *
+         * Repository-relative directory path
+         */
+        path?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/projects/{project_id}/github/bindings/{binding_id}/files';
+};
+
+export type ListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetError = ListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetErrors[keyof ListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetErrors];
+
+export type ListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GithubFileListResponse;
+};
+
+export type ListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetResponse = ListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetResponses[keyof ListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetResponses];
+
+export type RefreshBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdRefreshPostData = {
+    body?: never;
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Binding Id
+         */
+        binding_id: string;
+    };
+    query?: never;
+    url: '/api/v1/projects/{project_id}/github/bindings/{binding_id}/refresh';
+};
+
+export type RefreshBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdRefreshPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type RefreshBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdRefreshPostError = RefreshBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdRefreshPostErrors[keyof RefreshBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdRefreshPostErrors];
+
+export type RefreshBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdRefreshPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GithubBindingResponse;
+};
+
+export type RefreshBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdRefreshPostResponse = RefreshBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdRefreshPostResponses[keyof RefreshBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdRefreshPostResponses];
 
 export type ApiCancelSqlApiV1QueryCancelPostData = {
     body: SqlCancelRequest;

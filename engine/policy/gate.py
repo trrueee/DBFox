@@ -55,6 +55,7 @@ _AGENT_KERNEL_CAPABILITIES = frozenset(
         "database_read",
         "filesystem_read",
         "filesystem_write",
+        "network",
     }
 )
 

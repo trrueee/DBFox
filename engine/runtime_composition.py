@@ -22,6 +22,9 @@ from engine.agent.resource_refs import (
 )
 from engine.agent.workspace_context import WorkspaceContextContributor
 from engine.db import SessionLocal
+from engine.github.context import GitHubContextContributor
+from engine.github.resource import list_github_resources, resolve_github_repository
+from engine.github.tools import register_github_extension
 from engine.models import DataSource, Project
 from engine.tools.builtin.registry import (
     register_conversation_functions,
@@ -59,6 +62,7 @@ def build_product_tool_registry() -> ToolRegistry:
     register_workspace_extension(registry)
     register_workspace_write_extension(registry)
     register_remote_job_extension(registry)
+    register_github_extension(registry)
     return registry.freeze()
 
 
@@ -102,7 +106,7 @@ def list_workspace_resources(db: Session, project_id: str) -> tuple[ProjectResou
         ProjectResourceDescriptor(
             kind="workspace",
             id=str(project.id),
-            version=ref.version,
+            version=ref.version or "",
             name=project.name or "Workspace",
         ),
     )
@@ -113,6 +117,7 @@ def default_project_resource_providers() -> tuple[ProjectResourceProvider, ...]:
     return (
         list_database_resources,
         list_workspace_resources,
+        list_github_resources,
     )
 
 
@@ -197,15 +202,25 @@ def build_attempt_resource_resolver(
         with SessionLocal() as db:
             return resolve_workspace_resource(db, ref)
 
+    def resolve_github(ref: ResourceScopeRef) -> Any:
+        if metadata_session is not None:
+            return resolve_github_repository(metadata_session, ref)
+        with SessionLocal() as db:
+            return resolve_github_repository(db, ref)
+
     resolver.register("database", cast(ScopedResourceResolver, resolve_database))
     resolver.register("workspace", cast(ScopedResourceResolver, resolve_workspace))
+    resolver.register("github.repository", cast(ScopedResourceResolver, resolve_github))
     return resolver.freeze()
 
 
 def default_context_contributors() -> tuple[Callable[[Session], ContextContributor], ...]:
     """Return the built-in contributors; Context Kernel owns their use."""
 
-    return (WorkspaceContextContributor,)
+    return (
+        WorkspaceContextContributor,
+        GitHubContextContributor,
+    )
 
 
 def build_default_completion_policy() -> CompletionPolicy:

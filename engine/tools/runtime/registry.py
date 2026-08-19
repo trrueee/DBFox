@@ -16,6 +16,7 @@ IN_PROCESS_CAPABILITIES: frozenset[ToolCapability] = frozenset(
         "database_read",
         "database_write",
         "filesystem_read",
+        "network",
     }
 )
 
