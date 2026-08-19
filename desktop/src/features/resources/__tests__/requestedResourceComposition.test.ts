@@ -15,10 +15,9 @@ describe("Requested Resource Composition Contributors", () => {
     useGithubStore.setState({
       activeBindingIdByProject: {},
       bindingsByProject: {},
-      filesByBinding: {},
-      selectedFileByBinding: {},
-      loadingByBinding: {},
-      errorByBinding: {},
+      loadingByProject: {},
+      errorByProject: {},
+      fileStateByKey: {},
     });
   });
 
