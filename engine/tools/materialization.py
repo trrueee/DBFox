@@ -70,6 +70,7 @@ def materialize_tools(
     allowed_groups: set[str] | None = None,
     allowed_names: set[str] | None = None,
     execution_mode: str,
+    available_resource_kinds: set[str] | frozenset[str] | None = None,
 ) -> ToolMaterialization:
     materialized: list[MaterializedTool] = []
     for tool in registry.list_tools():
@@ -83,6 +84,10 @@ def materialize_tools(
         allowed_modes = set(spec.policy.allowed_execution_modes)
         if allowed_modes and execution_mode not in allowed_modes:
             continue
+        if available_resource_kinds is not None:
+            required = set(spec.execution.required_resource_kinds)
+            if not required.issubset(available_resource_kinds):
+                continue
         materialized.append(_materialize_tool(tool))
 
     materialized.sort(key=lambda value: value.name)

@@ -316,6 +316,7 @@ class ResultInspectTool(BaseTool[ResultInspectInput, ResultInspectOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
+        required_resource_kinds=("database",),
     )
     semantics = ToolSemanticSpec(
         produces=(ToolSemanticCapability.QUERY_RESULT,),
@@ -412,6 +413,7 @@ class ResultProfileTool(BaseTool[ResultProfileInput, ResultProfileOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
+        required_resource_kinds=("database",),
     )
     semantics = ToolSemanticSpec(
         produces=(ToolSemanticCapability.RESULT_PROFILE,),
@@ -504,6 +506,7 @@ class ChartCreateTool(BaseTool[ChartCreateInput, ChartCreateOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
+        required_resource_kinds=("database",),
     )
     semantics = ToolSemanticSpec(publishes_artifact_references=True)
 

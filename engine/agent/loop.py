@@ -52,8 +52,10 @@ from engine.llm.config import (
 from engine.llm.endpoint_policy import LlmEndpointPolicyError
 from engine.json_codec import load_object
 from engine.models import (
+    AgentSessionInput,
     AgentTurn,
 )
+from engine.agent.resource_refs import load_resource_refs
 from engine.tools.materialization import ToolMaterialization, materialize_tools
 from engine.tools.runtime import ToolExecutionTask, ToolExecutor, ToolRegistry
 from engine.tools.runtime.semantics import ToolSemanticCapability
@@ -828,11 +830,25 @@ class RunLoop:
                 state.get("allowed_tool_groups") or self.definition.allowed_tool_groups
             )
             groups = _relevant_tool_groups(groups, context)
+
+            frozen_refs: tuple[Any, ...] | None = None
+            available_resource_kinds: frozenset[str] | None = None
+            if run.input_id:
+                input_row = db.get(AgentSessionInput, str(run.input_id))
+                if input_row is not None and input_row.resource_refs_json is not None:
+                    frozen_refs = load_resource_refs(str(input_row.resource_refs_json))
+                    if frozen_refs is not None:
+                        available_resource_kinds = frozenset(r.kind for r in frozen_refs)
+            if available_resource_kinds is None and run.datasource_id:
+                # Legacy pre-P4 compatibility
+                available_resource_kinds = frozenset({"database"})
+
             tools = materialize_tools(
                 self.registry,
                 allowed_groups=groups,
                 allowed_names=(set(_FINALIZATION_TOOL_NAMES) if finalizing else None),
                 execution_mode=self.definition.execution_mode,
+                available_resource_kinds=available_resource_kinds,
             )
             tool_schemas = tools.provider_schemas()
             prompt = self.prompts.assemble(

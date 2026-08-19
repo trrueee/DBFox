@@ -128,6 +128,7 @@ class CatalogOverviewTool(BaseTool[EmptyInput, CatalogOverviewOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read",),
+        required_resource_kinds=("database",),
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(
@@ -190,6 +191,7 @@ class CatalogRefreshTool(BaseTool[EmptyInput, CatalogRefreshOutput]):
         timeout_seconds=120,
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "metadata_write", "database_read"),
+        required_resource_kinds=("database",),
     )
     semantics = ToolSemanticSpec(
         produces=(
@@ -282,6 +284,7 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read",),
+        required_resource_kinds=("database",),
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SCHEMA_METADATA,))
@@ -418,6 +421,7 @@ class SchemaSearchTool(BaseTool[SchemaSearchInput, SchemaSearchOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read",),
+        required_resource_kinds=("database",),
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SCHEMA_METADATA,))
@@ -516,6 +520,7 @@ class SchemaInspectTool(BaseTool[SchemaInspectInput, SchemaInspectOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read",),
+        required_resource_kinds=("database",),
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SCHEMA_METADATA,))

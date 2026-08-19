@@ -109,6 +109,7 @@ class WorkspaceFileSearchTool(BaseTool[FileSearchInput, FileSearchOutput]):
         max_output_bytes=200_000,
         backend="in_process",
         capabilities=("filesystem_read",),
+        required_resource_kinds=("workspace",),
     )
     semantics = ToolSemanticSpec(
         produces=("dbfox.workspace.file_search",),
@@ -171,6 +172,7 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
         max_output_bytes=1_000_000,
         backend="in_process",
         capabilities=("filesystem_read",),
+        required_resource_kinds=("workspace",),
     )
     semantics = ToolSemanticSpec(
         produces=("dbfox.workspace.file_snapshot",),
@@ -275,6 +277,7 @@ class WorkspaceFileWritePatchTool(
         max_output_bytes=1_000_000,
         backend="isolated_process",
         capabilities=("filesystem_write",),
+        required_resource_kinds=("workspace",),
     )
     semantics = ToolSemanticSpec(
         produces=("dbfox.workspace.code_patch",),
