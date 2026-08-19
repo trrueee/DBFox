@@ -85,8 +85,12 @@ function ReadOnlyCodeEditor({ value }: { value: string }) {
   return <div ref={hostRef} className="workspace-file-dock__editor" data-testid="workspace-file-editor" />;
 }
 
+import { useWorkspaceFileStore } from "../../stores/workspaceFileStore";
+
 export function WorkspaceFileDockContent({ tab }: { tab: WorkspaceDockTab }) {
-  const filePath = tab.filePath ?? "";
+  const fileState = useWorkspaceFileStore((s) => s.fileStateByKey[tab.stateKey ?? tab.viewKey]);
+  const filePath = fileState?.filePath ?? "";
+  const fileName = fileState?.fileName ?? tab.title;
   const [result, setResult] = useState<ProjectFileContent | null>(null);
   const [loading, setLoading] = useState(Boolean(filePath));
   const [reloadSeq, setReloadSeq] = useState(0);
@@ -102,7 +106,7 @@ export function WorkspaceFileDockContent({ tab }: { tab: WorkspaceDockTab }) {
         if (!cancelled) {
           setResult({
             path: filePath,
-            name: tab.fileName ?? filePath,
+            name: fileName || filePath,
             content: null,
             binary: false,
             size: 0,
@@ -116,9 +120,9 @@ export function WorkspaceFileDockContent({ tab }: { tab: WorkspaceDockTab }) {
     return () => {
       cancelled = true;
     };
-  }, [filePath, reloadSeq, tab.fileName]);
+  }, [fileName, filePath, reloadSeq]);
 
-  const title = tab.fileName ?? filePath;
+  const title = fileName || filePath;
   const retry = () => {
     setResult(null);
     setLoading(true);

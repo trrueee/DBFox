@@ -2,7 +2,15 @@ import { create } from "zustand";
 
 import { useWorkspaceStore } from "./workspaceStore";
 import { defaultSql } from "../features/workspace/defaultSql";
-import type { ConsoleEntry, SqlConsoleTabState } from "../features/workspace/SqlConsoleWorkspace";
+import type { ConsoleEntry } from "../features/workspace/SqlConsoleWorkspace";
+
+export type SqlConsoleTabState = {
+  datasourceId: string;
+  datasourceDbType?: string | null;
+  draftSql: string;
+  entries: ConsoleEntry[];
+  running: boolean;
+};
 
 interface SqlConsoleStateStore {
   sqlConsoleState: Record<string, SqlConsoleTabState>;
@@ -15,8 +23,8 @@ interface SqlConsoleActions {
     initialSql?: string,
     activate?: boolean,
   ) => void;
-  patchSqlConsoleState: (tabId: string, patch: Partial<SqlConsoleTabState>) => void;
-  appendSqlConsoleEntries: (tabId: string, entries: ConsoleEntry[]) => void;
+  patchSqlConsoleState: (stateKeyOrViewKey: string, patch: Partial<SqlConsoleTabState>) => void;
+  appendSqlConsoleEntries: (stateKeyOrViewKey: string, entries: ConsoleEntry[]) => void;
 }
 
 export type SqlConsoleStore = SqlConsoleStateStore & SqlConsoleActions;
@@ -33,22 +41,28 @@ export const useSqlConsoleStore = create<SqlConsoleStore>()((set) => ({
       const shell = useWorkspaceStore.getState();
       const projectKey = consoleKey(shell.activeProjectId, datasourceId);
       const stateKey = `sql-${projectKey}`;
-      const tabId = `console-${projectKey}`;
+      const viewKey = `dbfox.data.sql-console:${projectKey}`;
       const existing = state.sqlConsoleState[stateKey];
       const tab = {
-        id: tabId,
-        kind: "console" as const,
+        viewKey,
+        viewType: "dbfox.data.sql-console",
         title: "SQL 控制台",
         closeable: false,
         stateKey,
-        datasourceId,
-        datasourceDbType: datasourceDbType ?? null,
+        projectId: shell.activeProjectId || undefined,
+        target: {
+          type: "resource" as const,
+          kind: "database",
+          id: datasourceId,
+        },
       };
       shell.openDockTab(tab, activate);
       return {
         sqlConsoleState: {
           ...state.sqlConsoleState,
           [stateKey]: {
+            datasourceId,
+            datasourceDbType: datasourceDbType ?? null,
             draftSql: initialSql ?? existing?.draftSql ?? defaultSql,
             entries: existing?.entries ?? [],
             running: existing?.running ?? false,
@@ -57,26 +71,26 @@ export const useSqlConsoleStore = create<SqlConsoleStore>()((set) => ({
       };
     }),
 
-  patchSqlConsoleState: (tabId, patch) =>
+  patchSqlConsoleState: (key, patch) =>
     set((state) => {
-      const current = state.sqlConsoleState[tabId];
+      const current = state.sqlConsoleState[key];
       if (!current) return state;
       return {
         sqlConsoleState: {
           ...state.sqlConsoleState,
-          [tabId]: { ...current, ...patch },
+          [key]: { ...current, ...patch },
         },
       };
     }),
 
-  appendSqlConsoleEntries: (tabId, entries) =>
+  appendSqlConsoleEntries: (key, entries) =>
     set((state) => {
-      const current = state.sqlConsoleState[tabId];
+      const current = state.sqlConsoleState[key];
       if (!current) return state;
       return {
         sqlConsoleState: {
           ...state.sqlConsoleState,
-          [tabId]: { ...current, entries: [...current.entries, ...entries] },
+          [key]: { ...current, entries: [...current.entries, ...entries] },
         },
       };
     }),

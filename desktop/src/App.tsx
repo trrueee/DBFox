@@ -22,6 +22,7 @@ import { ResizableWorkspaceLayout } from "./features/appShell/ResizableWorkspace
 import { ProjectResourceSidebar } from "./features/resources/ProjectResourceSidebar";
 import { productResourceConnectors, ResourceConnectorDialog } from "./features/resources/resourceConnectorComposition";
 import { useConnectionDialogStore } from "./features/resources/connectionDialogStore";
+import { useProductDockBootstrap } from "./features/dock/useProductDockBootstrap";
 
 const AppCommandPalette = lazy(() =>
   import("./features/appShell/AppCommandPalette").then((module) => ({
@@ -125,6 +126,9 @@ export default function App() {
   const closeSettings = useWorkspaceStore((s) => s.closeSettings);
   const setSettingsSection = useWorkspaceStore((s) => s.setSettingsSection);
 
+  // Product-level Dock bootstrap (Console for active datasource, Artifacts for active conversation)
+  useProductDockBootstrap(activeConversationId);
+
   const openDockConsoleForActiveDatasource = useCallback(
     (initialSql?: string) => {
       if (!activeDatasource) return;
@@ -174,8 +178,12 @@ export default function App() {
       }
       if (event.key === "3") {
         event.preventDefault();
-        const tableTab = dockTabs.find((tab) => tab.kind === "table" && tab.datasourceId === activeDatasourceId);
-        if (tableTab) setDockActiveTab(tableTab.id);
+        const tableTab = dockTabs.find(
+          (tab) =>
+            tab.viewType === "dbfox.data.table"
+            && (!activeDatasourceId || (tab.target?.type === "resource" && tab.target.id === activeDatasourceId)),
+        );
+        if (tableTab) setDockActiveTab(tableTab.viewKey);
       }
       if (event.key === "4" && activeConversationId) {
         event.preventDefault();
@@ -201,7 +209,9 @@ export default function App() {
     showSmartQueryHome,
   ]);
 
-  const activeDockTab = dockTabs.find((tab) => tab.id === dock.activeTabId);
+  const activeDockTab = dockTabs.find(
+    (tab) => tab.viewKey === (dock.activeViewKey ?? dock.activeTabId),
+  );
 
   return (
     <div className="app-shell">
@@ -263,6 +273,7 @@ export default function App() {
                     </section>
                     <Suspense fallback={<WorkspaceDockFallback />}>
                       <WorkspaceDock
+                        activeDatasourceId={activeDatasourceId}
                         activeConversationId={activeConversationId}
                         showToast={toast}
                       />
@@ -280,6 +291,7 @@ export default function App() {
                     </section>
                     <Suspense fallback={<WorkspaceDockFallback />}>
                       <WorkspaceDock
+                        activeDatasourceId={activeDatasourceId}
                         activeConversationId={activeConversationId}
                         showToast={toast}
                       />

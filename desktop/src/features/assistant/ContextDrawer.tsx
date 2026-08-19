@@ -45,12 +45,15 @@ function AiSuggest() {
   );
 }
 
+import { useTableWorkspaceStore } from "../../stores/tableWorkspaceStore";
+
 function PropsPanel({ activeTab }: { activeTab?: WorkspaceDockTab }) {
   const { tables, activeDatasource: activeDs } = useDatasourceState();
   const apiConfig = getStoredApiConfig();
 
-  if (activeTab?.kind === "table") {
-    const tableId = activeTab.tableId || "";
+  if (activeTab?.viewType === "dbfox.data.table") {
+    const tableState = useTableWorkspaceStore.getState().tableStateByTabId[activeTab.stateKey ?? activeTab.viewKey];
+    const tableId = tableState?.tableName || activeTab.title || "";
     const table = tables.find((t) => t.table_name === tableId);
 
     const rows = [
@@ -76,7 +79,7 @@ function PropsPanel({ activeTab }: { activeTab?: WorkspaceDockTab }) {
     }
     return <InfoList rows={rows} />;
   }
-  if (activeTab?.kind === "console") {
+  if (activeTab?.viewType === "dbfox.data.sql-console") {
     return (
       <InfoList
         rows={[
@@ -88,11 +91,12 @@ function PropsPanel({ activeTab }: { activeTab?: WorkspaceDockTab }) {
       />
     );
   }
+  const conversationId = activeTab?.target?.type === "conversation" ? activeTab.target.id : "—";
   return (
     <InfoList
       rows={[
         ["激活大模型:", apiConfig?.modelName || "—"],
-        ["会话ID:", activeTab?.conversationId || "—"],
+        ["会话ID:", conversationId],
       ]}
     />
   );

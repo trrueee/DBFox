@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WorkspaceDockTab } from "../../../types/workspace";
+import { useWorkspaceFileStore } from "../../../stores/workspaceFileStore";
 import { WorkspaceFileDockContent } from "../WorkspaceFileDock";
 
 const projectFolderApi = vi.hoisted(() => ({
@@ -15,19 +16,28 @@ vi.mock("../../../lib/projectFolder", () => ({
 
 function tab(): WorkspaceDockTab {
   return {
-    id: "file-project-1-C:/demo/blob.bin",
-    kind: "file",
+    viewKey: "dbfox.workspace.file:project-1:C:/demo/blob.bin",
+    viewType: "dbfox.workspace.file",
     title: "blob.bin",
     closeable: true,
     projectId: "project-1",
-    filePath: "C:/demo/blob.bin",
-    fileName: "blob.bin",
+    stateKey: "dbfox.workspace.file:project-1:C:/demo/blob.bin",
+    target: { type: "resource", kind: "workspace", id: "project-1" },
   };
 }
 
 describe("WorkspaceFileDockContent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useWorkspaceFileStore.setState({
+      fileStateByKey: {
+        "dbfox.workspace.file:project-1:C:/demo/blob.bin": {
+          projectId: "project-1",
+          filePath: "C:/demo/blob.bin",
+          fileName: "blob.bin",
+        },
+      },
+    });
     projectFolderApi.readProjectFile.mockResolvedValue({
       path: "C:/demo/blob.bin",
       name: "blob.bin",
