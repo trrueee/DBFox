@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from engine.agent.resource_refs import RequestedResourceRef
 from engine.agent.session import DeliveryMode
 
 
@@ -24,6 +25,7 @@ class ConversationInputRequest(BaseModel):
     content: str = Field(min_length=1, max_length=20_000)
     idempotency_key: str = Field(min_length=8, max_length=256)
     delivery_mode: DeliveryMode = DeliveryMode.QUEUE
+    requested_resources: list[RequestedResourceRef] | None = None
     selected_artifact_ids: list[str] = Field(default_factory=list, max_length=20)
     workspace_context: dict[str, object] = Field(default_factory=dict)
     llm_credential_id: str = Field(min_length=1, max_length=256)

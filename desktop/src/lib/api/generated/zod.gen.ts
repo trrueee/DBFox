@@ -608,20 +608,6 @@ export const zDeliveryMode = z.enum([
 ]);
 
 /**
- * ConversationInputRequest
- */
-export const zConversationInputRequest = z.object({
-    api_base: z.string().max(2048).nullish(),
-    content: z.string().min(1).max(20000),
-    delivery_mode: zDeliveryMode.optional().default('queue'),
-    idempotency_key: z.string().min(8).max(256),
-    llm_credential_id: z.string().min(1).max(256),
-    model_name: z.string().max(256).nullish(),
-    selected_artifact_ids: z.array(z.string()).max(20).optional(),
-    workspace_context: z.record(z.string(), z.unknown()).optional()
-});
-
-/**
  * DiagnosticEnvironmentResponse
  */
 export const zDiagnosticEnvironmentResponse = z.object({
@@ -1012,6 +998,31 @@ export const zQuestionRequest = z.object({
     status: zQuestionStatus,
     turn_id: z.string(),
     version: z.int().gte(0)
+});
+
+/**
+ * RequestedResourceRef
+ *
+ * Wire representation of client resource intent. Excludes version.
+ */
+export const zRequestedResourceRef = z.object({
+    id: z.string().min(1).max(256),
+    kind: z.string().min(1).max(64)
+});
+
+/**
+ * ConversationInputRequest
+ */
+export const zConversationInputRequest = z.object({
+    api_base: z.string().max(2048).nullish(),
+    content: z.string().min(1).max(20000),
+    delivery_mode: zDeliveryMode.optional().default('queue'),
+    idempotency_key: z.string().min(8).max(256),
+    llm_credential_id: z.string().min(1).max(256),
+    model_name: z.string().max(256).nullish(),
+    requested_resources: z.array(zRequestedResourceRef).nullish(),
+    selected_artifact_ids: z.array(z.string()).max(20).optional(),
+    workspace_context: z.record(z.string(), z.unknown()).optional()
 });
 
 /**

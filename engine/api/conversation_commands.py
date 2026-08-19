@@ -32,7 +32,7 @@ from engine.errors import DBFoxError
 from engine.json_codec import loads as json_loads
 from engine.llm.config import LlmConfigurationError, normalize_product_llm_preferences
 from engine.models import AgentRun, AgentRunItemRecord, AgentSession, DataSource, Project
-from engine.tools.runtime.attempt import ResourceScopeRef
+from engine.runtime_composition import authorize_project_resources
 from engine.schemas.api_responses import (
     ArtifactSelectionResponse,
     ConversationDeleteResponse,
@@ -148,34 +148,18 @@ def admit_conversation_input(
             detail={"code": "CONVERSATION_NOT_FOUND", "message": "Conversation not found."},
         )
 
-    # Build frozen resource refs for this admission
-    resource_refs: list[ResourceScopeRef] = []
-    if aggregate.datasource_id is not None:
-        datasource = db.get(DataSource, str(aggregate.datasource_id))
-        if datasource is not None:
-            resource_refs.append(
-                ResourceScopeRef(
-                    kind="database",
-                    id=str(datasource.id),
-                    version=int(datasource.connection_generation or 0),
-                )
-            )
-            # Add workspace ref if project has workspace_root
-            if datasource.project_id is not None:
-                project = db.get(Project, str(datasource.project_id))
-                if project is not None and project.workspace_root:
-                    from engine.tools.runtime.resource_context import resolve_workspace_scope_ref
-                    ws_ref = resolve_workspace_scope_ref(db, str(datasource.id))
-                    if ws_ref is not None:
-                        resource_refs.append(ws_ref)
-    elif aggregate.project_id is not None:
-        # Workspace-only session: add workspace ref from project
-        project = db.get(Project, str(aggregate.project_id))
-        if project is not None and project.workspace_root:
-            from engine.tools.runtime.resource_context import resolve_workspace_scope_ref
-            ws_ref = resolve_workspace_scope_ref(db, None, project_id=str(aggregate.project_id))
-            if ws_ref is not None:
-                resource_refs.append(ws_ref)
+    try:
+        resource_refs = authorize_project_resources(
+            db,
+            project_id=str(aggregate.project_id or ""),
+            requested=payload.requested_resources,
+            fallback_datasource_id=str(aggregate.datasource_id) if aggregate.datasource_id else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_RESOURCE_REQUEST", "message": str(exc)},
+        ) from exc
 
     try:
         preferences = normalize_product_llm_preferences(

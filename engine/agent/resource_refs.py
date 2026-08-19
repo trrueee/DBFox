@@ -1,14 +1,49 @@
 """Strict typed codec for frozen Input resource refs.
 
-Two real consumers: ContextAssembler and ToolDispatcher.
+Consumers: ContextAssembler, ToolDispatcher, and ProjectResourceProviders.
 """
 
 from __future__ import annotations
+
+from typing import Any, Protocol
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from engine.json_codec import canonical_dumps as _json, loads as _loads
 from engine.tools.runtime.attempt import ResourceScopeRef
 
 MAX_INPUT_RESOURCE_REFS = 16
+
+
+class RequestedResourceRef(BaseModel):
+    """Wire representation of client resource intent. Excludes version."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    kind: str = Field(min_length=1, max_length=64)
+    id: str = Field(min_length=1, max_length=256)
+
+
+class ProjectResourceDescriptor(BaseModel):
+    """Project-scoped resource discovery descriptor with server-canonical freshness version."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: str
+    id: str
+    version: int | str
+    name: str
+    is_default: bool = False
+
+    def to_scope_ref(self) -> ResourceScopeRef:
+        return ResourceScopeRef(kind=self.kind, id=self.id, version=self.version)
+
+
+class ProjectResourceProvider(Protocol):
+    """DLC discovery interface for project-scoped resources."""
+
+    def __call__(self, db: Any, project_id: str) -> tuple[ProjectResourceDescriptor, ...]:
+        ...
 
 
 def dump_resource_refs(refs: tuple[ResourceScopeRef, ...]) -> str:
