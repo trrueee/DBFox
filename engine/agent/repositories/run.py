@@ -786,6 +786,11 @@ class RunRepository:
         response: ComposedResponse,
         delta: dict[str, Any],
     ) -> None:
+        if run.datasource_id is None:
+            aggregate.context_epoch = int(aggregate.context_epoch or 0) + 1
+            self.session.flush()
+            return
+
         row = self.session.execute(
             select(AgentSessionMemory).where(
                 AgentSessionMemory.session_id == aggregate.id
@@ -799,7 +804,7 @@ class RunRepository:
             except JsonCodecError:
                 previous = {}
         current_datasource_id = str(run.datasource_id)
-        current_generation = int(run.datasource_generation)
+        current_generation = int(run.datasource_generation or 0)
         same_generation = (
             previous.get("datasource_id") == current_datasource_id
             and previous.get("datasource_generation") == current_generation
@@ -864,7 +869,7 @@ class RunRepository:
             self.session.add(
                 AgentSessionMemory(
                     session_id=str(aggregate.id),
-                    datasource_id=str(aggregate.datasource_id),
+                    datasource_id=str(aggregate.datasource_id) if aggregate.datasource_id else None,
                     memory_json=_json(memory),
                 )
             )

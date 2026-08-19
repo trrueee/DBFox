@@ -84,7 +84,7 @@ class ToolRequest(BaseModel):
     run_id: str
     execution_id: str
     execution_mode: str
-    frozen_resource_refs: tuple[ResourceScopeRef, ...] = ()
+    frozen_resource_refs: tuple[ResourceScopeRef, ...] | None = None
 
 
 class ToolDispatchOutcome(StrEnum):
@@ -715,12 +715,13 @@ class ToolDispatcher:
                 result = None
 
         execution_id = str(invocation.id)
+        has_query_reservation = bool(execution_id and request.datasource_id is not None)
 
-        if execution_id:
+        if has_query_reservation:
             QUERY_REGISTRY.reserve(execution_id, request.datasource_id)
 
         def cancel_query() -> None:
-            if execution_id:
+            if has_query_reservation:
                 QUERY_REGISTRY.cancel(execution_id)
 
         try:
@@ -730,12 +731,12 @@ class ToolDispatcher:
                     scope_key=invocation.run_id,
                     operation=execute_leaf,
                     should_cancel=control.is_cancel_requested,
-                    cancel_action=cancel_query if execution_id else None,
+                    cancel_action=cancel_query if has_query_reservation else None,
                     on_attempt=record_attempt,
                     deadline=control.deadline,
                 )
         finally:
-            if execution_id:
+            if has_query_reservation:
                 QUERY_REGISTRY.unregister(execution_id)
 
         return result
@@ -1007,16 +1008,16 @@ class ToolDispatcher:
     def _tool_request(self, run: AgentRun, db: Session) -> ToolRequest:
         from engine.agent.resource_refs import load_resource_refs
 
-        # Read frozen resource refs from the input
-        frozen_refs: tuple[ResourceScopeRef, ...] = ()
+        # Read frozen resource refs from the input (None = legacy, () = empty post-P4)
+        frozen_refs: tuple[ResourceScopeRef, ...] | None = None
         if run.input_id:
             input_row = db.get(AgentSessionInput, str(run.input_id))
             if input_row is not None:
-                refs = load_resource_refs(
-                    str(input_row.resource_refs_json) if input_row.resource_refs_json is not None else None
+                frozen_refs = load_resource_refs(
+                    str(input_row.resource_refs_json)
+                    if input_row.resource_refs_json is not None
+                    else None
                 )
-                if refs is not None:
-                    frozen_refs = refs
 
         return ToolRequest(
             datasource_id=str(run.datasource_id) if run.datasource_id else None,

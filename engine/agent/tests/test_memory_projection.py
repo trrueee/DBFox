@@ -694,3 +694,151 @@ def test_scripted_continuation_consumes_memory_without_rediscovery(
     assert provider.prompt_checked is True
     assert run is not None and run.status == "completed"
     assert db_session.query(AgentToolInvocation).filter_by(run_id=admitted.run_id).count() == 0
+
+
+def test_memory_v4_matrix_workspace_only_run_preserves_catalog_and_advances_watermark(
+    db_session,
+    test_datasource,
+) -> None:
+    """Run 1 (DB A) -> Run 2 (Workspace-only) -> Run 3 (DB A) matrix test."""
+    session = _session(db_session, str(test_datasource.id), session_id="session-matrix-ws")
+
+    # Run 1: Database A with catalog observation
+    _run(db_session, session.id, datasource_id=str(test_datasource.id), run_id="run-matrix-1", sequence=1)
+    _catalog_search_records(db_session, run_id="run-matrix-1", session_id=session.id)
+    db_session.commit()
+
+    outcome_1 = project_session_memory(db_session, session.id, 1)
+    db_session.commit()
+    assert outcome_1.projected_through_session_sequence == 1
+
+    # Run 2: Workspace-only (no database, no catalog observation)
+    _run(db_session, session.id, datasource_id=None, run_id="run-matrix-2", sequence=2)
+    db_session.commit()
+
+    outcome_2 = project_session_memory(db_session, session.id, 2)
+    db_session.commit()
+    assert outcome_2.projected_through_session_sequence == 2
+
+    # Assert after Run 2: Catalog objects from Run 1 remain, scope remains A
+    row = db_session.query(AgentSessionMemory).filter_by(session_id=session.id).one()
+    payload = json.loads(row.memory_v4_json)
+    projection = next(
+        item
+        for item in payload["projections"]
+        if item["projection_id"] == "dbfox.catalog.working_state"
+    )
+    assert projection["projected_through_session_sequence"] == 2
+    assert projection["scope"]["datasource_id"] == str(test_datasource.id)
+    assert len(projection["state"]["objects"]) == 1
+
+    # Run 3: Database A continues
+    _run(db_session, session.id, datasource_id=str(test_datasource.id), run_id="run-matrix-3", sequence=3)
+    db_session.commit()
+
+    outcome_3 = project_session_memory(db_session, session.id, 3)
+    db_session.commit()
+    assert outcome_3.projected_through_session_sequence == 3
+
+    row_3 = db_session.query(AgentSessionMemory).filter_by(session_id=session.id).one()
+    payload_3 = json.loads(row_3.memory_v4_json)
+    projection_3 = next(
+        item
+        for item in payload_3["projections"]
+        if item["projection_id"] == "dbfox.catalog.working_state"
+    )
+    assert projection_3["projected_through_session_sequence"] == 3
+    assert projection_3["scope"]["datasource_id"] == str(test_datasource.id)
+    assert len(projection_3["state"]["objects"]) == 1
+
+
+def test_memory_v4_matrix_generation_invalidation_after_workspace_only_run(
+    db_session,
+    test_datasource,
+) -> None:
+    """Database A gen 1 -> Workspace-only -> Database A gen 2 invalidation."""
+    session = _session(db_session, str(test_datasource.id), session_id="session-matrix-gen")
+
+    # Run 1: Database A gen 1
+    _run(
+        db_session,
+        session.id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        run_id="run-gen-1",
+        sequence=1,
+    )
+    _catalog_search_records(db_session, run_id="run-gen-1", session_id=session.id)
+    db_session.commit()
+    project_session_memory(db_session, session.id, 1)
+
+    # Run 2: Workspace-only
+    _run(db_session, session.id, datasource_id=None, run_id="run-gen-2", sequence=2)
+    db_session.commit()
+    project_session_memory(db_session, session.id, 2)
+
+    # Run 3: Database A generation 2
+    _run(
+        db_session,
+        session.id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=2,
+        run_id="run-gen-3",
+        sequence=3,
+    )
+    db_session.commit()
+    outcome_3 = project_session_memory(db_session, session.id, 3)
+    db_session.commit()
+    assert outcome_3.projected_through_session_sequence == 3
+
+    # Assert generation 2 invalidated generation 1 objects
+    row = db_session.query(AgentSessionMemory).filter_by(session_id=session.id).one()
+    payload = json.loads(row.memory_v4_json)
+    projection = next(
+        item
+        for item in payload["projections"]
+        if item["projection_id"] == "dbfox.catalog.working_state"
+    )
+    assert projection["scope"]["datasource_generation"] == 2
+    assert len(projection["state"]["objects"]) == 0
+
+
+def test_memory_v4_matrix_workspace_only_first_then_database(
+    db_session,
+    test_datasource,
+) -> None:
+    """Run 1 workspace-only -> empty Catalog state -> Run 2 database A establishes scope."""
+    session = _session(db_session, None, session_id="session-matrix-ws-first")
+
+    # Run 1: Workspace-only
+    _run(db_session, session.id, datasource_id=None, run_id="run-wsfirst-1", sequence=1)
+    db_session.commit()
+    outcome_1 = project_session_memory(db_session, session.id, 1)
+    db_session.commit()
+    assert outcome_1.projected_through_session_sequence == 1
+
+    # Run 2: Database A with observation
+    _run(
+        db_session,
+        session.id,
+        datasource_id=str(test_datasource.id),
+        datasource_generation=1,
+        run_id="run-wsfirst-2",
+        sequence=2,
+    )
+    _catalog_search_records(db_session, run_id="run-wsfirst-2", session_id=session.id)
+    db_session.commit()
+    outcome_2 = project_session_memory(db_session, session.id, 2)
+    db_session.commit()
+    assert outcome_2.projected_through_session_sequence == 2
+
+    row = db_session.query(AgentSessionMemory).filter_by(session_id=session.id).one()
+    payload = json.loads(row.memory_v4_json)
+    projection = next(
+        item
+        for item in payload["projections"]
+        if item["projection_id"] == "dbfox.catalog.working_state"
+    )
+    assert projection["scope"]["datasource_id"] == str(test_datasource.id)
+    assert len(projection["state"]["objects"]) == 1
+

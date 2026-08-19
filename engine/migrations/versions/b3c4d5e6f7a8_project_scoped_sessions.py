@@ -135,6 +135,35 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    conn = op.get_bind()
+    null_sessions = (
+        conn.execute(
+            sa.text("SELECT count(*) FROM agent_sessions WHERE datasource_id IS NULL")
+        ).scalar()
+        or 0
+    )
+    null_runs = (
+        conn.execute(
+            sa.text("SELECT count(*) FROM agent_runs WHERE datasource_id IS NULL")
+        ).scalar()
+        or 0
+    )
+    null_memories = (
+        conn.execute(
+            sa.text(
+                "SELECT count(*) FROM agent_session_memories WHERE datasource_id IS NULL"
+            )
+        ).scalar()
+        or 0
+    )
+
+    if null_sessions > 0 or null_runs > 0 or null_memories > 0:
+        raise RuntimeError(
+            "Cannot downgrade project-scoped sessions while datasource-less Agent "
+            f"sessions/runs/memory rows exist (null sessions: {null_sessions}, "
+            f"runs: {null_runs}, memories: {null_memories})."
+        )
+
     op.drop_index("ix_agent_session_inputs_run", table_name="agent_session_inputs")
     op.drop_column("agent_session_inputs", "resource_refs_json")
 

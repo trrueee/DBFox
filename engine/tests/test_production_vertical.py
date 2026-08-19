@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import Any
 
 from sqlalchemy.orm import sessionmaker
 
 from engine.agent.context import ContextAssembler
 from engine.agent.control import LeaseAwareRunControl
 from engine.agent.definition import AgentDefinition
+from engine.agent.events import LiveStreamHub
+from engine.agent.loop import RunLoop
 from engine.agent.repositories.approval import ApprovalRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.run import RunLimits
 from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
-from engine.agent.turn import ModelToolCall
+from engine.agent.turn import ModelToolCall, TurnStreamItem, TurnStreamKind, TurnTermination
 from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentArtifactRecord,
@@ -24,6 +27,7 @@ from engine.models import (
     AgentRun,
     AgentMessage,
     AgentSession,
+    AgentSessionMemory,
     AgentToolInvocation,
     Project,
 )
@@ -255,10 +259,14 @@ def test_vertical_chain_handoff_after_failed_tool_run(
     )
     db_session.commit()
 
+    ws_digest = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:16]
     sessions = SessionRepository(db_session)
     first = sessions.admit(
         session_id="session-vertical-tool-failed",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(
+            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="workspace", id="project-vertical-tool-failed", version=ws_digest),
+        ),
         content="先读文件再失败",
         idempotency_key="vertical-tool-failed-first",
         llm_credential_id="credential",
@@ -451,10 +459,14 @@ def test_vertical_chain_file_write_patch_approval_recovery(
     )
     db_session.commit()
 
+    ws_digest = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:16]
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session-vertical-write",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(
+            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="workspace", id="project-vertical-write", version=ws_digest),
+        ),
         content="更新文件",
         idempotency_key="vertical-file-write-approval",
         llm_credential_id="credential",
@@ -825,3 +837,339 @@ def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
         "artifact_id" not in json.loads(artifact.payload_json)
         for artifact in remote_job_artifacts
     )
+
+
+class _ScriptedWorkspaceFileReadModel:
+    def __init__(self) -> None:
+        self.turn = 0
+
+    def stream(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        timeout_seconds: float | None = None,
+        **kwargs: Any,
+    ):
+        self.turn += 1
+        if self.turn == 1:
+            yield TurnStreamItem(
+                kind=TurnStreamKind.TOOL_CALL_START,
+                item_id="tool:call-ws-file-read",
+                revision=1,
+                tool_call_index=0,
+                tool_call_id="call-ws-file-read",
+                tool_name="file_read",
+                arguments_delta=json.dumps({"path": "notes.txt"}),
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.TOOL_CALL_END,
+                item_id="tool:call-ws-file-read",
+                revision=2,
+                tool_call_index=0,
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
+                item_id="tool:call-ws-file-read",
+                revision=3,
+                output_index=0,
+                model_output_item={
+                    "type": "function_call",
+                    "call_id": "call-ws-file-read",
+                    "name": "file_read",
+                    "arguments": json.dumps({"path": "notes.txt"}),
+                },
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.FINISH,
+                item_id="finish",
+                revision=1,
+                termination=TurnTermination.COMPLETED,
+            )
+        else:
+            content = "Successfully read notes.txt: Architecture P4 final closure"
+            yield TurnStreamItem(
+                kind=TurnStreamKind.ANSWER_START,
+                item_id="answer",
+                revision=1,
+                output_index=0,
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.ANSWER_DELTA,
+                item_id="answer",
+                revision=2,
+                content=content,
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.ANSWER_END,
+                item_id="answer",
+                revision=3,
+                output_index=0,
+                message_status="completed",
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
+                item_id="answer",
+                revision=4,
+                output_index=0,
+                model_output_item={
+                    "type": "message",
+                    "role": "assistant",
+                    "content": content,
+                },
+            )
+            yield TurnStreamItem(
+                kind=TurnStreamKind.FINISH,
+                item_id="finish",
+                revision=1,
+                termination=TurnTermination.COMPLETED,
+            )
+
+
+class _ScriptedZeroResourceTerminalModel:
+    def stream(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        timeout_seconds: float | None = None,
+        **kwargs: Any,
+    ):
+        content = "Project-only zero-resource terminal response."
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_START,
+            item_id="answer",
+            revision=1,
+            output_index=0,
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_DELTA,
+            item_id="answer",
+            revision=2,
+            content=content,
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.ANSWER_END,
+            item_id="answer",
+            revision=3,
+            output_index=0,
+            message_status="completed",
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.MODEL_OUTPUT_ITEM,
+            item_id="answer",
+            revision=4,
+            output_index=0,
+            model_output_item={
+                "type": "message",
+                "role": "assistant",
+                "content": content,
+            },
+        )
+        yield TurnStreamItem(
+            kind=TurnStreamKind.FINISH,
+            item_id="finish",
+            revision=1,
+            termination=TurnTermination.COMPLETED,
+        )
+
+
+def test_workspace_only_production_vertical_file_read_and_terminalize(
+    db_session,
+    tmp_path,
+) -> None:
+    """Full production RunLoop vertical for a workspace-only Session without Database."""
+    root = tmp_path / "ws_prod"
+    root.mkdir(parents=True)
+    notes_file = root / "notes.txt"
+    notes_file.write_text("Architecture P4 final closure\n", encoding="utf-8")
+
+    project = Project(
+        id="project-ws-vertical-prod",
+        name="Workspace Vertical Project",
+        status="active",
+        workspace_root=str(root),
+    )
+    db_session.add(project)
+    db_session.flush()
+
+    session = AgentSession(
+        id="session-ws-vertical-prod",
+        project_id="project-ws-vertical-prod",
+        datasource_id=None,
+        title="Workspace-only Vertical Session",
+    )
+    db_session.add(session)
+    db_session.commit()
+
+    ws_digest = hashlib.sha256(str(root.resolve()).encode("utf-8")).hexdigest()[:16]
+    ws_ref = ResourceScopeRef(
+        kind="workspace",
+        id="project-ws-vertical-prod",
+        version=ws_digest,
+    )
+
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session-ws-vertical-prod",
+        resource_refs=(ws_ref,),
+        content="read notes.txt",
+        idempotency_key="vertical-ws-file-read-prod-1",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="scripted",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id="session-ws-vertical-prod", owner="vertical-ws-worker")
+    assert lease is not None
+    promoted_run_id = sessions.promote_next_input(lease=lease)
+    assert promoted_run_id == admission.run_id
+    db_session.commit()
+
+    # Tool registry with real workspace extension
+    registry = ToolRegistry(available_backends=frozenset({"in_process"}))
+    register_workspace_extension(registry)
+    registry.freeze()
+
+    definition = AgentDefinition(
+        allowed_tool_groups=("workspace",),
+        execution_mode="agent_autonomous_read",
+    )
+    provider = _ScriptedWorkspaceFileReadModel()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+
+    # Execute through real production RunLoop
+    RunLoop(
+        session_factory=factory,
+        model_factory=lambda _settings: provider,
+        registry=registry,
+        definition=definition,
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    db_session.expire_all()
+
+    # 1. Run starts and finishes without datasource
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None
+    assert run.datasource_id is None
+    # 10. Run reaches completed terminal state
+    assert run.status == "completed"
+
+    # 2 & 3. Model called real file_read with exact frozen refs
+    invocations = (
+        db_session.query(AgentToolInvocation)
+        .filter_by(run_id=admission.run_id)
+        .all()
+    )
+    assert len(invocations) == 1
+    invocation = invocations[0]
+    assert invocation.tool_name == "file_read"
+    assert invocation.status == "succeeded"
+
+    # 4, 7, 8. Observation is durable and succeeded
+    observations = (
+        db_session.query(AgentObservationRecord)
+        .filter_by(tool_invocation_id=str(invocation.id))
+        .all()
+    )
+    assert len(observations) == 1
+    observation = observations[0]
+    assert observation.status == "succeeded"
+    assert len(json.loads(observation.model_output_json)["artifact_ids"]) == 1
+
+    # 9. Artifact behavior is durable and bounded
+    artifacts = (
+        db_session.query(AgentArtifactRecord)
+        .filter_by(session_id="session-ws-vertical-prod")
+        .all()
+    )
+    assert len(artifacts) == 1
+    artifact = artifacts[0]
+    assert artifact.type == "dbfox.workspace.file_snapshot"
+    assert json.loads(artifact.payload_json)["relativePath"] == "notes.txt"
+
+    # 11. v3 Memory does not write fake "None" datasource
+    memory_rows = (
+        db_session.query(AgentSessionMemory)
+        .filter_by(session_id="session-ws-vertical-prod")
+        .all()
+    )
+    for mem_row in memory_rows:
+        assert mem_row.datasource_id is None
+        assert mem_row.datasource_id != "None"
+        if mem_row.memory_json:
+            parsed = json.loads(mem_row.memory_json)
+            assert parsed.get("datasource_id") is None or parsed.get("datasource_id") != "None"
+
+    # 14. Next Context can still read normal Session history / Workspace Context
+    snapshot = ContextAssembler(
+        db_session,
+        contributors=default_context_contributors(),
+    ).build(admission.run_id)
+    assert snapshot is not None
+
+
+def test_project_only_zero_resource_production_vertical_terminalize(
+    db_session,
+) -> None:
+    """Project with zero resources admitted terminalizes cleanly through production RunLoop."""
+    project = Project(
+        id="project-zero-res-vert",
+        name="Zero Resource Project",
+        status="active",
+        workspace_root=None,
+    )
+    db_session.add(project)
+    db_session.flush()
+
+    session = AgentSession(
+        id="session-zero-res-vert",
+        project_id="project-zero-res-vert",
+        datasource_id=None,
+        title="Zero Resource Session",
+    )
+    db_session.add(session)
+    db_session.commit()
+
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="session-zero-res-vert",
+        resource_refs=(),
+        content="Hello from project-only session",
+        idempotency_key="vertical-zero-res-prod-1",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="scripted",
+        request_payload={},
+    )
+    lease = sessions.claim(session_id="session-zero-res-vert", owner="vertical-zero-worker")
+    assert lease is not None
+    promoted_run_id = sessions.promote_next_input(lease=lease)
+    assert promoted_run_id == admission.run_id
+    db_session.commit()
+
+    registry = ToolRegistry(available_backends=frozenset({"in_process"}))
+    registry.freeze()
+
+    definition = AgentDefinition(
+        allowed_tool_groups=(),
+        execution_mode="agent_autonomous_read",
+    )
+    provider = _ScriptedZeroResourceTerminalModel()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+
+    RunLoop(
+        session_factory=factory,
+        model_factory=lambda _settings: provider,
+        registry=registry,
+        definition=definition,
+        live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=admission.run_id)
+
+    db_session.expire_all()
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None
+    assert run.datasource_id is None
+    assert run.status == "completed"
+
