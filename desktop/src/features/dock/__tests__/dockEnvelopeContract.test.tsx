@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
 import type { WorkspaceDockTab } from "../../../types/workspace";
@@ -17,7 +17,7 @@ import { WorkspaceDock } from "../../appShell/WorkspaceDock";
 function resetAll() {
   useWorkspaceStore.setState({
     activeProjectId: "project-1",
-    dock: { open: true, activeViewKey: null, activeTabId: null },
+    dock: { open: true, activeViewKey: null },
     dockTabs: [],
     settingsOpen: false,
   });
@@ -82,6 +82,12 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         expect(forbidden in canonicalTab).toBe(false);
       }
     });
+
+    it("verifies dock store state contains only activeViewKey and no activeTabId", () => {
+      const dock = useWorkspaceStore.getState().dock;
+      expect("activeViewKey" in dock).toBe(true);
+      expect("activeTabId" in (dock as Record<string, unknown>)).toBe(false);
+    });
   });
 
   describe("B. Canonical viewKey Identity", () => {
@@ -121,6 +127,44 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       expect(useWorkspaceStore.getState().dockTabs.map((t) => t.viewKey)).toEqual(["custom:2"]);
       expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("custom:2");
     });
+
+    it("prevents updateDockTab from mutating canonical viewKey or viewType", () => {
+      useWorkspaceStore.getState().openDockTab({
+        viewKey: "custom:immutable",
+        viewType: "test.view",
+        title: "Immutable Identity",
+        closeable: true,
+      });
+
+      // Attempt to patch viewKey and viewType
+      (useWorkspaceStore.getState().updateDockTab as (key: string, patch: Record<string, unknown>) => void)(
+        "custom:immutable",
+        { viewKey: "hacked:key", viewType: "hacked.type", title: "Legitimate Title" },
+      );
+
+      const tab = useWorkspaceStore.getState().dockTabs[0];
+      expect(tab.viewKey).toBe("custom:immutable");
+      expect(tab.viewType).toBe("test.view");
+      expect(tab.title).toBe("Legitimate Title");
+    });
+
+    it("rejects openDockTab when the same viewKey is opened with a conflicting viewType", () => {
+      useWorkspaceStore.getState().openDockTab({
+        viewKey: "conflict:1",
+        viewType: "type.alpha",
+        title: "Alpha",
+        closeable: true,
+      });
+
+      expect(() => {
+        useWorkspaceStore.getState().openDockTab({
+          viewKey: "conflict:1",
+          viewType: "type.beta",
+          title: "Beta",
+          closeable: true,
+        });
+      }).toThrow(/Cannot open tab with viewKey "conflict:1" and viewType "type\.beta": already registered with viewType "type\.alpha"/);
+    });
   });
 
   describe("C. Data Capability State Ownership", () => {
@@ -143,7 +187,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       expect(storeState.draftSql).toBe("SELECT 42");
     });
 
-    it("keeps table and multi-table metadata in tableWorkspaceStore", () => {
+    it("keeps table and multi-table metadata in tableWorkspaceStore with datasource scoping", () => {
       useTableWorkspaceStore.getState().openTable("customers", "er", { id: "ds-2", dbType: "sqlite" });
 
       const tab = useWorkspaceStore.getState().dockTabs[0];
@@ -157,13 +201,17 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         datasourceDbType: "sqlite",
       });
 
-      useTableWorkspaceStore.getState().openMultiTable(["alpha", "beta"]);
+      useTableWorkspaceStore.getState().openMultiTable(["alpha", "beta"], { id: "ds-2", dbType: "sqlite" });
       const multiTab = useWorkspaceStore.getState().dockTabs[1];
-      expect(multiTab.viewKey).toBe("dbfox.data.multi-table:alpha|beta");
-      expect(useTableWorkspaceStore.getState().multiTableStateByTabId["dbfox.data.multi-table:alpha|beta"]).toEqual([
-        "alpha",
-        "beta",
-      ]);
+      expect(multiTab.viewKey).toBe("dbfox.data.multi-table:ds-2:alpha|beta");
+      expect(multiTab.target).toEqual({ type: "resource", kind: "database", id: "ds-2" });
+
+      const multiState = useTableWorkspaceStore.getState().multiTableStateByTabId["dbfox.data.multi-table:ds-2:alpha|beta"];
+      expect(multiState).toEqual({
+        datasourceId: "ds-2",
+        datasourceDbType: "sqlite",
+        tables: ["alpha", "beta"],
+      });
     });
   });
 
@@ -239,10 +287,10 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
     });
   });
 
-  describe("G. Unknown ViewType Fallback", () => {
+  describe("G. Unknown ViewType Fallback & Generic Empty State", () => {
     it("renders graceful unknown fallback state without crashing", async () => {
       useWorkspaceStore.setState({
-        dock: { open: true, activeViewKey: "future:99", activeTabId: "future:99" },
+        dock: { open: true, activeViewKey: "future:99" },
         dockTabs: [{
           viewKey: "future:99",
           viewType: "future.third-party.extension",
@@ -265,10 +313,30 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       expect(screen.getByText("未知视图")).toBeTruthy();
       expect(screen.getByText(/该 Dock 视图类型暂无渲染器：future\.third-party\.extension/)).toBeTruthy();
     });
+
+    it("renders capability-neutral empty state when no tabs are open", () => {
+      useWorkspaceStore.setState({
+        dock: { open: true, activeViewKey: null },
+        dockTabs: [],
+      });
+
+      render(
+        <TooltipProvider>
+          <WorkspaceDock
+            activeDatasourceId="ds-1"
+            activeConversationId="conv-1"
+            showToast={vi.fn()}
+          />
+        </TooltipProvider>,
+      );
+
+      expect(screen.getByText("没有打开的标签")).toBeTruthy();
+      expect(screen.getByText("从左侧资源或对话打开对象后，会在这里继续查看和操作。")).toBeTruthy();
+    });
   });
 
   describe("H. Test-Only Third Dock View Proof (Zero WorkspaceDock Edits)", () => {
-    it("renders custom third-party contribution through generic registry composition", async () => {
+    it("injects and renders custom third-party contribution through WorkspaceDock registry prop", async () => {
       const customView: DockViewContribution = {
         viewType: "test.example.custom-panel",
         icon: () => <span data-testid="custom-icon">✨</span>,
@@ -295,7 +363,6 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         dock: {
           open: true,
           activeViewKey: "custom:my-tool",
-          activeTabId: "custom:my-tool",
         },
         dockTabs: [{
           viewKey: "custom:my-tool",
@@ -305,10 +372,11 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         }],
       });
 
-      // Render standard unmodified WorkspaceDock
+      // Render standard unmodified WorkspaceDock with customRegistry passed in
       render(
         <TooltipProvider>
           <WorkspaceDock
+            registry={customRegistry}
             activeDatasourceId="ds-demo"
             activeConversationId="conv-demo"
             showToast={vi.fn()}
@@ -316,8 +384,25 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         </TooltipProvider>,
       );
 
-      // Tab rendered in shell
-      expect(await screen.findByRole("tab", { name: "My Extension" })).toBeTruthy();
+      // 1. Tab rendered in shell
+      const tabButton = await screen.findByRole("tab", { name: "My Extension" });
+      expect(tabButton).toBeTruthy();
+
+      // 2. Custom icon rendered in tab
+      expect(screen.getByTestId("custom-icon")).toBeTruthy();
+
+      // 3. Custom renderer ACTUALLY rendered in DOM
+      expect(screen.getByTestId("custom-rendered-view")).toBeTruthy();
+      expect(screen.getByText("Rendered My Extension")).toBeTruthy();
+      expect(screen.getByText("Active DS: ds-demo")).toBeTruthy();
+
+      // 4. Closing the tab closes it and removes the rendered view
+      const closeButton = screen.getByRole("button", { name: "关闭 My Extension" });
+      fireEvent.click(closeButton);
+
+      expect(useWorkspaceStore.getState().dockTabs).toHaveLength(0);
+      expect(screen.queryByTestId("custom-rendered-view")).toBeNull();
+      expect(screen.getByText("没有打开的标签")).toBeTruthy();
     });
   });
 });

@@ -9,11 +9,17 @@ export interface TableViewState {
   datasourceDbType?: string | null;
 }
 
+export interface MultiTableViewState {
+  datasourceId?: string;
+  datasourceDbType?: string | null;
+  tables: string[];
+}
+
 interface TableWorkspaceState {
   selectedTables: string[];
   tableSubTabs: Record<string, string>;
   tableStateByTabId: Record<string, TableViewState>;
-  multiTableStateByTabId: Record<string, string[]>;
+  multiTableStateByTabId: Record<string, MultiTableViewState>;
 }
 
 interface TableWorkspaceActions {
@@ -26,7 +32,10 @@ interface TableWorkspaceActions {
     initialSubtab?: string,
     datasource?: TableTabDatasourceContext,
   ) => void;
-  openMultiTable: (tables: string[]) => void;
+  openMultiTable: (
+    tables: string[],
+    datasource?: TableTabDatasourceContext,
+  ) => void;
 }
 
 export type TableWorkspaceStore = TableWorkspaceState & TableWorkspaceActions;
@@ -35,6 +44,13 @@ function canonicalTableViewKey(tableName: string, datasource?: TableTabDatasourc
   return datasource?.id
     ? `dbfox.data.table:${datasource.id}:${tableName}`
     : `dbfox.data.table:${tableName}`;
+}
+
+function canonicalMultiTableViewKey(tables: string[], datasource?: TableTabDatasourceContext) {
+  const canonicalTables = Array.from(new Set(tables)).sort();
+  return datasource?.id
+    ? `dbfox.data.multi-table:${datasource.id}:${canonicalTables.join("|")}`
+    : `dbfox.data.multi-table:${canonicalTables.join("|")}`;
 }
 
 export const useTableWorkspaceStore = create<TableWorkspaceStore>()((set) => ({
@@ -88,17 +104,25 @@ export const useTableWorkspaceStore = create<TableWorkspaceStore>()((set) => ({
     }));
   },
 
-  openMultiTable: (tables) => {
+  openMultiTable: (tables, datasource) => {
     if (tables.length === 0) return;
     const canonicalTables = Array.from(new Set(tables)).sort();
-    const viewKey = `dbfox.data.multi-table:${canonicalTables.join("|")}`;
+    const viewKey = canonicalMultiTableViewKey(canonicalTables, datasource);
     const title = `Workspace: ${canonicalTables.slice(0, 2).join(" & ")}${canonicalTables.length > 2 ? "..." : ""}`;
+    const target = datasource?.id
+      ? {
+          type: "resource" as const,
+          kind: "database",
+          id: datasource.id,
+        }
+      : undefined;
 
     useWorkspaceStore.getState().openDockTab({
       viewKey,
       viewType: "dbfox.data.multi-table",
       title,
       closeable: true,
+      target,
       stateKey: viewKey,
     });
 
@@ -106,7 +130,11 @@ export const useTableWorkspaceStore = create<TableWorkspaceStore>()((set) => ({
       selectedTables: canonicalTables,
       multiTableStateByTabId: {
         ...state.multiTableStateByTabId,
-        [viewKey]: canonicalTables,
+        [viewKey]: {
+          datasourceId: datasource?.id,
+          datasourceDbType: datasource?.dbType ?? null,
+          tables: canonicalTables,
+        },
       },
     }));
   },
