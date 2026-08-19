@@ -969,12 +969,14 @@ class ContextAssembler:
         admitted: AgentSessionInput,
         sources: list[ContextSource],
     ) -> list[ContextArtifact]:
-        selected_ids = _json_strings(admitted.selected_artifact_ids_json)
-        if (
-            aggregate.selected_artifact_id
-            and aggregate.selected_artifact_id not in selected_ids
-        ):
-            selected_ids.append(str(aggregate.selected_artifact_id))
+        if admitted.selected_artifact_ids_json is not None:
+            selected_ids = _json_strings(admitted.selected_artifact_ids_json)
+        else:
+            selected_ids = (
+                [str(aggregate.selected_artifact_id)]
+                if aggregate.selected_artifact_id
+                else []
+            )
         selected_ids = selected_ids[:MAX_SELECTED_ARTIFACTS]
         if not selected_ids:
             sources.append(

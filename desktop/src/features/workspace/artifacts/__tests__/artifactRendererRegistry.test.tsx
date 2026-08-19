@@ -1,17 +1,22 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
-  ArtifactMetadataFallback,
+  createArtifactRendererRegistry,
   getArtifactRenderer,
+  productArtifactRenderers,
   renderArtifact,
   type ArtifactEnvelope,
+  type ArtifactRendererContribution,
 } from "../artifactRendererRegistry";
+import { coreArtifactRenderers } from "../coreArtifactRenderers";
+import { dataArtifactRenderers } from "../dataArtifactRenderers";
+import { workspaceArtifactRenderers } from "../workspaceArtifactRenderers";
 
 vi.mock("../TableArtifactView", () => ({
   TableArtifactView: () => <div data-testid="table-artifact-view" />,
 }));
-vi.mock("../ChartArtifactView", () => ({
-  ChartArtifactView: () => <div data-testid="chart-artifact-view" />,
+vi.mock("../DeferredChartArtifactView", () => ({
+  DeferredChartArtifactView: () => <div data-testid="chart-artifact-view" />,
 }));
 vi.mock("../MarkdownArtifactView", () => ({
   MarkdownArtifactView: () => <div data-testid="markdown-artifact-view" />,
@@ -35,6 +40,34 @@ describe("artifact renderer registry", () => {
     expect(getArtifactRenderer("result_view", 2)).toBeNull();
     expect(getArtifactRenderer("dbfox.workspace.file_snapshot", 1)).not.toBeNull();
     expect(getArtifactRenderer("dbfox.workspace.code_patch", 1)).not.toBeNull();
+  });
+
+  it("verifies clean modular ownership among core, data, and workspace", () => {
+    const coreTypes = coreArtifactRenderers.map((r) => r.type);
+    const dataTypes = dataArtifactRenderers.map((r) => r.type);
+    const wsTypes = workspaceArtifactRenderers.map((r) => r.type);
+
+    expect(coreTypes).toEqual(["markdown"]);
+    expect(dataTypes).toEqual(["result_view", "chart", "sql"]);
+    expect(wsTypes).toEqual([
+      "dbfox.workspace.file_snapshot",
+      "dbfox.workspace.code_patch",
+    ]);
+
+    const productRenderers = productArtifactRenderers();
+    expect(productRenderers).toHaveLength(6);
+  });
+
+  it("rejects duplicate renderer type registration with fail-closed error", () => {
+    const dup: ArtifactRendererContribution<unknown> = {
+      type: "duplicate.type",
+      supportedSchemaVersions: [1],
+      parsePayload: (v) => v,
+      render: () => <div />,
+    };
+    expect(() => createArtifactRendererRegistry([dup, dup])).toThrow(
+      /Duplicate Artifact renderer contribution detected/,
+    );
   });
 
   it("renders unknown artifacts through the metadata fallback", () => {
@@ -99,18 +132,31 @@ describe("artifact renderer registry", () => {
     expect(screen.getByText(/payload 解析失败/)).toBeTruthy();
   });
 
-  it("renders metadata fallback without a payload", () => {
-    render(
-      <ArtifactMetadataFallback
-        artifact={{
-          id: "artifact-empty",
-          type: "sql",
-          title: "SQL envelope",
-          schema_version: 2,
-        }}
-      />,
+  it("supports custom registry injection for third-party artifact proof", () => {
+    const customContribution: ArtifactRendererContribution<unknown> = {
+      type: "test.custom.artifact",
+      supportedSchemaVersions: [1],
+      parsePayload: (v) => v,
+      render: () => <div data-testid="custom-rendered-artifact">Custom Artifact Body</div>,
+    };
+    const customRegistry = createArtifactRendererRegistry([
+      ...productArtifactRenderers(),
+      customContribution,
+    ]);
+
+    const artifact: ArtifactEnvelope = {
+      id: "custom-1",
+      type: "test.custom.artifact",
+      schema_version: 1,
+      title: "Custom Title",
+      payload: {},
+    };
+
+    const { container } = render(
+      renderArtifact(artifact, { onToast: vi.fn() }, customRegistry),
     );
-    expect(screen.getByText("SQL envelope")).toBeTruthy();
-    expect(screen.getByText("sql v2")).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="custom-rendered-artifact"]'),
+    ).toBeTruthy();
   });
 });
