@@ -7,7 +7,7 @@ plugin manager, manifest, container, or additional contribution model.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
@@ -15,8 +15,14 @@ from sqlalchemy.orm import Session
 from engine.agent.completion import CompletionPolicy
 from engine.agent.completion_data import DataCompletionSupport, DataResultCitationConstraint
 from engine.agent.context_fragment import ContextContributor
+from engine.agent.resource_refs import (
+    ProjectResourceDescriptor,
+    ProjectResourceProvider,
+    RequestedResourceRef,
+)
 from engine.agent.workspace_context import WorkspaceContextContributor
 from engine.db import SessionLocal
+from engine.models import DataSource, Project
 from engine.tools.builtin.registry import (
     register_conversation_functions,
     register_core_functions,
@@ -31,7 +37,10 @@ from engine.tools.runtime.attempt import (
     ResourceScopeRef,
     ScopedResourceResolver,
 )
-from engine.tools.runtime.resource_context import resolve_workspace_resource
+from engine.tools.runtime.resource_context import (
+    resolve_workspace_resource,
+    resolve_workspace_scope_ref,
+)
 from engine.workspace.read_service import WorkspaceReadService
 
 if TYPE_CHECKING:
@@ -53,17 +62,138 @@ def build_product_tool_registry() -> ToolRegistry:
     return registry.freeze()
 
 
-def build_attempt_resource_resolver() -> CompositeResourceResolver:
-    """Build unchanged default Database and Workspace attempt resolvers."""
+# ---------------------------------------------------------------------------
+# Project Resource Providers (Discovery)
+# ---------------------------------------------------------------------------
+
+
+def list_database_resources(db: Session, project_id: str) -> tuple[ProjectResourceDescriptor, ...]:
+    """Discover database resources (DataSources) belonging to a project."""
+    if not project_id:
+        return ()
+    datasources = (
+        db.query(DataSource)
+        .filter(DataSource.project_id == project_id)
+        .order_by(DataSource.created_at.asc())
+        .all()
+    )
+    return tuple(
+        ProjectResourceDescriptor(
+            kind="database",
+            id=str(ds.id),
+            version=int(ds.connection_generation or 0),
+            name=ds.name or "Database",
+        )
+        for ds in datasources
+    )
+
+
+def list_workspace_resources(db: Session, project_id: str) -> tuple[ProjectResourceDescriptor, ...]:
+    """Discover workspace resource belonging to a project if configured."""
+    if not project_id:
+        return ()
+    project = db.get(Project, project_id)
+    if project is None or not project.workspace_root:
+        return ()
+    ref = resolve_workspace_scope_ref(db, None, project_id=project_id)
+    if ref is None:
+        return ()
+    return (
+        ProjectResourceDescriptor(
+            kind="workspace",
+            id=str(project.id),
+            version=ref.version,
+            name=project.name or "Workspace",
+        ),
+    )
+
+
+def default_project_resource_providers() -> tuple[ProjectResourceProvider, ...]:
+    """Return the built-in project resource discovery providers."""
+    return (
+        list_database_resources,
+        list_workspace_resources,
+    )
+
+
+def discover_project_resources(
+    db: Session,
+    project_id: str,
+) -> tuple[ProjectResourceDescriptor, ...]:
+    """Discover all available resources across all registered providers for a project."""
+    descriptors: list[ProjectResourceDescriptor] = []
+    for provider in default_project_resource_providers():
+        descriptors.extend(provider(db, project_id))
+    return tuple(descriptors)
+
+
+def authorize_project_resources(
+    db: Session,
+    project_id: str,
+    requested: Sequence[RequestedResourceRef] | None,
+    fallback_datasource_id: str | None = None,
+) -> tuple[ResourceScopeRef, ...]:
+    """Authorize requested resources against project discovery, attaching server canonical versions."""
+    if requested is not None:
+        available = {
+            (d.kind, d.id): d
+            for d in discover_project_resources(db, project_id)
+        }
+        authorized: list[ResourceScopeRef] = []
+        seen: set[tuple[str, str]] = set()
+        for req in requested:
+            key = (req.kind, req.id)
+            if key not in available:
+                raise ValueError(
+                    f"Requested resource {req.kind}:{req.id} is not available in project {project_id}"
+                )
+            if key not in seen:
+                seen.add(key)
+                authorized.append(available[key].to_scope_ref())
+        return tuple(authorized)
+
+    # Legacy fallback path: derive from session compatibility fields
+    legacy_refs: list[ResourceScopeRef] = []
+    if fallback_datasource_id:
+        datasource = db.get(DataSource, str(fallback_datasource_id))
+        if datasource is not None:
+            legacy_refs.append(
+                ResourceScopeRef(
+                    kind="database",
+                    id=str(datasource.id),
+                    version=int(datasource.connection_generation or 0),
+                )
+            )
+            if datasource.project_id:
+                ws_ref = resolve_workspace_scope_ref(db, str(datasource.id))
+                if ws_ref is not None:
+                    legacy_refs.append(ws_ref)
+    elif project_id:
+        ws_ref = resolve_workspace_scope_ref(db, None, project_id=project_id)
+        if ws_ref is not None:
+            legacy_refs.append(ws_ref)
+    return tuple(legacy_refs)
+
+
+# ---------------------------------------------------------------------------
+# Attempt Resource Resolvers (Execution)
+# ---------------------------------------------------------------------------
+
+
+def build_attempt_resource_resolver(
+    metadata_session: Session | None = None,
+) -> CompositeResourceResolver:
+    """Build composite attempt resolver with attempt-scoped metadata session."""
 
     resolver = CompositeResourceResolver()
 
     def resolve_database(_ref: ResourceScopeRef) -> Any:
-        # The worker process is short-lived; ToolRuntime/leaf tools manage
-        # commit/rollback on this Session, and process exit closes it.
-        return SessionLocal()
+        # In-process: leaf metadata Session; worker process: SessionLocal
+        return metadata_session if metadata_session is not None else SessionLocal()
 
     def resolve_workspace(ref: ResourceScopeRef) -> WorkspaceReadService:
+        if metadata_session is not None:
+            return resolve_workspace_resource(metadata_session, ref)
         with SessionLocal() as db:
             return resolve_workspace_resource(db, ref)
 
