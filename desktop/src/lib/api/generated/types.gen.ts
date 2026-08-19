@@ -735,6 +735,10 @@ export type ConversationInputRequest = {
      */
     model_name?: string | null;
     /**
+     * Requested Resources
+     */
+    requested_resources?: Array<RequestedResourceRef> | null;
+    /**
      * Selected Artifact Ids
      */
     selected_artifact_ids?: Array<string>;
@@ -2627,6 +2631,22 @@ export type QuestionResolutionRequest = {
  * QuestionStatus
  */
 export type QuestionStatus = 'pending' | 'answered' | 'expired' | 'cancelled';
+
+/**
+ * RequestedResourceRef
+ *
+ * Wire representation of client resource intent. Excludes version.
+ */
+export type RequestedResourceRef = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: string;
+};
 
 /**
  * RestoreOperationResponse
