@@ -316,25 +316,26 @@ function normalizeSnapshot(raw: ConversationSnapshotResponse): ConversationDetai
   try {
     requireProtocolVersion(raw.protocol_version);
     return {
-    protocol_version: 2,
-    id: raw.session.id,
-    title: raw.session.title,
-    datasource_id: raw.session.datasource_id,
-    context_tables: raw.session.context_tables || [],
-    selected_artifact_id: raw.session.selected_artifact_id,
-    context_epoch: raw.session.context_epoch,
-    runs: raw.runs.map(parseConversationRun),
-    items: raw.items.map(parseConversationRunItem),
-    pagination: {
-      items: {
-        has_more: raw.pagination.items.has_more,
-        next_before_sequence: raw.pagination.items.next_before_sequence ?? null,
+      protocol_version: 2,
+      id: raw.session.id,
+      title: raw.session.title,
+      project_id: raw.session.project_id,
+      datasource_id: raw.session.datasource_id,
+      context_tables: raw.session.context_tables || [],
+      selected_artifact_id: raw.session.selected_artifact_id,
+      context_epoch: raw.session.context_epoch,
+      runs: raw.runs.map(parseConversationRun),
+      items: raw.items.map(parseConversationRunItem),
+      pagination: {
+        items: {
+          has_more: raw.pagination.items.has_more,
+          next_before_sequence: raw.pagination.items.next_before_sequence ?? null,
+        },
+        runs: {
+          has_more: raw.pagination.runs.has_more,
+          next_before_sequence: raw.pagination.runs.next_before_sequence ?? null,
+        },
       },
-      runs: {
-        has_more: raw.pagination.runs.has_more,
-        next_before_sequence: raw.pagination.runs.next_before_sequence ?? null,
-      },
-    },
       cursor: raw.cursor,
     };
   } catch (error) {

@@ -79,7 +79,9 @@ def _run_scope(
     state: CatalogWorkingState,
     scope: CatalogProjectionScope,
 ) -> tuple[CatalogWorkingState, CatalogProjectionScope]:
-    run_datasource_id = str(run.datasource_id) if run.datasource_id else ""
+    if run.datasource_id is None:
+        return state, scope
+    run_datasource_id = str(run.datasource_id)
     run_generation = int(run.datasource_generation or 0)
     if scope.datasource_id == "":
         return state, CatalogProjectionScope(

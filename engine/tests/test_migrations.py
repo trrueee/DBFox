@@ -1967,3 +1967,108 @@ def test_foundation_runtime_state_model_is_a_singleton_marker() -> None:
         "runtime_version",
         "reset_completed_at",
     }
+
+
+def test_p4_downgrade_succeeds_for_data_backed_rows(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """A. P4 DB containing only Data-backed Session/Run/Memory -> downgrade succeeds."""
+    database_url = _sqlite_url(tmp_path / "p4-downgrade-data-backed.db")
+    _upgrade(monkeypatch, database_url)
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO projects (id, name, status, created_at, updated_at) "
+                    "VALUES ('proj-1', 'Project 1', 'active', '2026-08-19 00:00:00', '2026-08-19 00:00:00')"
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO data_sources (
+                        id, project_id, name, db_type, host, port, database_name, username,
+                        connection_generation, ssh_enabled, ssh_port, ssl_enabled, ssl_verify_identity,
+                        connection_mode, is_read_only, env, status, created_at, updated_at
+                    ) VALUES (
+                        'ds-1', 'proj-1', 'DS 1', 'sqlite', 'localhost', 0, ':memory:', '',
+                        1, 0, 22, 0, 0, 'direct', 1, 'dev', 'active',
+                        '2026-08-19 00:00:00', '2026-08-19 00:00:00'
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO agent_sessions (id, project_id, datasource_id, title, created_at, updated_at) "
+                    "VALUES ('sess-1', 'proj-1', 'ds-1', 'Session 1', '2026-08-19 00:00:00', '2026-08-19 00:00:00')"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO agent_runs (id, session_id, datasource_id, question, status, created_at, updated_at) "
+                    "VALUES ('run-1', 'sess-1', 'ds-1', 'Question 1', 'completed', '2026-08-19 00:00:00', '2026-08-19 00:00:00')"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO agent_session_memories (id, session_id, datasource_id, memory_json, created_at, updated_at) "
+                    "VALUES ('mem-1', 'sess-1', 'ds-1', '{}', '2026-08-19 00:00:00', '2026-08-19 00:00:00')"
+                )
+            )
+    finally:
+        engine.dispose()
+
+    # Downgrade to previous revision (a2b3c4d5e6f7)
+    _downgrade(monkeypatch, database_url, "a2b3c4d5e6f7")
+
+    engine = create_engine(database_url)
+    try:
+        inspector = inspect(engine)
+        assert "resource_refs_json" not in {c["name"] for c in inspector.get_columns("agent_session_inputs")}
+        assert "project_id" not in {c["name"] for c in inspector.get_columns("agent_sessions")}
+    finally:
+        engine.dispose()
+
+
+def test_p4_downgrade_fails_explicitly_for_workspace_only_or_null_datasource(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """B, C, D. P4 DB containing null datasource -> downgrade explicitly fails before destructive mutation."""
+    database_url = _sqlite_url(tmp_path / "p4-downgrade-null-ds.db")
+    _upgrade(monkeypatch, database_url)
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO projects (id, name, status, workspace_root, created_at, updated_at) "
+                    "VALUES ('proj-ws', 'Project WS', 'active', '/tmp/ws', '2026-08-19 00:00:00', '2026-08-19 00:00:00')"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO agent_sessions (id, project_id, datasource_id, title, created_at, updated_at) "
+                    "VALUES ('sess-ws', 'proj-ws', NULL, 'WS Session', '2026-08-19 00:00:00', '2026-08-19 00:00:00')"
+                )
+            )
+    finally:
+        engine.dispose()
+
+    with pytest.raises(RuntimeError, match="Cannot downgrade project-scoped sessions while datasource-less"):
+        _downgrade(monkeypatch, database_url, "a2b3c4d5e6f7")
+
+    # D. Assert schema remains intact (no partial downgrade)
+    engine = create_engine(database_url)
+    try:
+        inspector = inspect(engine)
+        assert "resource_refs_json" in {c["name"] for c in inspector.get_columns("agent_session_inputs")}
+        assert "project_id" in {c["name"] for c in inspector.get_columns("agent_sessions")}
+    finally:
+        engine.dispose()
+

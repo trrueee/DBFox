@@ -110,6 +110,7 @@ describe("conversationRepository", () => {
     });
 
     const result = await createConversation({
+      project_id: "project-1",
       datasource_id: "ds-1",
       title: "New",
       context_tables: ["orders"],
@@ -117,7 +118,42 @@ describe("conversationRepository", () => {
 
     expect(result.id).toBe("conv-2");
     expect(sdkMocks.createConversation).toHaveBeenCalledWith({
-      body: { datasource_id: "ds-1", title: "New", context_tables: ["orders"] },
+      body: { project_id: "project-1", datasource_id: "ds-1", title: "New", context_tables: ["orders"] },
+      throwOnError: true,
+    });
+  });
+
+  it("creates a conversation with project_id and normalizes project_id in snapshot", async () => {
+    sdkMocks.createConversation.mockResolvedValueOnce({
+      data: {
+        protocol_version: 2,
+        session: {
+          id: "conv-p4",
+          project_id: "proj-100",
+          datasource_id: null,
+          title: "Project-scoped session",
+          context_tables: [],
+          context_epoch: 0,
+          selected_artifact_id: null,
+        },
+        runs: [],
+        items: [],
+        pagination,
+        cursor: 0,
+      },
+    });
+
+    const result = await createConversation({
+      project_id: "proj-100",
+      title: "Project-scoped session",
+      context_tables: [],
+    });
+
+    expect(result.id).toBe("conv-p4");
+    expect(result.project_id).toBe("proj-100");
+    expect(result.datasource_id).toBeNull();
+    expect(sdkMocks.createConversation).toHaveBeenCalledWith({
+      body: { project_id: "proj-100", title: "Project-scoped session", context_tables: [] },
       throwOnError: true,
     });
   });
@@ -138,6 +174,7 @@ describe("conversationRepository", () => {
     });
 
     await expect(createConversation({
+      project_id: "project-1",
       datasource_id: "ds-1",
       context_tables: [],
     })).rejects.toThrow("智能分析返回了无法识别的数据，请刷新后重试。");

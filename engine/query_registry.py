@@ -15,7 +15,7 @@ BackendKind = Literal["sqlite", "duckdb", "mysql", "postgresql"]
 @dataclass
 class RunningQuery:
     execution_id: str
-    datasource_id: str
+    datasource_id: str | None = None
     backend: BackendKind | None = None
     sqlite_connection: sqlite3.Connection | None = None
     duckdb_connection: Any = None

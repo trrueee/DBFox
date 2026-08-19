@@ -1079,6 +1079,18 @@ class ContextAssembler:
         aggregate: AgentSession,
         sources: list[ContextSource],
     ) -> dict[str, Any]:
+        if not run.datasource_id:
+            sources.append(
+                ContextSource(
+                    kind="session_memory",
+                    source_id=str(aggregate.id),
+                    version=str(aggregate.context_epoch or 0),
+                    included=False,
+                    reason="no datasource for run",
+                )
+            )
+            return {}
+
         row = self.session.execute(
             select(AgentSessionMemory).where(
                 AgentSessionMemory.session_id == aggregate.id
@@ -1246,6 +1258,18 @@ class ContextAssembler:
                     version=str(aggregate.context_epoch or 0),
                     included=False,
                     reason="Catalog projection envelope does not match typed scope/state",
+                )
+            )
+            return {}
+
+        if not run.datasource_id:
+            sources.append(
+                ContextSource(
+                    kind="session_memory",
+                    source_id=str(row.id),
+                    version=str(aggregate.context_epoch or 0),
+                    included=False,
+                    reason="no datasource for run",
                 )
             )
             return {}

@@ -23,6 +23,7 @@ import { useDatasourceState } from "../datasource/useDatasourceState";
 import { useProjectState } from "../projects/useProjectState";
 import { getUserErrorMessage } from "../../lib/api/client";
 import type { ResourceConnectorContribution } from "../resources/types";
+import type { ConversationSummary } from "../../types/conversation";
 import "../datasource/DataSourceTree.css";
 
 interface ProjectResourceSidebarProps {
@@ -89,14 +90,21 @@ export function ProjectResourceSidebar({
 
   const conversationsForProject = useMemo(() => {
     if (!activeProjectId) return [];
-    // Primary: group by project_id (P4+)
-    const direct = summaries.filter((c) => c.project_id === activeProjectId);
-    if (direct.length > 0) return direct;
-    // Legacy fallback: group via datasource → project
     const datasourceIds = new Set(
       datasources.filter((item) => item.project_id === activeProjectId).map((item) => item.id),
     );
-    return summaries.filter((c) => c.datasource_id && datasourceIds.has(c.datasource_id));
+    const seen = new Set<string>();
+    const result: ConversationSummary[] = [];
+    for (const c of summaries) {
+      const matchesDirect = c.project_id === activeProjectId;
+      const matchesLegacy = (c.project_id === null || c.project_id === undefined)
+        && Boolean(c.datasource_id && datasourceIds.has(c.datasource_id));
+      if ((matchesDirect || matchesLegacy) && !seen.has(c.id)) {
+        seen.add(c.id);
+        result.push(c);
+      }
+    }
+    return result;
   }, [activeProjectId, datasources, summaries]);
 
   const handleOpenConversation = async (conversationId: string) => {

@@ -107,6 +107,29 @@ describe("ProjectResourceSidebar", () => {
     expect(screen.getByRole("button", { name: "分析订单趋势" })).toBeInTheDocument();
   });
 
+  it("renders the union of direct project-scoped and legacy datasource-scoped conversations", () => {
+    useConversationStore.setState({
+      activeConversationId: null,
+      summaries: [
+        // Direct project conversation (P4+)
+        { id: "conv-direct-p4", project_id: "project-1", datasource_id: null, title: "工作区对话", updated_at: "2026-08-19T08:00:00Z" },
+        // Legacy conversation with datasource in project-1
+        { id: "conv-legacy-ds1", project_id: null, datasource_id: "ds-1", title: "数据库旧对话", updated_at: "2026-08-18T08:00:00Z" },
+        // Unrelated legacy conversation with datasource in another project
+        { id: "conv-legacy-other", project_id: null, datasource_id: "ds-other", title: "其他项目旧对话", updated_at: "2026-08-17T08:00:00Z" },
+        // Unrelated direct conversation in another project
+        { id: "conv-other-p4", project_id: "project-other", datasource_id: null, title: "其他工作区对话", updated_at: "2026-08-16T08:00:00Z" },
+      ],
+      openConversation,
+    });
+
+    renderSidebar();
+    expect(screen.getByRole("button", { name: "工作区对话" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "数据库旧对话" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "其他项目旧对话" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "其他工作区对话" })).toBeNull();
+  });
+
   it("renders connector selector tabs from contributions", () => {
     renderSidebar({ connectors: [dataConnector, workspaceConnector] });
     expect(screen.getByRole("button", { name: /数据库/ })).toBeInTheDocument();

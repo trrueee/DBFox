@@ -133,3 +133,19 @@ def test_reservation_rejects_execution_id_reuse_across_datasources() -> None:
 
     with pytest.raises(ValueError, match="another datasource"):
         registry.reserve("shared-id", "ds-b")
+
+
+def test_reservation_with_none_datasource_and_cancel_before_backend() -> None:
+    registry = QueryRegistry()
+    registry.reserve("exec-none-ds", None)
+    assert registry.is_running("exec-none-ds")
+
+    cancel_result = registry.cancel("exec-none-ds")
+    assert cancel_result["success"] is True
+    assert cancel_result["cancelled"] is True
+    assert "before execution started" in cancel_result["message"]
+    assert registry.is_cancelled("exec-none-ds") is True
+
+    registry.unregister("exec-none-ds")
+    assert registry.is_running("exec-none-ds") is False
+
