@@ -1,6 +1,17 @@
 # Runtime DLC Platform Architecture & Feasibility Specification
 
+> 文档类型：架构规范
+>
+> 状态：已接受
+>
+> 最后核验：2026-08-20
+>
+> 基线：`main@6d5ca1ec55f06ee52c5a3068f36fe781d3c2ee0d`
+>
+> 上位 Issue：[#59](https://github.com/trrueee/DBFox/issues/59)
+
 ## 1. Product Vision & Protocol-First Principle
+
 
 ### Product Vision
 Any developer can build an extension conforming to the DBFox DLC Protocol, package it into a single `.dbfox-dlc` file, and distribute it directly to users. The user installs the package via **Install from File** in DBFox DLC Center, verifies and enables it, and all contributed capabilities (Tools, Resources, Context, Connectors, Dock Views, Artifact Renderers, Operations) become active after a controlled restart without modifying DBFox source code or recompiling the DBFox binary.
