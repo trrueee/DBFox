@@ -30,7 +30,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "b3c4d5e6f7a8"
+FOUNDATION_HEAD_REVISION = "c4d5e6f7a8b9"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -250,7 +250,20 @@ def _assert_final_contract(engine) -> None:
         "agent_question_requests",
         "agent_events",
         "agent_task_plans",
+        "github_repository_bindings",
     }.issubset(tables)
+    assert _column_names(engine, "github_repository_bindings") == {
+        "id",
+        "project_id",
+        "owner",
+        "repository",
+        "ref_name",
+        "resolved_revision",
+        "default_branch",
+        "description",
+        "created_at",
+        "updated_at",
+    }
     agent_turn_columns = _column_names(engine, "agent_turns")
     assert "termination" in agent_turn_columns
     assert {"draft_text", "message_phase", "finish_signal"}.isdisjoint(

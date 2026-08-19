@@ -3,6 +3,7 @@ import { coreDockViews } from "./coreDockViews";
 import { dataDockViews } from "./dataDockViews";
 import type { DockViewContribution } from "./types";
 import { workspaceDockViews } from "./workspaceDockViews";
+import { githubDockViews } from "./githubDockViews";
 
 export interface DockViewRegistry {
   get: (viewType: string) => DockViewContribution | null;
@@ -32,6 +33,7 @@ export function productDockViews(): readonly DockViewContribution[] {
     ...coreDockViews,
     ...dataDockViews,
     ...workspaceDockViews,
+    ...githubDockViews,
   ];
 }
 

@@ -47,7 +47,7 @@ class _EchoTool(BaseTool[_EchoInput, _EchoOutput]):
 
 
 FROZEN_MATERIALIZATION_HASH = (
-    "329ff9b4b3a9a96ffb77e91924eaf65128841a90576f5a2d366eb98d7d4a55d8"
+    "f0b07caaadcdd6759fa9456b2a56604b2e0b67488cd4caabcec0705ba917f29f"
 )
 
 FROZEN_BUILTIN_NAMES = (
@@ -60,6 +60,9 @@ FROZEN_BUILTIN_NAMES = (
     "file_read",
     "file_search",
     "file_write_patch",
+    "github_list_files",
+    "github_read_file",
+    "github_repo_overview",
     "remote_job_cancel",
     "remote_job_status",
     "remote_job_submit",
@@ -86,6 +89,9 @@ FROZEN_OWNERS = {
     "file_read": "dbfox.workspace",
     "file_search": "dbfox.workspace",
     "file_write_patch": "dbfox.workspace",
+    "github_list_files": "dbfox.github",
+    "github_read_file": "dbfox.github",
+    "github_repo_overview": "dbfox.github",
     "result_inspect": "dbfox.data",
     "result_profile": "dbfox.data",
     "schema_inspect": "dbfox.data",

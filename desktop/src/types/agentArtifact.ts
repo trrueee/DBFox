@@ -80,3 +80,13 @@ export type WorkspaceCodePatchArtifact = AgentArtifactBase & {
   sizeBytes: number;
   created: boolean;
 };
+
+export type GithubFileSnapshotArtifact = AgentArtifactBase & {
+  type: "dbfox.github.file_snapshot";
+  repositoryBindingId: string;
+  relativePath: string;
+  revision: string;
+  blobSha: string;
+  sizeBytes: number;
+  truncated: boolean;
+};

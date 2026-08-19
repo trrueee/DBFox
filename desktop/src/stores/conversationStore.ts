@@ -38,6 +38,9 @@ import type {
   QuestionItem,
 } from "../types/conversation";
 import { useDatasourceSelectionStore } from "./datasourceSelectionStore";
+import { useWorkspaceStore } from "./workspaceStore";
+import { useGithubStore } from "../features/github/githubStore";
+import { collectProductRequestedResources } from "../features/resources/requestedResourceComposition";
 import {
   reduceStreamEvent,
   removeConversationState,
@@ -213,6 +216,16 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     const llmPayload = requireConversationLlmPayload();
     const detail = get().detailById[conversationId]
       || await get().openConversation(conversationId);
+    const projectId = detail.project_id || useWorkspaceStore.getState().activeProjectId || "";
+    const activeGithubBindingId = projectId
+      ? useGithubStore.getState().activeBindingIdByProject[projectId]
+      : null;
+    const requestedResources = collectProductRequestedResources({
+      projectId,
+      datasourceId: detail.datasource_id,
+      workspaceRoot: null,
+      activeGithubBindingId,
+    });
     const created = await admitConversationInput(conversationId, {
       content,
       idempotency_key: idempotencyKey,
@@ -221,6 +234,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       llm_credential_id: llmPayload.llm_credential_id,
       api_base: llmPayload.api_base,
       model_name: llmPayload.model_name,
+      requested_resources: requestedResources ? [...requestedResources] : undefined,
       workspace_context: {
         datasource_id: detail.datasource_id,
         selected_table_names: detail.context_tables,

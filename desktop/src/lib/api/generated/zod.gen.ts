@@ -349,6 +349,16 @@ export const zConversationSummaryResponse = z.object({
 });
 
 /**
+ * CreateGithubBindingRequest
+ *
+ * Request payload to create a new GitHub repository binding.
+ */
+export const zCreateGithubBindingRequest = z.object({
+    ref_name: z.string().optional().default('main'),
+    repository: z.string()
+});
+
+/**
  * CredentialKind
  */
 export const zCredentialKind = z.enum([
@@ -731,6 +741,66 @@ export const zFunctionCallOutputPayload = z.object({
     error_message: z.string().nullish(),
     output: z.string().optional().default(''),
     summary: z.string().optional().default('')
+});
+
+/**
+ * GithubBindingResponse
+ *
+ * Response schema for a single GitHub repository binding.
+ */
+export const zGithubBindingResponse = z.object({
+    created_at: z.string(),
+    default_branch: z.string().nullish(),
+    description: z.string().nullish(),
+    id: z.string(),
+    owner: z.string(),
+    project_id: z.string(),
+    ref_name: z.string(),
+    repository: z.string(),
+    resolved_revision: z.string(),
+    updated_at: z.string()
+});
+
+/**
+ * GithubFileContentResponse
+ *
+ * Response schema for repository file read API.
+ */
+export const zGithubFileContentResponse = z.object({
+    content: z.string(),
+    content_sha256: z.string(),
+    path: z.string(),
+    revision: z.string(),
+    size_bytes: z.int(),
+    truncated: z.boolean().optional().default(false)
+});
+
+/**
+ * GithubFileEntry
+ *
+ * Entry in a GitHub repository directory listing.
+ */
+export const zGithubFileEntry = z.object({
+    path: z.string(),
+    sha: z.string().nullish(),
+    size_bytes: z.int().nullish(),
+    type: z.enum([
+        'file',
+        'dir',
+        'submodule'
+    ])
+});
+
+/**
+ * GithubFileListResponse
+ *
+ * Response schema for repository file listing API.
+ */
+export const zGithubFileListResponse = z.object({
+    entries: z.array(zGithubFileEntry),
+    path: z.string(),
+    revision: z.string(),
+    truncated: z.boolean().optional().default(false)
 });
 
 /**
@@ -2090,6 +2160,77 @@ export const zApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetQuery = z.obj
  * Successful Response
  */
 export const zApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponse = z.array(zBackupResponse);
+
+export const zGetBindingsApiV1ProjectsProjectIdGithubBindingsGetPath = z.object({
+    project_id: z.string()
+});
+
+/**
+ * Response Get Bindings Api V1 Projects  Project Id  Github Bindings Get
+ *
+ * Successful Response
+ */
+export const zGetBindingsApiV1ProjectsProjectIdGithubBindingsGetResponse = z.array(zGithubBindingResponse);
+
+export const zCreateBindingApiV1ProjectsProjectIdGithubBindingsPostBody = zCreateGithubBindingRequest;
+
+export const zCreateBindingApiV1ProjectsProjectIdGithubBindingsPostPath = z.object({
+    project_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zCreateBindingApiV1ProjectsProjectIdGithubBindingsPostResponse = zGithubBindingResponse;
+
+export const zDeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeletePath = z.object({
+    project_id: z.string(),
+    binding_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zDeleteBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdDeleteResponse = z.void();
+
+export const zReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetPath = z.object({
+    project_id: z.string(),
+    binding_id: z.string()
+});
+
+export const zReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetQuery = z.object({
+    path: z.string().min(1)
+});
+
+/**
+ * Successful Response
+ */
+export const zReadBindingFileApiV1ProjectsProjectIdGithubBindingsBindingIdFileGetResponse = zGithubFileContentResponse;
+
+export const zListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetPath = z.object({
+    project_id: z.string(),
+    binding_id: z.string()
+});
+
+export const zListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetQuery = z.object({
+    path: z.string().optional().default(''),
+    limit: z.int().gte(1).lte(100).optional().default(50)
+});
+
+/**
+ * Successful Response
+ */
+export const zListBindingFilesApiV1ProjectsProjectIdGithubBindingsBindingIdFilesGetResponse = zGithubFileListResponse;
+
+export const zRefreshBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdRefreshPostPath = z.object({
+    project_id: z.string(),
+    binding_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zRefreshBindingRouteApiV1ProjectsProjectIdGithubBindingsBindingIdRefreshPostResponse = zGithubBindingResponse;
 
 export const zApiCancelSqlApiV1QueryCancelPostBody = zSqlCancelRequest;
 
