@@ -879,11 +879,11 @@ def test_dlc_operations_api_router(
 def test_tool_invocation_durable_identity_persistence(tmp_path: Path):
     """Prove owner_id and package_digest are durably persisted in agent_tool_invocations."""
     from uuid import uuid4
+    from typing import Any
     from engine.db import SessionLocal
     from engine.models import AgentToolInvocation, Project
     from engine.agent.repositories.session import SessionRepository
     from engine.agent.repositories.tool import ToolInvocationRepository
-    from engine.agent.tool import ToolInvocationStatus, ToolRecoveryPolicy
     from engine.tools.materialization import materialize_tools
     from engine.tools.runtime import ToolRegistry
     from engine.tools.runtime.base import (
@@ -985,6 +985,7 @@ def test_tool_dispatcher_a_to_b_recovery_mismatch_fails_closed(
     is provided by DLC B (different package_digest), dispatcher fails closed with TOOL_VERSION_CHANGED.
     """
     from uuid import uuid4
+    from typing import Any
     from sqlalchemy import select
     from engine.db import SessionLocal
     from engine.models import AgentObservationRecord, AgentToolInvocation, Project
@@ -993,7 +994,7 @@ def test_tool_dispatcher_a_to_b_recovery_mismatch_fails_closed(
     from engine.agent.repositories.tool import ToolInvocationRepository
     from engine.agent.tool_dispatcher import ToolDispatcher
     from engine.agent.observation import ObservationStatus
-    from engine.agent.tool import ToolInvocationStatus, ToolRecoveryPolicy
+    from engine.agent.tool import ToolInvocationStatus
     from engine.tools.materialization import materialize_tools
     from engine.tools.runtime import ToolExecutor, ToolRegistry
     from engine.tools.runtime.base import (

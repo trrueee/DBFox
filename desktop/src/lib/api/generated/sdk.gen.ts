@@ -380,7 +380,7 @@ export const clearSecurityAuditApiV1DiagnosticsSecurityAuditClearPost = <ThrowOn
 /**
  * Invoke a registered DLC management operation
  *
- * Execute a typed DLC operation.
+ * Execute a typed DLC operation with input/output bounds and single-call semantics.
  */
 export const invokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePost = <ThrowOnError extends boolean = false>(options: Options<InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostData, ThrowOnError>): RequestResult<InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostResponses, InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostErrors, ThrowOnError> => (options.client ?? client).post<InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostResponses, InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostErrors, ThrowOnError>({ url: '/api/v1/dlcs/{dlc_id}/operations/{operation_name}', ...options });
 
