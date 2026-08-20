@@ -9,7 +9,7 @@ from engine.dlc.errors import DlcError, DlcErrorCode
 
 CURRENT_DBFOX_VERSION = "1.0.3"
 CURRENT_EXTENSION_API_VERSION = "1"
-SUPPORTED_MANIFEST_SCHEMA_VERSIONS = {1}
+SUPPORTED_MANIFEST_SCHEMA_VERSIONS = {1, 2}
 
 
 @dataclass(frozen=True)

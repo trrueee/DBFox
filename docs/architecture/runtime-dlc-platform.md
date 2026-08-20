@@ -67,7 +67,7 @@ The DBFox product capabilities (Data, Workspace, GitHub) currently assemble at e
 An immutable ZIP-based archive with strict bounds and deterministic entry layout:
 ```text
 <package_root>/
-├── manifest.json       # Control file: Lifecycle metadata, compatibility bounds, permission declarations
+├── manifest.json       # Control file: Lifecycle metadata, compatibility bounds, publisherKey, permissions
 ├── integrity.json      # Control file: SHA256 digest mapping for all payload files (excludes integrity.json and signature.sig)
 ├── signature.sig       # Control file: Ed25519 digital signature of canonical manifest + integrity bytes
 ├── backend/            # Payload files: Backend Python extension code
@@ -98,6 +98,16 @@ To guarantee deterministic signature generation and verification across platform
 4. **Signature Verification**:
    - Verified using Ed25519 against the publisher's public key.
    - Publisher Key ID: SHA256 fingerprint of raw Ed25519 public key bytes.
+   - Product installation uses `manifestSchemaVersion: 2`. Its signed manifest MUST contain
+     `publisherKey`, encoded as canonical padded Base64 of exactly 32 raw Ed25519 public-key
+     bytes. The display-only `publisher` string never participates in trust decisions.
+   - Schema v2 is a single-file contract: signature authenticity is checked against the
+     embedded `publisherKey`; no adjacent `.pub` file or UI-supplied verification key is used.
+   - Schema v1 remains only as the existing internal compatibility path and requires an
+     explicit external public key. It is not the Install from File product flow.
+   - Signature authenticity and publisher trust are separate gates. Invalid signatures fail
+     as `INVALID_SIGNATURE`; an authentic signature from an unknown key yields
+     `TRUST_REQUIRED` and cannot be installed until the actual package key is explicitly trusted.
 5. **Path Normalization & Archive Allowlist**:
    - Forward slashes `/` as path separators.
    - No leading `./` or `/`.
@@ -217,6 +227,14 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
 ## 7. Storage, Lifecycle & State Machine
 
 ### Storage Isolation
+- **Trusted Publisher Store**: `APP_DATA/dlcs/trusted_publishers.json` is the only durable
+  publisher-trust SSOT. Schema v1 contains a bounded `fingerprint -> public_key_base64`
+  mapping and no arbitrary publisher metadata. It is strictly validated, written by same-directory
+  temporary file + `fsync` + atomic replace, and corruption fails closed without overwrite.
+- **Trust Confirmation Reverification**: Before persisting trust, DBFox re-reads the selected
+  `.dbfox-dlc`, recomputes its archive digest, re-parses the signed embedded key, and re-verifies
+  its signature. Both digest and key fingerprint must match the inspected prompt identity; this
+  prevents UI parameter forgery and inspect/trust TOCTOU substitution.
 - **Per-DLC SQLite Database**: Stored at `APP_DATA/dlcs/data/<dlc_id>.sqlite3`.
 - **Core Independence**: The DLC manages its own migrations and schema lifecycle completely outside the Core Alembic migration graph.
 - **Zero Core Mutation**: Installing or uninstalling a DLC never modifies `engine/models.py` or Core database tables.

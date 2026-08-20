@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -36,12 +37,18 @@ class DlcManifest(BaseModel):
         alias="manifestSchemaVersion",
         default=1,
         ge=1,
-        le=1,
+        le=2,
     )
     id: str = Field(min_length=3, max_length=64)
     version: str = Field(min_length=1, max_length=64)
     display_name: str = Field(alias="displayName", min_length=1, max_length=128)
     publisher: str = Field(min_length=2, max_length=64)
+    publisher_key: str | None = Field(
+        alias="publisherKey",
+        default=None,
+        min_length=44,
+        max_length=44,
+    )
     description: str = Field(default="", max_length=1024)
     extension_api_version: str = Field(
         alias="extensionApiVersion",
@@ -78,6 +85,30 @@ class DlcManifest(BaseModel):
             )
         return v
 
+    @field_validator("publisher_key")
+    @classmethod
+    def validate_publisher_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            raw_bytes = base64.b64decode(value, validate=True)
+        except Exception as exc:
+            raise DlcError(
+                DlcErrorCode.INVALID_MANIFEST,
+                f"publisherKey must be strict Base64: {exc}",
+            ) from exc
+        if len(raw_bytes) != 32:
+            raise DlcError(
+                DlcErrorCode.INVALID_MANIFEST,
+                f"publisherKey must encode exactly 32 Ed25519 public-key bytes, got {len(raw_bytes)}",
+            )
+        if base64.b64encode(raw_bytes).decode("ascii") != value:
+            raise DlcError(
+                DlcErrorCode.INVALID_MANIFEST,
+                "publisherKey must use canonical padded Base64 encoding",
+            )
+        return value
+
     @field_validator("version")
     @classmethod
     def validate_version(cls, v: str) -> str:
@@ -112,7 +143,17 @@ class DlcManifest(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_entrypoints_non_empty(self) -> "DlcManifest":
+    def validate_versioned_contract(self) -> "DlcManifest":
+        if self.manifest_schema_version == 2 and self.publisher_key is None:
+            raise DlcError(
+                DlcErrorCode.INVALID_MANIFEST,
+                "manifestSchemaVersion 2 requires signed publisherKey",
+            )
+        if self.manifest_schema_version == 1 and self.publisher_key is not None:
+            raise DlcError(
+                DlcErrorCode.INVALID_MANIFEST,
+                "manifestSchemaVersion 1 must use the explicit external publisher-key compatibility path",
+            )
         if not self.entrypoints.backend and not self.entrypoints.frontend:
             raise DlcError(
                 DlcErrorCode.INVALID_MANIFEST,
