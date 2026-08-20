@@ -209,6 +209,8 @@ class ArtifactPayloadContractRegistry:
         schema_version: int,
         validator: type[BaseModel],
     ) -> "ArtifactPayloadContractRegistry":
+        if self._frozen:
+            raise RuntimeError("Artifact payload contracts are frozen.")
         normalized_type = validate_artifact_type(artifact_type)
         if int(schema_version) < 1:
             raise ValueError("Artifact schema_version must be >= 1")
@@ -216,18 +218,13 @@ class ArtifactPayloadContractRegistry:
             raise TypeError("Artifact payload validator must be a BaseModel subclass")
         key = (normalized_type, int(schema_version))
         if key in self._contracts:
-            if self._contracts[key] is validator:
-                return self
-            if self._frozen:
-                raise RuntimeError("Artifact payload contracts are frozen.")
             raise ValueError(
                 f"Artifact payload contract is already registered: "
                 f"{normalized_type} v{schema_version}"
             )
-        if self._frozen:
-            raise RuntimeError("Artifact payload contracts are frozen.")
         self._contracts[key] = validator
         return self
+
 
     def get(
         self,

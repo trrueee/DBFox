@@ -105,10 +105,6 @@ async def lifespan(application: FastAPI) -> Any:
         # and the event log are database-owned; this coordinator only schedules work.
         startup_stage = "recovering"
         _emit_startup_stage(startup_stage)
-        # Artifact payload contracts freeze after every built-in/extension
-        # module has imported and registered its concrete validators.
-        from engine.agent.artifact import freeze_artifact_payload_contracts
-        freeze_artifact_payload_contracts()
 
         agent_coordinator = SessionCoordinator(
             session_factory=SessionLocal,
@@ -116,7 +112,14 @@ async def lifespan(application: FastAPI) -> Any:
         )
         agent_coordinator.start()
         application.state.agent_coordinator = agent_coordinator
+
+        # Artifact payload contracts freeze after every built-in/extension
+        # module has imported and registered its concrete validators.
+        from engine.agent.artifact import freeze_artifact_payload_contracts
+        freeze_artifact_payload_contracts()
+
         _emit_startup_stage("ready")
+
     except Exception:
         logger.exception("Engine startup failed during stage=%s", startup_stage)
         if agent_coordinator is not None:

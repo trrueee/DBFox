@@ -336,16 +336,18 @@ class ContributionCompiler:
 
         # 5. Atomically register accepted artifact payload contracts
         for art_contrib in all_artifact_contracts:
-            try:
-                register_artifact_payload_contract(
-                    art_contrib.artifact_type,
-                    art_contrib.schema_version,
-                    art_contrib.validator,
-                )
-            except Exception as exc:
-                logger.warning(
-                    f"Failed to register artifact payload contract for '{art_contrib.artifact_type}': {exc}"
-                )
+            if artifact_payload_contracts.get(art_contrib.artifact_type, art_contrib.schema_version) is None:
+                try:
+                    register_artifact_payload_contract(
+                        art_contrib.artifact_type,
+                        art_contrib.schema_version,
+                        art_contrib.validator,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Failed to register artifact payload contract for '{art_contrib.artifact_type}': {exc}"
+                    )
+
 
         # 6. Compute deterministic snapshot ID
         active_dlc_tuple = tuple(active_dlcs)

@@ -2125,6 +2125,11 @@ export const zClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostBody = zBo
  */
 export const zClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponse = zSecurityAuditClearedResponse;
 
+export const zInvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostPath = z.object({
+    dlc_id: z.string(),
+    operation_name: z.string()
+});
+
 /**
  * Response Api Health Api V1 Health Get
  *

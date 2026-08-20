@@ -5995,6 +5995,68 @@ export type ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponses = 
 
 export type ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponse = ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponses[keyof ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponses];
 
+export type InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostData = {
+    body?: never;
+    path: {
+        /**
+         * Dlc Id
+         */
+        dlc_id: string;
+        /**
+         * Operation Name
+         */
+        operation_name: string;
+    };
+    query?: never;
+    url: '/api/v1/dlcs/{dlc_id}/operations/{operation_name}';
+};
+
+export type InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostError = InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostErrors[keyof InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostErrors];
+
+export type InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostResponses = {
+    /**
+     * Response Invoke Dlc Operation Api V1 Dlcs  Dlc Id  Operations  Operation Name  Post
+     *
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type ApiHealthApiV1HealthGetData = {
     body?: never;
     path?: never;
