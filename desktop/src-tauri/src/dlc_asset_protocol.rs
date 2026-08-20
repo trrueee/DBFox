@@ -563,5 +563,15 @@ mod tests {
 
         let resp_inactive = handle_dlc_asset_request(&state, req_inactive);
         assert_eq!(resp_inactive.status(), StatusCode::FORBIDDEN);
+
+        // A restart projection reset must revoke the exact previously active digest.
+        state.clear();
+        let req_old_digest = Request::builder()
+            .method("GET")
+            .uri(format!("dlc-asset://localhost/{digest}/frontend/index.js"))
+            .body(Vec::new())
+            .unwrap();
+        let resp_old_digest = handle_dlc_asset_request(&state, req_old_digest);
+        assert_eq!(resp_old_digest.status(), StatusCode::FORBIDDEN);
     }
 }

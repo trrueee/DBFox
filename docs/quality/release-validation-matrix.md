@@ -17,7 +17,7 @@
 | 能力 | Windows 11 / windows-2025 | macOS 14 / Apple Silicon runner | Ubuntu 24.04 |
 |---|---:|---:|---:|
 | Python hash lock 安装 | 必须 | 必须 | 必须 |
-| Sidecar 平台命名与隐藏依赖测试 | 必须 | 必须 | 必须 |
+| Sidecar 平台命名、隐藏依赖与 DLC lifecycle smoke | 必须 | 必须 | 必须 |
 | PyInstaller Engine Sidecar | 必须 | 必须 | 必须 |
 | Frontend TypeScript/Vite build | 必须 | 必须 | 必须 |
 | Tauri Rust compile (`--no-bundle`) | 必须 | 必须 | 必须 |
@@ -38,6 +38,12 @@
 来源为 `requirements-build.lock`。Frozen smoke 必须从最终可执行文件验证鉴权、
 Schema、只读查询、Result Artifact、耐久多 Run 和重启重载；runtime manifest schema 2
 必须绑定解释器、锁哈希、关键包版本、SQLite provenance 和 Sidecar 哈希。
+
+同一个 Frozen smoke 还必须通过产品 lifecycle API 驱动签名的 `acme.echo` fixture，证明
+tampered 拒绝、安装阶段不执行、disabled 安装、enable/restart 后 exact digest 激活、
+backend operation 与 frontend Dock/Artifact bytes 可用、disable/restart 后消失，以及 inactive
+uninstall 删除 executable bytes 并保留 DLC-owned data。每个平台将结构化结果上传为
+`reports/dlc-packaged-e2e-<host-tuple>.json`，不得用本地 TestClient projection 替代。
 
 截至 2026-08-04 的本地证据仅覆盖 Windows x64；macOS/Linux 的结论必须以对应
 远程 Runner 结果另行更新，当前文档不声称这两个平台已通过。

@@ -252,6 +252,32 @@ def test_frozen_smoke_covers_schema_result_artifact_and_restart_contracts() -> N
         assert contract in source
 
 
+def test_frozen_smoke_covers_packaged_dlc_lifecycle_and_emits_evidence() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "desktop" / "scripts" / "smoke-sidecar.mjs").read_text(
+        encoding="utf-8"
+    )
+    workflow = (root / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+
+    for contract in (
+        "/api/v1/dlcs/packages/inspect",
+        "/api/v1/dlcs/publishers/trust",
+        "/api/v1/dlcs/acme.echo/enable",
+        "/api/v1/dlcs/acme.echo/disable",
+        "tampered_rejected",
+        "install_execution_blocked",
+        "enable_restart_active_exact_digest",
+        "disable_restart_absent",
+        "executable_bytes_removed",
+        "data_retained",
+        "dlc-packaged-e2e-${targetTriplet}.json",
+    ):
+        assert contract in source
+    assert "reports/dlc-packaged-e2e-*.json" in workflow
+
+
 def test_frozen_smoke_runtime_uses_a_non_symlinked_checkout_parent() -> None:
     root = Path(__file__).resolve().parents[2]
     source = (root / "desktop" / "scripts" / "smoke-sidecar.mjs").read_text(

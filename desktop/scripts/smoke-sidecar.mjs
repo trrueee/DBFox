@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import net from "node:net";
@@ -11,6 +11,7 @@ const sidecarName = `dbfox-engine-${targetTriplet}${process.platform === "win32"
 const sidecarPath = fileURLToPath(
   new URL(`../src-tauri/binaries/${sidecarName}`, import.meta.url),
 );
+const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 if (!existsSync(sidecarPath)) {
   throw new Error(`Packaged sidecar not found: ${sidecarPath}`);
@@ -35,6 +36,7 @@ if (sourceDatabase) {
 }
 const smokeSourcePath = join(runtimeDir, "smoke-source.sqlite");
 createSmokeSourceDatabase(smokeSourcePath);
+const dlcFixture = buildPackagedDlcFixture(join(runtimeDir, "fixture-packages"));
 const port = await reservePort();
 let token = randomBytes(32).toString("hex");
 let stderr = "";
@@ -69,6 +71,7 @@ try {
   }
 
   const frozenContract = await verifyFrozenDataContract(smokeSourcePath);
+  const dlcContract = await preparePackagedDlcLifecycle(dlcFixture);
 
   const oldToken = token;
   await stopProcessTree(child);
@@ -92,8 +95,27 @@ try {
   if (!Array.isArray(reloadedConversation.runs) || reloadedConversation.runs.length < 2) {
     throw new Error("Frozen sidecar restart did not reload the durable multi-turn run history");
   }
+  await verifyPackagedDlcActive(dlcContract);
+  const disabled = await apiJson("/api/v1/dlcs/acme.echo/disable", { method: "POST" });
+  if (disabled.state !== "disable_pending_restart" || !disabled.active) {
+    throw new Error(`DLC disable did not preserve active truth until restart: ${JSON.stringify(disabled)}`);
+  }
 
-  process.stdout.write(JSON.stringify({
+  const activeToken = token;
+  await stopProcessTree(child);
+  token = randomBytes(32).toString("hex");
+  stdout = "";
+  stderr = "";
+  child = launchSidecar(token);
+  await Promise.race([
+    waitUntilHealthy(child, port, token, () => stderr),
+    new Promise((_, reject) => child.once("error", reject)),
+  ]);
+  assertControlProtocol(stdout, port);
+  await expectRejectedToken("/api/v1/health", activeToken);
+  const dlcEvidence = await verifyPackagedDlcInactiveAndUninstall(dlcContract);
+
+  const evidence = {
     status: "ok",
     pid: child.pid,
     port,
@@ -105,8 +127,18 @@ try {
     result_artifact: "ok",
     durable_turns: reloadedConversation.runs.length,
     restart_reload: "ok",
+    packaged_dlc: dlcEvidence,
     target_triplet: targetTriplet,
-  }) + "\n");
+  };
+  const reportsDir = join(repositoryRoot, "reports");
+  await mkdir(reportsDir, { recursive: true });
+  await writeFile(
+    join(reportsDir, `dlc-packaged-e2e-${targetTriplet}.json`),
+    `${JSON.stringify(evidence, null, 2)}\n`,
+    "utf8",
+  );
+
+  process.stdout.write(`${JSON.stringify(evidence)}\n`);
 } finally {
   await stopProcessTree(child);
   if (process.env.DBFOX_SMOKE_KEEP_RUNTIME === "1") {
@@ -189,7 +221,7 @@ function createSmokeSourceDatabase(databasePath) {
     "connection.commit()",
     "connection.close()",
   ].join("; ");
-  const result = spawnSync(process.env.DBFOX_SMOKE_PYTHON || "python", [
+  const result = spawnSync(resolveSmokePython(), [
     "-c",
     script,
     databasePath,
@@ -201,6 +233,212 @@ function createSmokeSourceDatabase(databasePath) {
     const detail = result.error?.message || result.stderr?.trim() || `exit ${result.status}`;
     throw new Error(`Unable to create the frozen-smoke SQLite source: ${detail}`);
   }
+}
+
+function buildPackagedDlcFixture(outputDir) {
+  const result = spawnSync(resolveSmokePython(), [
+    "-m",
+    "scripts.build_dlc_e2e_fixture",
+    "--output-dir",
+    outputDir,
+  ], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (result.error || result.status !== 0) {
+    const detail = result.error?.message || result.stderr?.trim() || `exit ${result.status}`;
+    throw new Error(`Unable to build packaged DLC fixture: ${detail}`);
+  }
+  const outputLine = result.stdout.trim().split(/\r?\n/).at(-1);
+  let fixture;
+  try {
+    fixture = JSON.parse(outputLine || "");
+  } catch (error) {
+    throw new Error(`Packaged DLC fixture builder emitted invalid JSON: ${error}`);
+  }
+  if (!existsSync(fixture.valid_archive) || !existsSync(fixture.tampered_archive)) {
+    throw new Error(`Packaged DLC fixture builder omitted its archives: ${JSON.stringify(fixture)}`);
+  }
+  return fixture;
+}
+
+function resolveSmokePython() {
+  const configured = process.env.SIDECAR_PYTHON || process.env.DBFOX_SMOKE_PYTHON;
+  if (!configured) return "python";
+  if (isAbsolute(configured)) return configured;
+  if (configured.includes("/") || configured.includes("\\")) {
+    return resolve(repositoryRoot, configured);
+  }
+  return configured;
+}
+
+async function preparePackagedDlcLifecycle(fixture) {
+  const initialList = await apiJson("/api/v1/dlcs");
+  if (initialList.dlcs.some((item) => item.dlc_id === "acme.echo")) {
+    throw new Error("Packaged DLC fixture was unexpectedly installed before the test");
+  }
+
+  for (const endpoint of ["/api/v1/dlcs/packages/inspect", "/api/v1/dlcs/install"]) {
+    await expectApiProblem(endpoint, {
+      method: "POST",
+      body: { archive_path: fixture.tampered_archive },
+      expectedStatus: 400,
+      expectedCode: "HASH_MISMATCH",
+    });
+  }
+  const afterTamper = await apiJson("/api/v1/dlcs");
+  if (afterTamper.dlcs.some((item) => item.dlc_id === "acme.echo")) {
+    throw new Error("Tampered DLC package entered the installed registry");
+  }
+
+  const inspection = await apiJson("/api/v1/dlcs/packages/inspect", {
+    method: "POST",
+    body: { archive_path: fixture.valid_archive },
+  });
+  if (inspection.package_digest !== fixture.package_digest
+    || inspection.publisher_fingerprint !== fixture.publisher_fingerprint
+    || inspection.trust_required !== true
+    || inspection.backend_entrypoint_present !== true
+    || inspection.frontend_entrypoint_present !== true) {
+    throw new Error(`Packaged DLC inspection returned an invalid contract: ${JSON.stringify(inspection)}`);
+  }
+  await expectApiProblem("/api/v1/dlcs/install", {
+    method: "POST",
+    body: { archive_path: fixture.valid_archive },
+    expectedStatus: 409,
+    expectedCode: "TRUST_REQUIRED",
+  });
+
+  const trust = await apiJson("/api/v1/dlcs/publishers/trust", {
+    method: "POST",
+    body: {
+      archive_path: fixture.valid_archive,
+      package_digest: fixture.package_digest,
+      publisher_fingerprint: fixture.publisher_fingerprint,
+    },
+  });
+  if (!trust.trusted || trust.publisher_fingerprint !== fixture.publisher_fingerprint) {
+    throw new Error(`Packaged DLC publisher trust failed: ${JSON.stringify(trust)}`);
+  }
+
+  const installed = await apiJson("/api/v1/dlcs/install", {
+    method: "POST",
+    body: { archive_path: fixture.valid_archive },
+  });
+  if (installed.state !== "installed_disabled"
+    || installed.desired_enabled
+    || installed.active
+    || installed.selected_digest !== fixture.package_digest) {
+    throw new Error(`Packaged DLC did not install disabled: ${JSON.stringify(installed)}`);
+  }
+
+  const markerPath = join(runtimeDir, "dlcs", "data", "acme.echo", "activation-marker.txt");
+  if (existsSync(markerPath)) {
+    throw new Error("Packaged DLC backend executed during inspect, trust, or install");
+  }
+  await expectApiProblem("/api/v1/dlcs/acme.echo/operations/echo", {
+    method: "POST",
+    body: { message: "must not execute before restart" },
+    expectedStatus: 404,
+    expectedCode: "DLC_NOT_ACTIVE",
+  });
+
+  const enabled = await apiJson("/api/v1/dlcs/acme.echo/enable", { method: "POST" });
+  if (enabled.state !== "enable_pending_restart" || !enabled.desired_enabled || enabled.active) {
+    throw new Error(`Packaged DLC enable did not require restart: ${JSON.stringify(enabled)}`);
+  }
+  if (existsSync(markerPath)) {
+    throw new Error("Packaged DLC backend executed before the controlled restart");
+  }
+
+  return {
+    ...fixture,
+    markerPath,
+    packageDir: join(runtimeDir, "dlcs", "packages", `sha256-${fixture.package_digest}`),
+  };
+}
+
+async function verifyPackagedDlcActive(contract) {
+  const lifecycle = await apiJson("/api/v1/dlcs/acme.echo");
+  if (lifecycle.state !== "active"
+    || !lifecycle.active
+    || lifecycle.active_digest !== contract.package_digest
+    || lifecycle.selected_digest !== contract.package_digest) {
+    throw new Error(`Packaged DLC did not activate its exact digest: ${JSON.stringify(lifecycle)}`);
+  }
+  const activation = await apiJson("/api/v1/dlcs/activation");
+  const activeIdentity = activation.active_dlcs.find((item) => item.dlc_id === "acme.echo");
+  if (activeIdentity?.package_digest !== contract.package_digest
+    || activeIdentity.frontend_entrypoint !== "frontend/index.js") {
+    throw new Error(`Activation projection omitted the packaged DLC identity: ${JSON.stringify(activation)}`);
+  }
+  if (!existsSync(contract.markerPath)
+    || (await readFile(contract.markerPath, "utf8")) !== contract.package_digest) {
+    throw new Error("Packaged DLC activation marker omitted the exact active digest");
+  }
+
+  const echo = await apiJson("/api/v1/dlcs/acme.echo/operations/echo", {
+    method: "POST",
+    body: { message: "hello packaged DLC" },
+  });
+  if (echo.message !== "hello packaged DLC" || echo.package_digest !== contract.package_digest) {
+    throw new Error(`Packaged DLC backend operation returned invalid output: ${JSON.stringify(echo)}`);
+  }
+
+  const installedFrontend = await readFile(join(contract.packageDir, "frontend", "index.js"), "utf8");
+  if (!installedFrontend.includes("acme.echo.dock")
+    || !installedFrontend.includes("acme.echo.message")) {
+    throw new Error("Installed packaged DLC omitted its visible Dock or Artifact contribution");
+  }
+}
+
+async function verifyPackagedDlcInactiveAndUninstall(contract) {
+  const lifecycle = await apiJson("/api/v1/dlcs/acme.echo");
+  if (lifecycle.state !== "installed_disabled" || lifecycle.active || lifecycle.desired_enabled) {
+    throw new Error(`Packaged DLC remained active after disable and restart: ${JSON.stringify(lifecycle)}`);
+  }
+  const activation = await apiJson("/api/v1/dlcs/activation");
+  if (activation.active_dlcs.some((item) => item.dlc_id === "acme.echo")) {
+    throw new Error("Restarted activation projection retained the disabled packaged DLC");
+  }
+  await expectApiProblem("/api/v1/dlcs/acme.echo/operations/echo", {
+    method: "POST",
+    body: { message: "must not execute after restart" },
+    expectedStatus: 404,
+    expectedCode: "DLC_NOT_ACTIVE",
+  });
+
+  const uninstall = await apiJson("/api/v1/dlcs/acme.echo", { method: "DELETE" });
+  if (!uninstall.executable_bytes_removed || !uninstall.data_retained) {
+    throw new Error(`Packaged DLC uninstall returned invalid retention truth: ${JSON.stringify(uninstall)}`);
+  }
+  if (existsSync(contract.packageDir)) {
+    throw new Error("Inactive packaged DLC executable bytes remained after uninstall");
+  }
+  if (!existsSync(contract.markerPath)
+    || (await readFile(contract.markerPath, "utf8")) !== contract.package_digest) {
+    throw new Error("Packaged DLC-owned data was not retained after uninstall");
+  }
+  const finalList = await apiJson("/api/v1/dlcs");
+  if (finalList.dlcs.some((item) => item.dlc_id === "acme.echo")) {
+    throw new Error("Uninstalled packaged DLC remained in the lifecycle projection");
+  }
+
+  return {
+    dlc_id: "acme.echo",
+    package_digest: contract.package_digest,
+    publisher_fingerprint: contract.publisher_fingerprint,
+    tampered_rejected: true,
+    install_execution_blocked: true,
+    install_disabled: true,
+    enable_restart_active_exact_digest: true,
+    backend_operation: "ok",
+    frontend_dock_and_artifact: "ok",
+    disable_restart_absent: true,
+    executable_bytes_removed: true,
+    data_retained: true,
+  };
 }
 
 async function apiJson(path, { method = "GET", body } = {}) {
@@ -221,6 +459,31 @@ async function apiJson(path, { method = "GET", body } = {}) {
     );
   }
   return response.json();
+}
+
+async function expectApiProblem(path, {
+  method = "GET",
+  body,
+  expectedStatus,
+  expectedCode,
+}) {
+  const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+    method,
+    headers: {
+      "X-Local-Token": token,
+      Origin: "http://tauri.localhost",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const responseBody = await response.json();
+  if (response.status !== expectedStatus || responseBody.code !== expectedCode) {
+    throw new Error(
+      `${method} ${path} returned HTTP ${response.status}/${responseBody.code}, expected ${expectedStatus}/${expectedCode}: ${JSON.stringify(responseBody).slice(0, 500)}`,
+    );
+  }
+  return responseBody;
 }
 
 async function verifyFrozenDataContract(databasePath) {
