@@ -209,8 +209,6 @@ class ArtifactPayloadContractRegistry:
         schema_version: int,
         validator: type[BaseModel],
     ) -> "ArtifactPayloadContractRegistry":
-        if self._frozen:
-            raise RuntimeError("Artifact payload contracts are frozen.")
         normalized_type = validate_artifact_type(artifact_type)
         if int(schema_version) < 1:
             raise ValueError("Artifact schema_version must be >= 1")
@@ -218,10 +216,16 @@ class ArtifactPayloadContractRegistry:
             raise TypeError("Artifact payload validator must be a BaseModel subclass")
         key = (normalized_type, int(schema_version))
         if key in self._contracts:
+            if self._contracts[key] is validator:
+                return self
+            if self._frozen:
+                raise RuntimeError("Artifact payload contracts are frozen.")
             raise ValueError(
                 f"Artifact payload contract is already registered: "
                 f"{normalized_type} v{schema_version}"
             )
+        if self._frozen:
+            raise RuntimeError("Artifact payload contracts are frozen.")
         self._contracts[key] = validator
         return self
 
@@ -239,8 +243,27 @@ class ArtifactPayloadContractRegistry:
         self._frozen = True
         return self
 
+    def unfreeze(self) -> "ArtifactPayloadContractRegistry":
+        self._frozen = False
+        return self
+
+    def unregister(self, artifact_type: str, schema_version: int) -> None:
+        self._contracts.pop((str(artifact_type), int(schema_version)), None)
+
+    def reset(self) -> "ArtifactPayloadContractRegistry":
+        self._frozen = False
+        to_remove = [
+            k for k in self._contracts
+            if k[0] not in _KNOWN_ARTIFACT_TYPES and not k[0].startswith("dbfox.")
+        ]
+        for k in to_remove:
+            self._contracts.pop(k, None)
+        return self
+
+
 
 artifact_payload_contracts = ArtifactPayloadContractRegistry()
+
 
 
 def register_artifact_payload_contract(

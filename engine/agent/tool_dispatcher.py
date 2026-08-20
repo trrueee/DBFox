@@ -583,7 +583,9 @@ class ToolDispatcher:
                 ),
                 authorized_input=invocation.authorized_input,
                 attempt_timeout_ms=tool.execution.timeout_seconds * 1_000,
+                implementation=self.registry.implementation_identity_of(invocation.tool_name),
             )
+
 
         def execute_leaf(tool_control: ToolExecutionControl) -> ToolResult:
             if tool.execution.backend == "isolated_process":

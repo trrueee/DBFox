@@ -17,6 +17,8 @@ class DlcTrustStatus(StrEnum):
     TRUSTED_SIGNED = "trusted_signed"
     DEVELOPER_UNSIGNED = "developer_unsigned"
     DEVELOPER_SIGNED = "developer_signed"
+    UNTRUSTED = "untrusted"
+
 
 
 def public_key_from_base64(b64_str: str) -> ed25519.Ed25519PublicKey:
@@ -91,6 +93,11 @@ class DlcTrustStore:
 
     def is_trusted(self, fingerprint: str) -> bool:
         return fingerprint.lower() in self._trusted_keys
+
+    def list_trusted_keys(self) -> list[str]:
+        """Return list of all trusted public key Base64 strings."""
+        return list(self._trusted_keys.values())
+
 
     def verify_package_trust(
         self,
