@@ -98,24 +98,45 @@ class _DlcNamespaceFinder:
         return None
 
 
+_HEX_DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
+
 def reverify_installed_package(
     dlc_id: str,
     selected_digest: str,
     storage_root: Path,
     trust_store: DlcTrustStore,
     *,
+    expected_version: str | None = None,
+    expected_publisher_key_id: str | None = None,
     developer_mode: bool = False,
 ) -> tuple[DlcManifest, Path, DlcTrustStatus, str | None]:
     """Re-verify an installed DLC package directory before runtime activation.
 
     Enforces:
-    1. Package directory exists at content-addressed path.
-    2. manifest.json parses and manifest.id matches dlc_id.
-    3. integrity.json exists and all listed payload files exist with matching SHA256.
-    4. Ed25519 signature is authentic against trust store (or Developer Mode).
-    5. DBFox version and Extension API version are compatible.
+    1. selected_digest is exact 64-char lowercase hex.
+    2. Package directory exists strictly inside storage_root/packages without traversal.
+    3. manifest.json parses, manifest.id matches dlc_id, and manifest.version matches expected_version.
+    4. integrity.json exists and all listed payload files exist with matching SHA256.
+    5. Package tree contains no unlisted extra files or symlinks.
+    6. Ed25519 signature is authentic against trust store (or Developer Mode unsigned), and matches expected_publisher_key_id.
+    7. DBFox version and Extension API version are compatible.
     """
-    package_dir = storage_root / "packages" / f"sha256-{selected_digest}"
+    if not isinstance(selected_digest, str) or not _HEX_DIGEST_PATTERN.fullmatch(selected_digest.lower()):
+        raise DlcError(
+            DlcErrorCode.INVALID_ARCHIVE,
+            f"Invalid package digest format '{selected_digest}' for DLC '{dlc_id}'",
+        )
+
+    packages_root = (storage_root / "packages").resolve()
+    package_dir = (storage_root / "packages" / f"sha256-{selected_digest.lower()}").resolve()
+    try:
+        package_dir.relative_to(packages_root)
+    except ValueError:
+        raise DlcError(
+            DlcErrorCode.INVALID_ARCHIVE,
+            f"Package path escape detected for DLC '{dlc_id}'",
+        )
     if not package_dir.is_dir():
         raise DlcError(
             DlcErrorCode.PACKAGE_MISSING,
@@ -147,6 +168,12 @@ def reverify_installed_package(
             f"Manifest ID '{manifest.id}' does not match registered DLC ID '{dlc_id}'",
         )
 
+    if expected_version is not None and manifest.version != expected_version:
+        raise DlcError(
+            DlcErrorCode.PACKAGE_TAMPERED,
+            f"Manifest version '{manifest.version}' does not match registered version '{expected_version}'",
+        )
+
     try:
         integrity_bytes = integrity_file.read_bytes()
         integrity = DlcIntegrity.from_bytes(integrity_bytes)
@@ -155,6 +182,27 @@ def reverify_installed_package(
             DlcErrorCode.PACKAGE_TAMPERED,
             f"Failed to parse integrity.json for DLC '{dlc_id}': {exc}",
         ) from exc
+
+    # Reject unlisted files, extra files, symlinks
+    allowed_files = {
+        "manifest.json",
+        "integrity.json",
+        "signature.sig",
+        *(rel.replace("\\", "/") for rel in integrity.entries.keys()),
+    }
+    for item in package_dir.rglob("*"):
+        if item.is_symlink():
+            raise DlcError(
+                DlcErrorCode.PACKAGE_TAMPERED,
+                f"Package contains forbidden symlink: {item.relative_to(package_dir)}",
+            )
+        if item.is_file():
+            rel_path = item.relative_to(package_dir).as_posix()
+            if rel_path not in allowed_files:
+                raise DlcError(
+                    DlcErrorCode.PACKAGE_TAMPERED,
+                    f"Package contains unlisted or unauthorized file: {rel_path}",
+                )
 
     # Re-verify payload hashes
     for rel_path, expected_digest in integrity.entries.items():
@@ -205,16 +253,17 @@ def reverify_installed_package(
             except Exception:
                 continue
 
-
         if not verified:
-            if developer_mode:
-                trust_status = DlcTrustStatus.DEVELOPER_SIGNED
-            else:
+            raise DlcError(
+                DlcErrorCode.UNTRUSTED_PUBLISHER,
+                f"Signature on package '{dlc_id}' is not trusted by current trust store",
+            )
 
-                raise DlcError(
-                    DlcErrorCode.UNTRUSTED_PUBLISHER,
-                    f"Signature on package '{dlc_id}' is not trusted by current trust store",
-                )
+        if expected_publisher_key_id is not None and key_fingerprint != expected_publisher_key_id:
+            raise DlcError(
+                DlcErrorCode.UNTRUSTED_PUBLISHER,
+                f"Verified publisher key fingerprint '{key_fingerprint}' does not match registered publisher '{expected_publisher_key_id}'",
+            )
     else:
         if not developer_mode:
             raise DlcError(
@@ -230,8 +279,8 @@ def reverify_installed_package(
         manifest.requires_dbfox,
     )
 
-
     return manifest, package_dir, trust_status, key_fingerprint
+
 
 
 def load_dlc_backend(

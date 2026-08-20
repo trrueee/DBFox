@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import StrEnum
 import re
 from typing import Any, Literal
@@ -226,6 +227,29 @@ class ArtifactPayloadContractRegistry:
         return self
 
 
+    def register_many_atomic(
+        self,
+        contracts: Sequence[tuple[str, int, type[BaseModel]]],
+    ) -> "ArtifactPayloadContractRegistry":
+        if self._frozen:
+            raise RuntimeError("Artifact payload contracts are frozen.")
+        to_add: dict[tuple[str, int], type[BaseModel]] = {}
+        for artifact_type, schema_version, validator in contracts:
+            normalized_type = validate_artifact_type(artifact_type)
+            if int(schema_version) < 1:
+                raise ValueError("Artifact schema_version must be >= 1")
+            if not isinstance(validator, type) or not issubclass(validator, BaseModel):
+                raise TypeError("Artifact payload validator must be a BaseModel subclass")
+            key = (normalized_type, int(schema_version))
+            if key in self._contracts or key in to_add:
+                raise ValueError(
+                    f"Artifact payload contract is already registered: "
+                    f"{normalized_type} v{schema_version}"
+                )
+            to_add[key] = validator
+        self._contracts.update(to_add)
+        return self
+
     def get(
         self,
         artifact_type: str,
@@ -240,27 +264,8 @@ class ArtifactPayloadContractRegistry:
         self._frozen = True
         return self
 
-    def unfreeze(self) -> "ArtifactPayloadContractRegistry":
-        self._frozen = False
-        return self
-
-    def unregister(self, artifact_type: str, schema_version: int) -> None:
-        self._contracts.pop((str(artifact_type), int(schema_version)), None)
-
-    def reset(self) -> "ArtifactPayloadContractRegistry":
-        self._frozen = False
-        to_remove = [
-            k for k in self._contracts
-            if k[0] not in _KNOWN_ARTIFACT_TYPES and not k[0].startswith("dbfox.")
-        ]
-        for k in to_remove:
-            self._contracts.pop(k, None)
-        return self
-
-
 
 artifact_payload_contracts = ArtifactPayloadContractRegistry()
-
 
 
 def register_artifact_payload_contract(
@@ -277,8 +282,17 @@ def register_artifact_payload_contract(
     )
 
 
+def register_artifact_payload_contracts_atomic(
+    contracts: Sequence[tuple[str, int, type[BaseModel]]],
+) -> ArtifactPayloadContractRegistry:
+    """Atomically validate and register multiple artifact payload contracts."""
+
+    return artifact_payload_contracts.register_many_atomic(contracts)
+
+
 def freeze_artifact_payload_contracts() -> ArtifactPayloadContractRegistry:
     return artifact_payload_contracts.freeze()
+
 
 
 register_artifact_payload_contract(ArtifactType.SQL.value, 1, SqlArtifactPayload)

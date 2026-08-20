@@ -2,15 +2,16 @@
 
 This module is the stable, narrow public interface exposed to Runtime DLCs.
 DLC implementations MUST import extension contracts from this module (or
-``dbfox_dlc_api``), and MUST NOT import private DBFox internals (such as
-``engine.models``, ``engine.agent.*``, or ``engine.runtime_composition``).
+``dbfox_dlc_api``), and private imports from DBFox internals are unsupported
+and outside Extension API compatibility.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol, TypeVar
+from pathlib import Path
+from typing import Any, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,10 +20,11 @@ from engine.agent.context_fragment import (
     ContextContributor,
     ContextFragment,
     ContextLane,
+    MAX_CONTEXT_FRAGMENT_CHARS,
+    MAX_CONTEXT_FRAGMENTS_PER_CONTRIBUTOR,
 )
 from engine.agent.resource_refs import (
     ProjectResourceDescriptor,
-    ProjectResourceProvider,
     RequestedResourceRef,
 )
 from engine.tools.runtime.attempt import ResourceScopeRef, ScopedResourceResolver
@@ -40,6 +42,23 @@ from engine.tools.runtime.base import (
 TInput = TypeVar("TInput", bound=BaseModel)
 TOutput = TypeVar("TOutput", bound=BaseModel)
 
+# Neutral project resource provider contract: DLC receives only project_id (no Session)
+ExtensionProjectResourceProvider = Callable[[str], Sequence[ProjectResourceDescriptor]]
+
+# Neutral context contributor contract: DLC receives only ContextContributionInput (no Session)
+ExtensionContextContributor = ContextContributor
+ExtensionContextContributorFactory = Callable[[], ContextContributor]
+
+
+@dataclass(frozen=True)
+class DlcRuntimeInfo:
+    """Minimal immutable host-owned runtime identity for the DLC."""
+
+    dlc_id: str
+    package_version: str
+    package_digest: str
+    data_path: Path
+
 
 @dataclass(frozen=True)
 class DlcOperationContext:
@@ -47,7 +66,7 @@ class DlcOperationContext:
 
     dlc_id: str
     operation_name: str
-    caller_info: dict[str, Any] | None = None
+    project_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,7 +76,9 @@ class DlcOperationSpec:
     name: str
     input_model: type[BaseModel]
     output_model: type[BaseModel]
-    handler: Callable[[Any, DlcOperationContext], Any] | Callable[[Any], Any]
+    handler: Callable[[Any, DlcOperationContext], Any]
+    scope: Literal["machine", "project"] = "machine"
+    capabilities: tuple[str, ...] = ()
     description: str = ""
     max_output_bytes: int = 1_048_576  # 1 MiB
 
@@ -73,8 +94,8 @@ class ExtensionToolsHost(Protocol):
 class ExtensionResourcesHost(Protocol):
     """Registration surface for DLC Resource discovery and resolution."""
 
-    def register_provider(self, provider: ProjectResourceProvider) -> None:
-        """Register a project resource discovery function."""
+    def register_provider(self, provider: ExtensionProjectResourceProvider) -> None:
+        """Register a neutral project resource discovery function."""
         ...
 
     def register_resolver(self, kind: str, resolver: ScopedResourceResolver) -> None:
@@ -85,8 +106,15 @@ class ExtensionResourcesHost(Protocol):
 class ExtensionContextHost(Protocol):
     """Registration surface for DLC Context contributors."""
 
-    def register(self, contributor_factory: Callable[[Any], ContextContributor]) -> None:
-        """Register a ContextContributor factory (accepting a Session)."""
+    def register(
+        self,
+        contributor: (
+            ExtensionContextContributor
+            | ExtensionContextContributorFactory
+            | type[ExtensionContextContributor]
+        ),
+    ) -> None:
+        """Register a neutral ContextContributor or zero-arg factory."""
         ...
 
 
@@ -115,6 +143,9 @@ class BackendExtensionHost(Protocol):
     """Imperative typed host object passed to ``register(host)`` in backend/entry.py."""
 
     @property
+    def runtime_info(self) -> DlcRuntimeInfo: ...
+
+    @property
     def tools(self) -> ExtensionToolsHost: ...
 
     @property
@@ -138,6 +169,7 @@ __all__ = [
     "ExtensionContextHost",
     "ExtensionArtifactsHost",
     "ExtensionOperationsHost",
+    "DlcRuntimeInfo",
     # Tool contracts
     "BaseTool",
     "ToolInputModel",
@@ -149,15 +181,19 @@ __all__ = [
     "ToolCapability",
     # Resource contracts
     "ProjectResourceDescriptor",
-    "ProjectResourceProvider",
+    "ExtensionProjectResourceProvider",
     "RequestedResourceRef",
     "ResourceScopeRef",
     "ScopedResourceResolver",
     # Context contracts
     "ContextContributor",
+    "ExtensionContextContributor",
+    "ExtensionContextContributorFactory",
     "ContextContributionInput",
     "ContextFragment",
     "ContextLane",
+    "MAX_CONTEXT_FRAGMENT_CHARS",
+    "MAX_CONTEXT_FRAGMENTS_PER_CONTRIBUTOR",
     # Operation contracts
     "DlcOperationSpec",
     "DlcOperationContext",

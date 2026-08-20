@@ -27,6 +27,14 @@ class MaterializedTool(BaseModel):
     contract_hash: str = Field(
         description="Content-addressed identifier of the complete executable tool contract."
     )
+    owner_id: str | None = Field(
+        default=None,
+        description="Owner identifier (e.g., built-in or DLC ID) providing this tool.",
+    )
+    package_digest: str | None = Field(
+        default=None,
+        description="Immutable SHA-256 package digest for DLC tools.",
+    )
     group: str
     description: str
     input_schema: dict[str, Any]
@@ -88,7 +96,7 @@ def materialize_tools(
             required = set(spec.execution.required_resource_kinds)
             if not required.issubset(available_resource_kinds):
                 continue
-        materialized.append(_materialize_tool(tool))
+        materialized.append(_materialize_tool(tool, registry=registry))
 
     materialized.sort(key=lambda value: value.name)
     payload = [tool.model_dump(mode="json") for tool in materialized]
@@ -102,6 +110,8 @@ def require_current_tool(
     *,
     name: str,
     contract_hash: str,
+    owner_id: str | None = None,
+    package_digest: str | None = None,
 ) -> Any:
     try:
         frozen = materialization.require(name)
@@ -110,7 +120,7 @@ def require_current_tool(
         raise ToolVersionMismatch(
             f"Tool {name} is not available in both the frozen and current registries"
         ) from exc
-    current_contract = _materialize_tool(current)
+    current_contract = _materialize_tool(current, registry=registry)
     if (
         contract_hash != frozen.contract_hash
         or current_contract.contract_hash != frozen.contract_hash
@@ -118,6 +128,16 @@ def require_current_tool(
         raise ToolVersionMismatch(
             f"Tool {name} contract {contract_hash!r} cannot run against "
             f"frozen={frozen.contract_hash!r}, current={current_contract.contract_hash!r}"
+        )
+    expected_owner = owner_id if owner_id is not None else frozen.owner_id
+    if expected_owner is not None and current_contract.owner_id != expected_owner:
+        raise ToolVersionMismatch(
+            f"Tool {name} owner mismatch: expected {expected_owner!r}, current {current_contract.owner_id!r}"
+        )
+    expected_digest = package_digest if package_digest is not None else frozen.package_digest
+    if expected_digest is not None and current_contract.package_digest != expected_digest:
+        raise ToolVersionMismatch(
+            f"Tool {name} package digest mismatch: expected {expected_digest!r}, current {current_contract.package_digest!r}"
         )
     return current
 
@@ -128,6 +148,8 @@ def require_reconciliation_tool(
     *,
     name: str,
     contract_hash: str,
+    owner_id: str | None = None,
+    package_digest: str | None = None,
 ) -> Any:
     """Resolve only the read-only reconciler for an already-attempted call.
 
@@ -145,6 +167,7 @@ def require_reconciliation_tool(
         raise ToolVersionMismatch(
             f"Tool {name} is not available for reconciliation"
         ) from exc
+    current_contract = _materialize_tool(current, registry=registry)
     if (
         contract_hash != frozen.contract_hash
         or frozen.recovery_policy is not ToolRecoveryPolicy.RECONCILE
@@ -153,11 +176,25 @@ def require_reconciliation_tool(
         raise ToolVersionMismatch(
             f"Tool {name} no longer satisfies its frozen reconciliation contract"
         )
+    expected_owner = owner_id if owner_id is not None else frozen.owner_id
+    if expected_owner is not None and current_contract.owner_id != expected_owner:
+        raise ToolVersionMismatch(
+            f"Tool {name} owner mismatch: expected {expected_owner!r}, current {current_contract.owner_id!r}"
+        )
+    expected_digest = package_digest if package_digest is not None else frozen.package_digest
+    if expected_digest is not None and current_contract.package_digest != expected_digest:
+        raise ToolVersionMismatch(
+            f"Tool {name} package digest mismatch: expected {expected_digest!r}, current {current_contract.package_digest!r}"
+        )
     return current
 
 
 def _materialize_tool(
     tool: BaseTool[Any, Any] | ControlCommand[Any, Any],
+    *,
+    registry: ToolRegistry | None = None,
+    owner_id: str | None = None,
+    package_digest: str | None = None,
 ) -> MaterializedTool:
     spec = tool.spec
     input_schema = _strict_input_schema(spec.input_model)
@@ -179,10 +216,22 @@ def _materialize_tool(
         "presentation": presentation,
         "kind": spec.kind,
     }
+    resolved_owner = (
+        registry.owner_of(spec.name)
+        if registry is not None
+        else owner_id
+    )
+    resolved_digest = (
+        registry.package_digest_of(spec.name)
+        if registry is not None
+        else package_digest
+    )
     return MaterializedTool(
         name=spec.name,
         declared_version=str(spec.version),
         contract_hash=f"sha256:{_canonical_digest(contract_payload)}",
+        owner_id=resolved_owner,
+        package_digest=resolved_digest,
         group=spec.group,
         description=spec.description,
         input_schema=input_schema,
@@ -194,6 +243,7 @@ def _materialize_tool(
         recovery_policy=spec.execution.recovery,
         kind=spec.kind,
     )
+
 
 
 def current_tool_contract_hash(

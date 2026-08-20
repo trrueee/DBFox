@@ -69,6 +69,15 @@ class DlcOperationContribution:
 
 
 @dataclass(frozen=True)
+class DlcActivationFailure:
+    """Bounded diagnostic for a DLC that failed pre-verification or activation."""
+
+    dlc_id: str
+    error_code: str
+    message: str = ""
+
+
+@dataclass(frozen=True)
 class RuntimeDlcActivationProjection:
     """Wire-safe projection of active DLCs for future R3 Rust asset serving."""
 
@@ -92,6 +101,8 @@ class RuntimeContributionSnapshot:
     context_contributors: tuple[Callable[[Session], ContextContributor], ...]
     artifact_contracts: tuple[ArtifactContractContribution, ...]
     operations: tuple[DlcOperationContribution, ...]
+    activation_failures: tuple[DlcActivationFailure, ...] = ()
+
 
     def derive_r3_projection(self) -> RuntimeDlcActivationProjection:
         """Derive the wire-safe projection for future R3 Rust asset protocol handoff."""

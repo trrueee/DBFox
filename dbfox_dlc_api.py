@@ -11,14 +11,19 @@ from engine.dlc.api import (
     ContextLane,
     DlcOperationContext,
     DlcOperationSpec,
+    DlcRuntimeInfo,
     ExtensionArtifactsHost,
+    ExtensionContextContributor,
+    ExtensionContextContributorFactory,
     ExtensionContextHost,
     ExtensionOperationsHost,
+    ExtensionProjectResourceProvider,
     ExtensionResourcesHost,
     ExtensionToolsHost,
     Field,
+    MAX_CONTEXT_FRAGMENT_CHARS,
+    MAX_CONTEXT_FRAGMENTS_PER_CONTRIBUTOR,
     ProjectResourceDescriptor,
-    ProjectResourceProvider,
     RequestedResourceRef,
     ResourceScopeRef,
     ScopedResourceResolver,
@@ -27,14 +32,11 @@ from engine.dlc.api import (
     ToolInputModel,
     ToolOutputModel,
     ToolPolicy,
-
     ToolPresentation,
     ToolRecoveryPolicy,
 )
 
-
 __all__ = [
-
     "BackendExtensionHost",
     "BaseModel",
     "BaseTool",
@@ -45,14 +47,19 @@ __all__ = [
     "ContextLane",
     "DlcOperationContext",
     "DlcOperationSpec",
+    "DlcRuntimeInfo",
     "ExtensionArtifactsHost",
+    "ExtensionContextContributor",
+    "ExtensionContextContributorFactory",
     "ExtensionContextHost",
     "ExtensionOperationsHost",
+    "ExtensionProjectResourceProvider",
     "ExtensionResourcesHost",
     "ExtensionToolsHost",
     "Field",
+    "MAX_CONTEXT_FRAGMENT_CHARS",
+    "MAX_CONTEXT_FRAGMENTS_PER_CONTRIBUTOR",
     "ProjectResourceDescriptor",
-    "ProjectResourceProvider",
     "RequestedResourceRef",
     "ResourceScopeRef",
     "ScopedResourceResolver",
@@ -64,5 +71,3 @@ __all__ = [
     "ToolPresentation",
     "ToolRecoveryPolicy",
 ]
-
-

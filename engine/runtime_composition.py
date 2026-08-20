@@ -8,11 +8,16 @@ and RunLoop instances without any domain DLC branches in Kernel code.
 
 from __future__ import annotations
 
+import logging
+import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
+
 
 from engine.agent.completion import CompletionPolicy
 from engine.agent.completion_data import DataCompletionSupport, DataResultCitationConstraint
@@ -74,10 +79,21 @@ def initialize_runtime_snapshot(
     if storage_root is None:
         try:
             resolved_storage = private_runtime_dir("dlcs")
-        except Exception:
-            resolved_storage = Path(".dbfox_dlcs")
+        except Exception as exc:
+            logger.error("Failed to establish private runtime directory for DLCs: %s", exc)
+            # Fail closed without scanning CWD
+            empty_path = Path(tempfile.gettempdir()) / "dbfox_empty_dlc_storage"
+            compiler = ContributionCompiler(
+                empty_path,
+                trust_store=trust_store,
+                developer_mode=developer_mode,
+            )
+            snapshot = compiler.compile()
+            set_active_runtime_snapshot(snapshot)
+            return snapshot
     else:
         resolved_storage = storage_root
+
 
     compiler = ContributionCompiler(
         resolved_storage,

@@ -3,21 +3,20 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
-
-from engine.agent.context_fragment import ContextContributor
-from engine.agent.resource_refs import ProjectResourceProvider
 from engine.dlc.api import (
     BackendExtensionHost as IBackendExtensionHost,
     DlcOperationSpec,
+    DlcRuntimeInfo,
     ExtensionArtifactsHost as IExtensionArtifactsHost,
+    ExtensionContextContributor,
+    ExtensionContextContributorFactory,
     ExtensionContextHost as IExtensionContextHost,
     ExtensionOperationsHost as IExtensionOperationsHost,
+    ExtensionProjectResourceProvider,
     ExtensionResourcesHost as IExtensionResourcesHost,
     ExtensionToolsHost as IExtensionToolsHost,
 )
@@ -37,10 +36,15 @@ class StagedDlcContributions:
     dlc_id: str
     package_digest: str
     manifest: DlcManifest
+    runtime_info: DlcRuntimeInfo
     tools: list[BaseTool[Any, Any]] = field(default_factory=list)
-    resource_providers: list[ProjectResourceProvider] = field(default_factory=list)
+    resource_providers: list[ExtensionProjectResourceProvider] = field(default_factory=list)
     resource_resolvers: list[tuple[str, ScopedResourceResolver]] = field(default_factory=list)
-    context_contributors: list[Callable[[Session], ContextContributor]] = field(default_factory=list)
+    context_contributors: list[
+        ExtensionContextContributor
+        | ExtensionContextContributorFactory
+        | type[ExtensionContextContributor]
+    ] = field(default_factory=list)
     artifact_contracts: list[tuple[str, int, type[BaseModel]]] = field(default_factory=list)
     operations: list[DlcOperationSpec] = field(default_factory=list)
 
@@ -69,7 +73,7 @@ class _StagedResourcesHost:
     def __init__(self, staging: StagedDlcContributions) -> None:
         self._staging = staging
 
-    def register_provider(self, provider: ProjectResourceProvider) -> None:
+    def register_provider(self, provider: ExtensionProjectResourceProvider) -> None:
         if not callable(provider):
             raise DlcError(
                 DlcErrorCode.REGISTRATION_CONFLICT,
@@ -101,13 +105,30 @@ class _StagedContextHost:
     def __init__(self, staging: StagedDlcContributions) -> None:
         self._staging = staging
 
-    def register(self, contributor_factory: Callable[[Any], ContextContributor]) -> None:
-        if not callable(contributor_factory):
+    def register(
+        self,
+        contributor: (
+            ExtensionContextContributor
+            | ExtensionContextContributorFactory
+            | type[ExtensionContextContributor]
+        ),
+    ) -> None:
+        if isinstance(contributor, type):
+            if not (hasattr(contributor, "id") or hasattr(contributor, "build")):
+                raise DlcError(
+                    DlcErrorCode.REGISTRATION_CONFLICT,
+                    f"DLC '{self._staging.dlc_id}' registered invalid context contributor class",
+                )
+        elif callable(contributor):
+            pass
+        elif hasattr(contributor, "id") and hasattr(contributor, "build"):
+            pass
+        else:
             raise DlcError(
                 DlcErrorCode.REGISTRATION_CONFLICT,
-                f"DLC '{self._staging.dlc_id}' registered a non-callable context contributor factory",
+                f"DLC '{self._staging.dlc_id}' registered invalid context contributor: {contributor!r}",
             )
-        self._staging.context_contributors.append(contributor_factory)
+        self._staging.context_contributors.append(contributor)
 
 
 class _StagedArtifactsHost:
@@ -161,6 +182,11 @@ class _StagedOperationsHost:
                 f"DLC '{self._staging.dlc_id}' operation name '{spec.name}' is invalid. "
                 "Operation names must use lowercase alphanumeric and underscores/dashes.",
             )
+        if spec.scope not in ("machine", "project"):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' operation '{spec.name}' has invalid scope '{spec.scope}'. Must be 'machine' or 'project'.",
+            )
         if not (isinstance(spec.input_model, type) and issubclass(spec.input_model, BaseModel)):
             raise DlcError(
                 DlcErrorCode.REGISTRATION_CONFLICT,
@@ -189,11 +215,16 @@ class DefaultBackendExtensionHost(IBackendExtensionHost):
     """Concrete implementation of BackendExtensionHost passed to DLC register(host)."""
 
     def __init__(self, staging: StagedDlcContributions) -> None:
+        self._staging = staging
         self._tools_host = _StagedToolsHost(staging)
         self._resources_host = _StagedResourcesHost(staging)
         self._context_host = _StagedContextHost(staging)
         self._artifacts_host = _StagedArtifactsHost(staging)
         self._operations_host = _StagedOperationsHost(staging)
+
+    @property
+    def runtime_info(self) -> DlcRuntimeInfo:
+        return self._staging.runtime_info
 
     @property
     def tools(self) -> IExtensionToolsHost:

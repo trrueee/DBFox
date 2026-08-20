@@ -8,13 +8,18 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
+from engine.db import SessionLocal
 from engine.dlc.api import DlcOperationContext
+from engine.models import Project
 from engine.runtime_composition import get_active_runtime_snapshot
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/dlcs", tags=["dlc_operations"])
+
+MAX_DLC_OPERATION_INPUT_BYTES = 10 * 1024 * 1024  # 10 MiB
 
 
 @router.post(
@@ -27,7 +32,7 @@ async def invoke_dlc_operation(
     operation_name: str,
     request: Request,
 ) -> Any:
-    """Execute a typed DLC operation."""
+    """Execute a typed DLC operation with input/output bounds and single-call semantics."""
     snapshot = get_active_runtime_snapshot()
     op_contrib = snapshot.get_operation(dlc_id, operation_name)
     if op_contrib is None:
@@ -37,61 +42,111 @@ async def invoke_dlc_operation(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={
-                    "error_code": "DLC_NOT_ACTIVE",
+                    "code": "DLC_NOT_ACTIVE",
                     "message": f"DLC '{dlc_id}' is not currently active.",
                 },
             )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
-                "error_code": "OPERATION_NOT_FOUND",
+                "code": "OPERATION_NOT_FOUND",
                 "message": f"Operation '{operation_name}' not found for DLC '{dlc_id}'.",
             },
         )
 
     spec = op_contrib.spec
 
-    # Parse JSON body
+    # 1. Enforce input size bound before buffering
+    content_length_header = request.headers.get("content-length")
+    if content_length_header:
+        try:
+            content_length = int(content_length_header)
+            if content_length > MAX_DLC_OPERATION_INPUT_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail={
+                        "code": "INPUT_SIZE_EXCEEDED",
+                        "message": f"Request body size ({content_length} bytes) exceeds limit of {MAX_DLC_OPERATION_INPUT_BYTES} bytes.",
+                    },
+                )
+        except ValueError:
+            pass
+
+    body_chunks: list[bytes] = []
+    total_bytes = 0
+    async for chunk in request.stream():
+        total_bytes += len(chunk)
+        if total_bytes > MAX_DLC_OPERATION_INPUT_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail={
+                    "code": "INPUT_SIZE_EXCEEDED",
+                    "message": f"Request body size exceeds limit of {MAX_DLC_OPERATION_INPUT_BYTES} bytes.",
+                },
+            )
+        body_chunks.append(chunk)
+    body_bytes = b"".join(body_chunks)
+
+    # 2. Parse JSON body
     try:
-        body_bytes = await request.body()
         raw_input = json.loads(body_bytes.decode("utf-8")) if body_bytes else {}
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
-                "error_code": "INVALID_JSON",
+                "code": "INVALID_JSON",
                 "message": f"Failed to parse request JSON: {exc}",
             },
         ) from exc
 
-    # Validate input model
+    # 3. Validate input model
     try:
         input_data = spec.input_model.model_validate(raw_input)
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
-                "error_code": "INVALID_OPERATION_INPUT",
+                "code": "INVALID_OPERATION_INPUT",
                 "message": "Operation input validation failed.",
                 "errors": exc.errors(),
             },
         ) from exc
 
-    # Build execution context
+    # 4. Validate scope authority
+    project_id: str | None = None
+    if spec.scope == "project":
+        project_id = request.query_params.get("project_id") or request.headers.get("x-project-id")
+        if not project_id and isinstance(raw_input, dict):
+            project_id = raw_input.get("project_id")
+        if not project_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "MISSING_PROJECT_ID",
+                    "message": f"Operation '{operation_name}' is project-scoped and requires a valid project_id.",
+                },
+            )
+        with SessionLocal() as db:
+            project_row = db.get(Project, project_id)
+            if project_row is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "code": "PROJECT_NOT_FOUND",
+                        "message": f"Project '{project_id}' does not exist.",
+                    },
+                )
+
+    # 5. Build execution context
     ctx = DlcOperationContext(
         dlc_id=dlc_id,
         operation_name=operation_name,
-        caller_info={"client": request.client.host if request.client else None},
+        project_id=project_id,
     )
 
-    # Execute handler
+    # 6. Execute handler exactly once in threadpool (non-blocking)
     try:
-        try:
-            # Try 2-arg handler (input, ctx)
-            result = spec.handler(input_data, ctx)  # type: ignore[call-arg]
-        except TypeError:
-            # Fall back to 1-arg handler (input)
-            result = spec.handler(input_data)  # type: ignore[call-arg]
+        result = await run_in_threadpool(spec.handler, input_data, ctx)
     except Exception as exc:
         logger.error(
             f"Operation '{operation_name}' for DLC '{dlc_id}' failed: {exc}",
@@ -100,12 +155,12 @@ async def invoke_dlc_operation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
-                "error_code": "OPERATION_EXECUTION_FAILED",
+                "code": "OPERATION_EXECUTION_FAILED",
                 "message": f"Operation execution failed: {type(exc).__name__}",
             },
         ) from exc
 
-    # Validate output model
+    # 7. Validate output model
     try:
         if isinstance(result, spec.output_model):
             validated_output = result
@@ -120,12 +175,13 @@ async def invoke_dlc_operation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
-                "error_code": "INVALID_OPERATION_OUTPUT",
+                "code": "INVALID_OPERATION_OUTPUT",
                 "message": "Operation handler returned output that does not match its output model.",
             },
         ) from exc
 
-    # Check max output bytes
+
+    # 8. Check max output bytes
     output_json_bytes = json.dumps(output_dict).encode("utf-8")
     if len(output_json_bytes) > spec.max_output_bytes:
         raise HTTPException(

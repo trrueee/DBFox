@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from pathlib import Path
-
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -13,10 +12,15 @@ from sqlalchemy.orm import Session
 from engine.agent.artifact import (
     _KNOWN_ARTIFACT_TYPES,
     artifact_payload_contracts,
-    register_artifact_payload_contract,
+    register_artifact_payload_contracts_atomic,
 )
 from engine.agent.context_fragment import ContextContributor
 from engine.agent.resource_refs import ProjectResourceProvider
+from engine.dlc.api import (
+    DlcOperationSpec,
+    DlcRuntimeInfo,
+    ExtensionProjectResourceProvider,
+)
 from engine.dlc.errors import DlcError, DlcErrorCode
 from engine.dlc.host import DefaultBackendExtensionHost, StagedDlcContributions
 from engine.dlc.loader import (
@@ -30,6 +34,7 @@ from engine.dlc.registry import InstalledDlcRecord, InstalledDlcRegistry
 from engine.dlc.snapshot import (
     ActivatedDlcIdentity,
     ArtifactContractContribution,
+    DlcActivationFailure,
     DlcOperationContribution,
     ResourceResolverContribution,
     RuntimeContributionSnapshot,
@@ -37,6 +42,7 @@ from engine.dlc.snapshot import (
     compute_snapshot_id,
 )
 from engine.dlc.trust import DlcTrustStore
+from engine.tools.runtime import ToolRegistry
 from engine.tools.runtime.base import BaseTool, ToolCapability
 
 logger = logging.getLogger(__name__)
@@ -75,6 +81,22 @@ def _check_tool_permissions(manifest: DlcManifest, tool: BaseTool[Any, Any]) -> 
             )
 
 
+def _check_operation_permissions(manifest: DlcManifest, spec: DlcOperationSpec) -> None:
+    """Validate that operation capabilities are covered by manifest permission scopes."""
+    for cap in spec.capabilities:
+        has_permission = False
+        for perm in manifest.permissions:
+            perm_base = perm.split(":", 1)[0]
+            if perm_base == cap:
+                has_permission = True
+                break
+        if not has_permission:
+            raise DlcError(
+                DlcErrorCode.PERMISSION_VIOLATION,
+                f"Operation '{spec.name}' requires capability '{cap}', but DLC '{manifest.id}' does not declare permission '{cap}' in manifest.json",
+            )
+
+
 class ContributionCompiler:
     """Compiles built-in product contributions and enabled DLCs into a frozen RuntimeContributionSnapshot."""
 
@@ -99,12 +121,21 @@ class ContributionCompiler:
         built_in_context_contributors: Sequence[Callable[[Session], ContextContributor]] | None = None,
     ) -> RuntimeContributionSnapshot:
         """Execute the full compilation pipeline and return an immutable RuntimeContributionSnapshot."""
+        activation_failures: list[DlcActivationFailure] = []
+
         # 1. Load registry records
         try:
             self.registry.load()
             records = self.registry.list_installed_dlcs()
         except Exception as exc:
             logger.warning(f"Failed to load InstalledDlcRegistry: {exc}; proceeding with built-ins only.")
+            activation_failures.append(
+                DlcActivationFailure(
+                    dlc_id="__registry__",
+                    error_code=DlcErrorCode.REGISTRY_CORRUPT.value,
+                    message=str(exc),
+                )
+            )
             records = []
 
         # 2. Filter enabled DLCs and sort canonically by dlc_id
@@ -124,7 +155,6 @@ class ContributionCompiler:
                 register_workspace_write_extension,
             )
             from engine.github.tools import register_github_extension
-            from engine.tools.runtime import ToolRegistry
 
             temp_reg = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
             register_core_functions(temp_reg)
@@ -163,7 +193,6 @@ class ContributionCompiler:
         else:
             resolved_providers = list(built_in_resource_providers)
 
-
         if built_in_resource_resolvers is None:
             from engine.db import SessionLocal
             from engine.github.resource import resolve_github_repository
@@ -192,8 +221,11 @@ class ContributionCompiler:
         else:
             resolved_context = list(built_in_context_contributors)
 
-        # 4. Track existing identifiers to detect conflicts
-        known_tool_names: set[str] = {tc.tool.name for tc in resolved_built_in_tools}
+        # 4. Seed validation ToolRegistry to validate staged DLC tools against authoritative rules
+        validation_tool_registry = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
+        for tc in resolved_built_in_tools:
+            validation_tool_registry.register(tc.tool, owner=tc.owner_id, package_digest=tc.package_digest)
+
         known_resolver_kinds: set[str] = {rc.kind for rc in resolved_resolvers}
         known_artifact_types: set[str] = set(_KNOWN_ARTIFACT_TYPES) | {
             t for t, _ in artifact_payload_contracts.snapshot().keys()
@@ -208,8 +240,7 @@ class ContributionCompiler:
         all_artifact_contracts: list[ArtifactContractContribution] = []
         all_operations: list[DlcOperationContribution] = []
 
-
-        # 4. Activate each enabled DLC in canonical order with isolation
+        # 5. Activate each enabled DLC in canonical order with isolation
         for record in enabled_records:
             dlc_id = record.dlc_id
             selected_digest = record.selected_digest
@@ -218,12 +249,14 @@ class ContributionCompiler:
 
             namespace = derive_dlc_namespace(dlc_id, selected_digest)
             try:
-                # Pre-verification
+                # Pre-verification with strict identity binding
                 manifest, package_root, trust_status, key_fingerprint = reverify_installed_package(
                     dlc_id,
                     selected_digest,
                     self.storage_root,
                     self.trust_store,
+                    expected_version=record.package_version,
+                    expected_publisher_key_id=record.publisher_key_id,
                     developer_mode=self.developer_mode,
                 )
 
@@ -244,23 +277,42 @@ class ContributionCompiler:
                 # Load backend module
                 register_func = load_dlc_backend(package_root, manifest, selected_digest)
 
+                # Prepare isolated data path for DLC
+                data_path = self.storage_root / "data" / dlc_id
+                data_path.mkdir(parents=True, exist_ok=True)
+                runtime_info = DlcRuntimeInfo(
+                    dlc_id=dlc_id,
+                    package_version=manifest.version,
+                    package_digest=selected_digest,
+                    data_path=data_path,
+                )
+
                 # Staging execution
                 staging = StagedDlcContributions(
                     dlc_id=dlc_id,
                     package_digest=selected_digest,
                     manifest=manifest,
+                    runtime_info=runtime_info,
                 )
                 host = DefaultBackendExtensionHost(staging)
                 register_func(host)
 
-                # Validate staged contributions
+                # Validate staged tools with real ToolRegistry
                 for tool in staging.tools:
-                    _check_tool_permissions(manifest, tool)
-                    if tool.name in known_tool_names:
+                    # In R2 v1, installable DLC tools must use in_process execution backend
+                    if tool.execution.backend != "in_process":
                         raise DlcError(
-                            DlcErrorCode.REGISTRATION_CONFLICT,
-                            f"Tool '{tool.name}' from DLC '{dlc_id}' conflicts with an existing registered tool",
+                            DlcErrorCode.PERMISSION_VIOLATION,
+                            f"Tool '{tool.name}' from DLC '{dlc_id}' requested backend '{tool.execution.backend}'. "
+                            "Dynamic DLC tools in v1 must use 'in_process' execution backend.",
                         )
+                    _check_tool_permissions(manifest, tool)
+                    # Authoritative ToolRegistry validation
+                    validation_tool_registry.register(
+                        tool,
+                        owner=dlc_id,
+                        package_digest=selected_digest,
+                    )
 
                 for kind, _ in staging.resource_resolvers:
                     if kind in known_resolver_kinds:
@@ -277,6 +329,7 @@ class ContributionCompiler:
                         )
 
                 for op_spec in staging.operations:
+                    _check_operation_permissions(manifest, op_spec)
                     op_key = (dlc_id, op_spec.name)
                     if op_key in known_operations:
                         raise DlcError(
@@ -284,14 +337,21 @@ class ContributionCompiler:
                             f"Operation '{op_spec.name}' from DLC '{dlc_id}' is already registered",
                         )
 
+                # Atomically register artifact contracts for this DLC before committing other contributions
+                if staging.artifact_contracts:
+                    register_artifact_payload_contracts_atomic(staging.artifact_contracts)
+
                 # Commit staged contributions
                 for tool in staging.tools:
-                    known_tool_names.add(tool.name)
                     all_tools.append(
                         ToolContribution(tool=tool, owner_id=dlc_id, package_digest=selected_digest)
                     )
 
-                all_resource_providers.extend(staging.resource_providers)
+                # Adapt neutral resource providers: (project_id) -> Sequence -> (db, project_id) -> tuple
+                for provider in staging.resource_providers:
+                    def _make_adapted_provider(p: ExtensionProjectResourceProvider) -> ProjectResourceProvider:
+                        return lambda _db, project_id: tuple(p(project_id))
+                    all_resource_providers.append(_make_adapted_provider(provider))
 
                 for kind, resolver in staging.resource_resolvers:
                     known_resolver_kinds.add(kind)
@@ -299,7 +359,15 @@ class ContributionCompiler:
                         ResourceResolverContribution(kind=kind, resolver=resolver, owner_id=dlc_id)
                     )
 
-                all_context_contributors.extend(staging.context_contributors)
+                # Adapt neutral context contributors: ContextContributor / factory -> Callable[[Session], ContextContributor]
+                for contributor in staging.context_contributors:
+                    def _make_adapted_context(c: Any) -> Callable[[Session], ContextContributor]:
+                        if isinstance(c, type):
+                            return lambda _session: c()
+                        if callable(c) and not hasattr(c, "build"):
+                            return lambda _session: c()
+                        return lambda _session: c
+                    all_context_contributors.append(_make_adapted_context(contributor))
 
                 for art_type, schema_ver, validator in staging.artifact_contracts:
                     known_artifact_types.add(art_type)
@@ -330,24 +398,20 @@ class ContributionCompiler:
                 )
 
             except Exception as exc:
+                err_code = (
+                    exc.code.value if isinstance(getattr(exc, "code", None), DlcErrorCode)
+                    else str(getattr(exc, "code", type(exc).__name__))
+                )
                 logger.error(f"Failed to activate DLC '{dlc_id}': {exc}", exc_info=True)
+                activation_failures.append(
+                    DlcActivationFailure(
+                        dlc_id=dlc_id,
+                        error_code=err_code,
+                        message=str(exc),
+                    )
+                )
                 purge_dlc_namespace(namespace)
                 # Broken DLC isolation: do not fail entire runtime
-
-        # 5. Atomically register accepted artifact payload contracts
-        for art_contrib in all_artifact_contracts:
-            if artifact_payload_contracts.get(art_contrib.artifact_type, art_contrib.schema_version) is None:
-                try:
-                    register_artifact_payload_contract(
-                        art_contrib.artifact_type,
-                        art_contrib.schema_version,
-                        art_contrib.validator,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        f"Failed to register artifact payload contract for '{art_contrib.artifact_type}': {exc}"
-                    )
-
 
         # 6. Compute deterministic snapshot ID
         active_dlc_tuple = tuple(active_dlcs)
@@ -362,4 +426,5 @@ class ContributionCompiler:
             context_contributors=tuple(all_context_contributors),
             artifact_contracts=tuple(all_artifact_contracts),
             operations=tuple(all_operations),
+            activation_failures=tuple(activation_failures),
         )

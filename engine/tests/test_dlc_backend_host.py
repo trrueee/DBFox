@@ -77,11 +77,21 @@ def dlc_service(tmp_path: Path, trust_store: DlcTrustStore):
 
 @pytest.fixture(autouse=True)
 def reset_active_snapshot():
-    yield
-    from engine.runtime_composition import set_active_runtime_snapshot
     from engine.agent.artifact import artifact_payload_contracts
+    from engine.db import engine
+    from engine.models import Base
+    from engine.runtime_composition import set_active_runtime_snapshot
+    Base.metadata.create_all(bind=engine)
+    orig = dict(artifact_payload_contracts._contracts)
+    orig_frozen = artifact_payload_contracts._frozen
+    artifact_payload_contracts._frozen = False
+    yield
     set_active_runtime_snapshot(None)
-    artifact_payload_contracts.reset()
+    artifact_payload_contracts._contracts = dict(orig)
+    artifact_payload_contracts._frozen = orig_frozen
+
+
+
 
 
 
@@ -557,19 +567,21 @@ def test_full_dlc_contribution_suite(
                 "def ping_handler(input_data: PingInput, ctx: api.DlcOperationContext) -> PingOutput:\n"
                 "    return PingOutput(reply=f'pong: {input_data.message} from {ctx.dlc_id}')\n"
                 "\n"
-                "def list_analytics_resources(db, project_id):\n"
+                "def list_analytics_resources(project_id: str):\n"
                 "    return (api.ProjectResourceDescriptor(kind='acme.report', id='rep_1', version='1', name='Main Report'),)\n"
                 "\n"
                 "def resolve_analytics_resource(ref):\n"
                 "    return {'report_data': 'metrics_123'}\n"
                 "\n"
                 "class AnalyticsContextContributor(api.ContextContributor):\n"
-                "    def __init__(self, session):\n"
-                "        self.session = session\n"
-                "    def contribute(self, input_data):\n"
-                "        return api.ContextFragment(lane=api.ContextLane.PROJECT_CONTEXT, source='acme.analytics', title='Analytics Context', body='Active reports: 1')\n"
+                "    id = 'acme.analytics'\n"
+                "    def build(self, input_data):\n"
+                "        return (api.ContextFragment(source_id='acme.analytics', source_version='1.0.0', lane='resource', content='Active reports: 1'),)\n"
                 "\n"
                 "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    assert host.runtime_info.dlc_id == 'acme.analytics'\n"
+                "    assert host.runtime_info.package_version == '1.0.0'\n"
+                "    assert host.runtime_info.data_path.is_dir()\n"
                 "    host.resources.register_provider(list_analytics_resources)\n"
                 "    host.resources.register_resolver('acme.report', resolve_analytics_resource)\n"
                 "    host.context.register(AnalyticsContextContributor)\n"
@@ -857,6 +869,599 @@ def test_dlc_operations_api_router(
     # 4. Invalid input model
     resp_422 = client.post("/api/v1/dlcs/acme.ops_test/operations/echo", json={"invalid_field": 123}, headers=headers)
     assert resp_422.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# 9. R2.1 Durable Implementation Identity & Recovery Mismatch Fail-Closed
+# ---------------------------------------------------------------------------
+
+
+def test_tool_invocation_durable_identity_persistence(tmp_path: Path):
+    """Prove owner_id and package_digest are durably persisted in agent_tool_invocations."""
+    from uuid import uuid4
+    from engine.db import SessionLocal
+    from engine.models import AgentToolInvocation, Project
+    from engine.agent.repositories.session import SessionRepository
+    from engine.agent.repositories.tool import ToolInvocationRepository
+    from engine.agent.tool import ToolInvocationStatus, ToolRecoveryPolicy
+    from engine.tools.materialization import materialize_tools
+    from engine.tools.runtime import ToolRegistry
+    from engine.tools.runtime.base import (
+        BaseTool,
+        ToolExecutionSpec,
+        ToolInputModel,
+        ToolOutputModel,
+        ToolPolicy,
+        ToolPresentation,
+    )
+
+    class DummyInput(ToolInputModel):
+        param: str = ""
+
+    class DummyOutput(ToolOutputModel):
+        res: str = ""
+
+    class DummyTool(BaseTool[DummyInput, DummyOutput]):
+        name = "acme_durable_tool"
+        group = "default"
+        description = "Test durable tool"
+        input_model = DummyInput
+        output_model = DummyOutput
+        policy = ToolPolicy()
+        presentation = ToolPresentation(title="Test durable tool", category="explore")
+        execution = ToolExecutionSpec(backend="in_process")
+
+        def run(self, input_data: DummyInput, context: Any) -> DummyOutput:
+            return DummyOutput(res="ok")
+
+    reg = ToolRegistry(available_backends=frozenset({"in_process"}))
+    reg.register(DummyTool(), owner="acme.test_dlc", package_digest="digest_abc123")
+    mat_tools = materialize_tools(reg, execution_mode="read_only")
+
+    with SessionLocal() as db:
+        db.merge(Project(id="p1", name="Test Project"))
+        db.commit()
+        sess_repo = SessionRepository(db)
+        aggregate = sess_repo.create(project_id="p1", title="Test", context_tables=[])
+        admission = sess_repo.admit(
+            session_id=str(aggregate.id),
+            resource_refs=(),
+            content="Run test tool",
+            idempotency_key=f"idem_{uuid4().hex}",
+            llm_credential_id="cred_1",
+            api_base=None,
+            model_name="gpt-4o",
+            request_payload={},
+        )
+        lease = sess_repo.claim(session_id=str(aggregate.id), owner="test_worker")
+        assert lease is not None
+        sess_repo.promote_next_input(lease=lease)
+        turn = sess_repo.start_turn(
+            lease=lease,
+            run_id=admission.run_id,
+            agent_definition_version="v1",
+            prompt_version="v1",
+            prompt_hash="p_hash",
+            context_snapshot={},
+            context_hash="c_hash",
+            tool_materialization=mat_tools.model_dump(mode="json"),
+            tool_materialization_hash=mat_tools.hash,
+            provider="test",
+            model_name="test",
+        )
+
+        tool_repo = ToolInvocationRepository(db)
+        invocation = tool_repo.request(
+            lease=lease,
+            run_id=admission.run_id,
+            turn_id=str(turn.id),
+            provider_call_id="call_1",
+            tool_name="acme_durable_tool",
+            raw_input={"param": "value"},
+            materialization=mat_tools,
+            policy_decision={"mode": "auto", "safe_args": {"param": "value"}},
+        )
+        db.commit()
+
+        # Verify DB row has owner_id and package_digest persisted
+        row = db.get(AgentToolInvocation, invocation.id)
+        assert row is not None
+        assert row.owner_id == "acme.test_dlc"
+        assert row.package_digest == "digest_abc123"
+
+        # Verify domain model mapped from DB has owner_id and package_digest
+        recovered = tool_repo._domain(row)
+        assert recovered.owner_id == "acme.test_dlc"
+        assert recovered.package_digest == "digest_abc123"
+
+
+def test_tool_dispatcher_a_to_b_recovery_mismatch_fails_closed(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+):
+    """Prove that if a durable invocation was created under DLC A, and at execution time the tool
+
+    is provided by DLC B (different package_digest), dispatcher fails closed with TOOL_VERSION_CHANGED.
+    """
+    from uuid import uuid4
+    from sqlalchemy import select
+    from engine.db import SessionLocal
+    from engine.models import AgentObservationRecord, AgentToolInvocation, Project
+    from engine.agent.definition import DEFAULT_AGENT_DEFINITION
+    from engine.agent.repositories.session import SessionRepository
+    from engine.agent.repositories.tool import ToolInvocationRepository
+    from engine.agent.tool_dispatcher import ToolDispatcher
+    from engine.agent.observation import ObservationStatus
+    from engine.agent.tool import ToolInvocationStatus, ToolRecoveryPolicy
+    from engine.tools.materialization import materialize_tools
+    from engine.tools.runtime import ToolExecutor, ToolRegistry
+    from engine.tools.runtime.base import (
+        BaseTool,
+        ToolExecutionSpec,
+        ToolInputModel,
+        ToolOutputModel,
+        ToolPolicy,
+        ToolPresentation,
+    )
+
+    class DummyInput(ToolInputModel):
+        val: str = ""
+
+    class DummyOutput(ToolOutputModel):
+        out: str = ""
+
+    class DummyTool(BaseTool[DummyInput, DummyOutput]):
+        name = "shared_migrated_tool"
+        group = "default"
+        description = "Shared tool"
+        input_model = DummyInput
+        output_model = DummyOutput
+        policy = ToolPolicy()
+        presentation = ToolPresentation(title="Shared tool", category="explore")
+        execution = ToolExecutionSpec(backend="in_process")
+
+        def run(self, input_data: DummyInput, context: Any) -> DummyOutput:
+            return DummyOutput(out="executed")
+
+    # DLC A registry
+    reg_a = ToolRegistry(available_backends=frozenset({"in_process"}))
+    reg_a.register(
+        DummyTool(),
+        owner="acme.dlc_a",
+        package_digest="digest_a" * 8,
+    )
+    mat_tools_a = materialize_tools(reg_a, execution_mode="read_only")
+
+    # Current registry has the tool under DLC B (digest_B)
+    current_registry = ToolRegistry(available_backends=frozenset({"in_process"}))
+    current_registry.register(
+        DummyTool(),
+        owner="acme.dlc_b",
+        package_digest="digest_b" * 8,
+    )
+    frozen_reg = current_registry.freeze()
+
+    with SessionLocal() as db:
+        db.merge(Project(id="p1", name="Test Project"))
+        db.commit()
+        sess_repo = SessionRepository(db)
+        aggregate = sess_repo.create(project_id="p1", title="Test", context_tables=[])
+        admission = sess_repo.admit(
+            session_id=str(aggregate.id),
+            resource_refs=(),
+            content="Run tool",
+            idempotency_key=f"idem_{uuid4().hex}",
+            llm_credential_id="cred_1",
+            api_base=None,
+            model_name="gpt-4o",
+            request_payload={},
+        )
+        lease = sess_repo.claim(session_id=str(aggregate.id), owner="test_worker")
+        assert lease is not None
+        sess_repo.promote_next_input(lease=lease)
+        turn = sess_repo.start_turn(
+            lease=lease,
+            run_id=admission.run_id,
+            agent_definition_version="v1",
+            prompt_version="v1",
+            prompt_hash="p_hash",
+            context_snapshot={},
+            context_hash="c_hash",
+            tool_materialization=mat_tools_a.model_dump(mode="json"),
+            tool_materialization_hash=mat_tools_a.hash,
+            provider="test",
+            model_name="test",
+        )
+
+        tool_repo = ToolInvocationRepository(db)
+        invocation = tool_repo.request(
+            lease=lease,
+            run_id=admission.run_id,
+            turn_id=str(turn.id),
+            provider_call_id="call_1",
+            tool_name="shared_migrated_tool",
+            raw_input={"val": "test"},
+            materialization=mat_tools_a,
+            policy_decision={"mode": "auto", "safe_args": {"val": "test"}},
+        )
+        db.commit()
+
+        # ToolDispatcher prepares and runs invocation with current_registry
+        dispatcher = ToolDispatcher(
+            session_factory=SessionLocal,
+            registry=frozen_reg,
+            definition=DEFAULT_AGENT_DEFINITION,
+            executor=ToolExecutor(max_workers=1),
+        )
+
+        # Dispatch should detect implementation mismatch and settle with FAILED / TOOL_VERSION_CHANGED
+        prepared = dispatcher._prepare_execution(lease, invocation)
+        assert prepared is None
+
+        # Verify invocation is settled as failed
+        inv_row = db.get(AgentToolInvocation, invocation.id)
+        assert inv_row is not None
+        assert inv_row.status == ToolInvocationStatus.FAILED.value
+        obs_row = db.execute(
+            select(AgentObservationRecord).where(
+                AgentObservationRecord.tool_invocation_id == invocation.id
+            )
+        ).scalar_one()
+        assert obs_row.status == ObservationStatus.FAILED.value
+        assert obs_row.error_code == "TOOL_VERSION_CHANGED"
+
+
+
+
+# ---------------------------------------------------------------------------
+# 10. ContextAssembler Real Execution with DLC Contributor
+# ---------------------------------------------------------------------------
+
+
+def test_context_assembler_with_dlc_contributor(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+):
+    """Prove ContextAssembler executes neutral DLC context contributors without Session exposure."""
+    from uuid import uuid4
+    from engine.db import SessionLocal
+    from engine.models import Project
+    from engine.agent.repositories.session import SessionRepository
+    from engine.agent.context import ContextAssembler
+
+    priv_key, pub_b64 = test_keypair
+
+    arch = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.context_test",
+            "version": "1.0.0",
+            "displayName": "Context Test",
+            "publisher": "acme",
+            "extensionApiVersion": "1",
+            "requiresDbfox": ">=1.0.0",
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "\n"
+                "class DlcContextContrib(api.ContextContributor):\n"
+                "    id = 'acme.context_test'\n"
+                "    def build(self, input_data: api.ContextContributionInput):\n"
+                "        assert input_data.session_id is not None\n"
+                "        return (api.ContextFragment(source_id='acme.context_test', source_version='1.0.0', lane='evidence', content=f'DLC evidence for session {input_data.session_id}'),)\n"
+                "\n"
+                "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    host.context.register(DlcContextContrib)\n"
+            ),
+        },
+        private_key=priv_key,
+    )
+
+    path = tmp_path / "context_test.dbfox-dlc"
+    path.write_bytes(arch)
+
+    res = dlc_service.install_from_file(path, publisher_key_base64=pub_b64)
+    dlc_service.registry.set_desired_enabled(res.dlc_id, True)
+
+    compiler = ContributionCompiler(dlc_service.storage_root, trust_store=dlc_service.trust_store)
+    snapshot = compiler.compile()
+
+    with SessionLocal() as db:
+        db.merge(Project(id="p1", name="Test Project"))
+        db.commit()
+        sess_repo = SessionRepository(db)
+        aggregate = sess_repo.create(project_id="p1", title="Test", context_tables=[])
+        admission = sess_repo.admit(
+            session_id=str(aggregate.id),
+            resource_refs=(),
+            content="Need evidence",
+            idempotency_key=f"idem_{uuid4().hex}",
+            llm_credential_id="cred_1",
+            api_base=None,
+            model_name="gpt-4o",
+            request_payload={},
+        )
+
+        assembler = ContextAssembler(
+            db,
+            contributors=snapshot.context_contributors,
+        )
+        context_snap = assembler.build(admission.run_id)
+
+        assert any(
+            f.source_id == "acme.context_test" and "DLC evidence for session" in f.content
+            for f in context_snap.context_fragments
+        )
+
+
+# ---------------------------------------------------------------------------
+# 11. Artifact Atomic Batch Registration & Rollback
+# ---------------------------------------------------------------------------
+
+
+
+def test_artifact_atomic_registration_conflict_rolls_back_entire_dlc(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+):
+    """Prove that if a DLC defines multiple artifact contracts and one conflicts, none are registered and the DLC is rejected."""
+    from engine.agent.artifact import artifact_payload_contracts, register_artifact_payload_contract
+    from pydantic import BaseModel
+
+    class ExistingContract(BaseModel):
+        foo: str
+
+    register_artifact_payload_contract("acme.existing_type", 1, ExistingContract)
+
+    priv_key, pub_b64 = test_keypair
+
+    arch = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.conflicting_artifacts",
+            "version": "1.0.0",
+            "displayName": "Conflicting Artifacts",
+            "publisher": "acme",
+            "extensionApiVersion": "1",
+            "requiresDbfox": ">=1.0.0",
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "\n"
+                "class FirstContract(api.BaseModel):\n"
+                "    val: int\n"
+                "\n"
+                "class ConflictingContract(api.BaseModel):\n"
+                "    val: int\n"
+                "\n"
+                "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    host.artifacts.register('acme.first_type', 1, FirstContract)\n"
+                "    host.artifacts.register('acme.existing_type', 1, ConflictingContract)\n"
+            ),
+        },
+        private_key=priv_key,
+    )
+
+    path = tmp_path / "conflicting_artifacts.dbfox-dlc"
+    path.write_bytes(arch)
+
+    res = dlc_service.install_from_file(path, publisher_key_base64=pub_b64)
+    dlc_service.registry.set_desired_enabled(res.dlc_id, True)
+
+    compiler = ContributionCompiler(dlc_service.storage_root, trust_store=dlc_service.trust_store)
+    snapshot = compiler.compile()
+
+    # DLC should fail to activate
+    assert "acme.conflicting_artifacts" not in [d.dlc_id for d in snapshot.active_dlcs]
+    assert any(f.dlc_id == "acme.conflicting_artifacts" for f in snapshot.activation_failures)
+
+    # First contract must NOT be registered
+    assert artifact_payload_contracts.get("acme.first_type", 1) is None
+
+
+# ---------------------------------------------------------------------------
+# 12. Staged Tool Validation & Re-verification Extra File Detection
+# ---------------------------------------------------------------------------
+
+
+def test_staged_tool_isolated_process_backend_rejected(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+):
+    """Prove that installable DLC tools requesting non-in_process execution backend are rejected."""
+    priv_key, pub_b64 = test_keypair
+
+    arch = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.isolated_tool_test",
+            "version": "1.0.0",
+            "displayName": "Isolated Tool Test",
+            "publisher": "acme",
+            "extensionApiVersion": "1",
+            "requiresDbfox": ">=1.0.0",
+            "entrypoints": {"backend": "backend/entry.py"},
+            "permissions": ["network:api.acme.com"],
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "\n"
+                "class DummyInput(api.BaseModel):\n"
+                "    msg: str = ''\n"
+                "\n"
+                "class DummyOutput(api.BaseModel):\n"
+                "    res: str = ''\n"
+                "\n"
+                "class IsolatedTool(api.BaseTool):\n"
+                "    name = 'isolated_tool'\n"
+                "    description = 'Isolated tool'\n"
+                "    input_model = DummyInput\n"
+                "    output_model = DummyOutput\n"
+                "    policy = api.ToolPolicy()\n"
+                "    presentation = api.ToolPresentation()\n"
+                "    execution = api.ToolExecutionSpec(backend='isolated_process')\n"
+                "    def run(self, inp, ctx):\n"
+                "        return DummyOutput(res='ok')\n"
+                "\n"
+                "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    host.tools.register(IsolatedTool())\n"
+            ),
+        },
+        private_key=priv_key,
+    )
+
+    path = tmp_path / "isolated_tool_test.dbfox-dlc"
+    path.write_bytes(arch)
+
+    res = dlc_service.install_from_file(path, publisher_key_base64=pub_b64)
+    dlc_service.registry.set_desired_enabled(res.dlc_id, True)
+
+    compiler = ContributionCompiler(dlc_service.storage_root, trust_store=dlc_service.trust_store)
+    snapshot = compiler.compile()
+
+    assert "acme.isolated_tool_test" not in [d.dlc_id for d in snapshot.active_dlcs]
+    assert any(f.dlc_id == "acme.isolated_tool_test" for f in snapshot.activation_failures)
+
+
+def test_reverification_rejects_extra_unlisted_files(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+):
+    """Prove that injecting unlisted extra files into an installed package directory causes activation failure."""
+    priv_key, pub_b64 = test_keypair
+
+    arch = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.extra_file_test",
+            "version": "1.0.0",
+            "displayName": "Extra File Test",
+            "publisher": "acme",
+            "extensionApiVersion": "1",
+            "requiresDbfox": ">=1.0.0",
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": "def register(host): pass\n",
+        },
+        private_key=priv_key,
+    )
+
+    path = tmp_path / "extra_file_test.dbfox-dlc"
+    path.write_bytes(arch)
+
+    res = dlc_service.install_from_file(path, publisher_key_base64=pub_b64)
+    dlc_service.registry.set_desired_enabled(res.dlc_id, True)
+
+    # Add unauthorized extra file
+    pkg_dir = dlc_service.storage_root / "packages" / f"sha256-{res.package_digest}"
+    (pkg_dir / "unauthorized_script.py").write_text("print('injected')\n", encoding="utf-8")
+
+    compiler = ContributionCompiler(dlc_service.storage_root, trust_store=dlc_service.trust_store)
+    snapshot = compiler.compile()
+
+    assert "acme.extra_file_test" not in [d.dlc_id for d in snapshot.active_dlcs]
+    assert any(f.dlc_id == "acme.extra_file_test" for f in snapshot.activation_failures)
+
+
+# ---------------------------------------------------------------------------
+# 13. Operations Project Scope & Max Size Bounds
+# ---------------------------------------------------------------------------
+
+
+def test_dlc_operations_project_scope_and_size_bounds(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+):
+    """Prove project-scoped operations enforce valid project_id and large payloads are rejected with 413."""
+    from fastapi.testclient import TestClient
+    from engine.db import SessionLocal
+    from engine.models import Project
+    from engine.main import LOCAL_SECURE_TOKEN, app
+    from engine.runtime_composition import set_active_runtime_snapshot
+
+    priv_key, pub_b64 = test_keypair
+
+    arch = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.scope_test",
+            "version": "1.0.0",
+            "displayName": "Scope Test",
+            "publisher": "acme",
+            "extensionApiVersion": "1",
+            "requiresDbfox": ">=1.0.0",
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "\n"
+                "class ProjectIn(api.BaseModel):\n"
+                "    action: str\n"
+                "\n"
+                "class ProjectOut(api.BaseModel):\n"
+                "    project_id: str\n"
+                "\n"
+                "def proj_handler(inp: ProjectIn, ctx: api.DlcOperationContext) -> ProjectOut:\n"
+                "    return ProjectOut(project_id=str(ctx.project_id))\n"
+                "\n"
+                "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    host.operations.register(api.DlcOperationSpec(name='project_op', input_model=ProjectIn, output_model=ProjectOut, handler=proj_handler, scope='project'))\n"
+            ),
+        },
+        private_key=priv_key,
+    )
+
+    path = tmp_path / "scope_test.dbfox-dlc"
+    path.write_bytes(arch)
+
+    res = dlc_service.install_from_file(path, publisher_key_base64=pub_b64)
+    dlc_service.registry.set_desired_enabled(res.dlc_id, True)
+
+    compiler = ContributionCompiler(dlc_service.storage_root, trust_store=dlc_service.trust_store)
+    snapshot = compiler.compile()
+    set_active_runtime_snapshot(snapshot)
+
+    headers = {"X-Local-Token": LOCAL_SECURE_TOKEN}
+    client = TestClient(app)
+
+    # 1. Project-scoped op without project_id fails with 400
+    resp_no_proj = client.post("/api/v1/dlcs/acme.scope_test/operations/project_op", json={"action": "test"}, headers=headers)
+    assert resp_no_proj.status_code == 400
+    assert resp_no_proj.json()["code"] == "MISSING_PROJECT_ID"
+
+    # 2. Project-scoped op with non-existent project_id fails with 404
+    resp_bad_proj = client.post("/api/v1/dlcs/acme.scope_test/operations/project_op?project_id=non_existent", json={"action": "test"}, headers=headers)
+    assert resp_bad_proj.status_code == 404
+    assert resp_bad_proj.json()["code"] == "PROJECT_NOT_FOUND"
+
+    # 3. Create a real project in DB and invoke successfully
+    with SessionLocal() as db:
+        proj = Project(id="proj_valid_123", name="Valid Project")
+        db.add(proj)
+        db.commit()
+
+    resp_valid = client.post("/api/v1/dlcs/acme.scope_test/operations/project_op?project_id=proj_valid_123", json={"action": "test"}, headers=headers)
+    assert resp_valid.status_code == 200
+    assert resp_valid.json() == {"project_id": "proj_valid_123"}
+
 
 
 

@@ -52,6 +52,7 @@ from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
     ResourceScopeRef,
     ToolAttemptRequest,
+    ToolImplementationIdentity,
     ToolInvocationContext,
 )
 from engine.tools.runtime.attempt_runner import IsolatedProcessAttemptRunner
@@ -492,6 +493,8 @@ class ToolDispatcher:
                     materialization,
                     name=invocation.tool_name,
                     contract_hash=invocation.contract_hash,
+                    owner_id=invocation.owner_id,
+                    package_digest=invocation.package_digest,
                 )
                 if not isinstance(tool, BaseTool):
                     raise ToolVersionMismatch(
@@ -521,9 +524,7 @@ class ToolDispatcher:
                         if interrupted
                         else "TOOL_VERSION_CHANGED"
                     ),
-                    error_message=(
-                        "The current tool version does not match the Turn's frozen version."
-                    ),
+                    error_message="Tool implementation changed before execution.",
                     retryable=False,
                 )
                 db.commit()
@@ -564,6 +565,16 @@ class ToolDispatcher:
         request = prepared.request
         execution_authority = prepared.execution_authority
 
+        frozen_impl = (
+            ToolImplementationIdentity(
+                owner_id=invocation.owner_id,
+                package_digest=invocation.package_digest,
+                runtime_snapshot_id="",
+            )
+            if invocation.owner_id is not None
+            else None
+        )
+
         def attempt_request(
             mode: str,
             scope_refs: tuple[ResourceScopeRef, ...],
@@ -583,7 +594,7 @@ class ToolDispatcher:
                 ),
                 authorized_input=invocation.authorized_input,
                 attempt_timeout_ms=tool.execution.timeout_seconds * 1_000,
-                implementation=self.registry.implementation_identity_of(invocation.tool_name),
+                implementation=frozen_impl,
             )
 
 
