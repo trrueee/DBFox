@@ -2,6 +2,7 @@ import type { ResourceConnectorContribution } from "../resources/types";
 import type { RequestedResourceContributor } from "../resources/requestedResourceComposition";
 import type { DockViewContribution } from "../dock/types";
 import type { ArtifactRendererContribution } from "../workspace/artifacts/types";
+import type { WorkspaceDockTab } from "../../types/workspace";
 
 export interface ActiveDlcItem {
   dlc_id: string;
@@ -25,10 +26,23 @@ export interface FrontendExtensionHost {
   };
   readonly dockViews: {
     register(contribution: DockViewContribution): void;
+    open(view: WorkspaceDockTab, activate?: boolean): void;
   };
   readonly artifactRenderers: {
     register(contribution: ArtifactRendererContribution<unknown>): void;
   };
+  readonly operations: {
+    invoke<TOutput = unknown>(
+      operationName: string,
+      input?: unknown,
+      options?: DlcOperationInvokeOptions,
+    ): Promise<TOutput>;
+  };
+}
+
+export interface DlcOperationInvokeOptions {
+  readonly projectId?: string;
+  readonly signal?: AbortSignal;
 }
 
 export interface DlcContributionSet {

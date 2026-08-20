@@ -32,9 +32,12 @@ from engine.agent.context_budget import (
     ContextSegmentKind,
 )
 from engine.agent.context_fragment import (
+    ContextArtifactObservation,
     ContextContributionInput,
     ContextContributor,
     ContextFragment,
+    MAX_CONTEXT_ARTIFACT_OBSERVATIONS,
+    MAX_CONTEXT_ARTIFACT_PAYLOAD_BYTES,
 )
 from engine.agent.conversation_recall import ConversationRecallService
 from engine.agent.memory_v4 import (
@@ -573,6 +576,8 @@ class ContextAssembler:
         run: AgentRun,
         aggregate: AgentSession,
     ) -> list[ContextFragment]:
+        if not self.contributors:
+            return []
         contribution_input = ContextContributionInput(
             session_id=str(run.session_id),
             run_id=str(run.id),
@@ -582,12 +587,86 @@ class ContextAssembler:
                 else ""
             ),
             resource_refs=self._resource_refs_for_run(run),
+            recent_artifacts=self._recent_artifact_observations(str(run.session_id)),
         )
         fragments: list[ContextFragment] = []
         for contributor_factory in self.contributors:
             contributor = contributor_factory(self.session)
             fragments.extend(contributor.build(contribution_input))
         return fragments
+
+    def _recent_artifact_observations(
+        self,
+        session_id: str,
+    ) -> tuple[ContextArtifactObservation, ...]:
+        """Project bounded canonical Artifact evidence for neutral contributors."""
+
+        observations = (
+            self.session.execute(
+                select(AgentObservationRecord)
+                .where(
+                    AgentObservationRecord.session_id == session_id,
+                    AgentObservationRecord.status == "succeeded",
+                )
+                .order_by(
+                    AgentObservationRecord.created_at.desc(),
+                    AgentObservationRecord.sequence.desc(),
+                )
+                .limit(MAX_CONTEXT_ARTIFACT_OBSERVATIONS * 4)
+            )
+            .scalars()
+            .all()
+        )
+        ordered_pairs: list[tuple[AgentObservationRecord, str]] = []
+        artifact_ids: list[str] = []
+        seen_ids: set[str] = set()
+        for observation in observations:
+            for artifact_id in _json_strings(observation.artifact_ids_json):
+                if artifact_id in seen_ids:
+                    continue
+                seen_ids.add(artifact_id)
+                artifact_ids.append(artifact_id)
+                ordered_pairs.append((observation, artifact_id))
+                if len(artifact_ids) >= MAX_CONTEXT_ARTIFACT_OBSERVATIONS:
+                    break
+            if len(artifact_ids) >= MAX_CONTEXT_ARTIFACT_OBSERVATIONS:
+                break
+        if not artifact_ids:
+            return ()
+
+        rows = (
+            self.session.execute(
+                select(AgentArtifactRecord).where(
+                    AgentArtifactRecord.session_id == session_id,
+                    AgentArtifactRecord.id.in_(artifact_ids),
+                    AgentArtifactRecord.status == "completed",
+                )
+            )
+            .scalars()
+            .all()
+        )
+        by_id = {str(row.id): row for row in rows}
+        projected: list[ContextArtifactObservation] = []
+        for observation, artifact_id in ordered_pairs:
+            row = by_id.get(artifact_id)
+            if row is None:
+                continue
+            payload = _json_object(row.payload_json)
+            if byte_size(payload) > MAX_CONTEXT_ARTIFACT_PAYLOAD_BYTES:
+                continue
+            projected.append(
+                ContextArtifactObservation(
+                    observation_id=str(observation.id),
+                    artifact_id=artifact_id,
+                    artifact_type=str(row.type),
+                    schema_version=int(row.schema_version or 1),
+                    semantic_capabilities=tuple(
+                        _json_strings(observation.semantic_capabilities_json)
+                    ),
+                    payload=payload,
+                )
+            )
+        return tuple(projected)
 
     def _resource_refs_for_run(self, run: AgentRun) -> tuple[ResourceScopeRef, ...]:
         from engine.agent.resource_refs import load_resource_refs

@@ -6,7 +6,8 @@ import base64
 import hashlib
 import httpx
 
-from engine.agent.context_fragment import ContextContributionInput
+from engine.agent.context import ContextAssembler
+from engine.agent.context_fragment import ContextContributionInput, ContextFragment
 from engine.agent.repositories.session import SessionRepository
 from engine.github.context import GitHubContextContributor
 from engine.github.contracts import GITHUB_FILE_SNAPSHOT_ARTIFACT_TYPE
@@ -181,6 +182,33 @@ def test_github_context_contributor_rehydrates_snapshot(db_session, monkeypatch)
         )
     )
     db_session.commit()
+
+    captured_inputs: list[ContextContributionInput] = []
+
+    class CapturingContributor:
+        id = "test.capture"
+
+        def build(
+            self,
+            input: ContextContributionInput,
+        ) -> tuple[ContextFragment, ...]:
+            captured_inputs.append(input)
+            return ()
+
+    ContextAssembler(
+        db_session,
+        contributors=(lambda _session: CapturingContributor(),),
+    ).build(admission.run_id)
+    assert len(captured_inputs) == 1
+    recent = captured_inputs[0].recent_artifacts
+    assert len(recent) == 1
+    assert recent[0].observation_id == "observation-gh-snap-1"
+    assert recent[0].artifact_id == artifact_id
+    assert recent[0].artifact_type == GITHUB_FILE_SNAPSHOT_ARTIFACT_TYPE
+    assert recent[0].semantic_capabilities == (
+        GITHUB_FILE_SNAPSHOT_ARTIFACT_TYPE,
+    )
+    assert recent[0].payload["repositoryBindingId"] == binding_id
 
     # Monkeypatch transport on GithubReadService
     transport = _mock_github_transport()

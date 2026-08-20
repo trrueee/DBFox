@@ -65,7 +65,6 @@ describe("Runtime DLC Frontend Feasibility Contract", () => {
         "components",
         "icons",
         "registries",
-        "invokeOperation",
       ]);
 
       // Prohibited private internal surfaces
@@ -80,6 +79,7 @@ describe("Runtime DLC Frontend Feasibility Contract", () => {
         "rawEngineToken",
         "navigate",
         "router",
+        "invokeOperation",
       ];
 
       const mockExtensionHost: Record<string, unknown> = {
@@ -89,7 +89,6 @@ describe("Runtime DLC Frontend Feasibility Contract", () => {
         components: {},
         icons: {},
         registries: {},
-        invokeOperation: () => Promise.resolve(),
       };
 
       for (const key of Object.keys(mockExtensionHost)) {

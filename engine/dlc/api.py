@@ -16,12 +16,15 @@ from typing import Any, Literal, Protocol, TypeAlias, TypeVar
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.agent.context_fragment import (
+    ContextArtifactObservation,
     ContextContributionInput,
     ContextContributor,
     ContextFragment,
     ContextLane,
     MAX_CONTEXT_FRAGMENT_CHARS,
     MAX_CONTEXT_FRAGMENTS_PER_CONTRIBUTOR,
+    MAX_CONTEXT_ARTIFACT_OBSERVATIONS,
+    MAX_CONTEXT_ARTIFACT_PAYLOAD_BYTES,
 )
 from engine.agent.resource_refs import (
     ProjectResourceDescriptor,
@@ -187,6 +190,7 @@ __all__ = [
     "ScopedResourceResolver",
     # Context contracts
     "ContextContributor",
+    "ContextArtifactObservation",
     "ExtensionContextContributor",
     "ExtensionContextContributorFactory",
     "ContextContributionInput",
@@ -194,6 +198,8 @@ __all__ = [
     "ContextLane",
     "MAX_CONTEXT_FRAGMENT_CHARS",
     "MAX_CONTEXT_FRAGMENTS_PER_CONTRIBUTOR",
+    "MAX_CONTEXT_ARTIFACT_OBSERVATIONS",
+    "MAX_CONTEXT_ARTIFACT_PAYLOAD_BYTES",
     # Operation contracts
     "DlcOperationSpec",
     "DlcOperationContext",
