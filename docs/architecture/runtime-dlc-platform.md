@@ -235,7 +235,8 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
   `.dbfox-dlc`, recomputes its archive digest, re-parses the signed embedded key, and re-verifies
   its signature. Both digest and key fingerprint must match the inspected prompt identity; this
   prevents UI parameter forgery and inspect/trust TOCTOU substitution.
-- **Per-DLC SQLite Database**: Stored at `APP_DATA/dlcs/data/<dlc_id>.sqlite3`.
+- **Per-DLC Data Root**: Stored at `APP_DATA/dlcs/data/<dlc_id>/`; the DLC owns any
+  database and migration layout below that directory. Uninstall retains this directory by default.
 - **Core Independence**: The DLC manages its own migrations and schema lifecycle completely outside the Core Alembic migration graph.
 - **Zero Core Mutation**: Installing or uninstalling a DLC never modifies `engine/models.py` or Core database tables.
 
@@ -250,6 +251,25 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
   - Contains immutable activated DLC identities (`dlc_id`, `package_version`, `package_digest`), tools, resource providers, resolvers, context contributors, artifact contracts, and operations.
   - `snapshot_id`: Deterministically derived from DBFox release identity + built-in composition + sorted activated DLC identities (`(dlc_id, package_digest, package_version)`).
   - Snapshot is NOT a database table.
+
+### Local Lifecycle API
+- The existing `X-Local-Token` and trusted WebView origin middleware protects every lifecycle
+  route; no second authentication mechanism or externally reachable listener is introduced.
+- `POST /api/v1/dlcs/packages/inspect` authenticates a local `.dbfox-dlc` without installing or
+  executing it. `POST /api/v1/dlcs/publishers/trust` re-authenticates the same digest and embedded
+  key before committing trust. `POST /api/v1/dlcs/install` installs only a trusted package and
+  always starts with `desired_enabled=false`.
+- `GET /api/v1/dlcs` and `GET /api/v1/dlcs/{dlc_id}` derive lifecycle state by joining
+  `registry.json` desired state with the current immutable `RuntimeContributionSnapshot`; the
+  registry's legacy `runtime_state` field is never treated as active truth.
+- `POST /api/v1/dlcs/{dlc_id}/enable` and `/disable` change desired state only. The stable wire
+  states are `installed_disabled`, `enable_pending_restart`, `active`,
+  `disable_pending_restart`, and `activation_failed`.
+- `DELETE /api/v1/dlcs/{dlc_id}` requires desired-disabled state and absence from active runtime
+  truth. It removes the registry reference and unreferenced content-addressed executable bytes,
+  while retaining `APP_DATA/dlcs/data/<dlc_id>/`.
+- Rejections use the existing RFC 9457 `application/problem+json` boundary with bounded public
+  codes; filesystem paths, verifier diagnostics, and tracebacks do not cross the API boundary.
 
 ### Two-Tiered Tool Execution Identity
 1. **Tool Contract Identity**:
@@ -305,7 +325,9 @@ Error States:
 - **R1**: Package Protocol, Verifier, Signature Engine & Installed Registry (CLOSED).
 - **R2**: Runtime Composition Identity + Backend Extension Host (IN-PROGRESS).
 - **R3**: Frontend Runtime DLC Host (Tauri custom asset protocol & dynamic ESM loader).
-- **R4**: Install from File UI & DLC Center in Desktop App.
+- **R4.0**: Single-file Publisher Trust (CLOSED).
+- **R4.1**: Local-authenticated Lifecycle API (IN-PROGRESS).
+- **R4.2**: Install from File UI & DLC Center in Desktop App.
 - **R5**: Conformance Proof & Data Ownership — Decouple `dbfox.github` into `dbfox.github-1.0.0.dbfox-dlc`.
 - **R6**: Side-by-Side Update & Rollback Lifecycle.
 - **R7**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`).

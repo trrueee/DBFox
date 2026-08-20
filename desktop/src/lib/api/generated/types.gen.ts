@@ -1639,6 +1639,20 @@ export type DiagnosticPolicyResponse = {
 };
 
 /**
+ * DlcActivationFailureResponse
+ */
+export type DlcActivationFailureResponse = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
  * DlcActivationProjectionResponse
  */
 export type DlcActivationProjectionResponse = {
@@ -1650,6 +1664,225 @@ export type DlcActivationProjectionResponse = {
      * Snapshot Id
      */
     snapshot_id: string;
+};
+
+/**
+ * DlcInstallRequest
+ */
+export type DlcInstallRequest = {
+    /**
+     * Archive Path
+     */
+    archive_path: string;
+};
+
+/**
+ * DlcLifecycleItem
+ */
+export type DlcLifecycleItem = {
+    activation_failure?: DlcActivationFailureResponse | null;
+    /**
+     * Active
+     */
+    active: boolean;
+    /**
+     * Active Digest
+     */
+    active_digest: string | null;
+    /**
+     * Backend Entrypoint Present
+     */
+    backend_entrypoint_present: boolean;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Desired Enabled
+     */
+    desired_enabled: boolean;
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Dlc Id
+     */
+    dlc_id: string;
+    /**
+     * Frontend Entrypoint Present
+     */
+    frontend_entrypoint_present: boolean;
+    /**
+     * Permissions
+     */
+    permissions: Array<string>;
+    /**
+     * Publisher
+     */
+    publisher: string;
+    /**
+     * Publisher Fingerprint
+     */
+    publisher_fingerprint: string | null;
+    restart_state: DlcRestartState;
+    /**
+     * Selected Digest
+     */
+    selected_digest: string;
+    state: DlcLifecycleState;
+    /**
+     * Trust Status
+     */
+    trust_status: string;
+    /**
+     * Version
+     */
+    version: string;
+};
+
+/**
+ * DlcLifecycleState
+ */
+export type DlcLifecycleState = 'installed_disabled' | 'enable_pending_restart' | 'active' | 'disable_pending_restart' | 'activation_failed';
+
+/**
+ * DlcListResponse
+ */
+export type DlcListResponse = {
+    /**
+     * Dlcs
+     */
+    dlcs: Array<DlcLifecycleItem>;
+    /**
+     * Snapshot Id
+     */
+    snapshot_id: string;
+};
+
+/**
+ * DlcPackageInspectRequest
+ */
+export type DlcPackageInspectRequest = {
+    /**
+     * Archive Path
+     */
+    archive_path: string;
+};
+
+/**
+ * DlcPackageInspection
+ */
+export type DlcPackageInspection = {
+    /**
+     * Backend Entrypoint Present
+     */
+    backend_entrypoint_present: boolean;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Dlc Id
+     */
+    dlc_id: string;
+    /**
+     * Frontend Entrypoint Present
+     */
+    frontend_entrypoint_present: boolean;
+    /**
+     * Package Digest
+     */
+    package_digest: string;
+    /**
+     * Permissions
+     */
+    permissions: Array<string>;
+    /**
+     * Publisher
+     */
+    publisher: string;
+    /**
+     * Publisher Fingerprint
+     */
+    publisher_fingerprint: string;
+    /**
+     * Trust Required
+     */
+    trust_required: boolean;
+    trust_status: DlcTrustStatus;
+    /**
+     * Version
+     */
+    version: string;
+};
+
+/**
+ * DlcPublisherTrustRequest
+ */
+export type DlcPublisherTrustRequest = {
+    /**
+     * Archive Path
+     */
+    archive_path: string;
+    /**
+     * Package Digest
+     */
+    package_digest: string;
+    /**
+     * Publisher Fingerprint
+     */
+    publisher_fingerprint: string;
+};
+
+/**
+ * DlcPublisherTrustResponse
+ */
+export type DlcPublisherTrustResponse = {
+    /**
+     * Publisher Fingerprint
+     */
+    publisher_fingerprint: string;
+    /**
+     * Trusted
+     */
+    trusted?: boolean;
+};
+
+/**
+ * DlcRestartState
+ */
+export type DlcRestartState = 'none' | 'required' | 'failed';
+
+/**
+ * DlcTrustStatus
+ */
+export type DlcTrustStatus = 'trusted_signed' | 'developer_unsigned' | 'developer_signed' | 'untrusted';
+
+/**
+ * DlcUninstallResponse
+ */
+export type DlcUninstallResponse = {
+    /**
+     * Data Retained
+     */
+    data_retained: boolean;
+    /**
+     * Dlc Id
+     */
+    dlc_id: string;
+    /**
+     * Executable Bytes Removed
+     */
+    executable_bytes_removed: boolean;
+    /**
+     * Package Digest
+     */
+    package_digest: string;
 };
 
 /**
@@ -6031,6 +6264,59 @@ export type ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponses = 
 
 export type ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponse = ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponses[keyof ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponses];
 
+export type ListDlcsApiV1DlcsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/dlcs';
+};
+
+export type ListDlcsApiV1DlcsGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ListDlcsApiV1DlcsGetError = ListDlcsApiV1DlcsGetErrors[keyof ListDlcsApiV1DlcsGetErrors];
+
+export type ListDlcsApiV1DlcsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DlcListResponse;
+};
+
+export type ListDlcsApiV1DlcsGetResponse = ListDlcsApiV1DlcsGetResponses[keyof ListDlcsApiV1DlcsGetResponses];
+
 export type GetDlcActivationProjectionApiV1DlcsActivationGetData = {
     body?: never;
     path?: never;
@@ -6083,6 +6369,397 @@ export type GetDlcActivationProjectionApiV1DlcsActivationGetResponses = {
 };
 
 export type GetDlcActivationProjectionApiV1DlcsActivationGetResponse = GetDlcActivationProjectionApiV1DlcsActivationGetResponses[keyof GetDlcActivationProjectionApiV1DlcsActivationGetResponses];
+
+export type InstallDlcPackageApiV1DlcsInstallPostData = {
+    body: DlcInstallRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/dlcs/install';
+};
+
+export type InstallDlcPackageApiV1DlcsInstallPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type InstallDlcPackageApiV1DlcsInstallPostError = InstallDlcPackageApiV1DlcsInstallPostErrors[keyof InstallDlcPackageApiV1DlcsInstallPostErrors];
+
+export type InstallDlcPackageApiV1DlcsInstallPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: DlcLifecycleItem;
+};
+
+export type InstallDlcPackageApiV1DlcsInstallPostResponse = InstallDlcPackageApiV1DlcsInstallPostResponses[keyof InstallDlcPackageApiV1DlcsInstallPostResponses];
+
+export type InspectDlcPackageApiV1DlcsPackagesInspectPostData = {
+    body: DlcPackageInspectRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/dlcs/packages/inspect';
+};
+
+export type InspectDlcPackageApiV1DlcsPackagesInspectPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type InspectDlcPackageApiV1DlcsPackagesInspectPostError = InspectDlcPackageApiV1DlcsPackagesInspectPostErrors[keyof InspectDlcPackageApiV1DlcsPackagesInspectPostErrors];
+
+export type InspectDlcPackageApiV1DlcsPackagesInspectPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DlcPackageInspection;
+};
+
+export type InspectDlcPackageApiV1DlcsPackagesInspectPostResponse = InspectDlcPackageApiV1DlcsPackagesInspectPostResponses[keyof InspectDlcPackageApiV1DlcsPackagesInspectPostResponses];
+
+export type TrustDlcPublisherApiV1DlcsPublishersTrustPostData = {
+    body: DlcPublisherTrustRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/dlcs/publishers/trust';
+};
+
+export type TrustDlcPublisherApiV1DlcsPublishersTrustPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type TrustDlcPublisherApiV1DlcsPublishersTrustPostError = TrustDlcPublisherApiV1DlcsPublishersTrustPostErrors[keyof TrustDlcPublisherApiV1DlcsPublishersTrustPostErrors];
+
+export type TrustDlcPublisherApiV1DlcsPublishersTrustPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DlcPublisherTrustResponse;
+};
+
+export type TrustDlcPublisherApiV1DlcsPublishersTrustPostResponse = TrustDlcPublisherApiV1DlcsPublishersTrustPostResponses[keyof TrustDlcPublisherApiV1DlcsPublishersTrustPostResponses];
+
+export type UninstallDlcApiV1DlcsDlcIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Dlc Id
+         */
+        dlc_id: string;
+    };
+    query?: never;
+    url: '/api/v1/dlcs/{dlc_id}';
+};
+
+export type UninstallDlcApiV1DlcsDlcIdDeleteErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type UninstallDlcApiV1DlcsDlcIdDeleteError = UninstallDlcApiV1DlcsDlcIdDeleteErrors[keyof UninstallDlcApiV1DlcsDlcIdDeleteErrors];
+
+export type UninstallDlcApiV1DlcsDlcIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: DlcUninstallResponse;
+};
+
+export type UninstallDlcApiV1DlcsDlcIdDeleteResponse = UninstallDlcApiV1DlcsDlcIdDeleteResponses[keyof UninstallDlcApiV1DlcsDlcIdDeleteResponses];
+
+export type GetDlcApiV1DlcsDlcIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Dlc Id
+         */
+        dlc_id: string;
+    };
+    query?: never;
+    url: '/api/v1/dlcs/{dlc_id}';
+};
+
+export type GetDlcApiV1DlcsDlcIdGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type GetDlcApiV1DlcsDlcIdGetError = GetDlcApiV1DlcsDlcIdGetErrors[keyof GetDlcApiV1DlcsDlcIdGetErrors];
+
+export type GetDlcApiV1DlcsDlcIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DlcLifecycleItem;
+};
+
+export type GetDlcApiV1DlcsDlcIdGetResponse = GetDlcApiV1DlcsDlcIdGetResponses[keyof GetDlcApiV1DlcsDlcIdGetResponses];
+
+export type DisableDlcApiV1DlcsDlcIdDisablePostData = {
+    body?: never;
+    path: {
+        /**
+         * Dlc Id
+         */
+        dlc_id: string;
+    };
+    query?: never;
+    url: '/api/v1/dlcs/{dlc_id}/disable';
+};
+
+export type DisableDlcApiV1DlcsDlcIdDisablePostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type DisableDlcApiV1DlcsDlcIdDisablePostError = DisableDlcApiV1DlcsDlcIdDisablePostErrors[keyof DisableDlcApiV1DlcsDlcIdDisablePostErrors];
+
+export type DisableDlcApiV1DlcsDlcIdDisablePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DlcLifecycleItem;
+};
+
+export type DisableDlcApiV1DlcsDlcIdDisablePostResponse = DisableDlcApiV1DlcsDlcIdDisablePostResponses[keyof DisableDlcApiV1DlcsDlcIdDisablePostResponses];
+
+export type EnableDlcApiV1DlcsDlcIdEnablePostData = {
+    body?: never;
+    path: {
+        /**
+         * Dlc Id
+         */
+        dlc_id: string;
+    };
+    query?: never;
+    url: '/api/v1/dlcs/{dlc_id}/enable';
+};
+
+export type EnableDlcApiV1DlcsDlcIdEnablePostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type EnableDlcApiV1DlcsDlcIdEnablePostError = EnableDlcApiV1DlcsDlcIdEnablePostErrors[keyof EnableDlcApiV1DlcsDlcIdEnablePostErrors];
+
+export type EnableDlcApiV1DlcsDlcIdEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DlcLifecycleItem;
+};
+
+export type EnableDlcApiV1DlcsDlcIdEnablePostResponse = EnableDlcApiV1DlcsDlcIdEnablePostResponses[keyof EnableDlcApiV1DlcsDlcIdEnablePostResponses];
 
 export type InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostData = {
     body?: never;
