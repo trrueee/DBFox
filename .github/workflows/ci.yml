@@ -103,15 +103,24 @@ jobs:
           python -m pip check
 
       - name: Compile all Python runtime modules
-        run: python -m compileall -q engine build_sidecar.py conftest.py scripts
+        run: |
+          python -m compileall -q engine build_sidecar.py conftest.py scripts
+          python -m compileall -q dbfox_dlc_api.py dlcs
 
       - name: Lint Python runtime, tests, and repository scripts
-        run: python -m pyflakes engine build_sidecar.py conftest.py scripts
+        run: |
+          python -m pyflakes engine build_sidecar.py conftest.py scripts
+          python -m pyflakes dbfox_dlc_api.py dlcs/*/backend
 
       - name: Type-check the complete Python runtime
         run: >-
           python -m mypy --no-warn-unused-configs --follow-imports=skip
           engine build_sidecar.py --no-incremental
+
+      - name: Type-check installable DLC backends against the public API
+        run: >-
+          python -m mypy --no-warn-unused-configs --follow-imports=skip
+          --explicit-package-bases dlcs/*/backend --no-incremental
 
       - name: Verify committed dependency lock contracts
         run: python -m pytest engine/tests/test_engineering_contracts.py -q --tb=short
@@ -426,6 +435,13 @@ jobs:
 
       - name: Run ESLint
         run: npm run lint
+
+      - name: Lint installable DLC frontend entrypoints
+        working-directory: ${{ github.workspace }}
+        run: >-
+          desktop/node_modules/.bin/eslint
+          --config desktop/eslint.config.js
+          "dlcs/*/frontend/**/*.js"
 
       - name: Type-check frontend tests
         run: npm run typecheck:test

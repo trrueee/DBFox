@@ -1,6 +1,7 @@
 """Public alias module for DBFox Extension API v1."""
 
 from engine.dlc.api import (
+    ArtifactDraft,
     BackendExtensionHost,
     BaseModel,
     BaseTool,
@@ -11,6 +12,7 @@ from engine.dlc.api import (
     ContextFragment,
     ContextLane,
     DlcOperationContext,
+    DlcOperationError,
     DlcOperationSpec,
     DlcRuntimeInfo,
     ExtensionArtifactsHost,
@@ -21,6 +23,7 @@ from engine.dlc.api import (
     ExtensionProjectResourceProvider,
     ExtensionResourcesHost,
     ExtensionToolsHost,
+    ExtensionToolRunContext,
     Field,
     MAX_CONTEXT_FRAGMENT_CHARS,
     MAX_CONTEXT_FRAGMENTS_PER_CONTRIBUTOR,
@@ -33,13 +36,17 @@ from engine.dlc.api import (
     ToolCapability,
     ToolExecutionSpec,
     ToolInputModel,
+    ToolInputError,
     ToolOutputModel,
+    ToolOutcome,
     ToolPolicy,
     ToolPresentation,
     ToolRecoveryPolicy,
+    ToolSemanticSpec,
 )
 
 __all__ = [
+    "ArtifactDraft",
     "BackendExtensionHost",
     "BaseModel",
     "BaseTool",
@@ -50,6 +57,7 @@ __all__ = [
     "ContextFragment",
     "ContextLane",
     "DlcOperationContext",
+    "DlcOperationError",
     "DlcOperationSpec",
     "DlcRuntimeInfo",
     "ExtensionArtifactsHost",
@@ -60,6 +68,7 @@ __all__ = [
     "ExtensionProjectResourceProvider",
     "ExtensionResourcesHost",
     "ExtensionToolsHost",
+    "ExtensionToolRunContext",
     "Field",
     "MAX_CONTEXT_FRAGMENT_CHARS",
     "MAX_CONTEXT_FRAGMENTS_PER_CONTRIBUTOR",
@@ -72,8 +81,11 @@ __all__ = [
     "ToolCapability",
     "ToolExecutionSpec",
     "ToolInputModel",
+    "ToolInputError",
     "ToolOutputModel",
+    "ToolOutcome",
     "ToolPolicy",
     "ToolPresentation",
     "ToolRecoveryPolicy",
+    "ToolSemanticSpec",
 ]

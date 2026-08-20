@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any, Literal, Protocol, TypeAlias, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -26,6 +27,8 @@ from engine.agent.context_fragment import (
     MAX_CONTEXT_ARTIFACT_OBSERVATIONS,
     MAX_CONTEXT_ARTIFACT_PAYLOAD_BYTES,
 )
+from engine.agent.artifact import ArtifactDraft
+from engine.errors import ToolInputError
 from engine.agent.resource_refs import (
     ProjectResourceDescriptor,
     RequestedResourceRef,
@@ -41,6 +44,8 @@ from engine.tools.runtime.base import (
     ToolPresentation,
     ToolRecoveryPolicy,
 )
+from engine.tools.runtime.result import ToolOutcome
+from engine.tools.runtime.semantics import ToolSemanticSpec
 
 TInput = TypeVar("TInput", bound=BaseModel)
 TOutput = TypeVar("TOutput", bound=BaseModel)
@@ -51,6 +56,34 @@ ExtensionProjectResourceProvider: TypeAlias = Callable[[str], Sequence[ProjectRe
 # Neutral context contributor contract: DLC receives only ContextContributionInput (no Session)
 ExtensionContextContributor: TypeAlias = ContextContributor
 ExtensionContextContributorFactory: TypeAlias = Callable[[], ContextContributor]
+
+
+class ExtensionToolRunContext(Protocol):
+    """Narrow execution context exposed to installable DLC tools."""
+
+    def require_resource(self, kind: str) -> Any:
+        """Return the already-authorized resource bound to ``kind``."""
+        ...
+
+
+class DlcOperationError(Exception):
+    """Bounded, client-safe failure raised by a typed DLC operation."""
+
+    _ALLOWED_STATUS_CODES = frozenset({400, 404, 409, 429, 502, 503})
+
+    def __init__(self, *, code: str, message: str, status_code: int = 400) -> None:
+        normalized_code = str(code).strip()
+        normalized_message = str(message).strip()
+        if re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", normalized_code) is None:
+            raise ValueError("DLC operation error code must be uppercase snake case")
+        if not 1 <= len(normalized_message) <= 512:
+            raise ValueError("DLC operation error message must contain 1 to 512 characters")
+        if status_code not in self._ALLOWED_STATUS_CODES:
+            raise ValueError("DLC operation error status_code is not client-safe")
+        super().__init__(normalized_message)
+        self.code = normalized_code
+        self.message = normalized_message
+        self.status_code = status_code
 
 
 @dataclass(frozen=True)
@@ -173,6 +206,7 @@ __all__ = [
     "ExtensionArtifactsHost",
     "ExtensionOperationsHost",
     "DlcRuntimeInfo",
+    "DlcOperationError",
     # Tool contracts
     "BaseTool",
     "ToolInputModel",
@@ -182,6 +216,11 @@ __all__ = [
     "ToolPresentation",
     "ToolRecoveryPolicy",
     "ToolCapability",
+    "ToolSemanticSpec",
+    "ToolOutcome",
+    "ToolInputError",
+    "ExtensionToolRunContext",
+    "ArtifactDraft",
     # Resource contracts
     "ProjectResourceDescriptor",
     "ExtensionProjectResourceProvider",

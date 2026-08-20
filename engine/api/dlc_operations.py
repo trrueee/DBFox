@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from engine.db import SessionLocal
-from engine.dlc.api import DlcOperationContext
+from engine.dlc.api import DlcOperationContext, DlcOperationError
 from engine.models import Project
 from engine.runtime_composition import get_active_runtime_snapshot
 
@@ -148,6 +148,11 @@ async def invoke_dlc_operation(
     # 6. Execute handler exactly once in threadpool (non-blocking)
     try:
         result = await run_in_threadpool(spec.handler, input_data, ctx)
+    except DlcOperationError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
     except Exception as exc:
         logger.error(
             f"Operation '{operation_name}' for DLC '{dlc_id}' failed: {exc}",

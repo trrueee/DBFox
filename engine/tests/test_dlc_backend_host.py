@@ -834,8 +834,12 @@ def test_dlc_operations_api_router(
                 "def echo_handler(inp: EchoIn, ctx: api.DlcOperationContext) -> EchoOut:\n"
                 "    return EchoOut(echo=f'echo: {inp.msg}')\n"
                 "\n"
+                "def conflict_handler(inp: EchoIn, ctx: api.DlcOperationContext) -> EchoOut:\n"
+                "    raise api.DlcOperationError(code='ACME_CONFLICT', message='safe conflict', status_code=409)\n"
+                "\n"
                 "def register(host: api.BackendExtensionHost) -> None:\n"
                 "    host.operations.register(api.DlcOperationSpec(name='echo', input_model=EchoIn, output_model=EchoOut, handler=echo_handler))\n"
+                "    host.operations.register(api.DlcOperationSpec(name='conflict', input_model=EchoIn, output_model=EchoOut, handler=conflict_handler))\n"
             ),
         },
         private_key=priv_key,
@@ -872,6 +876,18 @@ def test_dlc_operations_api_router(
     # 4. Invalid input model
     resp_422 = client.post("/api/v1/dlcs/acme.ops_test/operations/echo", json={"invalid_field": 123}, headers=headers)
     assert resp_422.status_code == 422
+
+    # 5. Bounded public operation failures preserve a client-safe typed problem.
+    resp_conflict = client.post(
+        "/api/v1/dlcs/acme.ops_test/operations/conflict",
+        json={"msg": "hello"},
+        headers=headers,
+    )
+    assert resp_conflict.status_code == 409
+    conflict_problem = resp_conflict.json()
+    assert conflict_problem["code"] == "ACME_CONFLICT"
+    assert conflict_problem["detail"] == "safe conflict"
+    assert conflict_problem["status"] == 409
 
 
 # ---------------------------------------------------------------------------
