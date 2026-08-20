@@ -93,7 +93,6 @@ def test_github_production_vertical_slice(db_session, monkeypatch) -> None:
         return srv
 
     monkeypatch.setattr(gh_resource_module, "resolve_github_repository", patched_resolve)
-    monkeypatch.setattr("engine.runtime_composition.resolve_github_repository", patched_resolve)
     monkeypatch.setattr("engine.github.context.resolve_github_repository", patched_resolve)
 
     # 1. Frontend sends RequestedResourceRef (wire-only, NO version)

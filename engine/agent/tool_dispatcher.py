@@ -565,11 +565,18 @@ class ToolDispatcher:
         request = prepared.request
         execution_authority = prepared.execution_authority
 
+        active_snap_id = ""
+        try:
+            from engine.runtime_composition import get_active_runtime_snapshot
+            active_snap_id = get_active_runtime_snapshot().snapshot_id
+        except Exception:
+            pass
+
         frozen_impl = (
             ToolImplementationIdentity(
                 owner_id=invocation.owner_id,
                 package_digest=invocation.package_digest,
-                runtime_snapshot_id="",
+                runtime_snapshot_id=active_snap_id,
             )
             if invocation.owner_id is not None
             else None

@@ -29,9 +29,11 @@ from engine.agent.resource_refs import (
 )
 from engine.db import SessionLocal
 from engine.dlc.compiler import ContributionCompiler
-from engine.dlc.snapshot import RuntimeContributionSnapshot
+from engine.dlc.snapshot import (
+    ResourceResolverContribution,
+    RuntimeContributionSnapshot,
+)
 from engine.dlc.trust import DlcTrustStore
-from engine.github.resource import resolve_github_repository
 from engine.models import DataSource, Project
 from engine.runtime_paths import private_runtime_dir
 from engine.tools.runtime import ToolRegistry
@@ -41,10 +43,8 @@ from engine.tools.runtime.attempt import (
     ScopedResourceResolver,
 )
 from engine.tools.runtime.resource_context import (
-    resolve_workspace_resource,
     resolve_workspace_scope_ref,
 )
-from engine.workspace.read_service import WorkspaceReadService
 
 
 
@@ -248,7 +248,24 @@ def authorize_project_resources(
 
 # ---------------------------------------------------------------------------
 # Attempt Resource Resolvers (Execution)
-# ---------------------------------------------------------------------------
+def _adapt_scoped_resolver(
+    contrib: ResourceResolverContribution,
+    metadata_session: Session | None = None,
+) -> ScopedResourceResolver:
+    """Adapt a ResourceResolverContribution into a standard ScopedResourceResolver based on typed platform binding."""
+    if contrib.binding == "metadata_session":
+        resolver = contrib.resolver
+
+        def _session_wrapped(ref: ResourceScopeRef) -> Any:
+            if metadata_session is not None:
+                return resolver(metadata_session, ref)
+            with SessionLocal() as db:
+                return resolver(db, ref)
+
+        return cast(ScopedResourceResolver, _session_wrapped)
+
+    # scope_only (DLCs and neutral resolvers): strictly receives ref only, never receives Session
+    return cast(ScopedResourceResolver, contrib.resolver)
 
 
 def build_attempt_resource_resolver(
@@ -260,28 +277,10 @@ def build_attempt_resource_resolver(
     resolver = CompositeResourceResolver()
 
     for res_contrib in snap.resource_resolvers:
-        # If built-in kinds and metadata_session is provided, wrap appropriately
-        kind = res_contrib.kind
-        if kind == "database":
-            def resolve_db(_ref: ResourceScopeRef) -> Any:
-                return metadata_session if metadata_session is not None else SessionLocal()
-            resolver.register("database", cast(ScopedResourceResolver, resolve_db))
-        elif kind == "workspace":
-            def resolve_ws(ref: ResourceScopeRef) -> WorkspaceReadService:
-                if metadata_session is not None:
-                    return resolve_workspace_resource(metadata_session, ref)
-                with SessionLocal() as db:
-                    return resolve_workspace_resource(db, ref)
-            resolver.register("workspace", cast(ScopedResourceResolver, resolve_ws))
-        elif kind == "github.repository":
-            def resolve_gh(ref: ResourceScopeRef) -> Any:
-                if metadata_session is not None:
-                    return resolve_github_repository(metadata_session, ref)
-                with SessionLocal() as db:
-                    return resolve_github_repository(db, ref)
-            resolver.register("github.repository", cast(ScopedResourceResolver, resolve_gh))
-        else:
-            resolver.register(kind, res_contrib.resolver)
+        resolver.register(
+            res_contrib.kind,
+            _adapt_scoped_resolver(res_contrib, metadata_session),
+        )
 
     return resolver.freeze()
 

@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dlcs", tags=["dlc_operations"])
 
 MAX_DLC_OPERATION_INPUT_BYTES = 10 * 1024 * 1024  # 10 MiB
+PLATFORM_MAX_DLC_OPERATION_OUTPUT_BYTES = 10 * 1024 * 1024  # 10 MiB host ceiling
 
 
 @router.post(
@@ -181,14 +182,18 @@ async def invoke_dlc_operation(
         ) from exc
 
 
-    # 8. Check max output bytes
+    # 8. Check max output bytes against effective limit (min of spec limit and platform hard ceiling)
+    effective_max_output = min(
+        int(spec.max_output_bytes or 0) if int(spec.max_output_bytes or 0) > 0 else PLATFORM_MAX_DLC_OPERATION_OUTPUT_BYTES,
+        PLATFORM_MAX_DLC_OPERATION_OUTPUT_BYTES,
+    )
     output_json_bytes = json.dumps(output_dict).encode("utf-8")
-    if len(output_json_bytes) > spec.max_output_bytes:
+    if len(output_json_bytes) > effective_max_output:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
-                "error_code": "OUTPUT_SIZE_EXCEEDED",
-                "message": f"Operation output size ({len(output_json_bytes)} bytes) exceeds limit of {spec.max_output_bytes} bytes",
+                "code": "OUTPUT_SIZE_EXCEEDED",
+                "message": f"Operation output size ({len(output_json_bytes)} bytes) exceeds effective limit of {effective_max_output} bytes.",
             },
         )
 
