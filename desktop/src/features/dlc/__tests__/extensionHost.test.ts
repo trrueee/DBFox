@@ -130,4 +130,63 @@ describe("FrontendExtensionHost", () => {
     expect(() => staged.getContributions().connectors[0].onAdd?.({ projectId: "project-1" })).not.toThrow();
     consoleError.mockRestore();
   });
+
+  it("binds operation calls to the current DLC identity", async () => {
+    const invokeOperationCalls = vi.fn();
+    const invokeOperation = async <TOutput,>(
+      dlcId: string,
+      operationName: string,
+      input: unknown,
+      options?: { projectId?: string; signal?: AbortSignal },
+    ): Promise<TOutput> => {
+      invokeOperationCalls(dlcId, operationName, input, options);
+      return { ok: true } as TOutput;
+    };
+    const staged = createStagedExtensionHost("acme.bound", {
+      invokeOperation,
+      openDockTab: vi.fn(),
+    });
+
+    await expect(
+      staged.host.operations.invoke("list_bindings", { project_id: "p1" }, { projectId: "p1" }),
+    ).resolves.toEqual({ ok: true });
+    expect(invokeOperationCalls).toHaveBeenCalledWith(
+      "acme.bound",
+      "list_bindings",
+      { project_id: "p1" },
+      { projectId: "p1" },
+    );
+    await expect(staged.host.operations.invoke("../other", {})).rejects.toThrow(
+      /Invalid DLC operation name/,
+    );
+  });
+
+  it("opens only Dock view types registered by the same DLC", () => {
+    const openDockTab = vi.fn();
+    const staged = createStagedExtensionHost("acme.bound", {
+      invokeOperation: async <TOutput,>() => ({} as TOutput),
+      openDockTab,
+    });
+    staged.host.dockViews.register({
+      viewType: "acme.bound.file",
+      icon: () => null,
+      resolveTitle: (view) => view.title,
+      isVisible: () => true,
+      render: () => null,
+    });
+
+    staged.host.dockViews.open({
+      viewKey: "acme.bound.file:1",
+      viewType: "acme.bound.file",
+      title: "File",
+      closeable: true,
+    });
+    expect(openDockTab).toHaveBeenCalledOnce();
+    expect(() => staged.host.dockViews.open({
+      viewKey: "dbfox.core.settings",
+      viewType: "dbfox.core.settings",
+      title: "Settings",
+      closeable: true,
+    })).toThrow(/Cannot open unregistered Dock viewType/);
+  });
 });

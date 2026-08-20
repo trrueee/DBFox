@@ -17,6 +17,8 @@ ContextLane = Literal["working_state", "resource", "evidence"]
 
 MAX_CONTEXT_FRAGMENT_CHARS = 4_000
 MAX_CONTEXT_FRAGMENTS_PER_CONTRIBUTOR = 8
+MAX_CONTEXT_ARTIFACT_OBSERVATIONS = 16
+MAX_CONTEXT_ARTIFACT_PAYLOAD_BYTES = 64 * 1024
 
 
 class ContextFragment(BaseModel):
@@ -29,6 +31,19 @@ class ContextFragment(BaseModel):
     provenance: dict[str, JsonValue] = Field(default_factory=dict)
 
 
+class ContextArtifactObservation(BaseModel):
+    """Bounded canonical Artifact evidence exposed to Context contributors."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    observation_id: str
+    artifact_id: str
+    artifact_type: str
+    schema_version: int = Field(ge=1)
+    semantic_capabilities: tuple[str, ...] = ()
+    payload: dict[str, JsonValue] = Field(default_factory=dict)
+
+
 class ContextContributionInput(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -36,6 +51,10 @@ class ContextContributionInput(BaseModel):
     run_id: str
     current_request: str
     resource_refs: tuple[ResourceScopeRef, ...] = ()
+    recent_artifacts: tuple[ContextArtifactObservation, ...] = Field(
+        default=(),
+        max_length=MAX_CONTEXT_ARTIFACT_OBSERVATIONS,
+    )
 
 
 class ContextContributor(Protocol):

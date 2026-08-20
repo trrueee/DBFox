@@ -14,6 +14,9 @@ import type {
 } from "../workspace/artifacts/types";
 import { DlcErrorBoundary } from "./DlcErrorBoundary";
 import type { WorkspaceDockTab } from "../../types/workspace";
+import { fetchEnginePath } from "../../lib/api/client";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import type { DlcOperationInvokeOptions } from "./types";
 
 declare global {
   interface Window {
@@ -43,6 +46,60 @@ export interface StagedExtensionHostResult {
   getContributions(): DlcContributionSet;
 }
 
+interface ExtensionHostServices {
+  invokeOperation<TOutput>(
+    dlcId: string,
+    operationName: string,
+    input: unknown,
+    options?: DlcOperationInvokeOptions,
+  ): Promise<TOutput>;
+  openDockTab(view: WorkspaceDockTab, activate?: boolean): void;
+}
+
+async function invokeBoundDlcOperation<TOutput>(
+  dlcId: string,
+  operationName: string,
+  input: unknown,
+  options?: DlcOperationInvokeOptions,
+): Promise<TOutput> {
+  const query = options?.projectId
+    ? `?project_id=${encodeURIComponent(options.projectId)}`
+    : "";
+  const response = await fetchEnginePath(
+    `/dlcs/${encodeURIComponent(dlcId)}/operations/${encodeURIComponent(operationName)}${query}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input ?? {}),
+      signal: options?.signal,
+    },
+  );
+  if (!response.ok) {
+    let message = `DLC operation failed with HTTP ${response.status}`;
+    try {
+      const payload = await response.json() as {
+        detail?: string | { message?: string };
+      };
+      if (typeof payload.detail === "string") {
+        message = payload.detail;
+      } else if (payload.detail?.message) {
+        message = payload.detail.message;
+      }
+    } catch {
+      // Keep the bounded status-only fallback; never expose local auth material.
+    }
+    throw new Error(message);
+  }
+  return await response.json() as TOutput;
+}
+
+const DEFAULT_EXTENSION_HOST_SERVICES: ExtensionHostServices = {
+  invokeOperation: invokeBoundDlcOperation,
+  openDockTab: (view, activate) => {
+    useWorkspaceStore.getState().openDockTab(view, activate);
+  },
+};
+
 function DlcRenderCallback({ render }: { render: () => React.ReactNode }) {
   return <>{render()}</>;
 }
@@ -54,7 +111,10 @@ function reportCallbackFailure(dlcId: string, callback: string, error: unknown):
 /**
  * Creates an isolated, transactional staging host for a DLC registration.
  */
-export function createStagedExtensionHost(dlcId: string): StagedExtensionHostResult {
+export function createStagedExtensionHost(
+  dlcId: string,
+  services: ExtensionHostServices = DEFAULT_EXTENSION_HOST_SERVICES,
+): StagedExtensionHostResult {
   const connectors: ResourceConnectorContribution[] = [];
   const requestedResources: RequestedResourceContributor[] = [];
   const dockViews: DockViewContribution[] = [];
@@ -155,6 +215,14 @@ export function createStagedExtensionHost(dlcId: string): StagedExtensionHostRes
         };
         dockViews.push(safeContribution);
       },
+      open(view: WorkspaceDockTab, activate = true): void {
+        if (!view || !dockViews.some((candidate) => candidate.viewType === view.viewType)) {
+          throw new Error(
+            `[DLC ${dlcId}] Cannot open unregistered Dock viewType "${view?.viewType ?? ""}"`,
+          );
+        }
+        services.openDockTab({ ...view }, activate);
+      },
     },
     artifactRenderers: {
       register(contribution: ArtifactRendererContribution<unknown>): void {
@@ -176,6 +244,20 @@ export function createStagedExtensionHost(dlcId: string): StagedExtensionHostRes
           },
         };
         artifactRenderers.push(safeContribution);
+      },
+    },
+    operations: {
+      invoke<TOutput = unknown>(
+        operationName: string,
+        input: unknown = {},
+        options?: DlcOperationInvokeOptions,
+      ): Promise<TOutput> {
+        if (!/^[a-z0-9_.-]{1,64}$/.test(operationName)) {
+          return Promise.reject(
+            new Error(`Invalid DLC operation name: "${operationName}"`),
+          );
+        }
+        return services.invokeOperation<TOutput>(dlcId, operationName, input, options);
       },
     },
   };
