@@ -5,6 +5,28 @@ export type ClientOptions = {
 };
 
 /**
+ * ActiveDlcItem
+ */
+export type ActiveDlcItem = {
+    /**
+     * Dlc Id
+     */
+    dlc_id: string;
+    /**
+     * Frontend Entrypoint
+     */
+    frontend_entrypoint?: string | null;
+    /**
+     * Package Digest
+     */
+    package_digest: string;
+    /**
+     * Package Version
+     */
+    package_version: string;
+};
+
+/**
  * Approval
  */
 export type Approval = {
@@ -1614,6 +1636,20 @@ export type DiagnosticPolicyResponse = {
      * Redacted
      */
     redacted: boolean;
+};
+
+/**
+ * DlcActivationProjectionResponse
+ */
+export type DlcActivationProjectionResponse = {
+    /**
+     * Active Dlcs
+     */
+    active_dlcs: Array<ActiveDlcItem>;
+    /**
+     * Snapshot Id
+     */
+    snapshot_id: string;
 };
 
 /**
@@ -5994,6 +6030,59 @@ export type ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponses = 
 };
 
 export type ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponse = ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponses[keyof ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponses];
+
+export type GetDlcActivationProjectionApiV1DlcsActivationGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/dlcs/activation';
+};
+
+export type GetDlcActivationProjectionApiV1DlcsActivationGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type GetDlcActivationProjectionApiV1DlcsActivationGetError = GetDlcActivationProjectionApiV1DlcsActivationGetErrors[keyof GetDlcActivationProjectionApiV1DlcsActivationGetErrors];
+
+export type GetDlcActivationProjectionApiV1DlcsActivationGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DlcActivationProjectionResponse;
+};
+
+export type GetDlcActivationProjectionApiV1DlcsActivationGetResponse = GetDlcActivationProjectionApiV1DlcsActivationGetResponses[keyof GetDlcActivationProjectionApiV1DlcsActivationGetResponses];
 
 export type InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostData = {
     body?: never;

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
 import { useSqlConsoleStore } from "../../../stores/sqlConsoleStore";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
+import { useDlcStore } from "../../dlc/extensionStore";
 import { WorkspaceDock } from "../WorkspaceDock";
 
 vi.mock("../../datasource/useDatasourceState", () => ({
@@ -63,6 +64,7 @@ function renderDock() {
 describe("WorkspaceDock", () => {
   beforeEach(() => {
     cleanup();
+    useDlcStore.getState().reset();
     useWorkspaceStore.setState({
       centerMode: "home",
       pendingAsk: null,
@@ -144,5 +146,32 @@ describe("WorkspaceDock", () => {
 
     expect((await screen.findByRole("tab", { name: "SQL 控制台" })).getAttribute("aria-selected")).toBe("true");
     expect(view.getByTestId("sql-console")).toBeTruthy();
+  });
+
+  it("renders active DLC Dock views through the production WorkspaceDock", async () => {
+    useWorkspaceStore.setState({
+      dock: { open: true, activeViewKey: "acme.runtime.view:1" },
+      dockTabs: [{
+        viewKey: "acme.runtime.view:1",
+        viewType: "acme.runtime.view",
+        title: "Runtime DLC",
+        closeable: true,
+      }],
+    });
+    useDlcStore.getState().setProjectionResult("snap-dlc", {}, {
+      connectors: [],
+      requestedResources: [],
+      dockViews: [{
+        viewType: "acme.runtime.view",
+        icon: () => null,
+        resolveTitle: () => "Runtime DLC",
+        isVisible: () => true,
+        render: () => <div data-testid="dlc-dock-view">DLC Dock</div>,
+      }],
+      artifactRenderers: [],
+    });
+
+    renderDock();
+    expect(await screen.findByTestId("dlc-dock-view")).toBeTruthy();
   });
 });

@@ -14,6 +14,7 @@ import type {
   ArtifactRendererContext,
   ArtifactRendererContribution,
 } from "./types";
+import { useDlcStore } from "../../dlc/extensionStore";
 
 export type {
   ArtifactEnvelope,
@@ -81,7 +82,14 @@ export function getArtifactRenderer(
   schemaVersion = 1,
   registry: ArtifactRendererRegistry = DEFAULT_ARTIFACT_RENDERER_REGISTRY,
 ): ArtifactRendererContribution<unknown> | null {
-  return registry.get(type, schemaVersion);
+  const result = registry.get(type, schemaVersion);
+  if (result) return result;
+
+  const dlcRenderers = useDlcStore.getState().contributions.artifactRenderers;
+  const dlcRenderer = dlcRenderers.find(
+    (r) => r.type === type && r.supportedSchemaVersions.includes(schemaVersion),
+  );
+  return dlcRenderer ?? null;
 }
 
 export function ArtifactMetadataFallback({
@@ -118,7 +126,7 @@ export function renderArtifact(
   context: ArtifactRendererContext,
   registry: ArtifactRendererRegistry = DEFAULT_ARTIFACT_RENDERER_REGISTRY,
 ): ReactNode {
-  const renderer = registry.get(artifact.type, artifact.schema_version ?? 1);
+  const renderer = getArtifactRenderer(artifact.type, artifact.schema_version ?? 1, registry);
   if (!renderer) {
     return <ArtifactMetadataFallback artifact={artifact} />;
   }

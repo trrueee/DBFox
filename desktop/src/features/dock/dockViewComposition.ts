@@ -4,6 +4,7 @@ import { dataDockViews } from "./dataDockViews";
 import type { DockViewContribution } from "./types";
 import { workspaceDockViews } from "./workspaceDockViews";
 import { githubDockViews } from "./githubDockViews";
+import { useDlcStore } from "../dlc/extensionStore";
 
 export interface DockViewRegistry {
   get: (viewType: string) => DockViewContribution | null;
@@ -39,13 +40,20 @@ export function productDockViews(): readonly DockViewContribution[] {
 
 export const DEFAULT_REGISTRY = createDockViewRegistry(productDockViews());
 
-export function getDockView(viewType: string): DockViewContribution | null {
-  return DEFAULT_REGISTRY.get(viewType);
+export function getDockView(
+  viewType: string,
+  registry: DockViewRegistry = DEFAULT_REGISTRY,
+): DockViewContribution | null {
+  const view = registry.get(viewType);
+  if (view) return view;
+
+  const dlcViews = useDlcStore.getState().contributions.dockViews;
+  return dlcViews.find((v) => v.viewType === viewType) ?? null;
 }
 
 export function dockViewTitle(
   view: WorkspaceDockTab,
   registry: DockViewRegistry = DEFAULT_REGISTRY,
 ): string {
-  return registry.get(view.viewType)?.resolveTitle(view) ?? view.title;
+  return getDockView(view.viewType, registry)?.resolveTitle(view) ?? view.title;
 }

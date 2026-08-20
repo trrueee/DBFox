@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self'; script-src-attr 'none'; style-src 'self'; style-src-attr 'none'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data: https:; font-src 'self'",
+      "csp": "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self' dlc-asset:; script-src-attr 'none'; style-src 'self' dlc-asset:; style-src-attr 'none'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data: https: dlc-asset:; font-src 'self' dlc-asset:",
       "devCsp": null,
       "dangerousDisableAssetCspModification": false
     }

@@ -10,6 +10,8 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import type { WorkspaceDockTab } from "../../types/workspace";
 import type { DockViewRegistry } from "../dock/dockViewComposition";
 import { DEFAULT_REGISTRY, dockViewTitle } from "../dock/dockViewComposition";
+import { useDlcStore } from "../dlc/extensionStore";
+import type { DockViewContribution } from "../dock/types";
 import "./WorkspaceDock.css";
 
 export interface WorkspaceDockProps {
@@ -19,8 +21,21 @@ export interface WorkspaceDockProps {
   registry?: DockViewRegistry;
 }
 
-function dockTabIcon(tab: WorkspaceDockTab, registry: DockViewRegistry) {
-  return registry.get(tab.viewType)?.icon(tab) ?? <HelpCircle size={13} aria-hidden="true" />;
+function resolveDockView(
+  viewType: string,
+  registry: DockViewRegistry,
+  dlcDockViews: readonly DockViewContribution[],
+) {
+  return registry.get(viewType) ?? dlcDockViews.find((view) => view.viewType === viewType) ?? null;
+}
+
+function dockTabIcon(
+  tab: WorkspaceDockTab,
+  registry: DockViewRegistry,
+  dlcDockViews: readonly DockViewContribution[],
+) {
+  return resolveDockView(tab.viewType, registry, dlcDockViews)?.icon(tab)
+    ?? <HelpCircle size={13} aria-hidden="true" />;
 }
 
 export function WorkspaceDock({
@@ -35,10 +50,12 @@ export function WorkspaceDock({
   const setDockActiveTab = useWorkspaceStore((s) => s.setDockActiveTab);
   const closeDockTab = useWorkspaceStore((s) => s.closeDockTab);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
+  // Subscribe so active runtime contributions are reflected in production Dock consumers.
+  const dlcDockViews = useDlcStore((s) => s.contributions.dockViews);
 
   const visibleTabs = useMemo(() => {
     return dockTabs.filter((tab) => {
-      const contribution = registry.get(tab.viewType);
+      const contribution = resolveDockView(tab.viewType, registry, dlcDockViews);
       if (!contribution) {
         // Unknown viewType fallback: visible so it can be viewed and closed
         return true;
@@ -49,7 +66,7 @@ export function WorkspaceDock({
         activeConversationId,
       });
     });
-  }, [activeConversationId, activeDatasourceId, activeProjectId, dockTabs, registry]);
+  }, [activeConversationId, activeDatasourceId, activeProjectId, dlcDockViews, dockTabs, registry]);
 
   const activeKey = dock.activeViewKey;
   const activeTab =
@@ -80,7 +97,7 @@ export function WorkspaceDock({
                 aria-label={dockViewTitle(tab, registry)}
                 onClick={() => setDockActiveTab(tab.viewKey)}
               >
-                {dockTabIcon(tab, registry)}
+                {dockTabIcon(tab, registry, dlcDockViews)}
               </button>
             </TooltipTrigger>
             <TooltipContent>{tab.title}</TooltipContent>
@@ -110,7 +127,7 @@ export function WorkspaceDock({
                   onClick={() => setDockActiveTab(tab.viewKey)}
                 >
                   <span className="workspace-dock__tab-icon" aria-hidden="true">
-                    {dockTabIcon(tab, registry)}
+                    {dockTabIcon(tab, registry, dlcDockViews)}
                   </span>
                   <span className="workspace-dock__tab-title">{tab.title}</span>
                 </button>
@@ -155,6 +172,7 @@ export function WorkspaceDock({
           activeConversationId,
           showToast,
           registry,
+          dlcDockViews,
         )}
       </div>
     </aside>
@@ -168,6 +186,7 @@ function renderDockTab(
   activeConversationId: string | null,
   showToast: WorkspaceDockProps["showToast"],
   registry: DockViewRegistry,
+  dlcDockViews: readonly DockViewContribution[],
 ) {
   if (!tab) {
     return (
@@ -178,7 +197,7 @@ function renderDockTab(
     );
   }
 
-  const contribution = registry.get(tab.viewType);
+  const contribution = resolveDockView(tab.viewType, registry, dlcDockViews);
   if (!contribution) {
     return (
       <EmptyState
