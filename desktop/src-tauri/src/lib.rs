@@ -13,6 +13,7 @@ mod app_updates;
 mod crash_recovery;
 mod diagnostic_bundle;
 mod dlc_asset_protocol;
+mod dlc_package;
 mod external_image;
 mod project_folder;
 mod sidecar_log;
@@ -28,6 +29,7 @@ use diagnostic_bundle::{
 use dlc_asset_protocol::{
     handle_dlc_asset_request, DlcAssetHostState, RuntimeDlcActivationProjection,
 };
+use dlc_package::pick_dlc_package;
 use external_image::save_external_image;
 use project_folder::{list_project_folder, pick_project_folder, read_project_file};
 use sidecar_log::{retire_legacy_temp_sidecar_log, SidecarLog, SIDECAR_LOG_TARGET};
@@ -740,6 +742,7 @@ pub fn run() {
             open_diagnostic_logs,
             open_external_https_url,
             save_external_image,
+            pick_dlc_package,
             pick_project_folder,
             list_project_folder,
             read_project_file,

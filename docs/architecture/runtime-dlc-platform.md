@@ -271,6 +271,21 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
 - Rejections use the existing RFC 9457 `application/problem+json` boundary with bounded public
   codes; filesystem paths, verifier diagnostics, and tracebacks do not cross the API boundary.
 
+### Desktop DLC Center
+- DLC management lives inside the existing Settings shell. The WebView receives only a narrow
+  `pick_dlc_package` Tauri command, backed by the official native dialog plugin and restricted to
+  an existing single `.dbfox-dlc` file; no generic filesystem or dialog capability is exposed.
+- Install from File is an explicit `pick → inspect → trust when required → install disabled`
+  sequence. Trusting a publisher never installs the package, and neither inspect nor install
+  executes extension code.
+- Cards present `desired_enabled` beside current `active` truth and show selected and active
+  digests independently. Pending enable/disable state remains visible until the controlled engine
+  restart produces a newer generation, passes health checks, and refreshes the runtime projection.
+- Uninstall is disabled while desired-enabled or active. Its confirmation states that executable
+  bytes may be removed while `APP_DATA/dlcs/data/<dlc_id>/` is retained by default.
+- The UI adds no package registry cache or second state model; generated Lifecycle API responses
+  remain the source for durable intent and runtime projection display.
+
 ### Two-Tiered Tool Execution Identity
 1. **Tool Contract Identity**:
    - `tool_name`, `declared_version`, `contract_hash`.
@@ -326,8 +341,8 @@ Error States:
 - **R2**: Runtime Composition Identity + Backend Extension Host (IN-PROGRESS).
 - **R3**: Frontend Runtime DLC Host (Tauri custom asset protocol & dynamic ESM loader).
 - **R4.0**: Single-file Publisher Trust (CLOSED).
-- **R4.1**: Local-authenticated Lifecycle API (IN-PROGRESS).
-- **R4.2**: Install from File UI & DLC Center in Desktop App.
+- **R4.1**: Local-authenticated Lifecycle API (CLOSED).
+- **R4.2**: Install from File UI & DLC Center in Desktop App (IN-PROGRESS).
 - **R5**: Conformance Proof & Data Ownership — Decouple `dbfox.github` into `dbfox.github-1.0.0.dbfox-dlc`.
 - **R6**: Side-by-Side Update & Rollback Lifecycle.
 - **R7**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`).

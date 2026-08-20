@@ -591,6 +591,12 @@
           "markdownDescription": "Enables the open_external_https_url command without any pre-configured scope."
         },
         {
+          "description": "Enables the pick_dlc_package command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-pick-dlc-package",
+          "markdownDescription": "Enables the pick_dlc_package command without any pre-configured scope."
+        },
+        {
           "description": "Enables the pick_project_folder command without any pre-configured scope.",
           "type": "string",
           "const": "allow-pick-project-folder",
@@ -649,6 +655,12 @@
           "type": "string",
           "const": "deny-open-external-https-url",
           "markdownDescription": "Denies the open_external_https_url command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the pick_dlc_package command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-pick-dlc-package",
+          "markdownDescription": "Denies the pick_dlc_package command without any pre-configured scope."
         },
         {
           "description": "Denies the pick_project_folder command without any pre-configured scope.",

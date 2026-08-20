@@ -19,6 +19,11 @@ const DiagnosticsPage = lazy(async () => {
   return { default: module.DiagnosticsPage };
 });
 
+const DlcCenter = lazy(async () => {
+  const module = await import("./DlcCenter");
+  return { default: module.DlcCenter };
+});
+
 interface SettingsPageProps {
   section: AppSettingsSection;
   showToast: (message: string, type?: "success" | "error" | "warning" | "info") => void;
@@ -39,6 +44,8 @@ export function SettingsPage({ section, showToast }: SettingsPageProps) {
               <AppearanceSettingsPanel showToast={showToast} />
             ) : section === "model" ? (
               <ModelSettingsPanel showToast={showToast} />
+            ) : section === "dlc" ? (
+              <DlcCenter showToast={showToast} />
             ) : (
               <DiagnosticsPage onToast={showToast} chrome="workspace" />
             )}
