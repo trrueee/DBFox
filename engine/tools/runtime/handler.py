@@ -128,7 +128,32 @@ class ToolAttemptHandler:
                 error_code="TOOL_VERSION_CHANGED",
                 latency_ms=0,
             )
+        if request.implementation is not None:
+            expected_owner = request.implementation.owner_id
+            actual_owner = self.registry.owner_of(request.tool_name)
+            if actual_owner != expected_owner:
+                return ToolResult(
+                    name=request.tool_name,
+                    status="failed",
+                    input=dict(request.authorized_input),
+                    error=f"Tool implementation owner mismatch: expected {expected_owner!r}, got {actual_owner!r}",
+                    error_code="IMPLEMENTATION_MISMATCH",
+                    latency_ms=0,
+                )
+            if request.implementation.package_digest is not None:
+                expected_digest = request.implementation.package_digest
+                actual_digest = self.registry.package_digest_of(request.tool_name)
+                if actual_digest != expected_digest:
+                    return ToolResult(
+                        name=request.tool_name,
+                        status="failed",
+                        input=dict(request.authorized_input),
+                        error=f"Tool package digest mismatch: expected {expected_digest!r}, got {actual_digest!r}",
+                        error_code="IMPLEMENTATION_MISMATCH",
+                        latency_ms=0,
+                    )
         return tool
+
 
     def _invoke(
         self,

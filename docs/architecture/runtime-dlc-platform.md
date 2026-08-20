@@ -2,18 +2,31 @@
 
 > 文档类型：架构规范
 >
-> 状态：已接受
+> 状态：当前
+
 >
 > 最后核验：2026-08-20
 >
-> 基线：`main@6d5ca1ec55f06ee52c5a3068f36fe781d3c2ee0d`
+> 基线：`main@ae6966dbcba5e53ef2c4e1f91d7186be635dab7a`
 >
 > 上位 Issue：[#59](https://github.com/trrueee/DBFox/issues/59)
 
-## 1. Product Vision & Protocol-First Principle
+## 1. Product Vision, Security Model & Protocol-First Principle
 
 ### Product Vision
 Any developer can build an extension conforming to the DBFox DLC Protocol, package it into a single `.dbfox-dlc` file, and distribute it directly to users. The user installs the package via **Install from File** in DBFox DLC Center, verifies and enables it, and all contributed capabilities (Tools, Resources, Context, Connectors, Dock Views, Artifact Renderers, Operations) become active after a controlled restart without modifying DBFox source code or recompiling the DBFox binary.
+
+### Security Model (FROZEN)
+> **DBFox Runtime DLC v1 is an authenticated trusted-code extension system, not a sandboxed third-party code platform.**
+>
+> The guarantees are:
+> - **Signature**: authenticates publisher identity.
+> - **Integrity**: authenticates package bytes / installed payload integrity.
+> - **Manifest capability declarations**: describe the authority requested by the DLC.
+> - **Registration policy**: limits which typed DBFox contribution contracts the DLC may register.
+>
+> These DO NOT sandbox arbitrary in-process Python behavior. Trusted DLC Python can theoretically use `os`, `pathlib`, `socket`, environment variables, and process APIs outside the public Extension API. Likewise future R3 same-WebView JavaScript will not be sandboxed merely because the public Host object is narrow. True untrusted-code containment belongs to R8 (Subprocess Sandbox Gate). Do not make stronger security claims in code, docs, or tests.
+
 
 ### Source-Agnostic Principle
 The Runtime DLC Platform recognizes only the **DLC Package** (`.dbfox-dlc`). It does not hardcode marketplace, official index, or remote server dependencies into the runtime execution core:
@@ -208,45 +221,75 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
 - **Core Independence**: The DLC manages its own migrations and schema lifecycle completely outside the Core Alembic migration graph.
 - **Zero Core Mutation**: Installing or uninstalling a DLC never modifies `engine/models.py` or Core database tables.
 
-### Lifecycle State Machine
-- **Desired State vs Runtime State**:
-  - `desired_enabled`: User's desired configuration stored in `registry.json`.
-  - `runtime_loaded`: Active registration in the currently running process.
-- **Deterministic Transitions**:
-  ```text
-  [ NOT_INSTALLED ]
-         │  (Install from File)
-         ▼
-  [ INSTALLED_DISABLED ] ──(Enable)──> [ ENABLE_PENDING_RESTART ] ──(Controlled Restart)──> [ ENABLED ]
-         ▲                                                                                    │
-         │                             (Disable)                                              │
-         └─────────────────────── [ DISABLE_PENDING_RESTART ] <───────────────────────────────┘
+### Lifecycle State Machine: Desired State vs Active Runtime Truth
+- **Durable Desired State (`registry.json`)**:
+  - `desired_enabled`: User's durable desired state.
+  - `selected_digest`: The content-addressed digest selected for activation.
+  - `package_version`: Installed package version.
+  - `registry.json` is the machine-level single-writer SSOT for durable user intent, NOT proof of what the running process has loaded.
+- **Active Runtime Truth (`RuntimeContributionSnapshot`)**:
+  - In-memory process truth built once at startup.
+  - Contains immutable activated DLC identities (`dlc_id`, `package_version`, `package_digest`), tools, resource providers, resolvers, context contributors, artifact contracts, and operations.
+  - `snapshot_id`: Deterministically derived from DBFox release identity + built-in composition + sorted activated DLC identities (`(dlc_id, package_digest, package_version)`).
+  - Snapshot is NOT a database table.
 
-  Error States:
-  [ TAMPERED ]      (Digest mismatch on startup)
-  [ INCOMPATIBLE ]  (DBFox or Extension API version incompatible)
-  [ BROKEN ]        (Registration exception during startup activation)
-  ```
-- **Uninstall Data Retention**: Uninstall disables and removes executable package bytes only. Domain data in `APP_DATA/dlcs/data/<dlc_id>.sqlite3` is preserved by default unless the user explicitly triggers "Delete DLC Data". Historical Agent records (Runs, Turns, Invocations, Observations, Artifacts) remain immutable.
+### Two-Tiered Tool Execution Identity
+1. **Tool Contract Identity**:
+   - `tool_name`, `declared_version`, `contract_hash`.
+2. **Tool Implementation Identity**:
+   - `owner_id`: Capability owner (built-in owner or `dlc_id`).
+   - `package_digest`: Specific content-addressed `.dbfox-dlc` package digest for DLC tools (`None` for built-ins).
+   - `ToolAttemptRequest` freezes both contract hash and `ToolImplementationIdentity`. Both parent and isolated worker verify this identity before execution, preventing silent substitution across package versions.
+
+### Deterministic Lifecycle Transitions
+```text
+[ NOT_INSTALLED ]
+       │  (Install from File)
+       ▼
+[ INSTALLED_DISABLED ] ──(Enable)──> [ ENABLE_PENDING_RESTART ] ──(Controlled Restart)──> [ ENABLED ]
+       ▲                                                                                    │
+       │                             (Disable)                                              │
+       └─────────────────────── [ DISABLE_PENDING_RESTART ] <───────────────────────────────┘
+
+Error States:
+[ TAMPERED ]      (Digest / integrity mismatch on startup pre-verification)
+[ INCOMPATIBLE ]  (DBFox or Extension API version incompatible)
+[ BROKEN ]        (Registration exception during startup activation; isolated without corrupting host)
+```
 
 ---
 
-## 8. Cross-Platform Feasibility Status
+## 8. Cross-Platform Feasibility & R3/R5 Architecture Gates
 
+### Cross-Platform Feasibility Status
 - **Windows**: **Direct Production Proof** (Verified on native MSVC PyInstaller `--onefile` binary `dbfox-engine-x86_64-pc-windows-msvc.exe`).
 - **macOS**: CI/release reproduction requirement (Mach-O bundle with Hardened Runtime).
 - **Linux**: CI/release reproduction requirement (ELF onefile with locked glibc ABI).
+
+### R3 Activation Projection Handoff Contract
+- `RuntimeContributionSnapshot` generates a wire-safe `RuntimeDlcActivationProjection`:
+  - `snapshot_id`
+  - `active_dlcs: tuple[dict(dlc_id, package_digest, frontend_entrypoint), ...]`
+- In R3, the Rust Tauri asset protocol serves frontend assets ONLY for packages present in the active projection, guaranteeing zero split-brain between Python backend runtime and Rust asset host.
+
+### R5 GitHub Data Ownership Gate Requirement (FROZEN)
+- R5 GitHub conformance DOES NOT pass merely by moving GitHub Python/TS code into `.dbfox-dlc`.
+- **R5 Final Proof Requirement**:
+  - Core ORM (`engine/models.py`) must have ZERO GitHub-owned runtime model dependencies.
+  - GitHub DLC must own its durable storage in `APP_DATA/dlcs/data/dbfox.github.sqlite3`.
+  - Historical Core migration files may remain, but existing user data must migrate/adapt cleanly.
 
 ---
 
 ## 9. Implementation Roadmap
 
 - **R0 / R0.1**: Architecture Specification & Production Feasibility Closure (CLOSED).
-- **R1**: Package Protocol, Verifier, Signature Engine & Installed Registry (CURRENT).
-- **R2**: Backend Runtime DLC Host (In-process transactional registration & fault isolation).
+- **R1**: Package Protocol, Verifier, Signature Engine & Installed Registry (CLOSED).
+- **R2**: Runtime Composition Identity + Backend Extension Host (IN-PROGRESS).
 - **R3**: Frontend Runtime DLC Host (Tauri custom asset protocol & dynamic ESM loader).
 - **R4**: Install from File UI & DLC Center in Desktop App.
-- **R5**: Conformance Proof — Decouple `dbfox.github` into `dbfox.github-1.0.0.dbfox-dlc`.
+- **R5**: Conformance Proof & Data Ownership — Decouple `dbfox.github` into `dbfox.github-1.0.0.dbfox-dlc`.
 - **R6**: Side-by-Side Update & Rollback Lifecycle.
 - **R7**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`).
 - **R8**: Untrusted Subprocess Sandbox Gate.
+

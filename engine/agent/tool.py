@@ -33,6 +33,8 @@ class ToolInvocation(BaseModel):
     tool_name: str
     declared_version: str
     contract_hash: str
+    owner_id: str | None = None
+    package_digest: str | None = None
     authorized_input: dict[str, Any]
     authorized_input_hash: str
     idempotency_key: str

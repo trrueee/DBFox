@@ -731,7 +731,10 @@ class AgentToolInvocation(Base):  # type: ignore[misc,valid-type]
     tool_name = Column(String, nullable=False)
     declared_version = Column(String, nullable=False)
     contract_hash = Column(String, nullable=False)
+    owner_id = Column(String, nullable=True)
+    package_digest = Column(String, nullable=True)
     input_json = Column(Text, nullable=False)
+
     input_hash = Column(String, nullable=False)
     idempotency_key = Column(String, nullable=False)
     status = Column(String, nullable=False, default="requested")

@@ -57,6 +57,16 @@ class ToolInvocationContext(BaseModel):
         )
 
 
+class ToolImplementationIdentity(BaseModel):
+    """Execution implementation identity binding a Tool to its capability owner and package digest."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    owner_id: str = Field(min_length=1, max_length=128)
+    package_digest: str | None = None
+    runtime_snapshot_id: str | None = None
+
+
 class ToolAttemptRequest(BaseModel):
     """One attempt at executing or reconciling a frozen Tool contract."""
 
@@ -69,6 +79,8 @@ class ToolAttemptRequest(BaseModel):
     invocation: ToolInvocationContext
     authorized_input: dict[str, JsonValue]
     attempt_timeout_ms: int = Field(ge=1, le=3_600_000)
+    implementation: ToolImplementationIdentity | None = None
+
 
 
 class ScopedResourceResolver(Protocol):

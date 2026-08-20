@@ -124,7 +124,22 @@ HIDDEN_IMPORTS = [
     "httpx",
     "dotenv",
     "openai",
+    "dbfox_dlc_api",
+    "engine.dlc",
+    "engine.dlc.api",
+    "engine.dlc.host",
+    "engine.dlc.loader",
+    "engine.dlc.compiler",
+    "engine.dlc.snapshot",
+    "engine.dlc.trust",
+    "engine.dlc.errors",
+    "engine.dlc.manifest",
+    "engine.dlc.registry",
+    "engine.dlc.integrity",
+    "engine.dlc.compat",
+    "engine.api.dlc_operations",
 ]
+
 
 SIDECAR_RUNTIME_EXCLUDED_DIRS = {
     "__pycache__",
@@ -383,7 +398,9 @@ def build_pyinstaller(python_exe: str) -> Path:
         "--workpath", str(work_dir),
         "--add-data", f"{staged_engine}{os.pathsep}engine",
         "--add-data", f"{ROOT / 'alembic.ini'}{os.pathsep}.",
+        "--add-data", f"{ROOT / 'dbfox_dlc_api.py'}{os.pathsep}.",
     ]
+
     for mod in HIDDEN_IMPORTS:
         cmd += ["--hidden-import", mod]
     cmd.append(str(ENGINE_DIR / "main.py"))

@@ -1,16 +1,23 @@
-"""Explicit compile-time composition of DBFox's built-in product capabilities.
+"""Runtime composition root assembling built-in and active DLC product capabilities.
 
-This module is the sole backend product-composition root.  It assembles the
-existing typed Tool, resource, Context and Completion contracts without a
-plugin manager, manifest, container, or additional contribution model.
+This module is the backend product-composition root. It compiles built-in and
+activated DLC contributions into an immutable RuntimeContributionSnapshot, and
+materializes that snapshot into standard ToolRegistry, CompositeResourceResolver,
+and RunLoop instances without any domain DLC branches in Kernel code.
 """
 
 from __future__ import annotations
 
+import logging
+import tempfile
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
+
 
 from engine.agent.completion import CompletionPolicy
 from engine.agent.completion_data import DataCompletionSupport, DataResultCitationConstraint
@@ -20,20 +27,13 @@ from engine.agent.resource_refs import (
     ProjectResourceProvider,
     RequestedResourceRef,
 )
-from engine.agent.workspace_context import WorkspaceContextContributor
 from engine.db import SessionLocal
-from engine.github.context import GitHubContextContributor
-from engine.github.resource import list_github_resources, resolve_github_repository
-from engine.github.tools import register_github_extension
+from engine.dlc.compiler import ContributionCompiler
+from engine.dlc.snapshot import RuntimeContributionSnapshot
+from engine.dlc.trust import DlcTrustStore
+from engine.github.resource import resolve_github_repository
 from engine.models import DataSource, Project
-from engine.tools.builtin.registry import (
-    register_conversation_functions,
-    register_core_functions,
-    register_data_extension,
-    register_remote_job_extension,
-    register_workspace_extension,
-    register_workspace_write_extension,
-)
+from engine.runtime_paths import private_runtime_dir
 from engine.tools.runtime import ToolRegistry
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
@@ -46,23 +46,80 @@ from engine.tools.runtime.resource_context import (
 )
 from engine.workspace.read_service import WorkspaceReadService
 
+
+
 if TYPE_CHECKING:
     from engine.agent.loop import RunLoop
 
+_ACTIVE_RUNTIME_SNAPSHOT: RuntimeContributionSnapshot | None = None
 
-def build_product_tool_registry() -> ToolRegistry:
-    """Build the complete frozen Tool Registry for the DBFox product."""
 
+def get_active_runtime_snapshot() -> RuntimeContributionSnapshot:
+    """Return the active in-memory RuntimeContributionSnapshot for the running process."""
+    global _ACTIVE_RUNTIME_SNAPSHOT
+    if _ACTIVE_RUNTIME_SNAPSHOT is None:
+        _ACTIVE_RUNTIME_SNAPSHOT = initialize_runtime_snapshot()
+    return _ACTIVE_RUNTIME_SNAPSHOT
+
+
+def set_active_runtime_snapshot(snapshot: RuntimeContributionSnapshot | None) -> None:
+    """Explicitly set the active RuntimeContributionSnapshot (for testing or lifecycle restart)."""
+    global _ACTIVE_RUNTIME_SNAPSHOT
+    _ACTIVE_RUNTIME_SNAPSHOT = snapshot
+
+
+
+def initialize_runtime_snapshot(
+    storage_root: Path | None = None,
+    *,
+    trust_store: DlcTrustStore | None = None,
+    developer_mode: bool = False,
+) -> RuntimeContributionSnapshot:
+    """Build the frozen RuntimeContributionSnapshot from built-in contributions and enabled DLCs."""
+    if storage_root is None:
+        try:
+            resolved_storage = private_runtime_dir("dlcs")
+        except Exception as exc:
+            logger.error("Failed to establish private runtime directory for DLCs: %s", exc)
+            # Fail closed without scanning CWD
+            empty_path = Path(tempfile.gettempdir()) / "dbfox_empty_dlc_storage"
+            compiler = ContributionCompiler(
+                empty_path,
+                trust_store=trust_store,
+                developer_mode=developer_mode,
+            )
+            snapshot = compiler.compile()
+            set_active_runtime_snapshot(snapshot)
+            return snapshot
+    else:
+        resolved_storage = storage_root
+
+
+    compiler = ContributionCompiler(
+        resolved_storage,
+        trust_store=trust_store,
+        developer_mode=developer_mode,
+    )
+    snapshot = compiler.compile()
+    set_active_runtime_snapshot(snapshot)
+    return snapshot
+
+
+
+def build_product_tool_registry(
+    snapshot: RuntimeContributionSnapshot | None = None,
+) -> ToolRegistry:
+    """Build the complete frozen Tool Registry for the DBFox product from snapshot."""
+    snap = snapshot or get_active_runtime_snapshot()
     registry = ToolRegistry(
         available_backends=frozenset({"in_process", "isolated_process"})
     )
-    register_core_functions(registry)
-    register_conversation_functions(registry)
-    register_data_extension(registry)
-    register_workspace_extension(registry)
-    register_workspace_write_extension(registry)
-    register_remote_job_extension(registry)
-    register_github_extension(registry)
+    for tool_contrib in snap.tools:
+        registry.register(
+            tool_contrib.tool,
+            owner=tool_contrib.owner_id,
+            package_digest=tool_contrib.package_digest,
+        )
     return registry.freeze()
 
 
@@ -73,7 +130,7 @@ def build_product_tool_registry() -> ToolRegistry:
 
 def list_database_resources(db: Session, project_id: str) -> tuple[ProjectResourceDescriptor, ...]:
     """Discover database resources (DataSources) belonging to a project."""
-    if not project_id:
+    if db is None or not project_id:
         return ()
     datasources = (
         db.query(DataSource)
@@ -94,9 +151,10 @@ def list_database_resources(db: Session, project_id: str) -> tuple[ProjectResour
 
 def list_workspace_resources(db: Session, project_id: str) -> tuple[ProjectResourceDescriptor, ...]:
     """Discover workspace resource belonging to a project if configured."""
-    if not project_id:
+    if db is None or not project_id:
         return ()
     project = db.get(Project, project_id)
+
     if project is None or not project.workspace_root:
         return ()
     ref = resolve_workspace_scope_ref(db, None, project_id=project_id)
@@ -112,23 +170,30 @@ def list_workspace_resources(db: Session, project_id: str) -> tuple[ProjectResou
     )
 
 
-def default_project_resource_providers() -> tuple[ProjectResourceProvider, ...]:
-    """Return the built-in project resource discovery providers."""
-    return (
-        list_database_resources,
-        list_workspace_resources,
-        list_github_resources,
-    )
+def default_project_resource_providers(
+    snapshot: RuntimeContributionSnapshot | None = None,
+) -> tuple[ProjectResourceProvider, ...]:
+    """Return all active resource discovery providers from snapshot."""
+    snap = snapshot or get_active_runtime_snapshot()
+    return snap.resource_providers
 
 
 def discover_project_resources(
     db: Session,
     project_id: str,
+    snapshot: RuntimeContributionSnapshot | None = None,
 ) -> tuple[ProjectResourceDescriptor, ...]:
     """Discover all available resources across all registered providers for a project."""
+    snap = snapshot or get_active_runtime_snapshot()
     descriptors: list[ProjectResourceDescriptor] = []
-    for provider in default_project_resource_providers():
-        descriptors.extend(provider(db, project_id))
+    seen: set[tuple[str, str]] = set()
+    for provider in snap.resource_providers:
+        for d in provider(db, project_id):
+            key = (d.kind, d.id)
+            if key in seen:
+                raise ValueError(f"Duplicate resource discovery identity (kind={d.kind!r}, id={d.id!r})")
+            seen.add(key)
+            descriptors.append(d)
     return tuple(descriptors)
 
 
@@ -137,12 +202,13 @@ def authorize_project_resources(
     project_id: str,
     requested: Sequence[RequestedResourceRef] | None,
     fallback_datasource_id: str | None = None,
+    snapshot: RuntimeContributionSnapshot | None = None,
 ) -> tuple[ResourceScopeRef, ...]:
     """Authorize requested resources against project discovery, attaching server canonical versions."""
     if requested is not None:
         available = {
             (d.kind, d.id): d
-            for d in discover_project_resources(db, project_id)
+            for d in discover_project_resources(db, project_id, snapshot=snapshot)
         }
         authorized: list[ResourceScopeRef] = []
         seen: set[tuple[str, str]] = set()
@@ -187,60 +253,68 @@ def authorize_project_resources(
 
 def build_attempt_resource_resolver(
     metadata_session: Session | None = None,
+    snapshot: RuntimeContributionSnapshot | None = None,
 ) -> CompositeResourceResolver:
-    """Build composite attempt resolver with attempt-scoped metadata session."""
-
+    """Build composite attempt resolver from snapshot with attempt-scoped metadata session."""
+    snap = snapshot or get_active_runtime_snapshot()
     resolver = CompositeResourceResolver()
 
-    def resolve_database(_ref: ResourceScopeRef) -> Any:
-        # In-process: leaf metadata Session; worker process: SessionLocal
-        return metadata_session if metadata_session is not None else SessionLocal()
+    for res_contrib in snap.resource_resolvers:
+        # If built-in kinds and metadata_session is provided, wrap appropriately
+        kind = res_contrib.kind
+        if kind == "database":
+            def resolve_db(_ref: ResourceScopeRef) -> Any:
+                return metadata_session if metadata_session is not None else SessionLocal()
+            resolver.register("database", cast(ScopedResourceResolver, resolve_db))
+        elif kind == "workspace":
+            def resolve_ws(ref: ResourceScopeRef) -> WorkspaceReadService:
+                if metadata_session is not None:
+                    return resolve_workspace_resource(metadata_session, ref)
+                with SessionLocal() as db:
+                    return resolve_workspace_resource(db, ref)
+            resolver.register("workspace", cast(ScopedResourceResolver, resolve_ws))
+        elif kind == "github.repository":
+            def resolve_gh(ref: ResourceScopeRef) -> Any:
+                if metadata_session is not None:
+                    return resolve_github_repository(metadata_session, ref)
+                with SessionLocal() as db:
+                    return resolve_github_repository(db, ref)
+            resolver.register("github.repository", cast(ScopedResourceResolver, resolve_gh))
+        else:
+            resolver.register(kind, res_contrib.resolver)
 
-    def resolve_workspace(ref: ResourceScopeRef) -> WorkspaceReadService:
-        if metadata_session is not None:
-            return resolve_workspace_resource(metadata_session, ref)
-        with SessionLocal() as db:
-            return resolve_workspace_resource(db, ref)
-
-    def resolve_github(ref: ResourceScopeRef) -> Any:
-        if metadata_session is not None:
-            return resolve_github_repository(metadata_session, ref)
-        with SessionLocal() as db:
-            return resolve_github_repository(db, ref)
-
-    resolver.register("database", cast(ScopedResourceResolver, resolve_database))
-    resolver.register("workspace", cast(ScopedResourceResolver, resolve_workspace))
-    resolver.register("github.repository", cast(ScopedResourceResolver, resolve_github))
     return resolver.freeze()
 
 
-def default_context_contributors() -> tuple[Callable[[Session], ContextContributor], ...]:
-    """Return the built-in contributors; Context Kernel owns their use."""
-
-    return (
-        WorkspaceContextContributor,
-        GitHubContextContributor,
-    )
+def default_context_contributors(
+    snapshot: RuntimeContributionSnapshot | None = None,
+) -> tuple[Callable[[Session], ContextContributor], ...]:
+    """Return all active context contributors from snapshot."""
+    snap = snapshot or get_active_runtime_snapshot()
+    return snap.context_contributors
 
 
 def build_default_completion_policy() -> CompletionPolicy:
     """Compose the current Data completion contributions for DBFox."""
-
     return CompletionPolicy(
         constraints=(DataResultCitationConstraint(),),
         support=DataCompletionSupport(),
     )
 
 
-def build_product_run_loop(*, session_factory: Callable[[], Session]) -> RunLoop:
-    """Construct the production RunLoop with explicit product contributions."""
-
+def build_product_run_loop(
+    *,
+    session_factory: Callable[[], Session],
+    snapshot: RuntimeContributionSnapshot | None = None,
+) -> RunLoop:
+    """Construct the production RunLoop with explicit product contributions from snapshot."""
     from engine.agent.completion import CompletionGate
     from engine.agent.loop import RunLoop
 
+    snap = snapshot or get_active_runtime_snapshot()
     return RunLoop(
         session_factory=session_factory,
-        registry=build_product_tool_registry(),
-        context_contributors=default_context_contributors(),
+        registry=build_product_tool_registry(snap),
+        context_contributors=default_context_contributors(snap),
         completion=CompletionGate(build_default_completion_policy()),
     )

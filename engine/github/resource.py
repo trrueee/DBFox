@@ -17,8 +17,9 @@ def list_github_resources(
     project_id: str,
 ) -> tuple[ProjectResourceDescriptor, ...]:
     """Discover all active GitHub repository bindings belonging to a project."""
-    if not project_id:
+    if db is None or not project_id:
         return ()
+
 
     bindings = (
         db.execute(

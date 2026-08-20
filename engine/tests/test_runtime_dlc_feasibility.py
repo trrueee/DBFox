@@ -93,8 +93,9 @@ def _create_test_dlc_tree(
         "from .helper import format_greeting\n"
         "from .subpkg.calc import compute_total\n"
         "from .vendor.pure_vendored import vendored_transform\n"
-        "from engine.agent.resource_refs import ResourceScopeRef\n"
+        "from dbfox_dlc_api import ResourceScopeRef\n"
         f"{broken_import}"
+
         "\n"
         "def run_probe() -> dict:\n"
         "    ref = ResourceScopeRef(kind='test_proof', id='proof_1', version=42)\n"

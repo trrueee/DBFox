@@ -29,9 +29,21 @@ class DlcErrorCode(StrEnum):
     INCOMPATIBLE_DBFOX_VERSION = "incompatible_dbfox_version"
     NATIVE_EXTENSION_NOT_ALLOWED = "native_extension_not_allowed"
     REGISTRY_CORRUPT = "registry_corrupt"
-    INSTALL_IO_ERROR = "install_io_error"
     ALREADY_INSTALLED = "already_installed"
     CONFLICTING_DIGEST = "conflicting_digest"
+    PACKAGE_TAMPERED = "package_tampered"
+    PACKAGE_MISSING = "package_missing"
+    BACKEND_ENTRYPOINT_INVALID = "backend_entrypoint_invalid"
+    BACKEND_IMPORT_FAILED = "backend_import_failed"
+    BACKEND_REGISTER_FAILED = "backend_register_failed"
+    REGISTRATION_CONFLICT = "registration_conflict"
+    PERMISSION_VIOLATION = "permission_violation"
+    DLC_NOT_ACTIVE = "dlc_not_active"
+    OPERATION_NOT_FOUND = "operation_not_found"
+    IMPLEMENTATION_MISMATCH = "implementation_mismatch"
+    INSTALL_IO_ERROR = "install_io_error"
+
+
 
 
 class DlcError(Exception):

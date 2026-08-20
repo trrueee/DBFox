@@ -104,6 +104,8 @@ class ToolInvocationRepository:
             tool_name=tool.name,
             declared_version=tool.declared_version,
             contract_hash=tool.contract_hash,
+            owner_id=tool.owner_id,
+            package_digest=tool.package_digest,
             # The durable invocation is the action the policy authorized, not
             # the provider's untrusted request. Approval and leaf execution
             # therefore bind to exactly the same canonical input.
@@ -549,6 +551,8 @@ class ToolInvocationRepository:
             tool_name=str(row.tool_name),
             declared_version=str(row.declared_version),
             contract_hash=str(row.contract_hash),
+            owner_id=str(row.owner_id) if row.owner_id is not None else None,
+            package_digest=str(row.package_digest) if row.package_digest is not None else None,
             authorized_input=load_object(str(row.input_json)),
             authorized_input_hash=str(row.input_hash),
             idempotency_key=str(row.idempotency_key),

@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
+
+
 
 from engine.tools.runtime.base import BaseTool, ControlCommand, ToolCapability
+
+if TYPE_CHECKING:
+    from engine.tools.runtime.attempt import ToolImplementationIdentity
+
 
 
 RegisteredFunction = BaseTool | ControlCommand
@@ -25,6 +32,7 @@ class ToolRegistry:
     def __init__(self, *, available_backends: frozenset[str] | None = None) -> None:
         self._tools: dict[str, RegisteredFunction] = {}
         self._owners: dict[str, str] = {}
+        self._package_digests: dict[str, str] = {}
         self._frozen = False
         self._available_backends = available_backends or frozenset({"in_process"})
 
@@ -37,6 +45,7 @@ class ToolRegistry:
         tool: RegisteredFunction,
         *,
         owner: str | None = None,
+        package_digest: str | None = None,
     ) -> "ToolRegistry":
         if self._frozen:
             raise RuntimeError("Tool Registry is frozen; registration is rejected.")
@@ -51,6 +60,8 @@ class ToolRegistry:
         self._tools[tool.name] = tool
         if owner is not None:
             self._owners[tool.name] = owner
+        if package_digest is not None:
+            self._package_digests[tool.name] = package_digest
         return self
 
     def freeze(self) -> "ToolRegistry":
@@ -59,6 +70,21 @@ class ToolRegistry:
 
     def owner_of(self, name: str) -> str | None:
         return self._owners.get(name)
+
+    def package_digest_of(self, name: str) -> str | None:
+        return self._package_digests.get(name)
+
+    def implementation_identity_of(self, name: str) -> ToolImplementationIdentity | None:
+        owner = self.owner_of(name)
+        if owner is None:
+            return None
+        from engine.tools.runtime.attempt import ToolImplementationIdentity
+
+        return ToolImplementationIdentity(
+            owner_id=owner,
+            package_digest=self.package_digest_of(name),
+        )
+
 
     def tool_names(self) -> tuple[str, ...]:
         return tuple(sorted(self._tools))
