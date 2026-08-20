@@ -1,0 +1,9 @@
+{
+  "$schema": "../../gen/schemas/desktop-schema.json",
+  "identifier": "dlc-package",
+  "description": "Narrow user-confirmed .dbfox-dlc package selection for the main DBFox WebView",
+  "windows": ["main"],
+  "permissions": [
+    "allow-pick-dlc-package"
+  ]
+}

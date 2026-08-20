@@ -21,6 +21,7 @@ fn main() {
         "open_diagnostic_logs",
         "open_external_https_url",
         "save_external_image",
+        "pick_dlc_package",
         "export_diagnostic_bundle",
         "pick_project_folder",
         "list_project_folder",
