@@ -1,6 +1,11 @@
 # R5.0 GitHub Externalization Seam Audit
 
-Date: 2026-08-21
+> 文档类型：质量证据 / 架构审计
+>
+> 状态：当前
+>
+> 最后核验：2026-08-21
+
 Baseline: `main@8d182f24eb349f154d4a44c01041fb07c69a1b3a`
 
 ## Decision
