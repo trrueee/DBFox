@@ -12,6 +12,7 @@ use tauri_plugin_opener::OpenerExt;
 mod app_updates;
 mod crash_recovery;
 mod diagnostic_bundle;
+mod dlc_asset_protocol;
 mod external_image;
 mod project_folder;
 mod sidecar_log;
@@ -23,6 +24,9 @@ use app_updates::{
 use crash_recovery::{get_launch_recovery_status, CrashRecoveryState};
 use diagnostic_bundle::{
     export_bundle, DiagnosticBundlePayload, DiagnosticBundleResult, HostDiagnosticSnapshot,
+};
+use dlc_asset_protocol::{
+    handle_dlc_asset_request, DlcAssetHostState, RuntimeDlcActivationProjection,
 };
 use external_image::save_external_image;
 use project_folder::{list_project_folder, pick_project_folder, read_project_file};
@@ -49,6 +53,7 @@ struct EngineRuntime {
     next_generation: AtomicU64,
     restart_history: Mutex<VecDeque<Instant>>,
     monitor_started: AtomicBool,
+    dlc_asset_state: DlcAssetHostState,
 }
 
 const ENGINE_PROTOCOL_VERSION: u16 = 1;
@@ -63,6 +68,7 @@ impl Drop for EngineRuntime {
         self.shutting_down.store(true, Ordering::Release);
         self.startup_cancelled.store(true, Ordering::Release);
         self.epoch.fetch_add(1, Ordering::AcqRel);
+        self.dlc_asset_state.clear();
         if let Ok(supervisor) = self.supervisor.get_mut() {
             supervisor.stop();
         }
@@ -70,7 +76,7 @@ impl Drop for EngineRuntime {
 }
 
 impl PythonEngine {
-    fn starting() -> Self {
+    fn starting(dlc_asset_state: DlcAssetHostState) -> Self {
         Self(Arc::new(EngineRuntime {
             supervisor: Mutex::new(EngineSupervisor::starting()),
             startup_cancelled: AtomicBool::new(false),
@@ -79,6 +85,7 @@ impl PythonEngine {
             next_generation: AtomicU64::new(0),
             restart_history: Mutex::new(VecDeque::new()),
             monitor_started: AtomicBool::new(false),
+            dlc_asset_state,
         }))
     }
 
@@ -87,13 +94,13 @@ impl PythonEngine {
         let engine = self.clone();
         std::thread::spawn(move || {
             let progress_engine = engine.clone();
-            let progress_app = app.clone();
+            let callback_app = app.clone();
             let mut started =
                 EngineSupervisor::start(&app, log, &engine.0.startup_cancelled, move |stage| {
                     if let Ok(mut current) = progress_engine.0.supervisor.lock() {
                         current.stage = Some(stage.to_string());
                     }
-                    progress_engine.emit_status(&progress_app);
+                    progress_engine.emit_status(&callback_app);
                 });
             if engine.0.startup_cancelled.load(Ordering::Acquire)
                 || engine.0.shutting_down.load(Ordering::Acquire)
@@ -120,6 +127,11 @@ impl PythonEngine {
             if started.state == EngineStartupState::Ready {
                 started.generation = engine.0.next_generation.fetch_add(1, Ordering::AcqRel) + 1;
                 started.restart_count = engine.restart_count();
+                if let (Some(port), token) = (started.port, &started.token) {
+                    if let Ok(projection) = fetch_dlc_activation_projection(port, token) {
+                        engine.0.dlc_asset_state.update_projection(projection);
+                    }
+                }
             }
             *current = started;
             drop(current);
@@ -155,6 +167,7 @@ impl PythonEngine {
             };
 
             log.event(log::Level::Error, "sidecar.unexpected_exit", &exit_message);
+            self.0.dlc_asset_state.clear();
             let restart_count = self.record_restart();
             if let Ok(mut current) = self.0.supervisor.lock() {
                 current.restart_count = restart_count as u32;
@@ -253,6 +266,7 @@ impl PythonEngine {
         self.0.shutting_down.store(true, Ordering::Release);
         self.0.startup_cancelled.store(true, Ordering::Release);
         self.0.epoch.fetch_add(1, Ordering::AcqRel);
+        self.0.dlc_asset_state.clear();
         if let Ok(mut current) = self.0.supervisor.lock() {
             current.stop();
         }
@@ -689,14 +703,26 @@ pub fn run() {
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_dialog::init());
 
+    let dlc_asset_state = DlcAssetHostState::new();
+    let dlc_asset_protocol_state = dlc_asset_state.clone();
+
+    let builder = builder.register_asynchronous_uri_scheme_protocol(
+        "dlc-asset",
+        move |_app, request, responder| {
+            let response = handle_dlc_asset_request(&dlc_asset_protocol_state, request);
+            responder.respond(response);
+        },
+    );
+
     builder
-        .setup(|app| {
+        .setup(move |app| {
             retire_legacy_temp_sidecar_log().map_err(std::io::Error::other)?;
             let recovery = CrashRecoveryState::initialize(app.handle())?;
             app.manage(recovery);
             app.manage(PendingUpdate::default());
+            app.manage(dlc_asset_state.clone());
             let sidecar_log = SidecarLog;
-            let engine = PythonEngine::starting();
+            let engine = PythonEngine::starting(dlc_asset_state);
             app.manage(engine.clone());
             engine.start_in_background(sidecar_log, app.handle().clone());
             engine.start_monitor(sidecar_log, app.handle().clone());
@@ -905,6 +931,49 @@ fn validate_engine_health_response(response: &[u8]) -> Result<(), String> {
         return Err("health endpoint did not return healthy status".to_string());
     }
     Ok(())
+}
+
+fn fetch_dlc_activation_projection(
+    port: u16,
+    token: &str,
+) -> Result<RuntimeDlcActivationProjection, String> {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(1000))
+        .map_err(|error| format!("connect failed: {}", error))?;
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(2000)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(1000)));
+    let request = format!(
+        "GET /api/v1/dlcs/activation HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: tauri://localhost\r\nX-Local-Token: {token}\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("activation request write failed: {}", error))?;
+    let mut response = Vec::new();
+    stream
+        .take(MAX_ENGINE_HEALTH_RESPONSE_BYTES as u64)
+        .read_to_end(&mut response)
+        .map_err(|error| format!("activation response read failed: {}", error))?;
+
+    let header_end = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .ok_or_else(|| "activation response did not contain complete HTTP headers".to_string())?;
+    let headers = std::str::from_utf8(&response[..header_end])
+        .map_err(|_| "activation response headers were not valid UTF-8".to_string())?;
+    let mut status_parts = headers
+        .lines()
+        .next()
+        .ok_or_else(|| "activation response did not contain an HTTP status line".to_string())?
+        .split_ascii_whitespace();
+    let protocol = status_parts.next().unwrap_or_default();
+    let status_code = status_parts.next().unwrap_or_default();
+    if !matches!(protocol, "HTTP/1.0" | "HTTP/1.1") || status_code != "200" {
+        return Err(format!("activation endpoint returned HTTP {status_code}"));
+    }
+
+    let body = &response[(header_end + 4)..];
+    serde_json::from_slice(body)
+        .map_err(|error| format!("failed to parse activation projection JSON: {error}"))
 }
 
 #[cfg(test)]

@@ -23,6 +23,8 @@ import { ProjectResourceSidebar } from "./features/resources/ProjectResourceSide
 import { productResourceConnectors, ResourceConnectorDialog } from "./features/resources/resourceConnectorComposition";
 import { useConnectionDialogStore } from "./features/resources/connectionDialogStore";
 import { useProductDockBootstrap } from "./features/dock/useProductDockBootstrap";
+import { useDlcStore } from "./features/dlc/extensionStore";
+import { fetchAndLoadActiveExtensions } from "./features/dlc/extensionLoader";
 
 const AppCommandPalette = lazy(() =>
   import("./features/appShell/AppCommandPalette").then((module) => ({
@@ -105,6 +107,9 @@ export default function App() {
     void useConversationStore.getState().initConversations().catch((error) => {
       recordClientLog("error", "初始化对话列表失败", error);
     });
+    void fetchAndLoadActiveExtensions().catch((error) => {
+      recordClientLog("warning", "加载 DLC 扩展失败", error);
+    });
   }, []);
 
   // ── Store selectors ──
@@ -147,7 +152,8 @@ export default function App() {
   );
 
   // Resource connector composition
-  const connectors = productResourceConnectors(toast);
+  const dlcConnectors = useDlcStore((s) => s.contributions.connectors);
+  const connectors = productResourceConnectors(toast, dlcConnectors);
 
   // Layout UI states
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

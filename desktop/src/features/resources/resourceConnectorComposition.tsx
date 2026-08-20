@@ -8,6 +8,7 @@ import {
   AddGithubRepoDialog,
 } from "./GithubConnector";
 import { useConnectionDialogStore } from "./connectionDialogStore";
+import { useDlcStore } from "../dlc/extensionStore";
 
 const ConnectionDialog = lazy(() =>
   import("../datasource/ConnectionDialog").then((module) => ({
@@ -17,11 +18,14 @@ const ConnectionDialog = lazy(() =>
 
 export function productResourceConnectors(
   toast: (message: string) => void,
+  extraConnectors?: readonly ResourceConnectorContribution[],
 ): readonly ResourceConnectorContribution[] {
+  const dlcConnectors = extraConnectors ?? useDlcStore.getState().contributions.connectors;
   return [
     createDataContribution(toast),
     createWorkspaceContribution(),
     createGithubContribution(toast),
+    ...dlcConnectors,
   ];
 }
 

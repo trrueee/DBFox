@@ -3,6 +3,7 @@ import { queryClient } from "../../lib/queryClient";
 import { projectQueryKeys } from "../projects/useProjectState";
 import type { ProjectResponse } from "../../lib/api/generated/types.gen";
 import { useGithubStore } from "../github/githubStore";
+import { useDlcStore } from "../dlc/extensionStore";
 
 export interface ConversationSendResourceContext {
   projectId: string;
@@ -76,14 +77,21 @@ export interface ProductRequestedResourcesSnapshot {
   refs: readonly RequestedResourceRef[];
 }
 
+export function getEffectiveRequestedResourceContributors(): readonly RequestedResourceContributor[] {
+  const dlcContributors = useDlcStore.getState().contributions.requestedResources;
+  return [...PRODUCT_REQUESTED_RESOURCE_CONTRIBUTORS, ...dlcContributors];
+}
+
 export function collectProductRequestedResources(
   context: ConversationSendResourceContext,
-  contributors: readonly RequestedResourceContributor[] = PRODUCT_REQUESTED_RESOURCE_CONTRIBUTORS,
+  contributors?: readonly RequestedResourceContributor[],
 ): ProductRequestedResourcesSnapshot {
+  const activeContributors =
+    contributors ?? getEffectiveRequestedResourceContributors();
   const refs: RequestedResourceRef[] = [];
   const seen = new Set<string>();
 
-  for (const contributor of contributors) {
+  for (const contributor of activeContributors) {
     const result = contributor(context);
     if (!result.complete) {
       return { complete: false, refs: [] };
