@@ -22,12 +22,12 @@ class InstalledDlcRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     dlc_id: str
-    selected_digest: str
+    selected_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     package_version: str
     desired_enabled: bool = False
     runtime_state: str = "installed_disabled"
     trust_status: str
-    publisher_key_id: str | None = None
+    publisher_key_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     installed_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     last_failure_code: str | None = None
 
@@ -150,3 +150,15 @@ class InstalledDlcRegistry:
         current[dlc_id] = updated
         self.save(current)
         return updated
+
+    def remove_installed_dlc(self, dlc_id: str) -> InstalledDlcRecord:
+        """Atomically remove one installed record and return its previous value."""
+        current = self.load()
+        existing = current.pop(dlc_id, None)
+        if existing is None:
+            raise DlcError(
+                DlcErrorCode.DLC_NOT_INSTALLED,
+                f"DLC '{dlc_id}' is not installed",
+            )
+        self.save(current)
+        return existing

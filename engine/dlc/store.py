@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import shutil
 import tempfile
 import zipfile
@@ -11,6 +12,8 @@ from pathlib import Path
 
 from engine.dlc.errors import DlcError, DlcErrorCode
 from engine.dlc.verifier import VerifiedDlcPackage
+
+_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 class DlcPackageStore:
@@ -25,8 +28,12 @@ class DlcPackageStore:
 
     def get_package_dir(self, package_digest: str) -> Path:
         """Return the content-addressed directory path for a package digest."""
-        norm_digest = package_digest.lower()
-        return self.packages_dir / f"sha256-{norm_digest}"
+        if not _SHA256_PATTERN.fullmatch(package_digest):
+            raise DlcError(
+                DlcErrorCode.INVALID_INTEGRITY,
+                "Package digest must be a lowercase SHA-256 hex value",
+            )
+        return self.packages_dir / f"sha256-{package_digest}"
 
     def is_package_stored(self, package_digest: str) -> bool:
         """Check if package directory exists and is non-empty."""
@@ -58,7 +65,7 @@ class DlcPackageStore:
                     target_file = (staging_pkg_dir / rel_path).resolve()
 
                     # Enforce strict path containment
-                    if not str(target_file).startswith(str(staging_pkg_dir.resolve())):
+                    if not target_file.is_relative_to(staging_pkg_dir.resolve()):
                         raise DlcError(
                             DlcErrorCode.UNSAFE_PATH,
                             f"Extraction path escaped staging root: '{info.filename}'",
@@ -90,3 +97,28 @@ class DlcPackageStore:
                 DlcErrorCode.INSTALL_IO_ERROR,
                 f"Failed to extract package into content-addressed store: {exc}",
             ) from exc
+
+    def remove_package(self, package_digest: str) -> bool:
+        """Remove one exact content-addressed package directory, if present."""
+        package_dir = self.get_package_dir(package_digest).resolve()
+        packages_root = self.packages_dir.resolve()
+        if package_dir.parent != packages_root:
+            raise DlcError(
+                DlcErrorCode.UNSAFE_PATH,
+                "Package removal target escaped the content-addressed store",
+            )
+        if not package_dir.exists():
+            return False
+        if not package_dir.is_dir():
+            raise DlcError(
+                DlcErrorCode.INSTALL_IO_ERROR,
+                "Package removal target is not a directory",
+            )
+        try:
+            shutil.rmtree(package_dir)
+        except OSError as exc:
+            raise DlcError(
+                DlcErrorCode.INSTALL_IO_ERROR,
+                "Failed to remove unreferenced package bytes",
+            ) from exc
+        return True

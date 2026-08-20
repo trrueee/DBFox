@@ -668,11 +668,139 @@ export const zDiagnosticPolicyResponse = z.object({
 });
 
 /**
+ * DlcActivationFailureResponse
+ */
+export const zDlcActivationFailureResponse = z.object({
+    code: z.string(),
+    message: z.string()
+});
+
+/**
  * DlcActivationProjectionResponse
  */
 export const zDlcActivationProjectionResponse = z.object({
     active_dlcs: z.array(zActiveDlcItem),
     snapshot_id: z.string()
+});
+
+/**
+ * DlcInstallRequest
+ */
+export const zDlcInstallRequest = z.object({
+    archive_path: z.string().min(1).max(4096)
+});
+
+/**
+ * DlcLifecycleState
+ */
+export const zDlcLifecycleState = z.enum([
+    'installed_disabled',
+    'enable_pending_restart',
+    'active',
+    'disable_pending_restart',
+    'activation_failed'
+]);
+
+/**
+ * DlcPackageInspectRequest
+ */
+export const zDlcPackageInspectRequest = z.object({
+    archive_path: z.string().min(1).max(4096)
+});
+
+/**
+ * DlcPublisherTrustRequest
+ */
+export const zDlcPublisherTrustRequest = z.object({
+    archive_path: z.string().min(1).max(4096),
+    package_digest: z.string().regex(/^[0-9a-f]{64}$/),
+    publisher_fingerprint: z.string().regex(/^[0-9a-f]{64}$/)
+});
+
+/**
+ * DlcPublisherTrustResponse
+ */
+export const zDlcPublisherTrustResponse = z.object({
+    publisher_fingerprint: z.string(),
+    trusted: z.boolean().optional().default(true)
+});
+
+/**
+ * DlcRestartState
+ */
+export const zDlcRestartState = z.enum([
+    'none',
+    'required',
+    'failed'
+]);
+
+/**
+ * DlcLifecycleItem
+ */
+export const zDlcLifecycleItem = z.object({
+    activation_failure: zDlcActivationFailureResponse.nullish(),
+    active: z.boolean(),
+    active_digest: z.string().nullable(),
+    backend_entrypoint_present: z.boolean(),
+    description: z.string(),
+    desired_enabled: z.boolean(),
+    display_name: z.string(),
+    dlc_id: z.string(),
+    frontend_entrypoint_present: z.boolean(),
+    permissions: z.array(z.string()),
+    publisher: z.string(),
+    publisher_fingerprint: z.string().nullable(),
+    restart_state: zDlcRestartState,
+    selected_digest: z.string(),
+    state: zDlcLifecycleState,
+    trust_status: z.string(),
+    version: z.string()
+});
+
+/**
+ * DlcListResponse
+ */
+export const zDlcListResponse = z.object({
+    dlcs: z.array(zDlcLifecycleItem),
+    snapshot_id: z.string()
+});
+
+/**
+ * DlcTrustStatus
+ */
+export const zDlcTrustStatus = z.enum([
+    'trusted_signed',
+    'developer_unsigned',
+    'developer_signed',
+    'untrusted'
+]);
+
+/**
+ * DlcPackageInspection
+ */
+export const zDlcPackageInspection = z.object({
+    backend_entrypoint_present: z.boolean(),
+    description: z.string(),
+    display_name: z.string(),
+    dlc_id: z.string(),
+    frontend_entrypoint_present: z.boolean(),
+    package_digest: z.string(),
+    permissions: z.array(z.string()),
+    publisher: z.string(),
+    publisher_fingerprint: z.string(),
+    trust_required: z.boolean(),
+    trust_status: zDlcTrustStatus,
+    version: z.string()
+});
+
+/**
+ * DlcUninstallResponse
+ */
+export const zDlcUninstallResponse = z.object({
+    data_retained: z.boolean(),
+    dlc_id: z.string(),
+    executable_bytes_removed: z.boolean(),
+    package_digest: z.string()
 });
 
 /**
@@ -2146,7 +2274,69 @@ export const zClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponse =
 /**
  * Successful Response
  */
+export const zListDlcsApiV1DlcsGetResponse = zDlcListResponse;
+
+/**
+ * Successful Response
+ */
 export const zGetDlcActivationProjectionApiV1DlcsActivationGetResponse = zDlcActivationProjectionResponse;
+
+export const zInstallDlcPackageApiV1DlcsInstallPostBody = zDlcInstallRequest;
+
+/**
+ * Successful Response
+ */
+export const zInstallDlcPackageApiV1DlcsInstallPostResponse = zDlcLifecycleItem;
+
+export const zInspectDlcPackageApiV1DlcsPackagesInspectPostBody = zDlcPackageInspectRequest;
+
+/**
+ * Successful Response
+ */
+export const zInspectDlcPackageApiV1DlcsPackagesInspectPostResponse = zDlcPackageInspection;
+
+export const zTrustDlcPublisherApiV1DlcsPublishersTrustPostBody = zDlcPublisherTrustRequest;
+
+/**
+ * Successful Response
+ */
+export const zTrustDlcPublisherApiV1DlcsPublishersTrustPostResponse = zDlcPublisherTrustResponse;
+
+export const zUninstallDlcApiV1DlcsDlcIdDeletePath = z.object({
+    dlc_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zUninstallDlcApiV1DlcsDlcIdDeleteResponse = zDlcUninstallResponse;
+
+export const zGetDlcApiV1DlcsDlcIdGetPath = z.object({
+    dlc_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetDlcApiV1DlcsDlcIdGetResponse = zDlcLifecycleItem;
+
+export const zDisableDlcApiV1DlcsDlcIdDisablePostPath = z.object({
+    dlc_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zDisableDlcApiV1DlcsDlcIdDisablePostResponse = zDlcLifecycleItem;
+
+export const zEnableDlcApiV1DlcsDlcIdEnablePostPath = z.object({
+    dlc_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zEnableDlcApiV1DlcsDlcIdEnablePostResponse = zDlcLifecycleItem;
 
 export const zInvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostPath = z.object({
     dlc_id: z.string(),

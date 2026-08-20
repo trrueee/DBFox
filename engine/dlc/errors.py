@@ -45,6 +45,9 @@ class DlcErrorCode(StrEnum):
     DLC_NOT_ACTIVE = "dlc_not_active"
     OPERATION_NOT_FOUND = "operation_not_found"
     IMPLEMENTATION_MISMATCH = "implementation_mismatch"
+    DLC_NOT_INSTALLED = "dlc_not_installed"
+    DLC_DISABLE_REQUIRED = "dlc_disable_required"
+    DLC_ACTIVE = "dlc_active"
     INSTALL_IO_ERROR = "install_io_error"
 
 
