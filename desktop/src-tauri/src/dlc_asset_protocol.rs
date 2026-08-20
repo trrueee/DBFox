@@ -380,9 +380,7 @@ mod tests {
         let digest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         assert!(parse_dlc_asset_url(&format!("http://localhost/{digest}/index.js")).is_err());
         assert!(parse_dlc_asset_url(&format!("dlc-asset://evil.com/{digest}/index.js")).is_err());
-        assert!(
-            parse_dlc_asset_url(&format!("dlc-asset://localhost/short_digest/index.js")).is_err()
-        );
+        assert!(parse_dlc_asset_url("dlc-asset://localhost/short_digest/index.js").is_err());
     }
 
     #[test]
