@@ -29,6 +29,7 @@ from engine.agent.resource_refs import (
 from engine.dlc import (
     ActivatedDlcIdentity,
     ContributionCompiler,
+    DlcErrorCode,
     DlcPackageService,
     DlcTrustStore,
     compute_snapshot_id,
@@ -77,6 +78,8 @@ def dlc_service(tmp_path: Path, trust_store: DlcTrustStore):
 
 @pytest.fixture(autouse=True)
 def reset_active_snapshot():
+    import engine.github.contracts  # noqa: F401
+    import engine.tools.builtin.workspace  # noqa: F401
     from engine.agent.artifact import artifact_payload_contracts
     from engine.db import engine
     from engine.models import Base
@@ -1462,6 +1465,448 @@ def test_dlc_operations_project_scope_and_size_bounds(
     resp_valid = client.post("/api/v1/dlcs/acme.scope_test/operations/project_op?project_id=proj_valid_123", json={"action": "test"}, headers=headers)
     assert resp_valid.status_code == 200
     assert resp_valid.json() == {"project_id": "proj_valid_123"}
+
+
+# ---------------------------------------------------------------------------
+# 15. R2.2: Failed DLC Cannot Poison Subsequent DLCs
+# ---------------------------------------------------------------------------
+
+
+def test_failed_dlc_cannot_poison_later_dlc(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+):
+    """Prove that if DLC 1 defines a tool and then fails activation (e.g. invalid operation),
+
+    its candidate tools are discarded and DLC 2 can register the same tool name without conflict.
+    """
+    priv_key, pub_b64 = test_keypair
+
+    # DLC 1: registers tool 'shared_poison_test_tool' but fails on ungranted capability operation
+    bad_arch = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.bad_first_dlc",
+            "version": "1.0.0",
+            "displayName": "Bad DLC",
+            "publisher": "acme",
+            "extensionApiVersion": "1",
+            "requiresDbfox": ">=1.0.0",
+            "permissions": ["network"],  # Missing database_read
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "\n"
+                "class ToolIn(api.ToolInputModel):\n"
+                "    val: str = ''\n"
+                "class ToolOut(api.ToolOutputModel):\n"
+                "    val: str = ''\n"
+                "\n"
+                "class SharedTool(api.BaseTool[ToolIn, ToolOut]):\n"
+                "    name = 'shared_poison_test_tool'\n"
+                "    group = 'default'\n"
+                "    description = 'Shared tool'\n"
+                "    input_model = ToolIn\n"
+                "    output_model = ToolOut\n"
+                "    policy = api.ToolPolicy()\n"
+                "    presentation = api.ToolPresentation(title='Shared', category='explore')\n"
+                "    execution = api.ToolExecutionSpec(backend='in_process')\n"
+                "    def run(self, inp, ctx):\n"
+                "        return ToolOut(val='bad')\n"
+                "\n"
+                "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    host.tools.register(SharedTool())\n"
+                "    # Register operation with ungranted database_read capability -> will fail validation\n"
+                "    host.operations.register(api.DlcOperationSpec(\n"
+                "        name='forbidden_op',\n"
+                "        input_model=ToolIn,\n"
+                "        output_model=ToolOut,\n"
+                "        handler=lambda inp, ctx: ToolOut(),\n"
+                "        capabilities=('database_read',),\n"
+                "    ))\n"
+            ),
+        },
+        private_key=priv_key,
+    )
+
+    # DLC 2: registers the same tool name 'shared_poison_test_tool' cleanly
+    good_arch = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.good_second_dlc",
+            "version": "1.0.0",
+            "displayName": "Good DLC",
+            "publisher": "acme",
+            "extensionApiVersion": "1",
+            "requiresDbfox": ">=1.0.0",
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "\n"
+                "class ToolIn(api.ToolInputModel):\n"
+                "    val: str = ''\n"
+                "class ToolOut(api.ToolOutputModel):\n"
+                "    val: str = ''\n"
+                "\n"
+                "class SharedTool(api.BaseTool[ToolIn, ToolOut]):\n"
+                "    name = 'shared_poison_test_tool'\n"
+                "    group = 'default'\n"
+                "    description = 'Shared tool'\n"
+                "    input_model = ToolIn\n"
+                "    output_model = ToolOut\n"
+                "    policy = api.ToolPolicy()\n"
+                "    presentation = api.ToolPresentation(title='Shared', category='explore')\n"
+                "    execution = api.ToolExecutionSpec(backend='in_process')\n"
+                "    def run(self, inp, ctx):\n"
+                "        return ToolOut(val='good')\n"
+                "\n"
+                "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    host.tools.register(SharedTool())\n"
+            ),
+        },
+        private_key=priv_key,
+    )
+
+    path_bad = tmp_path / "bad.dbfox-dlc"
+    path_bad.write_bytes(bad_arch)
+    res_bad = dlc_service.install_from_file(path_bad, publisher_key_base64=pub_b64)
+    dlc_service.registry.set_desired_enabled(res_bad.dlc_id, True)
+
+    path_good = tmp_path / "good.dbfox-dlc"
+    path_good.write_bytes(good_arch)
+    res_good = dlc_service.install_from_file(path_good, publisher_key_base64=pub_b64)
+    dlc_service.registry.set_desired_enabled(res_good.dlc_id, True)
+
+    compiler = ContributionCompiler(dlc_service.storage_root, trust_store=dlc_service.trust_store)
+    snapshot = compiler.compile()
+
+    # 1. Bad DLC failed activation and is recorded in activation_failures
+    assert any(f.dlc_id == "acme.bad_first_dlc" for f in snapshot.activation_failures)
+    assert not any(d.dlc_id == "acme.bad_first_dlc" for d in snapshot.active_dlcs)
+
+    # 2. Good DLC activated successfully without being poisoned by Bad DLC
+    assert any(d.dlc_id == "acme.good_second_dlc" for d in snapshot.active_dlcs)
+
+    # 3. Tool registry contains the tool from Good DLC
+    reg = build_product_tool_registry(snapshot)
+    assert "shared_poison_test_tool" in reg.tool_names()
+    assert reg.owner_of("shared_poison_test_tool") == "acme.good_second_dlc"
+
+
+# ---------------------------------------------------------------------------
+# 16. R2.2: Subprocess Worker Parity — Package Digest Mismatch Fails Closed
+# ---------------------------------------------------------------------------
+
+
+def test_isolated_worker_package_digest_mismatch_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Prove that if a historical ToolAttemptRequest with package_digest A is sent to
+
+    a real isolated subprocess worker, and the worker's runtime does not match digest A,
+    the worker fails closed with IMPLEMENTATION_MISMATCH and does not execute.
+    """
+    import hashlib
+    from engine.tests.support.metadata import create_migrated_metadata_engine
+    from sqlalchemy.orm import sessionmaker
+    from engine.models import Project
+    from engine.tools.runtime.attempt import (
+        ResourceScopeRef,
+        ToolAttemptRequest,
+        ToolImplementationIdentity,
+        ToolInvocationContext,
+    )
+    from engine.tools.runtime.attempt_runner import (
+        IsolatedProcessAttemptRunner,
+        default_isolated_worker_command,
+    )
+    from engine.tools.materialization import current_tool_contract_hash
+    from engine.runtime_composition import build_product_tool_registry
+
+    import time
+    class _Control:
+        def __init__(self) -> None:
+            self.deadline = time.monotonic() + 30.0
+
+        def is_cancelled(self) -> bool:
+            return False
+
+    root = tmp_path / "ws_worker"
+    root.mkdir(parents=True)
+    (root / "hello.txt").write_text("Hello Worker\n", encoding="utf-8")
+
+    metadata_path = tmp_path / "worker-meta.db"
+    metadata_engine = create_migrated_metadata_engine(metadata_path)
+    SessionLocal = sessionmaker(bind=metadata_engine)
+    with SessionLocal() as db:
+        db.add(Project(id="proj-worker-1", name="Worker Project", workspace_root=str(root)))
+        db.commit()
+
+    monkeypatch.setenv("DBFOX_DATABASE_URL", f"sqlite:///{metadata_path}")
+    reg = build_product_tool_registry()
+    version = current_tool_contract_hash(reg.require("file_read"))
+
+    ws_digest = hashlib.sha256(str(root.resolve()).encode("utf-8")).hexdigest()[:16]
+    request = ToolAttemptRequest(
+        mode="execute",
+        tool_name="file_read",
+        frozen_tool_declared_version="1.0",
+        frozen_tool_contract_hash=version,
+        invocation=ToolInvocationContext(
+            session_id="sess_1",
+            run_id="run_1",
+            turn_id="turn_1",
+            invocation_id="inv_1",
+            idempotency_key="idem_1",
+            scope_refs=(
+                ResourceScopeRef(
+                    kind="workspace",
+                    id="proj-worker-1",
+                    version=ws_digest,
+                ),
+            ),
+        ),
+        authorized_input={"path": "hello.txt"},
+        attempt_timeout_ms=5000,
+        # Intentionally request a historical package digest that does not match current runtime
+        implementation=ToolImplementationIdentity(
+            owner_id="dbfox.workspace",
+            package_digest="sha256_historical_mismatched_digest_1234567890",
+            runtime_snapshot_id="historical_snap_1",
+        ),
+    )
+
+    runner = IsolatedProcessAttemptRunner(default_isolated_worker_command())
+    try:
+        result = runner.run(request=request, control=_Control())
+        assert result.status == "failed"
+        assert result.error_code == "IMPLEMENTATION_MISMATCH"
+        assert "mismatch" in (result.error or "").lower()
+    finally:
+        metadata_engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# 17. R2.2: Bounded Operation Bridge with Platform Hard Ceiling
+# ---------------------------------------------------------------------------
+
+
+def test_dlc_operation_platform_hard_ceiling_enforced(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+):
+    """Prove that if a DLC operation declares max_output_bytes exceeding PLATFORM_MAX_DLC_OPERATION_OUTPUT_BYTES
+
+    (or produces output larger than platform max), the platform hard ceiling is enforced.
+    """
+    from fastapi.testclient import TestClient
+    from engine.main import LOCAL_SECURE_TOKEN, app
+    from engine.runtime_composition import set_active_runtime_snapshot
+    priv_key, pub_b64 = test_keypair
+
+    arch = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.ceiling_test",
+            "version": "1.0.0",
+            "displayName": "Ceiling Test",
+            "publisher": "acme",
+            "extensionApiVersion": "1",
+            "requiresDbfox": ">=1.0.0",
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "\n"
+                "class PingIn(api.BaseModel):\n"
+                "    size_kb: int = 1\n"
+                "\n"
+                "class PingOut(api.BaseModel):\n"
+                "    payload: str\n"
+                "\n"
+                "def ping_handler(inp: PingIn, ctx: api.DlcOperationContext) -> PingOut:\n"
+                "    return PingOut(payload='x' * (inp.size_kb * 1024))\n"
+                "\n"
+                "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    # Request a 50 MiB limit, but platform ceiling is 10 MiB\n"
+                "    host.operations.register(api.DlcOperationSpec(\n"
+                "        name='large_ping',\n"
+                "        input_model=PingIn,\n"
+                "        output_model=PingOut,\n"
+                "        handler=ping_handler,\n"
+                "        max_output_bytes=50 * 1024 * 1024,\n"
+                "    ))\n"
+            ),
+        },
+        private_key=priv_key,
+    )
+
+    path = tmp_path / "ceiling_test.dbfox-dlc"
+    path.write_bytes(arch)
+    res = dlc_service.install_from_file(path, publisher_key_base64=pub_b64)
+    dlc_service.registry.set_desired_enabled(res.dlc_id, True)
+
+    compiler = ContributionCompiler(dlc_service.storage_root, trust_store=dlc_service.trust_store)
+    snapshot = compiler.compile()
+    set_active_runtime_snapshot(snapshot)
+
+    headers = {"X-Local-Token": LOCAL_SECURE_TOKEN}
+    client = TestClient(app)
+
+    # 1. Output within platform limit (e.g. 500 KB) succeeds
+    resp_ok = client.post("/api/v1/dlcs/acme.ceiling_test/operations/large_ping", json={"size_kb": 500}, headers=headers)
+    assert resp_ok.status_code == 200
+
+    # 2. Output exceeding platform 10 MiB limit (e.g. 11 MiB) fails with 500 OUTPUT_SIZE_EXCEEDED
+    resp_over = client.post("/api/v1/dlcs/acme.ceiling_test/operations/large_ping", json={"size_kb": 11 * 1024}, headers=headers)
+    assert resp_over.status_code == 500
+    assert resp_over.json()["code"] == "OUTPUT_SIZE_EXCEEDED"
+
+
+# ---------------------------------------------------------------------------
+# 18. R2.2.1: Resolver Authority Boundary — Core Session Leak Impossible
+# ---------------------------------------------------------------------------
+
+
+def test_dlc_two_argument_resolver_registration_rejected(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+):
+    """Prove that a DLC attempting to register a two-argument / session-accepting
+
+    resolver `def resolve(db, ref)` is rejected at registration/staging time,
+    preventing any Core SQLAlchemy Session leakage to the DLC.
+    """
+    priv_key, pub_b64 = test_keypair
+
+    arch = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.malicious_resolver",
+            "version": "1.0.0",
+            "displayName": "Malicious Resolver DLC",
+            "publisher": "acme",
+            "extensionApiVersion": "1",
+            "requiresDbfox": ">=1.0.0",
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "\n"
+                "def leak_session_resolver(db, ref):\n"
+                "    return {'db_type': str(type(db))}\n"
+                "\n"
+                "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    # Attempting to register a 2-arg resolver must fail closed\n"
+                "    host.resources.register_resolver('acme.leak', leak_session_resolver)\n"
+            ),
+        },
+        private_key=priv_key,
+    )
+
+    path = tmp_path / "malicious_resolver.dbfox-dlc"
+    path.write_bytes(arch)
+    res = dlc_service.install_from_file(path, publisher_key_base64=pub_b64)
+    dlc_service.registry.set_desired_enabled(res.dlc_id, True)
+
+    compiler = ContributionCompiler(dlc_service.storage_root, trust_store=dlc_service.trust_store)
+    snapshot = compiler.compile()
+
+    # The malicious DLC must have failed activation and must not be in active_dlcs
+    assert not any(d.dlc_id == "acme.malicious_resolver" for d in snapshot.active_dlcs)
+    assert any(
+        f.dlc_id == "acme.malicious_resolver" and f.error_code in ("registration_conflict", DlcErrorCode.REGISTRATION_CONFLICT.value)
+        for f in snapshot.activation_failures
+    )
+    # The resolver must NOT be in snapshot.resource_resolvers
+    assert not any(r.kind == "acme.leak" for r in snapshot.resource_resolvers)
+
+
+def test_dlc_resolver_never_receives_core_session(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+):
+    """Prove that a valid DLC single-argument resolver strictly receives ResourceScopeRef
+
+    and cannot receive or access the SQLAlchemy Session, even when metadata_session
+    is provided to build_attempt_resource_resolver.
+    """
+    from engine.tools.runtime.attempt import ResourceScopeRef
+    from sqlalchemy.orm import Session
+    from unittest.mock import MagicMock
+
+    priv_key, pub_b64 = test_keypair
+
+    arch = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.safe_resolver",
+            "version": "1.0.0",
+            "displayName": "Safe Resolver DLC",
+            "publisher": "acme",
+            "extensionApiVersion": "1",
+            "requiresDbfox": ">=1.0.0",
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "\n"
+                "def safe_resolve(ref: api.ResourceScopeRef):\n"
+                "    return {'arg_type': type(ref).__name__, 'is_scope_ref': isinstance(ref, api.ResourceScopeRef), 'ref_id': ref.id}\n"
+                "\n"
+                "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    host.resources.register_resolver('acme.safe_doc', safe_resolve)\n"
+            ),
+        },
+        private_key=priv_key,
+    )
+
+    path = tmp_path / "safe_resolver.dbfox-dlc"
+    path.write_bytes(arch)
+    res = dlc_service.install_from_file(path, publisher_key_base64=pub_b64)
+    dlc_service.registry.set_desired_enabled(res.dlc_id, True)
+
+    compiler = ContributionCompiler(dlc_service.storage_root, trust_store=dlc_service.trust_store)
+    snapshot = compiler.compile()
+
+    assert any(d.dlc_id == "acme.safe_resolver" for d in snapshot.active_dlcs)
+    contrib = next(r for r in snapshot.resource_resolvers if r.kind == "acme.safe_doc")
+    assert contrib.binding == "scope_only"
+
+    # Pass an explicit mock metadata Session
+    mock_session = MagicMock(spec=Session)
+    composite = build_attempt_resource_resolver(metadata_session=mock_session, snapshot=snapshot)
+
+    ref = ResourceScopeRef(kind="acme.safe_doc", id="doc_999", version="1")
+    resolved = composite.resolve([ref])
+
+    assert "acme.safe_doc" in resolved
+    doc_res = resolved["acme.safe_doc"]
+    assert doc_res["arg_type"] == "ResourceScopeRef"
+    assert doc_res["is_scope_ref"] is True
+    assert doc_res["ref_id"] == "doc_999"
+    # mock_session was NEVER touched by DLC resolver
+    assert mock_session.method_calls == []
+
+
+
 
 
 

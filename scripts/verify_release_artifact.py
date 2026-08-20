@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -66,18 +67,28 @@ def extracted_installer(bundle_root: Path) -> Iterator[tuple[Path, Path]]:
             if result.returncode != 0:
                 raise RuntimeError(f"MSI administrative extraction failed: {result.returncode}")
         else:
-            installer = _find_one(bundle_root, "appimage/*.AppImage")
-            installer.chmod(installer.stat().st_mode | 0o100)
-            env = os.environ.copy()
-            env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
-            result = subprocess.run(
-                [str(installer), "--appimage-extract"],
-                cwd=destination,
-                env=env,
-                timeout=180,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(f"AppImage extraction failed: {result.returncode}")
+            deb_matches = list(bundle_root.glob("deb/*.deb"))
+            if deb_matches and shutil.which("dpkg-deb"):
+                installer = _find_one(bundle_root, "deb/*.deb")
+                result = subprocess.run(
+                    ["dpkg-deb", "-x", str(installer), str(destination)],
+                    timeout=180,
+                )
+                if result.returncode != 0:
+                    raise RuntimeError(f"DEB extraction failed: {result.returncode}")
+            else:
+                installer = _find_one(bundle_root, "appimage/*.AppImage")
+                installer.chmod(installer.stat().st_mode | 0o100)
+                env = os.environ.copy()
+                env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
+                result = subprocess.run(
+                    [str(installer), "--appimage-extract"],
+                    cwd=destination,
+                    env=env,
+                    timeout=180,
+                )
+                if result.returncode != 0:
+                    raise RuntimeError(f"AppImage extraction failed: {result.returncode}")
         yield installer, destination
 
 
@@ -114,6 +125,25 @@ def verify_extracted_tree(
         for path in candidates
         if build_sidecar._sha256(path) == expected.get("sidecar_sha256")
     ]
+    if not matching and sys.platform.startswith("linux") and len(candidates) == 1:
+        # On Linux AppImages, linuxdeploy may patch the ELF runpath during bundle assembly.
+        # Verify the candidate executable by directly probing its runtime manifest and release contracts.
+        candidate = candidates[0]
+        try:
+            runtime = build_sidecar.probe_sidecar_runtime(candidate)
+            contracts = build_sidecar.probe_sidecar_release_contracts(candidate)
+            expected_runtime = expected.get("runtime", {})
+            if (
+                isinstance(expected_runtime, dict)
+                and runtime.get("engine_source_sha256") == expected_runtime.get("engine_source_sha256")
+                and runtime.get("build_lock_sha256") == expected_runtime.get("build_lock_sha256")
+                and runtime.get("python_version") == expected_runtime.get("python_version")
+                and contracts == expected.get("release_contracts")
+            ):
+                matching = [candidate]
+        except Exception:
+            pass
+
     if len(matching) != 1:
         raise RuntimeError(
             f"Expected one installer sidecar with hash {expected.get('sidecar_sha256')}, found {len(matching)}"

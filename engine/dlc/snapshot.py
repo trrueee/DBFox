@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -16,7 +16,6 @@ from engine.dlc.api import DlcOperationSpec
 from engine.dlc.compat import CURRENT_DBFOX_VERSION
 from engine.dlc.integrity import canonical_json_bytes
 from engine.dlc.trust import DlcTrustStatus
-from engine.tools.runtime.attempt import ScopedResourceResolver
 from engine.tools.runtime.base import BaseTool
 
 
@@ -43,11 +42,12 @@ class ToolContribution:
 
 @dataclass(frozen=True)
 class ResourceResolverContribution:
-    """A resource resolver contribution bound to its capability owner."""
+    """A resource resolver contribution bound to its capability owner and platform binding."""
 
     kind: str
-    resolver: ScopedResourceResolver
+    resolver: Any
     owner_id: str
+    binding: Literal["scope_only", "metadata_session"] = "scope_only"
 
 
 @dataclass(frozen=True)

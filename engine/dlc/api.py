@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Protocol, TypeVar
+from typing import Any, Literal, Protocol, TypeAlias, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -43,11 +43,11 @@ TInput = TypeVar("TInput", bound=BaseModel)
 TOutput = TypeVar("TOutput", bound=BaseModel)
 
 # Neutral project resource provider contract: DLC receives only project_id (no Session)
-ExtensionProjectResourceProvider = Callable[[str], Sequence[ProjectResourceDescriptor]]
+ExtensionProjectResourceProvider: TypeAlias = Callable[[str], Sequence[ProjectResourceDescriptor]]
 
 # Neutral context contributor contract: DLC receives only ContextContributionInput (no Session)
-ExtensionContextContributor = ContextContributor
-ExtensionContextContributorFactory = Callable[[], ContextContributor]
+ExtensionContextContributor: TypeAlias = ContextContributor
+ExtensionContextContributorFactory: TypeAlias = Callable[[], ContextContributor]
 
 
 @dataclass(frozen=True)

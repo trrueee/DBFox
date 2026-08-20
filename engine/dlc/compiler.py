@@ -117,7 +117,7 @@ class ContributionCompiler:
         *,
         built_in_tools: Sequence[ToolContribution | BaseTool[Any, Any]] | None = None,
         built_in_resource_providers: Sequence[ProjectResourceProvider] | None = None,
-        built_in_resource_resolvers: Sequence[tuple[str, Any] | ResourceResolverContribution] | None = None,
+        built_in_resource_resolvers: Sequence[tuple[str, Any] | tuple[str, Any, str] | ResourceResolverContribution] | None = None,
         built_in_context_contributors: Sequence[Callable[[Session], ContextContributor]] | None = None,
     ) -> RuntimeContributionSnapshot:
         """Execute the full compilation pipeline and return an immutable RuntimeContributionSnapshot."""
@@ -194,21 +194,27 @@ class ContributionCompiler:
             resolved_providers = list(built_in_resource_providers)
 
         if built_in_resource_resolvers is None:
-            from engine.db import SessionLocal
             from engine.github.resource import resolve_github_repository
             from engine.tools.runtime.resource_context import resolve_workspace_resource
 
             resolved_resolvers: list[ResourceResolverContribution] = [
-                ResourceResolverContribution(kind="database", resolver=lambda ref: SessionLocal(), owner_id="dbfox.builtin"),
-                ResourceResolverContribution(kind="workspace", resolver=lambda ref: resolve_workspace_resource(SessionLocal(), ref), owner_id="dbfox.builtin"),
-                ResourceResolverContribution(kind="github.repository", resolver=lambda ref: resolve_github_repository(SessionLocal(), ref), owner_id="dbfox.builtin"),
+                ResourceResolverContribution(kind="database", resolver=lambda db, _ref: db, owner_id="dbfox.builtin", binding="metadata_session"),
+                ResourceResolverContribution(kind="workspace", resolver=resolve_workspace_resource, owner_id="dbfox.builtin", binding="metadata_session"),
+                ResourceResolverContribution(kind="github.repository", resolver=resolve_github_repository, owner_id="dbfox.builtin", binding="metadata_session"),
             ]
         else:
-            resolved_resolvers = [
-                r if isinstance(r, ResourceResolverContribution)
-                else ResourceResolverContribution(kind=r[0], resolver=r[1], owner_id="dbfox.builtin")
-                for r in built_in_resource_resolvers
-            ]
+            resolved_resolvers = []
+            for r in built_in_resource_resolvers:
+                if isinstance(r, ResourceResolverContribution):
+                    resolved_resolvers.append(r)
+                elif isinstance(r, tuple) and len(r) >= 3:
+                    resolved_resolvers.append(
+                        ResourceResolverContribution(kind=r[0], resolver=r[1], owner_id="dbfox.builtin", binding=r[2])  # type: ignore[arg-type]
+                    )
+                else:
+                    resolved_resolvers.append(
+                        ResourceResolverContribution(kind=r[0], resolver=r[1], owner_id="dbfox.builtin", binding="metadata_session")
+                    )
 
         if built_in_context_contributors is None:
             from engine.agent.workspace_context import WorkspaceContextContributor
@@ -221,10 +227,10 @@ class ContributionCompiler:
         else:
             resolved_context = list(built_in_context_contributors)
 
-        # 4. Seed validation ToolRegistry to validate staged DLC tools against authoritative rules
-        validation_tool_registry = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
+        # 4. Accepted global state initialized with built-in contributions
+        accepted_tool_registry = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
         for tc in resolved_built_in_tools:
-            validation_tool_registry.register(tc.tool, owner=tc.owner_id, package_digest=tc.package_digest)
+            accepted_tool_registry.register(tc.tool, owner=tc.owner_id, package_digest=tc.package_digest)
 
         known_resolver_kinds: set[str] = {rc.kind for rc in resolved_resolvers}
         known_artifact_types: set[str] = set(_KNOWN_ARTIFACT_TYPES) | {
@@ -240,7 +246,17 @@ class ContributionCompiler:
         all_artifact_contracts: list[ArtifactContractContribution] = []
         all_operations: list[DlcOperationContribution] = []
 
-        # 5. Activate each enabled DLC in canonical order with isolation
+        def _clone_tool_registry(base: ToolRegistry) -> ToolRegistry:
+            cloned = ToolRegistry(available_backends=base._available_backends)
+            for name in base.tool_names():
+                cloned.register(
+                    base.require(name),
+                    owner=base.owner_of(name),
+                    package_digest=base.package_digest_of(name),
+                )
+            return cloned
+
+        # 5. Activate each enabled DLC in canonical order with strict transactional isolation
         for record in enabled_records:
             dlc_id = record.dlc_id
             selected_digest = record.selected_digest
@@ -297,7 +313,13 @@ class ContributionCompiler:
                 host = DefaultBackendExtensionHost(staging)
                 register_func(host)
 
-                # Validate staged tools with real ToolRegistry
+                # -----------------------------------------------------------------
+                # Transactional Validation of ALL candidate contributions
+                # -----------------------------------------------------------------
+
+                # 1. Validate candidate tools against a clone of the accepted registry
+                candidate_tool_registry = _clone_tool_registry(accepted_tool_registry)
+                candidate_tools: list[ToolContribution] = []
                 for tool in staging.tools:
                     # In R2 v1, installable DLC tools must use in_process execution backend
                     if tool.execution.backend != "in_process":
@@ -307,59 +329,39 @@ class ContributionCompiler:
                             "Dynamic DLC tools in v1 must use 'in_process' execution backend.",
                         )
                     _check_tool_permissions(manifest, tool)
-                    # Authoritative ToolRegistry validation
-                    validation_tool_registry.register(
+                    # Authoritative ToolRegistry validation on candidate clone
+                    candidate_tool_registry.register(
                         tool,
                         owner=dlc_id,
                         package_digest=selected_digest,
                     )
+                    candidate_tools.append(
+                        ToolContribution(tool=tool, owner_id=dlc_id, package_digest=selected_digest)
+                    )
 
-                for kind, _ in staging.resource_resolvers:
-                    if kind in known_resolver_kinds:
+                # 2. Validate candidate resource resolvers
+                candidate_resolvers: list[ResourceResolverContribution] = []
+                candidate_resolver_kinds: set[str] = set()
+                for kind, resolver in staging.resource_resolvers:
+                    if kind in known_resolver_kinds or kind in candidate_resolver_kinds:
                         raise DlcError(
                             DlcErrorCode.REGISTRATION_CONFLICT,
                             f"Resource resolver kind '{kind}' from DLC '{dlc_id}' conflicts with an existing resolver",
                         )
-
-                for art_type, schema_ver, _ in staging.artifact_contracts:
-                    if art_type in known_artifact_types:
-                        raise DlcError(
-                            DlcErrorCode.REGISTRATION_CONFLICT,
-                            f"Artifact type '{art_type}' from DLC '{dlc_id}' conflicts with an existing artifact type",
-                        )
-
-                for op_spec in staging.operations:
-                    _check_operation_permissions(manifest, op_spec)
-                    op_key = (dlc_id, op_spec.name)
-                    if op_key in known_operations:
-                        raise DlcError(
-                            DlcErrorCode.REGISTRATION_CONFLICT,
-                            f"Operation '{op_spec.name}' from DLC '{dlc_id}' is already registered",
-                        )
-
-                # Atomically register artifact contracts for this DLC before committing other contributions
-                if staging.artifact_contracts:
-                    register_artifact_payload_contracts_atomic(staging.artifact_contracts)
-
-                # Commit staged contributions
-                for tool in staging.tools:
-                    all_tools.append(
-                        ToolContribution(tool=tool, owner_id=dlc_id, package_digest=selected_digest)
+                    candidate_resolver_kinds.add(kind)
+                    candidate_resolvers.append(
+                        ResourceResolverContribution(kind=kind, resolver=resolver, owner_id=dlc_id, binding="scope_only")
                     )
 
-                # Adapt neutral resource providers: (project_id) -> Sequence -> (db, project_id) -> tuple
+                # 3. Validate candidate resource providers
+                candidate_providers: list[ProjectResourceProvider] = []
                 for provider in staging.resource_providers:
                     def _make_adapted_provider(p: ExtensionProjectResourceProvider) -> ProjectResourceProvider:
                         return lambda _db, project_id: tuple(p(project_id))
-                    all_resource_providers.append(_make_adapted_provider(provider))
+                    candidate_providers.append(_make_adapted_provider(provider))
 
-                for kind, resolver in staging.resource_resolvers:
-                    known_resolver_kinds.add(kind)
-                    all_resource_resolvers.append(
-                        ResourceResolverContribution(kind=kind, resolver=resolver, owner_id=dlc_id)
-                    )
-
-                # Adapt neutral context contributors: ContextContributor / factory -> Callable[[Session], ContextContributor]
+                # 4. Validate candidate context contributors
+                candidate_context: list[Callable[[Session], ContextContributor]] = []
                 for contributor in staging.context_contributors:
                     def _make_adapted_context(c: Any) -> Callable[[Session], ContextContributor]:
                         if isinstance(c, type):
@@ -367,11 +369,19 @@ class ContributionCompiler:
                         if callable(c) and not hasattr(c, "build"):
                             return lambda _session: c()
                         return lambda _session: c
-                    all_context_contributors.append(_make_adapted_context(contributor))
+                    candidate_context.append(_make_adapted_context(contributor))
 
+                # 5. Validate candidate artifact contracts
+                candidate_artifacts: list[ArtifactContractContribution] = []
+                candidate_artifact_types: set[str] = set()
                 for art_type, schema_ver, validator in staging.artifact_contracts:
-                    known_artifact_types.add(art_type)
-                    all_artifact_contracts.append(
+                    if art_type in known_artifact_types or art_type in candidate_artifact_types:
+                        raise DlcError(
+                            DlcErrorCode.REGISTRATION_CONFLICT,
+                            f"Artifact type '{art_type}' from DLC '{dlc_id}' conflicts with an existing artifact type",
+                        )
+                    candidate_artifact_types.add(art_type)
+                    candidate_artifacts.append(
                         ArtifactContractContribution(
                             artifact_type=art_type,
                             schema_version=schema_ver,
@@ -380,12 +390,51 @@ class ContributionCompiler:
                         )
                     )
 
+                # 6. Validate candidate operations
+                candidate_operations: list[DlcOperationContribution] = []
+                candidate_op_keys: set[tuple[str, str]] = set()
                 for op_spec in staging.operations:
-                    known_operations.add((dlc_id, op_spec.name))
-                    all_operations.append(
+                    _check_operation_permissions(manifest, op_spec)
+                    op_key = (dlc_id, op_spec.name)
+                    if op_key in known_operations or op_key in candidate_op_keys:
+                        raise DlcError(
+                            DlcErrorCode.REGISTRATION_CONFLICT,
+                            f"Operation '{op_spec.name}' from DLC '{dlc_id}' is already registered",
+                        )
+                    candidate_op_keys.add(op_key)
+                    candidate_operations.append(
                         DlcOperationContribution(dlc_id=dlc_id, spec=op_spec)
                     )
 
+                # -----------------------------------------------------------------
+                # PROMOTE: All validations passed, commit candidate contributions
+                # -----------------------------------------------------------------
+
+                # Atomically register artifact payload contracts for this DLC
+                if staging.artifact_contracts:
+                    register_artifact_payload_contracts_atomic(staging.artifact_contracts)
+
+                # Promote tools & registry
+                accepted_tool_registry = candidate_tool_registry
+                all_tools.extend(candidate_tools)
+
+                # Promote resolvers & providers
+                known_resolver_kinds.update(candidate_resolver_kinds)
+                all_resource_resolvers.extend(candidate_resolvers)
+                all_resource_providers.extend(candidate_providers)
+
+                # Promote context
+                all_context_contributors.extend(candidate_context)
+
+                # Promote artifacts
+                known_artifact_types.update(candidate_artifact_types)
+                all_artifact_contracts.extend(candidate_artifacts)
+
+                # Promote operations
+                known_operations.update(candidate_op_keys)
+                all_operations.extend(candidate_operations)
+
+                # Promote active DLC identity
                 active_dlcs.append(
                     ActivatedDlcIdentity(
                         dlc_id=dlc_id,
@@ -414,7 +463,7 @@ class ContributionCompiler:
                     )
                 )
                 purge_dlc_namespace(namespace)
-                # Broken DLC isolation: do not fail entire runtime
+                # Broken DLC isolation: candidate state discarded, accepted state untouched
 
         # 6. Compute deterministic snapshot ID
         active_dlc_tuple = tuple(active_dlcs)

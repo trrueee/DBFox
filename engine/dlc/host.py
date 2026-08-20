@@ -92,6 +92,26 @@ class _StagedResourcesHost:
                 DlcErrorCode.REGISTRATION_CONFLICT,
                 f"DLC '{self._staging.dlc_id}' registered a non-callable resource resolver for kind '{kind}'",
             )
+        import inspect
+        try:
+            sig = inspect.signature(resolver)
+            pos_params = [
+                p for p in sig.parameters.values()
+                if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                and p.default == inspect.Parameter.empty
+            ]
+            total_params = [
+                p for p in sig.parameters.values()
+                if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+            ]
+            if len(pos_params) > 1 or len(total_params) > 1:
+                raise DlcError(
+                    DlcErrorCode.REGISTRATION_CONFLICT,
+                    f"DLC '{self._staging.dlc_id}' registered a multi-argument resource resolver for kind '{kind}'. "
+                    "Runtime DLC resource resolvers must accept exactly one argument: (ref: ResourceScopeRef).",
+                )
+        except (ValueError, TypeError):
+            pass
         for existing_kind, _ in self._staging.resource_resolvers:
             if existing_kind == kind:
                 raise DlcError(
