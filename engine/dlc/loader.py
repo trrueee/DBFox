@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import importlib.machinery
 import importlib.util
@@ -24,6 +23,7 @@ from engine.dlc.manifest import DlcManifest
 from engine.dlc.trust import (
     DlcTrustStatus,
     DlcTrustStore,
+    DlcTrustVerifier,
     compute_key_fingerprint,
     public_key_from_base64,
 )
@@ -231,41 +231,62 @@ def reverify_installed_package(
     key_fingerprint: str | None = None
 
     if signature_file.is_file():
-        sig_b64 = signature_file.read_text("ascii").strip()
         try:
-            sig_bytes = base64.b64decode(sig_b64)
+            signature_base64 = signature_file.read_text("ascii").strip()
         except Exception as exc:
             raise DlcError(
                 DlcErrorCode.INVALID_SIGNATURE,
-                f"Invalid base64 signature in {signature_file}: {exc}",
+                f"Failed to read signature for package '{dlc_id}': {exc}",
             ) from exc
 
-        # Try verifying against trust store
-        verified = False
-        for trusted_key_b64 in trust_store.list_trusted_keys():
-            try:
-                pub_key = public_key_from_base64(trusted_key_b64)
-                pub_key.verify(sig_bytes, signed_payload)
-                trust_status = DlcTrustStatus.TRUSTED_SIGNED
-                key_fingerprint = compute_key_fingerprint(pub_key)
-                verified = True
-                break
-            except Exception:
-                continue
+        if manifest.manifest_schema_version == 2:
+            publisher_key_base64 = manifest.publisher_key
+            if publisher_key_base64 is None:
+                raise DlcError(
+                    DlcErrorCode.INVALID_MANIFEST,
+                    f"Schema v2 package '{dlc_id}' is missing publisherKey",
+                )
+        else:
+            publisher_key_base64 = (
+                trust_store.get_public_key(expected_publisher_key_id)
+                if expected_publisher_key_id is not None
+                else None
+            )
+            if publisher_key_base64 is None:
+                raise DlcError(
+                    DlcErrorCode.UNTRUSTED_PUBLISHER,
+                    f"No trusted external publisher key is available for legacy package '{dlc_id}'",
+                )
 
-        if not verified:
+        if not DlcTrustVerifier.verify_signature(
+            signed_payload,
+            signature_base64,
+            publisher_key_base64,
+        ):
             raise DlcError(
-                DlcErrorCode.UNTRUSTED_PUBLISHER,
-                f"Signature on package '{dlc_id}' is not trusted by current trust store",
+                DlcErrorCode.INVALID_SIGNATURE,
+                f"Digital signature verification failed for installed package '{dlc_id}'",
             )
 
-        if expected_publisher_key_id is not None and key_fingerprint != expected_publisher_key_id:
+        public_key = public_key_from_base64(publisher_key_base64)
+        key_fingerprint = compute_key_fingerprint(public_key)
+        if (
+            expected_publisher_key_id is not None
+            and key_fingerprint != expected_publisher_key_id.lower()
+        ):
             raise DlcError(
-                DlcErrorCode.UNTRUSTED_PUBLISHER,
-                f"Verified publisher key fingerprint '{key_fingerprint}' does not match registered publisher '{expected_publisher_key_id}'",
+                DlcErrorCode.PUBLISHER_KEY_MISMATCH,
+                f"Verified publisher fingerprint '{key_fingerprint}' does not match registered publisher '{expected_publisher_key_id}'",
             )
+        if not trust_store.is_trusted(key_fingerprint):
+            raise DlcError(
+                DlcErrorCode.TRUST_REQUIRED,
+                f"Publisher for installed package '{dlc_id}' is no longer trusted",
+                details={"publisher_key_id": key_fingerprint},
+            )
+        trust_status = DlcTrustStatus.TRUSTED_SIGNED
     else:
-        if not developer_mode:
+        if manifest.manifest_schema_version == 2 or not developer_mode:
             raise DlcError(
                 DlcErrorCode.SIGNATURE_REQUIRED,
                 f"Unsigned package '{dlc_id}' rejected in production mode",

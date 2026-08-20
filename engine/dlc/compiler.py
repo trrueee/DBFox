@@ -108,7 +108,9 @@ class ContributionCompiler:
         developer_mode: bool = False,
     ) -> None:
         self.storage_root = storage_root
-        self.trust_store = trust_store or DlcTrustStore()
+        self.trust_store = trust_store or DlcTrustStore(
+            storage_root=self.storage_root
+        )
         self.developer_mode = developer_mode
         self.registry = InstalledDlcRegistry(storage_root)
 

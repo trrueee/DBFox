@@ -64,7 +64,22 @@ class DlcPackageVerifier:
         developer_mode: bool = False,
         publisher_key_base64: str | None = None,
     ) -> VerifiedDlcPackage:
-        """Verify a .dbfox-dlc file from path."""
+        """Verify authenticity and require the resulting publisher trust policy."""
+        verified_package = self.authenticate_archive_file(
+            archive_path,
+            developer_mode=developer_mode,
+            publisher_key_base64=publisher_key_base64,
+        )
+        return self._require_trusted(verified_package)
+
+    def authenticate_archive_file(
+        self,
+        archive_path: Path,
+        *,
+        developer_mode: bool = False,
+        publisher_key_base64: str | None = None,
+    ) -> VerifiedDlcPackage:
+        """Authenticate a package without treating an unknown valid key as trusted."""
         if not archive_path.is_file():
             raise DlcError(
                 DlcErrorCode.INVALID_ARCHIVE,
@@ -79,7 +94,7 @@ class DlcPackageVerifier:
             )
 
         raw_bytes = archive_path.read_bytes()
-        return self.verify_archive_bytes(
+        return self.authenticate_archive_bytes(
             raw_bytes,
             developer_mode=developer_mode,
             publisher_key_base64=publisher_key_base64,
@@ -92,7 +107,22 @@ class DlcPackageVerifier:
         developer_mode: bool = False,
         publisher_key_base64: str | None = None,
     ) -> VerifiedDlcPackage:
-        """Verify .dbfox-dlc archive bytes."""
+        """Verify authenticity and require the resulting publisher trust policy."""
+        verified_package = self.authenticate_archive_bytes(
+            raw_bytes,
+            developer_mode=developer_mode,
+            publisher_key_base64=publisher_key_base64,
+        )
+        return self._require_trusted(verified_package)
+
+    def authenticate_archive_bytes(
+        self,
+        raw_bytes: bytes,
+        *,
+        developer_mode: bool = False,
+        publisher_key_base64: str | None = None,
+    ) -> VerifiedDlcPackage:
+        """Authenticate .dbfox-dlc bytes while preserving unknown-publisher state."""
         if len(raw_bytes) > MAX_ARCHIVE_BYTES:
             raise DlcError(
                 DlcErrorCode.PACKAGE_TOO_LARGE,
@@ -257,11 +287,27 @@ class DlcPackageVerifier:
             canonical_integrity = integrity.canonical_bytes()
             signed_payload = build_signed_message_bytes(canonical_manifest, canonical_integrity)
 
+            embedded_publisher_key = manifest.publisher_key
+            if manifest.manifest_schema_version == 2:
+                if (
+                    publisher_key_base64 is not None
+                    and publisher_key_base64 != embedded_publisher_key
+                ):
+                    raise DlcError(
+                        DlcErrorCode.PUBLISHER_KEY_MISMATCH,
+                        "External publisher key does not match the signed manifest publisherKey",
+                    )
+                effective_publisher_key = embedded_publisher_key
+                developer_trust_bypass = False
+            else:
+                effective_publisher_key = publisher_key_base64
+                developer_trust_bypass = developer_mode
+
             trust_status, key_fingerprint = self.trust_store.verify_package_trust(
                 signed_payload,
                 signature_base64,
-                publisher_key_base64,
-                developer_mode=developer_mode,
+                effective_publisher_key,
+                developer_mode=developer_trust_bypass,
             )
 
             return VerifiedDlcPackage(
@@ -272,8 +318,24 @@ class DlcPackageVerifier:
                 trust_status=trust_status,
                 publisher_key_id=key_fingerprint,
                 signature_base64=signature_base64,
-                publisher_key_base64=publisher_key_base64,
+                publisher_key_base64=effective_publisher_key,
             )
+
+    @staticmethod
+    def _require_trusted(verified_package: VerifiedDlcPackage) -> VerifiedDlcPackage:
+        if verified_package.trust_status != DlcTrustStatus.UNTRUSTED:
+            return verified_package
+        fingerprint = verified_package.publisher_key_id
+        raise DlcError(
+            DlcErrorCode.TRUST_REQUIRED,
+            "Package signature is authentic, but the publisher is not trusted",
+            details={
+                "dlc_id": verified_package.manifest.id,
+                "package_digest": verified_package.package_digest,
+                "publisher_key_id": fingerprint,
+                "publisher_key_base64": verified_package.publisher_key_base64,
+            },
+        )
 
 
 def _compute_stream_sha256(stream: IO[bytes]) -> tuple[str, int]:

@@ -5,10 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from engine.dlc.errors import DlcError, DlcErrorCode
 from engine.dlc.registry import InstalledDlcRecord, InstalledDlcRegistry
 from engine.dlc.store import DlcPackageStore
 from engine.dlc.trust import DlcTrustStatus, DlcTrustStore
-from engine.dlc.verifier import DlcPackageVerifier
+from engine.dlc.verifier import DlcPackageVerifier, VerifiedDlcPackage
 
 
 
@@ -33,10 +34,54 @@ class DlcPackageService:
         trust_store: DlcTrustStore | None = None,
     ) -> None:
         self.storage_root = storage_root.resolve()
-        self.trust_store = trust_store or DlcTrustStore()
+        self.trust_store = trust_store or DlcTrustStore(storage_root=self.storage_root)
         self.verifier = DlcPackageVerifier(self.trust_store)
         self.store = DlcPackageStore(self.storage_root)
         self.registry = InstalledDlcRegistry(self.storage_root)
+
+    def inspect_from_file(self, archive_path: Path) -> VerifiedDlcPackage:
+        """Authenticate a v2 single-file package without installing or trusting it."""
+        return self.verifier.authenticate_archive_file(archive_path)
+
+    def trust_publisher_from_file(
+        self,
+        archive_path: Path,
+        *,
+        expected_package_digest: str,
+        expected_publisher_key_id: str,
+    ) -> str:
+        """Re-authenticate an inspected v2 package before persisting its actual key."""
+        verified_package = self.verifier.authenticate_archive_file(archive_path)
+        if verified_package.manifest.manifest_schema_version != 2:
+            raise DlcError(
+                DlcErrorCode.INVALID_MANIFEST,
+                "Publisher trust prompts are supported only for single-file manifest schema v2 packages",
+            )
+        if verified_package.package_digest != expected_package_digest.lower():
+            raise DlcError(
+                DlcErrorCode.PACKAGE_TAMPERED,
+                "Package digest changed after inspection; publisher trust was not persisted",
+                details={
+                    "expected_package_digest": expected_package_digest.lower(),
+                    "actual_package_digest": verified_package.package_digest,
+                },
+            )
+        if verified_package.publisher_key_id != expected_publisher_key_id.lower():
+            raise DlcError(
+                DlcErrorCode.PUBLISHER_KEY_MISMATCH,
+                "Embedded publisherKey changed after inspection; publisher trust was not persisted",
+                details={
+                    "expected_publisher_key_id": expected_publisher_key_id.lower(),
+                    "actual_publisher_key_id": verified_package.publisher_key_id,
+                },
+            )
+        publisher_key_base64 = verified_package.publisher_key_base64
+        if publisher_key_base64 is None:
+            raise DlcError(
+                DlcErrorCode.INVALID_SIGNATURE,
+                "Authenticated v2 package did not yield an embedded publisher key",
+            )
+        return self.trust_store.add_trusted_key(publisher_key_base64)
 
     def install_from_file(
         self,

@@ -161,7 +161,7 @@ def test_install_unsigned_package_in_production_mode_rejected(
     assert exc_info.value.code == DlcErrorCode.SIGNATURE_REQUIRED
 
 
-def test_untrusted_publisher_key_rejected_in_production(
+def test_authentic_untrusted_publisher_requires_explicit_trust(
     tmp_path: Path,
     dlc_service: DlcPackageService,
 ):
@@ -178,7 +178,7 @@ def test_untrusted_publisher_key_rejected_in_production(
             publisher_key_base64=other_pub_b64,
         )
 
-    assert exc_info.value.code == DlcErrorCode.UNTRUSTED_PUBLISHER
+    assert exc_info.value.code == DlcErrorCode.TRUST_REQUIRED
 
 
 # ---------------------------------------------------------------------------
