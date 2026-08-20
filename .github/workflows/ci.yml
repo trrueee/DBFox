@@ -308,7 +308,7 @@ jobs:
         run: |
           ./.build_venv/bin/python build_sidecar.py
           test -x desktop/src-tauri/binaries/dbfox-engine-x86_64-unknown-linux-gnu
-          node desktop/scripts/smoke-sidecar.mjs
+          SIDECAR_PYTHON=./.build_venv/bin/python node desktop/scripts/smoke-sidecar.mjs
 
   supply-chain-audit:
     name: Locked dependency security audit
@@ -592,6 +592,7 @@ jobs:
           path: |
             reports/host-tuple.txt
             reports/release-artifact-verification.json
+            reports/dlc-packaged-e2e-*.json
             desktop/src-tauri/binaries/dbfox-engine-runtime-manifest.json
             desktop/src-tauri/target/release/bundle/**
           if-no-files-found: error

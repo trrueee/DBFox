@@ -286,6 +286,20 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
 - The UI adds no package registry cache or second state model; generated Lifecycle API responses
   remain the source for durable intent and runtime projection display.
 
+### Packaged Lifecycle Release Contract
+- The committed `acme.echo` source fixture owns a backend typed operation and Artifact contract,
+  plus visible frontend Dock and Artifact renderer contributions. It imports only the public
+  Extension API and is assembled with the host verifier's existing canonical package helper.
+- The final frozen Sidecar smoke drives the exact product lifecycle sequence:
+  `absent → install-disabled → enable-pending → restart-active exact digest → disable-pending →
+  restart-absent → inactive uninstall/data retained`. It also rejects a payload-tampered archive
+  before registry mutation and proves the activation marker is absent before restart.
+- Rust's asset protocol contract serves the selected digest only while it is present in the active
+  projection and returns `403` for that same old digest after projection reset. Frontend tests load
+  the committed fixture module and stage both visible contribution types through the real Host.
+- `release-platform-contract` runs this proof against the final PyInstaller Sidecar on Linux,
+  Windows, and macOS and uploads a host-tuple-bound JSON evidence report beside each installer.
+
 ### Two-Tiered Tool Execution Identity
 1. **Tool Contract Identity**:
    - `tool_name`, `declared_version`, `contract_hash`.
@@ -342,7 +356,8 @@ Error States:
 - **R3**: Frontend Runtime DLC Host (Tauri custom asset protocol & dynamic ESM loader).
 - **R4.0**: Single-file Publisher Trust (CLOSED).
 - **R4.1**: Local-authenticated Lifecycle API (CLOSED).
-- **R4.2**: Install from File UI & DLC Center in Desktop App (IN-PROGRESS).
+- **R4.2**: Install from File UI & DLC Center in Desktop App (CLOSED).
+- **R4.3**: Packaged cross-platform lifecycle proof (CLOSED).
 - **R5**: Conformance Proof & Data Ownership — Decouple `dbfox.github` into `dbfox.github-1.0.0.dbfox-dlc`.
 - **R6**: Side-by-Side Update & Rollback Lifecycle.
 - **R7**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`).
