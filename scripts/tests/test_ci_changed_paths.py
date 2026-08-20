@@ -8,8 +8,9 @@ D. Dependency lock change
 E. Migration/model change
 F. P9.0-like resource seam change
 G. Future P9 GitHub DLC change
-H. Workflow/CI file change (forces full run)
-I. Non-PR events (push to main, schedule, dispatch -> full run)
+H. Installable DLC source change
+I. Workflow/CI file change (forces full run)
+J. Non-PR events (push to main, schedule, dispatch -> full run)
 """
 
 from __future__ import annotations
@@ -145,7 +146,27 @@ def test_scenario_g_future_p9_github_dlc() -> None:
     assert res["supply_chain"] is False
 
 
-def test_scenario_h_workflow_ci_change_forces_full() -> None:
+def test_scenario_h_installable_dlc_source_tree() -> None:
+    files = [
+        "dlcs/dbfox.github/manifest.template.json",
+        "dlcs/dbfox.github/backend/entry.py",
+        "dlcs/dbfox.github/frontend/index.js",
+    ]
+    res = classify_changes(files, event_name="pull_request")
+
+    assert res["full"] is False
+    assert res["backend"] is True
+    assert res["python_quality"] is True
+    assert res["sidecar"] is True
+    assert res["frontend"] is True
+    assert res["migration"] is False
+    assert res["agent_runtime"] is False
+    assert res["isolated_worker"] is False
+    assert res["rust"] is False
+    assert res["supply_chain"] is False
+
+
+def test_scenario_i_workflow_ci_change_forces_full() -> None:
     files = [".github/workflows/ci.yml"]
     res = classify_changes(files, event_name="pull_request")
 
@@ -161,7 +182,7 @@ def test_scenario_h_workflow_ci_change_forces_full() -> None:
     assert res["supply_chain"] is True
 
 
-def test_scenario_i_non_pr_events_force_full() -> None:
+def test_scenario_j_non_pr_events_force_full() -> None:
     for event in ("push", "schedule", "workflow_dispatch"):
         res = classify_changes([], event_name=event)
         assert res["full"] is True

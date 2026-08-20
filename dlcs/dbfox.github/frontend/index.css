@@ -1,0 +1,90 @@
+.dbfox-github {
+  display: grid;
+  gap: 10px;
+  color: var(--text-primary, #e5e7eb);
+  font-size: 12px;
+}
+
+.dbfox-github__bindings,
+.dbfox-github__files {
+  display: grid;
+  gap: 4px;
+}
+
+.dbfox-github__binding,
+.dbfox-github__file,
+.dbfox-github__up {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.dbfox-github__binding:hover,
+.dbfox-github__binding.is-active,
+.dbfox-github__file:hover,
+.dbfox-github__up:hover {
+  border-color: var(--border-subtle, #374151);
+  background: var(--surface-hover, #1f2937);
+}
+
+.dbfox-github__binding small {
+  margin-left: auto;
+  color: var(--text-muted, #9ca3af);
+}
+
+.dbfox-github__remove {
+  padding: 0 3px;
+  color: var(--text-muted, #9ca3af);
+}
+
+.dbfox-github__form {
+  display: grid;
+  gap: 6px;
+}
+
+.dbfox-github__form input,
+.dbfox-github__form button {
+  border: 1px solid var(--border-subtle, #374151);
+  border-radius: 6px;
+  background: var(--surface-raised, #111827);
+  color: inherit;
+  padding: 7px 8px;
+}
+
+.dbfox-github__error {
+  color: var(--danger, #f87171);
+}
+
+.dbfox-github-file {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+}
+
+.dbfox-github-file header,
+.dbfox-github-artifact {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle, #374151);
+}
+
+.dbfox-github-file header span,
+.dbfox-github-artifact small {
+  color: var(--text-muted, #9ca3af);
+}
+
+.dbfox-github-file pre {
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  white-space: pre-wrap;
+  tab-size: 2;
+}

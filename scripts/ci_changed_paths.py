@@ -31,6 +31,9 @@ FULL_TRIGGER_PATTERNS = (
 BACKEND_PATTERNS = (
     "engine/*",
     "engine/**/*",
+    "dlcs/*/backend/*",
+    "dlcs/*/backend/**/*",
+    "dlcs/*/manifest*.json",
     "conftest.py",
     "pyproject.toml",
     "pytest.ini",
@@ -44,6 +47,8 @@ PYTHON_QUALITY_PATTERNS = (
     "build_sidecar.py",
     "scripts/*",
     "scripts/**/*",
+    "dlcs/*/backend/*",
+    "dlcs/*/backend/**/*",
     "conftest.py",
     "requirements.lock",
     "requirements-dev.lock",
@@ -95,6 +100,9 @@ ISOLATED_WORKER_PATTERNS = (
 SIDECAR_PATTERNS = (
     "engine/*",
     "engine/**/*",
+    "dlcs/*/backend/*",
+    "dlcs/*/backend/**/*",
+    "dlcs/*/manifest*.json",
     "build_sidecar.py",
     ".sidecar-python-version",
     ".sidecar-python-build",
@@ -107,6 +115,9 @@ SIDECAR_PATTERNS = (
 FRONTEND_PATTERNS = (
     "desktop/*",
     "desktop/**/*",
+    "dlcs/*/frontend/*",
+    "dlcs/*/frontend/**/*",
+    "dlcs/*/manifest*.json",
     "engine/api/*",
     "engine/api/**/*",
     "engine/schemas/*",
