@@ -398,10 +398,13 @@ class ContributionCompiler:
                 )
 
             except Exception as exc:
-                err_code = (
-                    exc.code.value if isinstance(getattr(exc, "code", None), DlcErrorCode)
-                    else str(getattr(exc, "code", type(exc).__name__))
-                )
+                exc_code = getattr(exc, "code", None)
+                if isinstance(exc_code, DlcErrorCode):
+                    err_code = exc_code.value
+                elif exc_code is not None:
+                    err_code = str(exc_code)
+                else:
+                    err_code = type(exc).__name__
                 logger.error(f"Failed to activate DLC '{dlc_id}': {exc}", exc_info=True)
                 activation_failures.append(
                     DlcActivationFailure(
