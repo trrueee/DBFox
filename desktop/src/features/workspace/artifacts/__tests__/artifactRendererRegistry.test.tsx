@@ -12,6 +12,7 @@ import { coreArtifactRenderers } from "../coreArtifactRenderers";
 import { dataArtifactRenderers } from "../dataArtifactRenderers";
 import { workspaceArtifactRenderers } from "../workspaceArtifactRenderers";
 import { githubArtifactRenderers } from "../githubArtifactRenderers";
+import { useDlcStore } from "../../../dlc/extensionStore";
 
 vi.mock("../TableArtifactView", () => ({
   TableArtifactView: () => <div data-testid="table-artifact-view" />,
@@ -208,5 +209,30 @@ describe("artifact renderer registry", () => {
     expect(
       container.querySelector('[data-testid="custom-rendered-artifact"]'),
     ).toBeTruthy();
+  });
+
+  it("renders active DLC artifact renderers through the production render path", () => {
+    useDlcStore.getState().setProjectionResult("snap-dlc", {}, {
+      connectors: [],
+      requestedResources: [],
+      dockViews: [],
+      artifactRenderers: [{
+        type: "acme.runtime.artifact",
+        supportedSchemaVersions: [1],
+        parsePayload: (value) => value,
+        render: () => <div data-testid="dlc-rendered-artifact">DLC Artifact</div>,
+      }],
+    });
+    const artifact: ArtifactEnvelope = {
+      id: "dlc-artifact-1",
+      type: "acme.runtime.artifact",
+      schema_version: 1,
+      title: "DLC Artifact",
+      payload: {},
+    };
+
+    const { container } = render(renderArtifact(artifact, { onToast: vi.fn() }));
+    expect(container.querySelector('[data-testid="dlc-rendered-artifact"]')).toBeTruthy();
+    useDlcStore.getState().reset();
   });
 });

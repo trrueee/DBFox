@@ -126,7 +126,7 @@ export function renderArtifact(
   context: ArtifactRendererContext,
   registry: ArtifactRendererRegistry = DEFAULT_ARTIFACT_RENDERER_REGISTRY,
 ): ReactNode {
-  const renderer = registry.get(artifact.type, artifact.schema_version ?? 1);
+  const renderer = getArtifactRenderer(artifact.type, artifact.schema_version ?? 1, registry);
   if (!renderer) {
     return <ArtifactMetadataFallback artifact={artifact} />;
   }

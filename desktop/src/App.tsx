@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import "./App.css";
@@ -25,6 +26,7 @@ import { useConnectionDialogStore } from "./features/resources/connectionDialogS
 import { useProductDockBootstrap } from "./features/dock/useProductDockBootstrap";
 import { useDlcStore } from "./features/dlc/extensionStore";
 import { fetchAndLoadActiveExtensions } from "./features/dlc/extensionLoader";
+import { getRuntimeSession, subscribeEngineState } from "./lib/api/client";
 
 const AppCommandPalette = lazy(() =>
   import("./features/appShell/AppCommandPalette").then((module) => ({
@@ -98,6 +100,7 @@ function AppLayoutFallback() {
 export default function App() {
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const loadedEngineGenerationRef = useRef(0);
 
   const { toast } = useToast();
 
@@ -110,6 +113,31 @@ export default function App() {
     void fetchAndLoadActiveExtensions().catch((error) => {
       recordClientLog("warning", "加载 DLC 扩展失败", error);
     });
+
+    loadedEngineGenerationRef.current = getRuntimeSession().generation;
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+    void subscribeEngineState((status) => {
+      if (disposed) return;
+      if (status.state !== "ready") {
+        useDlcStore.getState().reset();
+        return;
+      }
+      const generation = status.generation ?? 0;
+      if (generation <= loadedEngineGenerationRef.current) return;
+      loadedEngineGenerationRef.current = generation;
+      void fetchAndLoadActiveExtensions().catch((error) => {
+        recordClientLog("warning", "重新加载 DLC 扩展失败", error);
+      });
+    }).then((cleanup) => {
+      if (disposed) cleanup();
+      else unsubscribe = cleanup;
+    });
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
   }, []);
 
   // ── Store selectors ──

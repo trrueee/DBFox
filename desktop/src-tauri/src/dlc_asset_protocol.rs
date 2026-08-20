@@ -8,7 +8,6 @@ pub const MAX_DLC_ASSET_BYTES: usize = 20 * 1024 * 1024; // 20 MiB
 const PROTOCOL_SCHEME: &str = "dlc-asset";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ActiveDlcProjectionItem {
     pub dlc_id: String,
     pub package_version: String,
@@ -17,7 +16,6 @@ pub struct ActiveDlcProjectionItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct RuntimeDlcActivationProjection {
     pub snapshot_id: String,
     pub active_dlcs: Vec<ActiveDlcProjectionItem>,
@@ -57,7 +55,10 @@ impl DlcAssetHostState {
         };
         let normalized = normalize_digest(digest);
         projection.active_dlcs.iter().any(|d| {
-            normalize_digest(&d.package_digest).eq_ignore_ascii_case(&normalized)
+            d.frontend_entrypoint
+                .as_deref()
+                .is_some_and(|entrypoint| !entrypoint.trim().is_empty())
+                && normalize_digest(&d.package_digest).eq_ignore_ascii_case(&normalized)
         })
     }
 
@@ -84,7 +85,10 @@ pub struct ParsedDlcAssetRequest {
 pub fn parse_dlc_asset_url(raw_url: &str) -> Result<ParsedDlcAssetRequest, String> {
     let url = tauri::Url::parse(raw_url).map_err(|e| format!("Invalid URL: {e}"))?;
     if url.scheme() != PROTOCOL_SCHEME {
-        return Err(format!("Invalid scheme '{}': expected '{PROTOCOL_SCHEME}'", url.scheme()));
+        return Err(format!(
+            "Invalid scheme '{}': expected '{PROTOCOL_SCHEME}'",
+            url.scheme()
+        ));
     }
     if let Some(host) = url.host_str() {
         if !host.is_empty() && !host.eq_ignore_ascii_case("localhost") && host != "127.0.0.1" {
@@ -139,55 +143,76 @@ pub fn parse_dlc_asset_url(raw_url: &str) -> Result<ParsedDlcAssetRequest, Strin
     })
 }
 
-pub fn resolve_dlc_packages_root() -> PathBuf {
-    if let Ok(override_dir) = std::env::var("DBFOX_RUNTIME_DIR") {
-        if !override_dir.trim().is_empty() {
-            return PathBuf::from(override_dir).join("dlcs").join("packages");
-        }
+pub fn resolve_dlc_packages_root() -> Option<PathBuf> {
+    resolve_dlc_packages_root_from(|key| std::env::var(key).ok())
+}
+
+fn resolve_dlc_packages_root_from(get_env: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    if let Some(override_dir) =
+        get_env("DBFOX_RUNTIME_DIR").filter(|value| !value.trim().is_empty())
+    {
+        return Some(PathBuf::from(override_dir).join("dlcs").join("packages"));
     }
 
     #[cfg(target_os = "windows")]
     {
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            return PathBuf::from(appdata)
-                .join("DBFox")
-                .join("dlcs")
-                .join("packages");
+        if let Some(appdata) = get_env("APPDATA").filter(|value| !value.trim().is_empty()) {
+            return Some(
+                PathBuf::from(appdata)
+                    .join("DBFox")
+                    .join("dlcs")
+                    .join("packages"),
+            );
         }
     }
 
     #[cfg(target_os = "macos")]
     {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home)
-                .join("Library")
-                .join("Application Support")
-                .join("DBFox")
-                .join("dlcs")
-                .join("packages");
+        if let Some(home) = get_env("HOME").filter(|value| !value.trim().is_empty()) {
+            return Some(
+                PathBuf::from(home)
+                    .join("Library")
+                    .join("Application Support")
+                    .join("DBFox")
+                    .join("dlcs")
+                    .join("packages"),
+            );
         }
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
-            return PathBuf::from(xdg).join("dbfox").join("dlcs").join("packages");
+        if let Some(xdg) = get_env("XDG_DATA_HOME").filter(|value| !value.trim().is_empty()) {
+            return Some(
+                PathBuf::from(xdg)
+                    .join("dbfox")
+                    .join("dlcs")
+                    .join("packages"),
+            );
         }
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home)
-                .join(".local")
-                .join("share")
-                .join("dbfox")
-                .join("dlcs")
-                .join("packages");
+        if let Some(home) = get_env("HOME").filter(|value| !value.trim().is_empty()) {
+            return Some(
+                PathBuf::from(home)
+                    .join(".local")
+                    .join("share")
+                    .join("dbfox")
+                    .join("dlcs")
+                    .join("packages"),
+            );
         }
     }
 
-    PathBuf::from("dlcs").join("packages")
+    None
 }
 
 pub fn mime_for_path(path: &Path) -> &'static str {
-    match path.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase().as_str() {
+    match path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "js" | "mjs" => "text/javascript; charset=utf-8",
         "css" => "text/css; charset=utf-8",
         "json" => "application/json; charset=utf-8",
@@ -254,7 +279,12 @@ pub fn handle_dlc_asset_request(
     }
 
     // 2. Resolve package directory and enforce containment
-    let packages_root = resolve_dlc_packages_root();
+    let Some(packages_root) = resolve_dlc_packages_root() else {
+        return make_text_response(
+            StatusCode::NOT_FOUND,
+            "DLC runtime directory is unavailable",
+        );
+    };
     let base_dir = packages_root
         .join(format!("sha256-{}", parsed.package_digest))
         .join("frontend");
@@ -262,7 +292,10 @@ pub fn handle_dlc_asset_request(
     let canonical_base = match base_dir.canonicalize() {
         Ok(path) => path,
         Err(_) => {
-            return make_text_response(StatusCode::NOT_FOUND, "DLC package frontend assets not found");
+            return make_text_response(
+                StatusCode::NOT_FOUND,
+                "DLC package frontend assets not found",
+            );
         }
     };
 
@@ -347,14 +380,22 @@ mod tests {
         let digest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         assert!(parse_dlc_asset_url(&format!("http://localhost/{digest}/index.js")).is_err());
         assert!(parse_dlc_asset_url(&format!("dlc-asset://evil.com/{digest}/index.js")).is_err());
-        assert!(parse_dlc_asset_url(&format!("dlc-asset://localhost/short_digest/index.js")).is_err());
+        assert!(
+            parse_dlc_asset_url(&format!("dlc-asset://localhost/short_digest/index.js")).is_err()
+        );
     }
 
     #[test]
     fn rejects_path_traversal_segments() {
         let digest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-        assert!(parse_dlc_asset_url(&format!("dlc-asset://localhost/{digest}/../manifest.json")).is_err());
-        assert!(parse_dlc_asset_url(&format!("dlc-asset://localhost/{digest}/frontend/../../backend/entry.py")).is_err());
+        assert!(
+            parse_dlc_asset_url(&format!("dlc-asset://localhost/{digest}/../manifest.json"))
+                .is_err()
+        );
+        assert!(parse_dlc_asset_url(&format!(
+            "dlc-asset://localhost/{digest}/frontend/../../backend/entry.py"
+        ))
+        .is_err());
     }
 
     #[test]
@@ -378,23 +419,99 @@ mod tests {
 
         assert!(state.is_digest_active(digest));
         assert!(state.is_digest_active(&format!("sha256:{digest}")));
-        assert!(!state.is_digest_active("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
+        assert!(!state
+            .is_digest_active("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
 
         // Clear invalidates
         state.clear();
         assert!(!state.is_digest_active(digest));
+
+        state.update_projection(RuntimeDlcActivationProjection {
+            snapshot_id: "snap_empty_entrypoint".to_string(),
+            active_dlcs: vec![ActiveDlcProjectionItem {
+                dlc_id: "acme.empty_frontend".to_string(),
+                package_version: "1.0.0".to_string(),
+                package_digest: digest.to_string(),
+                frontend_entrypoint: Some(" ".to_string()),
+            }],
+        });
+        assert!(!state.is_digest_active(digest));
+    }
+
+    #[test]
+    fn deserializes_the_python_activation_projection_wire_shape() {
+        let projection: RuntimeDlcActivationProjection = serde_json::from_str(
+            r#"{
+                "snapshot_id": "snap_python",
+                "active_dlcs": [{
+                    "dlc_id": "acme.frontend",
+                    "package_version": "1.0.0",
+                    "package_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                    "frontend_entrypoint": "frontend/index.js"
+                }]
+            }"#,
+        )
+        .expect("Python API snake_case projection must deserialize");
+
+        assert_eq!(projection.snapshot_id, "snap_python");
+        assert_eq!(projection.active_dlcs[0].dlc_id, "acme.frontend");
+        assert_eq!(
+            projection.active_dlcs[0].frontend_entrypoint.as_deref(),
+            Some("frontend/index.js")
+        );
+    }
+
+    #[test]
+    fn backend_only_dlc_never_grants_frontend_asset_authority() {
+        let state = DlcAssetHostState::new();
+        let digest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        state.update_projection(RuntimeDlcActivationProjection {
+            snapshot_id: "snap_backend_only".to_string(),
+            active_dlcs: vec![ActiveDlcProjectionItem {
+                dlc_id: "acme.backend".to_string(),
+                package_version: "1.0.0".to_string(),
+                package_digest: digest.to_string(),
+                frontend_entrypoint: None,
+            }],
+        });
+
+        assert!(!state.is_digest_active(digest));
+    }
+
+    #[test]
+    fn packages_root_has_no_current_working_directory_fallback() {
+        assert_eq!(resolve_dlc_packages_root_from(|_| None), None);
+        assert_eq!(
+            resolve_dlc_packages_root_from(|_| Some("  ".to_string())),
+            None
+        );
     }
 
     #[test]
     fn resolves_correct_mime_types() {
-        assert_eq!(mime_for_path(Path::new("index.js")), "text/javascript; charset=utf-8");
-        assert_eq!(mime_for_path(Path::new("index.mjs")), "text/javascript; charset=utf-8");
-        assert_eq!(mime_for_path(Path::new("style.css")), "text/css; charset=utf-8");
+        assert_eq!(
+            mime_for_path(Path::new("index.js")),
+            "text/javascript; charset=utf-8"
+        );
+        assert_eq!(
+            mime_for_path(Path::new("index.mjs")),
+            "text/javascript; charset=utf-8"
+        );
+        assert_eq!(
+            mime_for_path(Path::new("style.css")),
+            "text/css; charset=utf-8"
+        );
         assert_eq!(mime_for_path(Path::new("icon.svg")), "image/svg+xml");
         assert_eq!(mime_for_path(Path::new("icon.png")), "image/png");
-        assert_eq!(mime_for_path(Path::new("data.json")), "application/json; charset=utf-8");
+        assert_eq!(
+            mime_for_path(Path::new("data.json")),
+            "application/json; charset=utf-8"
+        );
         assert_eq!(mime_for_path(Path::new("font.woff2")), "font/woff2");
-        assert_eq!(mime_for_path(Path::new("unknown.bin")), "application/octet-stream");
+        assert_eq!(
+            mime_for_path(Path::new("unknown.bin")),
+            "application/octet-stream"
+        );
     }
 
     #[test]

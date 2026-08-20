@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
 import {
   createStagedExtensionHost,
   initExtensionHostGlobalSdk,
@@ -82,5 +83,51 @@ describe("FrontendExtensionHost", () => {
       // @ts-expect-error test invalid type
       staged.host.requestedResources.register(null);
     }).toThrow(/Invalid requested resource contributor/);
+  });
+
+  it("isolates synchronous render throws inside the DLC error boundary", () => {
+    const staged = createStagedExtensionHost("acme.throwing_dlc");
+    staged.host.connectors.register({
+      id: "acme.throwing_connector",
+      title: "Throwing",
+      icon: null,
+      render: () => {
+        throw new Error("render exploded");
+      },
+    });
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    render(staged.getContributions().connectors[0].render({ projectId: "project-1" }));
+    expect(screen.getByText(/扩展组件加载或渲染失败/)).toBeTruthy();
+    consoleError.mockRestore();
+  });
+
+  it("fails closed when a requested-resource contributor throws", () => {
+    const staged = createStagedExtensionHost("acme.throwing_dlc");
+    staged.host.requestedResources.register(() => {
+      throw new Error("authority unavailable");
+    });
+
+    expect(staged.getContributions().requestedResources[0]({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+    })).toEqual({ complete: false });
+  });
+
+  it("contains connector onAdd callback failures", () => {
+    const staged = createStagedExtensionHost("acme.throwing_dlc");
+    staged.host.connectors.register({
+      id: "acme.throwing_add",
+      title: "Throwing",
+      icon: null,
+      render: () => null,
+      onAdd: () => {
+        throw new Error("add exploded");
+      },
+    });
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(() => staged.getContributions().connectors[0].onAdd?.({ projectId: "project-1" })).not.toThrow();
+    consoleError.mockRestore();
   });
 });

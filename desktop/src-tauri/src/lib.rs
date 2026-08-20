@@ -130,6 +130,9 @@ impl PythonEngine {
                 if let (Some(port), token) = (started.port, &started.token) {
                     if let Ok(projection) = fetch_dlc_activation_projection(port, token) {
                         engine.0.dlc_asset_state.update_projection(projection);
+                    } else {
+                        // A ready engine without a verified projection has no asset authority.
+                        engine.0.dlc_asset_state.clear();
                     }
                 }
             }
@@ -244,6 +247,8 @@ impl PythonEngine {
     fn restart(&self, log: SidecarLog, app: tauri::AppHandle) -> Result<(), String> {
         self.0.startup_cancelled.store(true, Ordering::Release);
         self.0.epoch.fetch_add(1, Ordering::AcqRel);
+        // A new engine generation must re-establish its own activation truth.
+        self.0.dlc_asset_state.clear();
         {
             let mut current = self
                 .0

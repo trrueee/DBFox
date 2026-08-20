@@ -3,6 +3,16 @@
 import * as z from 'zod';
 
 /**
+ * ActiveDlcItem
+ */
+export const zActiveDlcItem = z.object({
+    dlc_id: z.string(),
+    frontend_entrypoint: z.string().nullish(),
+    package_digest: z.string(),
+    package_version: z.string()
+});
+
+/**
  * ApprovalPayload
  */
 export const zApprovalPayload = z.object({
@@ -655,6 +665,14 @@ export const zDiagnosticPolicyResponse = z.object({
     max_lines_per_source: z.int(),
     omitted: z.array(z.string()),
     redacted: z.boolean()
+});
+
+/**
+ * DlcActivationProjectionResponse
+ */
+export const zDlcActivationProjectionResponse = z.object({
+    active_dlcs: z.array(zActiveDlcItem),
+    snapshot_id: z.string()
 });
 
 /**
@@ -2124,6 +2142,11 @@ export const zClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostBody = zBo
  * Successful Response
  */
 export const zClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponse = zSecurityAuditClearedResponse;
+
+/**
+ * Successful Response
+ */
+export const zGetDlcActivationProjectionApiV1DlcsActivationGetResponse = zDlcActivationProjectionResponse;
 
 export const zInvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostPath = z.object({
     dlc_id: z.string(),

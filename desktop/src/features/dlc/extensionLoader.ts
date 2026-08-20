@@ -176,6 +176,8 @@ export async function fetchAndLoadActiveExtensions(
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error("[DLC Host] Failed to fetch and load active DLC projection:", errorMsg);
+    // A failed projection cannot prove that any previous contribution remains active.
+    store.reset();
     store.setError(errorMsg);
   }
 }

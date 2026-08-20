@@ -55,12 +55,5 @@ export function dockViewTitle(
   view: WorkspaceDockTab,
   registry: DockViewRegistry = DEFAULT_REGISTRY,
 ): string {
-  return (
-    registry.get(view.viewType)?.resolveTitle(view) ??
-    useDlcStore
-      .getState()
-      .contributions.dockViews.find((v) => v.viewType === view.viewType)
-      ?.resolveTitle(view) ??
-    view.title
-  );
+  return getDockView(view.viewType, registry)?.resolveTitle(view) ?? view.title;
 }

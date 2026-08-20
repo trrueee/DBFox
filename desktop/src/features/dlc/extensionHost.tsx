@@ -6,7 +6,7 @@ import type {
 } from "./types";
 import type { ResourceConnectorContribution, ConnectorContext } from "../resources/types";
 import type { RequestedResourceContributor } from "../resources/requestedResourceComposition";
-import type { DockViewContribution, DockRenderContext } from "../dock/types";
+import type { DockViewContribution, DockRenderContext, DockViewContext } from "../dock/types";
 import type {
   ArtifactRendererContribution,
   ArtifactEnvelope,
@@ -43,6 +43,14 @@ export interface StagedExtensionHostResult {
   getContributions(): DlcContributionSet;
 }
 
+function DlcRenderCallback({ render }: { render: () => React.ReactNode }) {
+  return <>{render()}</>;
+}
+
+function reportCallbackFailure(dlcId: string, callback: string, error: unknown): void {
+  console.error(`[DLC Host] ${dlcId} ${callback} callback failed:`, error);
+}
+
 /**
  * Creates an isolated, transactional staging host for a DLC registration.
  */
@@ -65,9 +73,20 @@ export function createStagedExtensionHost(dlcId: string): StagedExtensionHostRes
             return React.createElement(
               DlcErrorBoundary,
               { dlcId, componentName: `connector:${contribution.id}` },
-              contribution.render(context),
+              React.createElement(DlcRenderCallback, {
+                render: () => contribution.render(context),
+              }),
             );
           },
+          onAdd: contribution.onAdd
+            ? (context: ConnectorContext) => {
+              try {
+                contribution.onAdd?.(context);
+              } catch (error) {
+                reportCallbackFailure(dlcId, `connector:${contribution.id}:onAdd`, error);
+              }
+            }
+            : undefined,
         };
         connectors.push(safeContribution);
       },
@@ -79,7 +98,14 @@ export function createStagedExtensionHost(dlcId: string): StagedExtensionHostRes
             `[DLC ${dlcId}] Invalid requested resource contributor: must be a function`,
           );
         }
-        requestedResources.push(contributor);
+        requestedResources.push((context) => {
+          try {
+            return contributor(context);
+          } catch (error) {
+            reportCallbackFailure(dlcId, "requestedResources", error);
+            return { complete: false };
+          }
+        });
       },
     },
     dockViews: {
@@ -93,11 +119,37 @@ export function createStagedExtensionHost(dlcId: string): StagedExtensionHostRes
         }
         const safeContribution: DockViewContribution = {
           ...contribution,
+          icon(view: WorkspaceDockTab) {
+            try {
+              return contribution.icon(view);
+            } catch (error) {
+              reportCallbackFailure(dlcId, `dockView:${contribution.viewType}:icon`, error);
+              return null;
+            }
+          },
+          resolveTitle(view: WorkspaceDockTab) {
+            try {
+              return contribution.resolveTitle(view);
+            } catch (error) {
+              reportCallbackFailure(dlcId, `dockView:${contribution.viewType}:resolveTitle`, error);
+              return view.title;
+            }
+          },
+          isVisible(view: WorkspaceDockTab, context: DockViewContext) {
+            try {
+              return contribution.isVisible(view, context);
+            } catch (error) {
+              reportCallbackFailure(dlcId, `dockView:${contribution.viewType}:isVisible`, error);
+              return false;
+            }
+          },
           render(view: WorkspaceDockTab, context: DockRenderContext) {
             return React.createElement(
               DlcErrorBoundary,
               { dlcId, componentName: `dockView:${contribution.viewType}` },
-              contribution.render(view, context),
+              React.createElement(DlcRenderCallback, {
+                render: () => contribution.render(view, context),
+              }),
             );
           },
         };
@@ -117,7 +169,9 @@ export function createStagedExtensionHost(dlcId: string): StagedExtensionHostRes
             return React.createElement(
               DlcErrorBoundary,
               { dlcId, componentName: `artifactRenderer:${contribution.type}` },
-              contribution.render(artifact, context),
+              React.createElement(DlcRenderCallback, {
+                render: () => contribution.render(artifact, context),
+              }),
             );
           },
         };
