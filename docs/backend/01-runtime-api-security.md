@@ -4,19 +4,19 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-12
+> 最后核验：2026-08-21
 >
 > 适用范围：Sidecar 启动、FastAPI、鉴权、公开错误与关闭流程
 >
 > 权威合同：[系统总览](../architecture/system-overview.md)、[Runtime 基础能力 ADR](../architecture/runtime-foundation-decisions.md)、[错误边界合同](../architecture/error-boundary-contract.md)
 >
-> 核心入口：[`engine/main.py`](../../engine/main.py)、[`engine/db.py`](../../engine/db.py)、[`engine/engine_runtime/credentials.py`](../../engine/engine_runtime/credentials.py)
+> 核心入口：[`desktop/main/engine.ts`](../../desktop/main/engine.ts)、[`desktop/main/nodeEngineHost.ts`](../../desktop/main/nodeEngineHost.ts)、[`engine/main.py`](../../engine/main.py)、[`engine/db.py`](../../engine/db.py)、[`engine/engine_runtime/credentials.py`](../../engine/engine_runtime/credentials.py)
 
 ## 1. 本卷回答什么
 
 本卷解释从桌面应用启动到 FastAPI 可接收业务请求的完整过程，并区分：
 
-- Rust Host 拥有什么；
+- Electron Main Host 拥有什么；
 - Python Sidecar 拥有什么；
 - Token 从哪里来、谁可以读取；
 - 为什么 `/health` 也必须鉴权；
@@ -35,13 +35,13 @@ Windows 用户
        ├─ 创建本次 runtime generation
        ├─ 生成并持有本次 loopback Token
        ├─ 启动/观察/终止 Python Sidecar
-       └─ 把当前 endpoint 投影给 React WebView
+       └─ 通过 sandboxed preload 把当前 endpoint 投影给 React Renderer
             └─ 通过 127.0.0.1 HTTP/SSE 调用 FastAPI
 ```
 
 边界规则：
 
-1. WebView 不自行猜端口，不从固定文件读取生产 Token；
+1. Renderer 不自行猜端口，不从固定文件读取生产 Token；
 2. Sidecar 不管理桌面窗口，也不成为自身生命周期的最终权威；
 3. 127.0.0.1 不是可信身份。任何本机进程都可能访问 loopback，因此仍需 Token；
 4. Token 只证明调用者持有本次 Runtime 凭据，不替代数据源权限、工具策略或审批；
@@ -113,11 +113,11 @@ lifespan 退出阶段负责：
 
 ### 4.2 为什么不能硬编码或复用旧 Token
 
-硬编码 Token 会把“持有本次 runtime capability”退化成任何知道源码的人都能调用。跨 generation 复用 Token 则会让旧 WebView、旧日志或旧本机进程继续访问新 Sidecar。
+硬编码 Token 会把“持有本次 runtime capability”退化成任何知道源码的人都能调用。跨 generation 复用 Token 则会让旧 Renderer、旧日志或旧本机进程继续访问新 Sidecar。
 
 正确判断应同时依赖：
 
-- 当前 Rust Host 报告的 Ready 状态；
+- 当前 Electron `EngineSupervisor` 报告的 Ready 状态；
 - 当前 generation；
 - 当前 endpoint；
 - 当前 Token。
@@ -137,7 +137,7 @@ lifespan 退出阶段负责：
 5. 使用常量时间比较检查当前 Token；
 6. 失败时返回固定公开错误，不泄漏期望 Token 或内部配置。
 
-`/health` 也经过鉴权。这一点很重要：Health 不只是“进程活着”，它会成为 Host/WebView 判断当前 runtime 是否可用的协议端点。匿名 health 会给任意本机进程提供探测面，也会使测试绕开真实鉴权链。
+`/health` 也经过鉴权。这一点很重要：Health 不只是“进程活着”，它会成为 Host/Renderer 判断当前 runtime 是否可用的协议端点。匿名 health 会给任意本机进程提供探测面，也会使测试绕开真实鉴权链。
 
 ### 5.2 鉴权不负责什么
 
@@ -267,10 +267,10 @@ HTTP 与 Agent Tool 边界都必须遵循同一可信度原则，但载体不同
 
 - 触发：frozen Sidecar 未收到 Host 注入的 Token；
 - 正确行为：启动失败，不生成 fallback；
-- 排查：Rust 启动参数/环境、runtime manifest、Sidecar 日志；
+- 排查：Electron launcher 的启动参数/环境、runtime manifest、Sidecar 日志；
 - 不正确修复：在 Python 中生成固定开发 Token。
 
-### 10.2 WebView 持有旧 generation
+### 10.2 Renderer 持有旧 generation
 
 - 触发：Sidecar 崩溃并由 Host 重启；
 - 现象：旧端口连接失败或旧 Token 401；
@@ -308,7 +308,7 @@ HTTP 与 Agent Tool 边界都必须遵循同一可信度原则，但载体不同
 
 修改启动、API 或安全边界前后确认：
 
-- [ ] 没有让 Python 与 Rust 同时成为 Sidecar 生命周期权威；
+- [ ] 没有让 Python 与 Electron Main 同时成为 Sidecar 生命周期权威；
 - [ ] 没有新增固定端口、固定 Token 或 production fallback；
 - [ ] `/health`、SSE 和普通 HTTP 使用一致鉴权；
 - [ ] frozen/source 行为差异有显式测试；

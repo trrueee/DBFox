@@ -309,7 +309,12 @@ def load_dlc_backend(
     manifest: DlcManifest,
     package_digest: str,
 ) -> Callable[[BackendExtensionHost], None]:
-    """Load the backend entrypoint of a verified DLC into an isolated module namespace."""
+    """Load trusted DLC code into a collision-resistant, non-security namespace.
+
+    The namespace prevents ordinary module-name collisions.  It does not isolate
+    filesystem, environment, network, subprocess, memory, or process authority.
+    R8A therefore keeps production activation restricted to trusted publishers.
+    """
     if not manifest.entrypoints.backend:
         raise DlcError(
             DlcErrorCode.BACKEND_ENTRYPOINT_INVALID,

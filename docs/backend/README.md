@@ -6,7 +6,7 @@
 >
 > 适用版本：当前 `engine/` 生产实现
 >
-> 最后核验：2026-08-10
+> 最后核验：2026-08-21
 >
 > 读者：项目所有者、后端维护者、Agent/SQL 功能开发者、代码评审者
 
@@ -29,7 +29,7 @@ DBFox 后端不是单一 Web API，而是四个相互约束的系统：
 
 | 系统 | 主要职责 | 耐久事实源 | 关键边界 |
 | --- | --- | --- | --- |
-| Runtime/API | 启动、鉴权、请求限制、公开错误、关闭 | 运行时状态 + 配置 | Rust Host 与 FastAPI Sidecar |
+| Runtime/API | 启动、鉴权、请求限制、公开错误、关闭 | 运行时状态 + 配置 | Electron Main 与 FastAPI Sidecar |
 | Metadata Control Plane | 配置、凭据引用、会话、事件、租约、审计 | SQLite metadata | SQLAlchemy 事务与 Alembic |
 | Data Plane | 外部数据源连接、Catalog、只读 SQL、结果回源 | 外部数据库 + Result Artifact | 安全 SQL 与参数绑定 |
 | Agent Harness | 调度、Provider、工具、上下文、记忆、SSE | SQLite Agent 表 | provider-neutral function calling |
@@ -93,7 +93,7 @@ DBFox 后端不是单一 Web API，而是四个相互约束的系统：
 
 以下规则是理解全部后端实现的主线：
 
-- Rust Runtime Supervisor 是正式环境 Sidecar 生命周期、端口、Token 和 generation 的唯一权威。
+- Electron Main 的 `EngineSupervisor` 是正式环境 Sidecar 生命周期、端口、Token 和 generation 的唯一权威。
 - FastAPI 的所有业务 HTTP/SSE 请求都经过同一 loopback Token 鉴权边界；`/health` 也不是匿名端点。
 - SQLite metadata 是控制平面耐久事实源；内存队列、SSE Hub、前端 Store 都只是可重建投影。
 - Schema 只由 Alembic 演进；启动不使用 `create_all()`、猜测式 stamp 或静默降级。

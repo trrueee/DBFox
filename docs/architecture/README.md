@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-16
+> 最后核验：2026-08-21
 >
 > 事实源：当前源码、迁移、锁文件、协议测试和绑定目标 commit 的运行证据
 
@@ -14,7 +14,8 @@
 
 1. [系统总览](./system-overview.md)：产品目标、核心不变量、外部系统、部署拓扑、质量属性和事实层级。
 2. [R7 Electron Host Cutover](../quality/2026-08-21-r7-electron-host-cutover.md)：当前 Sidecar、原生能力、DLC protocol、更新和发布边界。
-3. [桌面发布、恢复与个性化](./desktop-release-lifecycle.md)：外观偏好、窗口状态、异常退出、代码签名和自动更新链路。
+3. [R8A Untrusted Isolation Gate](./r8-untrusted-isolation-gate.md)：三平台 backend/frontend 隔离调查、NO-GO 结论与 trusted-publisher-only 边界。
+4. [桌面发布、恢复与个性化](./desktop-release-lifecycle.md)：外观偏好、窗口状态、异常退出、代码签名和自动更新链路。
 
 ## 2. 接受后的目标架构计划
 
@@ -36,7 +37,7 @@
 | 容器 | 文档 | 所有权 |
 | --- | --- | --- |
 | Electron/TypeScript Host | [系统总览](./system-overview.md#3-部署拓扑)、[R7 Cutover](../quality/2026-08-21-r7-electron-host-cutover.md) | 进程、窗口、端口、Token、generation、IPC、打包 |
-| React WebView | [前端架构](./frontend.md) | 工作区、交互、投影、查询缓存和恢复呈现 |
+| React Renderer | [前端架构](./frontend.md) | 工作区、交互、投影、查询缓存和恢复呈现 |
 | FastAPI Sidecar | [后端架构](./backend.md) | API、Agent、工具、数据源、SQL、持久化和事件 |
 | SQLite metadata | [后端架构](./backend.md#6-持久化与事务边界) | 迁移、会话、事件、租约、配置和审计事实 |
 | 外部数据源 | [数据、SQL 与结果链](./data-sql-results.md) | MySQL、PostgreSQL、SQLite、DuckDB 数据平面 |
@@ -59,7 +60,8 @@
 
 ## 6. 当前核心不变量
 
-- Rust Runtime Supervisor 是生产 Sidecar 的唯一生命周期权威；React 不猜测端口、Token 或进程状态。
+- Electron Main 的 `EngineSupervisor` 是生产 Sidecar 的唯一生命周期权威；React 不猜测端口、Token 或进程状态。
+- Runtime DLC 是 trusted-publisher-only 的应用级代码扩展；manifest permissions、subprocess、module namespace、CSP 或 Renderer sandbox 均不被描述为不可信代码 sandbox。
 - FastAPI 对 loopback HTTP/SSE 统一鉴权，公开错误使用固定 catalog 和 RFC 9457 Problem Details。
 - SQLite 是会话、事件和调度的耐久事实源；内存只保存有界 wake hints，不是第二队列。
 - Agent Harness 使用 provider-neutral 原生 function calling；完成、取消、异常和工具等待具有显式终止语义。

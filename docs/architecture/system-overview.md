@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-06
+> 最后核验：2026-08-21
 >
 > 适用版本：当前工作分支，产品版本 1.0.3
 >
@@ -66,7 +66,7 @@ Electron Main 负责启动和监督 sidecar、分配本地端口、读取启动�
 提供端口与 local token，并处理原生窗口和外部导航。Renderer 保持 sandbox、context isolation 和
 禁用 Node；业务通信仍直接使用带 token 的 HTTP/SSE。
 
-### 3.2 React WebView
+### 3.2 React Renderer
 
 前端负责工作区、数据源设置、对话、Activity Feed、Approval/Question 交互和 Artifact Dock。它消费 snapshot、committed event 和 live notification，但不拥有 Run 终态、审批结果或结果集历史。
 
@@ -292,7 +292,7 @@ Canonical Tool ID 在 Registry、模型 Provider、Policy、持久化和 Evaluat
 
 ### 10.4 CSP 与外部导航
 
-生产 WebView 使用严格 CSP。外部链接通过受控导航能力打开；Markdown 经过 AST 插件与 sanitize，不允许任意 HTML、脚本或协议进入 WebView。
+生产 Renderer 使用严格 CSP。外部链接通过受控导航能力打开；Markdown 经过 AST 插件与 sanitize，不允许任意 HTML、脚本或协议进入 Renderer。
 
 ## 11. 预算、取消和失败语义
 

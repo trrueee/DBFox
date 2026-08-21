@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-12
+> 最后核验：2026-08-21
 >
 > 适用范围：后端测试、调试、功能扩展和变更影响分析
 >
@@ -196,7 +196,7 @@ python -m pytest -q engine/agent/tests/harness/test_sqlite_scenarios.py
 - Provider SDK；
 - database driver/dialect；
 - OS credential store；
-- Rust/WebView IPC；
+- Electron Main/preload/Renderer IPC；
 - HTTP public contract。
 
 内部模块字段不一致应优先统一模型，而不是继续加 mapper。
