@@ -54,7 +54,14 @@ try {
   throw error;
 } finally {
   if (child?.pid && child.exitCode === null) await terminate(child.pid);
-  if (succeeded) await rm(runtimeRoot, { recursive: true, force: true });
+  if (succeeded) {
+    await rm(runtimeRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 250,
+    });
+  }
 }
 
 async function findExecutable() {
