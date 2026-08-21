@@ -1657,6 +1657,40 @@ export type DlcInstallRequest = {
 };
 
 /**
+ * DlcInstalledVersionItem
+ */
+export type DlcInstalledVersionItem = {
+    /**
+     * Active
+     */
+    active: boolean;
+    /**
+     * Installed At
+     */
+    installed_at: string;
+    /**
+     * Package Digest
+     */
+    package_digest: string;
+    /**
+     * Pending
+     */
+    pending: boolean;
+    /**
+     * Removable
+     */
+    removable: boolean;
+    /**
+     * Selected
+     */
+    selected: boolean;
+    /**
+     * Version
+     */
+    version: string;
+};
+
+/**
  * DlcLifecycleItem
  */
 export type DlcLifecycleItem = {
@@ -1693,6 +1727,10 @@ export type DlcLifecycleItem = {
      * Frontend Entrypoint Present
      */
     frontend_entrypoint_present: boolean;
+    /**
+     * Installed Versions
+     */
+    installed_versions: Array<DlcInstalledVersionItem>;
     /**
      * Permissions
      */
@@ -1851,6 +1889,28 @@ export type DlcUninstallResponse = {
      * Data Retained
      */
     data_retained: boolean;
+    /**
+     * Dlc Id
+     */
+    dlc_id: string;
+    /**
+     * Executable Bytes Removed
+     */
+    executable_bytes_removed: boolean;
+    /**
+     * Package Digest
+     */
+    package_digest: string;
+    /**
+     * Package Digests
+     */
+    package_digests: Array<string>;
+};
+
+/**
+ * DlcVersionRemovalResponse
+ */
+export type DlcVersionRemovalResponse = {
     /**
      * Dlc Id
      */
@@ -6674,6 +6734,130 @@ export type InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostResponses
      */
     200: unknown;
 };
+
+export type RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Dlc Id
+         */
+        dlc_id: string;
+        /**
+         * Package Digest
+         */
+        package_digest: string;
+    };
+    query?: never;
+    url: '/api/v1/dlcs/{dlc_id}/versions/{package_digest}';
+};
+
+export type RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteError = RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteErrors[keyof RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteErrors];
+
+export type RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: DlcVersionRemovalResponse;
+};
+
+export type RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteResponse = RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteResponses[keyof RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteResponses];
+
+export type SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostData = {
+    body?: never;
+    path: {
+        /**
+         * Dlc Id
+         */
+        dlc_id: string;
+        /**
+         * Package Digest
+         */
+        package_digest: string;
+    };
+    query?: never;
+    url: '/api/v1/dlcs/{dlc_id}/versions/{package_digest}/select';
+};
+
+export type SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostError = SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostErrors[keyof SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostErrors];
+
+export type SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DlcLifecycleItem;
+};
+
+export type SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostResponse = SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostResponses[keyof SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostResponses];
 
 export type ApiHealthApiV1HealthGetData = {
     body?: never;

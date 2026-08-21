@@ -6,6 +6,8 @@ import {
   inspectDlcPackageApiV1DlcsPackagesInspectPost,
   installDlcPackageApiV1DlcsInstallPost,
   listDlcsApiV1DlcsGet,
+  removeDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDelete,
+  selectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPost,
   trustDlcPublisherApiV1DlcsPublishersTrustPost,
   uninstallDlcApiV1DlcsDlcIdDelete,
 } from "./api/generated/sdk.gen";
@@ -14,6 +16,7 @@ import type {
   DlcListResponse,
   DlcPackageInspection,
   DlcUninstallResponse,
+  DlcVersionRemovalResponse,
 } from "./api/generated/types.gen";
 import {
   getRuntimeSession,
@@ -75,6 +78,28 @@ export async function setDlcEnabled(dlcId: string, enabled: boolean): Promise<Dl
     : disableDlcApiV1DlcsDlcIdDisablePost;
   const { data } = await operation({
     path: { dlc_id: dlcId },
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function selectDlcVersion(
+  dlcId: string,
+  packageDigest: string,
+): Promise<DlcLifecycleItem> {
+  const { data } = await selectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPost({
+    path: { dlc_id: dlcId, package_digest: packageDigest },
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function removeDlcVersion(
+  dlcId: string,
+  packageDigest: string,
+): Promise<DlcVersionRemovalResponse> {
+  const { data } = await removeDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDelete({
+    path: { dlc_id: dlcId, package_digest: packageDigest },
     throwOnError: true,
   });
   return data;

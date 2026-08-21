@@ -15,6 +15,7 @@ Verifies:
 12. Zero code execution guarantee during verification and installation.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -130,7 +131,12 @@ def test_install_valid_signed_package(
     assert record.selected_digest == result.package_digest
     assert record.package_version == "1.0.0"
     assert record.desired_enabled is False
-    assert record.runtime_state == "installed_disabled"
+    assert [item.package_digest for item in record.installed_versions] == [
+        result.package_digest
+    ]
+    assert json.loads(record.model_dump_json())["installed_versions"][0][
+        "package_version"
+    ] == "1.0.0"
 
 
 def test_install_unsigned_package_in_developer_mode(
@@ -518,6 +524,59 @@ def test_conflicting_digest_for_same_version_rejected(
         dlc_service.install_from_file(path2, publisher_key_base64=pub_key_b64)
 
     assert exc_info.value.code == DlcErrorCode.CONFLICTING_DIGEST
+
+
+def test_registry_v1_is_migrated_to_one_selected_version_on_next_write(
+    tmp_path: Path,
+) -> None:
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir()
+    digest = "a" * 64
+    registry_file = storage_root / "registry.json"
+    registry_file.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "installed_dlcs": {
+                    "acme.echo": {
+                        "dlc_id": "acme.echo",
+                        "selected_digest": digest,
+                        "package_version": "1.0.0",
+                        "desired_enabled": True,
+                        "runtime_state": "active",
+                        "trust_status": "trusted_signed",
+                        "publisher_key_id": "b" * 64,
+                        "installed_at": "2026-08-21T00:00:00+00:00",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    registry = InstalledDlcRegistry(storage_root)
+    migrated = registry.get_installed_dlc("acme.echo")
+    assert migrated is not None
+    assert migrated.selected_digest == digest
+    assert migrated.desired_enabled is True
+    assert [(item.package_version, item.package_digest) for item in migrated.installed_versions] == [
+        ("1.0.0", digest)
+    ]
+    assert json.loads(registry_file.read_text(encoding="utf-8"))["schema_version"] == 1
+
+    registry.set_desired_enabled("acme.echo", False)
+    persisted = json.loads(registry_file.read_text(encoding="utf-8"))
+    assert persisted["schema_version"] == 2
+    assert "runtime_state" not in persisted["installed_dlcs"]["acme.echo"]
+    assert persisted["installed_dlcs"]["acme.echo"]["installed_versions"] == [
+        {
+            "installed_at": "2026-08-21T00:00:00+00:00",
+            "package_digest": digest,
+            "package_version": "1.0.0",
+            "publisher_key_id": "b" * 64,
+            "trust_status": "trusted_signed",
+        }
+    ]
 
 
 def test_corrupt_registry_fails_safe(tmp_path: Path):

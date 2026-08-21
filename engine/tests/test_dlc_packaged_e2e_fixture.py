@@ -77,3 +77,21 @@ def test_acme_echo_fixture_authenticates_and_activates_only_after_enable(
         "message": "hello packaged DLC",
         "package_digest": built.package_digest,
     }
+
+    update_inspection = service.inspect_from_file(built.update_archive)
+    assert update_inspection.manifest.version == "2.0.0"
+    assert update_inspection.package_digest == built.update_package_digest
+    service.install_from_file(built.update_archive)
+    installed = service.registry.get_installed_dlc("acme.echo")
+    assert installed is not None
+    assert installed.selected_digest == built.package_digest
+    assert [item.package_digest for item in installed.installed_versions] == [
+        built.package_digest,
+        built.update_package_digest,
+    ]
+    assert marker_path.read_text(encoding="utf-8") == built.package_digest
+    assert snapshot.active_dlcs[0].package_digest == built.package_digest
+
+    service.select_package("acme.echo", built.update_package_digest)
+    assert snapshot.active_dlcs[0].package_digest == built.package_digest
+    assert marker_path.read_text(encoding="utf-8") == built.package_digest

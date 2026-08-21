@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from cryptography.hazmat.primitives.asymmetric import ed25519
+
 from fastapi.testclient import TestClient
 
 from engine.api.dlc_lifecycle import (
@@ -42,14 +44,19 @@ def _snapshot(
     )
 
 
-def _write_v2_package(path: Path) -> tuple[str, str]:
-    private_key, public_key_base64 = generate_test_keypair()
+def _write_v2_package(
+    path: Path,
+    *,
+    version: str = "1.0.0",
+    keypair: tuple[ed25519.Ed25519PrivateKey, str] | None = None,
+) -> tuple[str, str]:
+    private_key, public_key_base64 = keypair or generate_test_keypair()
     path.write_bytes(
         build_test_dlc_archive(
             manifest_data={
                 "manifestSchemaVersion": 2,
                 "id": "acme.echo",
-                "version": "1.0.0",
+                "version": version,
                 "displayName": "Acme Echo",
                 "publisher": "acme",
                 "publisherKey": public_key_base64,
@@ -266,6 +273,7 @@ def test_lifecycle_api_install_enable_disable_restart_and_uninstall(tmp_path: Pa
         assert uninstall_response.json() == {
             "dlc_id": "acme.echo",
             "package_digest": expected_digest,
+            "package_digests": [expected_digest],
             "executable_bytes_removed": True,
             "data_retained": True,
         }
@@ -274,6 +282,161 @@ def test_lifecycle_api_install_enable_disable_restart_and_uninstall(tmp_path: Pa
 
         missing_response = client.get("/api/v1/dlcs/acme.echo", headers=_headers())
         _problem(missing_response, "DLC_NOT_INSTALLED", 404)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_lifecycle_api_selects_rolls_back_and_removes_only_old_versions(
+    tmp_path: Path,
+) -> None:
+    keypair = generate_test_keypair()
+    v1_path = (tmp_path / "acme.echo-1.0.0.dbfox-dlc").resolve()
+    v2_path = (tmp_path / "acme.echo-2.0.0.dbfox-dlc").resolve()
+    v1_digest, fingerprint = _write_v2_package(
+        v1_path,
+        version="1.0.0",
+        keypair=keypair,
+    )
+    v2_digest, _ = _write_v2_package(
+        v2_path,
+        version="2.0.0",
+        keypair=keypair,
+    )
+    service = DlcPackageService(tmp_path / "runtime" / "dlcs")
+    service.trust_publisher_from_file(
+        v1_path,
+        expected_package_digest=v1_digest,
+        expected_publisher_key_id=fingerprint,
+    )
+    snapshot_holder = {"value": _snapshot()}
+    client = _client_for(service, snapshot_holder)
+    try:
+        assert client.post(
+            "/api/v1/dlcs/install",
+            headers=_headers(),
+            json={"archive_path": str(v1_path)},
+        ).status_code == 201
+        assert client.post(
+            "/api/v1/dlcs/acme.echo/enable",
+            headers=_headers(),
+        ).status_code == 200
+        snapshot_holder["value"] = _snapshot(
+            ActivatedDlcIdentity(
+                dlc_id="acme.echo",
+                package_version="1.0.0",
+                package_digest=v1_digest,
+                publisher_key_id=fingerprint,
+                frontend_entrypoint="frontend/index.js",
+            )
+        )
+
+        install_v2 = client.post(
+            "/api/v1/dlcs/install",
+            headers=_headers(),
+            json={"archive_path": str(v2_path)},
+        )
+        assert install_v2.status_code == 201
+        after_install = install_v2.json()
+        assert after_install["state"] == "active"
+        assert after_install["selected_digest"] == v1_digest
+        assert after_install["active_digest"] == v1_digest
+        assert [item["package_digest"] for item in after_install["installed_versions"]] == [
+            v1_digest,
+            v2_digest,
+        ]
+        assert after_install["installed_versions"][1] == {
+            "version": "2.0.0",
+            "package_digest": v2_digest,
+            "installed_at": after_install["installed_versions"][1]["installed_at"],
+            "selected": False,
+            "active": False,
+            "pending": False,
+            "removable": True,
+        }
+
+        select_v2 = client.post(
+            f"/api/v1/dlcs/acme.echo/versions/{v2_digest}/select",
+            headers=_headers(),
+        )
+        assert select_v2.status_code == 200
+        assert select_v2.json()["state"] == "enable_pending_restart"
+        assert select_v2.json()["selected_digest"] == v2_digest
+        assert select_v2.json()["active_digest"] == v1_digest
+        assert next(
+            item
+            for item in select_v2.json()["installed_versions"]
+            if item["package_digest"] == v2_digest
+        )["pending"] is True
+
+        selected_remove = client.delete(
+            f"/api/v1/dlcs/acme.echo/versions/{v2_digest}",
+            headers=_headers(),
+        )
+        _problem(selected_remove, "DLC_VERSION_SELECTED", 409)
+        active_remove = client.delete(
+            f"/api/v1/dlcs/acme.echo/versions/{v1_digest}",
+            headers=_headers(),
+        )
+        _problem(active_remove, "DLC_VERSION_ACTIVE", 409)
+
+        snapshot_holder["value"] = _snapshot(
+            ActivatedDlcIdentity(
+                dlc_id="acme.echo",
+                package_version="2.0.0",
+                package_digest=v2_digest,
+                publisher_key_id=fingerprint,
+                frontend_entrypoint="frontend/index.js",
+            )
+        )
+        select_rollback = client.post(
+            f"/api/v1/dlcs/acme.echo/versions/{v1_digest}/select",
+            headers=_headers(),
+        )
+        assert select_rollback.status_code == 200
+        assert select_rollback.json()["state"] == "enable_pending_restart"
+        assert select_rollback.json()["selected_digest"] == v1_digest
+        assert select_rollback.json()["active_digest"] == v2_digest
+
+        snapshot_holder["value"] = _snapshot(
+            ActivatedDlcIdentity(
+                dlc_id="acme.echo",
+                package_version="1.0.0",
+                package_digest=v1_digest,
+                publisher_key_id=fingerprint,
+                frontend_entrypoint="frontend/index.js",
+            )
+        )
+        assert client.post(
+            f"/api/v1/dlcs/acme.echo/versions/{v2_digest}/select",
+            headers=_headers(),
+        ).status_code == 200
+        snapshot_holder["value"] = _snapshot(
+            ActivatedDlcIdentity(
+                dlc_id="acme.echo",
+                package_version="2.0.0",
+                package_digest=v2_digest,
+                publisher_key_id=fingerprint,
+                frontend_entrypoint="frontend/index.js",
+            )
+        )
+        remove_old = client.delete(
+            f"/api/v1/dlcs/acme.echo/versions/{v1_digest}",
+            headers=_headers(),
+        )
+        assert remove_old.status_code == 200
+        assert remove_old.json() == {
+            "dlc_id": "acme.echo",
+            "package_digest": v1_digest,
+            "executable_bytes_removed": True,
+        }
+        assert not service.store.get_package_dir(v1_digest).exists()
+        assert service.store.get_package_dir(v2_digest).is_dir()
+
+        unknown = client.post(
+            f"/api/v1/dlcs/acme.echo/versions/{'f' * 64}/select",
+            headers=_headers(),
+        )
+        _problem(unknown, "DLC_VERSION_NOT_INSTALLED", 404)
     finally:
         app.dependency_overrides.clear()
 

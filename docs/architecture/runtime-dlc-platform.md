@@ -244,7 +244,12 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
 - **Durable Desired State (`registry.json`)**:
   - `desired_enabled`: User's durable desired state.
   - `selected_digest`: The content-addressed digest selected for activation.
-  - `package_version`: Installed package version.
+  - `installed_versions`: A bounded set of verified immutable digest/version identities and their
+    publisher/install metadata. Installing another version appends to this set without selecting,
+    executing, or deleting any package.
+  - Schema v1 single-version records are read strictly and converted in memory; the next mutation
+    atomically writes schema v2. There is no legacy dual-write path, and the redundant
+    `runtime_state` field is removed rather than retained as a second truth source.
   - `registry.json` is the machine-level single-writer SSOT for durable user intent, NOT proof of what the running process has loaded.
 - **Active Runtime Truth (`RuntimeContributionSnapshot`)**:
   - In-memory process truth built once at startup.
@@ -265,6 +270,12 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
 - `POST /api/v1/dlcs/{dlc_id}/enable` and `/disable` change desired state only. The stable wire
   states are `installed_disabled`, `enable_pending_restart`, `active`,
   `disable_pending_restart`, and `activation_failed`.
+- `POST /api/v1/dlcs/{dlc_id}/versions/{package_digest}/select` changes only the selected digest.
+  An enabled DLC keeps its old active digest until restart. Selecting an older digest is rollback
+  of executable package identity only; DLC-owned data and schema are never rolled back.
+- `DELETE /api/v1/dlcs/{dlc_id}/versions/{package_digest}` removes only an explicit unselected,
+  inactive version. Selected or active digests fail closed; versions are never garbage-collected
+  merely because another version was installed or selected.
 - `DELETE /api/v1/dlcs/{dlc_id}` requires desired-disabled state and absence from active runtime
   truth. It removes the registry reference and unreferenced content-addressed executable bytes,
   while retaining `APP_DATA/dlcs/data/<dlc_id>/`.
@@ -279,7 +290,9 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
   sequence. Trusting a publisher never installs the package, and neither inspect nor install
   executes extension code.
 - Cards present `desired_enabled` beside current `active` truth and show selected and active
-  digests independently. Pending enable/disable state remains visible until the controlled engine
+  digests independently. The installed-version list exposes Selected, Active, Pending restart,
+  explicit Select/Roll back, and safe old-version removal while warning that package rollback does
+  not roll back DLC data. Pending enable/disable state remains visible until the controlled engine
   restart produces a newer generation, passes health checks, and refreshes the runtime projection.
 - Uninstall is disabled while desired-enabled or active. Its confirmation states that executable
   bytes may be removed while `APP_DATA/dlcs/data/<dlc_id>/` is retained by default.
@@ -359,7 +372,7 @@ Error States:
 - **R4.2**: Install from File UI & DLC Center in Desktop App (CLOSED).
 - **R4.3**: Packaged cross-platform lifecycle proof (CLOSED).
 - **R5**: Conformance Proof & Data Ownership — Decouple `dbfox.github` into `dbfox.github-1.0.0.dbfox-dlc` (CLOSED).
-- **R6**: Side-by-Side Update & Rollback Lifecycle.
+- **R6**: Side-by-Side Update & Rollback Lifecycle (CLOSED).
 - **R7**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`).
 - **R8**: Untrusted Subprocess Sandbox Gate.
 

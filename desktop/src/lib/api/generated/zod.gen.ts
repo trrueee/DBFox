@@ -681,6 +681,19 @@ export const zDlcInstallRequest = z.object({
 });
 
 /**
+ * DlcInstalledVersionItem
+ */
+export const zDlcInstalledVersionItem = z.object({
+    active: z.boolean(),
+    installed_at: z.string(),
+    package_digest: z.string().regex(/^[0-9a-f]{64}$/),
+    pending: z.boolean(),
+    removable: z.boolean(),
+    selected: z.boolean(),
+    version: z.string()
+});
+
+/**
  * DlcLifecycleState
  */
 export const zDlcLifecycleState = z.enum([
@@ -737,6 +750,7 @@ export const zDlcLifecycleItem = z.object({
     display_name: z.string(),
     dlc_id: z.string(),
     frontend_entrypoint_present: z.boolean(),
+    installed_versions: z.array(zDlcInstalledVersionItem),
     permissions: z.array(z.string()),
     publisher: z.string(),
     publisher_fingerprint: z.string().nullable(),
@@ -788,6 +802,16 @@ export const zDlcPackageInspection = z.object({
  */
 export const zDlcUninstallResponse = z.object({
     data_retained: z.boolean(),
+    dlc_id: z.string(),
+    executable_bytes_removed: z.boolean(),
+    package_digest: z.string(),
+    package_digests: z.array(z.string())
+});
+
+/**
+ * DlcVersionRemovalResponse
+ */
+export const zDlcVersionRemovalResponse = z.object({
     dlc_id: z.string(),
     executable_bytes_removed: z.boolean(),
     package_digest: z.string()
@@ -2272,6 +2296,26 @@ export const zInvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostPath = 
     dlc_id: z.string(),
     operation_name: z.string()
 });
+
+export const zRemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeletePath = z.object({
+    dlc_id: z.string(),
+    package_digest: z.string().regex(/^[0-9a-f]{64}$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zRemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteResponse = zDlcVersionRemovalResponse;
+
+export const zSelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostPath = z.object({
+    dlc_id: z.string(),
+    package_digest: z.string().regex(/^[0-9a-f]{64}$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zSelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostResponse = zDlcLifecycleItem;
 
 /**
  * Response Api Health Api V1 Health Get

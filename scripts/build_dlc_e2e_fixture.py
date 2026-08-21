@@ -23,8 +23,10 @@ _FIXTURE_PRIVATE_KEY_SEED = hashlib.sha256(
 @dataclass(frozen=True)
 class BuiltDlcE2eFixtures:
     valid_archive: Path
+    update_archive: Path
     tampered_archive: Path
     package_digest: str
+    update_package_digest: str
     publisher_fingerprint: str
 
 
@@ -58,6 +60,12 @@ def build_dlc_e2e_fixtures(output_dir: Path) -> BuiltDlcE2eFixtures:
         payload_files=payload_files,
         private_key=private_key,
     )
+    update_manifest = {**manifest, "version": "2.0.0"}
+    update_bytes = build_test_dlc_archive(
+        manifest_data=update_manifest,
+        payload_files=payload_files,
+        private_key=private_key,
+    )
     tampered_bytes = build_test_dlc_archive(
         manifest_data=manifest,
         payload_files=payload_files,
@@ -65,14 +73,18 @@ def build_dlc_e2e_fixtures(output_dir: Path) -> BuiltDlcE2eFixtures:
         corrupt_payload_hash="backend/entry.py",
     )
     valid_archive = output_dir / "acme.echo.dbfox-dlc"
+    update_archive = output_dir / "acme.echo-2.0.0.dbfox-dlc"
     tampered_archive = output_dir / "acme.echo-tampered.dbfox-dlc"
     valid_archive.write_bytes(valid_bytes)
+    update_archive.write_bytes(update_bytes)
     tampered_archive.write_bytes(tampered_bytes)
 
     return BuiltDlcE2eFixtures(
         valid_archive=valid_archive,
+        update_archive=update_archive,
         tampered_archive=tampered_archive,
         package_digest=hashlib.sha256(valid_bytes).hexdigest(),
+        update_package_digest=hashlib.sha256(update_bytes).hexdigest(),
         publisher_fingerprint=compute_key_fingerprint(private_key.public_key()),
     )
 
@@ -86,8 +98,10 @@ def main() -> None:
         json.dumps(
             {
                 "valid_archive": str(built.valid_archive),
+                "update_archive": str(built.update_archive),
                 "tampered_archive": str(built.tampered_archive),
                 "package_digest": built.package_digest,
+                "update_package_digest": built.update_package_digest,
                 "publisher_fingerprint": built.publisher_fingerprint,
             },
             sort_keys=True,

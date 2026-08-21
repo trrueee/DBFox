@@ -8,7 +8,11 @@ from threading import RLock
 
 from engine.dlc.errors import DlcError, DlcErrorCode
 from engine.dlc.manifest import DlcManifest
-from engine.dlc.registry import InstalledDlcRecord, InstalledDlcRegistry
+from engine.dlc.registry import (
+    InstalledDlcRecord,
+    InstalledDlcRegistry,
+    InstalledDlcVersion,
+)
 from engine.dlc.store import DlcPackageStore
 from engine.dlc.trust import DlcTrustStatus, DlcTrustStore
 from engine.dlc.verifier import DlcPackageVerifier, VerifiedDlcPackage
@@ -35,8 +39,18 @@ class DlcUninstallResult:
 
     dlc_id: str
     package_digest: str
+    package_digests: tuple[str, ...]
     executable_bytes_removed: bool
     data_retained: bool = True
+
+
+@dataclass(frozen=True)
+class DlcVersionRemovalResult:
+    """Result of explicitly removing one inactive, unselected package version."""
+
+    dlc_id: str
+    package_digest: str
+    executable_bytes_removed: bool
 
 
 class DlcPackageService:
@@ -150,36 +164,30 @@ class DlcPackageService:
 
         existing = self.registry.get_installed_dlc(verified_pkg.manifest.id)
         if existing is not None:
-            if existing.selected_digest == verified_pkg.package_digest:
+            installed = existing.package_for_digest(verified_pkg.package_digest)
+            if installed is not None:
                 return DlcInstallationResult(
                     dlc_id=existing.dlc_id,
-                    version=existing.package_version,
-                    package_digest=existing.selected_digest,
-                    install_dir=self.store.get_package_dir(existing.selected_digest),
-                    trust_status=DlcTrustStatus(existing.trust_status),
-                    publisher_key_id=existing.publisher_key_id,
+                    version=installed.package_version,
+                    package_digest=installed.package_digest,
+                    install_dir=self.store.get_package_dir(installed.package_digest),
+                    trust_status=DlcTrustStatus(installed.trust_status),
+                    publisher_key_id=installed.publisher_key_id,
                 )
-            raise DlcError(
-                DlcErrorCode.CONFLICTING_DIGEST,
-                f"DLC '{verified_pkg.manifest.id}' is already installed",
-            )
 
         # 2. Extract and store package in immutable content-addressed store
         was_stored = self.store.is_package_stored(verified_pkg.package_digest)
         install_dir = self.store.stage_and_install_package(verified_pkg)
 
         # 3. Create and commit installed registry record
-        record = InstalledDlcRecord(
-            dlc_id=verified_pkg.manifest.id,
-            selected_digest=verified_pkg.package_digest,
+        package = InstalledDlcVersion(
+            package_digest=verified_pkg.package_digest,
             package_version=verified_pkg.manifest.version,
-            desired_enabled=False,
-            runtime_state="installed_disabled",
             trust_status=verified_pkg.trust_status.value,
             publisher_key_id=verified_pkg.publisher_key_id,
         )
         try:
-            self.registry.record_installed_dlc(record)
+            self.registry.record_installed_package(verified_pkg.manifest.id, package)
         except Exception:
             if not was_stored:
                 try:
@@ -206,6 +214,11 @@ class DlcPackageService:
                     f"DLC '{dlc_id}' is not installed",
                 )
             return self.registry.set_desired_enabled(dlc_id, enabled)
+
+    def select_package(self, dlc_id: str, package_digest: str) -> InstalledDlcRecord:
+        """Select an installed digest; activation remains restart-bound."""
+        with _DLC_LIFECYCLE_MUTATION_LOCK:
+            return self.registry.select_package(dlc_id, package_digest)
 
     def load_installed_manifest(self, record: InstalledDlcRecord) -> DlcManifest:
         """Load the signed manifest copy from the selected immutable package."""
@@ -249,6 +262,43 @@ class DlcPackageService:
                 active_package_digests=active_package_digests,
             )
 
+    def remove_version(
+        self,
+        dlc_id: str,
+        package_digest: str,
+        *,
+        active_package_digests: set[str] | frozenset[str],
+    ) -> DlcVersionRemovalResult:
+        """Remove one explicit old version without touching other installed versions."""
+        with _DLC_LIFECYCLE_MUTATION_LOCK:
+            record = self.registry.get_installed_dlc(dlc_id)
+            if record is None:
+                raise DlcError(
+                    DlcErrorCode.DLC_NOT_INSTALLED,
+                    f"DLC '{dlc_id}' is not installed",
+                )
+            if package_digest in active_package_digests:
+                raise DlcError(
+                    DlcErrorCode.DLC_VERSION_ACTIVE,
+                    f"Active package bytes for DLC '{dlc_id}' cannot be removed",
+                )
+            removed = self.registry.remove_installed_version(dlc_id, package_digest)
+            remaining_digests = {
+                version.package_digest
+                for item in self.registry.list_installed_dlcs()
+                for version in item.installed_versions
+            }
+            executable_bytes_removed = False
+            if removed.package_digest not in remaining_digests:
+                executable_bytes_removed = self.store.remove_package(
+                    removed.package_digest
+                )
+            return DlcVersionRemovalResult(
+                dlc_id=dlc_id,
+                package_digest=removed.package_digest,
+                executable_bytes_removed=executable_bytes_removed,
+            )
+
     def _uninstall(
         self,
         dlc_id: str,
@@ -266,7 +316,10 @@ class DlcPackageService:
                 DlcErrorCode.DLC_DISABLE_REQUIRED,
                 f"DLC '{dlc_id}' must be disabled before uninstall",
             )
-        if record.selected_digest in active_package_digests:
+        installed_digests = {
+            item.package_digest for item in record.installed_versions
+        }
+        if installed_digests & active_package_digests:
             raise DlcError(
                 DlcErrorCode.DLC_ACTIVE,
                 f"Active package bytes for DLC '{dlc_id}' cannot be removed",
@@ -274,13 +327,21 @@ class DlcPackageService:
 
         removed = self.registry.remove_installed_dlc(dlc_id)
         remaining_digests = {
-            item.selected_digest for item in self.registry.list_installed_dlcs()
+            version.package_digest
+            for item in self.registry.list_installed_dlcs()
+            for version in item.installed_versions
         }
-        executable_bytes_removed = False
-        if removed.selected_digest not in remaining_digests:
-            executable_bytes_removed = self.store.remove_package(removed.selected_digest)
+        removed_digests = tuple(
+            item.package_digest for item in removed.installed_versions
+        )
+        removal_results = [
+            self.store.remove_package(package_digest)
+            for package_digest in removed_digests
+            if package_digest not in remaining_digests
+        ]
         return DlcUninstallResult(
             dlc_id=removed.dlc_id,
             package_digest=removed.selected_digest,
-            executable_bytes_removed=executable_bytes_removed,
+            package_digests=removed_digests,
+            executable_bytes_removed=bool(removal_results) and all(removal_results),
         )

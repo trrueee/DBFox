@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -123,6 +124,10 @@ class ContributionCompiler:
         built_in_context_contributors: Sequence[Callable[[Session], ContextContributor]] | None = None,
     ) -> RuntimeContributionSnapshot:
         """Execute the full compilation pipeline and return an immutable RuntimeContributionSnapshot."""
+        # Installed package trees are immutable integrity roots.  Keep Python from
+        # materializing __pycache__ beside verified DLC sources, including for lazy
+        # imports that occur after registration.
+        sys.dont_write_bytecode = True
         activation_failures: list[DlcActivationFailure] = []
 
         # 1. Load registry records
