@@ -7,7 +7,7 @@ const execFileAsync = promisify(execFile);
 const runtimeRoot = await mkdtemp(join(process.cwd(), ".electron-packaged-smoke-"));
 const executable = await findExecutable();
 const resultPath = join(runtimeRoot, "electron-smoke-result.json");
-const output = [];
+let capturedOutput = "";
 let child;
 let succeeded = false;
 
@@ -22,8 +22,8 @@ try {
     windowsHide: true,
     maxBuffer: 1024 * 1024,
   });
-  child.stdout?.on("data", (chunk) => output.push(chunk));
-  child.stderr?.on("data", (chunk) => output.push(chunk));
+  child.stdout?.on("data", captureOutput);
+  child.stderr?.on("data", captureOutput);
 
   const exitedBeforeProof = new Promise((_, reject) => {
     child.once("error", reject);
@@ -49,7 +49,7 @@ try {
   console.log(JSON.stringify(proof));
   succeeded = true;
 } catch (error) {
-  process.stderr.write(Buffer.concat(output).toString("utf8").slice(-16_384));
+  process.stderr.write(capturedOutput.slice(-16_384));
   process.stderr.write(`\nPackaged Electron smoke runtime preserved at ${runtimeRoot}\n`);
   throw error;
 } finally {
@@ -78,6 +78,11 @@ async function findExecutable() {
     }
   }
   throw new Error(`Packaged Electron executable not found: ${candidates.join(", ")}`);
+}
+
+function captureOutput(chunk) {
+  const text = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+  capturedOutput = `${capturedOutput}${text}`.slice(-65_536);
 }
 
 async function waitForFile(path, timeoutMs) {
