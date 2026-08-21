@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-16
+> 最后核验：2026-08-21
 >
 > 适用范围：`engine/` 当前生产实现、迁移与自动化测试
 >
@@ -137,13 +137,13 @@ sequenceDiagram
   participant Coord as SessionCoordinator
   participant UI as React Startup Gate
 
-  Rust->>Main: spawn port + runtime token + private paths
+  Host->>Main: spawn port + runtime token + private paths
   Main->>Meta: Alembic upgrade
   Main->>Meta: verify schema / controlled legacy reset
   Main->>Vault: reconcile credential leases
   Main->>Meta: prune security audit
   Main->>Coord: start recovery coordinator
-  Main-->>Rust: startup stage = ready
+  Main-->>Host: startup stage = ready
   UI->>Main: GET /health + X-Local-Token
   Main-->>UI: ready
 ```
@@ -167,7 +167,7 @@ Ready 表示 metadata migration、凭据租约恢复、审计维护和 Coordinat
 
 ### 5.4 失败语义
 
-任一启动阶段失败都不会发布 Ready。Rust Host 保有 Sidecar 生命周期和 generation；前端只读取 Host 状态并展示可操作错误，不自己猜端口、不复用旧 Token，也不另启 Python 进程。
+任一启动阶段失败都不会发布 Ready。Electron Main 的 `EngineSupervisor` 保有 Sidecar 生命周期和 generation；前端只读取 Host 状态并展示可操作错误，不自己猜端口、不复用旧 Token，也不另启 Python 进程。
 
 ---
 

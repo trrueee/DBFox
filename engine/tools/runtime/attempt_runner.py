@@ -91,7 +91,12 @@ class InProcessAttemptRunner:
 
 
 class IsolatedProcessAttemptRunner:
-    """Run one attempt in a subprocess using the DBFox worker protocol."""
+    """Run one attempt across a crash/timeout transport process boundary.
+
+    This runner deliberately makes no hostile-code sandbox claim: the child
+    inherits ambient OS authority unless a platform sandbox launcher supplies a
+    stricter boundary.  It is not an R8 untrusted DLC execution host.
+    """
 
     protocol_version = PROTOCOL_VERSION
 

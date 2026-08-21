@@ -11,7 +11,7 @@
 - [Agent 长任务收尾与证据呈现整改方案](2026-08-15-long-run-evidence-remediation.md)：修复跨 Run Result 引用、硬预算前收尾、受限部分结果和 Evidence/来源呈现。
 - [2026-08-14 系统级工程审查整改计划](2026-08-14-system-review-remediation.md)：记录当前 P1/P2 修复设计、验收标准和 P3 反证核验清单。
 
-- [工程质量门禁](./engineering-gates.md)：本地与 CI 的 Python、前端、Rust、迁移、Frozen Sidecar 和依赖策略。
+- [工程质量门禁](./engineering-gates.md)：本地与 CI 的 Python、前端、Electron Host、迁移、Frozen Sidecar 和依赖策略。
 - [技术调研、方案复用与架构克制](./technical-investigation-and-reuse.md)：实现前先调查、复用优先、避免堆叠中间层、兼容层可退出和决策依据要求。
 - [R5.2 GitHub DLC 数据迁移证据](./2026-08-21-r5-github-data-migration.md)：一次性导入、失败保留、幂等重放，以及迁移后 DLC SQLite 唯一读写权威。
 - [R5.3 GitHub Core 运行图移除证据](./2026-08-21-r5-github-core-removal.md)：删除静态 API、ORM、运行时与前端组合，同时保留历史 Alembic 升级能力。
@@ -19,6 +19,7 @@
 - [R6 Side-by-Side Update / Rollback 证据](./2026-08-21-r6-side-by-side-update-rollback.md)：多 digest/version registry、显式选择与 rollback、数据不回滚、旧版本清理，以及三平台 packaged release 合同。
 - [R7.0 Electron Host Cutover 决策与迁移证据](./2026-08-21-r7-electron-host-cutover.md)：只替换 Desktop Host、保持 Renderer→Python HTTP/SSE、分阶段迁移 supervisor/native/DLC/release 并最终删除 Rust/Tauri。
 - [R7.1 DLC SDK / CLI / Conformance 证据](./2026-08-21-r7-dlc-sdk-cli.md)：共享 Host verifier/canonical rules、确定性 build/sign、安全 key generation、公开 Frontend types 与三平台 CLI 自举门禁。
+- [R8A Untrusted Isolation Gate 证据](./2026-08-21-r8-untrusted-isolation-gate.md)：逐平台核验 backend/frontend 权限、反证当前同进程/同 Renderer 边界，并正式记录 trusted-publisher-only 的 NO-GO 结论。
 - [P2 Memory v4 Cutover Gate 本地证据与限制](./2026-08-16-p2-memory-v4-cutover-evidence.md)：当前确定性门禁已通过；真实 Provider AgentBench 后测未执行，`DBFOX_MEMORY_V4_CONTEXT` 保持默认关闭。
 - [P2 Memory v4 DeepSeek 真实 Provider 调查与修复记录](./2026-08-17-memory-v4-projection-deepseek-investigation.md)：定位 `sha256:` content-hash tool version 与 Catalog reducer 语义版本门禁不匹配，修复 projection 无法写入的问题；v4 cutover 仍待完整回归门禁通过。
 - [Agent 生产评测方法](./agent-evaluation-methodology.md)：分层 Harness、数据集角色、Grader、统计门禁与脱敏 Trace 合同。

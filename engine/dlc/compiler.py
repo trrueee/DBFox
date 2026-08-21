@@ -288,7 +288,9 @@ class ContributionCompiler:
                     )
                     continue
 
-                # Load backend module
+                # Load trusted backend code in the Engine process.  Manifest
+                # permissions constrain typed registrations; they are not an OS
+                # sandbox.  R8A concluded NO-GO for untrusted activation.
                 register_func = load_dlc_backend(package_root, manifest, selected_digest)
 
                 # Prepare isolated data path for DLC

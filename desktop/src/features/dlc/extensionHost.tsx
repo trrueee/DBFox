@@ -99,7 +99,9 @@ function reportCallbackFailure(dlcId: string, callback: string, error: unknown):
 }
 
 /**
- * Creates an isolated, transactional staging host for a DLC registration.
+ * Creates a same-realm transactional staging host for trusted DLC registration.
+ * Callback failure isolation is not a DOM, process, network, or native-bridge
+ * sandbox; R8A deliberately keeps untrusted frontend code disabled.
  */
 export function createStagedExtensionHost(
   dlcId: string,

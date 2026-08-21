@@ -7,7 +7,7 @@
 >
 > 最后核验：2026-08-21
 >
-> 基线：`main@709d0f02ae6d298dafe452e9d8e50f523e6e11a7` + R5.3 work package
+> 基线：`main@2625ac366113c031149fd226075932ddca0739b2` + R8A work package
 >
 > 上位 Issue：[#59](https://github.com/trrueee/DBFox/issues/59)
 
@@ -25,7 +25,7 @@ Any developer can build an extension conforming to the DBFox DLC Protocol, packa
 > - **Manifest capability declarations**: describe the authority requested by the DLC.
 > - **Registration policy**: limits which typed DBFox contribution contracts the DLC may register.
 >
-> These DO NOT sandbox arbitrary in-process Python behavior. Trusted DLC Python can theoretically use `os`, `pathlib`, `socket`, environment variables, and process APIs outside the public Extension API. Likewise future R3 same-WebView JavaScript will not be sandboxed merely because the public Host object is narrow. True untrusted-code containment belongs to R8 (Subprocess Sandbox Gate). Do not make stronger security claims in code, docs, or tests.
+> These DO NOT sandbox arbitrary in-process Python behavior. Trusted DLC Python can theoretically use `os`, `pathlib`, `socket`, environment variables, and process APIs outside the public Extension API. R3/R7 frontend JavaScript executes in the product Renderer and is not sandboxed merely because the public Host object is narrow. R8A formally concluded **NO-GO** for cross-platform untrusted execution; production remains trusted-publisher-only. Do not make stronger security claims in code, docs, or tests.
 
 
 ### Source-Agnostic Principle
@@ -154,14 +154,14 @@ To guarantee deterministic signature generation and verification across platform
    - DBFox Host Extension SDK (pre-bundled in host binary).
    - Pure-Python vendored dependencies inside the DLC package directory (under `backend/vendor/` or package submodules).
 2. **Prohibited**:
-   - Native compiled C/Rust extensions (`.pyd`, `.so`, `.dylib`) are **STRICTLY PROHIBITED** in v1 in-process DLCs (deferred to R8 subprocess host).
+   - Native compiled C/Rust extensions (`.pyd`, `.so`, `.dylib`) are **STRICTLY PROHIBITED** in v1 in-process DLCs. R8A did not authorize a subprocess host.
    - Runtime package managers (`pip install`, `uv pip`, `setuptools`) are **STRICTLY PROHIBITED**.
-   - DLC packages cannot mutate host `site-packages` or host environment variables.
+   - DLC packages are contractually prohibited from mutating host `site-packages` or host environment variables. R8A confirms that trusted in-process code is not OS-blocked from attempting it.
 
 ### Realistic In-Process Trust & Isolation Claims
-- **What IS Isolated**: Registration exceptions, syntax/import errors, duplicate identifier conflicts (transactionally rolled back, DLC marked `BROKEN`).
+- **What IS Transactionally Contained**: Registration exceptions, syntax/import errors, duplicate identifier conflicts (rolled back, DLC marked `BROKEN`). This is not security isolation.
 - **What is NOT Isolated in v1**: Infinite loops/hangs, `os._exit()`, and native memory corruption/crashes (these will terminate the sidecar process).
-- **Process Isolation**: True process-level security isolation is deferred to R8 (Subprocess DLC Host).
+- **Process Isolation**: R8A closed NO-GO. No untrusted subprocess mode exists; a subprocess, module namespace, iframe, CSP, or Electron renderer sandbox alone is not represented as one.
 
 ---
 
@@ -258,7 +258,7 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
   - Snapshot is NOT a database table.
 
 ### Local Lifecycle API
-- The existing `X-Local-Token` and trusted WebView origin middleware protects every lifecycle
+- The existing `X-Local-Token` and trusted Renderer origin middleware protects every lifecycle
   route; no second authentication mechanism or externally reachable listener is introduced.
 - `POST /api/v1/dlcs/packages/inspect` authenticates a local `.dbfox-dlc` without installing or
   executing it. `POST /api/v1/dlcs/publishers/trust` re-authenticates the same digest and embedded
@@ -307,7 +307,7 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
   `absent → install-disabled → enable-pending → restart-active exact digest → disable-pending →
   restart-absent → inactive uninstall/data retained`. It also rejects a payload-tampered archive
   before registry mutation and proves the activation marker is absent before restart.
-- Rust's asset protocol contract serves the selected digest only while it is present in the active
+- Electron Main's asset protocol contract serves the selected digest only while it is present in the active
   projection and returns `403` for that same old digest after projection reset. Frontend tests load
   the committed fixture module and stage both visible contribution types through the real Host.
 - `release-platform-contract` runs this proof against the final PyInstaller Sidecar on Linux,
@@ -375,6 +375,7 @@ Error States:
 - **R6**: Side-by-Side Update & Rollback Lifecycle (CLOSED).
 - **R7.0**: Electron Host Cutover — replaced the old Host without rewriting the Python Engine or
   routing business APIs through IPC (CLOSED).
-- **R7.1**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`).
-- **R8**: Untrusted Subprocess Sandbox Gate.
+- **R7.1**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`) (CLOSED).
+- **R8A**: Untrusted Isolation Gate (CLOSED — NO-GO; trusted-publisher-only remains authoritative).
+- **R8B**: Not authorized. Reopens only if every criterion in `r8-untrusted-isolation-gate.md` can be proved on Windows, macOS, and Linux.
 
