@@ -63,11 +63,12 @@
 ### 修改前端工作区布局或右栏 Dock
 
 1. [`architecture/workbench-shell-workspace-dock.md`](architecture/workbench-shell-workspace-dock.md)（已接受的目标 ADR）
-2. [`architecture/workbench-shell-migration-guide.md`](architecture/workbench-shell-migration-guide.md)（组件复用、迁移顺序与删除条件）
-3. [`architecture/frontend.md`](architecture/frontend.md)（当前迁移中实现）
-4. [`dbfox-design-baseline.md`](dbfox-design-baseline.md)（当前设计基线）
-5. [`dbfox-workspace-dock-design.md`](dbfox-workspace-dock-design.md)（历史交互草案，仅补充细节）
-6. [`architecture/implementation-map.md`](architecture/implementation-map.md)
+2. [`dbfox-quiet-workbench-design.md`](dbfox-quiet-workbench-design.md)（Quiet Workbench 视觉规范与 merge gate）
+3. [`architecture/workbench-shell-migration-guide.md`](architecture/workbench-shell-migration-guide.md)（组件复用、迁移顺序与删除条件）
+4. [`architecture/frontend.md`](architecture/frontend.md)（当前迁移中实现）
+5. [`dbfox-design-baseline.md`](dbfox-design-baseline.md)（当前设计基线）
+6. [`dbfox-workspace-dock-design.md`](dbfox-workspace-dock-design.md)（历史交互草案，仅补充细节）
+7. [`architecture/implementation-map.md`](architecture/implementation-map.md)
 
 ### 准备提交或发布
 
@@ -103,6 +104,7 @@
 
 | 文档 | 主要问题 |
 | --- | --- |
+| [`dbfox-quiet-workbench-design.md`](dbfox-quiet-workbench-design.md) | Quiet Workbench 视觉架构与实现规范：Surface/Border/Radius/Shadow/Motion 合同、DLC Visual Contract、P0–P8 实施顺序与 merge gate 禁止清单。 |
 | [`dbfox-workspace-dock-design.md`](dbfox-workspace-dock-design.md) | 历史交互草案；边界决策已被 [`architecture/workbench-shell-workspace-dock.md`](architecture/workbench-shell-workspace-dock.md) 取代，本文只保留交互与视觉细节。 |
 
 ## 文档优先级
