@@ -5,6 +5,7 @@ import {
   PackagePlus,
   Power,
   RefreshCw,
+  RotateCcw,
   ShieldAlert,
   ShieldCheck,
   Trash2,
@@ -26,6 +27,7 @@ import { getUserErrorMessage } from "../../lib/api/client";
 import type {
   DlcLifecycleItem,
   DlcLifecycleState,
+  DlcInstalledVersionItem,
   DlcListResponse,
   DlcPackageInspection,
 } from "../../lib/api/generated/types.gen";
@@ -36,6 +38,8 @@ import {
   listDlcs,
   pickDlcPackage,
   restartDlcRuntime,
+  removeDlcVersion,
+  selectDlcVersion,
   setDlcEnabled,
   trustDlcPublisher,
   uninstallDlc,
@@ -49,6 +53,11 @@ interface DlcCenterProps {
 interface InspectedPackage {
   archivePath: string;
   inspection: DlcPackageInspection;
+}
+
+interface RemoveVersionTarget {
+  item: DlcLifecycleItem;
+  version: DlcInstalledVersionItem;
 }
 
 const STATE_PRESENTATION: Record<DlcLifecycleState, { label: string; tone: string }> = {
@@ -82,6 +91,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [candidate, setCandidate] = useState<InspectedPackage | null>(null);
   const [uninstallTarget, setUninstallTarget] = useState<DlcLifecycleItem | null>(null);
+  const [removeVersionTarget, setRemoveVersionTarget] = useState<RemoveVersionTarget | null>(null);
 
   const refresh = useCallback(async () => {
     const next = await listDlcs();
@@ -186,6 +196,41 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
       showToast("本地引擎已重启，DLC 运行状态已刷新", "success");
     } catch (error) {
       showToast(getUserErrorMessage(error, "本地引擎重启失败，请查看诊断日志"), "error");
+    } finally {
+      setActionKey(null);
+    }
+  };
+
+  const selectVersion = async (item: DlcLifecycleItem, packageDigest: string) => {
+    if (actionKey) return;
+    setActionKey(`select:${item.dlc_id}:${packageDigest}`);
+    try {
+      const updated = await selectDlcVersion(item.dlc_id, packageDigest);
+      setPayload((current) => upsertDlc(current, updated));
+      showToast(
+        item.desired_enabled
+          ? `${item.display_name} 已选择新包；重启后切换运行版本`
+          : `${item.display_name} 已选择新包；下次启用时生效`,
+        "info",
+      );
+    } catch (error) {
+      showToast(getUserErrorMessage(error, "无法选择 DLC 包版本"), "error");
+    } finally {
+      setActionKey(null);
+    }
+  };
+
+  const confirmRemoveVersion = async () => {
+    if (!removeVersionTarget || actionKey) return;
+    const { item, version } = removeVersionTarget;
+    setActionKey(`remove:${item.dlc_id}:${version.package_digest}`);
+    try {
+      await removeDlcVersion(item.dlc_id, version.package_digest);
+      await refresh();
+      setRemoveVersionTarget(null);
+      showToast(`${item.display_name} ${version.version} 的旧包字节已移除`, "success");
+    } catch (error) {
+      showToast(getUserErrorMessage(error, "无法移除旧 DLC 包版本"), "error");
     } finally {
       setActionKey(null);
     }
@@ -299,6 +344,8 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
                   busy={busy}
                   actionKey={actionKey}
                   onSetEnabled={setEnabled}
+                  onSelectVersion={selectVersion}
+                  onRemoveVersion={(version) => setRemoveVersionTarget({ item, version })}
                   onRestart={restartNow}
                   onUninstall={setUninstallTarget}
                   desktopRuntime={desktopRuntime}
@@ -329,7 +376,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
           <DialogHeader>
             <DialogTitle>卸载 {uninstallTarget?.display_name}</DialogTitle>
             <DialogDescription>
-              将删除 registry 引用和未被引用的可执行包字节。DLC 自己的数据目录默认保留，重新安装后仍可继续使用。
+              将删除 registry 中此 DLC 的所有已安装版本和未被引用的可执行包字节。DLC 自己的数据目录默认保留，重新安装后仍可继续使用。
             </DialogDescription>
           </DialogHeader>
           <SettingsStatus
@@ -346,6 +393,34 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={removeVersionTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setRemoveVersionTarget(null);
+        }}
+      >
+        <DialogContent className="dlc-confirm-dialog">
+          <DialogHeader>
+            <DialogTitle>移除旧版本 {removeVersionTarget?.version.version}</DialogTitle>
+            <DialogDescription>
+              只删除这个未选中且未运行的包 digest。DLC 数据和历史 ToolAttempt 的原始 digest 身份不会被修改。
+            </DialogDescription>
+          </DialogHeader>
+          <SettingsStatus
+            tone="warning"
+            label="包回滚不等于数据回滚"
+            description="移除后不能再选择这个包；DLC-owned schema 和数据仍保持当前版本。"
+          />
+          <DialogFooter>
+            <Button variant="outline" disabled={busy} onClick={() => setRemoveVersionTarget(null)}>取消</Button>
+            <Button variant="destructive" disabled={busy} onClick={() => void confirmRemoveVersion()}>
+              <Trash2 size={14} aria-hidden="true" />
+              {actionKey?.startsWith("remove:") ? "正在移除…" : "确认移除旧版本"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -355,6 +430,8 @@ function DlcCard({
   busy,
   actionKey,
   onSetEnabled,
+  onSelectVersion,
+  onRemoveVersion,
   onRestart,
   onUninstall,
   desktopRuntime,
@@ -363,6 +440,8 @@ function DlcCard({
   busy: boolean;
   actionKey: string | null;
   onSetEnabled: (item: DlcLifecycleItem, enabled: boolean) => Promise<void>;
+  onSelectVersion: (item: DlcLifecycleItem, packageDigest: string) => Promise<void>;
+  onRemoveVersion: (version: DlcInstalledVersionItem) => void;
   onRestart: () => Promise<void>;
   onUninstall: (item: DlcLifecycleItem) => void;
   desktopRuntime: boolean;
@@ -411,6 +490,56 @@ function DlcCard({
           item.frontend_entrypoint_present ? "Frontend" : null,
         ].filter(Boolean).join(" + ") || "无可用入口"}</dd></div>
       </dl>
+
+      <div className="dlc-versions" aria-label="已安装 DLC 包版本">
+        <div className="dlc-versions__heading">
+          <strong>已安装版本（{item.installed_versions.length}）</strong>
+          <span>选择包只改变下次重启目标；不会回滚 DLC 数据 schema。</span>
+        </div>
+        <ul>
+          {item.installed_versions.map((version) => {
+            const selectKey = `select:${item.dlc_id}:${version.package_digest}`;
+            return (
+              <li key={version.package_digest}>
+                <div className="dlc-version__identity">
+                  <strong>{version.version}</strong>
+                  <code title={version.package_digest}>{shortDigest(version.package_digest)}</code>
+                </div>
+                <div className="dlc-version__states">
+                  {version.selected ? <span>Selected</span> : null}
+                  {version.active ? <span>Active</span> : null}
+                  {version.pending ? <span>Pending restart</span> : null}
+                </div>
+                <div className="dlc-version__actions">
+                  {!version.selected ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void onSelectVersion(item, version.package_digest)}
+                    >
+                      <RotateCcw size={13} aria-hidden="true" />
+                      {actionKey === selectKey ? "正在选择…" : "选择 / 回滚"}
+                    </Button>
+                  ) : null}
+                  {!version.selected ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy || !version.removable}
+                      title={version.removable ? "移除此旧版本包" : "当前运行版本必须在重启切换后才能移除"}
+                      onClick={() => onRemoveVersion(version)}
+                    >
+                      <Trash2 size={13} aria-hidden="true" />
+                      移除旧版本
+                    </Button>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
 
       <details className="dlc-permissions">
         <summary>权限声明（{item.permissions.length}）</summary>

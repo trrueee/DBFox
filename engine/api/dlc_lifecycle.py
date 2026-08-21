@@ -6,7 +6,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path as PathParameter, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
@@ -95,6 +95,18 @@ class DlcActivationFailureResponse(BaseModel):
     message: str
 
 
+class DlcInstalledVersionItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    version: str
+    package_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    installed_at: str
+    selected: bool
+    active: bool
+    pending: bool
+    removable: bool
+
+
 class DlcLifecycleItem(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -104,6 +116,7 @@ class DlcLifecycleItem(BaseModel):
     description: str
     publisher: str
     publisher_fingerprint: str | None
+    installed_versions: list[DlcInstalledVersionItem]
     selected_digest: str
     active_digest: str | None
     desired_enabled: bool
@@ -129,8 +142,17 @@ class DlcUninstallResponse(BaseModel):
 
     dlc_id: str
     package_digest: str
+    package_digests: list[str]
     executable_bytes_removed: bool
     data_retained: bool
+
+
+class DlcVersionRemovalResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    dlc_id: str
+    package_digest: str
+    executable_bytes_removed: bool
 
 
 _BAD_PACKAGE_CODES = frozenset(
@@ -166,6 +188,9 @@ _CONFLICT_CODES = frozenset(
         DlcErrorCode.CONFLICTING_DIGEST,
         DlcErrorCode.DLC_DISABLE_REQUIRED,
         DlcErrorCode.DLC_ACTIVE,
+        DlcErrorCode.DLC_VERSION_SELECTED,
+        DlcErrorCode.DLC_VERSION_ACTIVE,
+        DlcErrorCode.DLC_VERSION_LIMIT_REACHED,
     }
 )
 _STORAGE_CODES = frozenset(
@@ -183,6 +208,10 @@ _PUBLIC_ERROR_DETAILS = {
     DlcErrorCode.ALREADY_INSTALLED: "This DLC package is already installed.",
     DlcErrorCode.CONFLICTING_DIGEST: "A different package is already installed for this DLC.",
     DlcErrorCode.DLC_NOT_INSTALLED: "The requested DLC is not installed.",
+    DlcErrorCode.DLC_VERSION_NOT_INSTALLED: "The requested DLC package version is not installed.",
+    DlcErrorCode.DLC_VERSION_SELECTED: "Select a different package version before removing this one.",
+    DlcErrorCode.DLC_VERSION_ACTIVE: "Restart DBFox on a different package version before removing this one.",
+    DlcErrorCode.DLC_VERSION_LIMIT_REACHED: "Remove an old package version before installing another one.",
     DlcErrorCode.DLC_DISABLE_REQUIRED: "Disable this DLC before uninstalling it.",
     DlcErrorCode.DLC_ACTIVE: "Restart DBFox after disabling this DLC before uninstalling it.",
     DlcErrorCode.PACKAGE_TAMPERED: "The package changed after it was inspected.",
@@ -198,7 +227,10 @@ _PUBLIC_ERROR_DETAILS = {
 
 
 def _raise_dlc_problem(exc: DlcError) -> NoReturn:
-    if exc.code == DlcErrorCode.DLC_NOT_INSTALLED:
+    if exc.code in {
+        DlcErrorCode.DLC_NOT_INSTALLED,
+        DlcErrorCode.DLC_VERSION_NOT_INSTALLED,
+    }:
         http_status = status.HTTP_404_NOT_FOUND
     elif exc.code in _CONFLICT_CODES:
         http_status = status.HTTP_409_CONFLICT
@@ -317,6 +349,25 @@ def _lifecycle_item(
         description=manifest.description,
         publisher=manifest.publisher,
         publisher_fingerprint=record.publisher_key_id,
+        installed_versions=[
+            DlcInstalledVersionItem(
+                version=item.package_version,
+                package_digest=item.package_digest,
+                installed_at=item.installed_at,
+                selected=item.package_digest == record.selected_digest,
+                active=item.package_digest == active_digest,
+                pending=(
+                    record.desired_enabled
+                    and item.package_digest == record.selected_digest
+                    and item.package_digest != active_digest
+                ),
+                removable=(
+                    item.package_digest != record.selected_digest
+                    and item.package_digest != active_digest
+                ),
+            )
+            for item in record.installed_versions
+        ],
         selected_digest=record.selected_digest,
         active_digest=active_digest,
         desired_enabled=record.desired_enabled,
@@ -498,6 +549,64 @@ async def disable_dlc(
     return await _set_enabled_response(dlc_id, False, service, snapshot)
 
 
+PackageDigestPath = Annotated[
+    str,
+    PathParameter(pattern=r"^[0-9a-f]{64}$"),
+]
+
+
+@router.post(
+    "/{dlc_id}/versions/{package_digest}/select",
+    response_model=DlcLifecycleItem,
+    status_code=status.HTTP_200_OK,
+    summary="Select one installed DLC package digest for the next restart",
+)
+async def select_dlc_version(
+    dlc_id: str,
+    package_digest: PackageDigestPath,
+    service: ServiceDependency,
+    snapshot: SnapshotDependency,
+) -> DlcLifecycleItem:
+    try:
+        record = await run_in_threadpool(
+            service.select_package,
+            dlc_id,
+            package_digest,
+        )
+        return await run_in_threadpool(_lifecycle_item, service, snapshot, record)
+    except DlcError as exc:
+        _raise_dlc_problem(exc)
+
+
+@router.delete(
+    "/{dlc_id}/versions/{package_digest}",
+    response_model=DlcVersionRemovalResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Remove one inactive, unselected DLC package version",
+)
+async def remove_dlc_version(
+    dlc_id: str,
+    package_digest: PackageDigestPath,
+    service: ServiceDependency,
+    snapshot: SnapshotDependency,
+) -> DlcVersionRemovalResponse:
+    active_digests = frozenset(item.package_digest for item in snapshot.active_dlcs)
+    try:
+        result = await run_in_threadpool(
+            service.remove_version,
+            dlc_id,
+            package_digest,
+            active_package_digests=active_digests,
+        )
+    except DlcError as exc:
+        _raise_dlc_problem(exc)
+    return DlcVersionRemovalResponse(
+        dlc_id=result.dlc_id,
+        package_digest=result.package_digest,
+        executable_bytes_removed=result.executable_bytes_removed,
+    )
+
+
 @router.delete(
     "/{dlc_id}",
     response_model=DlcUninstallResponse,
@@ -521,6 +630,7 @@ async def uninstall_dlc(
     return DlcUninstallResponse(
         dlc_id=result.dlc_id,
         package_digest=result.package_digest,
+        package_digests=list(result.package_digests),
         executable_bytes_removed=result.executable_bytes_removed,
         data_retained=result.data_retained,
     )

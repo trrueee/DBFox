@@ -78,18 +78,7 @@ try {
     frozenContract.projectId,
   );
 
-  const oldToken = token;
-  await stopProcessTree(child);
-  token = randomBytes(32).toString("hex");
-  stdout = "";
-  stderr = "";
-  child = launchSidecar(token);
-  await Promise.race([
-    waitUntilHealthy(child, port, token, () => stderr),
-    new Promise((_, reject) => child.once("error", reject)),
-  ]);
-  assertControlProtocol(stdout, port);
-  await expectRejectedToken("/api/v1/health", oldToken);
+  await restartFrozenSidecar();
   const reloadedDatasources = await apiJson("/api/v1/datasources");
   if (!reloadedDatasources.some((item) => item.id === frozenContract.datasourceId)) {
     throw new Error("Frozen sidecar restart did not reload the smoke datasource");
@@ -102,6 +91,34 @@ try {
   }
   await verifyPackagedDlcActive(dlcContract);
   await verifyPackagedGithubDlcActive(githubDlcContract);
+  await preparePackagedDlcUpdate(dlcContract);
+
+  await restartFrozenSidecar();
+  await verifyPackagedDlcActiveVersion(
+    dlcContract,
+    dlcContract.update_package_digest,
+    "2.0.0",
+  );
+  const rollback = await apiJson(
+    `/api/v1/dlcs/acme.echo/versions/${dlcContract.package_digest}/select`,
+    { method: "POST" },
+  );
+  if (rollback.state !== "enable_pending_restart"
+    || rollback.selected_digest !== dlcContract.package_digest
+    || rollback.active_digest !== dlcContract.update_package_digest) {
+    throw new Error(`Packaged DLC rollback selection was not restart-bound: ${JSON.stringify(rollback)}`);
+  }
+
+  await restartFrozenSidecar();
+  await verifyPackagedDlcActive(dlcContract);
+  const reselectedUpdate = await apiJson(
+    `/api/v1/dlcs/acme.echo/versions/${dlcContract.update_package_digest}/select`,
+    { method: "POST" },
+  );
+  if (reselectedUpdate.state !== "enable_pending_restart"
+    || reselectedUpdate.active_digest !== dlcContract.package_digest) {
+    throw new Error(`Packaged DLC update reselection lost active truth: ${JSON.stringify(reselectedUpdate)}`);
+  }
   const disabled = await apiJson("/api/v1/dlcs/acme.echo/disable", { method: "POST" });
   if (disabled.state !== "disable_pending_restart" || !disabled.active) {
     throw new Error(`DLC disable did not preserve active truth until restart: ${JSON.stringify(disabled)}`);
@@ -113,18 +130,7 @@ try {
     );
   }
 
-  const activeToken = token;
-  await stopProcessTree(child);
-  token = randomBytes(32).toString("hex");
-  stdout = "";
-  stderr = "";
-  child = launchSidecar(token);
-  await Promise.race([
-    waitUntilHealthy(child, port, token, () => stderr),
-    new Promise((_, reject) => child.once("error", reject)),
-  ]);
-  assertControlProtocol(stdout, port);
-  await expectRejectedToken("/api/v1/health", activeToken);
+  await restartFrozenSidecar();
   const dlcEvidence = await verifyPackagedDlcInactiveAndUninstall(dlcContract);
   const githubDlcEvidence = await verifyPackagedGithubDlcInactiveAndUninstall(
     githubDlcContract,
@@ -229,6 +235,21 @@ function launchSidecar(runtimeToken) {
   return processHandle;
 }
 
+async function restartFrozenSidecar() {
+  const staleToken = token;
+  await stopProcessTree(child);
+  token = randomBytes(32).toString("hex");
+  stdout = "";
+  stderr = "";
+  child = launchSidecar(token);
+  await Promise.race([
+    waitUntilHealthy(child, port, token, () => stderr),
+    new Promise((_, reject) => child.once("error", reject)),
+  ]);
+  assertControlProtocol(stdout, port);
+  await expectRejectedToken("/api/v1/health", staleToken);
+}
+
 function createSmokeSourceDatabase(databasePath) {
   const script = [
     "import sqlite3, sys",
@@ -273,7 +294,9 @@ function buildPackagedDlcFixture(outputDir) {
   } catch (error) {
     throw new Error(`Packaged DLC fixture builder emitted invalid JSON: ${error}`);
   }
-  if (!existsSync(fixture.valid_archive) || !existsSync(fixture.tampered_archive)) {
+  if (!existsSync(fixture.valid_archive)
+    || !existsSync(fixture.update_archive)
+    || !existsSync(fixture.tampered_archive)) {
     throw new Error(`Packaged DLC fixture builder omitted its archives: ${JSON.stringify(fixture)}`);
   }
   return fixture;
@@ -400,7 +423,57 @@ async function preparePackagedDlcLifecycle(fixture) {
     ...fixture,
     markerPath,
     packageDir: join(runtimeDir, "dlcs", "packages", `sha256-${fixture.package_digest}`),
+    updatePackageDir: join(
+      runtimeDir,
+      "dlcs",
+      "packages",
+      `sha256-${fixture.update_package_digest}`,
+    ),
   };
+}
+
+async function preparePackagedDlcUpdate(contract) {
+  const markerBeforeInstall = await readFile(contract.markerPath, "utf8");
+  const inspection = await apiJson("/api/v1/dlcs/packages/inspect", {
+    method: "POST",
+    body: { archive_path: contract.update_archive },
+  });
+  if (inspection.version !== "2.0.0"
+    || inspection.package_digest !== contract.update_package_digest
+    || inspection.trust_required) {
+    throw new Error(`Packaged DLC update inspection was invalid: ${JSON.stringify(inspection)}`);
+  }
+  const installed = await apiJson("/api/v1/dlcs/install", {
+    method: "POST",
+    body: { archive_path: contract.update_archive },
+  });
+  if (installed.selected_digest !== contract.package_digest
+    || installed.active_digest !== contract.package_digest
+    || installed.installed_versions.length !== 2
+    || !existsSync(contract.packageDir)
+    || !existsSync(contract.updatePackageDir)
+    || (await readFile(contract.markerPath, "utf8")) !== markerBeforeInstall) {
+    throw new Error(`Installing an update changed selection, execution, or old bytes: ${JSON.stringify(installed)}`);
+  }
+
+  const selected = await apiJson(
+    `/api/v1/dlcs/acme.echo/versions/${contract.update_package_digest}/select`,
+    { method: "POST" },
+  );
+  if (selected.state !== "enable_pending_restart"
+    || selected.selected_digest !== contract.update_package_digest
+    || selected.active_digest !== contract.package_digest
+    || (await readFile(contract.markerPath, "utf8")) !== markerBeforeInstall) {
+    throw new Error(`Selecting an update mutated active runtime truth: ${JSON.stringify(selected)}`);
+  }
+  await expectApiProblem(
+    `/api/v1/dlcs/acme.echo/versions/${contract.update_package_digest}`,
+    { method: "DELETE", expectedStatus: 409, expectedCode: "DLC_VERSION_SELECTED" },
+  );
+  await expectApiProblem(
+    `/api/v1/dlcs/acme.echo/versions/${contract.package_digest}`,
+    { method: "DELETE", expectedStatus: 409, expectedCode: "DLC_VERSION_ACTIVE" },
+  );
 }
 
 async function preparePackagedGithubDlcLifecycle(fixture, projectId) {
@@ -472,21 +545,26 @@ async function fileDigestOrNull(path) {
 }
 
 async function verifyPackagedDlcActive(contract) {
+  await verifyPackagedDlcActiveVersion(contract, contract.package_digest, "1.0.0");
+}
+
+async function verifyPackagedDlcActiveVersion(contract, expectedDigest, expectedVersion) {
   const lifecycle = await apiJson("/api/v1/dlcs/acme.echo");
   if (lifecycle.state !== "active"
     || !lifecycle.active
-    || lifecycle.active_digest !== contract.package_digest
-    || lifecycle.selected_digest !== contract.package_digest) {
+    || lifecycle.version !== expectedVersion
+    || lifecycle.active_digest !== expectedDigest
+    || lifecycle.selected_digest !== expectedDigest) {
     throw new Error(`Packaged DLC did not activate its exact digest: ${JSON.stringify(lifecycle)}`);
   }
   const activation = await apiJson("/api/v1/dlcs/activation");
   const activeIdentity = activation.active_dlcs.find((item) => item.dlc_id === "acme.echo");
-  if (activeIdentity?.package_digest !== contract.package_digest
+  if (activeIdentity?.package_digest !== expectedDigest
     || activeIdentity.frontend_entrypoint !== "frontend/index.js") {
     throw new Error(`Activation projection omitted the packaged DLC identity: ${JSON.stringify(activation)}`);
   }
   if (!existsSync(contract.markerPath)
-    || (await readFile(contract.markerPath, "utf8")) !== contract.package_digest) {
+    || (await readFile(contract.markerPath, "utf8")) !== expectedDigest) {
     throw new Error("Packaged DLC activation marker omitted the exact active digest");
   }
 
@@ -494,11 +572,14 @@ async function verifyPackagedDlcActive(contract) {
     method: "POST",
     body: { message: "hello packaged DLC" },
   });
-  if (echo.message !== "hello packaged DLC" || echo.package_digest !== contract.package_digest) {
+  if (echo.message !== "hello packaged DLC" || echo.package_digest !== expectedDigest) {
     throw new Error(`Packaged DLC backend operation returned invalid output: ${JSON.stringify(echo)}`);
   }
 
-  const installedFrontend = await readFile(join(contract.packageDir, "frontend", "index.js"), "utf8");
+  const packageDir = expectedDigest === contract.package_digest
+    ? contract.packageDir
+    : contract.updatePackageDir;
+  const installedFrontend = await readFile(join(packageDir, "frontend", "index.js"), "utf8");
   if (!installedFrontend.includes("acme.echo.dock")
     || !installedFrontend.includes("acme.echo.message")) {
     throw new Error("Installed packaged DLC omitted its visible Dock or Artifact contribution");
@@ -558,11 +639,26 @@ async function verifyPackagedDlcInactiveAndUninstall(contract) {
     expectedCode: "DLC_NOT_ACTIVE",
   });
 
+  const removeOld = await apiJson(
+    `/api/v1/dlcs/acme.echo/versions/${contract.package_digest}`,
+    { method: "DELETE" },
+  );
+  if (!removeOld.executable_bytes_removed
+    || existsSync(contract.packageDir)
+    || !existsSync(contract.updatePackageDir)) {
+    throw new Error(`Explicit old-version removal was incomplete: ${JSON.stringify(removeOld)}`);
+  }
+  const remaining = await apiJson("/api/v1/dlcs/acme.echo");
+  if (remaining.installed_versions.length !== 1
+    || remaining.selected_digest !== contract.update_package_digest) {
+    throw new Error(`Old-version removal changed the selected package: ${JSON.stringify(remaining)}`);
+  }
+
   const uninstall = await apiJson("/api/v1/dlcs/acme.echo", { method: "DELETE" });
   if (!uninstall.executable_bytes_removed || !uninstall.data_retained) {
     throw new Error(`Packaged DLC uninstall returned invalid retention truth: ${JSON.stringify(uninstall)}`);
   }
-  if (existsSync(contract.packageDir)) {
+  if (existsSync(contract.packageDir) || existsSync(contract.updatePackageDir)) {
     throw new Error("Inactive packaged DLC executable bytes remained after uninstall");
   }
   if (!existsSync(contract.markerPath)
@@ -582,6 +678,11 @@ async function verifyPackagedDlcInactiveAndUninstall(contract) {
     install_execution_blocked: true,
     install_disabled: true,
     enable_restart_active_exact_digest: true,
+    side_by_side_install_preserved_selection: true,
+    update_restart_active_exact_digest: true,
+    rollback_restart_active_exact_digest: true,
+    selected_and_active_delete_blocked: true,
+    old_version_removed_explicitly: true,
     backend_operation: "ok",
     frontend_dock_and_artifact: "ok",
     disable_restart_absent: true,
