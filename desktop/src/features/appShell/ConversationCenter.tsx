@@ -28,6 +28,7 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
   const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
+  const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
   const { activeDatasource } = useDatasourceState();
   const [askInputValue, setAskInputValue] = useState("");
   const displayAsk = pendingAsk ?? askInputValue;
@@ -48,12 +49,12 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
     }
   }, [clearPendingAsk, displayAsk, openConversationCenter, showToast]);
 
-  if (!activeDatasource) {
+  if (!activeProjectId) {
     return (
       <section className="conversation-center" aria-label="对话">
         <EmptyState
-          title="连接第一个项目"
-          description="连接一个数据库，开始在中间用自然语言问数。"
+          title="创建第一个项目"
+          description="项目是 DBFox 的工作单元，创建后即可在中间用自然语言开始分析。"
           action={(
             <Button type="button" onClick={onNewProject}>
               <Plus size={14} aria-hidden="true" />
