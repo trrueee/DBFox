@@ -1,7 +1,10 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-
 import { userFacingErrorMessage } from "../presentation";
+import {
+  getDesktopEngineConfig,
+  getDesktopEngineStatus,
+  isEngineDesktopHost,
+  subscribeDesktopEngineState,
+} from "../desktopHost";
 import { client as generatedApiClient } from "./generated/client.gen";
 import type { ClientOptions } from "./generated/types.gen";
 import { zProblemDetails } from "./generated/zod.gen";
@@ -70,9 +73,9 @@ export function getRuntimeSession(): RuntimeSession {
 
 export async function subscribeEngineState(
   listener: (status: EngineStartupStatus) => void,
-): Promise<UnlistenFn> {
-  if (!isTauri()) return () => undefined;
-  return listen<EngineStartupStatus>("dbfox://engine-state", (event) => listener(event.payload));
+): Promise<() => void> {
+  if (!isEngineDesktopHost()) return () => undefined;
+  return subscribeDesktopEngineState(listener);
 }
 
 function validateEngineConfig(config: EngineConfig): void {
@@ -93,8 +96,8 @@ function validateEngineConfig(config: EngineConfig): void {
 }
 
 export async function initEngineConfig(): Promise<void> {
-  if (!isTauri()) return;
-  const config = await invoke<EngineConfig>("get_engine_config");
+  if (!isEngineDesktopHost()) return;
+  const config = await getDesktopEngineConfig();
   validateEngineConfig(config);
   if (config.generation < runtimeSession.generation) return;
   ENGINE_PORT = String(config.port);
@@ -152,7 +155,7 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 async function getEngineStartupStatus(): Promise<EngineStartupStatus> {
-  return invoke<EngineStartupStatus>("get_engine_startup_status");
+  return getDesktopEngineStatus();
 }
 
 /**
@@ -161,7 +164,7 @@ async function getEngineStartupStatus(): Promise<EngineStartupStatus> {
  * starting. Browser-only development paths remain a no-op.
  */
 export async function waitForEngineConfig(options: EngineConfigWaitOptions = {}): Promise<void> {
-  if (!isTauri()) return;
+  if (!isEngineDesktopHost()) return;
 
   const attempts = options.attempts;
   const intervalMs = options.intervalMs ?? 250;
@@ -338,7 +341,7 @@ async function requestForSession(template: Request, session: RuntimeSession): Pr
 
 async function engineAwareFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let request = new Request(input, init);
-  if (isTauri() && runtimeSession.generation === 0) {
+  if (isEngineDesktopHost() && runtimeSession.generation === 0) {
     await refreshEngineConfig();
     request = await requestForSession(request, runtimeSession);
   }
@@ -348,11 +351,11 @@ async function engineAwareFetch(input: RequestInfo | URL, init?: RequestInit): P
   try {
     response = await globalThis.fetch(request);
   } catch (error) {
-    if (!isTauri() || !isReplaySafe(request.method) || request.signal.aborted) throw error;
+    if (!isEngineDesktopHost() || !isReplaySafe(request.method) || request.signal.aborted) throw error;
     await refreshEngineConfig(initialGeneration, request.signal);
     return globalThis.fetch(await requestForSession(retryTemplate, runtimeSession));
   }
-  if (response.status !== 401 || !isTauri() || !isReplaySafe(request.method)) return response;
+  if (response.status !== 401 || !isEngineDesktopHost() || !isReplaySafe(request.method)) return response;
 
   await refreshEngineConfig(undefined, request.signal);
   return globalThis.fetch(await requestForSession(retryTemplate, runtimeSession));

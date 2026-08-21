@@ -45,6 +45,8 @@ venv/
 node_modules/
 desktop/dist/
 desktop/dist-tests/
+desktop/dist-electron/
+desktop/.electron-host-smoke-*/
 desktop/.vite/
 
 # ============================================================
