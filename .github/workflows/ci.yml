@@ -630,6 +630,7 @@ jobs:
       - migration-and-python-quality
       - backend-core
       - isolated-worker-platform-contract
+      - dlc-sdk-platform-contract
       - production-python-compatibility
       - agent-runtime
       - sidecar-build
@@ -647,6 +648,7 @@ jobs:
               "migration-and-python-quality": "${{ needs.migration-and-python-quality.result }}",
               "backend-core": "${{ needs.backend-core.result }}",
               "isolated-worker-platform-contract": "${{ needs.isolated-worker-platform-contract.result }}",
+              "dlc-sdk-platform-contract": "${{ needs.dlc-sdk-platform-contract.result }}",
               "production-python-compatibility": "${{ needs.production-python-compatibility.result }}",
               "agent-runtime": "${{ needs.agent-runtime.result }}",
               "sidecar-build": "${{ needs.sidecar-build.result }}",
@@ -658,6 +660,7 @@ jobs:
               "migration-and-python-quality": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.python_quality == 'true' || needs.changes.outputs.migration == 'true' }}",
               "backend-core": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true' }}",
               "isolated-worker-platform-contract": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.isolated_worker == 'true' }}",
+              "dlc-sdk-platform-contract": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' }}",
               "production-python-compatibility": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true' }}",
               "agent-runtime": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.agent_runtime == 'true' }}",
               "sidecar-build": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.sidecar == 'true' }}",
