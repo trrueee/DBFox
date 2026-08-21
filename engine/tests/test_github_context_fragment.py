@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+from datetime import datetime
+
 import httpx
 
 from engine.agent.context import ContextAssembler
@@ -11,7 +13,7 @@ from engine.agent.context_fragment import ContextContributionInput, ContextFragm
 from engine.agent.repositories.session import SessionRepository
 from engine.github.context import GitHubContextContributor
 from engine.github.contracts import GITHUB_FILE_SNAPSHOT_ARTIFACT_TYPE
-from engine.github.models import GithubRepositoryBinding
+from engine.github.migration import GithubBindingRecord, transitional_store
 from engine.json_codec import dumps
 from engine.models import (
     AgentArtifactRecord,
@@ -96,14 +98,18 @@ def test_github_context_contributor_rehydrates_snapshot(db_session, monkeypatch)
     content_str = "# React\nA JavaScript library for building user interfaces"
     content_sha256 = hashlib.sha256(content_str.encode("utf-8")).hexdigest()
 
-    db_session.add(
-        GithubRepositoryBinding(
+    transitional_store(db_session).create_binding(
+        GithubBindingRecord(
             id=binding_id,
             project_id=project_id,
             owner="facebook",
             repository="react",
             ref_name="main",
             resolved_revision=rev,
+            default_branch=None,
+            description=None,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
         )
     )
     session_id = "session-gh-ctx"
@@ -253,14 +259,18 @@ def test_github_context_contributor_stale_fence(db_session, monkeypatch) -> None
     old_rev = "1111111111111111111111111111111111111111"
     new_rev = "2222222222222222222222222222222222222222"
 
-    db_session.add(
-        GithubRepositoryBinding(
+    transitional_store(db_session).create_binding(
+        GithubBindingRecord(
             id=binding_id,
             project_id=project_id,
             owner="facebook",
             repository="react",
             ref_name="main",
             resolved_revision=new_rev,
+            default_branch=None,
+            description=None,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
         )
     )
     session_id = "session-gh-stale"

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from typing import Any
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.agent.resource_refs import ProjectResourceDescriptor
-from engine.github.models import GithubRepositoryBinding
+from engine.github.migration import transitional_store
+from engine.github.repository import list_github_bindings
 from engine.github.service import GithubReadService
 from engine.tools.runtime.attempt import ResourceScopeRef
 
@@ -20,16 +20,7 @@ def list_github_resources(
     if db is None or not project_id:
         return ()
 
-
-    bindings = (
-        db.execute(
-            select(GithubRepositoryBinding)
-            .where(GithubRepositoryBinding.project_id == project_id)
-            .order_by(GithubRepositoryBinding.created_at.asc())
-        )
-        .scalars()
-        .all()
-    )
+    bindings = list_github_bindings(db, project_id)
 
     return tuple(
         ProjectResourceDescriptor(
@@ -52,7 +43,7 @@ def resolve_github_repository(
     if ref.kind != "github.repository":
         raise KeyError(f"Unexpected resource kind: {ref.kind}")
 
-    binding = db.get(GithubRepositoryBinding, str(ref.id))
+    binding = transitional_store(db).get_binding(str(ref.id))
     if binding is None:
         raise ValueError(f"GitHub repository binding '{ref.id}' does not exist.")
 
