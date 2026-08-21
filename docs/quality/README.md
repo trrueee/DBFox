@@ -14,6 +14,7 @@
 - [工程质量门禁](./engineering-gates.md)：本地与 CI 的 Python、前端、Rust、迁移、Frozen Sidecar 和依赖策略。
 - [技术调研、方案复用与架构克制](./technical-investigation-and-reuse.md)：实现前先调查、复用优先、避免堆叠中间层、兼容层可退出和决策依据要求。
 - [R5.2 GitHub DLC 数据迁移证据](./2026-08-21-r5-github-data-migration.md)：一次性导入、失败保留、幂等重放，以及迁移后 DLC SQLite 唯一读写权威。
+- [R5.3 GitHub Core 运行图移除证据](./2026-08-21-r5-github-core-removal.md)：删除静态 API、ORM、运行时与前端组合，同时保留历史 Alembic 升级能力。
 - [P2 Memory v4 Cutover Gate 本地证据与限制](./2026-08-16-p2-memory-v4-cutover-evidence.md)：当前确定性门禁已通过；真实 Provider AgentBench 后测未执行，`DBFOX_MEMORY_V4_CONTEXT` 保持默认关闭。
 - [P2 Memory v4 DeepSeek 真实 Provider 调查与修复记录](./2026-08-17-memory-v4-projection-deepseek-investigation.md)：定位 `sha256:` content-hash tool version 与 Catalog reducer 语义版本门禁不匹配，修复 projection 无法写入的问题；v4 cutover 仍待完整回归门禁通过。
 - [Agent 生产评测方法](./agent-evaluation-methodology.md)：分层 Harness、数据集角色、Grader、统计门禁与脱敏 Trace 合同。

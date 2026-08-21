@@ -1,9 +1,9 @@
-"""R5.2 one-way cutover from historical Core GitHub rows to DLC-owned SQLite.
+"""Historical one-way import of Core GitHub rows into DLC-owned SQLite.
 
-This module is an explicitly temporary compatibility boundary.  The Alembic
-revision invokes it once during upgrade, and the remaining static GitHub
-surface uses the same target store until R5.3 deletes Core GitHub wiring.
-Historical rows are never updated or deleted.
+This module belongs to the Alembic migration boundary.  It is deliberately not
+part of the engine runtime graph: current GitHub behavior is owned by the
+``dbfox.github`` DLC, while old Core rows remain available for upgrades from
+pre-R5 databases.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ _BINDING_COLUMNS = (
 
 
 class GithubDataMigrationError(RuntimeError):
-    """Fail-closed migration or target-store integrity error."""
+    """Fail-closed historical import or target-store integrity error."""
 
 
 @dataclass(frozen=True)
@@ -45,22 +45,6 @@ class GithubDataMigrationResult:
     source_row_count: int
     source_fingerprint: str
     target_changed: bool
-
-
-@dataclass(frozen=True)
-class GithubBindingRecord:
-    """Core-facing value read from the authoritative DLC target store."""
-
-    id: str
-    project_id: str
-    owner: str
-    repository: str
-    ref_name: str
-    resolved_revision: str
-    default_branch: str | None
-    description: str | None
-    created_at: datetime
-    updated_at: datetime
 
 
 def _metadata_database_path(bind: Engine | Connection) -> Path:
@@ -73,7 +57,7 @@ def _metadata_database_path(bind: Engine | Connection) -> Path:
 
 
 def github_dlc_data_path(bind: Engine | Connection) -> Path:
-    """Resolve the product DLC data path while keeping isolated DB tests isolated."""
+    """Resolve product storage while keeping isolated migration tests isolated."""
     metadata_path = _metadata_database_path(bind)
     from engine.db import DB_PATH
     from engine.runtime_paths import private_runtime_dir
@@ -100,7 +84,7 @@ def _timestamp(value: Any) -> str:
 
 
 def _canonical_row(
-    row: RowMapping | sqlite3.Row | dict[str, Any]
+    row: RowMapping | sqlite3.Row | dict[str, Any],
 ) -> dict[str, str | None]:
     values = dict(row)
     return {
@@ -147,8 +131,8 @@ def _load_legacy_rows(source: Session | Connection) -> list[dict[str, str | None
     return [_canonical_row(row) for row in rows]
 
 
-class TransitionalGithubBindingStore:
-    """Temporary Core adapter over the DLC-owned database; removed in R5.3."""
+class GithubLegacyImportTarget:
+    """Migration-only writer for the authoritative DLC database."""
 
     def __init__(self, data_path: Path) -> None:
         data_path.mkdir(parents=True, exist_ok=True)
@@ -195,24 +179,8 @@ class TransitionalGithubBindingStore:
                 """
             )
 
-    @staticmethod
-    def _binding(row: sqlite3.Row) -> GithubBindingRecord:
-        values = _canonical_row(row)
-        return GithubBindingRecord(
-            id=str(values["id"]),
-            project_id=str(values["project_id"]),
-            owner=str(values["owner"]),
-            repository=str(values["repository"]),
-            ref_name=str(values["ref_name"]),
-            resolved_revision=str(values["resolved_revision"]),
-            default_branch=values["default_branch"],
-            description=values["description"],
-            created_at=datetime.fromisoformat(str(values["created_at"])),
-            updated_at=datetime.fromisoformat(str(values["updated_at"])),
-        )
-
-    def sync_legacy_rows(self, rows: Sequence[dict[str, str | None]]) -> bool:
-        """Synchronize only identities owned by an uncompleted Alembic import."""
+    def sync(self, rows: Sequence[dict[str, str | None]]) -> bool:
+        """Synchronize only identities owned by an uncompleted import."""
         changed = False
         source_ids = {str(row["id"]) for row in rows}
         with self._connect() as connection:
@@ -298,7 +266,7 @@ class TransitionalGithubBindingStore:
                 raise
         return changed
 
-    def validate_legacy_rows(self, rows: Sequence[dict[str, str | None]]) -> None:
+    def validate(self, rows: Sequence[dict[str, str | None]]) -> None:
         with self._connect() as connection:
             for row in rows:
                 target = connection.execute(
@@ -316,110 +284,25 @@ class TransitionalGithubBindingStore:
                         "DLC target validation failed before GitHub cutover"
                     )
 
-    def list_bindings(self, project_id: str) -> list[GithubBindingRecord]:
-        if not project_id:
-            return []
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
-                SELECT id, project_id, owner, repository, ref_name,
-                       resolved_revision, default_branch, description,
-                       created_at, updated_at
-                  FROM repository_bindings
-                 WHERE project_id = ?
-                 ORDER BY created_at, id
-                """,
-                (project_id,),
-            ).fetchall()
-        return [self._binding(row) for row in rows]
-
-    def get_binding(self, binding_id: str) -> GithubBindingRecord | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                SELECT id, project_id, owner, repository, ref_name,
-                       resolved_revision, default_branch, description,
-                       created_at, updated_at
-                  FROM repository_bindings
-                 WHERE id = ?
-                """,
-                (binding_id,),
-            ).fetchone()
-        return self._binding(row) if row is not None else None
-
-    def create_binding(self, binding: GithubBindingRecord) -> None:
-        row = {
-            "id": binding.id,
-            "project_id": binding.project_id,
-            "owner": binding.owner,
-            "repository": binding.repository,
-            "ref_name": binding.ref_name,
-            "resolved_revision": binding.resolved_revision,
-            "default_branch": binding.default_branch,
-            "description": binding.description,
-            "created_at": binding.created_at.isoformat(),
-            "updated_at": binding.updated_at.isoformat(),
-        }
-        with self._connect() as connection, connection:
-            connection.execute(
-                """
-                INSERT INTO repository_bindings (
-                    id, project_id, owner, repository, ref_name,
-                    resolved_revision, default_branch, description,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                tuple(row[column] for column in _BINDING_COLUMNS),
-            )
-
-    def update_binding(self, binding: GithubBindingRecord) -> None:
-        with self._connect() as connection, connection:
-            cursor = connection.execute(
-                """
-                UPDATE repository_bindings
-                   SET ref_name = ?, resolved_revision = ?, default_branch = ?,
-                       description = ?, updated_at = ?
-                 WHERE id = ?
-                """,
-                (
-                    binding.ref_name,
-                    binding.resolved_revision,
-                    binding.default_branch,
-                    binding.description,
-                    binding.updated_at.isoformat(),
-                    binding.id,
-                ),
-            )
-        if cursor.rowcount != 1:
-            raise KeyError(binding.id)
-
-    def delete_binding(self, project_id: str, binding_id: str) -> bool:
-        with self._connect() as connection, connection:
-            cursor = connection.execute(
-                "DELETE FROM repository_bindings WHERE id = ? AND project_id = ?",
-                (binding_id, project_id),
-            )
-        return cursor.rowcount == 1
-
 
 def migrate_legacy_github_data(
     source: Session | Connection,
     *,
     data_path: Path | None = None,
 ) -> GithubDataMigrationResult:
-    """Commit and verify the target before Alembic records the cutover revision."""
+    """Commit and verify target data before Alembic records the revision."""
     bind = source.get_bind() if isinstance(source, Session) else source
-    store = TransitionalGithubBindingStore(data_path or github_dlc_data_path(bind))
+    target = GithubLegacyImportTarget(data_path or github_dlc_data_path(bind))
     rows = _load_legacy_rows(source)
     fingerprint = _fingerprint(rows)
     try:
-        changed = store.sync_legacy_rows(rows)
+        changed = target.sync(rows)
         confirmation_rows = _load_legacy_rows(source)
         if _fingerprint(confirmation_rows) != fingerprint:
             raise GithubDataMigrationError(
                 "Historical GitHub data changed during migration; cutover was not recorded"
             )
-        store.validate_legacy_rows(rows)
+        target.validate(rows)
     except sqlite3.Error as exc:
         raise GithubDataMigrationError("GitHub DLC target migration failed") from exc
     return GithubDataMigrationResult(
@@ -427,8 +310,3 @@ def migrate_legacy_github_data(
         source_fingerprint=fingerprint,
         target_changed=changed,
     )
-
-
-def transitional_store(source: Session) -> TransitionalGithubBindingStore:
-    """Return the cut-over target without consulting historical Core rows."""
-    return TransitionalGithubBindingStore(github_dlc_data_path(source.get_bind()))

@@ -5,9 +5,9 @@
 > 状态：当前
 
 >
-> 最后核验：2026-08-20
+> 最后核验：2026-08-21
 >
-> 基线：`main@ae6966dbcba5e53ef2c4e1f91d7186be635dab7a`
+> 基线：`main@709d0f02ae6d298dafe452e9d8e50f523e6e11a7` + R5.3 work package
 >
 > 上位 Issue：[#59](https://github.com/trrueee/DBFox/issues/59)
 
@@ -41,19 +41,19 @@ Local file installation is the foundational baseline. Marketplace and remote ind
 
 ---
 
-## 2. Current Static DLC Registration Map (Archaeology)
+## 2. Current DLC Registration Map
 
-The DBFox product capabilities (Data, Workspace, GitHub) currently assemble at explicit compile-time composition roots. Runtime DLC Platform introduces dynamic registration into these exact same typed seams:
+Data and Workspace remain explicit built-ins. GitHub is no longer part of the Core production graph: the `dbfox.github` package reaches the product only through the same public typed host seams available to any DLC. Historical GitHub SQL is retained solely under the Alembic migration boundary.
 
 | Seam | Backend / Frontend | Compile-Time Baseline | Target Dynamic Host Seam |
 |---|---|---|---|
-| **Tool Extension** | Backend (`engine/runtime_composition.py`) | `register_data_extension`, `register_workspace_extension`, `register_github_extension` | `host.tools.register(...)` |
-| **Resource Discovery** | Backend (`engine/runtime_composition.py`) | `list_database_resources`, `list_workspace_resources`, `list_github_resources` | `host.resources.register_provider(...)` |
-| **Resource Resolution** | Backend (`engine/runtime_composition.py`) | `resolve_database`, `resolve_workspace`, `resolve_github` | `host.resources.register_resolver(...)` |
-| **Context Contribution** | Backend (`engine/runtime_composition.py`) | `WorkspaceContextContributor`, `GitHubContextContributor` | `host.context.register(...)` |
+| **Tool Extension** | Backend (`engine/runtime_composition.py`) | Data and Workspace registrars | `host.tools.register(...)` |
+| **Resource Discovery** | Backend (`engine/runtime_composition.py`) | `list_database_resources`, `list_workspace_resources` | `host.resources.register_provider(...)` |
+| **Resource Resolution** | Backend (`engine/runtime_composition.py`) | database and workspace resolvers | `host.resources.register_resolver(...)` |
+| **Context Contribution** | Backend (`engine/runtime_composition.py`) | `WorkspaceContextContributor` | `host.context.register(...)` |
 | **Completion Constraints** | Backend (`engine/runtime_composition.py`) | `DataResultCitationConstraint` | `host.completion.register(...)` |
-| **Artifact Contract** | Backend (`engine/agent/artifact.py`, `engine/github/contracts.py`) | `register_artifact_payload_contract` | `host.artifacts.register(...)` |
-| **Operations / API** | Backend (`engine/api/`) | Static FastAPI routers (`/datasources`, `/projects/{id}/github`) | `POST /api/v1/dlcs/{dlc_id}/operations/{op}` |
+| **Artifact Contract** | Backend (`engine/agent/artifact.py`) | Core/Data/Workspace contracts | `host.artifacts.register(...)` |
+| **Operations / API** | Backend (`engine/api/`) | Static Core product routers | `POST /api/v1/dlcs/{dlc_id}/operations/{op}` |
 | **Resource Connector** | Frontend (`desktop/src/features/resources/`) | `productResourceConnectors()` | `host.connectors.register(...)` |
 | **Requested Resources** | Frontend (`desktop/src/features/resources/`) | `PRODUCT_REQUESTED_RESOURCE_CONTRIBUTORS` | `host.requestedResources.register(...)` |
 | **Dock Views** | Frontend (`desktop/src/features/dock/`) | `productDockViews()` | `host.dockViews.register(...)` |

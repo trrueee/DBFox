@@ -78,7 +78,6 @@ def dlc_service(tmp_path: Path, trust_store: DlcTrustStore):
 
 @pytest.fixture(autouse=True)
 def reset_active_snapshot():
-    import engine.github.contracts  # noqa: F401
     import engine.tools.builtin.workspace  # noqa: F401
     from engine.agent.artifact import artifact_payload_contracts
     from engine.db import engine

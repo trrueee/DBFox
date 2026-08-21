@@ -3,7 +3,6 @@ import { coreDockViews } from "./coreDockViews";
 import { dataDockViews } from "./dataDockViews";
 import type { DockViewContribution } from "./types";
 import { workspaceDockViews } from "./workspaceDockViews";
-import { githubDockViews } from "./githubDockViews";
 import { useDlcStore } from "../dlc/extensionStore";
 
 export interface DockViewRegistry {
@@ -34,7 +33,6 @@ export function productDockViews(): readonly DockViewContribution[] {
     ...coreDockViews,
     ...dataDockViews,
     ...workspaceDockViews,
-    ...githubDockViews,
   ];
 }
 
