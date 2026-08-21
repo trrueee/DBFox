@@ -2,9 +2,25 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import type {
+  DiagnosticBundlePayload,
+  DiagnosticBundleResult,
   DbfoxDesktopBridge,
   EngineConfig,
   EngineStartupStatus,
+  LaunchRecoveryStatus,
+  ProjectFileContent,
+  ProjectFolderListing,
+  SaveExternalImageResult,
+} from "../../shared/desktopContract";
+
+export type {
+  DiagnosticBundlePayload,
+  DiagnosticBundleResult,
+  LaunchRecoveryStatus,
+  ProjectFileContent,
+  ProjectFolderEntry,
+  ProjectFolderListing,
+  SaveExternalImageResult,
 } from "../../shared/desktopContract";
 
 declare global {
@@ -48,8 +64,101 @@ export async function subscribeDesktopEngineState(
 }
 
 export async function openDesktopDiagnosticLogs(): Promise<void> {
-  if (electronBridge() !== null) {
-    throw new Error("Electron diagnostic log integration has not migrated yet");
-  }
+  const electron = electronBridge();
+  if (electron !== null) return electron.shell.openDiagnosticLogs();
   await invoke("open_diagnostic_logs");
+}
+
+export async function pickDesktopProjectFolder(): Promise<string | null> {
+  const electron = electronBridge();
+  if (electron !== null) return electron.files.pickProjectFolder();
+  const result = await invoke<{ path?: string | null }>("pick_project_folder");
+  return result.path ?? null;
+}
+
+export function listDesktopProjectFolder(path: string): Promise<ProjectFolderListing> {
+  const electron = electronBridge();
+  return electron !== null
+    ? electron.files.listProjectFolder(path)
+    : invoke<ProjectFolderListing>("list_project_folder", { path });
+}
+
+export function readDesktopProjectFile(path: string): Promise<ProjectFileContent> {
+  const electron = electronBridge();
+  return electron !== null
+    ? electron.files.readProjectFile(path)
+    : invoke<ProjectFileContent>("read_project_file", { path });
+}
+
+export async function pickDesktopDlcPackage(): Promise<string | null> {
+  const electron = electronBridge();
+  if (electron !== null) return electron.files.pickDlcPackage();
+  const result = await invoke<{ path?: string | null }>("pick_dlc_package");
+  return result.path ?? null;
+}
+
+export function openDesktopExternalHttps(url: string): Promise<void> {
+  const electron = electronBridge();
+  return electron !== null
+    ? electron.shell.openExternalHttps(url)
+    : invoke("open_external_https_url", { url });
+}
+
+export function saveDesktopExternalImage(url: string): Promise<SaveExternalImageResult> {
+  const electron = electronBridge();
+  return electron !== null
+    ? electron.files.saveExternalImage(url)
+    : invoke<SaveExternalImageResult>("save_external_image", { url });
+}
+
+export function exportDesktopDiagnosticBundle(payload: DiagnosticBundlePayload): Promise<DiagnosticBundleResult> {
+  const electron = electronBridge();
+  return electron !== null
+    ? electron.diagnostics.exportBundle(payload)
+    : invoke<DiagnosticBundleResult>("export_diagnostic_bundle", { payload });
+}
+
+export function getDesktopLaunchRecoveryStatus(): Promise<LaunchRecoveryStatus> {
+  const electron = electronBridge();
+  return electron !== null
+    ? electron.lifecycle.getRecoveryStatus()
+    : invoke<LaunchRecoveryStatus>("get_launch_recovery_status");
+}
+
+export async function getDesktopWindowMaximized(): Promise<boolean> {
+  const electron = electronBridge();
+  if (electron !== null) return electron.window.isMaximized();
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  return getCurrentWindow().isMaximized();
+}
+
+export async function minimizeDesktopWindow(): Promise<void> {
+  const electron = electronBridge();
+  if (electron !== null) return electron.window.minimize();
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  await getCurrentWindow().minimize();
+}
+
+export async function toggleMaximizeDesktopWindow(): Promise<boolean> {
+  const electron = electronBridge();
+  if (electron !== null) return electron.window.toggleMaximize();
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  const window = getCurrentWindow();
+  await window.toggleMaximize();
+  return window.isMaximized();
+}
+
+export async function closeDesktopWindow(): Promise<void> {
+  const electron = electronBridge();
+  if (electron !== null) return electron.window.close();
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  await getCurrentWindow().close();
+}
+
+export async function subscribeDesktopWindowState(listener: (maximized: boolean) => void): Promise<() => void> {
+  const electron = electronBridge();
+  if (electron !== null) return electron.window.subscribe(listener);
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  const window = getCurrentWindow();
+  return window.onResized(async () => listener(await window.isMaximized()));
 }

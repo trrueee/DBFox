@@ -159,7 +159,7 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
+export async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
   if (response.body === null) return new Uint8Array();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
