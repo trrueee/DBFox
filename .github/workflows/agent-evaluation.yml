@@ -60,7 +60,7 @@ jobs:
           --junitxml=output/agent-evaluation/deterministic-harness.xml
       - name: Upload deterministic evaluation evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: agentbench-contract-${{ github.run_id }}
           path: output/agent-evaluation/
@@ -115,7 +115,7 @@ jobs:
             --junitxml=output/agent-evaluation/mysql-contract.xml
       - name: Upload MySQL contract evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: agentbench-mysql-${{ github.run_id }}
           path: output/agent-evaluation/
@@ -197,7 +197,7 @@ jobs:
           fi
       - name: Upload real-provider evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: agentbench-real-${{ github.run_id }}
           path: output/agent-evaluation/
