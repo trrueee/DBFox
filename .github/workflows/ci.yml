@@ -44,7 +44,7 @@ jobs:
       supply_chain: ${{ steps.classify.outputs.supply_chain }}
     steps:
       # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -81,7 +81,7 @@ jobs:
           echo "DBFOX_RUNTIME_DIR=$RUNNER_TEMP/dbfox-runtime" >> "$GITHUB_ENV"
 
       # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -147,7 +147,7 @@ jobs:
         run: echo "DBFOX_RUNTIME_DIR=$RUNNER_TEMP/dbfox-runtime" >> "$GITHUB_ENV"
 
       # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -181,7 +181,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -216,7 +216,7 @@ jobs:
         os: [ubuntu-24.04, windows-2025, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -267,7 +267,7 @@ jobs:
         run: echo "DBFOX_RUNTIME_DIR=$RUNNER_TEMP/dbfox-runtime" >> "$GITHUB_ENV"
 
       # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -303,7 +303,7 @@ jobs:
         run: echo "DBFOX_RUNTIME_DIR=$RUNNER_TEMP/dbfox-runtime" >> "$GITHUB_ENV"
 
       # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -333,7 +333,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -382,7 +382,7 @@ jobs:
       npm_config_fetch_timeout: "30000"
     steps:
       # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -430,7 +430,7 @@ jobs:
         working-directory: desktop
     steps:
       # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -494,7 +494,7 @@ jobs:
       DBFOX_RELEASE_TOKEN_SENTINEL: dbfox-ci-release-token-sentinel-7f596c622a1d4c6a
     steps:
       # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
