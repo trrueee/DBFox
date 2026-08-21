@@ -27,7 +27,7 @@
 
 ```mermaid
 flowchart TB
-    HOST["Tauri Host"] --> UI["React App Shell"]
+    HOST["Electron Host"] --> UI["React App Shell"]
     UI --> CONV["Conversation Product Layer"]
     UI --> WORK["Datasource / SQL / Settings Workspaces"]
     CONV --> CLIENT["Typed API + Stream Client"]
@@ -53,7 +53,7 @@ flowchart TB
 
 | 模块 | 主要职责 | 主要输入 | 主要输出 | 权威状态 | 禁止承担 |
 |---|---|---|---|---|---|
-| Tauri Host | sidecar 生命周期、端口/token、窗口与外部导航 | 安装资源、运行参数 | Engine status/config | 进程状态 | Agent 业务状态 |
+| Electron Host | sidecar 生命周期、端口/token、窗口与外部导航 | 安装资源、运行参数 | Engine status/config | 进程状态 | Agent 业务状态 |
 | App Shell | `activeProjectId`/per-project `projectShell`、Workspace 路由、Dock view presentation/visibility/render registry（`dockViewRegistry`）、主题、命令与全局错误边界；真实 Project list/create 经 `projectsApi`/`useProjectState` | UI command | tab/workspace | UI Store + Project API 投影 | 推断后端终态 |
 | Conversation Product | Message、Activity、Approval、Question、Artifact Dock | snapshot/events/live | 用户可理解过程 | 后端投影的前端缓存 | 原始调试 trace、结果历史 |
 | Typed API Client | token、错误映射、AbortSignal、SSE | request DTO | response/event DTO | 无 | 静默 fallback、业务重试 |
@@ -74,16 +74,16 @@ flowchart TB
 
 ## 4. 模块详细设计
 
-### 4.1 Tauri Host 与 Engine Startup Gate
+### 4.1 Electron Host 与 Engine Startup Gate
 
-入口是 Rust desktop host。它定位打包 sidecar、启动隐藏子进程、等待健康状态并向 WebView 提供动态 port/token。前端 `EngineStartupGate` 展示正常产品加载、失败原因、重试与诊断日志入口。
+入口是 TypeScript Electron Main。它校验打包 sidecar manifest/hash、启动隐藏子进程、等待健康状态并通过 preload 向 Renderer 提供动态 port/token。前端 `EngineStartupGate` 展示正常产品加载、失败原因、重试与诊断日志入口。
 
 状态边界：
 
-- Rust 拥有 sidecar process handle 和 startup state；
+- Electron Main 拥有 sidecar process handle 和 startup state；
 - Python `/health` 只证明引擎已完成初始化；
 - React 在 ready 前不发送业务请求；
-- Web 开发模式不伪造 Tauri 生命周期，只连接开发引擎。
+- Web 开发模式不伪造 Electron 生命周期，只连接开发引擎。
 
 主要失败：端口占用、sidecar 缺失、metadata migration 失败、凭据库不可用、旧进程锁定安装文件。失败必须保留诊断路径，不只返回错误码。
 
@@ -91,12 +91,12 @@ flowchart TB
 
 App Shell 组织实体侧栏（顶层项目/连接胶囊 + 每行 `对话|文件` / `对话|数据库` 子胶囊）、固定 Main Surface、Dock registry、命令面板、连接管理 Dialog、设置和对话。Workspace Store 只保存 Shell identity/layout（含 `sidebarEntityMode`、`projectSubMode`、`connectionSubMode`、per-project shell state 和通用 Dock tab identity）；SQL draft/entries 归 `sqlConsoleStore`，表选择/表子页归 `tableWorkspaceStore`，Artifact 与文件 Dock 打开动作归 `artifactDockStore`/`workspaceFileStore`，业务实体由各领域 Store 从后端加载。
 
-本地项目文件链路由 Tauri Host 承担 I/O 并保持有界：
+本地项目文件链路由 Electron Main 承担 I/O 并保持有界：
 
 - `pick_project_folder`：新建项目时选择本地工作目录，并把该目录写入应用配置目录的 `project_folder_access.json` 授权根集合；
 - `list_project_folder`：文件树按需读取单层，跳过 `.git`/`node_modules`/`target` 等重目录，最多 600 项；
 - `read_project_file`：只读 UTF-8 文本，≤ 1 MiB；二进制/超大/非 UTF-8 返回明确错误；
-- `list_project_folder` / `read_project_file` 在 Rust 侧 canonicalize 路径并拒绝不在任何已选择授权根之内的路径（含 symlink 逃逸）；
+- `list_project_folder` / `read_project_file` 在 Main 侧 realpath 路径并拒绝不在任何已选择授权根之内的路径（含 symlink 逃逸）；
 - 文件内容只进入 `WorkspaceFileDockContent` 的组件内状态，不进入 Shell Store。
 
 Dock 的折叠/恢复属于 UI preference；Artifact 本身、选择关系、Result 数据和项目文件内容不属于 Shell Store。
@@ -191,7 +191,7 @@ Runtime reset 只允许操作 private runtime root 内经过校验的路径，�
 
 ```mermaid
 sequenceDiagram
-    participant Host as Tauri Host
+    participant Host as Electron Host
     participant Engine as FastAPI Sidecar
     participant Meta as Metadata DB
     participant Coord as SessionCoordinator

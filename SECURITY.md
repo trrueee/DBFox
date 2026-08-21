@@ -10,7 +10,7 @@ DBFox 当前处于持续开发阶段。只有通过规范仓库 [`trrueee/DBFox`
 
 - 绕过 SQL 只读执行链、方言校验或参数绑定，执行任意/写操作；
 - 泄漏或越权访问数据库凭据、模型 API Key、运行时 Token、DSN、会话内容或查询结果；
-- 绕过 Tauri capability/ACL、CSP、Sidecar 鉴权或系统凭据库边界；
+- 绕过 Electron preload/IPC sender 校验、CSP、Sidecar 鉴权或系统凭据库边界；
 - 绕过升级器、安装包或构建来源（Attestation/Authenticode）的完整性校验；
 - 依赖供应链问题（恶意依赖、锁文件或哈希校验绕过）。
 

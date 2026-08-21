@@ -6,7 +6,6 @@ import argparse
 import importlib.metadata
 import json
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,7 +30,7 @@ class Component:
 
     @property
     def purl(self) -> str:
-        namespace = {"node": "npm", "python": "pypi", "rust": "cargo"}[self.ecosystem]
+        namespace = {"node": "npm", "python": "pypi"}[self.ecosystem]
         return f"pkg:{namespace}/{self.name}@{self.version}"
 
 
@@ -67,28 +66,6 @@ def python_components() -> list[Component]:
             raw = str(metadata.get("License") or "").strip()
             license_value = raw if raw and raw.upper() != "UNKNOWN" else "UNKNOWN"
         result.append(Component("python", name, version, license_value))
-    return result
-
-
-def rust_components() -> list[Component]:
-    completed = subprocess.run(
-        ["cargo", "metadata", "--locked", "--format-version", "1"],
-        cwd=ROOT / "desktop" / "src-tauri",
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    metadata = json.loads(completed.stdout)
-    workspace = set(metadata.get("workspace_members") or [])
-    result: list[Component] = []
-    for package in metadata.get("packages") or []:
-        if package.get("id") in workspace:
-            continue
-        result.append(Component(
-            "rust", str(package["name"]), str(package["version"]), str(package.get("license") or "UNKNOWN")
-        ))
     return result
 
 
@@ -152,10 +129,10 @@ def cyclonedx_document(components: list[Component]) -> dict[str, object]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ecosystem", choices=("node", "python", "rust", "all"), default="all")
+    parser.add_argument("--ecosystem", choices=("node", "python", "all"), default="all")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    loaders = {"node": node_components, "python": python_components, "rust": rust_components}
+    loaders = {"node": node_components, "python": python_components}
     selected = loaders if args.ecosystem == "all" else {args.ecosystem: loaders[args.ecosystem]}
     components = [component for loader in selected.values() for component in loader()]
     failures = validate_licenses(components)

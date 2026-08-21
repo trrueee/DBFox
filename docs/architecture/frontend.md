@@ -106,9 +106,9 @@ flowchart LR
 布局原则：
 
 - 左侧是实体导航：顶层「项目/连接」胶囊切换。项目行内是「对话/文件」子胶囊，连接行内是「对话/数据库」子胶囊；下方内容随当前实体子模式直接切换，不再出现“对话列表/文件/数据库对象树”这类分区标题。项目图标使用 Folder 激活/非激活两态，连接使用官方数据库图标，当前数据库节点使用数据源品牌图标。
-- 中间只放对话与「新建项目」表单。新建项目由 Tauri `pick_project_folder` 命令弹出系统文件夹选择器，自动用文件夹名作为项目名，并把 `workspace_root` 写入 Project API；表单提交后回到智能问数首页。
+- 中间只放对话与「新建项目」表单。新建项目由 Electron preload 的 `pickProjectFolder` 弹出系统文件夹选择器，自动用文件夹名作为项目名，并把 `workspace_root` 写入 Project API；表单提交后回到智能问数首页。
 - 新建连接采用 Navicat 式 `Dialog` 弹窗承载 `DataSourcesPage`，不再让数据源管理页占满中间对话区；旧 `centerMode === "datasource"` 分支和 `openDatasourceCenter`/`centerDatasourceMode` Shell 状态已删除，命令面板的「管理连接」动作改为打开该 Dialog。
-- 项目「文件」子模式通过 Tauri `list_project_folder` 逐层懒加载本地目录（跳过 `.git`、`node_modules`、`target` 等重目录），点击文本文件用 `read_project_file` 读取（UTF-8、≤ 1 MiB），并在 Dock 打开只读 `dbfox.workspace.file` 视图；文件内容不进入 Shell Store。
+- 项目「文件」子模式通过 Electron preload 的 `listProjectFolder` 逐层懒加载本地目录（跳过 `.git`、`node_modules`、`target` 等重目录），点击文本文件用 `readProjectFile` 读取（UTF-8、≤ 1 MiB），并在 Dock 打开只读 `dbfox.workspace.file` 视图；文件内容不进入 Shell Store。
 - 顶部不再显示项目名与连接状态。
 - 右侧 `WorkspaceDock` 是统一 Tab 容器：SQL 控制台、表详情、只读项目文件、工件总览和工件 Tab 都在这里。项目文件 Tab 按 `projectId` 对当前 Project 可见，切换 Project 后其他 Project 的文件 Tab 隐藏。
 - Shell/View 状态已分 owner：`workspaceStore` 只保存 Shell identity/layout 和通用 `openDockTab`/`updateDockTab`；SQL draft/entries 归 `sqlConsoleStore`，表选择/表子页归 `tableWorkspaceStore`，工件/文件 Dock 打开动作归 `artifactDockStore`/`workspaceFileStore`。`WorkspaceDockTabKind` 是开放 string，未知 view 走统一 fallback。
@@ -213,7 +213,7 @@ Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecute
 | `NULL`、布尔、数字、日期 | 固定的紧凑语义样式 | 不额外加载 | 保留原始复制文本 |
 | JSON 对象或数组 | 类型与成员数摘要 | 结构树和格式化详情 | 只解析合法对象或数组；无效 JSON 按普通文本显示 |
 | 长文本或多行文本 | 类型标签与单行截断摘要 | 有界悬浮预览；点击打开完整 Value Viewer | 保留原始换行；网格不展开整段内容 |
-| 普通 HTTPS URL | 省略显示并带外部链接图标 | 点击先进入 Value Viewer，再由明确动作交给 Rust/Tauri opener | 只允许 HTTPS；前后端边界重复校验 |
+| 普通 HTTPS URL | 省略显示并带外部链接图标 | 点击先进入 Value Viewer，再由明确动作交给 Electron shell boundary | 只允许 HTTPS；前后端边界重复校验 |
 | HTTPS 图片 URL | 图片类型入口，不自动请求远端 | 稳定悬浮约 400ms 后快速预览；点击在应用内完整查看；可再次选择外部打开 | 仅识别受支持图片后缀或已知图片处理参数；使用 `no-referrer`；失败显示固定状态 |
 | 二进制 | 仅在二进制列中识别后端 `<binary>` 占位 | Viewer 解释原始字节未进入当前合同 | 不把普通字符串 `<binary>` 当占位，不伪造预览或下载 |
 
@@ -225,7 +225,7 @@ Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecute
 
 - [DataGrip：View data](https://www.jetbrains.com/help/datagrip/tables-view-data.html) 将 JSON、数组、长值和图片放入独立 Value editor，而不是扩大主网格行高；
 - [DBeaver：Value Panel](https://dbeaver.com/docs/team-edition/desktop/Value-Panel/) 按 Text、JSON、Binary、Image 等内容类型提供专用查看方式；
-- [Tauri：Content Security Policy](https://v2.tauri.app/security/csp/) 要求只开放应用确实需要的资源来源，因此图片只扩展 `img-src`，不扩展脚本、frame 或通用网络请求能力。
+- Electron app protocol 的 CSP 只开放应用确实需要的资源来源，因此图片只扩展 `img-src`，不扩展脚本、frame 或通用网络请求能力。
 
 ## 7. 状态边界
 
@@ -270,7 +270,7 @@ Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecute
 - 字号按 UI、数据表、SQL/代码、Agent 对话四个真实阅读场景独立设置，使用受控整数 px：UI 11–16、数据 10–18、代码 11–22、Agent 13–24；组件继续引用语义字号 Token，不保存逐组件覆盖。
 - 密度使用 `compact | standard | comfortable` 统一控制工具栏、按钮和主要留白；UI、数据、代码字体家族分别选择受控的本机字体栈。
 - Agent 与 SQL/代码行高独立；数据表可配置默认行高、网格线、斑马纹、NULL 呈现和默认主键冻结，不改变手动列固定能力。
-- 高对比度、减少动效同时支持显式设置和系统媒体查询；系统 DPI 交给 Tauri WebView，不叠加 CSS zoom。
+- 高对比度、减少动效同时支持显式设置和系统媒体查询；系统 DPI 交给 Electron Chromium，不叠加 CSS zoom。
 - 数据源侧栏与 Agent 工件面板把拖拽结果写回同一偏好文档；原生窗口位置与尺寸由官方 Window State 插件独占，不保存第二份窗口坐标。
 - 导入/导出使用同一严格 schema，拒绝未知字段与超大文件；结构上不包含 Token、密码、DSN、SQL、会话或日志。
 - `ThemeProvider` 只把规范偏好投影为根元素的 `data-*` 属性；`tokens.css` 是色彩和字号的唯一视觉事实来源。
@@ -325,7 +325,7 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 | Workspace Shell | `desktop/src/stores/workspaceStore.ts`、`desktop/src/features/appShell/WorkspaceDock.tsx` |
 | Dock Registry | `desktop/src/features/appShell/dockViewRegistry.tsx`、`dockViewContent.tsx` |
 | 实体侧栏 | `desktop/src/features/datasource/DataSourceTree.tsx` |
-| 新建项目/本地文件 | `desktop/src/features/projects/ProjectCreateForm.tsx`、`useProjectFolderTree.ts`、`desktop/src/lib/projectFolder.ts`、`desktop/src-tauri/src/project_folder.rs` |
+| 新建项目/本地文件 | `desktop/src/features/projects/ProjectCreateForm.tsx`、`useProjectFolderTree.ts`、`desktop/src/lib/projectFolder.ts`、`desktop/main/nativeCapabilities.ts` |
 | 连接管理 Dialog | `desktop/src/features/datasource/ConnectionDialog.tsx`、`desktop/src/pages/DataSourcesPage.tsx` |
 | 只读项目文件视图 | `desktop/src/features/workspace/WorkspaceFileDock.tsx` |
 | Conversation | `desktop/src/features/conversation/workspace/ConversationWorkspace.tsx` |

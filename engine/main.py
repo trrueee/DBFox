@@ -74,9 +74,6 @@ def get_or_create_local_token() -> str:
 LOCAL_SECURE_TOKEN = get_or_create_local_token()
 ALLOWED_DESKTOP_ORIGINS = {
     "dbfox-app://localhost",
-    "tauri://localhost",
-    "http://tauri.localhost",
-    "https://tauri.localhost",
 }
 
 @asynccontextmanager
@@ -177,11 +174,10 @@ def _is_allowed_local_referer(value: str) -> bool:
         return False
     if parsed.username is not None or parsed.password is not None:
         return False
-    if parsed.scheme in {"dbfox-app", "tauri"}:
-        return parsed.hostname == "localhost" and parsed.port is None
     return (
-        parsed.scheme in {"http", "https"}
-        and parsed.hostname in {"127.0.0.1", "localhost", "tauri.localhost"}
+        parsed.scheme == "dbfox-app"
+        and parsed.hostname == "localhost"
+        and parsed.port is None
     )
 
 @app.middleware("http")

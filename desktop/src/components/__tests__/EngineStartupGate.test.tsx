@@ -1,15 +1,20 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { invokeMock, isTauriMock, waitForConfigMock, waitForHealthMock, subscribeMock } = vi.hoisted(() => ({
-  invokeMock: vi.fn(),
-  isTauriMock: vi.fn(() => false),
+const { hostAvailableMock, restartMock, openLogsMock, waitForConfigMock, waitForHealthMock, subscribeMock } = vi.hoisted(() => ({
+  hostAvailableMock: vi.fn(() => false),
+  restartMock: vi.fn(),
+  openLogsMock: vi.fn(),
   waitForConfigMock: vi.fn(),
   waitForHealthMock: vi.fn(),
   subscribeMock: vi.fn(async () => () => undefined),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock, isTauri: isTauriMock }));
+vi.mock("../../lib/desktopHost", () => ({
+  isEngineDesktopHost: hostAvailableMock,
+  restartDesktopEngine: restartMock,
+  openDesktopDiagnosticLogs: openLogsMock,
+}));
 
 vi.mock("../../lib/api/client", () => ({
   ApiError: class ApiError extends Error {
@@ -33,9 +38,9 @@ import { ApiError } from "../../lib/api/client";
 
 afterEach(() => {
   cleanup();
-  invokeMock.mockReset();
-  isTauriMock.mockReset();
-  isTauriMock.mockReturnValue(false);
+  hostAvailableMock.mockReset().mockReturnValue(false);
+  restartMock.mockReset();
+  openLogsMock.mockReset();
   waitForConfigMock.mockReset();
   waitForHealthMock.mockReset();
   subscribeMock.mockReset();
@@ -91,12 +96,12 @@ describe("EngineStartupGate", () => {
   });
 
   it("restarts the desktop engine and mounts children after retry succeeds", async () => {
-    isTauriMock.mockReturnValue(true);
+    hostAvailableMock.mockReturnValue(true);
     waitForConfigMock
       .mockRejectedValueOnce(new ApiError("stopped", 503, "ENGINE_STOPPED"))
       .mockResolvedValueOnce(undefined);
     waitForHealthMock.mockResolvedValue(undefined);
-    invokeMock.mockResolvedValue(undefined);
+    restartMock.mockResolvedValue(undefined);
 
     render(
       <EngineStartupGate>
@@ -106,16 +111,16 @@ describe("EngineStartupGate", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "重试启动" }));
 
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("restart_python_engine"));
+    await waitFor(() => expect(restartMock).toHaveBeenCalledOnce());
     expect(await screen.findByText("Workspace ready")).toBeTruthy();
   });
 
   it("opens the desktop diagnostic log directory from the failure state", async () => {
-    isTauriMock.mockReturnValue(true);
+    hostAvailableMock.mockReturnValue(true);
     waitForConfigMock.mockRejectedValue(
       new ApiError("health unavailable", 503, "ENGINE_HEALTH_UNAVAILABLE"),
     );
-    invokeMock.mockResolvedValue(undefined);
+    openLogsMock.mockResolvedValue(undefined);
 
     render(
       <EngineStartupGate>
@@ -125,7 +130,7 @@ describe("EngineStartupGate", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "打开诊断日志" }));
 
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("open_diagnostic_logs"));
+    await waitFor(() => expect(openLogsMock).toHaveBeenCalledOnce());
     expect(await screen.findByText("已打开诊断日志目录。")).toBeTruthy();
   });
 });

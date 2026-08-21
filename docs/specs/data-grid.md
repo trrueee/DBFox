@@ -50,7 +50,7 @@ DBFox 已有 TanStack Table、SQL Result Gateway、分页、筛选、排序、CS
 - [DataGrip View data](https://www.jetbrains.com/help/datagrip/tables-view-data.html) 使用紧凑表格、独立 Value Editor、图片查看和单记录视图，避免复杂值撑大主网格。
 - [DataGrip Cells](https://www.jetbrains.com/help/datagrip/cells.html) 将完整长文本和与类型相关的快捷操作放在单元格的辅助查看层。
 - [DBeaver Value Panel](https://dbeaver.com/docs/team-edition/desktop/Value-Panel/) 以统一 Value Viewer 承载 Text、JSON、Binary、Image 等专用展示和按类型动作。
-- [Tauri 官方插件目录](https://v2.tauri.app/plugin/) 将原生保存对话框、文件系统、HTTP 和外部打开拆成独立权限能力。DBFox 不应为了下载一张数据库图片向 WebView 暴露通用 HTTP 与文件写入权限。
+- Electron 官方 `dialog`/`shell` 与 Node 标准网络/文件 API 能在 Main 边界实现原生能力。DBFox 不应为了下载一张数据库图片向 Renderer 暴露通用 HTTP 与文件写入权限。
 
 DBFox 采用这些产品边界，但不复制其编辑器、插件系统或写回能力。
 
@@ -142,9 +142,9 @@ null | boolean | number | datetime | json | image-url | url | binary-placeholder
 
 ### 7.1 远程图片保存
 
-应用内“保存图片”是独立安全能力，不与预览点击混用。正式实现必须位于 Rust Host 边界，并满足：
+应用内“保存图片”是独立安全能力，不与预览点击混用。正式实现必须位于 Electron Main 边界，并满足：
 
-1. 使用成熟 HTTP 客户端和 Tauri 官方保存对话框；不向 WebView 暴露通用文件写入或任意 HTTP 能力。
+1. 使用 Node 官方 HTTPS 客户端和 Electron 保存对话框；不向 Renderer 暴露通用文件写入或任意 HTTP 能力。
 2. 只允许无用户名密码的 HTTPS URL。
 3. DNS 解析结果和每次重定向目标均拒绝 loopback、link-local、private、multicast 和 unspecified 地址。
 4. 限制重定向次数、连接/总超时、响应体大小和并发数。
@@ -152,7 +152,7 @@ null | boolean | number | datetime | json | image-url | url | binary-placeholder
 6. 在用户目标目录创建临时文件并完成同步，再以原子持久化完成保存；失败删除半成品。
 7. 不记录完整 URL 或查询参数；界面只展示固定、可公开的失败原因。
 
-当前实现使用 `reqwest`、Tauri 官方 Dialog 和 `tempfile`：限制为标准端口 HTTPS，逐跳校验 DNS 与重定向目标，禁用系统代理，限制为 2 个并发、3 次重定向、20 秒总超时和 20 MB，并校验 MIME 与文件签名。保存是完整查看器中的独立动作，不会替代“应用内预览”和“在浏览器打开”。
+当前实现使用 Node `https`/`dns`/`fs` 和 Electron Dialog：限制为标准端口 HTTPS，逐跳校验 DNS 与重定向目标，禁用系统代理，限制为 2 个并发、3 次重定向、20 秒总超时和 20 MB，并校验 MIME 与文件签名。保存是完整查看器中的独立动作，不会替代“应用内预览”和“在浏览器打开”。
 
 ## 8. 表格级统一行为
 
@@ -255,7 +255,7 @@ SQL 查询产生的 Result Artifact 在工件区保持一个工件身份，但�
 | JSON 树 | 复用现有 `JsonTree`，补充有界展示 | 当前只读需求简单，引入大型 JSON 编辑器成本过高 |
 | 值分类 | 在真实 UI 边界自行实现小型纯函数 | 数据库元数据与 DBFox 传输合同是项目特有输入；第三方库无法替代该判断 |
 | CSV | 复用后端 Result Gateway 与现有 CSV 防护 | 避免 DOM 导出、全量内存加载和双轨 SQL |
-| 外部打开 | 复用现有 Rust 校验 + Tauri Opener | 已有前后端双重 HTTPS 合同 |
-| 图片下载 | 使用 reqwest + Tauri 官方 Dialog + tempfile 的受控 Host 命令 | WebView 通用 HTTP/FS 权限不满足安全边界；Host 可集中执行 SSRF、大小和格式校验 |
+| 外部打开 | 复用 Electron Main URL 校验 + `shell.openExternal` | 已有前后端双重 HTTPS 合同 |
+| 图片下载 | 使用 Node 标准库 + Electron Dialog 的受控 Main 能力 | Renderer 通用 HTTP/FS 权限不满足安全边界；Main 可集中执行 SSRF、大小和格式校验 |
 
 本设计不新增兼容层、双向 Mapper、第二套 Result Gateway 或第二套表格执行路径。

@@ -2,17 +2,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { CONTENT_SECURITY_POLICY } from "../../main/appProtocol";
 
 const root = process.cwd();
 const indexHtml = readFileSync(join(root, "index.html"), "utf8");
 const globalCss = readFileSync(join(root, "src", "index.css"), "utf8");
-const tauriConfig = JSON.parse(
-  readFileSync(join(root, "src-tauri", "tauri.conf.json"), "utf8"),
-) as { app: { security: { csp: string } } };
 
 describe("desktop CSP network boundary", () => {
   it("does not load fonts or API traffic from arbitrary internet origins", () => {
-    const csp = tauriConfig.app.security.csp;
+    const csp = CONTENT_SECURITY_POLICY;
 
     expect(indexHtml).not.toMatch(/fonts\.(?:googleapis|gstatic|loli)\.net|fonts\.googleapis\.com/i);
     expect(globalCss).not.toMatch(/@import\s+url\([^)]*fonts\.googleapis\.com/i);
@@ -23,7 +21,7 @@ describe("desktop CSP network boundary", () => {
   });
 
   it("permits explicit HTTPS image previews without opening general HTTPS fetches", () => {
-    const csp = tauriConfig.app.security.csp;
+    const csp = CONTENT_SECURITY_POLICY;
 
     expect(csp).toContain("img-src 'self' data: https:");
     expect(csp).not.toMatch(/connect-src[^;]*https:/i);

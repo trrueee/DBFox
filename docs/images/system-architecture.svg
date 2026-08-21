@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
   <title id="title">DBFox 系统架构</title>
-  <desc id="desc">用户通过 React 工作区使用 DBFox。Tauri Rust Host 管理桌面窗口和 FastAPI Sidecar 生命周期；React 通过 Tauri IPC 与 Host 通信，并通过 HTTP 和 SSE 访问 Sidecar。Sidecar 持久化本地 SQLite，并访问用户数据库和模型服务。</desc>
+  <desc id="desc">用户通过 React 工作区使用 DBFox。Electron TypeScript Host 管理桌面窗口和 FastAPI Sidecar 生命周期；React 通过窄化 Preload IPC 与 Host 通信，并通过 HTTP 和 SSE 访问 Sidecar。Sidecar 持久化本地 SQLite，并访问用户数据库和模型服务。</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
@@ -37,7 +37,7 @@
   <text class="small" x="325" y="253" text-anchor="middle">UI / 视图投影</text>
 
   <rect class="node" x="455" y="190" width="160" height="96" rx="18"/>
-  <text class="label" x="535" y="224" text-anchor="middle">Tauri / Rust</text>
+  <text class="label" x="535" y="224" text-anchor="middle">Electron / TypeScript</text>
   <text class="small" x="535" y="248" text-anchor="middle">Desktop Host</text>
   <text class="small" x="535" y="270" text-anchor="middle">生命周期 / 系统能力</text>
 

@@ -10,7 +10,6 @@ import { ToastProvider } from "./components/Toast";
 import { ThemeProvider } from "./hooks/useTheme";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { hideBootIndicator } from "./boot";
-import { installCspStyleNoncePropagation } from "./lib/cspStyleNonce";
 import { queryClient } from "./lib/queryClient";
 
 function renderApplication(): void {
@@ -47,7 +46,6 @@ function installWindowVisualStateListeners(): void {
 }
 
 function startApplication(): void {
-  installCspStyleNoncePropagation();
   installWindowVisualStateListeners();
   renderApplication();
   hideBootIndicator();

@@ -1250,7 +1250,7 @@
   background: color-mix(in srgb, var(--color-text-muted) 48%, transparent);
 }
 
-/* 闂佸啿鍘滈崑鎾绘煃閸忓浜?Tauri Inactive Window State Dimming 闂佸啿鍘滈崑鎾绘煃閸忓浜?*/
+/* Electron inactive-window state dimming. */
 .window-inactive .titlebar {
   opacity: 0.72;
   filter: grayscale(15%);

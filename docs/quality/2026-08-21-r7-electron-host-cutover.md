@@ -2,7 +2,7 @@
 
 > 文档类型：平台决策 / 迁移门禁
 >
-> 状态：草案
+> 状态：已接受
 >
 > 最后核验：2026-08-21
 
@@ -13,9 +13,8 @@ Desktop Host，不重写 FastAPI、Agent、SQL、数据库连接、SQLite 持久
 contracts。Renderer 继续通过 HTTP/SSE 直连 Python；Electron IPC 只承载窗口、文件、Engine
 lifecycle、更新、诊断和其他真实 OS 边界，不代理业务 API。
 
-当前 Tauri release Host 在 Electron release contract 闭合前仍是唯一生产 Host。迁移期允许两套
-Host 源码存在，但一次进程和一次发布只启动一个 supervisor；不存在双 token、双 generation 或
-双 active truth。Electron 三平台安装态 contract 通过后原子切换默认 Host，紧接着删除 Rust/Tauri。
+Electron 现在是唯一生产 Host。旧 Host 源码、依赖、工具链、CI job 和临时 runtime selector 已在
+R7.0d 原子删除；一次进程只有一个 supervisor、一个 token/generation 和一份 active runtime truth。
 
 ## 调研与复用
 
@@ -34,8 +33,8 @@ Host 源码存在，但一次进程和一次发布只启动一个 supervisor；�
   自建文件 picker、URL parser 或网络栈。诊断 ZIP 采用现有生态中纯 TypeScript、无 native addon、MIT
   的 `fflate 0.8.2`；锁文件固定解析结果且 npm 官方 registry audit 为 0 vulnerabilities。
 - 未采用 Renderer Node 权限、通用 IPC、Renderer 直接读包目录、Electron IPC 代理 Python API，或把
-  `iframe`/`utilityProcess` 宣称为 sandbox。新增的唯一兼容债务仍是同一个 `desktopHost.ts` 单向选择器，
-  删除条件不变；R7.0b 没有增加新的双写、mapper 或第二份 active runtime truth。
+  `iframe`/`utilityProcess` 宣称为 sandbox。`desktopHost.ts` 现在只是 Electron preload 的窄化边界，
+  不再选择旧 Host，也没有双写、mapper 或第二份 active runtime truth。
 - R7.0c 调研 Electron 官方 packaging/autoUpdater、Forge 与 electron-builder。Electron core 明确要求
   第三方 packaging，内建 autoUpdater 只覆盖 Windows/macOS；Forge 仍需组合 makers 与更新方案。
   因此固定 `electron-builder 26.15.3` + `electron-updater 6.8.9`，直接复用 NSIS、DMG/ZIP、AppImage、
@@ -59,7 +58,7 @@ Host 源码存在，但一次进程和一次发布只启动一个 supervisor；�
 
 1. **R7.0a — Engine Host**：新增纯 TypeScript `EngineSupervisor`、Node child-process adapter、
    sandboxed preload 和窄化 engine IPC；真实 Python smoke 证明启动、鉴权、restart token/generation
-   轮换与 shutdown。Tauri 仍是默认 release Host。
+   轮换与 shutdown。
 2. **R7.0b — Native/DLC Boundary**：迁文件/目录、外链、窗口、诊断、crash marker 与严格
    `dlc-asset` protocol；Renderer 不获得 Node、通用 IPC 或任意路径能力。
 3. **R7.0c — Package/Update/Release**：选择并固定 Electron packaging/updater，建立 Windows、
@@ -94,12 +93,13 @@ Host 源码存在，但一次进程和一次发布只启动一个 supervisor；�
   同时验证 renderer origin、sender WebContents 和主窗口身份；真实 Electron smoke 额外证明未知/未激活
   digest 的 `dlc-asset` 请求返回 403。
 
-## 临时兼容面
+## R7.0d 原子删除结果
 
-`src/lib/desktopHost.ts` 是真实 Host/Renderer 边界上的单向 runtime selector，只让当前进程选择
-Electron 或 Tauri engine lifecycle API，不复制状态或业务规则。负责人为 Desktop Platform；删除
-条件是 R7.0c 三平台 Electron release contract 合并，最迟在 R7.0d 删除。不得让新的产品能力继续
-依赖 Tauri 分支。
+- `desktopHost.ts` 直接要求 Electron preload bridge，缺失时 fail-closed；不存在旧 Host fallback。
+- 删除旧 Host 源码、Cargo lock/toolchain、npm 依赖、构建脚本、CI job、Dependabot 生态和 release 配置。
+- 平台图标迁入 `desktop/build-resources/`，由 Electron packaging 单一消费。
+- Engine 只接受 `dbfox-app://localhost` 桌面 origin；旧 origins 不保留兼容路径。
+- 生产项目收敛为 TypeScript/Electron + Python，不新增协议转换、双重 SSOT 或迁移兼容层。
 
 ## R7.0c 打包、更新与发布合同
 
@@ -111,12 +111,11 @@ Electron 或 Tauri engine lifecycle API，不复制状态或业务规则。负�
   ASAR integrity 和 only-load-from-ASAR。
 - Sidecar 固定为 `resources/sidecar/dbfox-engine[.exe]`。Main 每次 launch 前校验 manifest schema、
   exact filename 和 SHA-256。`build_sidecar.py` 使用显式 OS/arch 映射，不再依赖 `rustc`。
-- `dbfox-app://localhost` 作为冻结 Engine 的正式 allowed origin；旧 Tauri origins 只存续到 R7.0d，
-  不通过代理或 null origin 放宽。未知 host、attacker origin 与未激活 DLC digest 继续 403。
+- `dbfox-app://localhost` 是冻结 Engine 的唯一正式桌面 origin，不通过代理或 null origin 放宽。
+  未知 host、attacker origin 与未激活 DLC digest 继续 403。
 - 更新检查保留 exact pending result，下载成功后才停止 Sidecar；下载/验签失败保持当前进程可用。
   Windows 使用 publisher Authenticode，macOS 要求 Developer ID/notarization，Linux 明确 system-managed。
 - 平台 signer 会改变 Sidecar 字节。正式流程先签 Sidecar、再调用受限 manifest refresh 重绑 hash，
   builder 不得二次修改它；随后签 Host/installer。Windows 正式工作流验证同一证书、metadata、packaged
   smoke、NSIS 静默安装/卸载与 provenance，且只创建 Draft Release。
-- CI `release-platform-contract` 已切换为 Python + Node + Electron，不再安装 Rust/Tauri；普通 Rust PR
-  job 仍保留到紧随其后的 R7.0d，作为迁移回归而非发布依赖。
+- CI `release-platform-contract` 和普通 PR 门禁均已收敛为 Python + Node + Electron。

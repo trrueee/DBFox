@@ -50,16 +50,7 @@ desktop/.electron-host-smoke-*/
 desktop/electron-app/
 desktop/electron-resources/
 desktop/release-electron/
-desktop/src-tauri/binaries/
 desktop/.vite/
-
-# ============================================================
-# Rust / Tauri
-# ============================================================
-desktop/src-tauri/target/
-desktop/src-tauri/gen/*
-!desktop/src-tauri/gen/schemas/
-desktop/src-tauri/.tauri/
 
 # ============================================================
 # Build outputs

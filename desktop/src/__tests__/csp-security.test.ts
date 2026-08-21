@@ -1,8 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const desktopRoot = resolve(process.cwd());
 const sourceRoot = join(process.cwd(), "src");
 
 function applicationSourceFiles(directory: string): string[] {
@@ -16,25 +15,10 @@ function applicationSourceFiles(directory: string): string[] {
 }
 
 describe("desktop CSP contracts", () => {
-  it("ships a strict release policy without permissive inline script or style sources", () => {
-    const config = JSON.parse(readFileSync(join(desktopRoot, "src-tauri", "tauri.conf.json"), "utf8"));
-    const csp = config.app.security.csp as string;
-
-    expect(csp).not.toContain("unsafe-inline");
-    expect(csp).toContain("script-src 'self'");
-    expect(csp).toContain("script-src-attr 'none'");
-    expect(csp).toContain("style-src 'self'");
-    expect(csp).toContain("style-src-attr 'none'");
-    expect(config.app.security.devCsp).toBeNull();
-    expect(config.app.security.dangerousDisableAssetCspModification).toBe(false);
-  });
-
   it("keeps boot assets external and rejects application style attributes", () => {
     const index = readFileSync(join(process.cwd(), "index.html"), "utf8");
     const styleTags = [...index.matchAll(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi)];
-    expect(styleTags).toHaveLength(1);
-    expect(styleTags[0][1]).toContain("data-tauri-csp-style-nonce");
-    expect(styleTags[0][2].trim()).toBe("");
+    expect(styleTags).toHaveLength(0);
     expect(index).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/i);
 
     for (const sourcePath of applicationSourceFiles(sourceRoot)) {

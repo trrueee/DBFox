@@ -11,7 +11,7 @@ await cp(join(root, "dist"), join(stagingRoot, "dist"), { recursive: true });
 await cp(join(root, "dist-electron"), join(stagingRoot, "dist-electron"), {
   recursive: true,
 });
-await cp(join(root, "src-tauri", "icons"), join(stagingRoot, "build-resources"), {
+await cp(join(root, "build-resources"), join(stagingRoot, "build-resources"), {
   recursive: true,
 });
 await cp(join(root, "electron-resources", "sidecar"), join(stagingRoot, "sidecar"), {

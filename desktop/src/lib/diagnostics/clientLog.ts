@@ -1,6 +1,4 @@
 import type { DiagnosticLogSource } from "../api/diagnostics";
-import { isTauri } from "@tauri-apps/api/core";
-import { error as hostError, info as hostInfo, warn as hostWarn } from "@tauri-apps/plugin-log";
 
 type ClientLogLevel = "info" | "warning" | "error";
 
@@ -35,25 +33,6 @@ export function recordClientLog(level: ClientLogLevel, message: string, detail?:
   };
   entries.push(entry);
   writeEntries(entries.slice(-MAX_ENTRIES));
-  emitDesktopLog(entry);
-}
-
-function emitDesktopLog(entry: ClientLogEntry): void {
-  if (!isTauri()) return;
-  const message = JSON.stringify({
-    component: "webview",
-    at: entry.at,
-    message: entry.message,
-    detail: entry.detail,
-  });
-  const operation = entry.level === "error"
-    ? hostError(message)
-    : entry.level === "warning"
-      ? hostWarn(message)
-      : hostInfo(message);
-  void operation.catch(() => {
-    // A logging transport failure must never affect product behavior.
-  });
 }
 
 export function getClientLogSource(): DiagnosticLogSource {

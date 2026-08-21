@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-"""Finalize DBFox desktop icons after regenerating Tauri icon assets.
+"""Finalize DBFox Electron icons after replacing the brand source assets.
 
-Not part of normal builds. Run only after regenerating Tauri icons for a brand
+Not part of normal builds. Run only after regenerating desktop icons for a brand
 asset change: it cleans icon alpha, backfills Windows ICO sizes, guarantees
 taskbar/shortcut icons and syncs the favicon. Mobile (android/ios) icons are
 intentionally not generated or tracked while DBFox has no mobile product.
@@ -16,10 +16,10 @@ from PIL import Image
 
 
 DESKTOP_ROOT = Path(__file__).resolve().parents[1]
-ICON_ROOT = DESKTOP_ROOT / "src-tauri" / "icons"
+ICON_ROOT = DESKTOP_ROOT / "build-resources"
 FAVICON = DESKTOP_ROOT / "public" / "favicon.png"
 WINDOWS_ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
-TAURI_PNG_FILES = (
+DESKTOP_PNG_FILES = (
     "32x32.png",
     "64x64.png",
     "128x128.png",
@@ -76,9 +76,9 @@ def main() -> None:
     source_path = ICON_ROOT / "icon.png"
     favicon_source = ICON_ROOT / "32x32.png"
     if not source_path.is_file() or not favicon_source.is_file():
-        raise SystemExit("Run `npm run tauri -- icon ...` before finalizing desktop icons.")
+        raise SystemExit("Regenerate desktop/build-resources icons before finalizing them.")
 
-    for filename in TAURI_PNG_FILES:
+    for filename in DESKTOP_PNG_FILES:
         path = ICON_ROOT / filename
         with Image.open(path) as generated:
             cleaned = _clean_invisible_alpha(generated.convert("RGBA"))

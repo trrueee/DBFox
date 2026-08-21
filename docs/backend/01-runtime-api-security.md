@@ -31,7 +31,7 @@
 
 ```text
 Windows 用户
-  └─ Tauri/Rust Host
+  └─ Electron/TypeScript Host
        ├─ 创建本次 runtime generation
        ├─ 生成并持有本次 loopback Token
        ├─ 启动/观察/终止 Python Sidecar

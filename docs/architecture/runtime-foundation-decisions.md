@@ -8,7 +8,10 @@
 >
 > 适用范围：Sidecar、单实例、诊断、HTTP/SSE、版本握手、SQLite 和更新
 
-本文记录第二轮反证验证后已实施的决定；“暂缓”不是缺陷确认。
+本文记录旧桌面 Host 的第二轮反证验证，保留用于追溯当时的约束和复用依据。自 R7.0d 起，
+Host 实现已由 [`R7 Electron Host Cutover`](../quality/2026-08-21-r7-electron-host-cutover.md)
+取代；HTTP/SSE、握手、SQLite 等未标记 Host 技术的协议决定仍有效。本文中的旧路径和命令
+不是当前开发入口。
 
 ## ADR-01：Rust 是 Runtime 生命周期唯一权威
 

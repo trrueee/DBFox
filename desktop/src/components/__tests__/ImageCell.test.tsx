@@ -3,21 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ImageCell } from "../ImageCell";
 import { isImageUrl } from "../imageUrl";
 
-const { invokeMock, isTauriMock } = vi.hoisted(() => ({
-  invokeMock: vi.fn(),
-  isTauriMock: vi.fn(),
+const { openExternalMock, saveImageMock } = vi.hoisted(() => ({
+  openExternalMock: vi.fn(),
+  saveImageMock: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: invokeMock,
-  isTauri: isTauriMock,
+vi.mock("../../lib/desktopHost", () => ({
+  isEngineDesktopHost: () => true,
+  openDesktopExternalHttps: openExternalMock,
+  saveDesktopExternalImage: saveImageMock,
 }));
 
 describe("ImageCell", () => {
   beforeEach(() => {
     cleanup();
-    invokeMock.mockReset().mockResolvedValue(undefined);
-    isTauriMock.mockReset().mockReturnValue(true);
+    openExternalMock.mockReset().mockResolvedValue(undefined);
+    saveImageMock.mockReset();
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -65,14 +66,14 @@ describe("ImageCell", () => {
   it("loads an HTTPS image in the application only after a direct user action", () => {
     render(<ImageCell url="https://cdn.example.com/a.png" />);
 
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(openExternalMock).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "预览图片 https://cdn.example.com/a.png" }));
 
     const dialog = screen.getByRole("dialog", { name: "图片预览" });
     const image = within(dialog).getByRole("img", { name: "数据库单元格中的图片预览" });
     expect(image.getAttribute("src")).toBe("https://cdn.example.com/a.png");
     expect(image.getAttribute("referrerpolicy")).toBe("no-referrer");
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(openExternalMock).not.toHaveBeenCalled();
   });
 
   it("keeps external navigation as a secondary explicit action", async () => {
@@ -81,21 +82,21 @@ describe("ImageCell", () => {
     fireEvent.click(screen.getByRole("button", { name: "预览图片 https://cdn.example.com/a.png" }));
     fireEvent.click(screen.getByRole("button", { name: "在浏览器打开" }));
 
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("open_external_https_url", {
-      url: "https://cdn.example.com/a.png",
-    }));
+    await waitFor(() => expect(openExternalMock).toHaveBeenCalledWith(
+      "https://cdn.example.com/a.png",
+    ));
   });
 
   it("saves through the dedicated Host command instead of renderer file access", async () => {
-    invokeMock.mockResolvedValueOnce({ status: "saved", fileName: "a.png", byteCount: 8 });
+    saveImageMock.mockResolvedValueOnce({ status: "saved", fileName: "a.png", byteCount: 8 });
     render(<ImageCell url="https://cdn.example.com/a.png" />);
 
     fireEvent.click(screen.getByRole("button", { name: "预览图片 https://cdn.example.com/a.png" }));
     fireEvent.click(screen.getByRole("button", { name: "保存副本" }));
 
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("save_external_image", {
-      url: "https://cdn.example.com/a.png",
-    }));
+    await waitFor(() => expect(saveImageMock).toHaveBeenCalledWith(
+      "https://cdn.example.com/a.png",
+    ));
     expect(await screen.findByRole("button", { name: "已保存" })).toBeTruthy();
   });
 
@@ -114,6 +115,6 @@ describe("ImageCell", () => {
     expect((screen.getByRole("button", {
       name: "预览图片 http://cdn.example.com/a.png",
     }) as HTMLButtonElement).disabled).toBe(true);
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(openExternalMock).not.toHaveBeenCalled();
   });
 });

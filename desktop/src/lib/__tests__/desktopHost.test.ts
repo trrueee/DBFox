@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-
 import type { DbfoxDesktopBridge, EngineStartupStatus } from "../../../shared/desktopContract";
 import {
   getDesktopLaunchRecoveryStatus,
@@ -15,24 +12,13 @@ import {
   subscribeDesktopEngineState,
 } from "../desktopHost";
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
-  isTauri: vi.fn(),
-}));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
-
-const mockInvoke = vi.mocked(invoke);
-const mockIsTauri = vi.mocked(isTauri);
-const mockListen = vi.mocked(listen);
-
 afterEach(() => {
   delete window.dbfoxDesktop;
   vi.resetAllMocks();
 });
 
 describe("desktopHost engine boundary", () => {
-  it("uses the Electron preload bridge without invoking the Tauri runtime", async () => {
-    mockIsTauri.mockReturnValue(false);
+  it("uses the Electron preload bridge as the only desktop runtime", async () => {
     const status: EngineStartupStatus = {
       state: "ready",
       error: null,
@@ -86,16 +72,12 @@ describe("desktopHost engine boundary", () => {
     expect(await subscribeDesktopEngineState(listener)).toBe(unsubscribe);
     expect(listener).toHaveBeenCalledWith(status);
     expect(bridge.shell.openDiagnosticLogs).toHaveBeenCalledOnce();
-    expect(mockInvoke).not.toHaveBeenCalled();
-    expect(mockListen).not.toHaveBeenCalled();
   });
 
-  it("keeps the current Tauri engine contract until the atomic release cutover", async () => {
-    mockIsTauri.mockReturnValue(true);
-    mockInvoke.mockResolvedValueOnce({ generation: 1 });
-
-    expect(isEngineDesktopHost()).toBe(true);
-    expect(await getDesktopEngineConfig()).toEqual({ generation: 1 });
-    expect(mockInvoke).toHaveBeenCalledWith("get_engine_config");
+  it("fails closed when the Electron preload bridge is absent", async () => {
+    expect(isEngineDesktopHost()).toBe(false);
+    await expect(getDesktopEngineConfig()).rejects.toThrow(
+      "DBFox Electron preload bridge is unavailable",
+    );
   });
 });

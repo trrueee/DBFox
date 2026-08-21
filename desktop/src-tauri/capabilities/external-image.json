@@ -1,9 +1,0 @@
-{
-  "$schema": "../../gen/schemas/desktop-schema.json",
-  "identifier": "external-image",
-  "description": "User-confirmed, Host-validated saving of external image values for the main DBFox WebView",
-  "windows": ["main"],
-  "permissions": [
-    "allow-save-external-image"
-  ]
-}

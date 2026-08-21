@@ -25,7 +25,6 @@ export default defineConfig(({ command }) => ({
     port: 5173,
     strictPort: true,
     watch: {
-      ignored: ["**/src-tauri/**"],
     },
   },
 

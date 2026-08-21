@@ -12,12 +12,12 @@
 
 ## 1. 运行形态
 
-后端是本地 FastAPI 引擎。桌面模式由 Tauri 启动和监督 sidecar；Web 开发模式直接启动同一引擎。两种模式共享 API、领域服务和持久化契约，差异只位于进程生命周期和桌面系统能力。
+后端是本地 FastAPI 引擎。桌面模式由 Electron Main 启动和监督 sidecar；Web 开发模式直接启动同一引擎。两种模式共享 API、领域服务和持久化契约，差异只位于进程生命周期和桌面系统能力。
 
 ```mermaid
 flowchart LR
   subgraph Host["Host"]
-    TAURI["Tauri Supervisor"]
+    ELECTRON["Electron Supervisor"]
     WEB["Browser Dev Host"]
   end
 
@@ -29,7 +29,7 @@ flowchart LR
     INFRA["Infrastructure Adapters"]
   end
 
-  TAURI --> START
+  ELECTRON --> START
   WEB --> ROUTES
   START --> ROUTES --> SERVICES --> DOMAIN --> INFRA
 ```
@@ -173,7 +173,7 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
-  participant Host as Tauri / Dev Host
+  participant Host as Electron / Dev Host
   participant Engine as FastAPI Engine
   participant DB as Metadata DB
   participant UI as React Gate
@@ -197,7 +197,7 @@ Runtime reset 只能操作应用私有目录下的固定路径，并通过持久
 - 诊断日志执行凭据、URL、SQL 参数和结果值脱敏，并有大小和轮转上限。
 - LLM endpoint 经过目标策略校验，防止本地地址、凭据 URL 和不受控跳转。
 - 文件导出、备份、日志和 runtime reset 都以解析后的受控根目录为边界。
-- CSP、Tauri capability 和外部导航共同约束桌面 WebView 权限。
+- CSP、sandboxed preload、IPC sender 校验和外部导航共同约束桌面 Renderer 权限。
 
 ## 9. 扩展边界
 
