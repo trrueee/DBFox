@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   Folder,
@@ -56,12 +56,13 @@ export function ProjectResourceSidebar({
 
   const restoredConversationProjectRef = useRef("");
   const [conversationError, setConversationError] = useState("");
-  const [selectedConnectorId, setSelectedConnectorId] = useState<string | undefined>();
+  const [expandedConnectors, setExpandedConnectors] = useState<Record<string, boolean>>({});
 
-  const activeConnectorId =
-    selectedConnectorId && connectors.some((c) => c.id === selectedConnectorId)
-      ? selectedConnectorId
-      : connectors[0]?.id;
+  // Host owns section chrome (expand/collapse); DLC only contributes content.
+  // Default: first connector expanded, the rest collapsed until the user opens them.
+  const toggleConnector = useCallback((connectorId: string, currentExpanded: boolean) => {
+    setExpandedConnectors((prev) => ({ ...prev, [connectorId]: !currentExpanded }));
+  }, []);
 
   // Auto-select first project
   useEffect(() => {
@@ -135,7 +136,6 @@ export function ProjectResourceSidebar({
     () => connectors.filter((c) => c.onAdd && c.addLabel),
     [connectors],
   );
-  const activeConnector = connectors.find((c) => c.id === activeConnectorId);
 
   if (collapsed) {
     return (
@@ -262,24 +262,11 @@ export function ProjectResourceSidebar({
             </div>
           ) : null}
 
-          {/* Resources (Connector Slot) */}
+          {/* Resources (Host-owned sections; connectors contribute content only) */}
           {activeProjectId && connectors.length > 0 ? (
             <div className="ds-resource-section">
               <div className="ds-resource-header">
-                {/* Connector selector tabs */}
-                <div className="ds-entity-sub-switch">
-                  {connectors.map((connector) => (
-                    <button
-                      key={connector.id}
-                      type="button"
-                      className={`ds-entity-sub-switch__button ${activeConnectorId === connector.id ? "is-active" : ""}`}
-                      onClick={() => setSelectedConnectorId(connector.id)}
-                    >
-                      {connector.icon}
-                      <span>{connector.title}</span>
-                    </button>
-                  ))}
-                </div>
+                <span className="ds-resource-header-label">资源</span>
 
                 {/* Add Resource menu */}
                 {addableConnectors.length > 0 ? (
@@ -307,13 +294,33 @@ export function ProjectResourceSidebar({
                 ) : null}
               </div>
 
-              {/* Active connector content */}
-              <div>
-                {activeConnector ? (
-                  activeConnector.render({ projectId: activeProjectId })
-                ) : (
-                  <div className="ds-tree-status">没有可用的资源连接器。</div>
-                )}
+              <div className="ds-connector-sections">
+                {connectors.map((connector, index) => {
+                  const isExpanded = expandedConnectors[connector.id] ?? index === 0;
+                  return (
+                    <div key={connector.id} className="ds-connector-section">
+                      <button
+                        type="button"
+                        className="ds-connector-section__header"
+                        aria-expanded={isExpanded}
+                        onClick={() => toggleConnector(connector.id, isExpanded)}
+                      >
+                        <ChevronDown
+                          size={12}
+                          aria-hidden="true"
+                          className={`ds-connector-section__chevron ${isExpanded ? "" : "is-collapsed"}`}
+                        />
+                        {connector.icon}
+                        <span className="ds-connector-section__title">{connector.title}</span>
+                      </button>
+                      {isExpanded ? (
+                        <div className="ds-connector-section__content">
+                          {connector.render({ projectId: activeProjectId })}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : null}

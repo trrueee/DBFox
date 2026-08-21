@@ -1,9 +1,9 @@
 /**
- * Publish virtual-list geometry through a constructable stylesheet.
+ * Publish layout geometry through a constructable stylesheet.
  *
- * DBFox rejects style attributes (`style-src-attr 'none'`). Virtualizers still
- * need per-frame pixel geometry, so the approved boundary is a CSSOM sheet
- * whose selectors and numeric values are fully normalized here.
+ * DBFox rejects style attributes (`style-src-attr 'none'`). Layouts that need
+ * imperative pixel geometry use this approved boundary: a CSSOM sheet whose
+ * selectors and numeric values are fully normalized here.
  */
 const MAX_LAYOUT_SIZE = 100_000_000;
 
@@ -48,8 +48,7 @@ function layoutMarker(token: string): string {
   return `[data-virtual-layout="${token}"]`;
 }
 
-function deleteLayoutRules(sheet: CSSStyleSheet, token: string): void {
-  const marker = layoutMarker(token);
+function deleteMarkerRules(sheet: CSSStyleSheet, marker: string): void {
   for (let index = sheet.cssRules.length - 1; index >= 0; index -= 1) {
     const rule = sheet.cssRules[index];
     if (rule instanceof CSSStyleRule && rule.selectorText.includes(marker)) {
@@ -68,7 +67,7 @@ export function setCspVirtualLayout(
 
   const token = normalizedToken(rawToken);
   const marker = layoutMarker(token);
-  deleteLayoutRules(sheet, token);
+  deleteMarkerRules(sheet, layoutMarker(token));
   sheet.insertRule(
     `.conv-message-column${marker}{height:${normalizedPixel(totalSize)}px;}`,
     sheet.cssRules.length,
@@ -85,5 +84,28 @@ export function setCspVirtualLayout(
 
 export function clearCspVirtualLayout(rawToken: string): void {
   if (!virtualLayoutSheet) return;
-  deleteLayoutRules(virtualLayoutSheet, normalizedToken(rawToken));
+  deleteMarkerRules(virtualLayoutSheet, layoutMarker(normalizedToken(rawToken)));
+}
+
+const flexBasisMarker = (token: string) => `[data-csp-flex-basis="${token}"]`;
+
+/**
+ * Publish a single `flex-basis` pixel value for the element carrying
+ * `data-csp-flex-basis="{token}"`. Pass `null` to remove the rule.
+ */
+export function setCspFlexBasis(rawToken: string, widthPx: number | null): void {
+  const sheet = getVirtualLayoutSheet();
+  if (!sheet) return;
+  const token = normalizedToken(rawToken);
+  deleteMarkerRules(sheet, flexBasisMarker(token));
+  if (widthPx === null) return;
+  sheet.insertRule(
+    `${flexBasisMarker(token)}{flex-basis:${normalizedPixel(widthPx)}px;}`,
+    sheet.cssRules.length,
+  );
+}
+
+export function clearCspFlexBasis(rawToken: string): void {
+  if (!virtualLayoutSheet) return;
+  deleteMarkerRules(virtualLayoutSheet, flexBasisMarker(normalizedToken(rawToken)));
 }

@@ -3,13 +3,20 @@
   width: min(100%, 880px);
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 34px;
+  gap: 0;
   margin: 0 auto;
   padding: 0 0 48px;
 }
 
+/* Flat sections separated by hairlines — settings are part of the Workbench,
+   not a stack of admin cards. */
 .settings-section {
   background: transparent;
+  padding: 26px 2px;
+}
+
+.settings-section + .settings-section {
+  border-top: 1px solid var(--hairline);
 }
 
 .settings-section__header {
@@ -33,10 +40,7 @@
   height: 28px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
-  border-radius: 8px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-text-muted);
 }
 
 .settings-section__title {
@@ -63,9 +67,7 @@
   flex-direction: column;
   gap: 0;
   overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: 14px;
-  background: var(--surface-elevated);
+  background: transparent;
   padding: 4px 22px;
 }
 

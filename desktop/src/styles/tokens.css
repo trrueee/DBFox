@@ -1,10 +1,10 @@
-/* ═══════════════════════════════════════════════════════
-   DBFox Design Tokens — Canonical Token Layer
-   ═══════════════════════════════════════════════════════ */
+﻿/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+   DBFox Design Tokens 鈥?Canonical Token Layer
+   鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/
 
 :root {
   color-scheme: light;
-  /* ── Brand Colors ── */
+  /* 鈹€鈹€ Brand Colors 鈹€鈹€ */
   --color-primary: #6554D9;
   --color-primary-strong: #5544C7;
   --color-on-primary: #FFFFFF;
@@ -16,18 +16,18 @@
   --color-danger: #C84040;
   --color-on-danger: #FFFFFF;
 
-  /* ── Text Colors ── */
+  /* 鈹€鈹€ Text Colors 鈹€鈹€ */
   --color-text-primary: #172033;
   --color-text-secondary: #526071;
   --color-text-muted: #64748B;
 
-  /* ── Surface Colors ── */
+  /* 鈹€鈹€ Surface Colors 鈹€鈹€ */
   --color-border: #D8E0EA;
   --color-border-hover: #C4CEDA;
   --color-bg: #F4F7FB;
   --color-panel: #FFFFFF;
 
-  /* ── Soft/Alpha Colors ── */
+  /* 鈹€鈹€ Soft/Alpha Colors 鈹€鈹€ */
   --color-primary-soft: rgba(101, 84, 217, 0.10);
   --color-info-soft: rgba(94, 134, 247, 0.08);
   --color-success-soft: rgba(22, 138, 104, 0.11);
@@ -35,10 +35,10 @@
   --color-danger-soft: rgba(200, 64, 64, 0.06);
   --color-focus-ring: rgba(101, 84, 217, 0.24);
 
-  /* ── Console accent（数据库在说话）── */
+  /* 鈹€鈹€ Console accent锛堟暟鎹簱鍦ㄨ璇濓級鈹€鈹€ */
   --color-console-accent: #0284C7;
 
-  /* ── Typography ── */
+  /* 鈹€鈹€ Typography 鈹€鈹€ */
   --font-family-ui: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
   --font-family-data: "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
   --font-family-code: ui-monospace, "Cascadia Mono", "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -75,9 +75,8 @@
   --agent-font-micro: calc(12px + var(--appearance-agent-font-adjust));
   --agent-font-code: calc(13px + var(--appearance-agent-font-adjust) + var(--appearance-code-font-adjust));
 
-  /* ── Semantic role tokens ── */
+  /* 鈹€鈹€ Semantic role tokens 鈹€鈹€ */
   --accent-indigo: var(--color-primary);
-  --accent-teal: var(--color-secondary);
   --accent-green: var(--color-success);
   --accent-red: var(--color-danger);
   --accent-amber: var(--color-warning);
@@ -96,17 +95,22 @@
   --border-medium: var(--color-border);
   --border-subtle: var(--color-border);
 
-  /* ── Window Shell ── */
+  /* 鈹€鈹€ Window Shell 鈹€鈹€ */
   --app-bg: #EEF3F8;
-  --app-bg-deep: #E7EDF5;
   --sidebar-bg: #EEF3F8;
-  --surface-glass: rgba(255, 255, 255, 0.78);
   --surface-raised: #ffffff;
-  --surface-sidebar: var(--sidebar-bg);
-  --surface-workspace: var(--color-bg);
+  --surface-workspace: var(--color-panel);
   --surface-elevated: var(--surface-raised);
 
-  /* ── Interactive Controls ── */
+  /* 鈹€鈹€ Quiet Workbench canonical surfaces 鈹€鈹€
+     Relative hierarchy (light): canvas 鈮?navigation < auxiliary < workspace 鈮?elevated 鈮?overlay.
+     Feature CSS consumes these names; legacy aliases above remain until the P8 cleanup. */
+  --surface-canvas: var(--app-bg);
+  --surface-navigation: var(--sidebar-bg);
+  --surface-auxiliary: var(--agent-surface-muted);
+  --surface-overlay: var(--color-panel);
+
+  /* 鈹€鈹€ Interactive Controls 鈹€鈹€ */
   --control-bg: var(--color-panel);
   --control-bg-hover: #F8FAFD;
   --control-bg-pressed: var(--color-primary-soft);
@@ -116,7 +120,9 @@
   --focus-ring: 0 0 0 3px var(--color-focus-ring);
   --nav-active-bg: var(--color-primary-soft);
   --nav-active-indicator: var(--color-primary);
-  --motion-fast: 150ms;
+  --motion-fast: 120ms;
+  --motion-normal: 170ms;
+  --motion-spatial: 220ms;
   --icon-size-sm: 14px;
   --icon-size-md: 16px;
   --density-toolbar-min-height: 40px;
@@ -141,7 +147,15 @@
   --hairline-strong: rgba(15, 23, 42, 0.10);
   --top-highlight: rgba(255, 255, 255, 0.7);
 
-  --radius-window: 12px;
+  /* 鈹€鈹€ Quiet Workbench canonical lines & intents 鈹€鈹€ */
+  --line-subtle: var(--hairline);
+  --line-strong: var(--hairline-strong);
+
+  --intent-accent: var(--color-primary);
+  --intent-success: var(--color-success);
+  --intent-warning: var(--color-warning);
+  --intent-danger: var(--color-danger);
+
   --radius-panel: 12px;
   --radius-card: 12px;
   --radius-control: 8px;
@@ -162,7 +176,6 @@
   --agent-accent: var(--color-primary);
   --agent-accent-soft: var(--color-primary-soft);
   --agent-user-bg: #F3F4F6;
-  --agent-user-border: #D1D5DB;
   --agent-user-text: #374151;
   --agent-shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04);
   --agent-shadow-hover: 0 2px 4px rgba(15, 23, 42, 0.08);
@@ -218,7 +231,7 @@
   --sql-code-comment: #64748B;
   --sql-code-punctuation: #526071;
 
-  /* ── shadcn/Radix HSL Bridge ──
+  /* 鈹€鈹€ shadcn/Radix HSL Bridge 鈹€鈹€
      These exist only to satisfy imported UI primitives.
      New feature CSS should use DBFox semantic tokens above. */
   --primary: 248 64% 59%;
@@ -264,19 +277,23 @@
   --color-danger-soft: rgba(220, 38, 38, 0.15);
   --color-focus-ring: rgba(167, 155, 255, 0.30);
 
-  /* Console accent（dark） */
+  /* Console accent锛坉ark锛?*/
   --color-console-accent: #38BDF8;
 
   --bg-hover: #202B42;
 
   --app-bg: #0B1020;
-  --app-bg-deep: #070B16;
   --sidebar-bg: #10172A;
-  --surface-glass: rgba(21, 29, 48, 0.82);
   --surface-raised: #1A2438;
-  --surface-sidebar: var(--sidebar-bg);
-  --surface-workspace: var(--color-bg);
+  --surface-workspace: var(--color-panel);
   --surface-elevated: var(--surface-raised);
+
+  /* 鈹€鈹€ Quiet Workbench canonical surfaces (dark) 鈹€鈹€
+     Same hierarchy as light; "closer to the user" reads lighter in dark mode. */
+  --surface-canvas: var(--app-bg);
+  --surface-navigation: var(--sidebar-bg);
+  --surface-auxiliary: var(--agent-surface-muted);
+  --surface-overlay: var(--color-panel);
   --control-bg: #151D30;
   --control-bg-hover: #1A2438;
   --control-bg-pressed: var(--color-primary-soft);
@@ -286,11 +303,21 @@
   --focus-ring: 0 0 0 3px var(--color-focus-ring);
   --nav-active-bg: var(--color-primary-soft);
   --nav-active-indicator: var(--color-primary);
-  --motion-fast: 150ms;
+  --motion-fast: 120ms;
+  --motion-normal: 170ms;
+  --motion-spatial: 220ms;
 
   --hairline: rgba(255, 255, 255, 0.06);
   --hairline-strong: rgba(255, 255, 255, 0.10);
   --top-highlight: rgba(255, 255, 255, 0.05);
+
+  --line-subtle: var(--hairline);
+  --line-strong: var(--hairline-strong);
+
+  --intent-accent: var(--color-primary);
+  --intent-success: var(--color-success);
+  --intent-warning: var(--color-warning);
+  --intent-danger: var(--color-danger);
 
   --agent-surface: var(--color-panel);
   --agent-surface-muted: #10172A;
@@ -304,7 +331,6 @@
   --agent-accent: var(--color-primary);
   --agent-accent-soft: var(--color-primary-soft);
   --agent-user-bg: #1F2937;
-  --agent-user-border: #4B5563;
   --agent-user-text: #E5E7EB;
   --agent-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.22);
   --agent-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.28);
@@ -377,7 +403,7 @@
   --ring: 247 100% 80%;
 }
 
-/* ── Appearance preferences ──
+/* 鈹€鈹€ Appearance preferences 鈹€鈹€
    Attribute values are bounded integer px choices applied by ThemeProvider.
    Each area keeps its existing type hierarchy and shifts around its canonical base. */
 :root[data-ui-font-size="11"] { --appearance-ui-font-adjust: -1px; }
@@ -665,7 +691,6 @@
   --color-bg: #F5F6F8;
   --color-panel: #FFFFFF;
   --app-bg: #F0F2F5;
-  --app-bg-deep: #E8EBEF;
   --sidebar-bg: #EEF0F3;
   --surface-raised: #FFFFFF;
   --control-bg-hover: #F7F8FA;
@@ -687,7 +712,6 @@
   --color-bg: #101114;
   --color-panel: #1A1C20;
   --app-bg: #101114;
-  --app-bg-deep: #0A0B0D;
   --sidebar-bg: #15171B;
   --surface-raised: #202329;
   --control-bg: #1A1C20;
@@ -712,7 +736,6 @@
   --color-bg: #F8F6F2;
   --color-panel: #FFFEFC;
   --app-bg: #F3F0EA;
-  --app-bg-deep: #ECE7DE;
   --sidebar-bg: #F3F0EA;
   --surface-raised: #FFFEFC;
   --control-bg: #FFFEFC;
@@ -736,7 +759,6 @@
   --color-bg: #171512;
   --color-panel: #211E1A;
   --app-bg: #171512;
-  --app-bg-deep: #0F0E0C;
   --sidebar-bg: #1D1A17;
   --surface-raised: #29251F;
   --control-bg: #211E1A;
@@ -752,7 +774,7 @@
   --sidebar-background: 30 12% 10%;
 }
 
-/* ── Shared Input Primitives ── */
+/* 鈹€鈹€ Shared Input Primitives 鈹€鈹€ */
 .hifi-input {
   width: 100%;
   height: 38px;
@@ -854,8 +876,8 @@
   letter-spacing: -0.01em;
 }
 
-/* ── Numeric discipline ──
-   表格数字、行数、耗时、错误码统一使用等宽数字。 */
+/* 鈹€鈹€ Numeric discipline 鈹€鈹€
+   琛ㄦ牸鏁板瓧銆佽鏁般€佽€楁椂銆侀敊璇爜缁熶竴浣跨敤绛夊鏁板瓧銆?*/
 .dbfox-tnum {
   font-variant-numeric: tabular-nums;
 }

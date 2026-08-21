@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApprovalItem } from "../../../types/conversation";
 import { Composer } from "./Composer";
 import { ApprovalCard } from "./ApprovalCard";
@@ -37,6 +37,7 @@ export function ConversationWorkspace({
     selectArtifact,
     loadRunArtifacts,
   } = useConversationViewModel(conversationId);
+  const [contentScrolled, setContentScrolled] = useState(false);
 
   useEffect(() => {
     if (!detail && conversationId) void openConversation(conversationId);
@@ -88,7 +89,11 @@ export function ConversationWorkspace({
   );
 
   const conversationPane = (
-    <section className="conv-conversation-pane" aria-label="Conversation">
+    <section
+      className="conv-conversation-pane"
+      aria-label="Conversation"
+      data-content-scrolled={contentScrolled ? "true" : undefined}
+    >
       <ConversationHeader detail={detail} />
       <MessageList
         items={items}
@@ -99,6 +104,7 @@ export function ConversationWorkspace({
         resolvingQuestionId={resolvingQuestionId}
         questionError={questionError}
         onResolveQuestion={resolveQuestion}
+        onScrolledChange={setContentScrolled}
       />
       {pendingApproval && runningRun && (
         <div className="conv-pinned-action">

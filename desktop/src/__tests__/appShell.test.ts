@@ -31,13 +31,26 @@ describe("app shell layout", () => {
     expect(resizable).toContain('from "react-resizable-panels"');
   });
 
-  it("uses a real viewport shell with grid rows and a restrained main surface", () => {
+  it("uses a real viewport shell with grid rows and a quiet primary workspace", () => {
     const css = read("App.css");
 
     expect(css).toMatch(/\.app-shell\s*{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*width:\s*100vw;[^}]*height:\s*100vh;/s);
-    expect(css).toMatch(/\.app-shell-inner\s*{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);/s);
+    expect(css).toMatch(/\.app-shell-inner\s*{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);[^}]*background:\s*var\(--surface-canvas\);/s);
     expect(css).toMatch(/\.app-body\s*{[^}]*grid-row:\s*2;/s);
-    expect(css).toMatch(/\.app-main\s*{[^}]*margin:\s*6px 6px 6px 0;[^}]*border-radius:\s*var\(--radius-window\);[^}]*box-shadow:\s*var\(--shadow-window\);[^}]*overflow:\s*hidden;/s);
+
+    // Quiet Workbench: the primary workspace is a contiguous surface, not a raised card.
+    const appMain = css.match(/\.app-main\s*{([^}]*)}/)?.[1] ?? "";
+    expect(appMain).toContain("background: var(--surface-workspace)");
+    expect(appMain).not.toMatch(/\bmargin\s*:|\bborder\s*:|\bborder-radius\s*:|\bbox-shadow\s*:/);
+
+    // Conversation and Dock sit flush: no canvas gaps between first-class regions.
+    expect(css).toMatch(/\.app-v3-stage\s*{[^}]*gap:\s*0;[^}]*padding:\s*0;/s);
+  });
+
+  it("keeps decorative gradients out of the structural shell", () => {
+    const css = read("App.css");
+
+    expect(css).not.toMatch(/\.app-shell-inner\s*{[^}]*radial-gradient/s);
   });
 
   it("keeps lazy workspace boundaries visibly loading instead of flashing blank", () => {

@@ -1,4 +1,5 @@
-/* 右侧扩展工作区：与中间对话区同级，Dock 内部使用浏览器式标签。 */
+/* 右侧扩展工作区：与中间对话区平级的 auxiliary surface。
+   Quiet Workbench：无四边 Card border / radius，只用左侧 hairline 与对话区分隔。 */
 
 .workspace-dock {
   display: flex;
@@ -8,9 +9,8 @@
   height: 100%;
   min-height: 0;
   flex-direction: column;
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-  background: var(--agent-surface-muted);
+  border-left: 1px solid var(--line-subtle);
+  background: var(--surface-auxiliary);
   box-shadow: none;
   overflow: hidden;
 }
@@ -22,7 +22,7 @@
   align-items: center;
   gap: 4px;
   padding: 6px 0;
-  border-color: transparent;
+  border-left-color: transparent;
   background: transparent;
 }
 
@@ -41,26 +41,36 @@
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
-  align-items: center;
+  align-items: stretch;
   gap: 2px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.workspace-dock__tabs::-webkit-scrollbar {
-  display: none;
+  /* Visibility is planned by the tab window (direct tabs + overflow menu),
+     not by a hidden horizontal scrollbar. */
+  overflow: hidden;
 }
 
 .workspace-dock__tab {
+  position: relative;
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   align-items: center;
   gap: 1px;
+  min-width: 0;
   max-width: 200px;
-  border: 1px solid transparent;
-  border-radius: 7px 7px 0 0;
+  border: 0;
+  border-radius: 0;
   color: var(--color-text-secondary);
-  transition: background-color var(--motion-fast) ease-out, color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out;
+}
+
+.workspace-dock__tab::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  transition: background-color var(--motion-fast) ease-out;
 }
 
 .workspace-dock__tab:hover {
@@ -68,12 +78,15 @@
   color: var(--color-text-primary);
 }
 
+/* Active = text emphasis + soft 2px indicator (not color-only, not a card). */
 .workspace-dock__tab.is-active {
-  background: var(--surface-raised);
-  border-color: var(--hairline);
-  border-bottom-color: var(--surface-raised);
+  background: transparent;
   color: var(--color-text-primary);
   font-weight: 600;
+}
+
+.workspace-dock__tab.is-active::after {
+  background: var(--intent-accent);
 }
 
 .workspace-dock__tab-main {
@@ -150,7 +163,8 @@
 
 .workspace-dock__collapse,
 .workspace-dock__expand,
-.workspace-dock__rail-item {
+.workspace-dock__rail-item,
+.workspace-dock__overflow {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -167,9 +181,49 @@
 
 .workspace-dock__collapse:hover,
 .workspace-dock__expand:hover,
-.workspace-dock__rail-item:hover {
+.workspace-dock__rail-item:hover,
+.workspace-dock__overflow:hover {
   background: var(--control-bg-hover);
   color: var(--color-primary);
+}
+
+/* Subtle resizer on the conversation-facing edge. */
+.workspace-dock {
+  position: relative;
+}
+
+.workspace-dock__resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  z-index: 6;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.workspace-dock__resizer::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 2px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  transition: background-color var(--motion-fast) ease-out;
+}
+
+.workspace-dock__resizer:hover::after,
+.workspace-dock__resizer:focus-visible::after,
+.workspace-dock__resizer[data-resizing]::after {
+  background: color-mix(in srgb, var(--intent-accent) 55%, transparent);
+}
+
+.workspace-dock__resizer:focus-visible::after {
+  background: var(--intent-accent);
 }
 
 .workspace-dock__content {

@@ -130,30 +130,40 @@ describe("ProjectResourceSidebar", () => {
     expect(screen.queryByRole("button", { name: "其他工作区对话" })).toBeNull();
   });
 
-  it("renders connector selector tabs from contributions", () => {
+  it("renders host-owned collapsible resource sections from contributions", () => {
     renderSidebar({ connectors: [dataConnector, workspaceConnector] });
-    expect(screen.getByRole("button", { name: /数据库/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /文件/ })).toBeInTheDocument();
+    const dataHeader = screen.getByRole("button", { name: /数据库/ });
+    const workspaceHeader = screen.getByRole("button", { name: /文件/ });
+    expect(dataHeader).toHaveAttribute("aria-expanded", "true");
+    expect(workspaceHeader).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("renders active connector content", () => {
-    renderSidebar({ connectors: [dataConnector] });
+  it("renders only the first connector content by default", () => {
+    renderSidebar({ connectors: [dataConnector, workspaceConnector] });
     expect(screen.getByTestId("data-connector")).toBeInTheDocument();
+    expect(screen.queryByTestId("workspace-connector")).toBeNull();
   });
 
-  it("mock contribution appears in connector selector", () => {
-    renderSidebar({ connectors: [mockConnector] });
-    expect(screen.getByRole("button", { name: /Mock/ })).toBeInTheDocument();
-  });
-
-  it("mock contribution renders in active slot when selected", () => {
+  it("expands and collapses sections independently", () => {
     renderSidebar({ connectors: [dataConnector, mockConnector] });
-    // Default is first connector (data)
-    expect(screen.getByTestId("data-connector")).toBeInTheDocument();
 
-    // Click mock tab
     fireEvent.click(screen.getByRole("button", { name: /Mock/ }));
     expect(screen.getByTestId("mock-connector")).toBeInTheDocument();
+    expect(screen.getByTestId("data-connector")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /数据库/ }));
+    expect(screen.queryByTestId("data-connector")).toBeNull();
+    expect(screen.getByTestId("mock-connector")).toBeInTheDocument();
+  });
+
+  it("keeps conversations visible regardless of section expansion", () => {
+    renderSidebar({ connectors: [dataConnector, mockConnector] });
+    expect(screen.getByText("对话")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "分析订单趋势" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Mock/ }));
+    expect(screen.getByText("对话")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "分析订单趋势" })).toBeInTheDocument();
   });
 
   it("add resource button is present when addable contributions exist", () => {
@@ -174,18 +184,6 @@ describe("ProjectResourceSidebar", () => {
     expect(addable.map((c) => c.id)).toEqual(["dbfox.data", "test.mock"]);
   });
 
-  it("conversations remain visible regardless of active connector", () => {
-    renderSidebar({ connectors: [dataConnector, mockConnector] });
-    expect(screen.getByText("对话")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "分析订单趋势" })).toBeInTheDocument();
-
-    // Switch connector
-    fireEvent.click(screen.getByRole("button", { name: /Mock/ }));
-    // Conversations still visible
-    expect(screen.getByText("对话")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "分析订单趋势" })).toBeInTheDocument();
-  });
-
   it("settings entry works", () => {
     const onOpenSettings = vi.fn();
     renderSidebar({ onOpenSettings });
@@ -193,28 +191,8 @@ describe("ProjectResourceSidebar", () => {
     expect(onOpenSettings).toHaveBeenCalledOnce();
   });
 
-  it("Add Resource onAdd works regardless of active connector", () => {
-    const dataOnAdd = vi.fn();
-    const mockOnAdd = vi.fn();
-    const data = { ...dataConnector, onAdd: dataOnAdd };
-    const mock = { ...mockConnector, onAdd: mockOnAdd };
-    renderSidebar({ connectors: [data, mock] });
-
-    // Switch to mock connector (Workspace-like)
-    fireEvent.click(screen.getByRole("button", { name: /Mock/ }));
-    expect(screen.getByTestId("mock-connector")).toBeInTheDocument();
-
-    // Data's onAdd should still work even though Data is not active
-    dataOnAdd({ projectId: "project-1" });
-    expect(dataOnAdd).toHaveBeenCalledWith({ projectId: "project-1" });
-
-    // Mock's onAdd should also work
-    mockOnAdd({ projectId: "project-1" });
-    expect(mockOnAdd).toHaveBeenCalledWith({ projectId: "project-1" });
-  });
-
-  it("connector fallback is deterministic without effect", () => {
-    // Start with 2 connectors, default is first
+  it("stays deterministic when the connector list shrinks", () => {
+    // Start with 2 connectors; the first is expanded by default.
     const { rerender } = render(
       <TooltipProvider>
         <ProjectResourceSidebar
@@ -228,11 +206,7 @@ describe("ProjectResourceSidebar", () => {
     );
     expect(screen.getByTestId("data-connector")).toBeInTheDocument();
 
-    // Select mock
-    fireEvent.click(screen.getByRole("button", { name: /Mock/ }));
-    expect(screen.getByTestId("mock-connector")).toBeInTheDocument();
-
-    // Remove mock from connectors — should fall back to first
+    // Remove mock — data section remains expanded.
     rerender(
       <TooltipProvider>
         <ProjectResourceSidebar
@@ -245,6 +219,32 @@ describe("ProjectResourceSidebar", () => {
       </TooltipProvider>,
     );
     expect(screen.getByTestId("data-connector")).toBeInTheDocument();
+  });
+
+  it("survives a synthetic 20-DLC stress composition", () => {
+    const synthetic: ResourceConnectorContribution[] = Array.from({ length: 20 }, (_, index) => ({
+      id: `synthetic.dlc-${index}`,
+      title: `DLC ${index} 的一个相当长的资源标题`,
+      icon: "🧩",
+      render: () => <div data-testid={`synthetic-content-${index}`}>content</div>,
+    }));
+
+    renderSidebar({ connectors: [dataConnector, ...synthetic] });
+
+    // All 21 section headers render; only the first is expanded by default.
+    for (let index = 0; index < 20; index += 1) {
+      expect(screen.getByRole("button", { name: new RegExp(synthetic[index].title) })).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+      expect(screen.queryByTestId(`synthetic-content-${index}`)).toBeNull();
+    }
+    expect(screen.getByTestId("data-connector")).toBeInTheDocument();
+
+    // Expanding one DLC keeps the rest collapsed.
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(synthetic[7].title) }));
+    expect(screen.getByTestId("synthetic-content-7")).toBeInTheDocument();
+    expect(screen.queryByTestId("synthetic-content-8")).toBeNull();
   });
 });
 

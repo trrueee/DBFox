@@ -24,6 +24,7 @@ interface MessageListProps {
     questionId: string,
     response: { selected_value?: string; text?: string },
   ) => Promise<void> | void;
+  onScrolledChange?: (scrolled: boolean) => void;
 }
 
 export function MessageList({
@@ -35,11 +36,13 @@ export function MessageList({
   resolvingQuestionId,
   questionError,
   onResolveQuestion,
+  onScrolledChange,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const virtualLayoutId = `messages-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const pinnedToBottomRef = useRef(true);
   const previousRunCountRef = useRef(0);
+  const scrolledStateRef = useRef(false);
   const orderedRuns = useMemo(
     () => [...runs].sort((left, right) => left.session_sequence - right.session_sequence),
     [runs],
@@ -105,16 +108,26 @@ export function MessageList({
     return () => cancelAnimationFrame(frame);
   }, [artifacts.length, latestRenderKey, orderedRuns.length, scrollToBottom]);
 
+  const emitScrolledState = useCallback(
+    (scrolled: boolean) => {
+      if (scrolledStateRef.current === scrolled) return;
+      scrolledStateRef.current = scrolled;
+      onScrolledChange?.(scrolled);
+    },
+    [onScrolledChange],
+  );
+
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
     const updatePinnedState = () => {
-      pinnedToBottomRef.current =
-        node.scrollHeight - node.scrollTop - node.clientHeight <= BOTTOM_THRESHOLD_PX;
+      const distanceToBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+      pinnedToBottomRef.current = distanceToBottom <= BOTTOM_THRESHOLD_PX;
+      emitScrolledState(distanceToBottom > BOTTOM_THRESHOLD_PX);
     };
     node.addEventListener("scroll", updatePinnedState, { passive: true });
     return () => node.removeEventListener("scroll", updatePinnedState);
-  }, []);
+  }, [emitScrolledState]);
 
   useEffect(() => {
     const node = ref.current;

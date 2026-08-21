@@ -601,39 +601,62 @@
   color: var(--color-primary);
 }
 
-.ds-entity-sub-switch {
+/* Host-owned collapsible resource sections.
+   Host owns section chrome (header, chevron, spacing, hover);
+   connectors only contribute content. */
+.ds-connector-sections {
   display: flex;
-  flex: 0 0 auto;
+  flex-direction: column;
   gap: 2px;
-  padding: 1px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-control);
-  background: var(--control-bg-subtle, var(--color-bg-subtle));
 }
 
-.ds-entity-sub-switch__button {
+.ds-connector-section__header {
   display: flex;
   align-items: center;
-  gap: 4px;
-  min-height: 22px;
+  gap: 6px;
+  width: 100%;
+  min-height: var(--density-tree-row-height);
+  padding: 0 8px;
   border: 0;
-  border-radius: calc(var(--radius-control) - 1px);
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: var(--ui-font-caption);
-  padding: 0 6px;
+  font-size: var(--ui-font-label);
+  font-weight: 500;
+  text-align: left;
 }
 
-.ds-entity-sub-switch__button:hover {
+.ds-connector-section__header:hover {
+  background: var(--control-bg-hover);
   color: var(--color-text-primary);
 }
 
-.ds-entity-sub-switch__button.is-active {
-  background: var(--surface-raised);
-  color: var(--color-primary);
-  font-weight: 650;
+.ds-connector-section__header:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.ds-connector-section__chevron {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  transition: transform var(--motion-fast) ease-out;
+}
+
+.ds-connector-section__chevron.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+.ds-connector-section__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-connector-section__content {
+  padding-left: 26px;
 }
 
 .ds-entity-row__content {
@@ -773,6 +796,7 @@
 .ds-add-resource-btn {
   width: 22px;
   height: 22px;
+  margin-left: auto;
 }
 
 .ds-tree-icon-btn--danger:hover {

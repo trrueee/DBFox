@@ -4,7 +4,7 @@ import { TooltipProvider } from "../../../components/ui";
 import { useSqlConsoleStore } from "../../../stores/sqlConsoleStore";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import { useDlcStore } from "../../dlc/extensionStore";
-import { WorkspaceDock } from "../WorkspaceDock";
+import { planDockTabWindow, WorkspaceDock } from "../WorkspaceDock";
 
 vi.mock("../../datasource/useDatasourceState", () => ({
   useDatasourceState: () => ({
@@ -173,5 +173,41 @@ describe("WorkspaceDock", () => {
 
     renderDock();
     expect(await screen.findByTestId("dlc-dock-view")).toBeTruthy();
+  });
+
+  it("hides the overflow trigger when every tab fits", () => {
+    renderDock();
+    expect(screen.queryByRole("button", { name: /更多标签/ })).toBeNull();
+  });
+
+  it("exposes a keyboard-operable width separator", () => {
+    renderDock();
+    const separator = screen.getByRole("separator", { name: "调整工作台宽度" });
+    expect(separator.getAttribute("aria-orientation")).toBe("vertical");
+  });
+});
+
+describe("planDockTabWindow", () => {
+  it("returns the full window when everything fits or measurement is unavailable", () => {
+    expect(planDockTabWindow([100, 120], 400, 0)).toEqual({ start: 0, end: 2 });
+    expect(planDockTabWindow([100, 120], 0, 1)).toEqual({ start: 0, end: 2 });
+    expect(planDockTabWindow([], 400, 0)).toEqual({ start: 0, end: 0 });
+  });
+
+  it("truncates to a leading window and reserves room for the overflow trigger", () => {
+    // limit = 300 - 30 = 270 → two 100px tabs fit, the third does not.
+    expect(planDockTabWindow([100, 100, 100], 300, 0)).toEqual({ start: 0, end: 2 });
+  });
+
+  it("slides the window so an overflowing active tab stays visible", () => {
+    // Active is the last tab; window slides to end at it.
+    expect(planDockTabWindow([100, 100, 100], 300, 2)).toEqual({ start: 1, end: 3 });
+    // Active in the middle stays inside the leading window.
+    expect(planDockTabWindow([100, 100, 100], 300, 1)).toEqual({ start: 0, end: 2 });
+  });
+
+  it("always shows at least one tab even when nothing fits", () => {
+    expect(planDockTabWindow([500], 300, 0)).toEqual({ start: 0, end: 1 });
+    expect(planDockTabWindow([200, 200, 200], 150, 2)).toEqual({ start: 2, end: 3 });
   });
 });
