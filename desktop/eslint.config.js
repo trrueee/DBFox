@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'src-tauri/target', 'src/lib/api/generated']),
+  globalIgnores(['dist', 'dist-electron', 'src-tauri/target', 'src/lib/api/generated']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -22,6 +22,12 @@ export default defineConfig([
       'react-hooks/purity': 'warn',
       'react-hooks/set-state-in-effect': 'warn',
       'react-refresh/only-export-components': 'warn',
+    },
+  },
+  {
+    files: ['main/**/*.ts', 'preload/**/*.ts', 'shared/**/*.ts', 'vitest.electron.config.ts'],
+    languageOptions: {
+      globals: globals.node,
     },
   },
   {

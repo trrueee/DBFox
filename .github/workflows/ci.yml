@@ -449,6 +449,9 @@ jobs:
       - name: Run frontend unit tests serially for deterministic memory usage
         run: npm test -- --maxWorkers=1
 
+      - name: Run Electron host unit tests
+        run: npm run test:electron
+
       - name: Compile and build the frontend
         run: npm run build
 
@@ -568,6 +571,10 @@ jobs:
       - name: Install locked frontend dependencies
         working-directory: desktop
         run: npm ci
+
+      - name: Verify the Electron EngineSupervisor contract
+        working-directory: desktop
+        run: npm run test:electron
 
       - name: Verify platform-sensitive sidecar contracts
         shell: bash

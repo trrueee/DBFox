@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FolderOpen, RefreshCw } from "lucide-react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
 import {
   ApiError,
   getRuntimeSession,
@@ -8,6 +7,11 @@ import {
   waitEngineHealth,
   waitForEngineConfig,
 } from "../lib/api/client";
+import {
+  isEngineDesktopHost,
+  openDesktopDiagnosticLogs,
+  restartDesktopEngine,
+} from "../lib/desktopHost";
 import { FoxIcon } from "./brand/FoxIcon";
 import { Button } from "./ui/button";
 
@@ -54,10 +58,6 @@ function startupFailure(error: unknown): StartupFailure {
     default:
       return { code, summary: "DBFox 暂时无法完成启动，请重试或查看诊断日志。" };
   }
-}
-
-async function invokeDesktopCommand(command: "restart_python_engine" | "open_diagnostic_logs") {
-  await invoke(command);
 }
 
 export function EngineStartupGate({ children }: { children: ReactNode }) {
@@ -157,7 +157,7 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
     setEnginePhase(null);
     setActionMessage("正在重新加载 DBFox…");
     try {
-      if (isTauri()) await invokeDesktopCommand("restart_python_engine");
+      if (isEngineDesktopHost()) await restartDesktopEngine();
       setAttempt((value) => value + 1);
     } catch {
       setFailure(startupFailure(new ApiError("Engine restart failed", 503, "ENGINE_RESTART_FAILED")));
@@ -167,12 +167,12 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
   };
 
   const openDiagnosticLogs = async () => {
-    if (!isTauri()) {
+    if (!isEngineDesktopHost()) {
       setActionMessage("诊断日志目录只能在 DBFox 桌面应用中打开。");
       return;
     }
     try {
-      await invokeDesktopCommand("open_diagnostic_logs");
+      await openDesktopDiagnosticLogs();
       setActionMessage("已打开诊断日志目录。");
     } catch {
       setActionMessage("无法打开诊断日志目录，请稍后重试。");

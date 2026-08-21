@@ -17,6 +17,7 @@
 - [R5.3 GitHub Core 运行图移除证据](./2026-08-21-r5-github-core-removal.md)：删除静态 API、ORM、运行时与前端组合，同时保留历史 Alembic 升级能力。
 - [R5.4 GitHub 完整外置 Conformance 证据](./2026-08-21-r5-github-conformance.md)：真实 `dbfox.github` 包的 absence、restart activation/deactivation、数据与 ToolAttempt 身份保留，以及三平台 frozen release 合同。
 - [R6 Side-by-Side Update / Rollback 证据](./2026-08-21-r6-side-by-side-update-rollback.md)：多 digest/version registry、显式选择与 rollback、数据不回滚、旧版本清理，以及三平台 packaged release 合同。
+- [R7.0 Electron Host Cutover 决策与迁移证据](./2026-08-21-r7-electron-host-cutover.md)：只替换 Desktop Host、保持 Renderer→Python HTTP/SSE、分阶段迁移 supervisor/native/DLC/release 并最终删除 Rust/Tauri。
 - [P2 Memory v4 Cutover Gate 本地证据与限制](./2026-08-16-p2-memory-v4-cutover-evidence.md)：当前确定性门禁已通过；真实 Provider AgentBench 后测未执行，`DBFOX_MEMORY_V4_CONTEXT` 保持默认关闭。
 - [P2 Memory v4 DeepSeek 真实 Provider 调查与修复记录](./2026-08-17-memory-v4-projection-deepseek-investigation.md)：定位 `sha256:` content-hash tool version 与 Catalog reducer 语义版本门禁不匹配，修复 projection 无法写入的问题；v4 cutover 仍待完整回归门禁通过。
 - [Agent 生产评测方法](./agent-evaluation-methodology.md)：分层 Harness、数据集角色、Grader、统计门禁与脱敏 Trace 合同。

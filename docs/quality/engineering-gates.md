@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-06
+> 最后核验：2026-08-21
 >
 > 适用范围：本地检查、持续集成、依赖锁定和工程门禁
 >
@@ -16,8 +16,9 @@
 2. 不依赖外部服务或真实 LLM 凭据的核心后端与 Agent 运行时回归；
 3. 使用 `.sidecar-python-version` 指定的生产解释器，重新运行完整确定性后端合同；
 4. 在独立 `.build_venv` 中执行完整 PyInstaller sidecar 构建；
-5. 前端的 `npm ci`、ESLint、Vitest、TypeScript/Vite build；
-6. Rust 的锁文件验证、fmt、Clippy（警告即失败）和单元测试。
+5. 前端的 `npm ci`、ESLint、Vitest、Electron Main/真实 Python supervisor smoke、
+   TypeScript/Vite build；
+6. Electron release cutover 前继续执行 Rust 的锁文件验证、fmt、Clippy（警告即失败）和单元测试。
 
 CI 只授予 `contents: read`，每个第三方 GitHub Action 固定到完整提交 SHA，且 checkout 不保留凭据。真实 LLM、外部集成和端到端测试保留给受控环境，不作为普通 PR 的隐式依赖。
 
@@ -43,6 +44,7 @@ npm ci
 npm run lint
 npm run typecheck:test
 npm test -- --maxWorkers=1
+npm run test:electron
 npm run build
 
 cd src-tauri

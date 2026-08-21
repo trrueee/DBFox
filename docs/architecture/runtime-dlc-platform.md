@@ -373,6 +373,8 @@ Error States:
 - **R4.3**: Packaged cross-platform lifecycle proof (CLOSED).
 - **R5**: Conformance Proof & Data Ownership — Decouple `dbfox.github` into `dbfox.github-1.0.0.dbfox-dlc` (CLOSED).
 - **R6**: Side-by-Side Update & Rollback Lifecycle (CLOSED).
-- **R7**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`).
+- **R7.0**: Electron Host Cutover — replace Tauri/Rust without rewriting the Python Engine or
+  routing business APIs through IPC; close Electron release contracts, then remove the old Host.
+- **R7.1**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`).
 - **R8**: Untrusted Subprocess Sandbox Gate.
 
