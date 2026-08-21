@@ -126,6 +126,9 @@ def test_electron_release_does_not_mutate_the_manifest_bound_sidecar() -> None:
     assert "rustc" not in build_step
     assert "desktop/electron-resources/sidecar/dbfox-engine" in workflow
     assert "desktop/src-tauri/binaries/dbfox-engine-x86_64-unknown-linux-gnu" not in workflow
+    assert "chown root:root release-electron/linux-unpacked/chrome-sandbox" in workflow
+    assert "chmod 4755 release-electron/linux-unpacked/chrome-sandbox" in workflow
+    assert "--no-sandbox" not in workflow
 
 
 def test_ci_only_uses_runner_context_after_a_job_reaches_its_runner() -> None:
