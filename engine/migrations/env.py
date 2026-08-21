@@ -34,6 +34,7 @@ target_metadata = _models.Base.metadata
 
 _FTS_VIRTUAL_TABLES = {"schema_search_fts", "query_history_fts", "agent_message_fts"}
 _FTS_SHADOW_SUFFIXES = {"data", "idx", "content", "docsize", "config"}
+_RETAINED_HISTORICAL_TABLES = {"github_repository_bindings"}
 _DEFAULT_ALEMBIC_URL = "driver://user:pass@localhost/dbname"
 _OFFLINE_MIGRATION_ERROR = (
     "DBFOX_ALEMBIC_OFFLINE_UNSUPPORTED: metadata migrations require a live database connection; "
@@ -69,8 +70,18 @@ def _is_fts_table(name: str | None) -> bool:
 
 
 def include_object(object_, name, type_, reflected, compare_to) -> bool:
-    """Keep SQLite FTS virtual tables and their shadow tables out of diffs."""
+    """Keep virtual and intentionally retained historical tables out of diffs."""
     if type_ == "table" and _is_fts_table(name):
+        return False
+    if (
+        type_ == "table"
+        and reflected
+        and compare_to is None
+        and name in _RETAINED_HISTORICAL_TABLES
+    ):
+        # R5 copied these rows into DLC-owned state.  The old table remains so
+        # historical upgrades stay recoverable, but it is no longer a current
+        # Core model and autogenerate must not propose destructive cleanup.
         return False
     return True
 

@@ -44,9 +44,8 @@
 - 新增依赖：无。
 - 双写或第二业务 SSOT：无。Alembic revision 是唯一完成记录；staging 表仅支持未完成
   revision 的恢复。
-- 临时层：`engine.github.migration.TransitionalGithubBindingStore` 与静态 Core GitHub
-  facade。负责人/删除阶段固定为 R5.3；删除条件是本 revision 已成为支持版本的升级地板，
-  且静态 API、ORM、tools/resources/context/frontend composition 一并移除。
+- 临时层已在 R5.3 删除。保留下来的实现位于
+  `engine.migrations.github_dlc_state`，只供历史 Alembic revision 使用，不提供运行时 CRUD。
 - 历史 Core 表在 R5.3 后仍可由历史 migration 识别，但生产 graph 不得引用它。
 
 ## 验证范围
@@ -56,5 +55,5 @@
 - 目标身份冲突时迁移失败且源行、既有目标行均保持不变。
 - 模拟迁移后旧 Core 行变化，重建 target store 与静态兼容读取仍返回已迁移值，证明无
   fallback 或持续双写。
-- GitHub API、repository、resource、context、production vertical 与实包 conformance
-  回归继续通过。
+- R5.2 合并时 GitHub 静态 facade 与实包 conformance 回归均通过；R5.3 随后删除静态
+  facade，并由迁移回归继续证明历史导入能力。

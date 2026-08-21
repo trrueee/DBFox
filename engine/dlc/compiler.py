@@ -156,8 +156,6 @@ class ContributionCompiler:
                 register_workspace_extension,
                 register_workspace_write_extension,
             )
-            from engine.github.tools import register_github_extension
-
             temp_reg = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
             register_core_functions(temp_reg)
             register_conversation_functions(temp_reg)
@@ -165,7 +163,6 @@ class ContributionCompiler:
             register_workspace_extension(temp_reg)
             register_workspace_write_extension(temp_reg)
             register_remote_job_extension(temp_reg)
-            register_github_extension(temp_reg)
             resolved_built_in_tools: list[ToolContribution] = [
                 ToolContribution(
                     tool=temp_reg.require(name),  # type: ignore[arg-type]
@@ -182,7 +179,6 @@ class ContributionCompiler:
             ]
 
         if built_in_resource_providers is None:
-            from engine.github.resource import list_github_resources
             from engine.runtime_composition import (
                 list_database_resources,
                 list_workspace_resources,
@@ -190,19 +186,16 @@ class ContributionCompiler:
             resolved_providers: list[ProjectResourceProvider] = [
                 list_database_resources,
                 list_workspace_resources,
-                list_github_resources,
             ]
         else:
             resolved_providers = list(built_in_resource_providers)
 
         if built_in_resource_resolvers is None:
-            from engine.github.resource import resolve_github_repository
             from engine.tools.runtime.resource_context import resolve_workspace_resource
 
             resolved_resolvers: list[ResourceResolverContribution] = [
                 ResourceResolverContribution(kind="database", resolver=lambda db, _ref: db, owner_id="dbfox.builtin", binding="metadata_session"),
                 ResourceResolverContribution(kind="workspace", resolver=resolve_workspace_resource, owner_id="dbfox.builtin", binding="metadata_session"),
-                ResourceResolverContribution(kind="github.repository", resolver=resolve_github_repository, owner_id="dbfox.builtin", binding="metadata_session"),
             ]
         else:
             resolved_resolvers = []
@@ -220,11 +213,9 @@ class ContributionCompiler:
 
         if built_in_context_contributors is None:
             from engine.agent.workspace_context import WorkspaceContextContributor
-            from engine.github.context import GitHubContextContributor
 
             resolved_context: list[Callable[[Session], ContextContributor]] = [
                 WorkspaceContextContributor,
-                GitHubContextContributor,
             ]
         else:
             resolved_context = list(built_in_context_contributors)

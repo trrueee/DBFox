@@ -523,6 +523,78 @@ def test_generated_api_artifact_contract_is_open_type_with_schema_version() -> N
     assert "type: string;" in generated_types
 
 
+def test_r5_core_product_graph_has_no_static_github_domain() -> None:
+    """GitHub may enter the product only through an activated DLC package."""
+    retired_paths = (
+        ROOT / "desktop" / "src" / "features" / "resources" / "GithubConnector.tsx",
+        ROOT / "desktop" / "src" / "features" / "dock" / "GithubFileDock.tsx",
+        ROOT
+        / "desktop"
+        / "src"
+        / "features"
+        / "workspace"
+        / "artifacts"
+        / "GithubFileSnapshotArtifactView.tsx",
+        ROOT / "desktop" / "src" / "lib" / "api" / "github.ts",
+    )
+    assert not [path.relative_to(ROOT).as_posix() for path in retired_paths if path.exists()]
+    retired_source_roots = (
+        ROOT / "engine" / "github",
+        ROOT / "desktop" / "src" / "features" / "github",
+    )
+    assert not [
+        path.relative_to(ROOT).as_posix()
+        for source_root in retired_source_roots
+        if source_root.exists()
+        for path in source_root.rglob("*")
+        if path.is_file() and path.suffix in {".py", ".ts", ".tsx"}
+    ]
+
+    production_roots = (
+        ROOT / "engine" / "api" / "__init__.py",
+        ROOT / "engine" / "dlc" / "compiler.py",
+        ROOT / "engine" / "dlc" / "snapshot.py",
+        ROOT / "engine" / "models.py",
+        ROOT / "desktop" / "src" / "features" / "dock" / "dockViewComposition.ts",
+        ROOT
+        / "desktop"
+        / "src"
+        / "features"
+        / "resources"
+        / "resourceConnectorComposition.tsx",
+        ROOT
+        / "desktop"
+        / "src"
+        / "features"
+        / "resources"
+        / "requestedResourceComposition.ts",
+        ROOT
+        / "desktop"
+        / "src"
+        / "features"
+        / "workspace"
+        / "artifacts"
+        / "artifactRendererRegistry.tsx",
+    )
+    forbidden = re.compile(
+        r"engine\.github|GithubRepositoryBinding|builtin\.github|"
+        r"githubDockViews|GithubConnector|githubRequestedResourceContributor|"
+        r"githubArtifactRenderers|githubApi"
+    )
+    offenders = [
+        path.relative_to(ROOT).as_posix()
+        for path in production_roots
+        if forbidden.search(path.read_text(encoding="utf-8"))
+    ]
+    assert not offenders, offenders
+
+    generated_root = ROOT / "desktop" / "src" / "lib" / "api" / "generated"
+    generated_contract = "\n".join(
+        path.read_text(encoding="utf-8") for path in generated_root.rglob("*.ts")
+    )
+    assert "/projects/{project_id}/github" not in generated_contract
+
+
 def test_readme_architecture_diagram_is_static_svg() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     diagram_path = ROOT / "docs" / "images" / "system-architecture.svg"

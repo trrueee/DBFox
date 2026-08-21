@@ -8,7 +8,7 @@ from collections.abc import Sequence
 
 from alembic import op
 
-from engine.github.migration import migrate_legacy_github_data
+from engine.migrations.github_dlc_state import migrate_legacy_github_data
 
 
 revision: str = "d5e6f7a8b9c1"

@@ -129,7 +129,7 @@ class RuntimeContributionSnapshot:
 
 def compute_snapshot_id(
     active_dlcs: tuple[ActivatedDlcIdentity, ...],
-    built_in_identifiers: tuple[str, ...] = ("builtin.data", "builtin.workspace", "builtin.github"),
+    built_in_identifiers: tuple[str, ...] = ("builtin.data", "builtin.workspace"),
 ) -> str:
     """Deterministically compute the runtime snapshot ID from composition identity."""
     sorted_dlc_payload = [

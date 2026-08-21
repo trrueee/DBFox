@@ -11,7 +11,6 @@ import {
 import { coreArtifactRenderers } from "../coreArtifactRenderers";
 import { dataArtifactRenderers } from "../dataArtifactRenderers";
 import { workspaceArtifactRenderers } from "../workspaceArtifactRenderers";
-import { githubArtifactRenderers } from "../githubArtifactRenderers";
 import { useDlcStore } from "../../../dlc/extensionStore";
 
 vi.mock("../TableArtifactView", () => ({
@@ -32,9 +31,6 @@ vi.mock("../WorkspaceFileSnapshotArtifactView", () => ({
 vi.mock("../WorkspaceCodePatchArtifactView", () => ({
   WorkspaceCodePatchArtifactView: () => <div data-testid="workspace-code-patch-view" />,
 }));
-vi.mock("../GithubFileSnapshotArtifactView", () => ({
-  GithubFileSnapshotArtifactView: () => <div data-testid="github-file-snapshot-view" />,
-}));
 
 describe("artifact renderer registry", () => {
   it("binds known renderers to (type, schemaVersion)", () => {
@@ -45,14 +41,13 @@ describe("artifact renderer registry", () => {
     expect(getArtifactRenderer("result_view", 2)).toBeNull();
     expect(getArtifactRenderer("dbfox.workspace.file_snapshot", 1)).not.toBeNull();
     expect(getArtifactRenderer("dbfox.workspace.code_patch", 1)).not.toBeNull();
-    expect(getArtifactRenderer("dbfox.github.file_snapshot", 1)).not.toBeNull();
+    expect(getArtifactRenderer("dbfox.github.file_snapshot", 1)).toBeNull();
   });
 
-  it("verifies clean modular ownership among core, data, workspace, and github", () => {
+  it("verifies clean modular ownership among core, data, and workspace", () => {
     const coreTypes = coreArtifactRenderers.map((r) => r.type);
     const dataTypes = dataArtifactRenderers.map((r) => r.type);
     const wsTypes = workspaceArtifactRenderers.map((r) => r.type);
-    const ghTypes = githubArtifactRenderers.map((r) => r.type);
 
     expect(coreTypes).toEqual(["markdown"]);
     expect(dataTypes).toEqual(["result_view", "chart", "sql"]);
@@ -60,10 +55,8 @@ describe("artifact renderer registry", () => {
       "dbfox.workspace.file_snapshot",
       "dbfox.workspace.code_patch",
     ]);
-    expect(ghTypes).toEqual(["dbfox.github.file_snapshot"]);
-
     const productRenderers = productArtifactRenderers();
-    expect(productRenderers).toHaveLength(7);
+    expect(productRenderers).toHaveLength(6);
   });
 
   it("rejects duplicate renderer type registration with fail-closed error", () => {

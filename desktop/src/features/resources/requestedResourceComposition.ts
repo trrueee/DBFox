@@ -2,7 +2,6 @@ import type { RequestedResourceRef } from "../../lib/api/generated/types.gen";
 import { queryClient } from "../../lib/queryClient";
 import { projectQueryKeys } from "../projects/useProjectState";
 import type { ProjectResponse } from "../../lib/api/generated/types.gen";
-import { useGithubStore } from "../github/githubStore";
 import { useDlcStore } from "../dlc/extensionStore";
 
 export interface ConversationSendResourceContext {
@@ -55,21 +54,9 @@ export const workspaceRequestedResourceContributor: RequestedResourceContributor
   return { complete: true, refs: [{ kind: "workspace", id: context.projectId }] };
 };
 
-export const githubRequestedResourceContributor: RequestedResourceContributor = (context) => {
-  if (!context.projectId) {
-    return { complete: true, refs: [] };
-  }
-  const activeBindingId = useGithubStore.getState().activeBindingIdByProject[context.projectId];
-  if (!activeBindingId) {
-    return { complete: true, refs: [] };
-  }
-  return { complete: true, refs: [{ kind: "github.repository", id: activeBindingId }] };
-};
-
 export const PRODUCT_REQUESTED_RESOURCE_CONTRIBUTORS: readonly RequestedResourceContributor[] = [
   dataRequestedResourceContributor,
   workspaceRequestedResourceContributor,
-  githubRequestedResourceContributor,
 ];
 
 export interface ProductRequestedResourcesSnapshot {
