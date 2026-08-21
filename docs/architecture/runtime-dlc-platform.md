@@ -343,7 +343,7 @@ Error States:
 - R5 GitHub conformance DOES NOT pass merely by moving GitHub Python/TS code into `.dbfox-dlc`.
 - **R5 Final Proof Requirement**:
   - Core ORM (`engine/models.py`) must have ZERO GitHub-owned runtime model dependencies.
-  - GitHub DLC must own its durable storage in `APP_DATA/dlcs/data/dbfox.github.sqlite3`.
+  - GitHub DLC must own its durable storage in `APP_DATA/dlcs/data/dbfox.github/state.sqlite3`.
   - Historical Core migration files may remain, but existing user data must migrate/adapt cleanly.
 
 ---

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import httpx
 import pytest
 
 from engine.github.contracts import GithubInvalidInputError
-from engine.github.models import GithubRepositoryBinding
+from engine.github.migration import GithubBindingRecord, transitional_store
 from engine.github.repository import (
     create_github_binding,
     delete_github_binding,
@@ -170,17 +172,21 @@ def test_github_resource_provider_discovery(db_session) -> None:
     project_id = "proj-provider-test"
     db_session.add(Project(id=project_id, name="Provider Test"))
     db_session.flush()
-    db_session.add(
-        GithubRepositoryBinding(
+    db_session.commit()
+    transitional_store(db_session).create_binding(
+        GithubBindingRecord(
             id="bind-1",
             project_id=project_id,
             owner="fastapi",
             repository="fastapi",
             ref_name="master",
             resolved_revision="11223344556677889900aabbccddeeff00112233",
+            default_branch=None,
+            description=None,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
         )
     )
-    db_session.commit()
 
     descriptors = list_github_resources(db_session, project_id)
     assert len(descriptors) == 1
@@ -194,17 +200,21 @@ def test_github_resource_resolver_freshness_and_stale_fence(db_session) -> None:
     project_id = "proj-resolver-test"
     db_session.add(Project(id=project_id, name="Resolver Test"))
     db_session.flush()
-    db_session.add(
-        GithubRepositoryBinding(
+    db_session.commit()
+    transitional_store(db_session).create_binding(
+        GithubBindingRecord(
             id="bind-valid",
             project_id=project_id,
             owner="pallets",
             repository="flask",
             ref_name="main",
             resolved_revision="aabbccddeeff0011223344556677889900aabbcc",
+            default_branch=None,
+            description=None,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
         )
     )
-    db_session.commit()
 
     # Successful resolution with matching revision
     valid_ref = ResourceScopeRef(

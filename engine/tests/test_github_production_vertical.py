@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import datetime
 from uuid import uuid4
 import httpx
 from sqlalchemy.orm import sessionmaker
@@ -16,7 +17,7 @@ from engine.agent.run import RunLimits
 from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
 from engine.agent.turn import ModelToolCall
 from engine.github.contracts import GITHUB_FILE_SNAPSHOT_ARTIFACT_TYPE
-from engine.github.models import GithubRepositoryBinding
+from engine.github.migration import GithubBindingRecord, transitional_store
 from engine.json_codec import loads
 from engine.models import AgentArtifactRecord, AgentRun, AgentSession, Project
 from engine.runtime_composition import (
@@ -68,8 +69,8 @@ def test_github_production_vertical_slice(db_session, monkeypatch) -> None:
     binding_id = "binding-uv-1"
     rev = "8899aabbccddeeff00112233445566778899aabb"
 
-    db_session.add(
-        GithubRepositoryBinding(
+    transitional_store(db_session).create_binding(
+        GithubBindingRecord(
             id=binding_id,
             project_id=project_id,
             owner="astral-sh",
@@ -77,6 +78,9 @@ def test_github_production_vertical_slice(db_session, monkeypatch) -> None:
             ref_name="main",
             resolved_revision=rev,
             default_branch="main",
+            description=None,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
         )
     )
     session_id = "session-uv-1"

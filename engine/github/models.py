@@ -1,4 +1,4 @@
-"""GitHub DLC database models."""
+"""Historical GitHub SQLAlchemy model retained as the R5.2 import source."""
 
 from __future__ import annotations
 

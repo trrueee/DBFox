@@ -17,7 +17,7 @@ from engine.github.contracts import (
     GithubRateLimitedError,
     GithubServiceError,
 )
-from engine.github.models import GithubRepositoryBinding
+from engine.github.migration import GithubBindingRecord
 from engine.github.repository import (
     create_github_binding,
     delete_github_binding,
@@ -30,7 +30,7 @@ from engine.github.service import GithubReadService
 router = APIRouter(prefix="/projects/{project_id}/github", tags=["github"])
 
 
-def _to_binding_response(b: GithubRepositoryBinding) -> GithubBindingResponse:
+def _to_binding_response(b: GithubBindingRecord) -> GithubBindingResponse:
     return GithubBindingResponse(
         id=str(b.id),
         project_id=str(b.project_id),
