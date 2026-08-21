@@ -1,4 +1,4 @@
-name: Windows signed draft release
+name: Windows signed Electron draft release
 
 on:
   workflow_dispatch:
@@ -13,22 +13,18 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PYTHON_VERSION: "3.12.8"
   NODE_VERSION: "22.18.0"
-  RUST_VERSION: "1.95.0"
   UV_VERSION: "0.11.23"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PIP_NO_INPUT: "1"
 
 jobs:
   windows-signed-draft:
-    name: Signed Windows x64 draft
+    name: Signed Electron Windows x64 draft
     if: github.ref == 'refs/heads/main'
     runs-on: windows-2025
     environment: release
     env:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
       WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     steps:
@@ -37,15 +33,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Require all independent signing credentials
+      - name: Require the Windows publisher credentials
         shell: pwsh
         run: |
-          $required = @(
-            'TAURI_SIGNING_PRIVATE_KEY',
-            'WINDOWS_CERTIFICATE_BASE64',
-            'WINDOWS_CERTIFICATE_PASSWORD'
-          )
-          foreach ($name in $required) {
+          foreach ($name in @('WINDOWS_CERTIFICATE_BASE64', 'WINDOWS_CERTIFICATE_PASSWORD')) {
             if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
               throw "Required release credential is missing: $name"
             }
@@ -83,20 +74,22 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
-      - name: Install the repository-pinned Rust toolchain
-        run: rustup toolchain install "${{ env.RUST_VERSION }}" --profile minimal
-
       - name: Create the isolated frozen-runtime build environment
-        shell: bash
+        shell: pwsh
         run: |
           python -m venv .build_venv
-          uv pip sync --require-hashes requirements-dev.lock --python ./.build_venv/Scripts/python.exe
+          uv pip sync --require-hashes requirements-dev.lock `
+            --python ./.build_venv/Scripts/python.exe
 
       - name: Install locked frontend dependencies
         working-directory: desktop
         run: npm ci
 
-      - name: Import the Windows publisher certificate and create the release overlay
+      - name: Build and probe the unsigned frozen Sidecar
+        shell: pwsh
+        run: ./.build_venv/Scripts/python.exe build_sidecar.py
+
+      - name: Import publisher identity, sign Sidecar, and bind its final hash
         shell: pwsh
         run: |
           $pfxPath = Join-Path $env:RUNNER_TEMP 'dbfox-release.pfx'
@@ -105,134 +98,129 @@ jobs:
             [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
           )
           $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
-          $importedCertificates = Import-PfxCertificate `
+          $certificates = Import-PfxCertificate `
             -FilePath $pfxPath `
             -CertStoreLocation 'Cert:\CurrentUser\My' `
             -Password $password
-          Remove-Item -LiteralPath $pfxPath -Force
-          $certificate = $importedCertificates |
+          $certificate = $certificates |
             Where-Object {
               $_.HasPrivateKey -and
               ($_.EnhancedKeyUsageList.ObjectId.Value -contains '1.3.6.1.5.5.7.3.3')
             } |
             Sort-Object NotAfter -Descending |
             Select-Object -First 1
-          if ($null -eq $certificate -or [string]::IsNullOrWhiteSpace($certificate.Thumbprint)) {
+          if ($null -eq $certificate) {
             throw 'No code-signing certificate with a private key was imported.'
           }
+          $signTool = Get-ChildItem `
+            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if ($null -eq $signTool) { throw 'Windows SDK signtool.exe is unavailable.' }
+
+          & $signTool.FullName sign /sha1 $certificate.Thumbprint /fd sha256 `
+            /tr 'http://timestamp.digicert.com' /td sha256 `
+            'desktop/electron-resources/sidecar/dbfox-engine.exe'
+          if ($LASTEXITCODE -ne 0) { throw 'Sidecar Authenticode signing failed.' }
+          ./.build_venv/Scripts/python.exe build_sidecar.py --refresh-artifact-manifest
+
           "WINDOWS_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" | Out-File `
             -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CSC_LINK=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CSC_KEY_PASSWORD=$env:WINDOWS_CERTIFICATE_PASSWORD" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          $overlay = Get-Content 'desktop/src-tauri/tauri.release.conf.json' -Raw | ConvertFrom-Json
-          $overlay.bundle | Add-Member -MemberType NoteProperty -Name windows -Value @{
-            certificateThumbprint = $certificate.Thumbprint
-            digestAlgorithm = 'sha256'
-            timestampUrl = 'http://timestamp.digicert.com'
-          }
-          $overlay | ConvertTo-Json -Depth 20 | Set-Content `
-            'desktop/src-tauri/tauri.ci-release.conf.json' -Encoding utf8
-
-      # tauri-action v0.6.2, pinned to the dereferenced commit.
-      - name: Build signed installers and create an unpublished draft release
-        id: tauri
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5
+      - name: Build signed NSIS installer and create an unpublished draft
+        working-directory: desktop
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: desktop
-          tauriScript: npm run tauri
-          args: --config src-tauri/tauri.ci-release.conf.json
-          tagName: v__VERSION__
-          releaseName: DBFox v__VERSION__
-          releaseBody: Windows x64 signed candidate. Keep this draft until installer, upgrade and uninstall evidence is approved.
-          releaseDraft: true
-          prerelease: false
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm run build
+          node ./scripts/prepare-electron-package.mjs
+          npx electron-builder --projectDir electron-app `
+            --config ../electron-builder.yml --config.forceCodeSigning=true --publish always
 
-      - name: Verify frozen runtime, publisher signatures, and updater artifacts
+      - name: Verify frozen runtime, publisher signatures, and update metadata
         shell: pwsh
         run: |
           python scripts/verify_release_artifact.py `
             --output reports/release-artifact-verification.json
 
-          $installers = Get-ChildItem 'desktop/src-tauri/target/release/bundle' -Recurse -File |
-            Where-Object { $_.Extension -in @('.msi', '.exe') }
-          if ($installers.Count -lt 2) {
-            throw 'Expected both MSI and NSIS installers.'
-          }
-          foreach ($installer in $installers) {
-            $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+          $installer = Get-ChildItem 'desktop/release-electron' -File -Filter 'DBFox-*.exe' |
+            Select-Object -First 1
+          $signedFiles = @(
+            $installer,
+            (Get-Item 'desktop/release-electron/win-unpacked/DBFox.exe'),
+            (Get-Item 'desktop/release-electron/win-unpacked/resources/sidecar/dbfox-engine.exe')
+          )
+          foreach ($file in $signedFiles) {
+            if ($null -eq $file) { throw 'A signed release executable is missing.' }
+            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
             if ($signature.Status -ne 'Valid') {
-              throw "Invalid Authenticode signature: $($installer.FullName) ($($signature.Status))"
+              throw "Invalid Authenticode signature: $($file.FullName) ($($signature.Status))"
             }
             if ($signature.SignerCertificate.Thumbprint -ne $env:WINDOWS_CERTIFICATE_THUMBPRINT) {
-              throw "Unexpected signer certificate: $($installer.FullName)"
+              throw "Unexpected signer certificate: $($file.FullName)"
             }
           }
 
-          $signatures = Get-ChildItem 'desktop/src-tauri/target/release/bundle' -Recurse -File -Filter '*.sig'
-          if ($signatures.Count -lt 1) {
-            throw 'Tauri updater signature artifacts are missing.'
+          $metadata = Get-Content 'desktop/release-electron/latest.yml' -Raw
+          foreach ($required in @('sha512:', 'files:', '.exe')) {
+            if (-not $metadata.Contains($required)) {
+              throw "Electron update metadata is missing: $required"
+            }
+          }
+          $appUpdate = Get-Content `
+            'desktop/release-electron/win-unpacked/resources/app-update.yml' -Raw
+          if (-not $appUpdate.Contains('publisherName:')) {
+            throw 'Installed update policy is not bound to the Authenticode publisher.'
           }
 
+      - name: Run packaged host and NSIS lifecycle evidence
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          npm run test:electron-packaged
+          $candidate = Get-ChildItem 'release-electron' -File -Filter 'DBFox-*.exe' |
+            Select-Object -First 1
+          & '../scripts/verify_windows_nsis_lifecycle.ps1' `
+            -CandidateInstaller $candidate.FullName `
+            -ExpectedVersion ((Get-Content package.json -Raw | ConvertFrom-Json).version) `
+            -Output '../reports/windows-nsis-lifecycle.json'
+
       # actions/attest v4.2.1
-      - name: Attest official installer provenance
+      - name: Attest official release provenance
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
         with:
           subject-path: |
-            desktop/src-tauri/target/release/bundle/msi/*.msi
-            desktop/src-tauri/target/release/bundle/nsis/*.exe
-            desktop/src-tauri/target/release/bundle/**/*.sig
-
-      - name: Verify MSI fresh install, published-version upgrade, and uninstall
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $candidate = Get-ChildItem 'desktop/src-tauri/target/release/bundle/msi' -File -Filter '*.msi' |
-            Select-Object -First 1
-          if ($null -eq $candidate) {
-            throw 'Candidate MSI is missing.'
-          }
-          $version = (Get-Content 'desktop/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json).version
-
-          $previousDirectory = Join-Path $env:RUNNER_TEMP 'dbfox-previous-release'
-          New-Item -ItemType Directory -Path $previousDirectory -Force | Out-Null
-          $previousTag = gh release list --exclude-drafts --exclude-pre-releases --limit 1 `
-            --json tagName --jq '.[0].tagName'
-          $previous = $null
-          if (-not [string]::IsNullOrWhiteSpace($previousTag)) {
-            gh release download $previousTag --pattern '*.msi' --dir $previousDirectory
-            $previous = Get-ChildItem $previousDirectory -File -Filter '*.msi' | Select-Object -First 1
-          }
-
-          $arguments = @{
-            CandidateMsi = $candidate.FullName
-            ExpectedVersion = $version
-            Output = 'reports/windows-msi-lifecycle.json'
-          }
-          if ($null -ne $previous) {
-            $arguments.PreviousMsi = $previous.FullName
-          }
-          & 'scripts/verify_windows_msi_lifecycle.ps1' @arguments
+            desktop/release-electron/DBFox-*.exe
+            desktop/release-electron/DBFox-*.exe.blockmap
+            desktop/release-electron/latest.yml
 
       # v4.6.2
       - name: Upload signed release evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: windows-signed-release-${{ github.sha }}
+          name: windows-signed-electron-release-${{ github.sha }}
           path: |
             reports/release-artifact-verification.json
-            reports/windows-msi-lifecycle.json
-            desktop/src-tauri/binaries/dbfox-engine-runtime-manifest.json
-            desktop/src-tauri/target/release/bundle/**
+            reports/windows-nsis-lifecycle.json
+            desktop/electron-resources/sidecar/dbfox-engine-runtime-manifest.json
+            desktop/release-electron/**
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
 
-      - name: Remove generated release overlay
+      - name: Remove imported release credentials
         if: always()
         shell: pwsh
-        run: Remove-Item -LiteralPath 'desktop/src-tauri/tauri.ci-release.conf.json' -Force -ErrorAction SilentlyContinue
+        run: |
+          if (-not [string]::IsNullOrWhiteSpace($env:CSC_LINK) -and (Test-Path -LiteralPath $env:CSC_LINK)) {
+            Remove-Item -LiteralPath $env:CSC_LINK -Force
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_THUMBPRINT)) {
+            Remove-Item -LiteralPath "Cert:\CurrentUser\My\$env:WINDOWS_CERTIFICATE_THUMBPRINT" `
+              -Force -ErrorAction SilentlyContinue
+          }

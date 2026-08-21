@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Extract a final Tauri installer and verify its frozen sidecar contract."""
+"""Verify an Electron release image, installer, and frozen Sidecar contract."""
 
 from __future__ import annotations
 
@@ -8,10 +8,7 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
-import shutil
-import subprocess
 import sys
-import tempfile
 from typing import Iterator
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,47 +46,19 @@ def _find_one(root: Path, pattern: str) -> Path:
 
 
 @contextmanager
-def extracted_installer(bundle_root: Path) -> Iterator[tuple[Path, Path]]:
+def packaged_release(bundle_root: Path) -> Iterator[tuple[Path, Path]]:
     if sys.platform == "darwin":
-        app = _find_one(bundle_root, "macos/*.app")
-        installer = _find_one(bundle_root, "dmg/*.dmg")
+        apps = sorted(bundle_root.glob("mac*/DBFox.app"))
+        if len(apps) != 1:
+            raise RuntimeError(f"Expected one packaged macOS app, found {len(apps)}")
+        app = apps[0]
+        installer = _find_one(bundle_root, "DBFox-*.dmg")
         yield installer, app
         return
-
-    with tempfile.TemporaryDirectory(prefix="dbfox-installer-extract-") as temporary:
-        destination = Path(temporary)
-        if sys.platform == "win32":
-            installer = _find_one(bundle_root, "msi/*.msi")
-            result = subprocess.run(
-                ["msiexec.exe", "/a", str(installer), "/qn", f"TARGETDIR={destination}"],
-                timeout=180,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(f"MSI administrative extraction failed: {result.returncode}")
-        else:
-            deb_matches = list(bundle_root.glob("deb/*.deb"))
-            if deb_matches and shutil.which("dpkg-deb"):
-                installer = _find_one(bundle_root, "deb/*.deb")
-                result = subprocess.run(
-                    ["dpkg-deb", "-x", str(installer), str(destination)],
-                    timeout=180,
-                )
-                if result.returncode != 0:
-                    raise RuntimeError(f"DEB extraction failed: {result.returncode}")
-            else:
-                installer = _find_one(bundle_root, "appimage/*.AppImage")
-                installer.chmod(installer.stat().st_mode | 0o100)
-                env = os.environ.copy()
-                env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
-                result = subprocess.run(
-                    [str(installer), "--appimage-extract"],
-                    cwd=destination,
-                    env=env,
-                    timeout=180,
-                )
-                if result.returncode != 0:
-                    raise RuntimeError(f"AppImage extraction failed: {result.returncode}")
-        yield installer, destination
+    if sys.platform == "win32":
+        yield _find_one(bundle_root, "DBFox-*.exe"), _find_one(bundle_root, "win-unpacked")
+        return
+    yield _find_one(bundle_root, "DBFox-*.AppImage"), _find_one(bundle_root, "linux-unpacked")
 
 
 def _sidecar_candidates(root: Path) -> list[Path]:
@@ -217,7 +186,7 @@ def main() -> None:
     parser.add_argument(
         "--bundle-root",
         type=Path,
-        default=Path("desktop/src-tauri/target/release/bundle"),
+        default=Path("desktop/release-electron"),
     )
     parser.add_argument(
         "--manifest",
@@ -240,7 +209,7 @@ def main() -> None:
             )
         forbidden_values = (value.encode("utf-8"),)
 
-    with extracted_installer(args.bundle_root.resolve()) as (installer, root):
+    with packaged_release(args.bundle_root.resolve()) as (installer, root):
         result = verify_extracted_tree(
             root,
             args.manifest.resolve(),

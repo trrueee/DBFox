@@ -1,38 +1,31 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
 import { AlertTriangle, Download, RefreshCw, RotateCcw, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { SettingsContent, SettingsSection, SettingsStatus } from "../../components/settings";
 import { Button } from "../../components/ui/button";
 import { getUserErrorMessage } from "../../lib/api/client";
+import {
+  checkForDesktopUpdate,
+  getDesktopLaunchRecoveryStatus,
+  getDesktopUpdateConfiguration,
+  installPendingDesktopUpdate,
+  isEngineDesktopHost,
+  type LaunchRecoveryStatus,
+  type UpdateCheckResult,
+  type UpdateConfiguration,
+} from "../../lib/desktopHost";
 import "./UpdateSettingsPanel.css";
-
-interface UpdateConfiguration {
-  configured: boolean;
-  channel: string;
-  currentVersion: string;
-}
-
-interface UpdateCheckResult {
-  available: boolean;
-  currentVersion: string;
-  version: string | null;
-  body: string | null;
-  publishedAtUnix: number | null;
-}
-
-interface LaunchRecoveryStatus {
-  previousUncleanExit: boolean;
-}
 
 interface UpdateSettingsPanelProps {
   showToast: (message: string, type?: "success" | "error" | "warning" | "info") => void;
 }
 
 export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
-  const desktopRuntime = isTauri();
+  const desktopRuntime = isEngineDesktopHost();
   const [configuration, setConfiguration] = useState<UpdateConfiguration | null>(() => (
-    desktopRuntime ? null : { configured: false, channel: "stable", currentVersion: "开发预览" }
+    desktopRuntime ? null : {
+      configured: false, channel: "stable", currentVersion: "开发预览", platformPolicy: "development",
+    }
   ));
   const [recovery, setRecovery] = useState<LaunchRecoveryStatus | null>(() => (
     desktopRuntime ? null : { previousUncleanExit: false }
@@ -46,8 +39,8 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
     if (!desktopRuntime) return () => { cancelled = true; };
 
     void Promise.all([
-      invoke<UpdateConfiguration>("get_update_configuration"),
-      invoke<LaunchRecoveryStatus>("get_launch_recovery_status"),
+      getDesktopUpdateConfiguration(),
+      getDesktopLaunchRecoveryStatus(),
     ]).then(([nextConfiguration, nextRecovery]) => {
       if (!cancelled) {
         setConfiguration(nextConfiguration);
@@ -63,7 +56,7 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
     if (!configuration?.configured || checking) return;
     setChecking(true);
     try {
-      const result = await invoke<UpdateCheckResult>("check_for_app_update");
+      const result = await checkForDesktopUpdate();
       setUpdate(result);
       showToast(
         result.available ? `发现 DBFox ${result.version}` : "当前已是最新版本",
@@ -80,8 +73,8 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
     if (!update?.available || installing) return;
     setInstalling(true);
     try {
-      showToast("正在下载并验证签名，安装开始后应用会安全退出", "info");
-      await invoke("install_pending_app_update");
+      showToast("正在下载并验证发布者签名，安装开始后应用会安全退出", "info");
+      await installPendingDesktopUpdate();
     } catch (error) {
       setInstalling(false);
       showToast(getUserErrorMessage(error, "更新安装失败"), "error");
@@ -89,21 +82,24 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
   };
 
   const configured = Boolean(configuration?.configured);
+  const systemManaged = configuration?.platformPolicy === "system-package-manager";
   return (
     <SettingsContent>
       <SettingsStatus
         tone={configured ? "success" : "warning"}
-        label={configured ? "签名更新通道已启用" : "此构建未启用自动更新"}
+        label={configured ? "代码签名更新通道已启用" : systemManaged ? "由系统包管理器负责更新" : "此构建未启用自动更新"}
         description={configured
-          ? "自动检查只读取官方发布清单；安装包必须通过 Tauri Updater 的公钥签名校验。"
-          : "开发构建或未注入发布公钥的构建不会联网检查更新，也不能安装未签名更新包。"}
+          ? "手动检查只读取官方发布清单；Windows 或 macOS 更新必须匹配已安装应用的代码签名身份。"
+          : systemManaged
+            ? "Linux 不从应用内安装更新，请使用发行包或系统包管理器完成升级。"
+            : "开发构建不会联网检查更新，也不能安装未签名更新包。"}
         meta={`版本：${configuration?.currentVersion ?? "读取中…"} · 通道：${configuration?.channel ?? "stable"}`}
       />
 
       <SettingsSection
         icon={Download}
         title="应用更新"
-        description="启动后自动静默检查一次，也可手动检查；DBFox 不自行下载或执行任意 URL。"
+        description="仅在你手动触发时检查；DBFox 不接受 Renderer 提供的更新 URL。"
         trailing={(
           <Button variant="outline" size="sm" disabled={!configured || checking} onClick={() => void checkForUpdate()}>
             <RefreshCw size={14} aria-hidden="true" />
@@ -127,7 +123,7 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
           <SettingsStatus
             tone="neutral"
             label={update ? "当前已是最新版本" : "尚未执行手动检查"}
-            description="发现新版本后，由你确认才会下载和安装；Windows 安装阶段会安全停止 Sidecar 并退出应用。"
+            description="发现新版本后，由你确认才会下载和安装；安装阶段会安全停止 Sidecar 并退出应用。"
           />
         )}
       </SettingsSection>
@@ -142,19 +138,19 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
           label={recovery?.previousUncleanExit ? "检测到上次异常退出" : "上次会话正常结束"}
           description={recovery?.previousUncleanExit
             ? "原生窗口状态会恢复；Agent 对话和工件继续以数据库为事实来源。若运行异常，请导出诊断包。"
-            : "窗口位置与尺寸由官方 Window State 插件恢复，应用内面板由外观设置恢复。"}
+            : "应用内面板和持久化工作区会从各自的唯一事实来源恢复。"}
         />
       </SettingsSection>
 
       <SettingsSection
         icon={ShieldCheck}
         title="发布安全边界"
-        description="更新签名与 Windows Authenticode 代码签名是两套独立门禁，正式发布必须同时通过。"
+        description="更新元数据完整性、平台代码签名与发布 provenance 是相互独立的门禁。"
       >
         <ul className="update-security-list">
-          <li>更新清单与更新包使用 Tauri minisign 密钥验证，私钥仅存在于 CI Secret。</li>
-          <li>Windows 安装器必须使用发布者代码签名证书签名，并在 CI 中验证 Authenticode。</li>
-          <li>任何密钥缺失、签名失败或 HTTPS 清单异常都会阻止发布或安装，不提供降级通道。</li>
+          <li>Electron Builder 生成带 SHA-512 的更新元数据；应用不接受 UI 传入的 feed 或下载地址。</li>
+          <li>Windows NSIS 必须通过 Authenticode，macOS App/DMG 必须通过 Developer ID 与 notarization。</li>
+          <li>更新器禁止预发布、降级和 Web installer；Linux 明确交由系统包管理器，不伪造签名边界。</li>
         </ul>
       </SettingsSection>
     </SettingsContent>

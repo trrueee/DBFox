@@ -68,12 +68,15 @@ uv python install --managed-python $dbfoxSidecarPython
 uv venv --managed-python --python $dbfoxSidecarPython .build_venv
 uv pip sync requirements-build.lock --python .\.build_venv\Scripts\python.exe
 .\.build_venv\Scripts\python build_sidecar.py
-node desktop/scripts/smoke-sidecar.mjs
+cd desktop
+npm run test:sidecar
+npm run electron:package
+npm run test:electron-packaged
 ```
 
 ## 锁定策略
 
-`desktop/package-lock.json`、`desktop/src-tauri/Cargo.lock`、`requirements.lock`、`requirements-dev.lock` 与 `requirements-build.lock` 都是提交的解析锁文件。前端使用 `npm ci`，Cargo 使用 `--locked`，Python 使用 `pip --require-hashes`，因此 CI 不会在构建时重新选择依赖版本或接受未固定的分发包。
+`desktop/package-lock.json`、`desktop/src-tauri/Cargo.lock`、`requirements.lock`、`requirements-dev.lock` 与 `requirements-build.lock` 都是提交的解析锁文件。前端和 Electron 使用 `npm ci`，迁移期 Rust 回归使用 Cargo `--locked`，Python 使用 `pip --require-hashes`。R7.0d 删除 Tauri 时同时删除 Cargo lock 和 Rust 门禁；Electron 发布流程已经不再调用 Rust。
 
 `requirements*.txt` 是人工维护的输入清单；运行时/开发锁使用 Python 3.12，生产 Sidecar 构建锁使用 `.sidecar-python-version` 的精确版本，并由 `.sidecar-python-build` 固定 uv 管理的 `python-build-standalone` 构建批次。所有锁均为 universal、带 SHA-256 hash 的解析结果，并必须与输入清单一起更新。安装 `requirements-dev.lock` 后可使用其中的 `uv` 执行以下命令；生成后必须运行全部 CI 门禁和审查依赖来源、许可证及安全公告：
 

@@ -3,14 +3,15 @@
 
 This script:
   1. Builds the engine with PyInstaller inside a locked build environment
-  2. Copies the binary to desktop/src-tauri/binaries/ with the correct
-     target-triplet filename that Tauri's externalBin expects
+  2. Copies the binary to desktop/electron-resources/sidecar/ using the
+     fixed filename consumed from Electron's process.resourcesPath
 
 Development credentials are generated only by dev.ps1/dev.sh through
 scripts/dev_environment.py. This builder never writes frontend env.
 
 Usage:
-    python build_sidecar.py              # full build
+    python build_sidecar.py                              # full build
+    python build_sidecar.py --refresh-artifact-manifest # after OS code signing
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -30,7 +32,7 @@ from scripts.dev_environment import generate_dev_token
 ROOT = Path(__file__).resolve().parent
 ENGINE_DIR = ROOT / "engine"
 DESKTOP_DIR = ROOT / "desktop"
-BINARIES_DIR = DESKTOP_DIR / "src-tauri" / "binaries"
+BINARIES_DIR = DESKTOP_DIR / "electron-resources" / "sidecar"
 BUILD_VENV = ROOT / ".build_venv"
 BUILD_LOCK = ROOT / "requirements-build.lock"
 SIDECAR_PYTHON_VERSION_PATH = ROOT / ".sidecar-python-version"
@@ -53,25 +55,30 @@ KEY_BUILD_PACKAGES = (
 )
 
 
-def get_target_triplet() -> str:
-    """Return rustc's official host tuple and fail closed when unavailable."""
-    command = ["rustc", "--print", "host-tuple"]
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
-    except OSError as error:
+def get_target_triplet(
+    *, system: str | None = None, machine: str | None = None
+) -> str:
+    """Return DBFox's explicit Sidecar target without depending on Rust."""
+
+    selected_system = (system or platform.system()).lower()
+    selected_machine = (machine or platform.machine()).lower()
+    architecture = {
+        "amd64": "x86_64",
+        "x86_64": "x86_64",
+        "arm64": "aarch64",
+        "aarch64": "aarch64",
+    }.get(selected_machine)
+    suffix = {
+        "windows": "pc-windows-msvc",
+        "darwin": "apple-darwin",
+        "linux": "unknown-linux-gnu",
+    }.get(selected_system)
+    if architecture is None or suffix is None:
         raise RuntimeError(
-            "Failed to run `rustc --print host-tuple`. Install the Rust toolchain "
-            f"and ensure rustc is on PATH: {error}"
-        ) from error
-    target = result.stdout.strip()
-    if result.returncode != 0 or not target:
-        stderr = result.stderr.strip() or "no stderr"
-        raise RuntimeError(
-            "`rustc --print host-tuple` failed "
-            f"(exit={result.returncode}, stderr={stderr}). Install or repair the "
-            "Rust toolchain before building a release."
+            "Unsupported DBFox Sidecar target: "
+            f"system={selected_system or 'unknown'}, machine={selected_machine or 'unknown'}"
         )
-    return target
+    return f"{architecture}-{suffix}"
 
 
 def sidecar_python_version() -> str:
@@ -424,10 +431,7 @@ def build_pyinstaller(python_exe: str) -> Path:
 
 def install_sidecar(binary: Path) -> Path:
     BINARIES_DIR.mkdir(parents=True, exist_ok=True)
-    triplet = get_target_triplet()
-    name = f"dbfox-engine-{triplet}"
-    if sys.platform == "win32":
-        name += ".exe"
+    name = "dbfox-engine.exe" if sys.platform == "win32" else "dbfox-engine"
     dest = BINARIES_DIR / name
     shutil.copy2(binary, dest)
     print(f"  [OK] Sidecar -> {dest}")
@@ -611,9 +615,46 @@ def write_artifact_manifest(
     return RUNTIME_MANIFEST_PATH
 
 
+def refresh_artifact_manifest_after_platform_signing() -> Path:
+    """Rebind the manifest after an official platform signer mutates the executable."""
+
+    try:
+        existing = json.loads(RUNTIME_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError("Sidecar artifact manifest is unavailable for refresh") from error
+    expected_name = "dbfox-engine.exe" if sys.platform == "win32" else "dbfox-engine"
+    runtime = existing.get("runtime")
+    release_contracts = existing.get("release_contracts")
+    if (
+        existing.get("schema_version") != ARTIFACT_MANIFEST_SCHEMA_VERSION
+        or existing.get("sidecar_filename") != expected_name
+        or not isinstance(runtime, dict)
+        or not isinstance(release_contracts, dict)
+    ):
+        raise RuntimeError("Sidecar artifact manifest cannot be safely refreshed")
+    binary = BINARIES_DIR / expected_name
+    if not binary.is_file():
+        raise RuntimeError("Signed Sidecar executable is unavailable for manifest refresh")
+    signed_runtime = probe_sidecar_runtime(binary)
+    validate_current_source_provenance(signed_runtime)
+    signed_release_contracts = probe_sidecar_release_contracts(binary)
+    if signed_runtime != runtime or signed_release_contracts != release_contracts:
+        raise RuntimeError("Platform signing changed the probed Sidecar contract")
+    return write_artifact_manifest(binary, signed_runtime, signed_release_contracts)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build DBFox engine sidecar")
-    parser.parse_args()
+    parser.add_argument(
+        "--refresh-artifact-manifest",
+        action="store_true",
+        help="Recompute the Sidecar hash after official platform code signing",
+    )
+    args = parser.parse_args()
+
+    if args.refresh_artifact_manifest:
+        refresh_artifact_manifest_after_platform_signing()
+        return
 
     print("=" * 55)
     print("DBFox Sidecar Builder")
@@ -628,7 +669,7 @@ def main() -> None:
     print("\n[2/4] PyInstaller build")
     binary = build_pyinstaller(python_exe)
 
-    print("\n[3/4] Install to Tauri binaries")
+    print("\n[3/4] Install to Electron resources")
     dest = install_sidecar(binary)
 
     print("\n[4/4] Probe final sidecar and enforce release contracts")
@@ -650,7 +691,7 @@ def main() -> None:
     print("\n" + "=" * 55)
     print("Sidecar build complete.")
     print(f"  {dest}")
-    print("  Next: cd desktop && npm run tauri -- build")
+    print("  Next: cd desktop && npm run electron:package")
     print("=" * 55)
 
 

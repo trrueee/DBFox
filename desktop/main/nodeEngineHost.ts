@@ -1,6 +1,9 @@
 import { execFile } from "node:child_process";
 import { spawn, type ChildProcessByStdio } from "node:child_process";
-import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import type { Readable } from "node:stream";
 import { promisify } from "node:util";
 
@@ -8,6 +11,7 @@ import type { EngineChild, EngineExit, EngineHealthProbe, EngineLauncher } from 
 
 const execFileAsync = promisify(execFile);
 const MAX_HEALTH_RESPONSE_BYTES = 64 * 1024;
+const MAX_SIDECAR_MANIFEST_BYTES = 1024 * 1024;
 
 class NodeEngineChild implements EngineChild {
   readonly #child: ChildProcessByStdio<null, Readable, Readable>;
@@ -76,41 +80,106 @@ export function createDevelopmentEngineLauncher(
   const repositoryRoot = resolve(process.cwd(), "..");
   return {
     async launch(token: string): Promise<EngineChild> {
-      const child = spawn(
+      return spawnEngine(
         process.env.DBFOX_ELECTRON_ENGINE_COMMAND ?? "python",
         ["-m", "engine.main", "--no-reload"],
+        repositoryRoot,
         {
-          cwd: repositoryRoot,
-          env: {
-            ...process.env,
-            PYTHONPATH: repositoryRoot,
-            DBFOX_ENGINE_PORT: "0",
-            DBFOX_ENGINE_TOKEN: token,
-            DBFOX_DEV_CORS_ORIGINS: rendererOrigin,
-          },
-          stdio: ["ignore", "pipe", "pipe"],
-          detached: process.platform !== "win32",
-          windowsHide: true,
+          ...process.env,
+          PYTHONPATH: repositoryRoot,
+          DBFOX_ENGINE_PORT: "0",
+          DBFOX_ENGINE_TOKEN: token,
+          DBFOX_DEV_CORS_ORIGINS: rendererOrigin,
         },
+        onStderr,
       );
-      child.stderr.on("data", (chunk: Buffer) => {
-        onStderr(chunk.byteLength);
-      });
-      await new Promise<void>((resolveSpawn, reject) => {
-        const onSpawn = () => {
-          child.removeListener("error", onError);
-          resolveSpawn();
-        };
-        const onError = (error: Error) => {
-          child.removeListener("spawn", onSpawn);
-          reject(error);
-        };
-        child.once("spawn", onSpawn);
-        child.once("error", onError);
-      });
-      return new NodeEngineChild(child);
     },
   };
+}
+
+export function createPackagedEngineLauncher(
+  rendererOrigin: string,
+  resourcesPath: string,
+  onStderr: (byteCount: number) => void = () => undefined,
+): EngineLauncher {
+  const sidecarDirectory = join(resourcesPath, "sidecar");
+  const executable = join(sidecarDirectory, process.platform === "win32" ? "dbfox-engine.exe" : "dbfox-engine");
+  const manifest = join(sidecarDirectory, "dbfox-engine-runtime-manifest.json");
+  return {
+    async launch(token: string): Promise<EngineChild> {
+      await verifyPackagedSidecar(executable, manifest);
+      return spawnEngine(executable, [], dirname(executable), {
+        ...process.env,
+        DBFOX_ENGINE_PORT: "0",
+        DBFOX_ENGINE_TOKEN: token,
+        DBFOX_DEV_CORS_ORIGINS: rendererOrigin,
+      }, onStderr);
+    },
+  };
+}
+
+export async function verifyPackagedSidecar(executable: string, manifestPath: string): Promise<void> {
+  const metadata = await stat(manifestPath);
+  if (!metadata.isFile() || metadata.size > MAX_SIDECAR_MANIFEST_BYTES) {
+    throw new Error("Packaged Sidecar manifest is missing or exceeds its size limit");
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(await readFile(manifestPath, "utf8"));
+  } catch (error) {
+    throw new Error("Packaged Sidecar manifest is invalid", { cause: error });
+  }
+  if (value === null || typeof value !== "object") throw new Error("Packaged Sidecar manifest is invalid");
+  const manifest = value as Record<string, unknown>;
+  if (manifest.schema_version !== 3 || manifest.sidecar_filename !== basename(executable)
+    || typeof manifest.target_triplet !== "string" || manifest.target_triplet.length > 128
+    || typeof manifest.sidecar_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(manifest.sidecar_sha256)) {
+    throw new Error("Packaged Sidecar manifest does not match the Electron resource contract");
+  }
+  const executableMetadata = await stat(executable);
+  if (!executableMetadata.isFile()) throw new Error("Packaged Sidecar executable is unavailable");
+  const actual = await sha256(executable);
+  if (actual !== manifest.sidecar_sha256) throw new Error("Packaged Sidecar integrity verification failed");
+}
+
+async function spawnEngine(
+  command: string,
+  args: readonly string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  onStderr: (byteCount: number) => void,
+): Promise<EngineChild> {
+  const child = spawn(command, args, {
+    cwd,
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: process.platform !== "win32",
+    windowsHide: true,
+  });
+  child.stderr.on("data", (chunk: Buffer) => onStderr(chunk.byteLength));
+  await new Promise<void>((resolveSpawn, reject) => {
+    const onSpawn = () => {
+      child.removeListener("error", onError);
+      resolveSpawn();
+    };
+    const onError = (error: Error) => {
+      child.removeListener("spawn", onSpawn);
+      reject(error);
+    };
+    child.once("spawn", onSpawn);
+    child.once("error", onError);
+  });
+  return new NodeEngineChild(child);
+}
+
+function sha256(path: string): Promise<string> {
+  return new Promise((resolveDigest, reject) => {
+    const digest = createHash("sha256");
+    const stream = createReadStream(path);
+    stream.on("data", (chunk) => digest.update(chunk));
+    stream.once("error", reject);
+    stream.once("end", () => resolveDigest(digest.digest("hex")));
+  });
 }
 
 export function createEngineHealthProbe(rendererOrigin: string): EngineHealthProbe {

@@ -534,10 +534,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-
-      - name: Install the repository-pinned Rust toolchain
-        run: rustup toolchain install "${{ env.RUST_VERSION }}" --profile minimal
+          sudo apt-get install --yes xvfb
 
       - name: Install locked test dependencies
         run: python -m pip install --require-hashes -r requirements-dev.lock
@@ -585,23 +582,34 @@ jobs:
         shell: bash
         run: |
           mkdir -p reports
-          rustc --print host-tuple | tee reports/host-tuple.txt
+          "$SIDECAR_PYTHON" -c 'import build_sidecar; print(build_sidecar.get_target_triplet())' | tee reports/host-tuple.txt
 
-      - name: Build final desktop installers and probe the frozen sidecar
+      - name: Build and probe the frozen Sidecar
+        shell: bash
+        run: |
+          "$SIDECAR_PYTHON" build_sidecar.py
+
+      - name: Build final Electron desktop installers
         working-directory: desktop
         env:
           VITE_LOCAL_ENGINE_TOKEN: ${{ env.DBFOX_RELEASE_TOKEN_SENTINEL }}
-          # linuxdeploy strips ELF files by default. A PyInstaller one-file
-          # Sidecar is already finalized and hash-bound to its runtime manifest;
-          # mutating it during AppImage assembly breaks that integrity contract.
-          NO_STRIP: ${{ runner.os == 'Linux' && '1' || '' }}
-        run: npm run tauri build
+        run: npm run electron:package
 
       - name: Run the authenticated frozen Sidecar smoke
         working-directory: desktop
         run: npm run test:sidecar
 
-      - name: Extract the final installer and verify its runtime manifest
+      - name: Run the packaged Electron host smoke
+        working-directory: desktop
+        shell: bash
+        run: |
+          if [[ "${RUNNER_OS}" == "Linux" ]]; then
+            xvfb-run --auto-servernum npm run test:electron-packaged
+          else
+            npm run test:electron-packaged
+          fi
+
+      - name: Verify the final Electron release image and runtime manifest
         run: >-
           python scripts/verify_release_artifact.py
           --forbidden-value-env DBFOX_RELEASE_TOKEN_SENTINEL
@@ -616,8 +624,8 @@ jobs:
             reports/host-tuple.txt
             reports/release-artifact-verification.json
             reports/dlc-packaged-e2e-*.json
-            desktop/src-tauri/binaries/dbfox-engine-runtime-manifest.json
-            desktop/src-tauri/target/release/bundle/**
+            desktop/electron-resources/sidecar/dbfox-engine-runtime-manifest.json
+            desktop/release-electron/**
           if-no-files-found: error
           retention-days: 7
           compression-level: 0

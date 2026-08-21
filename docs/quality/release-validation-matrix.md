@@ -1,64 +1,62 @@
-# DBFox 发布验证矩阵
+# DBFox Electron 发布验证矩阵
 
 > 文档类型：发布参考
 >
 > 状态：当前
 >
-> 最后核验：2026-08-10
->
-> 适用范围：Windows、macOS、Linux 候选产物和发布证据
+> 最后核验：2026-08-21
 
-本矩阵是发布门禁，不是“理论支持”列表。定时 CI 与人工发布前检查必须在三个目标系统上执行相同的锁定依赖、Sidecar 和 Tauri 编译链。
+门禁配置不等于平台已经通过。每次 work package 必须绑定 commit、workflow run、job、artifact 和
+验证摘要；Windows 结果不得外推到 macOS/Linux。
 
-门禁配置不等于平台已通过。每次候选版本必须绑定具体 commit、workflow/job、
-产物 SHA-256 和 smoke 输出；缺少真实 Runner/产物时该平台只能标记“静态合同已审查、
-未真实验证”。Windows 结果不得外推到 macOS/Linux。
-
-| 能力 | Windows 11 / windows-2025 | macOS 14 / Apple Silicon runner | Ubuntu 24.04 |
+| 自动合同 | Windows 2025 | macOS 14 arm64 | Ubuntu 24.04 |
 |---|---:|---:|---:|
-| Python hash lock 安装 | 必须 | 必须 | 必须 |
-| Sidecar 平台命名、隐藏依赖与 DLC lifecycle smoke | 必须 | 必须 | 必须 |
-| PyInstaller Engine Sidecar | 必须 | 必须 | 必须 |
-| Frontend TypeScript/Vite build | 必须 | 必须 | 必须 |
-| Tauri Rust compile (`--no-bundle`) | 必须 | 必须 | 必须 |
-| Tauri GUI 启动与主流程 smoke | 发布候选 | 发布候选 | 发布候选 |
-| OS 原生 Keyring 实机检查 | 发布候选 | 发布候选 | 发布候选 |
-| 安装、覆盖升级、卸载 | 发布候选 | 发布候选 | 发布候选 |
-| Sidecar crash / sleep-resume / 端口重占用 | 发布候选 | 发布候选 | 发布候选 |
-| MySQL/PostgreSQL/SQLite 连接与取消 | 发布候选 | 发布候选 | 发布候选 |
-| SSH、TLS 与证书路径 | 发布候选 | 发布候选 | 发布候选 |
+| 固定 Python/Node lock 安装 | 必须 | 必须 | 必须 |
+| PyInstaller Sidecar + manifest/hash | 必须 | 必须 | 必须 |
+| DLC packaged lifecycle smoke | 必须 | 必须 | 必须 |
+| React/Vite + Electron Main/Preload | 必须 | 必须 | 必须 |
+| Electron installer | NSIS | DMG + ZIP | AppImage |
+| Packaged Electron/Preload/Engine smoke | 必须 | 必须 | 必须（xvfb） |
+| 未激活 DLC asset 403 | 必须 | 必须 | 必须 |
+| 最终 app tree/Sidecar probe/secret scan | 必须 | 必须 | 必须 |
+| 正式平台签名 | Authenticode 自动门 | Developer ID/notarization 待正式门 | 系统包管理器策略 |
+| 安装/卸载 | 签名候选自动 | 发布候选 | 发布候选 |
 
-## 自动门禁
+## 自动工作流
 
-`.github/workflows/ci.yml` 的 `release-platform-contract` 在每周定时任务和手工触发时运行三平台矩阵。任何平台失败都阻止把对应结果标记为跨平台发布合同通过，但不把 Windows 证据外推给其他平台。
+`ci.yml` 的 `release-platform-contract` 只在 schedule 或 `workflow_dispatch` 运行。它在三平台重建
+Sidecar，执行 runtime/DLC smoke，生成 Electron installer，启动 packaged Electron，并上传
+`reports/`、最终 manifest 和 `desktop/release-electron/**`。普通 PR 的 Rust job会保留到 R7.0d，
+仅用于短迁移期回归；Electron release contract 本身不再安装或调用 Rust/Tauri。
 
-`.github/workflows/windows-signed-release.yml` 是当前唯一正式发布工作流，只允许从 `main` 手工触发并只覆盖 Windows x64。它要求 updater minisign 与 Windows Authenticode 两类独立凭据，使用官方 `tauri-action` 创建未公开 Draft Release，并在发布前验证最终 MSI/NSIS、Frozen Sidecar、publisher signature、updater `.sig`，以及 MSI 首装/可用前序版本升级/卸载。缺少密钥或证书时必须失败，不能生成未签名候选或跳过门禁。
+`windows-signed-release.yml` 是当前唯一正式发布工作流，只允许从 `main` 手工触发。它要求
+`WINDOWS_CERTIFICATE_BASE64` 与 `WINDOWS_CERTIFICATE_PASSWORD`，先签 Sidecar并刷新 hash，再由
+electron-builder 签 Host/NSIS、生成 `latest.yml` 和未公开 Draft Release。随后验证：
 
-生产 Sidecar 的解释器唯一来源为仓库根目录 `.sidecar-python-version`，构建依赖唯一
-来源为 `requirements-build.lock`。Frozen smoke 必须从最终可执行文件验证鉴权、
-Schema、只读查询、Result Artifact、耐久多 Run 和重启重载；runtime manifest schema 2
-必须绑定解释器、锁哈希、关键包版本、SQLite provenance 和 Sidecar 哈希。
+- installer、安装态 Host 与 Sidecar 的 Authenticode signer；
+- artifact manifest、Sidecar exact hash/runtime/release contracts；
+- `latest.yml` SHA-512 与 app-update publisher policy；
+- packaged Electron preload/Engine/asset 403 smoke；
+- NSIS 静默首次安装、版本、安装态签名和卸载；
+- GitHub artifact attestation。
 
-同一个 Frozen smoke 还必须通过产品 lifecycle API 驱动签名的 `acme.echo` fixture，证明
-tampered 拒绝、安装阶段不执行、disabled 安装、enable/restart 后 exact digest 激活、
-backend operation 与 frontend Dock/Artifact bytes 可用、disable/restart 后消失，以及 inactive
-uninstall 删除 executable bytes 并保留 DLC-owned data。每个平台将结构化结果上传为
-`reports/dlc-packaged-e2e-<host-tuple>.json`，不得用本地 TestClient projection 替代。
+缺少凭据、签名、metadata 或证据均失败，不生成“临时未签名正式版”。
 
-截至 2026-08-04 的本地证据仅覆盖 Windows x64；macOS/Linux 的结论必须以对应
-远程 Runner 结果另行更新，当前文档不声称这两个平台已通过。
+## Sidecar 与 DLC 合同
 
-当前自动门禁尚未包含 Tauri GUI WebDriver。Rust 编译、Frozen Sidecar smoke 和前端
-组件测试不能替代真实 WebView 启动证据；在经过独立依赖安全审查的 GUI 自动化落地前，
-该项继续由发布候选人工证据覆盖，不得据此声称已自动验证。
+生产解释器来自 `.sidecar-python-version`，依赖来自 `requirements-build.lock`。manifest schema 3
+绑定解释器/锁/源码/SQLite provenance、target triplet、release contracts、固定 filename 和最终
+SHA-256。签名改变二进制后必须显式 refresh，builder 不允许二次修改 Sidecar。
 
-供应链门禁由 `scripts/dependency_governance.py` 执行：
+Frozen smoke 必须验证鉴权、Schema、只读查询、Result Artifact、durable run、restart reload，并通过
+真实 lifecycle API 驱动签名的 `acme.echo`：tampered 拒绝、安装不执行、disabled、enable/restart
+exact digest、backend/frontend contribution、disable/restart 消失，以及 inactive uninstall 保留 data。
 
-- Node 从提交的 `package-lock.json` 读取全部依赖与许可证；
-- Python 从 hash lock 确定精确版本，并从已安装的锁定 distribution 读取许可证；
-- Rust 从 `cargo metadata --locked` 读取 Cargo.lock 对应的完整依赖图；
-- 三端分别生成 CycloneDX 1.5 清单，并拒绝未知许可证和没有可接受替代项的强 copyleft/受限许可证。
+## 尚需人工候选证据
 
-## 发布候选人工证据
+正式候选还需保存 OS 安装包 hash、签名/公证、首次启动、sleep/resume、Sidecar crash、端口重占、
+Keyring、MySQL/PostgreSQL/SQLite 连接取消、SSH/TLS 路径。macOS 在 Developer ID/notarization 和
+Gatekeeper 真实工作流闭合前不能标记正式可发布；Linux 应记录目标发行版依赖和包管理器升级路径。
 
-发布负责人需要为三个系统分别保存：安装包哈希、签名验证、首次启动日志、升级前后元数据库版本、Keyring 状态、Sidecar 诊断包、数据库连接/取消结果。该证据属于发布记录，不写入 Agent Session/Event Log。
+供应链继续由 lockfile、依赖治理和 CycloneDX 门禁覆盖。R7.0d 删除 Rust/Tauri 后，Cargo 依赖图与
+RustSec 门禁同时删除，而不是保留无消费者的第三语言流程。

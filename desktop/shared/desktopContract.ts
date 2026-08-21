@@ -17,6 +17,9 @@ export const DESKTOP_CHANNELS = Object.freeze({
   openDiagnosticLogs: "dbfox:shell:open-diagnostic-logs",
   exportDiagnosticBundle: "dbfox:diagnostics:export-bundle",
   getLaunchRecoveryStatus: "dbfox:lifecycle:get-recovery-status",
+  getUpdateConfiguration: "dbfox:update:get-configuration",
+  checkForUpdate: "dbfox:update:check",
+  installPendingUpdate: "dbfox:update:install-pending",
 });
 
 export type EngineStartupState = "starting" | "restarting" | "ready" | "failed" | "stopped";
@@ -84,6 +87,21 @@ export interface LaunchRecoveryStatus {
   previousUncleanExit: boolean;
 }
 
+export interface UpdateConfiguration {
+  configured: boolean;
+  channel: "stable";
+  currentVersion: string;
+  platformPolicy: "code-signed" | "system-package-manager" | "development";
+}
+
+export interface UpdateCheckResult {
+  available: boolean;
+  currentVersion: string;
+  version: string | null;
+  body: string | null;
+  publishedAtUnix: number | null;
+}
+
 export interface DbfoxDesktopBridge {
   readonly runtime: "electron";
   readonly engine: {
@@ -115,5 +133,10 @@ export interface DbfoxDesktopBridge {
   };
   readonly lifecycle: {
     getRecoveryStatus(): Promise<LaunchRecoveryStatus>;
+  };
+  readonly updates: {
+    getConfiguration(): Promise<UpdateConfiguration>;
+    check(): Promise<UpdateCheckResult>;
+    installPending(): Promise<void>;
   };
 }

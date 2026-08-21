@@ -113,14 +113,17 @@ def test_ci_enforces_the_required_layered_quality_gates() -> None:
         assert command in workflow
 
 
-def test_linux_appimage_does_not_mutate_the_manifest_bound_sidecar() -> None:
+def test_electron_release_does_not_mutate_the_manifest_bound_sidecar() -> None:
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
     build_step = workflow.split(
-        "- name: Build final desktop installers and probe the frozen sidecar",
+        "- name: Build and probe the frozen Sidecar",
         1,
     )[1].split("- name: Run the authenticated frozen Sidecar smoke", 1)[0]
 
-    assert "NO_STRIP: ${{ runner.os == 'Linux' && '1' || '' }}" in build_step
+    assert '"$SIDECAR_PYTHON" build_sidecar.py' in build_step
+    assert "npm run electron:package" in build_step
+    assert "npm run tauri" not in build_step
+    assert "rustc" not in build_step
 
 
 def test_ci_only_uses_runner_context_after_a_job_reaches_its_runner() -> None:
@@ -243,15 +246,20 @@ def test_ci_installs_only_hash_checked_python_locks() -> None:
     assert "python -m pip install -r requirements-build.txt" not in all_python_workflows
 
 
-def test_windows_release_uses_repository_toolchain_and_hash_contracts() -> None:
+def test_windows_release_uses_electron_and_hash_checked_sidecar_contracts() -> None:
     workflow = WINDOWS_SIGNED_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    builder = (ROOT / "desktop" / "electron-builder.yml").read_text(encoding="utf-8")
 
     assert 'NODE_VERSION: "22.18.0"' in workflow
-    assert 'RUST_VERSION: "1.95.0"' in workflow
+    assert "RUST_VERSION" not in workflow
+    assert "TAURI_SIGNING_PRIVATE_KEY" not in workflow
     assert "python-version-file: .sidecar-python-version" in workflow
     assert "PIP_REQUIRE_HASHES" not in workflow
     assert "uv pip sync --require-hashes requirements-dev.lock" in workflow
-    assert "releaseDraft: true" in workflow
+    assert "electron-builder --projectDir electron-app" in workflow
+    assert "--config.forceCodeSigning=true" in workflow
+    assert "--refresh-artifact-manifest" in workflow
+    assert "releaseType: draft" in builder
     assert "refs/heads/main" in workflow
 
 
@@ -263,9 +271,9 @@ def test_windows_release_requires_verified_source_and_attests_installers() -> No
     assert "Require a GitHub-verified source commit" in workflow
     assert ".commit.verification.verified" in workflow
     assert "actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d" in workflow
-    assert "desktop/src-tauri/target/release/bundle/msi/*.msi" in workflow
-    assert "desktop/src-tauri/target/release/bundle/nsis/*.exe" in workflow
-    assert "desktop/src-tauri/target/release/bundle/**/*.sig" in workflow
+    assert "desktop/release-electron/DBFox-*.exe" in workflow
+    assert "desktop/release-electron/DBFox-*.exe.blockmap" in workflow
+    assert "desktop/release-electron/latest.yml" in workflow
 
 
 def test_sidecar_build_uses_exact_python_distribution_sources() -> None:

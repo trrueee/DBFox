@@ -72,7 +72,8 @@ def get_or_create_local_token() -> str:
 
 
 LOCAL_SECURE_TOKEN = get_or_create_local_token()
-ALLOWED_TAURI_ORIGINS = {
+ALLOWED_DESKTOP_ORIGINS = {
+    "dbfox-app://localhost",
     "tauri://localhost",
     "http://tauri.localhost",
     "https://tauri.localhost",
@@ -176,7 +177,7 @@ def _is_allowed_local_referer(value: str) -> bool:
         return False
     if parsed.username is not None or parsed.password is not None:
         return False
-    if parsed.scheme == "tauri":
+    if parsed.scheme in {"dbfox-app", "tauri"}:
         return parsed.hostname == "localhost" and parsed.port is None
     return (
         parsed.scheme in {"http", "https"}
@@ -189,7 +190,7 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
     if request.method == "OPTIONS":
         return await call_next(request)
 
-    # 🔒 在生产环境（Tauri 容器内）强制检查请求的 Origin 来源头部
+    # 🔒 在冻结桌面容器内强制检查请求的 Origin 来源头部。
     if is_frozen:
         origin = request.headers.get("origin")
         if not origin:
@@ -206,7 +207,7 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
                     code="FORBIDDEN_ORIGIN",
                     detail="The request origin is not allowed.",
                 )
-        elif origin not in ALLOWED_TAURI_ORIGINS:
+        elif origin not in ALLOWED_DESKTOP_ORIGINS:
             logger.warning("拦截到非法的跨域恶意连接请求，尝试来源: %s", origin)
             return problem_response(
                 request,
@@ -257,7 +258,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         *_dev_cors_origins,
-        *ALLOWED_TAURI_ORIGINS,
+        *ALLOWED_DESKTOP_ORIGINS,
     ],
     allow_credentials=True,
     allow_methods=["*"],
