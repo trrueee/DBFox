@@ -19,15 +19,7 @@ export type DockTargetRef =
  * Dock Shell 仅持有 viewKey、viewType、title、closeable 及可选的 projectId/target/stateKey。
  * 领域 payload 全部归 capability-owned store。
  */
-export interface WorkspaceDockTab {
-  viewKey: string;
-  viewType: string;
-  title: string;
-  closeable: boolean;
-  projectId?: string;
-  target?: DockTargetRef;
-  stateKey?: string;
-}
+export type { WorkspaceDockTab } from "../../../sdk/frontend/index";
 
 export type WorkspaceCenterMode = "home" | "conversation" | "project-create";
 

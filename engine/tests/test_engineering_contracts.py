@@ -230,7 +230,7 @@ def test_ci_installs_only_hash_checked_python_locks() -> None:
     # PIP_REQUIRE_HASHES leaks into setup-python and PEP 517 build-isolation
     # subprocesses, where bootstrap tools are intentionally outside our lock.
     assert "PIP_REQUIRE_HASHES" not in all_python_workflows
-    assert workflow.count("--require-hashes -r requirements-dev.lock") == 5
+    assert workflow.count("--require-hashes -r requirements-dev.lock") == 6
     assert agent_evaluation.count("--require-hashes -r requirements-dev.lock") == 3
     assert workflow.count("uv pip sync requirements-dev.lock") == 4
     assert "python-version-file: .sidecar-python-version" in workflow

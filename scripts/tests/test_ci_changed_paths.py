@@ -10,6 +10,7 @@ F. Future P9 GitHub DLC change
 G. Installable DLC source change
 H. Workflow/CI file change (forces full run)
 I. Non-PR events (push to main, schedule, dispatch -> full run)
+J. DLC SDK and CLI changes
 """
 
 from __future__ import annotations
@@ -161,3 +162,22 @@ def test_scenario_i_non_pr_events_force_full() -> None:
         assert res["backend"] is True
         assert res["frontend"] is True
         assert res["supply_chain"] is True
+
+
+def test_scenario_j_dlc_sdk_and_cli_changes() -> None:
+    files = [
+        "sdk/frontend/index.d.ts",
+        "sdk/schema/manifest.schema.json",
+        "tools/dbfox-dlc.cmd",
+    ]
+    res = classify_changes(files, event_name="pull_request")
+
+    assert res["full"] is False
+    assert res["backend"] is True
+    assert res["python_quality"] is True
+    assert res["frontend"] is True
+    assert res["migration"] is False
+    assert res["agent_runtime"] is False
+    assert res["isolated_worker"] is False
+    assert res["sidecar"] is False
+    assert res["supply_chain"] is False

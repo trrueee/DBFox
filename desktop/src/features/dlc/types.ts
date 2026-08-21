@@ -1,8 +1,15 @@
-import type { ResourceConnectorContribution } from "../resources/types";
-import type { RequestedResourceContributor } from "../resources/requestedResourceComposition";
-import type { DockViewContribution } from "../dock/types";
-import type { ArtifactRendererContribution } from "../workspace/artifacts/types";
-import type { WorkspaceDockTab } from "../../types/workspace";
+import type {
+  ArtifactRendererContribution,
+  DockViewContribution,
+  FrontendExtensionHost,
+  RequestedResourceContributor,
+  ResourceConnectorContribution,
+} from "../../../../sdk/frontend/index";
+
+export type {
+  DlcOperationInvokeOptions,
+  FrontendExtensionHost,
+} from "../../../../sdk/frontend/index";
 
 export interface ActiveDlcItem {
   dlc_id: string;
@@ -14,35 +21,6 @@ export interface ActiveDlcItem {
 export interface RuntimeDlcActivationProjection {
   snapshot_id: string;
   active_dlcs: readonly ActiveDlcItem[];
-}
-
-export interface FrontendExtensionHost {
-  readonly dlcId: string;
-  readonly connectors: {
-    register(contribution: ResourceConnectorContribution): void;
-  };
-  readonly requestedResources: {
-    register(contributor: RequestedResourceContributor): void;
-  };
-  readonly dockViews: {
-    register(contribution: DockViewContribution): void;
-    open(view: WorkspaceDockTab, activate?: boolean): void;
-  };
-  readonly artifactRenderers: {
-    register(contribution: ArtifactRendererContribution<unknown>): void;
-  };
-  readonly operations: {
-    invoke<TOutput = unknown>(
-      operationName: string,
-      input?: unknown,
-      options?: DlcOperationInvokeOptions,
-    ): Promise<TOutput>;
-  };
-}
-
-export interface DlcOperationInvokeOptions {
-  readonly projectId?: string;
-  readonly signal?: AbortSignal;
 }
 
 export interface DlcContributionSet {

@@ -1,0 +1,118 @@
+{
+  "$defs": {
+    "DlcEntrypoints": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backend"
+        },
+        "frontend": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frontend"
+        }
+      },
+      "title": "DlcEntrypoints",
+      "type": "object"
+    }
+  },
+  "$id": "https://dbfox.dev/schemas/dlc/manifest-v2.json",
+  "additionalProperties": false,
+  "description": "Publisher-facing v2 manifest contract used by the product SDK.",
+  "properties": {
+    "description": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "Description",
+      "type": "string"
+    },
+    "displayName": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Displayname",
+      "type": "string"
+    },
+    "entrypoints": {
+      "$ref": "#/$defs/DlcEntrypoints"
+    },
+    "extensionApiVersion": {
+      "default": "1",
+      "maxLength": 16,
+      "minLength": 1,
+      "title": "Extensionapiversion",
+      "type": "string"
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 3,
+      "title": "Id",
+      "type": "string"
+    },
+    "manifestSchemaVersion": {
+      "const": 2,
+      "default": 2,
+      "title": "Manifestschemaversion",
+      "type": "integer"
+    },
+    "permissions": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Permissions",
+      "type": "array"
+    },
+    "publisher": {
+      "maxLength": 64,
+      "minLength": 2,
+      "title": "Publisher",
+      "type": "string"
+    },
+    "publisherKey": {
+      "maxLength": 44,
+      "minLength": 44,
+      "title": "Publisherkey",
+      "type": "string"
+    },
+    "requiresDbfox": {
+      "default": ">=1.0.0",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Requiresdbfox",
+      "type": "string"
+    },
+    "version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "displayName",
+    "publisher",
+    "publisherKey"
+  ],
+  "title": "DBFox DLC Manifest",
+  "type": "object"
+}

@@ -3,28 +3,16 @@ import { queryClient } from "../../lib/queryClient";
 import { projectQueryKeys } from "../projects/useProjectState";
 import type { ProjectResponse } from "../../lib/api/generated/types.gen";
 import { useDlcStore } from "../dlc/extensionStore";
+import type {
+  ConversationSendResourceContext,
+  RequestedResourceContributor,
+} from "../../../../sdk/frontend/index";
 
-export interface ConversationSendResourceContext {
-  projectId: string;
-  conversationId: string;
-  datasourceId?: string | null;
-}
-
-export interface RequestedResourceContributionResult {
-  /**
-   * Whether this capability was able to prove a complete and definite authority decision.
-   * If false, the overall snapshot cannot be proven complete -> omit requested_resources (fallback).
-   */
-  complete: boolean;
-  /**
-   * The requested resources for this capability (empty if none selected/active).
-   */
-  refs?: readonly RequestedResourceRef[];
-}
-
-export type RequestedResourceContributor = (
-  context: ConversationSendResourceContext,
-) => RequestedResourceContributionResult;
+export type {
+  ConversationSendResourceContext,
+  RequestedResourceContributionResult,
+  RequestedResourceContributor,
+} from "../../../../sdk/frontend/index";
 
 export const dataRequestedResourceContributor: RequestedResourceContributor = (context) => {
   if (!context.datasourceId) {

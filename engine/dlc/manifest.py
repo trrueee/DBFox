@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import re
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -22,8 +23,8 @@ PERMISSION_TOKEN_PATTERN = re.compile(r"^[a-z0-9_]+(?::[a-zA-Z0-9_./-]+)?$")
 class DlcEntrypoints(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    backend: str | None = Field(default="backend/entry.py", max_length=255)
-    frontend: str | None = Field(default="frontend/index.js", max_length=255)
+    backend: str | None = Field(default=None, max_length=255)
+    frontend: str | None = Field(default=None, max_length=255)
 
 
 class DlcManifest(BaseModel):
@@ -194,3 +195,17 @@ class DlcManifest(BaseModel):
                 DlcErrorCode.INVALID_MANIFEST,
                 f"Validation failed for manifest.json: {exc}",
             ) from exc
+
+
+class DlcManifestV2(DlcManifest):
+    """Publisher-facing v2 manifest contract used by the product SDK."""
+
+    manifest_schema_version: Literal[2] = Field(
+        alias="manifestSchemaVersion",
+        default=2,
+    )
+    publisher_key: str = Field(
+        alias="publisherKey",
+        min_length=44,
+        max_length=44,
+    )

@@ -11,6 +11,7 @@ from typing import IO
 
 from engine.dlc.compat import check_dlc_compatibility
 from engine.dlc.errors import DlcError, DlcErrorCode
+from engine.dlc.frontend_contract import validate_frontend_bundle
 from engine.dlc.integrity import (
     DlcIntegrity,
     build_signed_message_bytes,
@@ -18,23 +19,15 @@ from engine.dlc.integrity import (
     normalize_posix_archive_path,
 )
 from engine.dlc.manifest import DlcManifest
-from engine.dlc.trust import DlcTrustStatus, DlcTrustStore
-
-MAX_ARCHIVE_BYTES = 50 * 1024 * 1024  # 50 MiB
-MAX_EXTRACTED_BYTES = 150 * 1024 * 1024  # 150 MiB
-MAX_FILE_COUNT = 1000
-MAX_SINGLE_FILE_BYTES = 20 * 1024 * 1024  # 20 MiB
-MAX_PATH_LENGTH = 255
-
-PROHIBITED_EXTENSIONS = (
-    ".pyd",
-    ".so",
-    ".dylib",
-    ".dll",
-    ".exe",
-    ".bin",
-    ".node",
+from engine.dlc.package_contract import (
+    CONTROL_FILES,
+    MAX_ARCHIVE_BYTES,
+    MAX_EXTRACTED_BYTES,
+    MAX_FILE_COUNT,
+    MAX_SINGLE_FILE_BYTES,
+    PROHIBITED_EXTENSIONS,
 )
+from engine.dlc.trust import DlcTrustStatus, DlcTrustStore
 
 
 @dataclass(frozen=True)
@@ -235,9 +228,8 @@ class DlcPackageVerifier:
 
             # 4. Strict Archive Allowlist
             # Allowlist = { manifest.json, integrity.json, signature.sig } U set(integrity.entries.keys())
-            control_files = {"manifest.json", "integrity.json", "signature.sig"}
             payload_files = set(integrity.entries.keys())
-            allowed_files = control_files | payload_files
+            allowed_files = CONTROL_FILES | payload_files
 
             actual_files = set(normalized_entries.keys())
 
@@ -274,6 +266,22 @@ class DlcPackageVerifier:
                         DlcErrorCode.HASH_MISMATCH,
                         f"SHA256 mismatch for '{payload_path}': expected {expected_hash}, got {actual_hash}",
                     )
+
+            for entrypoint_kind, entrypoint_path in (
+                ("Backend", manifest.entrypoints.backend),
+                ("Frontend", manifest.entrypoints.frontend),
+            ):
+                if entrypoint_path and entrypoint_path not in normalized_entries:
+                    raise DlcError(
+                        DlcErrorCode.MISSING_FILE,
+                        f"{entrypoint_kind} entrypoint '{entrypoint_path}' is missing from the package",
+                    )
+            if manifest.entrypoints.frontend:
+                frontend_entrypoint = manifest.entrypoints.frontend
+                validate_frontend_bundle(
+                    frontend_entrypoint,
+                    zip_file.read(normalized_entries[frontend_entrypoint]),
+                )
 
             # 6. Verify Compatibility
             check_dlc_compatibility(
