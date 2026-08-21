@@ -124,6 +124,8 @@ def test_electron_release_does_not_mutate_the_manifest_bound_sidecar() -> None:
     assert "npm run electron:package" in build_step
     assert "npm run tauri" not in build_step
     assert "rustc" not in build_step
+    assert "desktop/electron-resources/sidecar/dbfox-engine" in workflow
+    assert "desktop/src-tauri/binaries/dbfox-engine-x86_64-unknown-linux-gnu" not in workflow
 
 
 def test_ci_only_uses_runner_context_after_a_job_reaches_its_runner() -> None:
