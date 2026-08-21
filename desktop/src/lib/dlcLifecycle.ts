@@ -1,4 +1,4 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { isEngineDesktopHost, pickDesktopDlcPackage, restartDesktopEngine } from "./desktopHost";
 
 import {
   disableDlcApiV1DlcsDlcIdDisablePost,
@@ -24,17 +24,12 @@ import {
   waitForEngineConfig,
 } from "./api/client";
 
-interface DlcPackageSelection {
-  path?: string | null;
-}
-
 export function canManageDlcPackages(): boolean {
-  return isTauri();
+  return isEngineDesktopHost();
 }
 
 export async function pickDlcPackage(): Promise<string | null> {
-  const selection = await invoke<DlcPackageSelection>("pick_dlc_package");
-  return selection.path ?? null;
+  return pickDesktopDlcPackage();
 }
 
 export async function listDlcs(): Promise<DlcListResponse> {
@@ -114,9 +109,9 @@ export async function uninstallDlc(dlcId: string): Promise<DlcUninstallResponse>
 }
 
 export async function restartDlcRuntime(): Promise<void> {
-  if (!isTauri()) throw new Error("只能在 DBFox 桌面应用中重启本地引擎");
+  if (!isEngineDesktopHost()) throw new Error("只能在 DBFox 桌面应用中重启本地引擎");
   const previousGeneration = getRuntimeSession().generation;
-  await invoke("restart_python_engine");
+  await restartDesktopEngine();
   await waitForEngineConfig({
     afterGeneration: previousGeneration,
     attempts: 80,

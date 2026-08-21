@@ -30,6 +30,12 @@ Host 源码存在，但一次进程和一次发布只启动一个 supervisor；�
   不可信 DLC 隔离。R8A 将在 cutover 后单独评估 OS containment 与 adversarial escape tests。
 - 复用现有 Vite/TypeScript 构建，不引入 electron-vite、Forge、业务 IPC mapper 或第二套 Engine
   协议。Electron 43.4.1 的 Node 要求与仓库 Node 22 contract 匹配。
+- R7.0b 复用 Electron 官方 `dialog`、`shell`、`protocol.handle` 和 Node `fs`/`dns`/`https`，没有
+  自建文件 picker、URL parser 或网络栈。诊断 ZIP 采用现有生态中纯 TypeScript、无 native addon、MIT
+  的 `fflate 0.8.2`；锁文件固定解析结果且 npm 官方 registry audit 为 0 vulnerabilities。
+- 未采用 Renderer Node 权限、通用 IPC、Renderer 直接读包目录、Electron IPC 代理 Python API，或把
+  `iframe`/`utilityProcess` 宣称为 sandbox。新增的唯一兼容债务仍是同一个 `desktopHost.ts` 单向选择器，
+  删除条件不变；R7.0b 没有增加新的双写、mapper 或第二份 active runtime truth。
 
 官方依据：
 
@@ -61,6 +67,22 @@ Host 源码存在，但一次进程和一次发布只启动一个 supervisor；�
   process tree、清空 crash budget 并等待新一代 Ready。
 - BrowserWindow 强制 `sandbox: true`、`contextIsolation: true`、`nodeIntegration: false`，拒绝新窗口
   和非 renderer origin 导航；preload 不暴露 `ipcRenderer` 或通用 `send/invoke`。
+
+## R7.0b 原生与 DLC 边界合同
+
+- 文件夹选择通过 Electron 官方 `dialog` 完成；Main 持有有界、严格 schema、原子替换的授权根记录。
+  每次列目录或读文件都重新 `realpath` 并校验 canonical containment，目录最多返回 600 项，文本预览
+  最多 1 MiB，DLC picker 只接受实际存在的 `.dbfox-dlc` 单文件。
+- `dlc-asset` 使用 Electron 官方 `protocol.handle`，且只信任当前 Python runtime activation
+  projection 中带 frontend entrypoint 的 exact digest。Engine 状态离开 Ready 时立即清空 authority；投影
+  超过 64 KiB、schema/digest 非法、路径逃逸、symlink 逃逸或资源超过 20 MiB 均 fail-closed。
+- 外部图片仍执行 HTTPS/443、无凭据、DNS 后 public-IP pin、手动有界 redirect、媒体类型与 magic
+  signature 双校验、20 MiB/20 秒/最多两个并发下载及原子落盘；Renderer 不取得网络或文件句柄。
+- diagnostics 只接收两份有界快照，递归执行敏感键和文本凭据脱敏，并仅收集有界的 DBFox Host/
+  Sidecar regular logs。ZIP 采用锁定的 `fflate 0.8.2`；没有引入第二份诊断模型或业务 IPC。
+- 窗口、文件、外链、诊断、crash marker 与 lifecycle 均通过固定 preload 方法暴露。Main 对每次 IPC
+  同时验证 renderer origin、sender WebContents 和主窗口身份；真实 Electron smoke 额外证明未知/未激活
+  digest 的 `dlc-asset` 请求返回 403。
 
 ## 临时兼容面
 

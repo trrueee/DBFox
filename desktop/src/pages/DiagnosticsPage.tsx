@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, CheckCircle2, ChevronDown, Copy, Download, FileWarning, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
 import {
   Button,
   DropdownMenu,
@@ -15,6 +14,7 @@ import { SettingsSection, SettingsToggle } from "../components/settings";
 import { diagnosticsApi, type DiagnosticLogSource, type DiagnosticLogsResponse } from "../lib/api/diagnostics";
 import { getClientLogSource } from "../lib/diagnostics/clientLog";
 import { getUserErrorMessage } from "../lib/api/client";
+import { exportDesktopDiagnosticBundle, isEngineDesktopHost } from "../lib/desktopHost";
 import "./DiagnosticsPage.css";
 
 interface DiagnosticsPageProps {
@@ -115,16 +115,14 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
 
   const handleExport = async () => {
     if (!logs) return;
-    if (!isTauri()) {
+    if (!isEngineDesktopHost()) {
       await handleCopy();
       return;
     }
     try {
-      const result = await invoke<{ path: string; sizeBytes: number }>("export_diagnostic_bundle", {
-        payload: {
-          engineSnapshot: logs,
-          webviewSnapshot: getClientLogSource(),
-        },
+      const result = await exportDesktopDiagnosticBundle({
+        engineSnapshot: logs,
+        webviewSnapshot: getClientLogSource(),
       });
       onToast(`诊断包已导出：${result.path}`, "success");
     } catch (err) {

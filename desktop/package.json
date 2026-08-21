@@ -60,6 +60,7 @@
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.6",
     "eventsource-parser": "^3.1.0",
+    "fflate": "^0.8.2",
     "lucide-react": "^1.17.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

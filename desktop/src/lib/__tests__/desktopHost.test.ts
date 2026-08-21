@@ -5,9 +5,12 @@ import { listen } from "@tauri-apps/api/event";
 
 import type { DbfoxDesktopBridge, EngineStartupStatus } from "../../../shared/desktopContract";
 import {
+  getDesktopLaunchRecoveryStatus,
   getDesktopEngineConfig,
   getDesktopEngineStatus,
   isEngineDesktopHost,
+  openDesktopDiagnosticLogs,
+  pickDesktopProjectFolder,
   restartDesktopEngine,
   subscribeDesktopEngineState,
 } from "../desktopHost";
@@ -56,16 +59,32 @@ describe("desktopHost engine boundary", () => {
           return unsubscribe;
         }),
       },
+      window: {
+        isMaximized: vi.fn(), minimize: vi.fn(), toggleMaximize: vi.fn(), close: vi.fn(), subscribe: vi.fn(),
+      },
+      files: {
+        pickProjectFolder: vi.fn(), listProjectFolder: vi.fn(), readProjectFile: vi.fn(),
+        pickDlcPackage: vi.fn(), saveExternalImage: vi.fn(),
+      },
+      shell: { openExternalHttps: vi.fn(), openDiagnosticLogs: vi.fn() },
+      diagnostics: { exportBundle: vi.fn() },
+      lifecycle: { getRecoveryStatus: vi.fn() },
     };
     window.dbfoxDesktop = bridge;
 
     expect(isEngineDesktopHost()).toBe(true);
+    vi.mocked(bridge.files.pickProjectFolder).mockResolvedValue("C:\\project");
+    vi.mocked(bridge.lifecycle.getRecoveryStatus).mockResolvedValue({ previousUncleanExit: false });
     expect((await getDesktopEngineConfig()).generation).toBe(3);
     expect(await getDesktopEngineStatus()).toEqual(status);
+    expect(await pickDesktopProjectFolder()).toBe("C:\\project");
+    await openDesktopDiagnosticLogs();
+    expect(await getDesktopLaunchRecoveryStatus()).toEqual({ previousUncleanExit: false });
     await restartDesktopEngine();
     const listener = vi.fn();
     expect(await subscribeDesktopEngineState(listener)).toBe(unsubscribe);
     expect(listener).toHaveBeenCalledWith(status);
+    expect(bridge.shell.openDiagnosticLogs).toHaveBeenCalledOnce();
     expect(mockInvoke).not.toHaveBeenCalled();
     expect(mockListen).not.toHaveBeenCalled();
   });

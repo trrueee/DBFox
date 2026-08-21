@@ -1,11 +1,7 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useEffect } from "react";
 
 import { recordClientLog } from "../../lib/diagnostics/clientLog";
-
-interface LaunchRecoveryStatus {
-  previousUncleanExit: boolean;
-}
+import { getDesktopLaunchRecoveryStatus, isEngineDesktopHost } from "../../lib/desktopHost";
 
 export function DesktopLifecycleMonitor({
   showToast,
@@ -13,10 +9,10 @@ export function DesktopLifecycleMonitor({
   showToast: (message: string, type?: "success" | "error" | "warning" | "info") => void;
 }) {
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isEngineDesktopHost()) return;
     let cancelled = false;
 
-    void invoke<LaunchRecoveryStatus>("get_launch_recovery_status")
+    void getDesktopLaunchRecoveryStatus()
       .then((status) => {
         if (!cancelled && status.previousUncleanExit) {
           showToast("检测到上次异常退出，已恢复安全的窗口与持久化工作区状态", "warning");

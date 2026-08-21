@@ -2,33 +2,15 @@ import { useEffect, useState } from "react";
 import { Minus, Square, X } from "lucide-react";
 import { FoxIcon } from "./brand/FoxIcon";
 import { ThemeToggle } from "./ThemeToggle";
+import {
+  closeDesktopWindow,
+  getDesktopWindowMaximized,
+  isEngineDesktopHost,
+  minimizeDesktopWindow,
+  subscribeDesktopWindowState,
+  toggleMaximizeDesktopWindow,
+} from "../lib/desktopHost";
 import "./TitleBar.css";
-
-interface TauriWindow {
-  isMaximized(): Promise<boolean>;
-  minimize(): Promise<void>;
-  toggleMaximize(): Promise<void>;
-  close(): Promise<void>;
-}
-
-function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
-let _tauriWindow: (() => Promise<TauriWindow>) | null = null;
-
-async function getTauriWindow(): Promise<TauriWindow | null> {
-  if (!isTauriRuntime()) return null;
-  if (!_tauriWindow) {
-    try {
-      const mod = await import("@tauri-apps/api/window");
-      _tauriWindow = () => mod.getCurrentWindow() as unknown as Promise<TauriWindow>;
-    } catch {
-      return null;
-    }
-  }
-  return _tauriWindow!();
-}
 
 export default function TitleBar() {
   const [maximized, setMaximized] = useState(false);
@@ -38,25 +20,19 @@ export default function TitleBar() {
     let unlisten: (() => void) | undefined;
 
     (async () => {
-      const win = await getTauriWindow();
-      if (!win || cancelled) return;
-      setMaximized(await win.isMaximized());
-
-      try {
-        const mod = await import("@tauri-apps/api/window");
-        unlisten = await mod.getCurrentWindow().onResized(async () => {
-          if (cancelled) return;
-          setMaximized(await win.isMaximized());
-        });
-      } catch { /* ignore */ }
+      if (!isEngineDesktopHost() || cancelled) return;
+      setMaximized(await getDesktopWindowMaximized());
+      unlisten = await subscribeDesktopWindowState((value) => {
+        if (!cancelled) setMaximized(value);
+      });
     })();
 
     return () => { cancelled = true; unlisten?.(); };
   }, []);
 
-  const handleMinimize = async () => { try { (await getTauriWindow())?.minimize(); } catch { /* ignore */ } };
-  const handleToggleMaximize = async () => { try { const w = await getTauriWindow(); if (w) { await w.toggleMaximize(); setMaximized(await w.isMaximized()); } } catch { /* ignore */ } };
-  const handleClose = async () => { try { (await getTauriWindow())?.close(); } catch { /* ignore */ } };
+  const handleMinimize = async () => { try { await minimizeDesktopWindow(); } catch { /* ignore */ } };
+  const handleToggleMaximize = async () => { try { setMaximized(await toggleMaximizeDesktopWindow()); } catch { /* ignore */ } };
+  const handleClose = async () => { try { await closeDesktopWindow(); } catch { /* ignore */ } };
 
   return (
     <div className="titlebar" data-tauri-drag-region onDoubleClick={handleToggleMaximize}>
@@ -68,7 +44,7 @@ export default function TitleBar() {
       </span>
       <div className="titlebar-controls titlebar-controls--spacious">
         <ThemeToggle />
-        {isTauriRuntime() && (
+        {isEngineDesktopHost() && (
           <div className="titlebar-window-controls">
             <button
               className="titlebar-btn"

@@ -1,8 +1,15 @@
-import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, protocol, shell, type IpcMainInvokeEvent } from "electron";
+import { mkdir } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DESKTOP_CHANNELS } from "../shared/desktopContract";
+import { DESKTOP_CHANNELS, type DiagnosticBundlePayload } from "../shared/desktopContract";
+import { CrashRecoveryMarker } from "./crashRecovery";
+import { exportDiagnosticBundle } from "./diagnosticBundle";
+import { DlcAssetAuthority, registerDlcAssetProtocol } from "./dlcAssetProtocol";
 import { EngineSupervisor } from "./engine";
+import { downloadExternalImage, persistImageAtomically } from "./externalImage";
+import { ProjectFolderAccess, validateDlcPackage } from "./nativeFiles";
 import { createDevelopmentEngineLauncher, createEngineHealthProbe } from "./nodeEngineHost";
 import { developmentRendererUrl } from "./security";
 
@@ -11,21 +18,41 @@ const rendererUrl = developmentRendererUrl(
 );
 const rendererOrigin = rendererUrl.origin;
 const smokeMode = process.env.DBFOX_ELECTRON_SMOKE === "1";
+if (smokeMode && process.env.DBFOX_RUNTIME_DIR) {
+  const smokeRuntimeRoot = resolve(process.env.DBFOX_RUNTIME_DIR);
+  app.setPath("userData", join(smokeRuntimeRoot, "electron-user-data"));
+  app.setPath("logs", join(smokeRuntimeRoot, "electron-logs"));
+}
 const preloadPath = fileURLToPath(new URL("../preload/index.cjs", import.meta.url));
 const supervisor = new EngineSupervisor(
   createDevelopmentEngineLauncher(rendererOrigin),
   createEngineHealthProbe(rendererOrigin),
 );
+const dlcAssetAuthority = new DlcAssetAuthority();
+
+protocol.registerSchemesAsPrivileged([{
+  scheme: "dlc-asset",
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+}]);
 
 let mainWindow: BrowserWindow | null = null;
+let projectFolders: ProjectFolderAccess | null = null;
+let crashRecovery: CrashRecoveryMarker | null = null;
+let logDirectory: string | null = null;
 let shutdownStarted = false;
 let shutdownComplete = false;
 
 function validateSender(event: IpcMainInvokeEvent): void {
   const frameUrl = event.senderFrame?.url;
-  if (!frameUrl || new URL(frameUrl).origin !== rendererOrigin) {
+  if (!frameUrl || new URL(frameUrl).origin !== rendererOrigin
+    || mainWindow === null || event.sender !== mainWindow.webContents) {
     throw new Error("Rejected desktop IPC from an untrusted renderer");
   }
+}
+
+function requireWindow(): BrowserWindow {
+  if (mainWindow === null || mainWindow.isDestroyed()) throw new Error("DBFox desktop window is unavailable");
+  return mainWindow;
 }
 
 function registerEngineIpc(): void {
@@ -43,6 +70,78 @@ function registerEngineIpc(): void {
   });
 }
 
+function registerNativeIpc(): void {
+  const handle = <TArgs extends unknown[], TResult>(
+    channel: string,
+    operation: (event: IpcMainInvokeEvent, ...args: TArgs) => TResult | Promise<TResult>,
+  ) => ipcMain.handle(channel, (event, ...args: unknown[]) => {
+    validateSender(event);
+    return operation(event, ...(args as TArgs));
+  });
+  handle(DESKTOP_CHANNELS.windowIsMaximized, () => requireWindow().isMaximized());
+  handle(DESKTOP_CHANNELS.windowMinimize, () => requireWindow().minimize());
+  handle(DESKTOP_CHANNELS.windowToggleMaximize, () => {
+    const window = requireWindow();
+    if (window.isMaximized()) window.unmaximize(); else window.maximize();
+    return window.isMaximized();
+  });
+  handle(DESKTOP_CHANNELS.windowClose, () => requireWindow().close());
+  handle(DESKTOP_CHANNELS.pickProjectFolder, async () => {
+    const access = projectFolders;
+    if (access === null) throw new Error("项目文件夹授权服务不可用");
+    const selection = await dialog.showOpenDialog(requireWindow(), {
+      title: "选择项目文件夹", properties: ["openDirectory"],
+    });
+    if (selection.canceled || !selection.filePaths[0]) return null;
+    return access.approve(selection.filePaths[0]);
+  });
+  handle(DESKTOP_CHANNELS.listProjectFolder, (_event, path: string) => {
+    if (projectFolders === null) throw new Error("项目文件夹授权服务不可用");
+    return projectFolders.list(path);
+  });
+  handle(DESKTOP_CHANNELS.readProjectFile, (_event, path: string) => {
+    if (projectFolders === null) throw new Error("项目文件夹授权服务不可用");
+    return projectFolders.read(path);
+  });
+  handle(DESKTOP_CHANNELS.pickDlcPackage, async () => {
+    const selection = await dialog.showOpenDialog(requireWindow(), {
+      title: "选择 DBFox DLC 安装包",
+      properties: ["openFile"],
+      filters: [{ name: "DBFox DLC Package", extensions: ["dbfox-dlc"] }],
+    });
+    if (selection.canceled || !selection.filePaths[0]) return null;
+    return validateDlcPackage(selection.filePaths[0]);
+  });
+  handle(DESKTOP_CHANNELS.openExternalHttps, async (_event, rawUrl: string) => {
+    const url = validateExternalHttps(rawUrl);
+    await shell.openExternal(url.href, { activate: true });
+  });
+  handle(DESKTOP_CHANNELS.openDiagnosticLogs, async () => {
+    if (logDirectory === null) throw new Error("诊断日志目录不可用");
+    const error = await shell.openPath(logDirectory);
+    if (error) throw new Error(error);
+  });
+  handle(DESKTOP_CHANNELS.saveExternalImage, async (_event, rawUrl: string) => {
+    const image = await downloadExternalImage(rawUrl);
+    const selection = await dialog.showSaveDialog(requireWindow(), {
+      title: "保存图片副本",
+      defaultPath: image.suggestedName,
+      filters: [{ name: "图片", extensions: [image.extension] }],
+    });
+    if (selection.canceled || !selection.filePath) return { status: "cancelled", fileName: null, byteCount: null } as const;
+    const path = await persistImageAtomically(selection.filePath, image);
+    return { status: "saved", fileName: path.split(/[\\/]/).pop() ?? null, byteCount: image.bytes.byteLength } as const;
+  });
+  handle(DESKTOP_CHANNELS.exportDiagnosticBundle, async (_event, payload: DiagnosticBundlePayload) => {
+    if (logDirectory === null) throw new Error("诊断日志目录不可用");
+    return exportDiagnosticBundle(logDirectory, payload, app.getVersion(), supervisor.status());
+  });
+  handle(DESKTOP_CHANNELS.getLaunchRecoveryStatus, () => {
+    if (crashRecovery === null) throw new Error("异常退出状态不可用");
+    return crashRecovery.status();
+  });
+}
+
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1440,
@@ -50,6 +149,7 @@ function createMainWindow(): BrowserWindow {
     minWidth: 960,
     minHeight: 640,
     show: false,
+    frame: false,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -57,6 +157,9 @@ function createMainWindow(): BrowserWindow {
       sandbox: true,
     },
   });
+  const publishWindowState = () => window.webContents.send(DESKTOP_CHANNELS.windowState, window.isMaximized());
+  window.on("maximize", publishWindowState);
+  window.on("unmaximize", publishWindowState);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event, targetUrl) => {
     if (new URL(targetUrl).origin !== rendererOrigin) event.preventDefault();
@@ -78,11 +181,24 @@ if (!app.requestSingleInstanceLock()) {
     if (app.isPackaged) {
       throw new Error("Electron packaged releases remain disabled until the R7.0c release cutover");
     }
+    logDirectory = app.getPath("logs");
+    await mkdir(logDirectory, { recursive: true, mode: 0o700 });
+    projectFolders = new ProjectFolderAccess(join(app.getPath("userData"), "project_folder_access.json"));
+    crashRecovery = await CrashRecoveryMarker.initialize(join(app.getPath("userData"), "session-active-v1"));
+    registerDlcAssetProtocol(protocol, dlcAssetAuthority);
     registerEngineIpc();
+    registerNativeIpc();
     mainWindow = createMainWindow();
     supervisor.subscribe((status) => {
+      dlcAssetAuthority.clear();
       if (mainWindow !== null && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send(DESKTOP_CHANNELS.engineState, status);
+      }
+      if (status.state === "ready") {
+        const config = supervisor.config();
+        void dlcAssetAuthority.synchronize(config, rendererOrigin).catch((error: unknown) => {
+          console.error("[Electron Host] DLC activation projection unavailable", error);
+        });
       }
     });
     await supervisor.start();
@@ -91,12 +207,16 @@ if (!app.requestSingleInstanceLock()) {
       const rendererProof = await mainWindow.webContents.executeJavaScript(
         `(async () => ({
           runtime: window.dbfoxDesktop?.runtime,
-          generation: (await window.dbfoxDesktop?.engine.getConfig())?.generation
+          generation: (await window.dbfoxDesktop?.engine.getConfig())?.generation,
+          inactiveDlcAssetStatus: await fetch(
+            "dlc-asset://localhost/${"0".repeat(64)}/index.js"
+          ).then((response) => response.status)
         }))()`,
         true,
-      ) as { runtime?: unknown; generation?: unknown };
-      if (rendererProof.runtime !== "electron" || rendererProof.generation !== 1) {
-        throw new Error("Electron preload bridge did not expose the ready Engine generation");
+      ) as { runtime?: unknown; generation?: unknown; inactiveDlcAssetStatus?: unknown };
+      if (rendererProof.runtime !== "electron" || rendererProof.generation !== 1
+        || rendererProof.inactiveDlcAssetStatus !== 403) {
+        throw new Error("Electron preload/asset boundary did not expose the expected fail-closed contract");
       }
       const config = supervisor.config();
       console.log(JSON.stringify({
@@ -104,6 +224,7 @@ if (!app.requestSingleInstanceLock()) {
         runtime: rendererProof.runtime,
         generation: config.generation,
         protocolVersion: config.protocolVersion,
+        inactiveDlcAssetStatus: rendererProof.inactiveDlcAssetStatus,
       }));
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
       app.quit();
@@ -119,11 +240,17 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   if (shutdownStarted) return;
   shutdownStarted = true;
+  let stoppedCleanly = false;
   void supervisor.stop()
+    .then(() => {
+      stoppedCleanly = true;
+      return crashRecovery?.clear();
+    })
     .catch((error: unknown) => {
       console.error("[Electron Host] Engine shutdown failed", error);
     })
     .finally(() => {
+      if (!stoppedCleanly) console.error("[Electron Host] Session marker retained after unclean shutdown");
       shutdownComplete = true;
       app.quit();
     });
@@ -141,4 +268,13 @@ function waitForRendererLoad(window: BrowserWindow): Promise<void> {
       reject(new Error(`Electron renderer failed to load (${code}): ${description}`));
     });
   });
+}
+
+function validateExternalHttps(rawUrl: string): URL {
+  if (!rawUrl || rawUrl.trim() !== rawUrl) throw new Error("External URL is invalid");
+  const url = new URL(rawUrl);
+  if (url.protocol !== "https:" || !url.hostname || url.username || url.password) {
+    throw new Error("Only credential-free HTTPS URLs may be opened");
+  }
+  return url;
 }
