@@ -9,7 +9,8 @@ The repository does not contain a production publisher private key. Conformance 
 build and sign this exact source tree with an explicitly test-only key. Production key handling and the
 general `dbfox-dlc build/sign` commands are delivered in R7.
 
-During R5.2, the existing Core GitHub surface remains available, but its persistence
-facade reads and writes only this DLC-owned database after the one-way Alembic import.
-The historical Core table is retained read-only. R5.3 removes the temporary Core
-implementation and facade; there is no durable dual-write or fallback path.
+Core no longer contains a GitHub runtime or frontend surface. The historical Core table
+is retained only for the one-way Alembic import into this DLC-owned database; there is
+no durable dual-write or fallback path. R5 conformance proves that capability appears
+only after this package is enabled and the engine restarts, and disappears after disable
+plus restart while DLC data and ToolAttempt package identity remain durable.

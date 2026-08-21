@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
@@ -37,6 +37,7 @@ if (sourceDatabase) {
 const smokeSourcePath = join(runtimeDir, "smoke-source.sqlite");
 createSmokeSourceDatabase(smokeSourcePath);
 const dlcFixture = buildPackagedDlcFixture(join(runtimeDir, "fixture-packages"));
+const githubDlcFixture = buildPackagedGithubDlcFixture(join(runtimeDir, "fixture-packages"));
 const port = await reservePort();
 let token = randomBytes(32).toString("hex");
 let stderr = "";
@@ -72,6 +73,10 @@ try {
 
   const frozenContract = await verifyFrozenDataContract(smokeSourcePath);
   const dlcContract = await preparePackagedDlcLifecycle(dlcFixture);
+  const githubDlcContract = await preparePackagedGithubDlcLifecycle(
+    githubDlcFixture,
+    frozenContract.projectId,
+  );
 
   const oldToken = token;
   await stopProcessTree(child);
@@ -96,9 +101,16 @@ try {
     throw new Error("Frozen sidecar restart did not reload the durable multi-turn run history");
   }
   await verifyPackagedDlcActive(dlcContract);
+  await verifyPackagedGithubDlcActive(githubDlcContract);
   const disabled = await apiJson("/api/v1/dlcs/acme.echo/disable", { method: "POST" });
   if (disabled.state !== "disable_pending_restart" || !disabled.active) {
     throw new Error(`DLC disable did not preserve active truth until restart: ${JSON.stringify(disabled)}`);
+  }
+  const githubDisabled = await apiJson("/api/v1/dlcs/dbfox.github/disable", { method: "POST" });
+  if (githubDisabled.state !== "disable_pending_restart" || !githubDisabled.active) {
+    throw new Error(
+      `dbfox.github disable did not preserve active truth until restart: ${JSON.stringify(githubDisabled)}`,
+    );
   }
 
   const activeToken = token;
@@ -114,6 +126,9 @@ try {
   assertControlProtocol(stdout, port);
   await expectRejectedToken("/api/v1/health", activeToken);
   const dlcEvidence = await verifyPackagedDlcInactiveAndUninstall(dlcContract);
+  const githubDlcEvidence = await verifyPackagedGithubDlcInactiveAndUninstall(
+    githubDlcContract,
+  );
 
   const evidence = {
     status: "ok",
@@ -128,6 +143,7 @@ try {
     durable_turns: reloadedConversation.runs.length,
     restart_reload: "ok",
     packaged_dlc: dlcEvidence,
+    packaged_github_dlc: githubDlcEvidence,
     target_triplet: targetTriplet,
   };
   const reportsDir = join(repositoryRoot, "reports");
@@ -263,6 +279,34 @@ function buildPackagedDlcFixture(outputDir) {
   return fixture;
 }
 
+function buildPackagedGithubDlcFixture(outputDir) {
+  const result = spawnSync(resolveSmokePython(), [
+    "-m",
+    "scripts.build_dbfox_github_dlc_fixture",
+    "--output-dir",
+    outputDir,
+  ], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (result.error || result.status !== 0) {
+    const detail = result.error?.message || result.stderr?.trim() || `exit ${result.status}`;
+    throw new Error(`Unable to build dbfox.github DLC fixture: ${detail}`);
+  }
+  const outputLine = result.stdout.trim().split(/\r?\n/).at(-1);
+  let fixture;
+  try {
+    fixture = JSON.parse(outputLine || "");
+  } catch (error) {
+    throw new Error(`dbfox.github fixture builder emitted invalid JSON: ${error}`);
+  }
+  if (!existsSync(fixture.archive)) {
+    throw new Error(`dbfox.github fixture builder omitted its archive: ${JSON.stringify(fixture)}`);
+  }
+  return fixture;
+}
+
 function resolveSmokePython() {
   const configured = process.env.SIDECAR_PYTHON || process.env.DBFOX_SMOKE_PYTHON;
   if (!configured) return "python";
@@ -359,6 +403,74 @@ async function preparePackagedDlcLifecycle(fixture) {
   };
 }
 
+async function preparePackagedGithubDlcLifecycle(fixture, projectId) {
+  const initialList = await apiJson("/api/v1/dlcs");
+  if (initialList.dlcs.some((item) => item.dlc_id === "dbfox.github")) {
+    throw new Error("dbfox.github was unexpectedly installed before the conformance flow");
+  }
+  await expectApiProblem("/api/v1/dlcs/dbfox.github/operations/bindings.list", {
+    method: "POST",
+    body: {},
+    expectedStatus: 404,
+    expectedCode: "DLC_NOT_ACTIVE",
+  });
+
+  const statePath = join(runtimeDir, "dlcs", "data", "dbfox.github", "state.sqlite3");
+  const stateBeforeInstall = await fileDigestOrNull(statePath);
+  const inspection = await apiJson("/api/v1/dlcs/packages/inspect", {
+    method: "POST",
+    body: { archive_path: fixture.archive },
+  });
+  if (inspection.dlc_id !== "dbfox.github"
+    || inspection.package_digest !== fixture.package_digest
+    || inspection.publisher_fingerprint !== fixture.publisher_fingerprint
+    || inspection.trust_required !== true
+    || inspection.permissions.join(",") !== "network:api.github.com") {
+    throw new Error(`dbfox.github inspection returned an invalid contract: ${JSON.stringify(inspection)}`);
+  }
+  await apiJson("/api/v1/dlcs/publishers/trust", {
+    method: "POST",
+    body: {
+      archive_path: fixture.archive,
+      package_digest: fixture.package_digest,
+      publisher_fingerprint: fixture.publisher_fingerprint,
+    },
+  });
+  const installed = await apiJson("/api/v1/dlcs/install", {
+    method: "POST",
+    body: { archive_path: fixture.archive },
+  });
+  if (installed.state !== "installed_disabled"
+    || installed.desired_enabled
+    || installed.active
+    || installed.selected_digest !== fixture.package_digest) {
+    throw new Error(`dbfox.github did not install disabled: ${JSON.stringify(installed)}`);
+  }
+
+  if (await fileDigestOrNull(statePath) !== stateBeforeInstall) {
+    throw new Error("dbfox.github altered DLC-owned state during inspect, trust, or install");
+  }
+  const enabled = await apiJson("/api/v1/dlcs/dbfox.github/enable", { method: "POST" });
+  if (enabled.state !== "enable_pending_restart" || !enabled.desired_enabled || enabled.active) {
+    throw new Error(`dbfox.github enable did not require restart: ${JSON.stringify(enabled)}`);
+  }
+  if (await fileDigestOrNull(statePath) !== stateBeforeInstall) {
+    throw new Error("dbfox.github altered DLC-owned state before the controlled restart");
+  }
+
+  return {
+    ...fixture,
+    projectId,
+    statePath,
+    packageDir: join(runtimeDir, "dlcs", "packages", `sha256-${fixture.package_digest}`),
+  };
+}
+
+async function fileDigestOrNull(path) {
+  if (!existsSync(path)) return null;
+  return createHash("sha256").update(await readFile(path)).digest("hex");
+}
+
 async function verifyPackagedDlcActive(contract) {
   const lifecycle = await apiJson("/api/v1/dlcs/acme.echo");
   if (lifecycle.state !== "active"
@@ -390,6 +502,43 @@ async function verifyPackagedDlcActive(contract) {
   if (!installedFrontend.includes("acme.echo.dock")
     || !installedFrontend.includes("acme.echo.message")) {
     throw new Error("Installed packaged DLC omitted its visible Dock or Artifact contribution");
+  }
+}
+
+async function verifyPackagedGithubDlcActive(contract) {
+  const lifecycle = await apiJson("/api/v1/dlcs/dbfox.github");
+  if (lifecycle.state !== "active"
+    || !lifecycle.active
+    || lifecycle.active_digest !== contract.package_digest
+    || lifecycle.selected_digest !== contract.package_digest) {
+    throw new Error(`dbfox.github did not activate its exact digest: ${JSON.stringify(lifecycle)}`);
+  }
+  const activation = await apiJson("/api/v1/dlcs/activation");
+  const activeIdentity = activation.active_dlcs.find((item) => item.dlc_id === "dbfox.github");
+  if (activeIdentity?.package_digest !== contract.package_digest
+    || activeIdentity.frontend_entrypoint !== "frontend/index.js") {
+    throw new Error(`Activation projection omitted dbfox.github: ${JSON.stringify(activation)}`);
+  }
+
+  const bindings = await apiJson(
+    `/api/v1/dlcs/dbfox.github/operations/bindings.list?project_id=${encodeURIComponent(contract.projectId)}`,
+    { method: "POST", body: {} },
+  );
+  if (!Array.isArray(bindings.bindings) || bindings.bindings.length !== 0) {
+    throw new Error(`dbfox.github bindings operation returned invalid output: ${JSON.stringify(bindings)}`);
+  }
+  if (!existsSync(contract.statePath)) {
+    throw new Error("Active dbfox.github did not establish its DLC-owned state database");
+  }
+  const installedFrontend = await readFile(join(contract.packageDir, "frontend", "index.js"), "utf8");
+  for (const contribution of [
+    "dbfox.github.file",
+    "dbfox.github.file_snapshot",
+    "extensionHost.operations.invoke",
+  ]) {
+    if (!installedFrontend.includes(contribution)) {
+      throw new Error(`Installed dbfox.github frontend omitted ${contribution}`);
+    }
   }
 }
 
@@ -435,6 +584,53 @@ async function verifyPackagedDlcInactiveAndUninstall(contract) {
     enable_restart_active_exact_digest: true,
     backend_operation: "ok",
     frontend_dock_and_artifact: "ok",
+    disable_restart_absent: true,
+    executable_bytes_removed: true,
+    data_retained: true,
+  };
+}
+
+async function verifyPackagedGithubDlcInactiveAndUninstall(contract) {
+  const lifecycle = await apiJson("/api/v1/dlcs/dbfox.github");
+  if (lifecycle.state !== "installed_disabled" || lifecycle.active || lifecycle.desired_enabled) {
+    throw new Error(`dbfox.github remained active after restart: ${JSON.stringify(lifecycle)}`);
+  }
+  const activation = await apiJson("/api/v1/dlcs/activation");
+  if (activation.active_dlcs.some((item) => item.dlc_id === "dbfox.github")) {
+    throw new Error("Activation projection retained disabled dbfox.github");
+  }
+  await expectApiProblem("/api/v1/dlcs/dbfox.github/operations/bindings.list", {
+    method: "POST",
+    body: {},
+    expectedStatus: 404,
+    expectedCode: "DLC_NOT_ACTIVE",
+  });
+
+  const uninstall = await apiJson("/api/v1/dlcs/dbfox.github", { method: "DELETE" });
+  if (!uninstall.executable_bytes_removed || !uninstall.data_retained) {
+    throw new Error(`dbfox.github uninstall returned invalid retention truth: ${JSON.stringify(uninstall)}`);
+  }
+  if (existsSync(contract.packageDir)) {
+    throw new Error("Inactive dbfox.github executable bytes remained after uninstall");
+  }
+  if (!existsSync(contract.statePath)) {
+    throw new Error("dbfox.github DLC-owned state was not retained after uninstall");
+  }
+  const finalList = await apiJson("/api/v1/dlcs");
+  if (finalList.dlcs.some((item) => item.dlc_id === "dbfox.github")) {
+    throw new Error("Uninstalled dbfox.github remained in the lifecycle projection");
+  }
+
+  return {
+    dlc_id: "dbfox.github",
+    package_digest: contract.package_digest,
+    publisher_fingerprint: contract.publisher_fingerprint,
+    absent_without_package: true,
+    install_execution_blocked: true,
+    install_disabled: true,
+    enable_restart_active_exact_digest: true,
+    backend_operation: "ok",
+    frontend_contributions: "ok",
     disable_restart_absent: true,
     executable_bytes_removed: true,
     data_retained: true,
@@ -552,7 +748,10 @@ async function verifyFrozenDataContract(databasePath) {
   if (!Array.isArray(snapshot.runs) || snapshot.runs.length < 2) {
     throw new Error("Frozen conversation projection omitted durable multi-turn history");
   }
-  return { datasourceId: datasource.id, sessionId };
+  if (!datasource.project_id) {
+    throw new Error("Frozen datasource creation returned no project identity");
+  }
+  return { datasourceId: datasource.id, projectId: datasource.project_id, sessionId };
 }
 
 async function expectRejectedToken(path, rejectedToken) {

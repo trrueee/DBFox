@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 from dataclasses import dataclass
@@ -63,3 +64,26 @@ def build_dbfox_github_dlc_fixture(output_dir: Path) -> BuiltGithubDlcFixture:
         package_digest=hashlib.sha256(archive_bytes).hexdigest(),
         publisher_fingerprint=compute_key_fingerprint(private_key.public_key()),
     )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Build the signed dbfox.github conformance fixture"
+    )
+    parser.add_argument("--output-dir", type=Path, required=True)
+    args = parser.parse_args()
+    built = build_dbfox_github_dlc_fixture(args.output_dir)
+    print(
+        json.dumps(
+            {
+                "archive": str(built.archive),
+                "package_digest": built.package_digest,
+                "publisher_fingerprint": built.publisher_fingerprint,
+            },
+            sort_keys=True,
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()

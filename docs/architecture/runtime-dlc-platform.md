@@ -352,13 +352,13 @@ Error States:
 
 - **R0 / R0.1**: Architecture Specification & Production Feasibility Closure (CLOSED).
 - **R1**: Package Protocol, Verifier, Signature Engine & Installed Registry (CLOSED).
-- **R2**: Runtime Composition Identity + Backend Extension Host (IN-PROGRESS).
-- **R3**: Frontend Runtime DLC Host (Tauri custom asset protocol & dynamic ESM loader).
+- **R2**: Runtime Composition Identity + Backend Extension Host (CLOSED).
+- **R3**: Frontend Runtime DLC Host (Tauri custom asset protocol & dynamic ESM loader) (CLOSED).
 - **R4.0**: Single-file Publisher Trust (CLOSED).
 - **R4.1**: Local-authenticated Lifecycle API (CLOSED).
 - **R4.2**: Install from File UI & DLC Center in Desktop App (CLOSED).
 - **R4.3**: Packaged cross-platform lifecycle proof (CLOSED).
-- **R5**: Conformance Proof & Data Ownership — Decouple `dbfox.github` into `dbfox.github-1.0.0.dbfox-dlc`.
+- **R5**: Conformance Proof & Data Ownership — Decouple `dbfox.github` into `dbfox.github-1.0.0.dbfox-dlc` (CLOSED).
 - **R6**: Side-by-Side Update & Rollback Lifecycle.
 - **R7**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`).
 - **R8**: Untrusted Subprocess Sandbox Gate.
