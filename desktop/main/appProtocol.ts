@@ -13,7 +13,7 @@ const CONTENT_SECURITY_POLICY = [
   "script-src 'self' dlc-asset:",
   "script-src-attr 'none'",
   "style-src 'self' dlc-asset: 'unsafe-inline'",
-  "connect-src 'self' http://127.0.0.1:*",
+  "connect-src 'self' http://127.0.0.1:* dlc-asset:",
   "img-src 'self' data: https: dlc-asset:",
   "font-src 'self' dlc-asset:",
 ].join("; ");

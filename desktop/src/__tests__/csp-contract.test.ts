@@ -16,7 +16,7 @@ describe("desktop CSP network boundary", () => {
 
     expect(indexHtml).not.toMatch(/fonts\.(?:googleapis|gstatic|loli)\.net|fonts\.googleapis\.com/i);
     expect(globalCss).not.toMatch(/@import\s+url\([^)]*fonts\.googleapis\.com/i);
-    expect(csp).toContain("connect-src 'self' http://127.0.0.1:*");
+    expect(csp).toContain("connect-src 'self' http://127.0.0.1:* dlc-asset:");
     expect(csp).not.toContain("connect-src 'self' http://127.0.0.1:* https:");
     expect(csp).toContain("font-src 'self'");
     expect(csp).not.toMatch(/font-src[^;]*(?:googleapis|gstatic|loli)/i);

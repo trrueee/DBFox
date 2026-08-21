@@ -41,6 +41,9 @@ describe("packaged Electron renderer protocol", () => {
     const index = await handleAppRequest(new Request("dbfox-app://localhost/index.html"), root);
     expect(index.status).toBe(200);
     expect(index.headers.get("content-security-policy")).toContain("script-src 'self' dlc-asset:");
+    expect(index.headers.get("content-security-policy")).toContain(
+      "connect-src 'self' http://127.0.0.1:* dlc-asset:",
+    );
     expect(index.headers.get("content-security-policy")).not.toContain("unsafe-eval");
     expect(index.headers.get("cache-control")).toBe("no-cache");
     const asset = await handleAppRequest(new Request("dbfox-app://localhost/assets/index.js"), root);
