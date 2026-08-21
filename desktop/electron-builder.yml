@@ -1,0 +1,80 @@
+appId: com.dbfox.app
+productName: DBFox
+electronVersion: 43.4.1
+asar: true
+compression: normal
+npmRebuild: false
+electronLanguages:
+  - en-US
+  - zh-CN
+
+directories:
+  output: ../release-electron
+  buildResources: build-resources
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+extraResources:
+  - from: sidecar
+    to: sidecar
+    filter:
+      - dbfox-engine
+      - dbfox-engine.exe
+      - dbfox-engine-runtime-manifest.json
+
+artifactName: DBFox-${version}-${os}-${arch}.${ext}
+
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+
+publish:
+  provider: github
+  owner: trrueee
+  repo: DBFox
+  releaseType: draft
+
+win:
+  target:
+    - nsis
+  icon: icon.ico
+  requestedExecutionLevel: asInvoker
+  verifyUpdateCodeSignature: true
+  # The Sidecar hash is bound after its own platform-signing step. Prevent the
+  # packager from mutating that executable a second time during resource copy.
+  signExts:
+    - "!dbfox-engine.exe"
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+
+mac:
+  target:
+    - dmg
+    - zip
+  icon: icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: true
+  # Formal macOS release jobs must codesign the Sidecar first, refresh its
+  # artifact manifest, then let builder seal the containing App bundle.
+  signIgnore: Contents/Resources/sidecar/dbfox-engine
+  category: public.app-category.developer-tools
+
+linux:
+  target:
+    - AppImage
+  icon: icon.png
+  category: Development
+  maintainer: DBFox

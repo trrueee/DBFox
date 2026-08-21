@@ -48,6 +48,11 @@ const bridge: DbfoxDesktopBridge = Object.freeze({
   lifecycle: Object.freeze({
     getRecoveryStatus: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getLaunchRecoveryStatus),
   }),
+  updates: Object.freeze({
+    getConfiguration: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getUpdateConfiguration),
+    check: () => ipcRenderer.invoke(DESKTOP_CHANNELS.checkForUpdate),
+    installPending: () => ipcRenderer.invoke(DESKTOP_CHANNELS.installPendingUpdate),
+  }),
 });
 
 contextBridge.exposeInMainWorld("dbfoxDesktop", bridge);

@@ -36,6 +36,13 @@ Host 源码存在，但一次进程和一次发布只启动一个 supervisor；�
 - 未采用 Renderer Node 权限、通用 IPC、Renderer 直接读包目录、Electron IPC 代理 Python API，或把
   `iframe`/`utilityProcess` 宣称为 sandbox。新增的唯一兼容债务仍是同一个 `desktopHost.ts` 单向选择器，
   删除条件不变；R7.0b 没有增加新的双写、mapper 或第二份 active runtime truth。
+- R7.0c 调研 Electron 官方 packaging/autoUpdater、Forge 与 electron-builder。Electron core 明确要求
+  第三方 packaging，内建 autoUpdater 只覆盖 Windows/macOS；Forge 仍需组合 makers 与更新方案。
+  因此固定 `electron-builder 26.15.3` + `electron-updater 6.8.9`，直接复用 NSIS、DMG/ZIP、AppImage、
+  extraResources、ASAR/fuses、代码签名和 `latest*.yml`，不自写下载/验签/installer。
+- Linux 明确使用系统包管理器，不以 AppImage updater 冒充三平台同质签名边界；Windows/macOS 只在
+  packaged build 启用代码签名通道。Renderer 无权提供 feed/URL，禁止 prerelease、downgrade、web
+  installer、自动下载和退出时自动安装。
 
 官方依据：
 
@@ -44,6 +51,9 @@ Host 源码存在，但一次进程和一次发布只启动一个 supervisor；�
 - [Process Sandboxing](https://www.electronjs.org/docs/latest/tutorial/sandbox)
 - [IPC](https://www.electronjs.org/docs/latest/tutorial/ipc)
 - [Custom Protocol](https://www.electronjs.org/docs/latest/api/protocol/)
+- [Application Packaging](https://www.electronjs.org/docs/latest/tutorial/application-distribution)
+- [electron-builder](https://www.electron.build/)
+- [electron-updater](https://www.electron.build/auto-update.html)
 
 ## 分阶段门禁
 
@@ -90,3 +100,23 @@ Host 源码存在，但一次进程和一次发布只启动一个 supervisor；�
 Electron 或 Tauri engine lifecycle API，不复制状态或业务规则。负责人为 Desktop Platform；删除
 条件是 R7.0c 三平台 Electron release contract 合并，最迟在 R7.0d 删除。不得让新的产品能力继续
 依赖 Tauri 分支。
+
+## R7.0c 打包、更新与发布合同
+
+- packaged Renderer 由 `dbfox-app://localhost` 提供，协议只允许固定 host、无 credentials/query/hash、
+  规范化的 containment、10 MiB 资源上限、明确 MIME、CSP、COOP、nosniff 与 immutable asset cache；
+  CSP 不含 `unsafe-eval`，业务网络仍只开放本地 Engine。
+- staging app 不声明运行依赖；Main 将 updater 完整 bundle，最终 ASAR 只包含 dist、Main/Preload 与
+  package metadata。Electron fuses 禁止 RunAsNode、NODE_OPTIONS 和 inspect，启用 cookie encryption、
+  ASAR integrity 和 only-load-from-ASAR。
+- Sidecar 固定为 `resources/sidecar/dbfox-engine[.exe]`。Main 每次 launch 前校验 manifest schema、
+  exact filename 和 SHA-256。`build_sidecar.py` 使用显式 OS/arch 映射，不再依赖 `rustc`。
+- `dbfox-app://localhost` 作为冻结 Engine 的正式 allowed origin；旧 Tauri origins 只存续到 R7.0d，
+  不通过代理或 null origin 放宽。未知 host、attacker origin 与未激活 DLC digest 继续 403。
+- 更新检查保留 exact pending result，下载成功后才停止 Sidecar；下载/验签失败保持当前进程可用。
+  Windows 使用 publisher Authenticode，macOS 要求 Developer ID/notarization，Linux 明确 system-managed。
+- 平台 signer 会改变 Sidecar 字节。正式流程先签 Sidecar、再调用受限 manifest refresh 重绑 hash，
+  builder 不得二次修改它；随后签 Host/installer。Windows 正式工作流验证同一证书、metadata、packaged
+  smoke、NSIS 静默安装/卸载与 provenance，且只创建 Draft Release。
+- CI `release-platform-contract` 已切换为 Python + Node + Electron，不再安装 Rust/Tauri；普通 Rust PR
+  job 仍保留到紧随其后的 R7.0d，作为迁移回归而非发布依赖。

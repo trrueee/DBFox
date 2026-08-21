@@ -69,6 +69,7 @@ describe("desktopHost engine boundary", () => {
       shell: { openExternalHttps: vi.fn(), openDiagnosticLogs: vi.fn() },
       diagnostics: { exportBundle: vi.fn() },
       lifecycle: { getRecoveryStatus: vi.fn() },
+      updates: { getConfiguration: vi.fn(), check: vi.fn(), installPending: vi.fn() },
     };
     window.dbfoxDesktop = bridge;
 

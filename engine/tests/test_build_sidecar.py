@@ -38,15 +38,17 @@ def test_dev_launchers_delegate_frontend_env_writes_to_one_helper() -> None:
     assert ".env.local" not in shell_source
 
 
-def test_tauri_package_build_rebuilds_sidecar_before_frontend() -> None:
-    config_path = Path(__file__).resolve().parents[2] / "desktop" / "src-tauri" / "tauri.conf.json"
-    config = json.loads(config_path.read_text(encoding="utf-8"))
+def test_electron_release_rebuilds_sidecar_before_packaging() -> None:
+    root = Path(__file__).resolve().parents[2]
+    package = json.loads((root / "desktop" / "package.json").read_text(encoding="utf-8"))
+    builder = (root / "desktop" / "electron-builder.yml").read_text(encoding="utf-8")
 
-    before_build = config["build"]["beforeBuildCommand"]
-
-    assert "build_sidecar.py" in before_build
-    assert before_build.index("build_sidecar.py") < before_build.index("npm run build")
-    assert config["bundle"]["resources"]["binaries/dbfox-engine-runtime-manifest.json"] == "dbfox-engine-runtime-manifest.json"
+    assert package["scripts"]["electron:release"] == (
+        "python ../build_sidecar.py && npm run electron:package"
+    )
+    assert "dbfox-engine-runtime-manifest.json" in builder
+    assert '"!dbfox-engine.exe"' in builder
+    assert "rustc" not in (root / "build_sidecar.py").read_text(encoding="utf-8")
 
 
 def _runtime_manifest(version: tuple[int, int, int]) -> dict[str, object]:
@@ -121,6 +123,50 @@ def test_artifact_manifest_binds_runtime_to_sidecar_hash(tmp_path, monkeypatch) 
     assert manifest["target_sqlite_version"] == "3.53.4"
     assert manifest["schema_version"] == build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION
     assert manifest["release_contracts"] == _release_contracts()
+
+
+def test_platform_signing_refresh_rebinds_only_the_existing_fixed_sidecar(
+    tmp_path, monkeypatch
+) -> None:
+    binary = tmp_path / ("dbfox-engine.exe" if sys.platform == "win32" else "dbfox-engine")
+    binary.write_bytes(b"signed-sidecar")
+    manifest_path = tmp_path / "dbfox-engine-runtime-manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION,
+                "sidecar_filename": binary.name,
+                "sidecar_sha256": "0" * 64,
+                "runtime": _runtime_manifest((3, 53, 4)),
+                "release_contracts": _release_contracts(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(build_sidecar, "BINARIES_DIR", tmp_path)
+    monkeypatch.setattr(build_sidecar, "RUNTIME_MANIFEST_PATH", manifest_path)
+    monkeypatch.setattr(build_sidecar, "get_target_triplet", lambda: "test-triplet")
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_runtime",
+        lambda _path: _runtime_manifest((3, 53, 4)),
+    )
+    monkeypatch.setattr(
+        build_sidecar,
+        "validate_current_source_provenance",
+        lambda _runtime: None,
+    )
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_release_contracts",
+        lambda _path: _release_contracts(),
+    )
+
+    build_sidecar.refresh_artifact_manifest_after_platform_signing()
+
+    refreshed = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert refreshed["sidecar_sha256"] == build_sidecar._sha256(binary)
+    assert refreshed["runtime"] == _runtime_manifest((3, 53, 4))
 
 
 def test_extracted_installer_must_match_manifest_hash_and_runtime(tmp_path, monkeypatch) -> None:
@@ -225,14 +271,15 @@ def test_extracted_installer_rejects_development_files(tmp_path, monkeypatch) ->
         verify_release_artifact.verify_extracted_tree(root, expected_manifest)
 
 
-def test_frozen_smoke_uses_rustc_host_tuple_without_platform_mapping() -> None:
+def test_frozen_smoke_uses_the_same_explicit_platform_mapping_as_the_builder() -> None:
     root = Path(__file__).resolve().parents[2]
     source = (root / "desktop" / "scripts" / "smoke-sidecar.mjs").read_text(encoding="utf-8")
 
-    assert '["--print", "host-tuple"]' in source
-    assert "x86_64-pc-windows-msvc" not in source
-    assert "x86_64-unknown-linux-gnu" not in source
-    assert "aarch64-apple-darwin" not in source
+    assert "platformTargetTriplet" in source
+    assert "pc-windows-msvc" in source
+    assert "unknown-linux-gnu" in source
+    assert "apple-darwin" in source
+    assert "rustc" not in source
 
 
 def test_frozen_smoke_covers_schema_result_artifact_and_restart_contracts() -> None:
@@ -423,28 +470,23 @@ def test_removed_local_crypto_is_not_a_direct_runtime_dependency() -> None:
     assert not (root / "engine" / "crypto.py").exists()
 
 
-def test_target_triplet_uses_rustc_host_tuple(monkeypatch) -> None:
-    observed: list[list[str]] = []
+@pytest.mark.parametrize(
+    ("system", "machine", "expected"),
+    [
+        ("Windows", "AMD64", "x86_64-pc-windows-msvc"),
+        ("Darwin", "arm64", "aarch64-apple-darwin"),
+        ("Linux", "x86_64", "x86_64-unknown-linux-gnu"),
+    ],
+)
+def test_target_triplet_uses_explicit_platform_contract(
+    system: str, machine: str, expected: str
+) -> None:
+    assert build_sidecar.get_target_triplet(system=system, machine=machine) == expected
 
-    def run(command, **_kwargs):
-        observed.append(command)
-        return subprocess.CompletedProcess(command, 0, "aarch64-apple-darwin\n", "")
 
-    monkeypatch.setattr(build_sidecar.subprocess, "run", run)
-
-    assert build_sidecar.get_target_triplet() == "aarch64-apple-darwin"
-    assert observed == [["rustc", "--print", "host-tuple"]]
-
-
-def test_target_triplet_fails_closed_when_rustc_fails(monkeypatch) -> None:
-    monkeypatch.setattr(
-        build_sidecar.subprocess,
-        "run",
-        lambda command, **_kwargs: subprocess.CompletedProcess(command, 1, "", "toolchain missing"),
-    )
-
-    with pytest.raises(RuntimeError, match=r"rustc --print host-tuple.*exit=1"):
-        build_sidecar.get_target_triplet()
+def test_target_triplet_fails_closed_for_unsupported_platform() -> None:
+    with pytest.raises(RuntimeError, match="Unsupported DBFox Sidecar target"):
+        build_sidecar.get_target_triplet(system="Plan9", machine="mips")
 
 
 def test_git_source_facts_use_content_diffs_instead_of_status_metadata(

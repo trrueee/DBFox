@@ -1,104 +1,108 @@
-# DBFox 桌面发布、恢复与个性化
+# DBFox Electron 桌面发布、恢复与更新
 
 > 文档类型：架构说明
 >
 > 状态：当前
 >
-> 最后核验：2026-08-10
+> 最后核验：2026-08-21
 >
-> 适用范围：桌面外观、窗口恢复、异常退出、签名和自动更新
->
-> 当前正式发布范围：Windows x64
+> 当前正式发布范围：Windows x64；macOS/Linux 为跨平台 release-contract
 
-本文说明桌面外观偏好、窗口恢复、异常退出检测、代码签名和应用更新如何协作。它不把 CI 配置当作已经取得的证书或发布证据；macOS/Linux 仍需各自的真实签名、安装和运行验证。
+## 所有权边界
 
-## 1. 所有权边界
-
-| 状态 | 唯一事实来源 | 不允许进入 |
+| 状态或能力 | 唯一事实来源 | 禁止路径 |
 |---|---|---|
-| 主题、字体、密度、表格与内部面板 | `ThemeProvider` 的版本化 `AppearancePreferences` | 数据库、Agent 上下文、诊断包 |
-| 原生窗口位置、尺寸、最大化状态 | 官方 `tauri-plugin-window-state` | React localStorage、自定义坐标 mapper |
-| Agent 会话、Run、工具和工件 | SQLite 耐久存储 | 窗口状态或外观导出 |
-| 上次是否异常退出 | Rust 的存在性 session marker | SQL、对话正文、Token、凭据 |
-| 更新检查、下载、签名验证与安装 | 官方 `tauri-plugin-updater` | WebView 任意 URL 下载、自定义安装器 |
-| Windows 发布者身份 | Authenticode 证书与系统证书存储 | 仓库、安装包资源、日志 |
+| 主题、字体、密度和内部面板 | Renderer `AppearancePreferences` | Engine、诊断包 |
+| 原生窗口和上次异常退出 | Electron Main / session marker | React 业务状态、SQL、Token |
+| Agent、Run、工具和工件 | Python/SQLite | Electron IPC |
+| Engine token、generation、process handle | Electron Main `EngineSupervisor` | Renderer localStorage、双 supervisor |
+| 更新检查、下载和安装 | Main 中锁定的 `electron-updater` | Renderer URL、任意 feed、Python 代理 |
+| Windows 发布者身份 | Authenticode 与系统证书链 | 仓库、日志、应用 metadata 参数 |
 
-当前界面不存在独立底部面板。外观设置因此保存真实存在的数据源侧栏宽度和 Agent 右侧工件面板宽度，不创建无消费者的“底部面板高度”。若未来引入正式底部面板，应由该组件消费新的规范字段并补迁移测试。
+Renderer 继续通过 HTTP/SSE 直连 Python。Electron IPC 只覆盖窗口、文件、诊断、更新、
+Engine lifecycle 和其他真实 OS 能力，不成为新的业务 API。
 
-## 2. 外观与工作区
+## 窗口与异常退出
 
-`desktop/src/lib/appearance.ts` 是唯一偏好 schema。它使用封闭枚举和有界数值，拒绝未知字段、任意 CSS 值和版本不匹配的导入文件。导出 JSON 只包含该 schema 中的外观字段，因此结构上不可能包含 Token、API Key、数据源密码、DSN、SQL、会话或日志。
+`BrowserWindow` 默认隐藏，加载完成后再显示；`sandbox: true`、`contextIsolation: true`、
+`nodeIntegration: false` 为硬门。Main 在 userData 下创建 `session-active-v1`，正常退出或更新安装前
+删除。marker 只表达上次是否正常退出，不包含窗口内容、SQL、会话、Token 或凭据。
 
-- 密度统一投影到工具栏、按钮和主要间距 token；
-- UI、数据、代码分别选择本机字体栈，未安装首选字体时使用 CSS 字体栈自然回退；
-- Agent 与 SQL/代码行高独立；
-- 数据表控制默认行高、网格线、斑马纹、NULL 呈现和默认主键冻结；
-- 高对比度和减少动效同时支持显式选择与系统媒体查询；
-- 系统 DPI 由 Windows、Tauri 和 WebView 处理，不使用 CSS `zoom` 二次缩放；
-- React 可调面板把用户拖拽结果写回同一偏好文档，不维护第二份 layout localStorage。
+内部布局由已有 AppearancePreferences 恢复，Agent/工件由 SQLite 恢复。未确认完成的非幂等操作
+不会因桌面恢复而自动重放。
 
-## 3. 窗口与异常退出恢复
+## 打包合同
 
-原生窗口在 `tauri.conf.json` 中以 `visible: false` 创建，官方 Window State 插件在首次显示前恢复几何状态，避免窗口先出现在默认位置再跳动。WebView 没有 Window State 写权限，因为当前无需从 JavaScript 调用插件命令。
+`electron-builder 26.15.3` 负责 Windows NSIS、macOS DMG/ZIP 和 Linux AppImage，Electron 固定为
+43.4.1。构建先生成 React/Vite 与完全 bundle 的 Main/Preload，再复制到无依赖的 `electron-app`
+staging；最终 ASAR 不包含仓库 `node_modules`、源码或开发配置。官方 Electron fuses 禁止 RunAsNode、
+`NODE_OPTIONS` 和 CLI inspect，启用 ASAR integrity 并只从 ASAR 加载应用。
 
-Rust Host 启动时在应用数据目录创建 `session-active-v1`。正常关闭、窗口销毁和 Windows 更新安装前都会删除该 marker；下一次启动只根据 marker 是否仍存在报告“上次异常退出”。marker 不保存窗口内容或业务数据。恢复范围如下：
-
-1. 原生窗口几何由 Window State 恢复；
-2. 内部面板和外观由 AppearancePreferences 恢复；
-3. Agent、工具和工件继续从数据库耐久事实恢复；
-4. 不保存或自动重放未确认完成的非幂等操作。
-
-## 4. 自动更新链路
+Frozen Sidecar 固定安装为 `resources/sidecar/dbfox-engine[.exe]`。Main 每次启动前校验 schema 3
+artifact manifest、精确文件名和 SHA-256。`build_sidecar.py` 使用 Python `platform` 显式映射目标，
+不再调用 Rust。平台代码签名会改变可执行文件字节，因此正式发布必须遵循：
 
 ```text
-发布通道验收完成后，由产品入口触发检查
-  -> Rust 确认编译期公钥存在
-  -> 官方 Updater 读取固定 HTTPS latest.json
-  -> 默认 semver 比较（不降级）
-  -> UI 展示版本、说明和安装确认
-  -> 用户确认安装
-  -> 官方 Updater 下载
-  -> minisign 公钥验证更新包
-  -> Rust 停止 Sidecar、清除 session marker、执行 Tauri cleanup
-  -> Windows 被动安装并重新启动应用
+构建并 probe Sidecar
+  -> 使用 OS 官方 signer 签 Sidecar
+  -> --refresh-artifact-manifest 重绑最终 SHA-256
+  -> builder 复制但不二次修改 Sidecar
+  -> 签名并封装 Electron App/Installer
 ```
 
-更新端点固定为 GitHub Release 的 `latest.json`，前端不能传 URL、目标平台或签名。Release 构建从官方插件配置 `desktop/src-tauri/tauri.conf.json` 的 `plugins.updater` 读取唯一一份端点与公钥。私钥只允许由 CI 的 `TAURI_SIGNING_PRIVATE_KEY` Secret 提供。官方 Updater 的签名校验不能关闭，失败时不存在旧下载器、HTTP、跳过验证或手工 fallback。
+Windows 流程已经自动执行该顺序。未来 macOS 正式发布必须先以 Developer ID 签 Sidecar并刷新
+manifest，再由 builder 签整个 App、notarize DMG/ZIP；缺任一步都不能发布。
 
-当前产品入口暂不开放自动更新：设置侧栏、命令面板和启动后台任务都不会触发更新检查。Rust/Tauri 更新边界和候选页面代码保留用于发布验收；只有在 GitHub Release 清单、minisign、Windows Authenticode、安装/升级/回滚场景全部取得真实证据后，才能重新加入公开设置导航。开发构建不得用不可操作的占位页面冒充已交付功能。
+## 应用更新
 
-自动更新指“自动检查、用户确认安装”，不做无人值守的自动下载安装。原因是 DBFox 可能有正在运行的查询、Agent Run 和数据库交互；未经用户确认退出会损害可解释性。若未来需要强制安全更新，必须新增独立 ADR，定义截止时间、运行中任务处理和回滚策略。
+`electron-updater 6.8.9` 只在 packaged Windows/macOS 构建中启用，Linux 明确交给系统包管理器或
+发行包。更新只由用户手动触发，不做后台自动下载：
 
-## 5. 两类签名不可混用
+```text
+用户检查
+  -> Main 使用编译进应用的 GitHub provider
+  -> 只接受 stable 且高于当前版本
+  -> UI 展示版本与说明
+  -> 用户确认
+  -> updater 下载并校验 metadata SHA-512
+  -> Windows 验证固定 publisher Authenticode / macOS 验证签名身份
+  -> Main 停止 Sidecar、清 crash marker
+  -> quitAndInstall
+```
 
-1. **Tauri updater minisign**：证明更新清单引用的包由 DBFox 更新密钥签发，阻止更新通道投毒。
-2. **Windows Authenticode**：证明 MSI/NSIS 的发布者身份，供 SmartScreen、系统属性和企业策略验证。
+`autoDownload`、`autoInstallOnAppQuit`、prerelease、downgrade 与 web installer 均关闭。Renderer
+不能提供 feed、URL、版本或文件路径；下载/验签失败时不会停止当前 Engine。只有下载成功后才进入
+受控 shutdown，若安装调用同步失败则重启 Engine。
 
-二者缺一不可。`windows-signed-release.yml` 是仅允许从 `main` 手工触发的 Release environment 工作流，要求四组外部配置：
+Windows `latest.yml` 的 SHA-512 负责下载完整性，Authenticode publisher 负责发布者身份，GitHub
+Actions provenance 负责构建来源；三者互不替代。正式工作流只从 `main` 手工触发，要求 PFX，创建
+未公开 Draft Release，并验证最终 NSIS、unpacked Host、Sidecar 的同一证书、manifest/hash、更新
+metadata、packaged Host smoke、静默首次安装和卸载。缺少凭据直接失败。
 
-- Secret：`TAURI_SIGNING_PRIVATE_KEY`；
-- 可选有密码的 updater 私钥 Secret：`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`；
-- Secrets：`WINDOWS_CERTIFICATE_BASE64`、`WINDOWS_CERTIFICATE_PASSWORD`。
+## 发布与回滚
 
-工作流导入 PFX 到临时 Runner 的当前用户证书库，使用 Tauri 官方打包和 `tauri-action`，只创建 **Draft Release**。随后验证 MSI/NSIS Authenticode、Frozen Sidecar、manifest 和 updater `.sig`，并使用 Windows Installer 的静默标准参数验证 MSI 首次安装、从最近已发布 MSI 覆盖升级以及卸载；没有已发布前序版本时，报告会明确标记首次版本的升级场景不适用。NSIS 的交互安装/卸载仍属于人工候选验收。任何凭据缺失都会在构建前失败。
+- 普通三平台 contract 不持有签名私钥，不得把其 unsigned artifact 当作正式发行物；
+- Windows 当前是唯一正式自动签名发布；macOS 要等 Developer ID/notarization 工作流闭合；
+- Linux 不伪造应用内代码签名更新，使用系统包管理器或明确下载的新发行包；
+- 客户端不允许降级。回滚以更高补丁版本发布修复，不静默替换已检查的 artifact；
+- 草稿验证失败时保留证据、删除失败候选后从源码重新构建，不能修改已签名 artifact 补洞。
 
-## 6. 发布与回滚
+## 复用决策
 
-- 普通 CI 和每周跨平台合同不持有发布私钥，也不生成可发布更新；
-- 当前正式工作流只覆盖 Windows x64；macOS 签名/公证、Gatekeeper 与 Linux 动态依赖/安装未验证；
-- Updater 默认只接受高于当前版本的 semver；回滚应发布新的更高修复版本，不通过客户端允许降级；
-- 草稿 Release 验证失败时不得发布，删除草稿和对应候选 tag 后修复源码重新构建；
-- 已发布版本出现问题时停止发布清单指向、准备更高补丁版本，并保留旧版本人工下载与证据，不轮换或复用已泄漏私钥。
+采用 Electron 官方 BrowserWindow/protocol/fuses、安全指南，采用成熟的 electron-builder 与
+electron-updater；仅自研产品策略、Sidecar shutdown 排序、异常退出 marker 和窄化 IPC。未采用
+Electron core autoUpdater，因为它不覆盖 Linux 且不能生成当前三平台 installer；未采用 Forge，
+因为当前仍需额外组合 makers/updater 才能得到同一跨平台合同；未采用自写下载器、更新服务器、
+Renderer Node 权限或 IPC-to-Python 代理。
 
-## 7. 采用与未采用方案
-
-采用官方 Window State、Updater、Tauri bundler、tauri-action、Windows 证书存储和 Authenticode。DBFox 自研部分仅保留产品边界：何时检查、何时征求安装确认、Sidecar 停止、异常退出 marker 和安全 UI 文案。
-
-未采用 Electron 风格自定义更新服务器、自写下载/验签/解压、前端直连任意 URL、双更新通道、坐标 localStorage、CSS 缩放和包含凭据的整份应用设置导出。这些方案要么重复平台能力，要么扩大供应链与隐私边界。
+主要新增依赖风险是 builder/updater 供应链和平台签名差异，缓解方式为 package-lock、npm audit、
+固定 Actions、三平台打包 smoke 和正式 signer 验证。没有新增双写、业务 mapper 或第二份 runtime truth。
 
 官方依据：
 
-- [Tauri Window State](https://v2.tauri.app/plugin/window-state/)
-- [Tauri Updater](https://v2.tauri.app/plugin/updater/)
-- [Tauri Windows Code Signing](https://v2.tauri.app/distribute/sign/windows/)
-- [Tauri GitHub Pipelines](https://v2.tauri.app/distribute/pipelines/github/)
+- [Electron Application Packaging](https://www.electronjs.org/docs/latest/tutorial/application-distribution)
+- [Electron Security](https://www.electronjs.org/docs/latest/tutorial/security)
+- [electron-builder](https://www.electron.build/)
+- [electron-updater](https://www.electron.build/auto-update.html)
+- [Windows Code Signing](https://www.electron.build/code-signing-win.html)
+- [macOS Code Signing](https://www.electron.build/code-signing-mac.html)

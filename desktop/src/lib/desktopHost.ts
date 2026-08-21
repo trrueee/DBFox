@@ -11,6 +11,8 @@ import type {
   ProjectFileContent,
   ProjectFolderListing,
   SaveExternalImageResult,
+  UpdateCheckResult,
+  UpdateConfiguration,
 } from "../../shared/desktopContract";
 
 export type {
@@ -21,6 +23,8 @@ export type {
   ProjectFolderEntry,
   ProjectFolderListing,
   SaveExternalImageResult,
+  UpdateCheckResult,
+  UpdateConfiguration,
 } from "../../shared/desktopContract";
 
 declare global {
@@ -123,6 +127,26 @@ export function getDesktopLaunchRecoveryStatus(): Promise<LaunchRecoveryStatus> 
   return electron !== null
     ? electron.lifecycle.getRecoveryStatus()
     : invoke<LaunchRecoveryStatus>("get_launch_recovery_status");
+}
+
+export function getDesktopUpdateConfiguration(): Promise<UpdateConfiguration> {
+  const electron = electronBridge();
+  return electron !== null
+    ? electron.updates.getConfiguration()
+    : invoke<UpdateConfiguration>("get_update_configuration");
+}
+
+export function checkForDesktopUpdate(): Promise<UpdateCheckResult> {
+  const electron = electronBridge();
+  return electron !== null
+    ? electron.updates.check()
+    : invoke<UpdateCheckResult>("check_for_app_update");
+}
+
+export async function installPendingDesktopUpdate(): Promise<void> {
+  const electron = electronBridge();
+  if (electron !== null) return electron.updates.installPending();
+  await invoke("install_pending_app_update");
 }
 
 export async function getDesktopWindowMaximized(): Promise<boolean> {

@@ -10,8 +10,8 @@ const chunkSizeWarningLimit = Math.ceil(
 
 const builder = await createBuilder(
   {
-    // Use relative paths so assets load correctly under Tauri's custom
-    // protocol.  Without this, absolute /assets/… paths cause a white
+    // Use relative paths so assets load correctly under packaged custom
+    // protocols. Without this, absolute /assets/… paths cause a white
     // screen in production builds.
     base: "./",
     build: {
@@ -24,13 +24,11 @@ const builder = await createBuilder(
 );
 await builder.buildApp();
 
-// Tauri's custom protocol (tauri://localhost) does not send CORS headers.
-// Vite/Rolldown adds `crossorigin` on <script type="module"> and <link>
-// tags by default, which causes the browser to require CORS headers the
-// custom protocol cannot supply → all JS/CSS loads fail → white screen.
+// Packaged custom protocols do not share HTTP's CORS behavior. Vite/Rolldown
+// adds `crossorigin` by default, so strip it from the desktop bundle.
 const distDir = resolve(import.meta.dirname, "..", "dist");
 const htmlPath = resolve(distDir, "index.html");
 let html = readFileSync(htmlPath, "utf-8");
 html = html.replace(/\s+crossorigin(?:="[^"]*")?/g, "");
 writeFileSync(htmlPath, html);
-console.log("  ✓ Stripped crossorigin attributes for Tauri compatibility");
+console.log("  ✓ Stripped crossorigin attributes for the packaged desktop protocol");

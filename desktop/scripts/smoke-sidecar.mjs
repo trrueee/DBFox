@@ -6,10 +6,11 @@ import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import net from "node:net";
 
-const targetTriplet = authoritativeHostTuple();
-const sidecarName = `dbfox-engine-${targetTriplet}${process.platform === "win32" ? ".exe" : ""}`;
+const rendererOrigin = "dbfox-app://localhost";
+const targetTriplet = platformTargetTriplet();
+const sidecarName = `dbfox-engine${process.platform === "win32" ? ".exe" : ""}`;
 const sidecarPath = fileURLToPath(
-  new URL(`../src-tauri/binaries/${sidecarName}`, import.meta.url),
+  new URL(`../electron-resources/sidecar/${sidecarName}`, import.meta.url),
 );
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -59,7 +60,7 @@ try {
     const authenticated = await fetch(`http://127.0.0.1:${port}/api/v1/${resource}`, {
       headers: {
         "X-Local-Token": token,
-        Origin: "http://tauri.localhost",
+        Origin: rendererOrigin,
       },
       signal: AbortSignal.timeout(5000),
     });
@@ -170,17 +171,17 @@ try {
   }
 }
 
-function authoritativeHostTuple() {
-  const result = spawnSync("rustc", ["--print", "host-tuple"], {
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  const tuple = result.stdout?.trim();
-  if (result.error || result.status !== 0 || !tuple) {
-    const detail = result.error?.message || result.stderr?.trim() || `exit ${result.status}`;
-    throw new Error(`Unable to resolve Sidecar target with rustc --print host-tuple: ${detail}`);
+function platformTargetTriplet() {
+  const architecture = { x64: "x86_64", arm64: "aarch64" }[process.arch];
+  const suffix = {
+    win32: "pc-windows-msvc",
+    darwin: "apple-darwin",
+    linux: "unknown-linux-gnu",
+  }[process.platform];
+  if (!architecture || !suffix) {
+    throw new Error(`Unsupported Sidecar target: ${process.platform}/${process.arch}`);
   }
-  return tuple;
+  return `${architecture}-${suffix}`;
 }
 
 function assertControlProtocol(output, selectedPort) {
@@ -743,7 +744,7 @@ async function apiJson(path, { method = "GET", body } = {}) {
     method,
     headers: {
       "X-Local-Token": token,
-      Origin: "http://tauri.localhost",
+      Origin: rendererOrigin,
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -768,7 +769,7 @@ async function expectApiProblem(path, {
     method,
     headers: {
       "X-Local-Token": token,
-      Origin: "http://tauri.localhost",
+      Origin: rendererOrigin,
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -856,7 +857,7 @@ async function verifyFrozenDataContract(databasePath) {
 }
 
 async function expectRejectedToken(path, rejectedToken) {
-  const headers = { Origin: "http://tauri.localhost" };
+  const headers = { Origin: rendererOrigin };
   if (rejectedToken) headers["X-Local-Token"] = rejectedToken;
   const response = await fetch(`http://127.0.0.1:${port}${path}`, {
     headers,
@@ -892,7 +893,7 @@ async function waitUntilHealthy(processHandle, selectedPort, token, capturedStde
       const response = await fetch(`http://127.0.0.1:${selectedPort}/api/v1/health`, {
         headers: {
           "X-Local-Token": token,
-          Origin: "http://tauri.localhost",
+          Origin: rendererOrigin,
         },
         signal: AbortSignal.timeout(2000),
       });

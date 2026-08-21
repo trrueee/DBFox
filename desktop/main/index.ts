@@ -1,52 +1,72 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell, type IpcMainInvokeEvent } from "electron";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DESKTOP_CHANNELS, type DiagnosticBundlePayload } from "../shared/desktopContract";
+import { hasPackagedRendererOrigin, PACKAGED_RENDERER_URL, registerAppProtocol } from "./appProtocol";
+import { AppUpdateService, createAppUpdateService } from "./appUpdater";
 import { CrashRecoveryMarker } from "./crashRecovery";
 import { exportDiagnosticBundle } from "./diagnosticBundle";
 import { DlcAssetAuthority, registerDlcAssetProtocol } from "./dlcAssetProtocol";
 import { EngineSupervisor } from "./engine";
 import { downloadExternalImage, persistImageAtomically } from "./externalImage";
 import { ProjectFolderAccess, validateDlcPackage } from "./nativeFiles";
-import { createDevelopmentEngineLauncher, createEngineHealthProbe } from "./nodeEngineHost";
+import { createDevelopmentEngineLauncher, createEngineHealthProbe, createPackagedEngineLauncher } from "./nodeEngineHost";
 import { developmentRendererUrl } from "./security";
 
-const rendererUrl = developmentRendererUrl(
-  process.env.DBFOX_ELECTRON_RENDERER_URL ?? "http://127.0.0.1:5173",
-);
-const rendererOrigin = rendererUrl.origin;
+const rendererUrl = app.isPackaged
+  ? PACKAGED_RENDERER_URL
+  : developmentRendererUrl(process.env.DBFOX_ELECTRON_RENDERER_URL ?? "http://127.0.0.1:5173");
+// WHATWG URL reports `null` for non-special schemes. Chromium nevertheless
+// serializes our privileged standard scheme as this concrete origin.
+const rendererOrigin = app.isPackaged ? "dbfox-app://localhost" : rendererUrl.origin;
 const smokeMode = process.env.DBFOX_ELECTRON_SMOKE === "1";
-if (smokeMode && process.env.DBFOX_RUNTIME_DIR) {
-  const smokeRuntimeRoot = resolve(process.env.DBFOX_RUNTIME_DIR);
+const smokeRuntimeRoot = smokeMode && process.env.DBFOX_RUNTIME_DIR
+  ? resolve(process.env.DBFOX_RUNTIME_DIR)
+  : null;
+if (smokeRuntimeRoot !== null) {
   app.setPath("userData", join(smokeRuntimeRoot, "electron-user-data"));
   app.setPath("logs", join(smokeRuntimeRoot, "electron-logs"));
 }
 const preloadPath = fileURLToPath(new URL("../preload/index.cjs", import.meta.url));
 const supervisor = new EngineSupervisor(
-  createDevelopmentEngineLauncher(rendererOrigin),
+  app.isPackaged
+    ? createPackagedEngineLauncher(rendererOrigin, process.resourcesPath)
+    : createDevelopmentEngineLauncher(rendererOrigin),
   createEngineHealthProbe(rendererOrigin),
 );
 const dlcAssetAuthority = new DlcAssetAuthority();
 
-protocol.registerSchemesAsPrivileged([{
-  scheme: "dlc-asset",
-  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
-}]);
+protocol.registerSchemesAsPrivileged([
+  { scheme: "dbfox-app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  { scheme: "dlc-asset", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+]);
 
 let mainWindow: BrowserWindow | null = null;
 let projectFolders: ProjectFolderAccess | null = null;
 let crashRecovery: CrashRecoveryMarker | null = null;
 let logDirectory: string | null = null;
+let appUpdates: AppUpdateService | null = null;
 let shutdownStarted = false;
 let shutdownComplete = false;
+let updateInstallPrepared = false;
 
 function validateSender(event: IpcMainInvokeEvent): void {
   const frameUrl = event.senderFrame?.url;
-  if (!frameUrl || new URL(frameUrl).origin !== rendererOrigin
+  if (!frameUrl || !isTrustedRendererUrl(frameUrl)
     || mainWindow === null || event.sender !== mainWindow.webContents) {
     throw new Error("Rejected desktop IPC from an untrusted renderer");
+  }
+}
+
+function isTrustedRendererUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    if (!app.isPackaged) return url.origin === rendererOrigin;
+    return hasPackagedRendererOrigin(rawUrl);
+  } catch {
+    return false;
   }
 }
 
@@ -140,6 +160,30 @@ function registerNativeIpc(): void {
     if (crashRecovery === null) throw new Error("异常退出状态不可用");
     return crashRecovery.status();
   });
+  handle(DESKTOP_CHANNELS.getUpdateConfiguration, () => {
+    if (appUpdates === null) throw new Error("应用更新服务不可用");
+    return appUpdates.configuration();
+  });
+  handle(DESKTOP_CHANNELS.checkForUpdate, () => {
+    if (appUpdates === null) throw new Error("应用更新服务不可用");
+    return appUpdates.check();
+  });
+  handle(DESKTOP_CHANNELS.installPendingUpdate, async () => {
+    if (appUpdates === null) throw new Error("应用更新服务不可用");
+    try {
+      await appUpdates.installPending(async () => {
+        await supervisor.stop();
+        await crashRecovery?.clear();
+        updateInstallPrepared = true;
+      });
+    } catch (error) {
+      if (updateInstallPrepared) {
+        updateInstallPrepared = false;
+        await supervisor.start();
+      }
+      throw error;
+    }
+  });
 }
 
 function createMainWindow(): BrowserWindow {
@@ -162,7 +206,7 @@ function createMainWindow(): BrowserWindow {
   window.on("unmaximize", publishWindowState);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event, targetUrl) => {
-    if (new URL(targetUrl).origin !== rendererOrigin) event.preventDefault();
+    if (!isTrustedRendererUrl(targetUrl)) event.preventDefault();
   });
   if (!smokeMode) window.once("ready-to-show", () => window.show());
   void window.loadURL(rendererUrl.href);
@@ -178,13 +222,17 @@ if (!app.requestSingleInstanceLock()) {
     mainWindow.focus();
   });
   app.whenReady().then(async () => {
-    if (app.isPackaged) {
-      throw new Error("Electron packaged releases remain disabled until the R7.0c release cutover");
-    }
+    app.setAppUserModelId("com.dbfox.app");
     logDirectory = app.getPath("logs");
     await mkdir(logDirectory, { recursive: true, mode: 0o700 });
     projectFolders = new ProjectFolderAccess(join(app.getPath("userData"), "project_folder_access.json"));
     crashRecovery = await CrashRecoveryMarker.initialize(join(app.getPath("userData"), "session-active-v1"));
+    appUpdates = createAppUpdateService({
+      packaged: app.isPackaged,
+      smokeMode,
+      currentVersion: app.getVersion(),
+    });
+    if (app.isPackaged) registerAppProtocol(protocol, join(app.getAppPath(), "dist"));
     registerDlcAssetProtocol(protocol, dlcAssetAuthority);
     registerEngineIpc();
     registerNativeIpc();
@@ -219,13 +267,22 @@ if (!app.requestSingleInstanceLock()) {
         throw new Error("Electron preload/asset boundary did not expose the expected fail-closed contract");
       }
       const config = supervisor.config();
-      console.log(JSON.stringify({
+      const smokeProof = {
         marker: "DBFOX_ELECTRON_HOST_READY",
         runtime: rendererProof.runtime,
         generation: config.generation,
         protocolVersion: config.protocolVersion,
         inactiveDlcAssetStatus: rendererProof.inactiveDlcAssetStatus,
-      }));
+        packaged: app.isPackaged,
+      };
+      console.log(JSON.stringify(smokeProof));
+      if (smokeRuntimeRoot !== null) {
+        await writeFile(
+          join(smokeRuntimeRoot, "electron-smoke-result.json"),
+          `${JSON.stringify(smokeProof, null, 2)}\n`,
+          { encoding: "utf8", mode: 0o600 },
+        );
+      }
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
       app.quit();
     }
@@ -236,6 +293,10 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.on("before-quit", (event) => {
+  if (updateInstallPrepared) {
+    shutdownComplete = true;
+    return;
+  }
   if (shutdownComplete) return;
   event.preventDefault();
   if (shutdownStarted) return;
