@@ -165,28 +165,28 @@ To guarantee deterministic signature generation and verification across platform
 
 ---
 
-## 5. Frontend Extension Host & Tauri Asset Protocol
+## 5. Frontend Extension Host & Electron Asset Protocol
 
-### Feasibility Status & Roadmap
+### Implementation Status
 - **Frontend Feasibility**: Accepted and characterized in R0/R0.1.
-- **Frontend Runtime Implementation**: Gated for **R3**. R0 and R1 do not alter production `tauri.conf.json` or implement the Tauri URI handler in Rust.
+- **Frontend Runtime Implementation**: Closed in R3 and migrated to the Electron Main boundary in R7.0.
 
-### Target Tauri Custom Protocol (R3)
+### Electron Custom Protocol
 - **URI Scheme**: `dlc-asset://localhost/<package_digest>/frontend/<path>`
-- **Rust Handler**:
-  - Registered via `tauri::Builder::default().register_uri_scheme_protocol("dlc-asset", ...)`.
+- **Main Handler**:
+  - Registered via Electron `protocol.handle("dlc-asset", ...)`.
   - Parses `<package_digest>` and checks that it exists in the verified Installed Registry.
   - Enforces canonical path containment within `APP_DATA/dlcs/packages/sha256-<digest>/frontend/`.
   - Sets exact MIME types: `.js`/`.mjs` $\rightarrow$ `text/javascript; charset=utf-8`, `.css` $\rightarrow$ `text/css; charset=utf-8`, `.svg` $\rightarrow$ `image/svg+xml`, `.png` $\rightarrow$ `image/png`.
 
-### Target Production CSP (`tauri.conf.json` in R3)
+### Production CSP (`main/appProtocol.ts`)
 ```text
 default-src 'self';
 script-src 'self' dlc-asset:;
 style-src 'self' 'unsafe-inline' dlc-asset:;
 img-src 'self' data: dlc-asset: https:;
 font-src 'self' dlc-asset:;
-connect-src 'self' http://127.0.0.1:*;
+connect-src 'self' http://127.0.0.1:* dlc-asset:;
 base-uri 'none';
 object-src 'none';
 form-action 'none';
@@ -283,8 +283,8 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
   codes; filesystem paths, verifier diagnostics, and tracebacks do not cross the API boundary.
 
 ### Desktop DLC Center
-- DLC management lives inside the existing Settings shell. The WebView receives only a narrow
-  `pick_dlc_package` Tauri command, backed by the official native dialog plugin and restricted to
+- DLC management lives inside the existing Settings shell. The Renderer receives only a narrow
+  `pickDlcPackage` preload method, backed by Electron's native dialog and restricted to
   an existing single `.dbfox-dlc` file; no generic filesystem or dialog capability is exposed.
 - Install from File is an explicit `pick → inspect → trust when required → install disabled`
   sequence. Trusting a publisher never installs the package, and neither inspect nor install
@@ -350,7 +350,7 @@ Error States:
 - `RuntimeContributionSnapshot` generates a wire-safe `RuntimeDlcActivationProjection`:
   - `snapshot_id`
   - `active_dlcs: tuple[dict(dlc_id, package_digest, frontend_entrypoint), ...]`
-- In R3, the Rust Tauri asset protocol serves frontend assets ONLY for packages present in the active projection, guaranteeing zero split-brain between Python backend runtime and Rust asset host.
+- The Electron asset protocol serves frontend assets ONLY for packages present in the active projection, guaranteeing zero split-brain between Python backend runtime and the Main asset host.
 
 ### R5 GitHub Data Ownership Gate Requirement (FROZEN)
 - R5 GitHub conformance DOES NOT pass merely by moving GitHub Python/TS code into `.dbfox-dlc`.
@@ -366,15 +366,15 @@ Error States:
 - **R0 / R0.1**: Architecture Specification & Production Feasibility Closure (CLOSED).
 - **R1**: Package Protocol, Verifier, Signature Engine & Installed Registry (CLOSED).
 - **R2**: Runtime Composition Identity + Backend Extension Host (CLOSED).
-- **R3**: Frontend Runtime DLC Host (Tauri custom asset protocol & dynamic ESM loader) (CLOSED).
+- **R3**: Frontend Runtime DLC Host (custom asset protocol & dynamic ESM loader) (CLOSED).
 - **R4.0**: Single-file Publisher Trust (CLOSED).
 - **R4.1**: Local-authenticated Lifecycle API (CLOSED).
 - **R4.2**: Install from File UI & DLC Center in Desktop App (CLOSED).
 - **R4.3**: Packaged cross-platform lifecycle proof (CLOSED).
 - **R5**: Conformance Proof & Data Ownership — Decouple `dbfox.github` into `dbfox.github-1.0.0.dbfox-dlc` (CLOSED).
 - **R6**: Side-by-Side Update & Rollback Lifecycle (CLOSED).
-- **R7.0**: Electron Host Cutover — replace Tauri/Rust without rewriting the Python Engine or
-  routing business APIs through IPC; close Electron release contracts, then remove the old Host.
+- **R7.0**: Electron Host Cutover — replaced the old Host without rewriting the Python Engine or
+  routing business APIs through IPC (CLOSED).
 - **R7.1**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`).
 - **R8**: Untrusted Subprocess Sandbox Gate.
 

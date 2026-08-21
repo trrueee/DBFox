@@ -130,7 +130,7 @@ DBFox 自研部分主要表达产品特有的不变量：证据优先、referenc
 
 ```mermaid
 sequenceDiagram
-  participant Rust as Tauri Runtime Host
+  participant Host as Electron Runtime Host
   participant Main as engine.main
   participant Meta as metadata SQLite
   participant Vault as OS Credential Vault

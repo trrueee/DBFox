@@ -14,7 +14,7 @@ DBFox 使用 MIT License。任何人都可以在许可证范围内使用、修�
 
 1. 构建来源是 `main` 上经 GitHub 验证签名的提交；
 2. 安装包具有项目发布证书的有效 Windows Authenticode 签名；
-3. 自动更新文件具有 Tauri updater 签名；
+3. 自动更新文件由 Electron 发布通道生成并绑定平台代码签名；
 4. GitHub 为安装包和更新签名生成可验证的构建来源证明；
 5. Release 页面、工作流运行和产物摘要能够关联到同一个 commit SHA。
 

@@ -3,21 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CellValuePreview } from "../CellValuePreview";
 import { cellValueToText, isCellValuePreviewable } from "../cellValue";
 
-const { invokeMock, isTauriMock } = vi.hoisted(() => ({
-  invokeMock: vi.fn(),
-  isTauriMock: vi.fn(),
+const { openExternalMock } = vi.hoisted(() => ({
+  openExternalMock: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: invokeMock,
-  isTauri: isTauriMock,
+vi.mock("../../../lib/desktopHost", () => ({
+  isEngineDesktopHost: () => true,
+  openDesktopExternalHttps: openExternalMock,
+  saveDesktopExternalImage: vi.fn(),
 }));
 
 describe("CellValuePreview", () => {
   beforeEach(() => {
     cleanup();
-    invokeMock.mockReset().mockResolvedValue(undefined);
-    isTauriMock.mockReset().mockReturnValue(true);
+    openExternalMock.mockReset().mockResolvedValue(undefined);
   });
 
   it("renders long text through a bounded preview trigger", () => {
@@ -61,9 +60,9 @@ describe("CellValuePreview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "查看链接 https://example.com/report?id=7" }));
     expect(screen.getByRole("dialog", { name: "链接" })).toBeTruthy();
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(openExternalMock).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "在浏览器打开" }));
-    expect(invokeMock).toHaveBeenCalledWith("open_external_https_url", { url: "https://example.com/report?id=7" });
+    expect(openExternalMock).toHaveBeenCalledWith("https://example.com/report?id=7");
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     rerender(<CellValuePreview value="javascript:alert(1)" />);

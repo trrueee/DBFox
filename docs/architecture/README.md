@@ -13,7 +13,7 @@
 ## 1. 系统和约束
 
 1. [系统总览](./system-overview.md)：产品目标、核心不变量、外部系统、部署拓扑、质量属性和事实层级。
-2. [Runtime 基础能力 ADR](./runtime-foundation-decisions.md)：Sidecar、单实例、Transport、诊断、SQLite、更新和官方 Tauri 插件决定。
+2. [R7 Electron Host Cutover](../quality/2026-08-21-r7-electron-host-cutover.md)：当前 Sidecar、原生能力、DLC protocol、更新和发布边界。
 3. [桌面发布、恢复与个性化](./desktop-release-lifecycle.md)：外观偏好、窗口状态、异常退出、代码签名和自动更新链路。
 
 ## 2. 接受后的目标架构计划
@@ -35,7 +35,7 @@
 
 | 容器 | 文档 | 所有权 |
 | --- | --- | --- |
-| Tauri/Rust Host | [系统总览](./system-overview.md#3-部署拓扑)、[Runtime ADR](./runtime-foundation-decisions.md) | 进程、窗口、端口、Token、generation、ACL、打包 |
+| Electron/TypeScript Host | [系统总览](./system-overview.md#3-部署拓扑)、[R7 Cutover](../quality/2026-08-21-r7-electron-host-cutover.md) | 进程、窗口、端口、Token、generation、IPC、打包 |
 | React WebView | [前端架构](./frontend.md) | 工作区、交互、投影、查询缓存和恢复呈现 |
 | FastAPI Sidecar | [后端架构](./backend.md) | API、Agent、工具、数据源、SQL、持久化和事件 |
 | SQLite metadata | [后端架构](./backend.md#6-持久化与事务边界) | 迁移、会话、事件、租约、配置和审计事实 |

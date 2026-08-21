@@ -49,9 +49,9 @@ DBFox 是本地优先的 AI 数据库桌面客户端。它不是远程多租户 
 
 ```mermaid
 flowchart LR
-    USER["Local User"] --> TAURI["Tauri 2 Desktop Host"]
-    TAURI --> WEBVIEW["React / TypeScript WebView"]
-    TAURI --> SIDECAR["Python FastAPI Sidecar"]
+    USER["Local User"] --> ELECTRON["Electron / TypeScript Desktop Host"]
+    ELECTRON --> WEBVIEW["React / TypeScript Renderer"]
+    ELECTRON --> SIDECAR["Python FastAPI Sidecar"]
     WEBVIEW -->|"Loopback HTTP + local token"| SIDECAR
     SIDECAR --> META[("Private SQLite Metadata DB")]
     SIDECAR --> VAULT["OS Credential Vault"]
@@ -60,9 +60,11 @@ flowchart LR
     SIDECAR --> FILES["Private runtime logs / backups"]
 ```
 
-### 3.1 Tauri 桌面主机
+### 3.1 Electron 桌面主机
 
-Tauri 负责启动和监督 sidecar、分配本地端口、读取启动状态、向 WebView 提供端口与 local token，并处理原生窗口和外部导航。Windows 发布物要求 MSVC Rust 工具链；GNU host 会被显式拒绝，防止桌面二进制与 MSVC sidecar triplet 不一致。
+Electron Main 负责启动和监督 sidecar、分配本地端口、读取启动状态、通过窄化 preload bridge
+提供端口与 local token，并处理原生窗口和外部导航。Renderer 保持 sandbox、context isolation 和
+禁用 Node；业务通信仍直接使用带 token 的 HTTP/SSE。
 
 ### 3.2 React WebView
 
@@ -320,17 +322,17 @@ RunControl 统一执行 deadline、turn count、tool invocation count、input/ou
 
 ## 13. 构建、供应链与发布
 
-Python sidecar 由 `build_sidecar.py` 构建，前端由 TypeScript/Vite 构建，桌面安装包由 Tauri/Rust 构建。工程门禁包括：
+Python sidecar 由 `build_sidecar.py` 构建，前端由 TypeScript/Vite 构建，桌面安装包由 Electron Builder 构建。工程门禁包括：
 
 - 官方 npm registry 与 lock integrity；
-- Node/Python/Rust CycloneDX SBOM；
+- Node/Python CycloneDX SBOM；
 - license gate 和漏洞审计；
 - frontend bundle budget；
 - Windows/macOS/Linux 候选构建矩阵；
 - Alembic 单一 head 与完整迁移链测试。
 
-Windows 打包只接受 `x86_64-pc-windows-msvc`；GNU target 不作为失败回退。具体候选版本的
-Clippy、test 与 Tauri 构建结论必须来自绑定 commit 的 Windows MSVC 本地或 CI 证据。
+具体候选版本的 Electron packaged smoke、Sidecar hash、平台安装包和签名结论必须来自绑定
+commit 的 Windows、macOS、Linux CI 证据。
 
 ## 14. 测试与当前证据
 
@@ -354,7 +356,7 @@ workflow/job 和原始输出；权威命令与分层门禁见 [`quality/engineer
 
 | 领域 | 当前入口 |
 |---|---|
-| 桌面生命周期 | `desktop/src-tauri/src/lib.rs`、`desktop/src/components/EngineStartupGate.tsx` |
+| 桌面生命周期 | `desktop/main/engineSupervisor.ts`、`desktop/main/nodeEngineHost.ts`、`desktop/src/components/EngineStartupGate.tsx` |
 | 前端对话 | `desktop/src/features/conversation/workspace/ConversationWorkspace.tsx` |
 | 前端状态归并 | `desktop/src/stores/conversationStoreReducer.ts` |
 | Timeline / Artifact | `MessageList.tsx`、`AgentTimeline.tsx`、`ArtifactDock.tsx` |

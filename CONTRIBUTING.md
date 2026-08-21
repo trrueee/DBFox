@@ -45,11 +45,11 @@ Set-Location ..
 .\dev.ps1
 ```
 
-运行 Tauri 桌面应用：
+运行 Electron 桌面应用：
 
 ```powershell
 Set-Location desktop
-npm run tauri -- dev
+npm run electron:dev
 ```
 
 Unix 开发脚本为 `./dev.sh`，但脚本存在不等同于 macOS/Linux 发布已经验证。

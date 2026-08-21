@@ -26,8 +26,8 @@
 
 `ci.yml` 的 `release-platform-contract` 只在 schedule 或 `workflow_dispatch` 运行。它在三平台重建
 Sidecar，执行 runtime/DLC smoke，生成 Electron installer，启动 packaged Electron，并上传
-`reports/`、最终 manifest 和 `desktop/release-electron/**`。普通 PR 的 Rust job会保留到 R7.0d，
-仅用于短迁移期回归；Electron release contract 本身不再安装或调用 Rust/Tauri。
+`reports/`、最终 manifest 和 `desktop/release-electron/**`。普通 PR 与 release contract 都只安装
+Python/Node 依赖，不包含第三语言构建路径。
 
 `windows-signed-release.yml` 是当前唯一正式发布工作流，只允许从 `main` 手工触发。它要求
 `WINDOWS_CERTIFICATE_BASE64` 与 `WINDOWS_CERTIFICATE_PASSWORD`，先签 Sidecar并刷新 hash，再由
@@ -58,5 +58,4 @@ exact digest、backend/frontend contribution、disable/restart 消失，以及 i
 Keyring、MySQL/PostgreSQL/SQLite 连接取消、SSH/TLS 路径。macOS 在 Developer ID/notarization 和
 Gatekeeper 真实工作流闭合前不能标记正式可发布；Linux 应记录目标发行版依赖和包管理器升级路径。
 
-供应链继续由 lockfile、依赖治理和 CycloneDX 门禁覆盖。R7.0d 删除 Rust/Tauri 后，Cargo 依赖图与
-RustSec 门禁同时删除，而不是保留无消费者的第三语言流程。
+供应链继续由 lockfile、依赖治理和 CycloneDX 门禁覆盖；不存在无消费者的第三语言流程。

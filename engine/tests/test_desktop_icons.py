@@ -1,15 +1,12 @@
-import json
-import re
 from pathlib import Path
 
 from PIL import Image, ImageChops
 
 
 ROOT = Path(__file__).resolve().parents[2]
-TAURI_CONF = ROOT / "desktop" / "src-tauri" / "tauri.conf.json"
-TAURI_ICONS = ROOT / "desktop" / "src-tauri" / "icons"
-NSIS_HOOKS = ROOT / "desktop" / "src-tauri" / "nsis-hooks.nsh"
-WIX_TEMPLATE = ROOT / "desktop" / "src-tauri" / "wix-template.wxs"
+DESKTOP_ICONS = ROOT / "desktop" / "build-resources"
+ELECTRON_BUILDER = ROOT / "desktop" / "electron-builder.yml"
+PREPARE_PACKAGE = ROOT / "desktop" / "scripts" / "prepare-electron-package.mjs"
 FAVICON = ROOT / "desktop" / "public" / "favicon.png"
 TITLEBAR_ICON = (
     ROOT
@@ -75,7 +72,7 @@ def _border_has_opaque_white_pixel(image: Image.Image) -> bool:
     return False
 
 
-def test_tauri_bundle_icons_are_transparent_and_safely_padded() -> None:
+def test_electron_bundle_icons_are_transparent_and_safely_padded() -> None:
     expected_png_sizes = {
         "32x32.png": (32, 32),
         "64x64.png": (64, 64),
@@ -85,7 +82,7 @@ def test_tauri_bundle_icons_are_transparent_and_safely_padded() -> None:
     }
 
     for filename, expected_size in expected_png_sizes.items():
-        path = TAURI_ICONS / filename
+        path = DESKTOP_ICONS / filename
         assert _rgba(path).size == expected_size
         _assert_transparent_padding(path)
 
@@ -101,7 +98,7 @@ def test_windows_ico_contains_common_shell_sizes() -> None:
         (256, 256),
     }
 
-    with Image.open(TAURI_ICONS / "icon.ico") as icon:
+    with Image.open(DESKTOP_ICONS / "icon.ico") as icon:
         assert set(icon.ico.sizes()) >= expected_sizes
 
         for size in expected_sizes:
@@ -130,46 +127,22 @@ def test_titlebar_icon_source_has_clean_transparent_edges() -> None:
 
 def test_favicon_uses_same_transparent_mark_as_bundle_icon() -> None:
     favicon = _rgba(FAVICON)
-    bundle_icon = _rgba(TAURI_ICONS / "32x32.png")
+    bundle_icon = _rgba(DESKTOP_ICONS / "32x32.png")
 
     assert favicon.size == (32, 32)
     _assert_transparent_padding(FAVICON)
     assert ImageChops.difference(favicon, bundle_icon).getbbox() is None
 
 
-def test_windows_installer_uses_bundled_icon_for_distribution_shortcuts() -> None:
-    config = json.loads(TAURI_CONF.read_text(encoding="utf-8"))
-    bundle = config["bundle"]
-    windows = bundle["windows"]
-    nsis = windows["nsis"]
-    wix = windows["wix"]
+def test_electron_builder_uses_the_committed_platform_icons() -> None:
+    builder = ELECTRON_BUILDER.read_text(encoding="utf-8")
+    prepare = PREPARE_PACKAGE.read_text(encoding="utf-8")
 
-    assert bundle["targets"] == "all"
-    assert bundle["resources"]["icons/icon.ico"] == "dbfox-icon.ico"
-    assert nsis["installerIcon"] == "icons/icon.ico"
-    assert nsis["uninstallerIcon"] == "icons/icon.ico"
-    assert nsis["installerHooks"] == "nsis-hooks.nsh"
-    assert wix["template"] == "wix-template.wxs"
-
-    hooks = NSIS_HOOKS.read_text(encoding="utf-8")
-    assert "$INSTDIR\\dbfox-icon.ico" in hooks
-    assert "$DESKTOP\\${PRODUCTNAME}.lnk" in hooks
-    assert "$SMPROGRAMS\\${PRODUCTNAME}.lnk" in hooks
-    assert "CreateShortcut" in hooks
-    assert "SHChangeNotify" in hooks
-    assert "!macro NSIS_HOOK_PREINSTALL" in hooks
-    assert "!macro NSIS_HOOK_PREUNINSTALL" in hooks
-    assert 'KillProcessCurrentUser "dbfox-engine.exe"' in hooks
-    assert 'KillProcess "dbfox-engine.exe"' in hooks
-
-    wix_template = WIX_TEMPLATE.read_text(encoding="utf-8")
-    assert re.search(
-        r'<Shortcut\s+Id="ApplicationDesktopShortcut"[^>]*Icon="ProductIcon"',
-        wix_template,
-        re.DOTALL,
-    )
-    assert re.search(
-        r'<Shortcut\s+Id="ApplicationStartMenuShortcut"[^>]*Icon="ProductIcon"',
-        wix_template,
-        re.DOTALL,
-    )
+    assert "buildResources: build-resources" in builder
+    assert "icon: icon.ico" in builder
+    assert "icon: icon.icns" in builder
+    assert "icon: icon.png" in builder
+    assert "createDesktopShortcut: always" in builder
+    assert "createStartMenuShortcut: true" in builder
+    assert 'join(root, "build-resources")' in prepare
+    assert 'join(stagingRoot, "build-resources")' in prepare

@@ -1,6 +1,6 @@
 # DBFox — Local-First AI Database Workbench
 
-DBFox 是本地优先、结果可追溯的 AI 数据分析桌面应用：Tauri/Rust Host 管理
+DBFox 是本地优先、结果可追溯的 AI 数据分析桌面应用：Electron/TypeScript Host 管理
 Frozen FastAPI Sidecar 的生命周期，React 工作区通过带短期令牌的 HTTP/SSE 与
 Sidecar 通信；Agent 工具调用与 SQL 只读执行都经过正式合同。
 
@@ -21,17 +21,16 @@ Sidecar 通信；Agent 工具调用与 SQL 只读执行都经过正式合同。
 | 事实 | 权威文件 |
 | --- | --- |
 | Node 版本 | `desktop/package.json`（`engines`） |
-| Rust 版本 | `desktop/src-tauri/rust-toolchain.toml` |
 | Frozen Sidecar Python | `.sidecar-python-version` / `.sidecar-python-build` |
 | 开发 Python 与依赖 | `CONTRIBUTING.md` + `requirements-dev.lock` |
-| 各生态锁文件 | `requirements*.lock`、`desktop/package-lock.json`、`desktop/src-tauri/Cargo.lock` |
+| 各生态锁文件 | `requirements*.lock`、`desktop/package-lock.json` |
 | 质量门禁命令 | `docs/quality/engineering-gates.md` + `.github/workflows/ci.yml` |
 
 ## 开发入口
 
 优先使用根脚本 `./dev.ps1` / `./dev.sh`（`backend` / `frontend` / `both`）；它们通过
 `scripts/dev_environment.py` 生成共享开发 Token，并保持前后端合同一致。开发端口：
-后端 `18625`，前端 `5173`。完整桌面开发：`cd desktop && npm run tauri -- dev`。
+后端 `18625`，前端 `5173`。完整桌面开发：`cd desktop && npm run electron:dev`。
 
 ## 关键架构不变量
 

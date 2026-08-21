@@ -3,14 +3,13 @@
 Simulates all routing scenarios:
 A. Docs-only
 B. Frontend-only React change
-C. Rust-only
-D. Dependency lock change
-E. Migration/model change
-F. P9.0-like resource seam change
-G. Future P9 GitHub DLC change
-H. Installable DLC source change
-I. Workflow/CI file change (forces full run)
-J. Non-PR events (push to main, schedule, dispatch -> full run)
+C. Dependency lock change
+D. Migration/model change
+E. P9.0-like resource seam change
+F. Future P9 GitHub DLC change
+G. Installable DLC source change
+H. Workflow/CI file change (forces full run)
+I. Non-PR events (push to main, schedule, dispatch -> full run)
 """
 
 from __future__ import annotations
@@ -30,7 +29,6 @@ def test_scenario_a_docs_only() -> None:
     assert res["isolated_worker"] is False
     assert res["sidecar"] is False
     assert res["frontend"] is False
-    assert res["rust"] is False
     assert res["supply_chain"] is False
 
 
@@ -50,30 +48,10 @@ def test_scenario_b_frontend_only_react() -> None:
     assert res["agent_runtime"] is False
     assert res["isolated_worker"] is False
     assert res["sidecar"] is False
-    assert res["rust"] is False
     assert res["supply_chain"] is False
 
 
-def test_scenario_c_rust_only() -> None:
-    files = [
-        "desktop/src-tauri/src/main.rs",
-        "desktop/src-tauri/src/tray.rs",
-    ]
-    res = classify_changes(files, event_name="pull_request")
-
-    assert res["full"] is False
-    assert res["rust"] is True
-    assert res["frontend"] is False
-    assert res["backend"] is False
-    assert res["python_quality"] is False
-    assert res["migration"] is False
-    assert res["agent_runtime"] is False
-    assert res["isolated_worker"] is False
-    assert res["sidecar"] is False
-    assert res["supply_chain"] is False
-
-
-def test_scenario_d_dependency_lock_change() -> None:
+def test_scenario_c_dependency_lock_change() -> None:
     files = ["requirements.lock"]
     res = classify_changes(files, event_name="pull_request")
 
@@ -85,10 +63,9 @@ def test_scenario_d_dependency_lock_change() -> None:
     assert res["sidecar"] is True
     assert res["frontend"] is True
     assert res["supply_chain"] is True
-    assert res["rust"] is False
 
 
-def test_scenario_e_migration_model_change() -> None:
+def test_scenario_d_migration_model_change() -> None:
     files = [
         "engine/migrations/versions/c1d2e3f4_new_migration.py",
         "engine/models.py",
@@ -101,11 +78,10 @@ def test_scenario_e_migration_model_change() -> None:
     assert res["python_quality"] is True
     assert res["sidecar"] is True
     assert res["agent_runtime"] is True
-    assert res["rust"] is False
     assert res["supply_chain"] is False
 
 
-def test_scenario_f_p9_0_resource_seam_change() -> None:
+def test_scenario_e_p9_0_resource_seam_change() -> None:
     files = [
         "engine/runtime_composition.py",
         "engine/tools/runtime/resource_context.py",
@@ -121,11 +97,10 @@ def test_scenario_f_p9_0_resource_seam_change() -> None:
     assert res["isolated_worker"] is True
     assert res["sidecar"] is True
     assert res["frontend"] is True
-    assert res["rust"] is False
     assert res["supply_chain"] is False
 
 
-def test_scenario_g_future_p9_github_dlc() -> None:
+def test_scenario_f_future_p9_github_dlc() -> None:
     files = [
         "engine/github/client.py",
         "engine/tools/builtin/github.py",
@@ -142,11 +117,10 @@ def test_scenario_g_future_p9_github_dlc() -> None:
     assert res["isolated_worker"] is True
     assert res["sidecar"] is True
     assert res["frontend"] is True
-    assert res["rust"] is False
     assert res["supply_chain"] is False
 
 
-def test_scenario_h_installable_dlc_source_tree() -> None:
+def test_scenario_g_installable_dlc_source_tree() -> None:
     files = [
         "dlcs/dbfox.github/manifest.template.json",
         "dlcs/dbfox.github/backend/entry.py",
@@ -162,11 +136,10 @@ def test_scenario_h_installable_dlc_source_tree() -> None:
     assert res["migration"] is False
     assert res["agent_runtime"] is False
     assert res["isolated_worker"] is False
-    assert res["rust"] is False
     assert res["supply_chain"] is False
 
 
-def test_scenario_i_workflow_ci_change_forces_full() -> None:
+def test_scenario_h_workflow_ci_change_forces_full() -> None:
     files = [".github/workflows/ci.yml"]
     res = classify_changes(files, event_name="pull_request")
 
@@ -178,15 +151,13 @@ def test_scenario_i_workflow_ci_change_forces_full() -> None:
     assert res["isolated_worker"] is True
     assert res["sidecar"] is True
     assert res["frontend"] is True
-    assert res["rust"] is True
     assert res["supply_chain"] is True
 
 
-def test_scenario_j_non_pr_events_force_full() -> None:
+def test_scenario_i_non_pr_events_force_full() -> None:
     for event in ("push", "schedule", "workflow_dispatch"):
         res = classify_changes([], event_name=event)
         assert res["full"] is True
         assert res["backend"] is True
         assert res["frontend"] is True
-        assert res["rust"] is True
         assert res["supply_chain"] is True

@@ -6,7 +6,7 @@
 >
 > 最后核验：2026-08-15
 >
-> 适用范围：Python、npm、Rust 锁文件与持续集成安全审计
+> 适用范围：Python、npm 锁文件与持续集成安全审计
 
 `main`、每个 Pull Request 和每周一 03:17 UTC 的计划任务都会执行
 `.github/workflows/ci.yml` 的 `Locked dependency security audit`。该任务只读取提交到
@@ -18,7 +18,6 @@
 | --- | --- | --- |
 | Python | `requirements.lock`、`requirements-dev.lock`、`requirements-build.lock` | 下载并 SHA-256 校验 OSV Scanner `v2.3.8`，以 `--no-resolve --data-source=native` 扫描三个已哈希锁定的 requirements 文件；发现已知漏洞即失败。仅允许 `osv-scanner.toml` 中带理由和到期时间的已审查例外。 |
 | npm | `desktop/package-lock.json` | `npm audit --package-lock-only --ignore-scripts --audit-level=high`；仅高危或严重漏洞阻断，避免开发工具的低风险通报阻塞交付。 |
-| Rust | `desktop/src-tauri/Cargo.lock` | 下载并 SHA-256 校验 RustSec `cargo-audit v0.22.2`，审计已提交的锁文件；已知漏洞阻断，未维护状态和上游 GTK3 技术债会在日志中保留为告警，而不是伪装成漏洞失败。 |
 
 所有下载都使用 HTTPS、固定版本、完整 SHA-256 校验、有限重试与显式超时。CI 的
 `GITHUB_TOKEN` 仅有 `contents: read`，且 checkout 不保留凭据。
@@ -29,7 +28,6 @@
 
 - Python lock 中每个固定包条目都带 SHA-256 hash；
 - npm lock 使用 lockfile v3，所有第三方包来自 npm 官方 registry 且带 SHA-512 integrity；
-- Cargo lock 使用 v4，所有非工作区 crate 来自 crates.io 且带 checksum；
 - CI 中的审计器版本、下载 hash、超时和锁文件路径没有被移除。
 
 这层契约不替代在线漏洞数据库，但能阻止无锁、无 hash、Git/本地依赖或未校验下载在
@@ -46,8 +44,8 @@ Set-Location desktop
 npm audit --package-lock-only --ignore-scripts --audit-level=high --registry=https://registry.npmjs.org
 ```
 
-在 Linux 或对应平台下载并校验 CI 指定的二进制后，按 CI 中的参数运行 OSV Scanner 和
-`cargo-audit`。不要使用 `npm audit fix --force`、未校验的 `curl | sh`，或无理由、无
+在 Linux 或对应平台下载并校验 CI 指定的二进制后，按 CI 中的参数运行 OSV Scanner。
+不要使用 `npm audit fix --force`、未校验的 `curl | sh`，或无理由、无
 期限的全局忽略。若必须临时接受一个不可修复的告警，必须在根目录
 `osv-scanner.toml` 中逐项记录公告 ID、影响判断、到期时间和上游移除条件；CI 显式加载
 该配置，过期例外重新成为阻断项。
@@ -89,8 +87,8 @@ MIT License 允许复用和商业使用，因此供应链合同不把“禁止�
 1. 规范仓库的公开提交图、Pull Request 和 Release 记录保留开发历史；
 2. 维护者使用 GitHub 已登记的 SSH、GPG 或 S/MIME 密钥签署后续提交；
 3. Windows 发布工作流只接受 `main` 上经 GitHub 验证的源提交，并继续校验
-   Authenticode 与 Tauri updater 签名；
-4. 工作流使用 GitHub 官方 `actions/attest` 为 MSI、NSIS 和 updater 签名文件生成
+   Authenticode 与 Electron 更新 metadata 的签名边界；
+4. 工作流使用 GitHub 官方 `actions/attest` 为 MSI、NSIS 和更新文件生成
    构建来源证明。
 
 用户可以使用 GitHub CLI 验证本地下载文件：
@@ -105,7 +103,5 @@ gh attestation verify .\DBFox_1.0.3_x64_en-US.msi --repo trrueee/DBFox
 
 ## 当前残余风险
 
-Tauri 的 Linux WebKit/GTK3 传递依赖仍会被 RustSec 标记为“未维护”或存在上游
-soundness 告警；目前没有与当前 Tauri 2.x 兼容的无破坏性上游替代项。该告警不被忽略，
-会显示在审计日志中。未来应优先跟随 Tauri/Wry 对 GTK4 或已维护后端的上游迁移，再评估
-是否把对应告警提升为阻断条件。
+Electron/Chromium 显著扩大 npm 依赖体积和发布物体积，因此必须保持锁文件、在线 audit、版本更新、
+代码签名和 packaged smoke。删除第三语言依赖图降低了工具链数量，但不替代 Chromium 安全更新。

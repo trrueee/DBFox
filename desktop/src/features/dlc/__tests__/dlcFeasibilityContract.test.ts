@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import tauriConfig from "../../../../src-tauri/tauri.conf.json";
+import { CONTENT_SECURITY_POLICY } from "../../../../main/appProtocol";
 
 describe("Runtime DLC Frontend Feasibility Contract", () => {
-  describe("Tauri Custom Protocol & CSP Isolation", () => {
+  describe("Electron Custom Protocol & CSP Isolation", () => {
     it("enforces dedicated dlc-asset URI format with digest pinning", () => {
       const buildDlcAssetUrl = (digest: string, relativePath: string): string => {
         // Enforce lowercase SHA256 hex digest (64 chars)
@@ -31,7 +31,7 @@ describe("Runtime DLC Frontend Feasibility Contract", () => {
     });
 
     it("verifies production CSP allows loopback HTTP ONLY in connect-src, not in script-src", () => {
-      const csp = tauriConfig.app?.security?.csp ?? "";
+      const csp = CONTENT_SECURITY_POLICY;
       expect(csp).toBeTruthy();
 
       // Extract script-src and connect-src directives

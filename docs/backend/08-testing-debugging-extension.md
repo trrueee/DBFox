@@ -22,7 +22,7 @@ DBFox 的风险来自跨边界链路：Runtime、SQLite、Provider、工具、�
 | Harness 场景 | 多 Turn、工具、取消、崩溃恢复 | 外部 Provider 事件兼容 |
 | opt-in Provider | SDK/Responses/tool loop/stream | 所有模型和网络环境 |
 | datasource 集成 | driver、SSL、readonly、类型 | 其他数据库版本 |
-| frozen/安装测试 | PyInstaller/Tauri/Token/sidecar | 未运行平台 |
+| frozen/安装测试 | PyInstaller/Electron/Token/sidecar | 未运行平台 |
 
 测试报告必须说清环境和覆盖边界，不能从 Windows 推断 macOS/Linux，也不能从 fake Provider 推断真实 Provider。
 

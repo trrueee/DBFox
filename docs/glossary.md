@@ -14,12 +14,12 @@
 
 | 术语 | 通俗解释 | 不要混淆 |
 | --- | --- | --- |
-| Rust Host | Tauri 的 Rust 进程，负责桌面窗口、Sidecar 生命周期、端口、令牌和系统能力 | React 页面或 Python 业务服务 |
-| Sidecar | 随桌面应用一起分发并由 Rust Host 启动的 Python Engine 进程 | 第二套后端实现 |
-| Runtime Supervisor | Rust Host 中监督 Sidecar 启动、退出和重启的组件 | 前端网络重试逻辑 |
+| Electron Host | Electron Main/Preload，负责桌面窗口、Sidecar 生命周期、端口、令牌和窄化系统能力 | React 页面或 Python 业务服务 |
+| Sidecar | 随桌面应用一起分发并由 Electron Host 启动的 Python Engine 进程 | 第二套后端实现 |
+| Runtime Supervisor | Electron Main 中监督 Sidecar 启动、退出和重启的组件 | 前端网络重试逻辑 |
 | generation（运行代次） | 每次 Sidecar 成功启动后的代次编号，用于识别过期端口和令牌 | 数据库结构版本 |
-| 运行时令牌 | Rust Host 为本次 Sidecar 运行生成的短期本地访问令牌 | Provider API Key 或数据库密码 |
-| WebView | Tauri 窗口中承载 React 界面的网页运行环境 | 普通浏览器发布版本 |
+| 运行时令牌 | Electron Host 为本次 Sidecar 运行生成的短期本地访问令牌 | Provider API Key 或数据库密码 |
+| Renderer | Electron sandbox 窗口中承载 React 界面的网页运行环境 | 普通浏览器发布版本 |
 
 ## 数据与 SQL
 
@@ -69,7 +69,7 @@
 | 术语 | 通俗解释 | 不要混淆 |
 | --- | --- | --- |
 | Frozen Sidecar | 由 PyInstaller 等方式冻结后的正式 Sidecar 可执行文件 | 开发环境中的 `python` 进程 |
-| bundle（安装产物） | Tauri 生成的 MSI、NSIS、AppImage 或应用包 | 只完成编译的中间文件 |
+| bundle（安装产物） | Electron Builder 生成的 NSIS、DMG/ZIP、AppImage 或应用包 | 只完成编译的中间文件 |
 | smoke（冒烟验证） | 对正式构建运行最小关键链路，证明产物能启动并完成基本合同 | 完整功能回归 |
 | 静态发布合同 | 对配置、目标平台和构建脚本的代码审查 | 真实平台构建、安装和运行通过 |
 | 发布门禁 | 发布前必须满足并留下证据的检查 | 一般改进建议 |

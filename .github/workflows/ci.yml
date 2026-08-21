@@ -24,7 +24,6 @@ concurrency:
 env:
   PYTHON_VERSION: "3.12.8"
   NODE_VERSION: "22.18.0"
-  RUST_VERSION: "1.95.0"
   UV_VERSION: "0.11.23"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PIP_NO_INPUT: "1"
@@ -42,7 +41,6 @@ jobs:
       isolated_worker: ${{ steps.classify.outputs.isolated_worker }}
       sidecar: ${{ steps.classify.outputs.sidecar }}
       frontend: ${{ steps.classify.outputs.frontend }}
-      rust: ${{ steps.classify.outputs.rust }}
       supply_chain: ${{ steps.classify.outputs.supply_chain }}
     steps:
       # v4.2.2
@@ -328,14 +326,10 @@ jobs:
     env:
       # Audit only committed lockfiles.  No lifecycle scripts or dependency
       # resolver is allowed to execute while collecting vulnerability metadata.
-      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       GIT_TERMINAL_PROMPT: "0"
       npm_config_fetch_retries: "2"
       npm_config_fetch_timeout: "30000"
     steps:
-      - name: Configure runner-local paths
-        run: echo "CARGO_HOME=$RUNNER_TEMP/cargo-home" >> "$GITHUB_ENV"
-
       # v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -374,24 +368,6 @@ jobs:
 
       - name: Enforce frontend dependency licenses and generate CycloneDX inventory
         run: python scripts/dependency_governance.py --ecosystem node --output reports/dbfox-node-sbom.cdx.json
-
-      - name: Download the checksum-verified Cargo advisory scanner
-        env:
-          CARGO_AUDIT_URL: https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-x86_64-unknown-linux-gnu-v0.22.2.tgz
-          CARGO_AUDIT_SHA256: ab28a1bdb54db4d5d8ad5981cf1f959410370b3d28250dbd35f6a44248620e39
-        run: |
-          mkdir -p "$RUNNER_TEMP/cargo-audit"
-          curl --fail --location --proto '=https' --tlsv1.2 --retry 2 --connect-timeout 15 --max-time 120 \
-            --output "$RUNNER_TEMP/cargo-audit.tgz" "$CARGO_AUDIT_URL"
-          echo "$CARGO_AUDIT_SHA256  $RUNNER_TEMP/cargo-audit.tgz" | sha256sum --check --strict
-          tar --extract --gzip --file "$RUNNER_TEMP/cargo-audit.tgz" --directory "$RUNNER_TEMP/cargo-audit" --strip-components=1
-
-      - name: Audit the committed Cargo lockfile against RustSec
-        working-directory: desktop/src-tauri
-        run: |
-          CARGO_AUDIT_BIN="$RUNNER_TEMP/cargo-audit/cargo-audit"
-          test -x "$CARGO_AUDIT_BIN"
-          timeout 120s "$CARGO_AUDIT_BIN" audit --db "$RUNNER_TEMP/rustsec-advisory-db" --file Cargo.lock --color never
 
   frontend:
     name: Frontend test, lint, and build
@@ -454,44 +430,6 @@ jobs:
 
       - name: Compile and build the frontend
         run: npm run build
-
-  rust:
-    name: Rust format, lint, and test
-    needs: changes
-    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.rust == 'true'
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: desktop/src-tauri
-    steps:
-      # v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          persist-credentials: false
-
-      - name: Install Linux libraries required by Tauri's Rust test build
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-
-      - name: Install the repository-pinned Rust toolchain
-        run: rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy,rustfmt
-
-      - name: Validate the committed Cargo dependency graph
-        run: cargo metadata --locked --format-version 1 --no-deps
-
-      - name: Enforce Rust dependency licenses and generate CycloneDX inventory
-        working-directory: .
-        run: python scripts/dependency_governance.py --ecosystem rust --output reports/dbfox-rust-sbom.cdx.json
-
-      - name: Enforce Rust formatting
-        run: cargo fmt --all -- --check
-
-      - name: Run Clippy with warnings denied
-        run: cargo clippy --locked --all-targets -- -D warnings
-
-      - name: Run Rust unit tests with the committed lockfile
-        run: cargo test --locked
 
   release-platform-contract:
     name: Release contract (${{ matrix.os }})
@@ -646,7 +584,6 @@ jobs:
       - sidecar-build
       - supply-chain-audit
       - frontend
-      - rust
     runs-on: ubuntu-24.04
     steps:
       - name: Verify required check outcomes
@@ -664,7 +601,6 @@ jobs:
               "sidecar-build": "${{ needs.sidecar-build.result }}",
               "supply-chain-audit": "${{ needs.supply-chain-audit.result }}",
               "frontend": "${{ needs.frontend.result }}",
-              "rust": "${{ needs.rust.result }}",
           }
 
           expected = {
@@ -676,7 +612,6 @@ jobs:
               "sidecar-build": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.sidecar == 'true' }}",
               "supply-chain-audit": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.supply_chain == 'true' }}",
               "frontend": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.frontend == 'true' }}",
-              "rust": "${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.rust == 'true' }}",
           }
 
           print("--- CI JOB RESULTS ---")

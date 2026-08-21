@@ -4,7 +4,7 @@ import type { Protocol } from "electron";
 
 const APP_SCHEME = "dbfox-app";
 const MAX_APP_ASSET_BYTES = 10 * 1024 * 1024;
-const CONTENT_SECURITY_POLICY = [
+export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "base-uri 'none'",
   "object-src 'none'",

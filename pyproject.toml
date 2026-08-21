@@ -18,7 +18,6 @@ norecursedirs = [
     ".tmp",
     ".venv",
     "desktop/node_modules",
-    "desktop/src-tauri/target",
     "output",
     "pyinstaller_build",
     "pyinstaller_dist",

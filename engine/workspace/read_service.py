@@ -1,6 +1,6 @@
 """Bounded read-only Workspace resource service.
 
-This is P5A's backend counterpart to the Tauri-host file viewer. It never
+This is P5A's backend counterpart to the Electron-host file viewer. It never
 depends on Agent RunLoop, Tool Registry or Prompt assembly, never writes, and
 never escapes the approved workspace root.
 """

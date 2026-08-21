@@ -25,7 +25,6 @@ WINDOWS_SIGNED_RELEASE_WORKFLOW = (
 )
 NPM_LOCK = ROOT / "desktop" / "package-lock.json"
 NPM_MANIFEST = ROOT / "desktop" / "package.json"
-CARGO_LOCK = ROOT / "desktop" / "src-tauri" / "Cargo.lock"
 PYTHON_LOCKS = {
     "requirements.txt": "requirements.lock",
     "requirements-dev.txt": "requirements-dev.lock",
@@ -106,9 +105,6 @@ def test_ci_enforces_the_required_layered_quality_gates() -> None:
         "npm run lint",
         "npm test -- --maxWorkers=1",
         "npm run build",
-        "cargo fmt --all -- --check",
-        "cargo clippy --locked --all-targets -- -D warnings",
-        "cargo test --locked",
     ):
         assert command in workflow
 
@@ -122,10 +118,8 @@ def test_electron_release_does_not_mutate_the_manifest_bound_sidecar() -> None:
 
     assert '"$SIDECAR_PYTHON" build_sidecar.py' in build_step
     assert "npm run electron:package" in build_step
-    assert "npm run tauri" not in build_step
     assert "rustc" not in build_step
     assert "desktop/electron-resources/sidecar/dbfox-engine" in workflow
-    assert "desktop/src-tauri/binaries/dbfox-engine-x86_64-unknown-linux-gnu" not in workflow
     assert "chown root:root release-electron/linux-unpacked/chrome-sandbox" in workflow
     assert "chmod 4755 release-electron/linux-unpacked/chrome-sandbox" in workflow
     assert "--no-sandbox" not in workflow
@@ -146,32 +140,26 @@ def test_ci_only_uses_runner_context_after_a_job_reaches_its_runner() -> None:
                 )
 
 
-def test_rust_toolchain_and_lockfile_are_explicit() -> None:
-    manifest = (ROOT / "desktop" / "src-tauri" / "Cargo.toml").read_text(encoding="utf-8")
-    toolchain = (ROOT / "desktop" / "src-tauri" / "rust-toolchain.toml").read_text(
-        encoding="utf-8"
-    )
-    rust_host = (ROOT / "desktop" / "src-tauri" / "src" / "lib.rs").read_text(
-        encoding="utf-8"
-    )
+def test_rust_and_tauri_are_absent_from_the_production_graph() -> None:
+    package = json.loads(NPM_MANIFEST.read_text(encoding="utf-8"))
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8").lower()
+    dependabot = (ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8").lower()
+    governance = (ROOT / "scripts" / "dependency_governance.py").read_text(encoding="utf-8").lower()
 
-    assert 'rust-version = "1.95"' in manifest
-    assert 'channel = "1.95.0"' in toolchain
-    assert (ROOT / "desktop" / "src-tauri" / "Cargo.lock").is_file()
-    assert 'target_env = "gnu"' in rust_host
-    assert "Windows desktop builds require the MSVC Rust toolchain" in rust_host
+    assert not (ROOT / "desktop" / "src-tauri").exists()
+    assert not (ROOT / "desktop" / "scripts" / "run-rust-tool.mjs").exists()
+    assert all("tauri" not in name for name in package["dependencies"])
+    assert all("tauri" not in name for name in package["devDependencies"])
+    assert re.search(r"\bcargo\b", workflow) is None
+    assert re.search(r"\brust\b", workflow) is None
+    assert "package-ecosystem: cargo" not in dependabot
+    assert '"rust"' not in governance
 
 
 def test_application_manifests_match_the_engine_version() -> None:
     npm_version = json.loads(NPM_MANIFEST.read_text(encoding="utf-8"))["version"]
-    cargo_version = tomllib.loads(
-        (ROOT / "desktop" / "src-tauri" / "Cargo.toml").read_text(encoding="utf-8")
-    )["package"]["version"]
-    tauri_version = json.loads(
-        (ROOT / "desktop" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
-    )["version"]
 
-    assert {npm_version, cargo_version, tauri_version} == {__version__}
+    assert npm_version == __version__
 
 
 def test_no_orphan_root_npm_lockfile_exists() -> None:
@@ -338,22 +326,6 @@ def test_frontend_security_floors_and_cross_platform_build_peers_are_locked() ->
     assert packages["node_modules/@emnapi/runtime"]["version"] == "2.0.0-alpha.4"
 
 
-def test_cargo_lock_is_registry_resolved_and_checksum_verified() -> None:
-    lock = tomllib.loads(CARGO_LOCK.read_text(encoding="utf-8"))
-
-    assert lock["version"] == 4
-    packages = lock["package"]
-    assert isinstance(packages, list) and packages
-    root_packages = [package for package in packages if package["name"] == "dbfox"]
-    assert len(root_packages) == 1
-
-    for package in packages:
-        if package["name"] == "dbfox":
-            continue
-        assert package.get("source") == "registry+https://github.com/rust-lang/crates.io-index", package["name"]
-        assert re.fullmatch(r"[0-9a-f]{64}", str(package.get("checksum", ""))), package["name"]
-
-
 def test_ci_runs_bounded_lockfile_vulnerability_audits() -> None:
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
@@ -370,9 +342,6 @@ def test_ci_runs_bounded_lockfile_vulnerability_audits() -> None:
     assert "--lockfile=requirements.txt:requirements-build.lock" in workflow
     assert "timeout 90s npm audit --package-lock-only --ignore-scripts" in workflow
     assert "--audit-level=high --registry=https://registry.npmjs.org" in workflow
-    assert "rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-x86_64-unknown-linux-gnu-v0.22.2.tgz" in workflow
-    assert "ab28a1bdb54db4d5d8ad5981cf1f959410370b3d28250dbd35f6a44248620e39" in workflow
-    assert '"$CARGO_AUDIT_BIN" audit --db "$RUNNER_TEMP/rustsec-advisory-db" --file Cargo.lock' in workflow
 
 
 def test_osv_exception_is_narrow_documented_and_expires() -> None:
@@ -423,7 +392,6 @@ def test_pytest_does_not_collect_generated_or_vendored_test_suites() -> None:
         ".build_venv",
         ".venv",
         "desktop/node_modules",
-        "desktop/src-tauri/target",
         "output",
         "pyinstaller_build",
         "pyinstaller_dist",
@@ -618,19 +586,8 @@ def test_readme_architecture_diagram_is_static_svg() -> None:
     assert "<svg" in diagram
     assert "DBFox 系统架构" in diagram
     assert "React 工作区" in diagram
-    assert "Tauri / Rust" in diagram
+    assert "Electron / TypeScript" in diagram
     assert "FastAPI" in diagram and "Sidecar" in diagram
     assert "本地 SQLite" in diagram
     assert "用户数据库" in diagram
     assert "模型服务" in diagram
-
-
-def test_capability_and_config_schemas_use_local_or_official_sources() -> None:
-    capabilities_root = ROOT / "desktop" / "src-tauri" / "capabilities"
-    for path in sorted(capabilities_root.glob("*.json")):
-        capability = json.loads(path.read_text(encoding="utf-8"))
-        assert capability["$schema"] == "../../gen/schemas/desktop-schema.json", path.name
-
-    config_path = ROOT / "desktop" / "src-tauri" / "tauri.conf.json"
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    assert config["$schema"] == "https://schema.tauri.app/config/2"

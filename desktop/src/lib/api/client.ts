@@ -159,7 +159,7 @@ async function getEngineStartupStatus(): Promise<EngineStartupStatus> {
 }
 
 /**
- * The Rust host starts the engine in the background.  Poll its explicit
+ * The Electron Host starts the engine in the background. Poll its explicit
  * lifecycle state instead of probing a guessed port while it is still
  * starting. Browser-only development paths remain a no-op.
  */

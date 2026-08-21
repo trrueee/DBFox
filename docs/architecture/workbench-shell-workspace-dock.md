@@ -157,7 +157,7 @@ Conversation history 就是当前项目/连接下的 Conversation summaries，�
 
 ### 6.2 Project files
 
-新建项目时必须选择本地文件夹并把 `workspace_root` 持久化到 Project。文件树由 Tauri 命令 `list_project_folder` 按需读取一层；目录展开后才读取子目录，并跳过 `.git`、`node_modules`、`.venv`、`target` 等重目录。文本文件经 `read_project_file` 读取后以 `dbfox.workspace.file` Dock 视图渲染，只支持 UTF-8 且不超过 1 MiB；二进制、超大或非 UTF-8 文件显示明确错误。
+新建项目时必须选择本地文件夹并把 `workspace_root` 持久化到 Project。文件树由 Electron preload 的 `listProjectFolder` 按需读取一层；目录展开后才读取子目录，并跳过 `.git`、`node_modules`、`.venv`、`target` 等重目录。文本文件经 `readProjectFile` 读取后以 `dbfox.workspace.file` Dock 视图渲染，只支持 UTF-8 且不超过 1 MiB；二进制、超大或非 UTF-8 文件显示明确错误。
 
 ## 7. Main Surface
 
@@ -177,7 +177,7 @@ Empty / error
 
 ConversationWorkspace 继续拥有 Message Timeline、Plan、Tool、Approval、Question、Composer、streaming/cancel 和 Artifact references；只移除右侧 Artifact layout ownership。
 
-Project Create 使用现有 Project create API 的 `name`/`description`/`workspace_root` contract：`workspace_root` 来自 Tauri 系统文件夹选择器，项目名默认取文件夹 basename，用户仍可修改名称。若产品需要 Project Edit，先在后端补一个最小、明确的 Project update contract，再接 Main Surface；不能复用 Datasource form 假装 Project form。
+Project Create 使用现有 Project create API 的 `name`/`description`/`workspace_root` contract：`workspace_root` 来自 Electron 系统文件夹选择器，项目名默认取文件夹 basename，用户仍可修改名称。若产品需要 Project Edit，先在后端补一个最小、明确的 Project update contract，再接 Main Surface；不能复用 Datasource form 假装 Project form。
 
 Datasource create/edit/test/credential/schema sync 在 Navicat 式连接管理 Dialog 中完成，不占用 Main Surface，也不进入 Dock。
 

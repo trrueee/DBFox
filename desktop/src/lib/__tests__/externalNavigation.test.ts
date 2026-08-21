@@ -7,20 +7,23 @@ import {
   saveUserConfirmedExternalImage,
 } from "../externalNavigation";
 
-const { invokeMock, isTauriMock } = vi.hoisted(() => ({
-  invokeMock: vi.fn(),
-  isTauriMock: vi.fn(),
+const { hostAvailableMock, openExternalMock, saveImageMock } = vi.hoisted(() => ({
+  hostAvailableMock: vi.fn(),
+  openExternalMock: vi.fn(),
+  saveImageMock: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: invokeMock,
-  isTauri: isTauriMock,
+vi.mock("../desktopHost", () => ({
+  isEngineDesktopHost: hostAvailableMock,
+  openDesktopExternalHttps: openExternalMock,
+  saveDesktopExternalImage: saveImageMock,
 }));
 
 describe("externalNavigation", () => {
   beforeEach(() => {
-    invokeMock.mockReset().mockResolvedValue(undefined);
-    isTauriMock.mockReset().mockReturnValue(true);
+    openExternalMock.mockReset().mockResolvedValue(undefined);
+    saveImageMock.mockReset();
+    hostAvailableMock.mockReset().mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -48,16 +51,14 @@ describe("externalNavigation", () => {
     expect(canOpenExternalHttpsUrl(unsafeUrl)).toBe(false);
   });
 
-  it("delegates an approved URL to the policy-validated Rust command", async () => {
+  it("delegates an approved URL to the policy-validated Electron Host", async () => {
     await expect(openUserConfirmedExternalHttpsUrl("https://cdn.example.com/image.png")).resolves.toBe(true);
 
-    expect(invokeMock).toHaveBeenCalledWith("open_external_https_url", {
-      url: "https://cdn.example.com/image.png",
-    });
+    expect(openExternalMock).toHaveBeenCalledWith("https://cdn.example.com/image.png");
   });
 
-  it("delegates image saving to the dedicated Rust boundary", async () => {
-    invokeMock.mockResolvedValueOnce({ status: "saved", fileName: "image.png", byteCount: 12 });
+  it("delegates image saving to the dedicated Electron boundary", async () => {
+    saveImageMock.mockResolvedValueOnce({ status: "saved", fileName: "image.png", byteCount: 12 });
 
     await expect(saveUserConfirmedExternalImage("https://cdn.example.com/image.png")).resolves.toEqual({
       status: "saved",
@@ -65,22 +66,20 @@ describe("externalNavigation", () => {
       byteCount: 12,
     });
     expect(canSaveExternalImage("https://cdn.example.com/image.png")).toBe(true);
-    expect(invokeMock).toHaveBeenCalledWith("save_external_image", {
-      url: "https://cdn.example.com/image.png",
-    });
+    expect(saveImageMock).toHaveBeenCalledWith("https://cdn.example.com/image.png");
   });
 
   it("never invokes the host for a rejected URL", async () => {
     await expect(openUserConfirmedExternalHttpsUrl("file:///C:/Users/Lenovo/private.png")).resolves.toBe(false);
 
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(openExternalMock).not.toHaveBeenCalled();
   });
 
-  it("does not add a browser fallback outside Tauri", async () => {
-    isTauriMock.mockReturnValue(false);
+  it("does not add a browser fallback outside Electron", async () => {
+    hostAvailableMock.mockReturnValue(false);
 
     await expect(openUserConfirmedExternalHttpsUrl("https://cdn.example.com/image.png")).resolves.toBe(false);
     expect(canSaveExternalImage("https://cdn.example.com/image.png")).toBe(false);
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(openExternalMock).not.toHaveBeenCalled();
   });
 });

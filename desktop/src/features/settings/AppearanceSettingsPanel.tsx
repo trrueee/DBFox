@@ -358,7 +358,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
       <SettingsSection
         icon={Accessibility}
         title="辅助功能"
-        description="系统缩放始终由 Tauri WebView 和操作系统处理；这里提供额外的对比度与动效控制。"
+        description="系统缩放始终由 Electron 和操作系统处理；这里提供额外的对比度与动效控制。"
       >
         <SettingsField label="对比度" htmlFor="appearance-contrast">
           <Select id="appearance-contrast" value={appearance.contrastMode} onChange={(event) => updateAppearance({ contrastMode: event.target.value as ContrastMode })}>

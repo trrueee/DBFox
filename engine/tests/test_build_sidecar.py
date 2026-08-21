@@ -349,71 +349,16 @@ def test_frozen_smoke_runtime_uses_a_non_symlinked_checkout_parent() -> None:
 def test_packaged_sidecar_preserves_control_stream_without_showing_a_window() -> None:
     root = Path(__file__).resolve().parents[2]
     builder_source = Path(build_sidecar.__file__).read_text(encoding="utf-8")
-    process_source = (root / "desktop" / "src-tauri" / "src" / "sidecar_process.rs").read_text(
+    process_source = (root / "desktop" / "main" / "nodeEngineHost.ts").read_text(
         encoding="utf-8"
     )
-    cargo = (root / "desktop" / "src-tauri" / "Cargo.toml").read_text(encoding="utf-8")
 
     assert '"--console"' in builder_source
     assert '"--noconsole"' not in builder_source
-    assert 'tauri-plugin-shell = "2.3.5"' in cargo
-    assert '.sidecar("dbfox-engine")' in process_source
-    assert "CommandEvent::Stdout" in process_source
-    assert "CommandEvent::Stderr" in process_source
-    assert "CommandEvent::Terminated" in process_source
-    assert "sidecar_candidate_paths" not in process_source
-
-
-def test_webview_does_not_receive_shell_process_permissions() -> None:
-    root = Path(__file__).resolve().parents[2] / "desktop" / "src-tauri" / "capabilities"
-    permissions = []
-    for path in root.glob("*.json"):
-        permissions.extend(json.loads(path.read_text(encoding="utf-8"))["permissions"])
-
-    assert not any(permission.startswith("shell:") for permission in permissions)
-
-
-def test_tauri_config_does_not_disable_platform_security_features() -> None:
-    config_path = Path(__file__).resolve().parents[2] / "desktop" / "src-tauri" / "tauri.conf.json"
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    browser_args = " ".join(
-        window.get("additionalBrowserArgs", "")
-        for window in config["app"].get("windows", [])
-    )
-
-    assert "msSmartScreenProtection" not in browser_args
-    assert "--no-proxy-server" not in browser_args
-
-
-def test_tauri_app_commands_have_explicit_main_window_permissions() -> None:
-    root = Path(__file__).resolve().parents[2]
-    tauri_root = root / "desktop" / "src-tauri"
-    build_source = (tauri_root / "build.rs").read_text(encoding="utf-8")
-    capabilities = {
-        path.stem: json.loads(path.read_text(encoding="utf-8"))
-        for path in (tauri_root / "capabilities").glob("*.json")
-    }
-
-    declared_commands = set(re.findall(r'^\s*"([a-z_]+)",?$', build_source, re.MULTILINE))
-    command_permission_sets = {
-        name: {permission for permission in capability["permissions"] if permission.startswith("allow-")}
-        for name, capability in capabilities.items()
-    }
-    command_permissions = set().union(*command_permission_sets.values())
-    allowed_commands = {
-        permission.removeprefix("allow-").replace("-", "_")
-        for permission in command_permissions
-    }
-
-    assert declared_commands == allowed_commands
-    assert all(capability["windows"] == ["main"] for capability in capabilities.values())
-    assert sum(len(permissions) for permissions in command_permission_sets.values()) == len(command_permissions)
-    assert not command_permission_sets["default"]
-    assert not any(
-        permission.startswith("opener:")
-        for capability in capabilities.values()
-        for permission in capability["permissions"]
-    )
+    assert 'stdio: ["ignore", "pipe", "pipe"]' in process_source
+    assert "windowsHide: true" in process_source
+    assert "DBFOX_ENGINE_TOKEN: token" in process_source
+    assert "verifyPackagedSidecar" in process_source
 
 
 def test_sidecar_builder_has_no_langsmith_plaintext_export_path() -> None:

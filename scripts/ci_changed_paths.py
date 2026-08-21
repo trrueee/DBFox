@@ -126,30 +126,12 @@ FRONTEND_PATTERNS = (
     "requirements.lock",
 )
 
-FRONTEND_EXCLUDE_PATTERNS = (
-    "desktop/src-tauri/*",
-    "desktop/src-tauri/**/*",
-)
-
-RUST_PATTERNS = (
-    "desktop/src-tauri/*",
-    "desktop/src-tauri/**/*",
-    "Cargo.toml",
-    "Cargo.lock",
-    "rust-toolchain.toml",
-    "scripts/dependency_governance.py",
-)
-
 SUPPLY_CHAIN_PATTERNS = (
     "requirements.lock",
     "requirements-dev.lock",
     "requirements-build.lock",
     "desktop/package.json",
     "desktop/package-lock.json",
-    "desktop/src-tauri/Cargo.toml",
-    "desktop/src-tauri/Cargo.lock",
-    "Cargo.toml",
-    "Cargo.lock",
     "osv-scanner.toml",
     "scripts/dependency_governance.py",
 )
@@ -176,7 +158,6 @@ def classify_changes(
             "isolated_worker": True,
             "sidecar": True,
             "frontend": True,
-            "rust": True,
             "supply_chain": True,
         }
 
@@ -194,17 +175,10 @@ def classify_changes(
             "isolated_worker": True,
             "sidecar": True,
             "frontend": True,
-            "rust": True,
             "supply_chain": True,
         }
 
-    # Frontend matching handles desktop/* excluding desktop/src-tauri/*
-    has_frontend = False
-    for p in path_list:
-        if _match_any(p, FRONTEND_PATTERNS):
-            if not _match_any(p, FRONTEND_EXCLUDE_PATTERNS) or _match_any(p, ("engine/api/*", "engine/api/**/*", "engine/schemas/*", "engine/schemas/**/*", "engine/agent/session.py", "requirements.lock")):
-                has_frontend = True
-                break
+    has_frontend = any(_match_any(p, FRONTEND_PATTERNS) for p in path_list)
 
     return {
         "full": False,
@@ -215,7 +189,6 @@ def classify_changes(
         "isolated_worker": any(_match_any(p, ISOLATED_WORKER_PATTERNS) for p in path_list),
         "sidecar": any(_match_any(p, SIDECAR_PATTERNS) for p in path_list),
         "frontend": has_frontend,
-        "rust": any(_match_any(p, RUST_PATTERNS) for p in path_list),
         "supply_chain": any(_match_any(p, SUPPLY_CHAIN_PATTERNS) for p in path_list),
     }
 

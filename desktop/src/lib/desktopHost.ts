@@ -1,6 +1,3 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-
 import type {
   DiagnosticBundlePayload,
   DiagnosticBundleResult,
@@ -37,152 +34,98 @@ function electronBridge(): DbfoxDesktopBridge | null {
   return window.dbfoxDesktop?.runtime === "electron" ? window.dbfoxDesktop : null;
 }
 
+function requireElectronBridge(): DbfoxDesktopBridge {
+  const bridge = electronBridge();
+  if (bridge === null) throw new Error("DBFox Electron preload bridge is unavailable");
+  return bridge;
+}
+
 export function isEngineDesktopHost(): boolean {
-  return electronBridge() !== null || isTauri();
+  return electronBridge() !== null;
 }
 
 export async function getDesktopEngineConfig(): Promise<EngineConfig> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.engine.getConfig();
-  return invoke<EngineConfig>("get_engine_config");
+  return requireElectronBridge().engine.getConfig();
 }
 
 export async function getDesktopEngineStatus(): Promise<EngineStartupStatus> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.engine.getStatus();
-  return invoke<EngineStartupStatus>("get_engine_startup_status");
+  return requireElectronBridge().engine.getStatus();
 }
 
 export async function restartDesktopEngine(): Promise<void> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.engine.restart();
-  await invoke("restart_python_engine");
+  return requireElectronBridge().engine.restart();
 }
 
 export async function subscribeDesktopEngineState(
   listener: (status: EngineStartupStatus) => void,
 ): Promise<() => void> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.engine.subscribe(listener);
-  return listen<EngineStartupStatus>("dbfox://engine-state", (event) => listener(event.payload));
+  return requireElectronBridge().engine.subscribe(listener);
 }
 
 export async function openDesktopDiagnosticLogs(): Promise<void> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.shell.openDiagnosticLogs();
-  await invoke("open_diagnostic_logs");
+  return requireElectronBridge().shell.openDiagnosticLogs();
 }
 
 export async function pickDesktopProjectFolder(): Promise<string | null> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.files.pickProjectFolder();
-  const result = await invoke<{ path?: string | null }>("pick_project_folder");
-  return result.path ?? null;
+  return requireElectronBridge().files.pickProjectFolder();
 }
 
 export function listDesktopProjectFolder(path: string): Promise<ProjectFolderListing> {
-  const electron = electronBridge();
-  return electron !== null
-    ? electron.files.listProjectFolder(path)
-    : invoke<ProjectFolderListing>("list_project_folder", { path });
+  return requireElectronBridge().files.listProjectFolder(path);
 }
 
 export function readDesktopProjectFile(path: string): Promise<ProjectFileContent> {
-  const electron = electronBridge();
-  return electron !== null
-    ? electron.files.readProjectFile(path)
-    : invoke<ProjectFileContent>("read_project_file", { path });
+  return requireElectronBridge().files.readProjectFile(path);
 }
 
 export async function pickDesktopDlcPackage(): Promise<string | null> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.files.pickDlcPackage();
-  const result = await invoke<{ path?: string | null }>("pick_dlc_package");
-  return result.path ?? null;
+  return requireElectronBridge().files.pickDlcPackage();
 }
 
 export function openDesktopExternalHttps(url: string): Promise<void> {
-  const electron = electronBridge();
-  return electron !== null
-    ? electron.shell.openExternalHttps(url)
-    : invoke("open_external_https_url", { url });
+  return requireElectronBridge().shell.openExternalHttps(url);
 }
 
 export function saveDesktopExternalImage(url: string): Promise<SaveExternalImageResult> {
-  const electron = electronBridge();
-  return electron !== null
-    ? electron.files.saveExternalImage(url)
-    : invoke<SaveExternalImageResult>("save_external_image", { url });
+  return requireElectronBridge().files.saveExternalImage(url);
 }
 
 export function exportDesktopDiagnosticBundle(payload: DiagnosticBundlePayload): Promise<DiagnosticBundleResult> {
-  const electron = electronBridge();
-  return electron !== null
-    ? electron.diagnostics.exportBundle(payload)
-    : invoke<DiagnosticBundleResult>("export_diagnostic_bundle", { payload });
+  return requireElectronBridge().diagnostics.exportBundle(payload);
 }
 
 export function getDesktopLaunchRecoveryStatus(): Promise<LaunchRecoveryStatus> {
-  const electron = electronBridge();
-  return electron !== null
-    ? electron.lifecycle.getRecoveryStatus()
-    : invoke<LaunchRecoveryStatus>("get_launch_recovery_status");
+  return requireElectronBridge().lifecycle.getRecoveryStatus();
 }
 
 export function getDesktopUpdateConfiguration(): Promise<UpdateConfiguration> {
-  const electron = electronBridge();
-  return electron !== null
-    ? electron.updates.getConfiguration()
-    : invoke<UpdateConfiguration>("get_update_configuration");
+  return requireElectronBridge().updates.getConfiguration();
 }
 
 export function checkForDesktopUpdate(): Promise<UpdateCheckResult> {
-  const electron = electronBridge();
-  return electron !== null
-    ? electron.updates.check()
-    : invoke<UpdateCheckResult>("check_for_app_update");
+  return requireElectronBridge().updates.check();
 }
 
 export async function installPendingDesktopUpdate(): Promise<void> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.updates.installPending();
-  await invoke("install_pending_app_update");
+  return requireElectronBridge().updates.installPending();
 }
 
 export async function getDesktopWindowMaximized(): Promise<boolean> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.window.isMaximized();
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  return getCurrentWindow().isMaximized();
+  return requireElectronBridge().window.isMaximized();
 }
 
 export async function minimizeDesktopWindow(): Promise<void> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.window.minimize();
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  await getCurrentWindow().minimize();
+  return requireElectronBridge().window.minimize();
 }
 
 export async function toggleMaximizeDesktopWindow(): Promise<boolean> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.window.toggleMaximize();
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  const window = getCurrentWindow();
-  await window.toggleMaximize();
-  return window.isMaximized();
+  return requireElectronBridge().window.toggleMaximize();
 }
 
 export async function closeDesktopWindow(): Promise<void> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.window.close();
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  await getCurrentWindow().close();
+  return requireElectronBridge().window.close();
 }
 
 export async function subscribeDesktopWindowState(listener: (maximized: boolean) => void): Promise<() => void> {
-  const electron = electronBridge();
-  if (electron !== null) return electron.window.subscribe(listener);
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  const window = getCurrentWindow();
-  return window.onResized(async () => listener(await window.isMaximized()));
+  return requireElectronBridge().window.subscribe(listener);
 }

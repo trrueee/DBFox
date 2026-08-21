@@ -48,12 +48,11 @@ describe("app shell layout", () => {
     expect(app).toContain('<LoadingState label="正在载入工作区" />');
   });
 
-  it("keeps the Tauri drag region on the titlebar and out of controls", () => {
+  it("keeps window controls inside the Electron titlebar", () => {
     const titlebar = read("components/TitleBar.tsx");
     const css = read("components/TitleBar.css");
 
-    expect(titlebar).toContain('className="titlebar" data-tauri-drag-region');
-    expect(titlebar).not.toMatch(/<button[^>]*data-tauri-drag-region/s);
+    expect(titlebar).toContain('className="titlebar"');
     expect(css).toMatch(/\.titlebar\s*{[^}]*grid-row:\s*1;/s);
     expect(css).toMatch(/\.titlebar-controls\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
   });

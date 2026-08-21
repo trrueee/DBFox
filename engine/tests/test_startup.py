@@ -77,12 +77,7 @@ def test_frozen_engine_allows_only_known_desktop_origins(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "is_frozen", True)
 
     with TestClient(app) as client:
-        for origin in [
-            "dbfox-app://localhost",
-            "tauri://localhost",
-            "http://tauri.localhost",
-            "https://tauri.localhost",
-        ]:
+        for origin in ["dbfox-app://localhost"]:
             response = client.get(
                 "/api/v1/datasources",
                 headers={
@@ -94,14 +89,20 @@ def test_frozen_engine_allows_only_known_desktop_origins(monkeypatch) -> None:
             assert response.status_code != 403
             assert response.headers.get("access-control-allow-origin") == origin
 
-        rejected = client.get(
-            "/api/v1/datasources",
-            headers={
-                "Origin": "dbfox-app://attacker.invalid",
-                "X-Local-Token": LOCAL_SECURE_TOKEN,
-            },
-        )
-        assert rejected.status_code == 403
+        for rejected_origin in (
+            "dbfox-app://attacker.invalid",
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+        ):
+            rejected = client.get(
+                "/api/v1/datasources",
+                headers={
+                    "Origin": rejected_origin,
+                    "X-Local-Token": LOCAL_SECURE_TOKEN,
+                },
+            )
+            assert rejected.status_code == 403
 
 
 def test_frozen_engine_parses_referer_host_instead_of_accepting_prefix_spoof(
@@ -110,13 +111,6 @@ def test_frozen_engine_parses_referer_host_instead_of_accepting_prefix_spoof(
     monkeypatch.setattr(main_module, "is_frozen", True)
 
     with TestClient(app) as client:
-        accepted = client.get(
-            "/api/v1/health",
-            headers={
-                "Referer": "http://localhost:1420/workspace",
-                "X-Local-Token": LOCAL_SECURE_TOKEN,
-            },
-        )
         rejected = client.get(
             "/api/v1/health",
             headers={
@@ -132,7 +126,6 @@ def test_frozen_engine_parses_referer_host_instead_of_accepting_prefix_spoof(
             },
         )
 
-    assert accepted.status_code != 403
     assert electron.status_code != 403
     assert rejected.status_code == 403
     assert rejected.json()["code"] == "FORBIDDEN_ORIGIN"
@@ -144,11 +137,11 @@ def test_frozen_health_uses_the_same_origin_and_token_policy(monkeypatch) -> Non
     with TestClient(app) as client:
         missing_token = client.get(
             "/api/v1/health",
-            headers={"Origin": "http://tauri.localhost"},
+            headers={"Origin": "dbfox-app://localhost"},
         )
         wrong_token = client.get(
             "/api/v1/health",
-            headers={"Origin": "http://tauri.localhost", "X-Local-Token": "wrong"},
+            headers={"Origin": "dbfox-app://localhost", "X-Local-Token": "wrong"},
         )
         missing_origin = client.get(
             "/api/v1/health",
@@ -157,7 +150,7 @@ def test_frozen_health_uses_the_same_origin_and_token_policy(monkeypatch) -> Non
         response = client.get(
             "/api/v1/health",
             headers={
-                "Origin": "http://tauri.localhost",
+                "Origin": "dbfox-app://localhost",
                 "X-Local-Token": LOCAL_SECURE_TOKEN,
             },
         )

@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { invokeMock, isTauriMock } = vi.hoisted(() => ({
+const { invokeMock, desktopHostMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
-  isTauriMock: vi.fn(() => false),
+  desktopHostMock: vi.fn(() => false),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: invokeMock,
-  isTauri: isTauriMock,
+vi.mock("../../desktopHost", () => ({
+  isEngineDesktopHost: desktopHostMock,
+  getDesktopEngineConfig: () => invokeMock("get_engine_config"),
+  getDesktopEngineStatus: () => invokeMock("get_engine_startup_status"),
+  subscribeDesktopEngineState: () => Promise.resolve(() => undefined),
 }));
 
 import { fetchEnginePath, initEngineConfig, waitForEngineConfig } from "../client";
@@ -24,8 +26,8 @@ function engineConfig(port: number, token: string, generation = 1) {
   };
 }
 
-function enableTauriRuntime(): void {
-  isTauriMock.mockReturnValue(true);
+function enableDesktopRuntime(): void {
+  desktopHostMock.mockReturnValue(true);
 }
 
 function deferred<T>() {
@@ -40,14 +42,13 @@ function deferred<T>() {
 
 afterEach(() => {
   invokeMock.mockReset();
-  isTauriMock.mockReset();
-  isTauriMock.mockReturnValue(false);
+  desktopHostMock.mockReset();
+  desktopHostMock.mockReturnValue(false);
   vi.unstubAllGlobals();
 });
-
 describe("local engine startup coordination", () => {
   it("waits for the host lifecycle to become ready before requesting a port", async () => {
-    enableTauriRuntime();
+    enableDesktopRuntime();
     const states: string[] = [];
     invokeMock
       .mockResolvedValueOnce({ state: "starting", error: null })
@@ -71,7 +72,7 @@ describe("local engine startup coordination", () => {
   });
 
   it("fails fast when the host reports a terminal startup failure", async () => {
-    enableTauriRuntime();
+    enableDesktopRuntime();
     invokeMock.mockResolvedValueOnce({ state: "failed", error: "sidecar exited" });
 
     await expect(waitForEngineConfig({ attempts: 3, intervalMs: 0 })).rejects.toMatchObject({
@@ -82,7 +83,7 @@ describe("local engine startup coordination", () => {
   });
 
   it("rejects an invalid host engine configuration", async () => {
-    enableTauriRuntime();
+    enableDesktopRuntime();
     invokeMock.mockResolvedValueOnce(engineConfig(0, ""));
 
     await expect(initEngineConfig()).rejects.toMatchObject({
@@ -92,7 +93,7 @@ describe("local engine startup coordination", () => {
   });
 
   it("refreshes the desktop token once and retries a rejected request", async () => {
-    enableTauriRuntime();
+    enableDesktopRuntime();
     invokeMock
       .mockResolvedValueOnce(engineConfig(18731, "stale-token"))
       .mockResolvedValueOnce(engineConfig(18732, "fresh-token", 2));
@@ -132,7 +133,7 @@ describe("local engine startup coordination", () => {
   });
 
   it("waits for a newer generation before replaying a failed safe request", async () => {
-    enableTauriRuntime();
+    enableDesktopRuntime();
     invokeMock
       .mockResolvedValueOnce(engineConfig(18731, "old-token", 7))
       .mockRejectedValueOnce(new Error("engine is restarting"))
@@ -158,7 +159,7 @@ describe("local engine startup coordination", () => {
   });
 
   it("keeps crash recovery independent when a concurrent 401 caller is cancelled", async () => {
-    enableTauriRuntime();
+    enableDesktopRuntime();
     const sharedSnapshot = deferred<ReturnType<typeof engineConfig>>();
     invokeMock
       .mockResolvedValueOnce(engineConfig(18731, "old-token", 10))
@@ -198,7 +199,7 @@ describe("local engine startup coordination", () => {
   });
 
   it("does not let a cancelled crash recovery abort a concurrent ordinary refresh", async () => {
-    enableTauriRuntime();
+    enableDesktopRuntime();
     const sharedSnapshot = deferred<ReturnType<typeof engineConfig>>();
     invokeMock
       .mockResolvedValueOnce(engineConfig(18800, "old-token", 20))
@@ -236,7 +237,7 @@ describe("local engine startup coordination", () => {
   });
 
   it("evaluates different required generations independently after one shared snapshot", async () => {
-    enableTauriRuntime();
+    enableDesktopRuntime();
     const sharedSnapshot = deferred<ReturnType<typeof engineConfig>>();
     let configRequest = 0;
     invokeMock.mockImplementation((command: string) => {
@@ -271,7 +272,7 @@ describe("local engine startup coordination", () => {
   });
 
   it("never replays a non-idempotent request after an ambiguous network failure", async () => {
-    enableTauriRuntime();
+    enableDesktopRuntime();
     invokeMock.mockResolvedValueOnce(engineConfig(18731, "write-token", 9));
     const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("connection reset"));
     vi.stubGlobal("fetch", fetchMock);
