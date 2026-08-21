@@ -1,5 +1,11 @@
 # DLC SDK, CLI, and conformance contract
 
+> 文档类型：架构说明 / 开发者指南
+>
+> 状态：当前
+>
+> 最后核验：2026-08-21
+
 ## Stable author surfaces
 
 DBFox exposes one backend import surface (`dbfox_dlc_api`), one frontend type
