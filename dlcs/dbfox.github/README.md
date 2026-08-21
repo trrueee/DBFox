@@ -6,8 +6,8 @@ by the DLC at `data_path/state.sqlite3`; and its frontend registers only through
 bounded frontend host.
 
 The repository does not contain a production publisher private key. Conformance tests
-build and sign this exact source tree with an explicitly test-only key. Production key handling and the
-general `dbfox-dlc build/sign` commands are delivered in R7.
+build and sign this exact source tree with an explicitly test-only key through the
+same deterministic builder exposed by the R7 `dbfox-dlc build/sign` commands.
 
 Core no longer contains a GitHub runtime or frontend surface. The historical Core table
 is retained only for the one-way Alembic import into this DLC-owned database; there is

@@ -18,16 +18,6 @@ import { fetchEnginePath } from "../../lib/api/client";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import type { DlcOperationInvokeOptions } from "./types";
 
-declare global {
-  interface Window {
-    __DBFOX_EXTENSION_HOST__?: {
-      React: typeof React;
-      ReactDOM: typeof ReactDOM;
-      version: string;
-    };
-  }
-}
-
 /**
  * Ensures global SDK object is mounted on window for dynamic DLC scripts.
  */

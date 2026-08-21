@@ -267,7 +267,10 @@ def test_tamper_between_inspect_and_trust_does_not_persist_key(tmp_path: Path) -
     archive_path.write_bytes(
         build_test_dlc_archive(
             manifest_data=_v2_manifest(public_key_base64),
-            payload_files={"backend/entry.py": "def register(host):\n    changed = True\n"},
+            payload_files={
+                "backend/entry.py": "def register(host):\n    changed = True\n",
+                "frontend/index.js": "export function register(host) {}\n",
+            },
             private_key=private_key,
         )
     )

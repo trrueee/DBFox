@@ -39,6 +39,9 @@ BACKEND_PATTERNS = (
     "pytest.ini",
     "requirements.lock",
     "requirements-dev.lock",
+    "sdk/*",
+    "sdk/**/*",
+    "tools/dbfox-dlc*",
 )
 
 PYTHON_QUALITY_PATTERNS = (
@@ -54,6 +57,9 @@ PYTHON_QUALITY_PATTERNS = (
     "requirements-dev.lock",
     "requirements-build.lock",
     "pyproject.toml",
+    "sdk/*",
+    "sdk/**/*",
+    "tools/dbfox-dlc*",
 )
 
 MIGRATION_PATTERNS = (
@@ -124,6 +130,8 @@ FRONTEND_PATTERNS = (
     "engine/schemas/**/*",
     "engine/agent/session.py",
     "requirements.lock",
+    "sdk/frontend/*",
+    "sdk/frontend/**/*",
 )
 
 SUPPLY_CHAIN_PATTERNS = (

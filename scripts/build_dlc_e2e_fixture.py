@@ -10,7 +10,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-from engine.dlc.trust import compute_key_fingerprint, public_key_to_base64
+from engine.dlc.package_builder import build_dlc_package
 from engine.tests.fixtures.dlc_fixture_builder import build_test_dlc_archive
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -38,11 +38,9 @@ def build_dlc_e2e_fixtures(output_dir: Path) -> BuiltDlcE2eFixtures:
     private_key = ed25519.Ed25519PrivateKey.from_private_bytes(
         _FIXTURE_PRIVATE_KEY_SEED
     )
-    public_key_base64 = public_key_to_base64(private_key.public_key())
     manifest = json.loads(
         (FIXTURE_SOURCE_ROOT / "manifest.template.json").read_text(encoding="utf-8")
     )
-    manifest["publisherKey"] = public_key_base64
     payload_files = {
         "backend/__init__.py": (
             FIXTURE_SOURCE_ROOT / "backend" / "__init__.py"
@@ -55,17 +53,18 @@ def build_dlc_e2e_fixtures(output_dir: Path) -> BuiltDlcE2eFixtures:
         ).read_bytes(),
     }
 
-    valid_bytes = build_test_dlc_archive(
-        manifest_data=manifest,
-        payload_files=payload_files,
+    valid = build_dlc_package(
+        manifest,
+        payload_files,
         private_key=private_key,
     )
     update_manifest = {**manifest, "version": "2.0.0"}
-    update_bytes = build_test_dlc_archive(
-        manifest_data=update_manifest,
-        payload_files=payload_files,
+    update = build_dlc_package(
+        update_manifest,
+        payload_files,
         private_key=private_key,
     )
+    manifest["publisherKey"] = valid.manifest.publisher_key
     tampered_bytes = build_test_dlc_archive(
         manifest_data=manifest,
         payload_files=payload_files,
@@ -75,17 +74,17 @@ def build_dlc_e2e_fixtures(output_dir: Path) -> BuiltDlcE2eFixtures:
     valid_archive = output_dir / "acme.echo.dbfox-dlc"
     update_archive = output_dir / "acme.echo-2.0.0.dbfox-dlc"
     tampered_archive = output_dir / "acme.echo-tampered.dbfox-dlc"
-    valid_archive.write_bytes(valid_bytes)
-    update_archive.write_bytes(update_bytes)
+    valid_archive.write_bytes(valid.archive_bytes)
+    update_archive.write_bytes(update.archive_bytes)
     tampered_archive.write_bytes(tampered_bytes)
 
     return BuiltDlcE2eFixtures(
         valid_archive=valid_archive,
         update_archive=update_archive,
         tampered_archive=tampered_archive,
-        package_digest=hashlib.sha256(valid_bytes).hexdigest(),
-        update_package_digest=hashlib.sha256(update_bytes).hexdigest(),
-        publisher_fingerprint=compute_key_fingerprint(private_key.public_key()),
+        package_digest=valid.package_digest,
+        update_package_digest=update.package_digest,
+        publisher_fingerprint=valid.publisher_fingerprint or "",
     )
 
 

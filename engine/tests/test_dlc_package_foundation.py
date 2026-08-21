@@ -505,11 +505,17 @@ def test_conflicting_digest_for_same_version_rejected(
     """Prove installing a modified package with the same dlc_id and version is rejected with CONFLICTING_DIGEST."""
     priv_key, pub_key_b64 = test_keypair
     archive1 = build_test_dlc_archive(
-        payload_files={"backend/entry.py": "def register(h): pass\n# v1"},
+        payload_files={
+            "backend/entry.py": "def register(h): pass\n# v1",
+            "frontend/index.js": "export function register(host) {}\n",
+        },
         private_key=priv_key,
     )
     archive2 = build_test_dlc_archive(
-        payload_files={"backend/entry.py": "def register(h): pass\n# v2 modified"},
+        payload_files={
+            "backend/entry.py": "def register(h): pass\n# v2 modified",
+            "frontend/index.js": "export function register(host) {}\n",
+        },
         private_key=priv_key,
     )
 
