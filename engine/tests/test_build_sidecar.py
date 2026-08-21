@@ -272,6 +272,12 @@ def test_frozen_smoke_covers_packaged_dlc_lifecycle_and_emits_evidence() -> None
         "disable_restart_absent",
         "executable_bytes_removed",
         "data_retained",
+        "preparePackagedGithubDlcLifecycle",
+        "verifyPackagedGithubDlcActive",
+        "verifyPackagedGithubDlcInactiveAndUninstall",
+        'dlc_id: "dbfox.github"',
+        "absent_without_package",
+        "packaged_github_dlc",
         "dlc-packaged-e2e-${targetTriplet}.json",
     ):
         assert contract in source
