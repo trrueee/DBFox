@@ -13,6 +13,7 @@ function reset() {
     dockTabs: [],
     settingsOpen: false,
     settingsSection: "appearance",
+    projectCreateOpen: false,
   });
 }
 
@@ -60,17 +61,18 @@ describe("workspaceStore — Shell", () => {
     expect(useWorkspaceStore.getState().settingsOpen).toBe(false);
   });
 
-  it("temporarily opens the New Project surface and returns home", () => {
+  it("opens and closes the New Project modal dialog without disrupting centerMode", () => {
     useWorkspaceStore.getState().openConversationCenter("conv-1");
     useWorkspaceStore.getState().openProjectCreate();
 
     expect(useWorkspaceStore.getState()).toMatchObject({
-      centerMode: "project-create",
-      centerReturnMode: "conversation",
+      projectCreateOpen: true,
+      centerMode: "conversation",
     });
 
-    useWorkspaceStore.getState().showSmartQueryHome();
-    expect(useWorkspaceStore.getState().centerMode).toBe("home");
+    useWorkspaceStore.getState().closeProjectCreate();
+    expect(useWorkspaceStore.getState().projectCreateOpen).toBe(false);
+    expect(useWorkspaceStore.getState().centerMode).toBe("conversation");
   });
 });
 

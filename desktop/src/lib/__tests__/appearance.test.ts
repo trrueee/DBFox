@@ -49,6 +49,16 @@ describe("appearance preferences", () => {
     expect(storage.getItem("dbfox-theme")).toBeNull();
   });
 
+  it("migrates legacy sidebarWidth under minimum to default", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({
+      ...DEFAULT_APPEARANCE,
+      sidebarWidth: 220,
+    }));
+
+    expect(loadAppearancePreferences(storage).sidebarWidth).toBe(280);
+  });
+
   it("round-trips the versioned preference contract", () => {
     const storage = new MemoryStorage();
     const preferences = {

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -50,6 +51,16 @@ interface AgentTimelineProps {
   ) => Promise<void> | void;
 }
 
+type RenderableTimelineItem =
+  | { kind: "single"; item: ConversationRunItem }
+  | {
+      kind: "function_group";
+      id: string;
+      title: string;
+      category: FunctionCallItem["payload"]["presentation"]["category"];
+      items: FunctionCallItem[];
+    };
+
 export function AgentTimeline({
   run,
   items,
@@ -60,11 +71,16 @@ export function AgentTimeline({
   questionError,
   onResolveQuestion,
 }: AgentTimelineProps) {
-  const outputs = new Map(
-    items
-      .filter((item): item is FunctionCallOutputItem => item.type === "function_call_output")
-      .map((item) => [item.payload.call_id, item]),
-  );
+  const outputs = useMemo(() => {
+    const map = new Map<string, FunctionCallOutputItem>();
+    for (const item of items) {
+      if (item.type === "function_call_output") {
+        map.set(item.payload.call_id, item);
+      }
+    }
+    return map;
+  }, [items]);
+
   const primaryArtifacts = artifacts.filter(isPrimaryConversationArtifact);
   const preservedResults = primaryArtifacts.filter(
     (artifact) => artifact.status === "completed" && isSqlBackedResultViewArtifact(artifact),
@@ -88,10 +104,23 @@ export function AgentTimeline({
       && item.status !== "cancelled",
   );
 
+  const renderableItems = useMemo(() => groupTimelineItems(items), [items]);
+
   return (
     <section className="conv-agent-timeline" aria-label="Agent 时间线">
-      {items.map((item) => {
-        if (item.type === "function_call_output") return null;
+      {renderableItems.map((entry) => {
+        if (entry.kind === "function_group") {
+          return (
+            <FunctionCallGroup
+              key={entry.id}
+              group={entry}
+              outputs={outputs}
+              runStatus={run.status}
+              onSelectArtifact={onSelectArtifact}
+            />
+          );
+        }
+        const item = entry.item;
         if (item.type === "message") {
           if (item.payload.role === "user") {
             return <UserMessage key={item.id} item={item as UserMessageItem} />;
@@ -241,6 +270,8 @@ function FunctionCall({
   if (item.payload.presentation.visibility === "developer") return null;
   const status = output?.status || item.status;
   const detailId = `tool-detail-${item.id}`;
+  const isCompleted = status === "completed";
+
   return (
     <details className={`conv-agent-tool is-${status} is-${item.payload.presentation.category}`}>
       <summary aria-controls={detailId}>
@@ -253,19 +284,26 @@ function FunctionCall({
         </span>
         <span className="conv-agent-tool-copy">
           <span className="conv-agent-tool-title">
-            <span className={`conv-agent-tool-status is-${status}`}>
-              {toolStatusLabel(status, runStatus)}
-            </span>
             <span>{item.payload.presentation.title}</span>
+            {!isCompleted && (
+              <span className={`conv-agent-tool-status is-${status}`}>
+                {toolStatusLabel(status, runStatus)}
+              </span>
+            )}
           </span>
         </span>
-        <ChevronRight className="conv-agent-tool-chevron" size={15} aria-hidden="true" />
+        <ChevronRight className="conv-agent-tool-chevron" size={14} aria-hidden="true" />
       </summary>
       <div id={detailId} className="conv-agent-tool-detail">
         <div className="conv-agent-tool-call">
           <span>调用</span>
           <code>{item.payload.name}</code>
           {item.payload.attempt > 1 && <span>第 {item.payload.attempt} 次尝试</span>}
+          {isCompleted && (
+            <span className={`conv-agent-tool-status is-${status}`}>
+              {toolStatusLabel(status, runStatus)}
+            </span>
+          )}
         </div>
         {Object.keys(item.payload.arguments).length > 0 && (
           <ToolArguments arguments={item.payload.arguments} />
@@ -301,28 +339,129 @@ function FunctionCall({
   );
 }
 
+function FunctionCallGroup({
+  group,
+  outputs,
+  runStatus,
+  onSelectArtifact,
+}: {
+  group: {
+    id: string;
+    title: string;
+    category: FunctionCallItem["payload"]["presentation"]["category"];
+    items: FunctionCallItem[];
+  };
+  outputs: Map<string, FunctionCallOutputItem>;
+  runStatus: ConversationRun["status"];
+  onSelectArtifact?: (artifactId: string) => void;
+}) {
+  const hasInProgress = group.items.some((i) => i.status === "in_progress" || i.status === "pending");
+  const hasFailed = group.items.some((i) => (outputs.get(i.payload.call_id)?.status || i.status) === "failed");
+  const groupStatus = hasFailed ? "failed" : hasInProgress ? "in_progress" : "completed";
+  const detailId = `tool-detail-${group.id}`;
+
+  return (
+    <details className={`conv-agent-tool is-${groupStatus} is-${group.category}`}>
+      <summary aria-controls={detailId}>
+        <span
+          className="conv-agent-tool-kind"
+          title={toolCategoryLabel(group.category)}
+          aria-hidden="true"
+        >
+          <ToolCategoryIcon category={group.category} />
+        </span>
+        <span className="conv-agent-tool-copy">
+          <span className="conv-agent-tool-title">
+            <span>{group.title}</span>
+            <span className="conv-agent-tool-count">({group.items.length})</span>
+            {groupStatus !== "completed" && (
+              <span className={`conv-agent-tool-status is-${groupStatus}`}>
+                {toolStatusLabel(groupStatus, runStatus)}
+              </span>
+            )}
+          </span>
+        </span>
+        <ChevronRight className="conv-agent-tool-chevron" size={14} aria-hidden="true" />
+      </summary>
+      <div id={detailId} className="conv-agent-tool-detail conv-agent-tool-group-detail">
+        {group.items.map((item, index) => {
+          const output = outputs.get(item.payload.call_id);
+          const status = output?.status || item.status;
+          return (
+            <div key={item.id} className="conv-agent-tool-group-item">
+              <div className="conv-agent-tool-call">
+                <span>#{index + 1} 调用</span>
+                <code>{item.payload.name}</code>
+                {item.payload.attempt > 1 && <span>第 {item.payload.attempt} 次尝试</span>}
+                {status === "completed" && (
+                  <span className={`conv-agent-tool-status is-${status}`}>
+                    {toolStatusLabel(status, runStatus)}
+                  </span>
+                )}
+              </div>
+              {Object.keys(item.payload.arguments).length > 0 && (
+                <ToolArguments arguments={item.payload.arguments} />
+              )}
+              {output?.payload.summary && (
+                <div className="conv-agent-tool-outcome">
+                  <strong>结果</strong>
+                  <p>{output.payload.summary}</p>
+                </div>
+              )}
+              {(output?.payload.error_message || output?.payload.error_code) && (
+                <p className="conv-agent-tool-error" role="alert">
+                  {output.payload.error_message || output.payload.error_code}
+                </p>
+              )}
+              {output?.payload.artifact_refs.length ? (
+                <div className="conv-agent-tool-artifacts">
+                  {output.payload.artifact_refs.map((reference, refIdx) => (
+                    <button
+                      key={reference.artifact_id}
+                      type="button"
+                      onClick={() => onSelectArtifact?.(reference.artifact_id)}
+                    >
+                      <FileOutput size={14} aria-hidden="true" />
+                      <span>{reference.label || `查看结果 ${refIdx + 1}`}</span>
+                      <ArrowUpRight size={13} aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
+
 function Plan({ item }: { item: PlanItem }) {
+  const completedCount = completedPlanSteps(item);
+  const totalCount = item.payload.steps.length;
+  const isFailed = item.status === "failed";
+
   return (
     <details className={`conv-agent-plan is-${item.status}`}>
       <summary>
         <span className="conv-agent-tool-kind is-plan" aria-hidden="true">
-          <ListChecks size={16} />
+          <ListChecks size={15} />
         </span>
         <span className="conv-agent-plan-copy">
-          <span>{item.payload.objective}</span>
-          <small>
-            {toolStatusLabel(item.status)} · {completedPlanSteps(item)} / {item.payload.steps.length} 个阶段完成
-          </small>
+          <span className="conv-agent-plan-title">分析计划</span>
+          <span className="conv-agent-plan-progress">
+            {isFailed ? "计划已中止" : `${completedCount}/${totalCount} 阶段`}
+          </span>
         </span>
-        <ChevronRight className="conv-agent-plan-chevron" size={15} aria-hidden="true" />
+        <ChevronRight className="conv-agent-plan-chevron" size={14} aria-hidden="true" />
       </summary>
-      <ol>
+      <ol className="conv-agent-plan-steps">
         {item.payload.steps.map((step) => (
           <li key={step.id} className={`is-${step.status}`}>
             <PlanStepIcon status={step.status} />
-            <span>
-              <span>{step.title}</span>
-              {step.note && <small>{step.note}</small>}
+            <span className="conv-agent-plan-step-content">
+              <span className="conv-agent-plan-step-title">{step.title}</span>
+              {step.note && <small className="conv-agent-plan-step-note">{step.note}</small>}
             </span>
           </li>
         ))}
@@ -336,10 +475,10 @@ function ToolCategoryIcon({
 }: {
   category: FunctionCallItem["payload"]["presentation"]["category"];
 }) {
-  if (category === "explore") return <Search size={16} />;
-  if (category === "query") return <Database size={16} />;
-  if (category === "visualize") return <BarChart3 size={16} />;
-  return <Settings2 size={16} />;
+  if (category === "explore") return <Search size={14} />;
+  if (category === "query") return <Database size={14} />;
+  if (category === "visualize") return <BarChart3 size={14} />;
+  return <Settings2 size={14} />;
 }
 
 function ToolArguments({ arguments: values }: { arguments: Record<string, unknown> }) {
@@ -400,4 +539,42 @@ function completedPlanSteps(item: PlanItem): number {
 
 function activeItem(items: ConversationRunItem[]): ConversationRunItem | undefined {
   return items.findLast((item) => ["pending", "in_progress", "waiting"].includes(item.status));
+}
+
+function groupTimelineItems(items: ConversationRunItem[]): RenderableTimelineItem[] {
+  const result: RenderableTimelineItem[] = [];
+  let currentGroup: FunctionCallItem[] = [];
+
+  const flushGroup = () => {
+    if (currentGroup.length === 0) return;
+    if (currentGroup.length === 1) {
+      result.push({ kind: "single", item: currentGroup[0] });
+    } else {
+      const first = currentGroup[0];
+      result.push({
+        kind: "function_group",
+        id: `group-${first.id}-${currentGroup.length}`,
+        title: first.payload.presentation.title,
+        category: first.payload.presentation.category,
+        items: [...currentGroup],
+      });
+    }
+    currentGroup = [];
+  };
+
+  for (const item of items) {
+    if (item.type === "function_call_output") continue;
+    if (item.type === "function_call" && item.payload.presentation.visibility !== "developer") {
+      const last = currentGroup[currentGroup.length - 1];
+      if (!last || last.payload.presentation.title === item.payload.presentation.title) {
+        currentGroup.push(item);
+        continue;
+      }
+    }
+    flushGroup();
+    result.push({ kind: "single", item });
+  }
+  flushGroup();
+
+  return result;
 }

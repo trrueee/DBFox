@@ -22,7 +22,7 @@ export const APPEARANCE_RANGES = Object.freeze({
   agentLineHeight: Object.freeze({ min: 1.4, max: 2, defaultValue: 1.7, step: 0.1 }),
   codeLineHeight: Object.freeze({ min: 1.3, max: 2, defaultValue: 1.6, step: 0.1 }),
   tableRowHeight: Object.freeze({ min: 24, max: 44, defaultValue: 32, step: 2 }),
-  sidebarWidth: Object.freeze({ min: 220, max: 420, defaultValue: 260, step: 10 }),
+  sidebarWidth: Object.freeze({ min: 248, max: 420, defaultValue: 280, step: 10 }),
   artifactDockWidth: Object.freeze({ min: 22, max: 50, defaultValue: 28, step: 2 }),
 });
 
@@ -113,7 +113,13 @@ export function loadAppearancePreferences(
   try {
     const stored = storage.getItem(APPEARANCE_STORAGE_KEY);
     if (stored) {
-      const parsed = appearancePreferencesSchema.safeParse(JSON.parse(stored));
+      const raw = JSON.parse(stored);
+      if (raw && typeof raw === "object" && typeof raw.sidebarWidth === "number") {
+        if (raw.sidebarWidth < APPEARANCE_RANGES.sidebarWidth.min) {
+          raw.sidebarWidth = APPEARANCE_RANGES.sidebarWidth.defaultValue;
+        }
+      }
+      const parsed = appearancePreferencesSchema.safeParse(raw);
       if (parsed.success) return parsed.data;
     }
 

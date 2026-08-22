@@ -1,63 +1,13 @@
-.project-create {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  min-height: 100%;
-  padding: 32px 16px;
-}
-
-.project-create__card {
-  width: min(520px, 100%);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-panel);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-window);
-  padding: 20px;
-}
-
-.project-create__header {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.project-create__back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--ui-font-control);
-  padding: 0;
-}
-
-.project-create__back:hover {
-  color: var(--color-primary);
-}
-
-.project-create__title {
-  margin: 0;
-  font-size: var(--ui-font-title);
-  font-weight: 650;
-  color: var(--color-text-primary);
-}
-
-.project-create__description {
-  margin: 0;
-  font-size: var(--ui-font-control);
-  color: var(--color-text-secondary);
-  line-height: 1.6;
+.project-create-dialog {
+  max-width: 480px;
+  width: 100%;
 }
 
 .project-create__form {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  margin-top: 8px;
 }
 
 .project-create__field {
@@ -84,6 +34,8 @@
 .project-create__actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
 }
 
 .project-create__folder-picker {
@@ -100,6 +52,7 @@
   font: inherit;
   font-size: var(--ui-font-control);
   padding: 0 10px;
+  transition: border-color 0.15s, color 0.15s;
 }
 
 .project-create__folder-picker:hover {
@@ -115,3 +68,4 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+

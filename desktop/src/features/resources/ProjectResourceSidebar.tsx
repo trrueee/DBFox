@@ -137,6 +137,17 @@ export function ProjectResourceSidebar({
     [connectors],
   );
 
+  const [chatsCollapsed, setChatsCollapsed] = useState(false);
+  const [showAllChats, setShowAllChats] = useState(false);
+  const RECENT_CHATS_LIMIT = 6;
+
+  const displayedConversations = useMemo(() => {
+    if (showAllChats) return conversationsForProject;
+    return conversationsForProject.slice(0, RECENT_CHATS_LIMIT);
+  }, [conversationsForProject, showAllChats]);
+
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0] ?? null;
+
   if (collapsed) {
     return (
       <section className="hifi-col hifi-sidebar-col ds-tree-collapsed">
@@ -164,6 +175,34 @@ export function ProjectResourceSidebar({
     <section className="hifi-col hifi-sidebar-col ds-tree-main">
       <div className="hifi-sidebar-panel">
         <div className="hifi-sidebar-header ds-tree-header-row">
+          {projects.length > 1 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="ds-workspace-identity-trigger" aria-label="切换项目">
+                  <FolderOpen size={14} className="ds-workspace-identity-icon" />
+                  <span className="ds-workspace-identity-name">{activeProject?.name || "工作区"}</span>
+                  <ChevronDown size={12} className="ds-workspace-identity-chevron" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {projects.map((project) => (
+                  <DropdownMenuItem
+                    key={project.id}
+                    onClick={() => handleSelectProject(project.id)}
+                  >
+                    <Folder size={14} className="ds-project-dropdown-icon" />
+                    <span>{project.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <div className="ds-workspace-identity">
+              <FolderOpen size={14} className="ds-workspace-identity-icon" />
+              <span className="ds-workspace-identity-name">{activeProject?.name || "工作区"}</span>
+            </div>
+          )}
+
           <div className="ds-tree-actions">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -192,73 +231,74 @@ export function ProjectResourceSidebar({
         <ScrollArea className="hifi-tree-container ds-tree-scroll-area">
           {conversationError && <div className="ds-tree-status ds-tree-status--error" role="alert">{conversationError}</div>}
 
-          {/* Project list */}
-          <div className="ds-entity-list">
-            {loadingProjects && <div className="ds-tree-status">正在读取项目…</div>}
-            {!loadingProjects && projects.length === 0 && (
-              <div className="ds-tree-status">还没有项目。点击右上角 + 选择电脑上的文件夹。</div>
-            )}
-            {projects.map((project) => {
-              const isActive = project.id === activeProjectId;
-              return (
-                <div key={project.id} className={`ds-entity-row ${isActive ? "is-active" : ""}`}>
-                  <div className="ds-entity-row__main">
-                    <button
-                      type="button"
-                      className="ds-entity-row__trigger"
-                      onClick={() => handleSelectProject(project.id)}
-                      aria-current={isActive ? "page" : undefined}
-                    >
-                      {isActive ? (
-                        <FolderOpen size={14} className="ds-entity-row__icon" />
-                      ) : (
-                        <Folder size={14} className="ds-entity-row__icon" />
-                      )}
-                      <span className="ds-entity-row__name">{project.name}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="ds-entity-row__new-conversation"
-                      aria-label={`${project.name} 新对话`}
-                      onClick={() => handleNewProjectConversation(project.id)}
-                    >
-                      <Plus size={13} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
           {/* Conversations (Core) */}
           {activeProjectId ? (
             <div className="ds-resource-section">
-              <div className="ds-conversation-group-header ds-resource-header">
-                <MessageSquare size={13} aria-hidden="true" />
-                <span className="ds-resource-header-label">对话</span>
+              <div className="ds-resource-header ds-resource-header--collapsible">
+                <button
+                  type="button"
+                  className="ds-section-toggle-btn"
+                  onClick={() => setChatsCollapsed((c) => !c)}
+                  aria-expanded={!chatsCollapsed}
+                >
+                  <ChevronDown
+                    size={12}
+                    aria-hidden="true"
+                    className={`ds-section-chevron ${chatsCollapsed ? "is-collapsed" : ""}`}
+                  />
+                  <MessageSquare size={13} aria-hidden="true" />
+                  <span className="ds-resource-header-label">对话</span>
+                </button>
                 {conversationsForProject.length > 0 && (
                   <span className="ds-conversation-count">{conversationsForProject.length}</span>
                 )}
-              </div>
-              <div className="ds-entity-row__content">
-                {conversationsForProject.length === 0 ? (
-                  <div className="ds-tree-status">暂无对话，点击 + 开始新对话。</div>
-                ) : (
-                  conversationsForProject.map((conversation) => (
+                <Tooltip>
+                  <TooltipTrigger asChild>
                     <button
                       type="button"
-                      key={conversation.id}
-                      className={`hifi-tree-node ds-tree-table-row ${conversation.id === activeConversationId ? "active" : ""}`}
-                      onClick={() => { void handleOpenConversation(conversation.id); }}
-                      aria-current={conversation.id === activeConversationId ? "page" : undefined}
-                      title={conversation.title}
+                      className="ds-tree-icon-btn ds-section-add-btn"
+                      aria-label="新对话"
+                      onClick={() => handleNewProjectConversation(activeProjectId)}
                     >
-                      <MessageSquare size={13} className="ds-tree-table-icon" />
-                      <span className="ds-tree-table-name">{conversation.title}</span>
+                      <Plus size={13} />
                     </button>
-                  ))
-                )}
+                  </TooltipTrigger>
+                  <TooltipContent>新对话</TooltipContent>
+                </Tooltip>
               </div>
+
+              {!chatsCollapsed && (
+                <div className="ds-section-content">
+                  {conversationsForProject.length === 0 ? (
+                    <div className="ds-tree-status">暂无对话，点击 + 开始新对话。</div>
+                  ) : (
+                    <>
+                      {displayedConversations.map((conversation) => (
+                        <button
+                          type="button"
+                          key={conversation.id}
+                          className={`hifi-tree-node ds-tree-table-row ${conversation.id === activeConversationId ? "active" : ""}`}
+                          onClick={() => { void handleOpenConversation(conversation.id); }}
+                          aria-current={conversation.id === activeConversationId ? "page" : undefined}
+                          title={conversation.title}
+                        >
+                          <MessageSquare size={13} className="ds-tree-table-icon" />
+                          <span className="ds-tree-table-name">{conversation.title}</span>
+                        </button>
+                      ))}
+                      {conversationsForProject.length > RECENT_CHATS_LIMIT && (
+                        <button
+                          type="button"
+                          className="ds-tree-more-btn"
+                          onClick={() => setShowAllChats((prev) => !prev)}
+                        >
+                          {showAllChats ? "收起" : `查看全部 ${conversationsForProject.length} 个对话`}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           ) : null}
 

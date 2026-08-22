@@ -166,6 +166,18 @@ describe("AgentTimeline", () => {
     expect(screen.queryByText("查询结果 result-1")).toBeNull();
     expect(screen.queryByText("已保存结果")).toBeNull();
   });
+
+  it("groups consecutive function calls with the same title into a quiet group", () => {
+    const call1 = call(1);
+    const call2 = { ...call(2), id: "call-item-2", payload: { ...call(1).payload, call_id: "call-2" } };
+    const call3 = { ...call(3), id: "call-item-3", payload: { ...call(1).payload, call_id: "call-3" } };
+
+    renderTimeline([call1, call2, call3]);
+
+    expect(screen.getByText("读取订单结构")).toBeTruthy();
+    expect(screen.getByText("(3)")).toBeTruthy();
+    expect(screen.queryByText("(2)")).toBeNull();
+  });
 });
 
 function renderTimeline(

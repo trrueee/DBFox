@@ -21,6 +21,7 @@ interface WorkspaceState {
   dockTabs: WorkspaceDockTab[];
   settingsOpen: boolean;
   settingsSection: AppSettingsSection;
+  projectCreateOpen: boolean;
 }
 
 interface WorkspaceActions {
@@ -36,6 +37,8 @@ interface WorkspaceActions {
   showSmartQueryHome: (initialAsk?: string) => void;
   openConversationCenter: (conversationId?: string) => void;
   openProjectCreate: () => void;
+  closeProjectCreate: () => void;
+  setProjectCreateOpen: (open: boolean) => void;
   clearPendingAsk: () => void;
   openDockTab: (tab: WorkspaceDockTab, activate?: boolean) => void;
   updateDockTab: (
@@ -57,6 +60,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   dockTabs: [],
   settingsOpen: false,
   settingsSection: "appearance",
+  projectCreateOpen: false,
 
   setActiveProject: (projectId) => set({ activeProjectId: projectId }),
 
@@ -175,10 +179,17 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     })),
 
   openProjectCreate: () =>
-    set((state) => ({
-      centerMode: "project-create",
-      centerReturnMode: state.centerReturnMode,
+    set({
+      projectCreateOpen: true,
       settingsOpen: false,
+    }),
+
+  closeProjectCreate: () => set({ projectCreateOpen: false }),
+
+  setProjectCreateOpen: (projectCreateOpen) =>
+    set((state) => ({
+      projectCreateOpen,
+      settingsOpen: projectCreateOpen ? false : state.settingsOpen,
     })),
 
   clearPendingAsk: () => set({ pendingAsk: null }),

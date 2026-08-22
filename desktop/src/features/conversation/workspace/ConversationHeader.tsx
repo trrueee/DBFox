@@ -5,8 +5,10 @@ export function ConversationHeader({ detail }: { detail: ConversationDetail }) {
 
   return (
     <header className="conv-header">
-      <div className="conv-header-title-group">
-        <h2 title={title}>{title}</h2>
+      <div className="conv-header-rail">
+        <div className="conv-header-title-group">
+          <h2 className="conv-header-title" title={title}>{title}</h2>
+        </div>
       </div>
     </header>
   );

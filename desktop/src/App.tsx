@@ -43,9 +43,9 @@ const SettingsPage = lazy(() =>
     default: module.SettingsPage,
   })),
 );
-const ProjectCreateForm = lazy(() =>
-  import("./features/projects/ProjectCreateForm").then((module) => ({
-    default: module.ProjectCreateForm,
+const ProjectCreateDialog = lazy(() =>
+  import("./features/projects/ProjectCreateDialog").then((module) => ({
+    default: module.ProjectCreateDialog,
   })),
 );
 const WorkspaceDock = lazy(() =>
@@ -143,7 +143,6 @@ export default function App() {
   // ── Store selectors ──
   const { activeDatasource, activeDatasourceId, tables } = useDatasourceState();
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
-  const centerMode = useWorkspaceStore((s) => s.centerMode);
   const dock = useWorkspaceStore((s) => s.dock);
   const dockTabs = useWorkspaceStore((s) => s.dockTabs);
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
@@ -152,7 +151,6 @@ export default function App() {
   const openDockArtifacts = useArtifactDockStore((s) => s.openArtifacts);
   const showSmartQueryHome = useWorkspaceStore((s) => s.showSmartQueryHome);
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
-  const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
   const settingsOpen = useWorkspaceStore((s) => s.settingsOpen);
   const settingsSection = useWorkspaceStore((s) => s.settingsSection);
   const openSettings = useWorkspaceStore((s) => s.openSettings);
@@ -290,29 +288,6 @@ export default function App() {
                       </div>
                     </Suspense>
                   </section>
-                ) : centerMode === "project-create" ? (
-                  <div className="app-v3-stage">
-                    <section className="app-main app-main--conversation app-main--project-create">
-                      <div className="app-main-scroll">
-                        <Suspense fallback={<LoadingState label="正在载入新建项目" />}>
-                          <ProjectCreateForm
-                            onCreated={(projectId) => {
-                              setActiveProject(projectId);
-                              showSmartQueryHome();
-                            }}
-                            onCancel={showSmartQueryHome}
-                          />
-                        </Suspense>
-                      </div>
-                    </section>
-                    <Suspense fallback={<WorkspaceDockFallback />}>
-                      <WorkspaceDock
-                        activeDatasourceId={activeDatasourceId}
-                        activeConversationId={activeConversationId}
-                        showToast={toast}
-                      />
-                    </Suspense>
-                  </div>
                 ) : (
                   <div className="app-v3-stage">
                     <section className="app-main app-main--conversation">
@@ -337,6 +312,10 @@ export default function App() {
           </Suspense>
 
           <ResourceConnectorDialog />
+
+          <Suspense fallback={null}>
+            <ProjectCreateDialog />
+          </Suspense>
 
           {showCommandPalette && (
             <Suspense fallback={null}>

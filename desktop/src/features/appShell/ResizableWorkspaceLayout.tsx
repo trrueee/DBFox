@@ -45,7 +45,7 @@ export function ResizableWorkspaceLayout({
         id="app-sidebar-panel"
         className={`app-sidebar-panel ${sidebarCollapsed ? "app-sidebar-panel--collapsed" : ""}`}
         defaultSize={sidebarCollapsed ? 36 : sidebarDefaultWidth}
-        minSize={sidebarCollapsed ? 36 : 220}
+        minSize={sidebarCollapsed ? 36 : 248}
         maxSize={sidebarCollapsed ? 36 : settingsOpen ? 320 : 420}
         disabled={sidebarCollapsed}
         groupResizeBehavior="preserve-pixel-size"

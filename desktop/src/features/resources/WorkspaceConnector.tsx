@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from "react";
-import { ChevronDown, ChevronRight, FileText, Folder } from "lucide-react";
+import { ChevronDown, FileText, Folder } from "lucide-react";
 import { useWorkspaceFileStore } from "../../stores/workspaceFileStore";
 import type { ProjectFolderEntry, ProjectFolderListing } from "../../lib/projectFolder";
 import { useProjectFolderTree } from "../projects/useProjectFolderTree";
@@ -58,7 +58,7 @@ function WorkspaceConnectorContent({ projectId }: { projectId: string }) {
   const folderError = folderErrors[workspaceRoot] && !listing;
 
   return (
-    <div className="ds-entity-row__content ds-project-files">
+    <div className="ds-connector-tree ds-project-files">
       {loading ? (
         <div className="ds-tree-status" role="status">正在读取项目文件…</div>
       ) : folderError ? (
@@ -120,15 +120,15 @@ function WorkspaceFileTreeNode({
       <div className="ds-project-file-node" role="treeitem" aria-expanded={expanded}>
         <button
           type="button"
-          className={`ds-project-file-node__dir ${depthClass}`}
+          className={`hifi-tree-node ds-project-file-node__dir ${depthClass}`}
           onClick={() => onToggleFolder(entry)}
           title={entry.name}
         >
-          {expanded ? (
-            <ChevronDown size={12} className="ds-project-file-node__chevron" aria-hidden="true" />
-          ) : (
-            <ChevronRight size={12} className="ds-project-file-node__chevron" aria-hidden="true" />
-          )}
+          <ChevronDown
+            size={12}
+            className={`ds-group-chevron ds-project-file-node__chevron ${expanded ? "" : "ds-group-chevron-collapsed"}`}
+            aria-hidden="true"
+          />
           <Folder size={13} className="ds-project-file-node__icon" aria-hidden="true" />
           <span className="ds-project-file-node__name">{entry.name}</span>
         </button>
@@ -163,7 +163,7 @@ function WorkspaceFileTreeNode({
   return (
     <button
       type="button"
-      className={`ds-project-file-node ds-project-file-node--file ${depthClass}`}
+      className={`hifi-tree-node ds-project-file-node ds-project-file-node--file ${depthClass}`}
       onClick={() => onOpenFile(entry)}
       title={entry.path}
     >
