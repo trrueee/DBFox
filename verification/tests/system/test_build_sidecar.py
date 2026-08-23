@@ -78,9 +78,14 @@ def _runtime_manifest(version: tuple[int, int, int]) -> dict[str, object]:
 def _release_contracts() -> dict[str, object]:
     return {
         "schema_version": 1,
-        "schema_list_empty_arguments": {
+        "request_clarification_defaults": {
             "status": "allowed",
-            "safe_args": {"limit": 20},
+            "safe_args": {
+                "question": "Select a target",
+                "reason": "A target is required.",
+                "options": [],
+                "allow_free_text": True,
+            },
         },
     }
 
@@ -92,6 +97,23 @@ def test_runtime_manifest_gate_rejects_last_affected_sqlite() -> None:
 
 def test_runtime_manifest_gate_accepts_fixed_sqlite() -> None:
     build_sidecar.validate_runtime_manifest(_runtime_manifest((3, 51, 3)))
+
+
+def test_release_contract_gate_accepts_current_kernel_defaults() -> None:
+    build_sidecar.validate_release_contracts(_release_contracts())
+
+
+def test_release_contract_gate_rejects_legacy_data_tool_contract() -> None:
+    with pytest.raises(RuntimeError, match="request_clarification defaults"):
+        build_sidecar.validate_release_contracts(
+            {
+                "schema_version": 1,
+                "schema_list_empty_arguments": {
+                    "status": "allowed",
+                    "safe_args": {"limit": 20},
+                },
+            }
+        )
 
 
 def test_new_sidecar_must_match_the_current_engine_source_tree() -> None:

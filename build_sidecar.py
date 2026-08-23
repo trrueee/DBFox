@@ -606,14 +606,19 @@ def validate_current_source_provenance(manifest: dict[str, object]) -> None:
 def validate_release_contracts(contracts: dict[str, object]) -> None:
     if contracts.get("schema_version") != 1:
         raise RuntimeError("Unsupported Sidecar release-contract schema")
-    schema_list = contracts.get("schema_list_empty_arguments")
-    if not isinstance(schema_list, dict) or schema_list != {
+    clarification = contracts.get("request_clarification_defaults")
+    if not isinstance(clarification, dict) or clarification != {
         "status": "allowed",
-        "safe_args": {"limit": 20},
+        "safe_args": {
+            "question": "Select a target",
+            "reason": "A target is required.",
+            "options": [],
+            "allow_free_text": True,
+        },
     }:
         raise RuntimeError(
-            "Release blocked: final Sidecar rejects schema_list empty arguments "
-            "instead of applying canonical defaults"
+            "Release blocked: final Sidecar does not apply canonical "
+            "request_clarification defaults"
         )
 
 
