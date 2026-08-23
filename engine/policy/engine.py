@@ -1,6 +1,6 @@
 import logging
 from sqlglot import exp
-from engine.sql.parser import parse_sql
+from dlcs.dbfox_data.backend.sql.parser import parse_sql
 
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.models import DataSource

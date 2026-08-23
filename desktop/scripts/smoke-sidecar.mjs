@@ -13,6 +13,9 @@ const sidecarPath = fileURLToPath(
   new URL(`../electron-resources/sidecar/${sidecarName}`, import.meta.url),
 );
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
+const systemDlcDirectory = fileURLToPath(
+  new URL("../electron-resources/system-dlcs/", import.meta.url),
+);
 
 if (!existsSync(sidecarPath)) {
   throw new Error(`Packaged sidecar not found: ${sidecarPath}`);
@@ -221,6 +224,7 @@ function launchSidecar(runtimeToken) {
       DBFOX_ENGINE_PORT: String(port),
       DBFOX_ENGINE_TOKEN: runtimeToken,
       DBFOX_RUNTIME_DIR: runtimeDir,
+      DBFOX_SYSTEM_DLC_DIR: systemDlcDirectory,
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -345,6 +349,14 @@ async function preparePackagedDlcLifecycle(fixture) {
   const initialList = await apiJson("/api/v1/dlcs");
   if (initialList.dlcs.some((item) => item.dlc_id === "acme.echo")) {
     throw new Error("Packaged DLC fixture was unexpectedly installed before the test");
+  }
+  const systemData = initialList.dlcs.find((item) => item.dlc_id === "dbfox.data");
+  const systemWorkspace = initialList.dlcs.find((item) => item.dlc_id === "dbfox.workspace");
+  if (!systemData || systemData.desired_enabled || systemData.active) {
+    throw new Error(`dbfox.data migration gate is invalid: ${JSON.stringify(systemData)}`);
+  }
+  if (!systemWorkspace || !systemWorkspace.desired_enabled || !systemWorkspace.active) {
+    throw new Error(`dbfox.workspace System DLC is inactive: ${JSON.stringify(systemWorkspace)}`);
   }
 
   for (const endpoint of ["/api/v1/dlcs/packages/inspect", "/api/v1/dlcs/install"]) {

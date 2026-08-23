@@ -6,7 +6,6 @@ import type {
 
 export const EMPTY_CONTRIBUTIONS: DlcContributionSet = Object.freeze({
   connectors: Object.freeze([]),
-  requestedResources: Object.freeze([]),
   dockViews: Object.freeze([]),
   artifactRenderers: Object.freeze([]),
 });

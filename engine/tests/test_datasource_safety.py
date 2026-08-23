@@ -9,7 +9,10 @@ from fastapi import HTTPException
 import engine.connectivity.resources as connectivity_resources_module
 import engine.datasource as datasource_module
 import engine.tunnel as tunnel_module
-from engine.connectivity.factory import build_postgres_ssl_params
+from dlcs.dbfox_data.backend.connection_primitives import (
+    ConnectionConfigurationError,
+    build_postgres_ssl_params,
+)
 from engine.connectivity.profile import ConnectionProfile
 from engine.datasource import test_connection as run_test_connection
 from engine.errors import DataSourceConnectionError
@@ -73,7 +76,7 @@ def test_mysql_connection_error_never_leaks_driver_exception(monkeypatch, caplog
     def fail_connect(**_kwargs):
         raise RuntimeError(f"MySQL driver failed with password={sentinel}")
 
-    monkeypatch.setattr("engine.connectivity.factory.pymysql.connect", fail_connect)
+    monkeypatch.setattr("pymysql.connect", fail_connect)
 
     with _capture_module_logger(monkeypatch, caplog, datasource_module, logging.WARNING):
         with pytest.raises(DataSourceConnectionError) as exc_info:
@@ -105,7 +108,7 @@ def test_mysql_connection_test_accepts_dict_cursor_rows(monkeypatch) -> None:
         {"Grants for creatorhub@%": "GRANT SELECT ON `creatorhub`.* TO 'creatorhub'@'%'"}
     ]
     connection.cursor.return_value.__enter__.return_value = cursor
-    monkeypatch.setattr("engine.connectivity.factory.pymysql.connect", lambda **_kwargs: connection)
+    monkeypatch.setattr("pymysql.connect", lambda **_kwargs: connection)
 
     result = run_test_connection({
         "db_type": "mysql",
@@ -256,7 +259,7 @@ def test_release_datasource_pool_error_never_leaks_exception_text(monkeypatch, c
             raise RuntimeError(f"pool cleanup password={sentinel}")
 
     monkeypatch.setattr(
-        "engine.sql.pool_registry.get_pool_registry",
+        "dlcs.dbfox_data.backend.sql.pool_registry.get_pool_registry",
         lambda: FailingPoolRegistry(),
     )
 
@@ -275,7 +278,7 @@ def test_release_datasource_pool_error_never_leaks_exception_text(monkeypatch, c
 
 
 def test_postgres_ssl_verify_full_requires_ca() -> None:
-    with pytest.raises(DataSourceConnectionError):
+    with pytest.raises(ConnectionConfigurationError):
         build_postgres_ssl_params({"ssl_enabled": True, "ssl_verify_identity": True})
 
 

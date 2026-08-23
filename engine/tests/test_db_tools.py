@@ -14,17 +14,17 @@ from engine.tools.builtin.catalog import (
     SchemaSearchTool,
 )
 from engine.runtime_composition import build_product_tool_registry
-from engine.tools.builtin.contracts import (
+from dlcs.dbfox_data.backend.tool_contracts import (
     ChartCreateInput,
-    EmptyInput,
+    DatabaseTargetInput,
     ResultProfileInput,
     SchemaListInput,
     SchemaSearchInput,
 )
-from engine.tools.builtin.results import (
-    _infer_chart_type,
-    _profile_rows,
-    _resolve_chart_suggestion,
+from dlcs.dbfox_data.backend.result_analysis import (
+    infer_chart_type,
+    profile_rows,
+    resolve_chart_suggestion,
 )
 from engine.tools.db.inspect import db_inspect
 from engine.tools.db.observe import _build_observation_context, db_observe
@@ -35,6 +35,7 @@ from engine.tools.runtime import ToolRunContext, ToolRuntime
 from engine.models import DomainTagRule, QueryHistory, SchemaSearchDoc, SchemaTable
 from engine.environment.schema_catalog_sync import ensure_catalog
 from engine.json_codec import byte_size
+from engine.resource import ResourceScopeRef
 
 
 def sync_schema(db_session, datasource_id: str):
@@ -170,7 +171,9 @@ def test_schema_list_queries_only_requested_cursor_page(
                     session_id="session_test",
                 ),
                 idempotency_key="schema-list-test",
-                resources={"database": db_session},
+                resources={("dbfox.data.database", str(datasource_id)): db_session},
+                scope_refs=(ResourceScopeRef(kind="dbfox.data.database", id=datasource_id, version=1),),
+                metadata_session=db_session,
             ),
         )
     finally:
@@ -213,7 +216,9 @@ def test_schema_list_cursor_preserves_same_named_tables_across_schemas(
             session_id="session_schema_identity",
         ),
         idempotency_key="schema-list-identity",
-        resources={"database": db_session},
+        resources={("dbfox.data.database", str(test_datasource.id)): db_session},
+        scope_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        metadata_session=db_session,
     )
 
     first = SchemaListTool().run(
@@ -262,7 +267,9 @@ def test_schema_search_deduplicates_by_full_schema_identity(
                 session_id="session_search_identity",
             ),
             idempotency_key="schema-search-identity",
-            resources={"database": db_session},
+            resources={("dbfox.data.database", str(test_datasource.id)): db_session},
+            scope_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+            metadata_session=db_session,
         ),
     )
 
@@ -283,14 +290,16 @@ def test_catalog_refresh_leaves_commit_to_tool_runtime(
 ) -> None:
     original_sync_at = test_datasource.last_sync_at
     result = CatalogRefreshTool().run(
-        EmptyInput(),
+        DatabaseTargetInput(),
         ToolRunContext.for_invocation(
             request=SimpleNamespace(
                 datasource_id=test_datasource.id,
                 session_id="session_catalog_refresh",
             ),
             idempotency_key="catalog-refresh",
-            resources={"database": db_session},
+            resources={("dbfox.data.database", str(test_datasource.id)): db_session},
+            scope_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+            metadata_session=db_session,
         ),
     )
 
@@ -306,7 +315,7 @@ def test_catalog_refresh_leaves_commit_to_tool_runtime(
 
 
 def test_chart_intent_uses_verified_result_columns() -> None:
-    suggestion = _resolve_chart_suggestion(
+    suggestion = resolve_chart_suggestion(
         ChartCreateInput(
             result_artifact_id="result-1",
             intent="Compare revenue by region",
@@ -330,7 +339,7 @@ def test_chart_intent_uses_verified_result_columns() -> None:
 
 def test_chart_intent_rejects_unverified_result_columns() -> None:
     with pytest.raises(ToolInputError, match="not present"):
-        _resolve_chart_suggestion(
+        resolve_chart_suggestion(
             ChartCreateInput(
                 result_artifact_id="result-1",
                 x="region",
@@ -343,24 +352,24 @@ def test_chart_intent_rejects_unverified_result_columns() -> None:
 
 def test_chart_auto_type_uses_values_instead_of_column_name_tokens() -> None:
     assert (
-        _infer_chart_type(
+        infer_chart_type(
             "bucket",
             [{"bucket": "2026-07-01"}, {"bucket": "2026-07-02"}],
         )
         == "line"
     )
     assert (
-        _infer_chart_type(
+        infer_chart_type(
             "month_name_but_categorical",
             [{"month_name_but_categorical": "enterprise"}],
         )
         == "bar"
     )
-    assert _infer_chart_type("axis", [{"axis": 1}, {"axis": 2}]) == "scatter"
+    assert infer_chart_type("axis", [{"axis": 1}, {"axis": 2}]) == "scatter"
 
 
 def test_result_profile_reports_quality_distribution_and_numeric_summary() -> None:
-    profiles = _profile_rows(
+    profiles = profile_rows(
         [
             {"region": "East", "revenue": 10},
             {"region": "East", "revenue": 20},
@@ -677,7 +686,9 @@ def test_data_preview_runtime_returns_actionable_safe_input_error(
             datasource_generation=1,
         ),
         idempotency_key="preview-invalid-column",
-        resources={"database": db_session},
+        resources={("dbfox.data.database", str(test_datasource.id)): db_session},
+        scope_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        metadata_session=db_session,
     )
 
     assert result.status == "failed"

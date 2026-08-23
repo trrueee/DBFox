@@ -2,20 +2,29 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from engine.agent.resource_refs import RequestedResourceRef
+from engine.agent.resource_refs import MAX_INPUT_RESOURCE_REFS, RequestedResourceRef
 from engine.agent.session import DeliveryMode
 
 
 class ConversationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
     project_id: str
-    datasource_id: str | None = None
     title: str | None = None
-    context_tables: list[str] = Field(default_factory=list)
+    resource_intents: list[RequestedResourceRef] = Field(
+        default_factory=list,
+        max_length=MAX_INPUT_RESOURCE_REFS,
+    )
 
 
 class ConversationPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
     title: str | None = None
-    context_tables: list[str] | None = None
+    resource_intents: list[RequestedResourceRef] | None = Field(
+        default=None,
+        max_length=MAX_INPUT_RESOURCE_REFS,
+    )
     archived: bool | None = None
 
 
@@ -25,7 +34,10 @@ class ConversationInputRequest(BaseModel):
     content: str = Field(min_length=1, max_length=20_000)
     idempotency_key: str = Field(min_length=8, max_length=256)
     delivery_mode: DeliveryMode = DeliveryMode.QUEUE
-    requested_resources: list[RequestedResourceRef] | None = None
+    requested_resources: list[RequestedResourceRef] | None = Field(
+        default=None,
+        max_length=MAX_INPUT_RESOURCE_REFS,
+    )
     selected_artifact_ids: list[str] = Field(default_factory=list, max_length=20)
     workspace_context: dict[str, object] = Field(default_factory=dict)
     llm_credential_id: str = Field(min_length=1, max_length=256)

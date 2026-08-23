@@ -15,6 +15,8 @@ from engine.tools.runtime.base import (
     ToolSpec,
 )
 from engine.tools.runtime.context import ToolRunContext
+from engine.tools.runtime.admission import ToolAdmissionContext, ToolAdmissionDecision
+from engine.tools.runtime.attempt import ResourceKey, ResourceScopeRef
 from engine.tools.runtime.executor import (
     ToolExecutionControl,
     ToolExecutionTask,
@@ -50,6 +52,10 @@ __all__ = [
     "ToolReconciliation",
     "ToolObservationProjection",
     "ToolRunContext",
+    "ToolAdmissionContext",
+    "ToolAdmissionDecision",
+    "ResourceKey",
+    "ResourceScopeRef",
     "ToolRegistry",
     "ToolResult",
     "ToolRuntime",

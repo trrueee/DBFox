@@ -8,6 +8,8 @@ from engine.app.safe_errors import (
     SafeLogOperation,
     fixed_error_detail,
     fixed_error_message,
+    log_extension_diagnostic,
+    log_extension_exception,
     log_unexpected_exception,
 )
 
@@ -64,3 +66,37 @@ def test_safe_error_helpers_never_render_arbitrary_exception_or_operation_text(c
     assert sentinel not in caplog.text
     assert "unexpected_internal_error" in caplog.text
     assert "RuntimeError" in caplog.text
+
+
+def test_extension_diagnostic_logs_only_namespaced_code_and_opaque_fingerprint(caplog) -> None:
+    sentinel = "dlc-sql-secret-sentinel"
+    logger = logging.Logger("test.extension_safe_log")
+    logger.setLevel(logging.WARNING)
+    logger.propagate = False
+    logger.addHandler(caplog.handler)
+    try:
+        log_extension_diagnostic(
+            logger,
+            operation="dbfox.data.sql_guardrail_parse",
+            subject=f"SELECT '{sentinel}'",
+            subject_type="sql",
+        )
+        log_extension_diagnostic(
+            logger,
+            operation=f"invalid-{sentinel}",
+            subject=sentinel,
+            subject_type="exception",
+        )
+        log_extension_exception(
+            logger,
+            operation="dbfox.data.sql_guardrail_parse",
+            exc=RuntimeError(sentinel),
+            fingerprint_subject=sentinel,
+        )
+    finally:
+        logger.removeHandler(caplog.handler)
+
+    assert "dbfox.data.sql_guardrail_parse" in caplog.text
+    assert "extension.unexpected.operation" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert sentinel not in caplog.text

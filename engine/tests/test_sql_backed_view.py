@@ -1,6 +1,6 @@
 import pytest
 
-from engine.sql.sql_backed_view import (
+from dlcs.dbfox_data.backend.sql.sql_backed_view import (
     SqlBackedFilter,
     SqlBackedSort,
     SqlBackedViewError,

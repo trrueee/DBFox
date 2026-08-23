@@ -39,7 +39,6 @@ const projectedRun = (
   input_id: `input-${id}`,
   session_sequence: 1,
   user_message_id: `message-${id}`,
-  datasource_id: "ds-1",
   question: "Analyze data",
   status,
   version: 1,
@@ -77,7 +76,7 @@ describe("conversationRepository", () => {
         {
           id: "conv-1",
           title: "Orders",
-          datasource_id: "ds-1",
+          project_id: "project-1",
           updated_at: "2026-06-21T00:00:00+00:00",
           last_message: "Done",
           message_count: 2,
@@ -99,8 +98,8 @@ describe("conversationRepository", () => {
       data: {
         protocol_version: 2,
         session: {
-          id: "conv-2", title: "New", datasource_id: "ds-1",
-          context_tables: ["orders"], context_epoch: 0, selected_artifact_id: null,
+          id: "conv-2", project_id: "project-1", title: "New",
+          resource_intents: [{ kind: "dbfox.data.database", id: "ds-1" }], context_epoch: 0, selected_artifact_id: null,
         },
         runs: [],
         items: [],
@@ -111,14 +110,13 @@ describe("conversationRepository", () => {
 
     const result = await createConversation({
       project_id: "project-1",
-      datasource_id: "ds-1",
       title: "New",
-      context_tables: ["orders"],
+      resource_intents: [{ kind: "dbfox.data.database", id: "ds-1" }],
     });
 
     expect(result.id).toBe("conv-2");
     expect(sdkMocks.createConversation).toHaveBeenCalledWith({
-      body: { project_id: "project-1", datasource_id: "ds-1", title: "New", context_tables: ["orders"] },
+      body: { project_id: "project-1", title: "New", resource_intents: [{ kind: "dbfox.data.database", id: "ds-1" }] },
       throwOnError: true,
     });
   });
@@ -130,9 +128,8 @@ describe("conversationRepository", () => {
         session: {
           id: "conv-p4",
           project_id: "proj-100",
-          datasource_id: null,
           title: "Project-scoped session",
-          context_tables: [],
+          resource_intents: [],
           context_epoch: 0,
           selected_artifact_id: null,
         },
@@ -146,14 +143,13 @@ describe("conversationRepository", () => {
     const result = await createConversation({
       project_id: "proj-100",
       title: "Project-scoped session",
-      context_tables: [],
+      resource_intents: [],
     });
 
     expect(result.id).toBe("conv-p4");
     expect(result.project_id).toBe("proj-100");
-    expect(result.datasource_id).toBeNull();
     expect(sdkMocks.createConversation).toHaveBeenCalledWith({
-      body: { project_id: "proj-100", title: "Project-scoped session", context_tables: [] },
+      body: { project_id: "proj-100", title: "Project-scoped session", resource_intents: [] },
       throwOnError: true,
     });
   });
@@ -163,8 +159,8 @@ describe("conversationRepository", () => {
       data: {
         protocol_version: 1,
         session: {
-          id: "conv-old", title: "Old", datasource_id: "ds-1",
-          context_tables: [], context_epoch: 0, selected_artifact_id: null,
+          id: "conv-old", project_id: "project-1", title: "Old",
+          resource_intents: [], context_epoch: 0, selected_artifact_id: null,
         },
         runs: [],
         items: [],
@@ -175,8 +171,7 @@ describe("conversationRepository", () => {
 
     await expect(createConversation({
       project_id: "project-1",
-      datasource_id: "ds-1",
-      context_tables: [],
+      resource_intents: [],
     })).rejects.toThrow("智能分析返回了无法识别的数据，请刷新后重试。");
   });
 

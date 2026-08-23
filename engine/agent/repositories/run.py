@@ -1,6 +1,7 @@
 """Run/Turn state transitions and atomic terminal response persistence."""
 
 from __future__ import annotations
+from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
 
 import logging
 from datetime import UTC, datetime
@@ -13,6 +14,7 @@ from engine.agent.events import RuntimeEventType
 from engine.agent.repositories.evidence import EvidenceRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
+from engine.agent.resource_refs import single_run_resource_ref
 from engine.agent.response import ComposedResponse
 from engine.agent.run import RunStatus, SessionLeaseConflict, TERMINAL_RUN_STATUSES
 from engine.agent.run_item import (
@@ -786,7 +788,8 @@ class RunRepository:
         response: ComposedResponse,
         delta: dict[str, Any],
     ) -> None:
-        if run.datasource_id is None:
+        database_ref = single_run_resource_ref(self.session, run, DATABASE_RESOURCE_KIND)
+        if database_ref is None:
             aggregate.context_epoch = int(aggregate.context_epoch or 0) + 1
             self.session.flush()
             return
@@ -803,8 +806,8 @@ class RunRepository:
                 previous = loaded if isinstance(loaded, dict) else {}
             except JsonCodecError:
                 previous = {}
-        current_datasource_id = str(run.datasource_id)
-        current_generation = int(run.datasource_generation or 0)
+        current_datasource_id = database_ref.id
+        current_generation = database_ref.version or 0
         same_generation = (
             previous.get("datasource_id") == current_datasource_id
             and previous.get("datasource_generation") == current_generation
@@ -869,7 +872,6 @@ class RunRepository:
             self.session.add(
                 AgentSessionMemory(
                     session_id=str(aggregate.id),
-                    datasource_id=str(aggregate.datasource_id) if aggregate.datasource_id else None,
                     memory_json=_json(memory),
                 )
             )

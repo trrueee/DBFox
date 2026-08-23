@@ -31,7 +31,7 @@ def test_sqlite_catalog_reflection_returns_tables_columns_and_foreign_keys(
         test_datasource.id,
     )
 
-    assert inventory.datasource_id == test_datasource.id
+    assert inventory.database_resource_id == test_datasource.id
     assert inventory.dialect == "sqlite"
     assert inventory.table_count >= 20
     orders = next(table for table in inventory.tables if table.table_name == "orders")

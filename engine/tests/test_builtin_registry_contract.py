@@ -1,8 +1,7 @@
-"""P0.5/P1 contracts for the built-in Tool Registry.
+"""Contracts for the Kernel-owned default Tool Registry.
 
-These tests freeze the current registration surface before extension ownership
-changes, then prove that the owner-scoped composition path keeps the exact same
-materialization contract.
+System DLC tools are intentionally absent until their signed package is
+enabled and compiled into a RuntimeContributionSnapshot.
 """
 
 from __future__ import annotations
@@ -47,7 +46,7 @@ class _EchoTool(BaseTool[_EchoInput, _EchoOutput]):
 
 
 FROZEN_MATERIALIZATION_HASH = (
-    "2f190070c69582576d51fb3d7d11049921f44dd9eab1181066bffbcb102d7e07"
+    "277a162d2c9e1b1bcaddc19e8194b5a39334689782b7cecb7feb9b3bd75c87e7"
 )
 
 FROZEN_BUILTIN_NAMES = (
@@ -57,9 +56,6 @@ FROZEN_BUILTIN_NAMES = (
     "conversation_read",
     "conversation_search",
     "data_preview",
-    "file_read",
-    "file_search",
-    "file_write_patch",
     "remote_job_cancel",
     "remote_job_status",
     "remote_job_submit",
@@ -83,9 +79,6 @@ FROZEN_OWNERS = {
     "catalog_refresh": "dbfox.data",
     "chart_create": "dbfox.data",
     "data_preview": "dbfox.data",
-    "file_read": "dbfox.workspace",
-    "file_search": "dbfox.workspace",
-    "file_write_patch": "dbfox.workspace",
     "result_inspect": "dbfox.data",
     "result_profile": "dbfox.data",
     "schema_inspect": "dbfox.data",

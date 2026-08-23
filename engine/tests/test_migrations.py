@@ -18,6 +18,9 @@ from sqlalchemy.orm import sessionmaker
 
 from engine.db import Base
 from engine.migrations.sqlite_mutex import SQLITE_MIGRATION_LOCKED, sqlite_migration_mutex
+from engine.migrations.versions.d1e2f3a4b5c7_namespace_data_database_resource_kind import (
+    _rewrite_resource_kind,
+)
 from engine.models import (
     AgentMessage,
     FoundationRuntimeState,
@@ -30,7 +33,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "d5e6f7a8b9c1"
+FOUNDATION_HEAD_REVISION = "d1e2f3a4b5c7"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -196,6 +199,9 @@ def _assert_final_contract(engine) -> None:
         "id",
         "credential_ids_json",
         "status",
+        "owner_id",
+        "owner_operation",
+        "owner_project_id",
         "version",
         "created_at",
         "expires_at",
@@ -224,8 +230,9 @@ def _assert_final_contract(engine) -> None:
 
     assert "environment_id" not in _column_names(engine, "backup_records")
     assert "memory_v4_json" in _column_names(engine, "agent_session_memories")
+    assert "datasource_id" not in _column_names(engine, "agent_session_memories")
     assert "schema_version" in _column_names(engine, "agent_artifacts")
-    assert "workspace_root" in _column_names(engine, "projects")
+    assert "workspace_root" not in _column_names(engine, "projects")
 
     assert {
         "llm_credential_id",
@@ -233,13 +240,15 @@ def _assert_final_contract(engine) -> None:
         "model_name",
         "input_id",
         "session_sequence",
-        "datasource_generation",
         "version",
         "lease_token",
         "request_json",
         "result_json",
         "cancel_requested",
     }.issubset(_column_names(engine, "agent_runs"))
+    assert {"datasource_id", "datasource_generation"}.isdisjoint(
+        _column_names(engine, "agent_runs")
+    )
 
     assert {
         "agent_session_inputs",
@@ -280,6 +289,13 @@ def _assert_final_contract(engine) -> None:
         "selected_artifact_id",
         "context_epoch",
     }.issubset(_column_names(engine, "agent_sessions"))
+    assert {"datasource_id", "context_tables_json"}.isdisjoint(
+        _column_names(engine, "agent_sessions")
+    )
+    input_columns = {
+        item["name"]: item for item in inspect(engine).get_columns("agent_session_inputs")
+    }
+    assert input_columns["resource_refs_json"]["nullable"] is False
 
     assert not any(name.startswith("agent_runtime_") for name in tables)
     assert {"agent_checkpoints", "agent_trace_events"}.isdisjoint(tables)
@@ -354,6 +370,390 @@ def test_fresh_upgrade_has_the_complete_foundation_v2_contract(monkeypatch, tmp_
             assert connection.execute(text("SELECT COUNT(*) FROM foundation_runtime_state")).scalar_one() == 0
         _assert_final_contract(engine)
         command.check(_alembic_config(database_url))
+    finally:
+        engine.dispose()
+
+
+def test_extension_api_v2_invalidates_only_retired_catalog_memory_projection(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "memory-resource-ref-cutover.db")
+    _upgrade(monkeypatch, database_url, "c0d1e2f3a4b9")
+    engine = create_engine(database_url)
+    payload = {
+        "schema_version": 4,
+        "core_policy_version": 1,
+        "core": {
+            "referenced_artifact_ids": ["artifact-1"],
+            "runtime_evidence_references": [],
+            "advisory_open_questions": [],
+        },
+        "projections": [
+            {
+                "extension_id": "dbfox.data",
+                "projection_id": "dbfox.catalog.working_state",
+                "schema_version": 1,
+                "contract_fingerprint": "retired",
+                "projected_through_session_sequence": 1,
+                "state_hash": "retired",
+                "scope": {
+                    "datasource_id": "database-1",
+                    "datasource_generation": 1,
+                    "catalog_revision": 3,
+                },
+                "state": {},
+            },
+            {
+                "extension_id": "acme.notes",
+                "projection_id": "acme.notes.summary",
+                "schema_version": 1,
+                "contract_fingerprint": "keep",
+                "projected_through_session_sequence": 1,
+                "state_hash": "keep",
+                "scope": {},
+                "state": {"note": "preserve"},
+            },
+        ],
+    }
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO projects (
+                        id, name, description, status, created_at, updated_at
+                    ) VALUES (
+                        'project-memory-v2', 'Memory v2', '', 'active',
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO agent_sessions (
+                        id, project_id, title, input_sequence, event_sequence,
+                        event_floor_sequence, lease_token, context_epoch,
+                        message_sequence, created_at, updated_at
+                    ) VALUES (
+                        'session-memory-v2', 'project-memory-v2', 'Memory',
+                        0, 0, 0, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO agent_session_memories (
+                        id, session_id, memory_json, memory_v4_json,
+                        created_at, updated_at
+                    ) VALUES (
+                        'memory-resource-ref-cutover', 'session-memory-v2', '{}',
+                        :payload, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    """
+                ),
+                {"payload": json.dumps(payload)},
+            )
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            encoded = connection.execute(
+                text(
+                    "SELECT memory_v4_json FROM agent_session_memories "
+                    "WHERE id = 'memory-resource-ref-cutover'"
+                )
+            ).scalar_one()
+        migrated = json.loads(encoded)
+        assert migrated["core"]["referenced_artifact_ids"] == ["artifact-1"]
+        assert migrated["projections"] == [payload["projections"][1]]
+    finally:
+        engine.dispose()
+
+
+def test_workspace_root_drop_reimports_rows_written_after_initial_cutover(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "workspace-final-cutover.db"
+    database_url = _sqlite_url(database_path)
+    _upgrade(monkeypatch, database_url, "b9c0d1e2f3a5")
+    workspace = tmp_path / "late-workspace"
+    workspace.mkdir()
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text("""
+                    INSERT INTO projects (
+                        id, name, description, status, workspace_root,
+                        created_at, updated_at
+                    ) VALUES (
+                        'late-project', 'Late Project', '', 'active', :workspace_root,
+                        '2026-08-22 00:00:00', '2026-08-22 00:00:00'
+                    )
+                """),
+                {"workspace_root": str(workspace)},
+            )
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        assert "workspace_root" not in _column_names(engine, "projects")
+    finally:
+        engine.dispose()
+
+    state_database = (
+        database_path.parent
+        / "dlcs"
+        / "data"
+        / "dbfox.workspace"
+        / "state.sqlite3"
+    )
+    with sqlite3.connect(state_database) as connection:
+        row = connection.execute(
+            "SELECT project_id, root_path FROM workspace_bindings WHERE project_id = ?",
+            ("late-project",),
+        ).fetchone()
+    assert row == ("late-project", str(workspace.resolve()))
+
+
+def test_frozen_resource_ref_cutover_backfills_null_to_empty_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "resource-ref-cutover.db")
+    _upgrade(monkeypatch, database_url, "c0d1e2f3a4b7")
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("""
+                INSERT INTO agent_sessions (
+                    id, title, input_sequence, event_sequence,
+                    event_floor_sequence, lease_token, message_sequence,
+                    context_epoch, created_at, updated_at
+                ) VALUES (
+                    'legacy-empty-authority', 'Legacy', 0, 0, 0, 0, 0, 0,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+            """))
+            connection.execute(text("""
+                INSERT INTO agent_session_inputs (
+                    id, session_id, sequence, idempotency_key, content,
+                    delivery_mode, selected_artifact_ids_json,
+                    workspace_context_json, resource_refs_json, status,
+                    admitted_at
+                ) VALUES (
+                    'legacy-input', 'legacy-empty-authority', 1, 'legacy-key',
+                    'legacy input', 'queue', '[]', '{}', NULL, 'admitted',
+                    CURRENT_TIMESTAMP
+                )
+            """))
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            assert connection.execute(text(
+                "SELECT resource_refs_json FROM agent_session_inputs "
+                "WHERE id = 'legacy-input'"
+            )).scalar_one() == "[]"
+        columns = {
+            item["name"]: item
+            for item in inspect(engine).get_columns("agent_session_inputs")
+        }
+        assert columns["resource_refs_json"]["nullable"] is False
+    finally:
+        engine.dispose()
+
+
+def test_conversation_resource_intent_migration_seeds_only_explicit_datasource(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "conversation-resource-intent.db")
+    _upgrade(monkeypatch, database_url, "d5e6f7a8b9c1")
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("""
+                INSERT INTO projects (
+                    id, name, description, status, workspace_root, created_at, updated_at
+                ) VALUES (
+                    'project-1', 'Project 1', '', 'active', '/tmp/workspace',
+                    '2026-08-22 00:00:00', '2026-08-22 00:00:00'
+                )
+            """))
+            connection.execute(text("""
+                INSERT INTO data_sources (
+                    id, project_id, name, db_type, host, port, database_name, username,
+                    connection_generation, ssh_enabled, ssh_port, ssl_enabled,
+                    ssl_verify_identity, connection_mode, is_read_only, env, status,
+                    created_at, updated_at
+                ) VALUES (
+                    'database-1', 'project-1', 'Database 1', 'sqlite', 'localhost', 0,
+                    ':memory:', '', 1, 0, 22, 0, 0, 'direct', 1, 'dev', 'active',
+                    '2026-08-22 00:00:00', '2026-08-22 00:00:00'
+                )
+            """))
+            connection.execute(text("""
+                INSERT INTO agent_sessions (
+                    id, project_id, datasource_id, title, created_at, updated_at
+                ) VALUES
+                    ('conversation-data', 'project-1', 'database-1', 'Data',
+                     '2026-08-22 00:00:00', '2026-08-22 00:00:00'),
+                    ('conversation-workspace', 'project-1', NULL, 'Workspace',
+                     '2026-08-22 00:00:00', '2026-08-22 00:00:00')
+            """))
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            rows = connection.execute(text("""
+                SELECT conversation_id, kind, resource_id, position
+                FROM conversation_resource_intents
+                ORDER BY conversation_id, position
+            """)).all()
+        assert rows == [
+            ("conversation-data", "dbfox.data.database", "database-1", 0)
+        ]
+        assert {"datasource_id", "context_tables_json"}.isdisjoint(
+            _column_names(engine, "agent_sessions")
+        )
+    finally:
+        engine.dispose()
+
+
+def test_data_resource_kind_migration_rewrites_only_resource_kind_fields() -> None:
+    payload = {
+        "database": "warehouse",
+        "resource_refs": [
+            {"kind": "database", "id": "db-1", "version": 3},
+            {"kind": "dbfox.workspace.root", "id": "workspace-1", "version": 1},
+        ],
+        "nested": {"selection": {"kind": "database", "id": "db-2"}},
+    }
+
+    rewritten, changed = _rewrite_resource_kind(
+        payload,
+        source="database",
+        target="dbfox.data.database",
+    )
+
+    assert changed is True
+    assert rewritten == {
+        "database": "warehouse",
+        "resource_refs": [
+            {"kind": "dbfox.data.database", "id": "db-1", "version": 3},
+            {"kind": "dbfox.workspace.root", "id": "workspace-1", "version": 1},
+        ],
+        "nested": {
+            "selection": {"kind": "dbfox.data.database", "id": "db-2"}
+        },
+    }
+
+
+def test_data_resource_kind_migration_converges_durable_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "data-resource-kind.db")
+    _upgrade(monkeypatch, database_url, "c0d1e2f3a4ba")
+    old_ref = {"kind": "database", "id": "db-1", "version": 7}
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("""
+                INSERT INTO agent_sessions (
+                    id, title, input_sequence, event_sequence,
+                    event_floor_sequence, lease_token, message_sequence,
+                    context_epoch, created_at, updated_at
+                ) VALUES (
+                    'resource-kind-session', 'Resource kind', 1, 0, 0, 0, 0, 0,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+            """))
+            connection.execute(
+                text("""
+                    INSERT INTO agent_session_inputs (
+                        id, session_id, sequence, idempotency_key, content,
+                        delivery_mode, selected_artifact_ids_json,
+                        workspace_context_json, resource_refs_json, status,
+                        admitted_at
+                    ) VALUES (
+                        'resource-kind-input', 'resource-kind-session', 1,
+                        'resource-kind-key', 'inspect billing', 'queue', '[]', '{}',
+                        :resource_refs, 'admitted', CURRENT_TIMESTAMP
+                    )
+                """),
+                {"resource_refs": json.dumps([old_ref])},
+            )
+            connection.execute(
+                text("""
+                    INSERT INTO agent_session_memories (
+                        id, session_id, memory_json, memory_v4_json,
+                        created_at, updated_at
+                    ) VALUES (
+                        'resource-kind-memory', 'resource-kind-session', '{}',
+                        :memory, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                """),
+                {"memory": json.dumps({"active_resource": old_ref})},
+            )
+            connection.execute(text("""
+                INSERT INTO conversation_resource_intents (
+                    id, conversation_id, kind, resource_id, position, created_at
+                ) VALUES
+                    ('legacy-kind-intent', 'resource-kind-session', 'database',
+                     'db-1', 0, CURRENT_TIMESTAMP),
+                    ('canonical-kind-intent', 'resource-kind-session',
+                     'dbfox.data.database', 'db-1', 1, CURRENT_TIMESTAMP)
+            """))
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            input_refs = json.loads(connection.execute(text(
+                "SELECT resource_refs_json FROM agent_session_inputs "
+                "WHERE id = 'resource-kind-input'"
+            )).scalar_one())
+            memory = json.loads(connection.execute(text(
+                "SELECT memory_v4_json FROM agent_session_memories "
+                "WHERE id = 'resource-kind-memory'"
+            )).scalar_one())
+            intents = connection.execute(text(
+                "SELECT kind, resource_id FROM conversation_resource_intents "
+                "WHERE conversation_id = 'resource-kind-session'"
+            )).all()
+        canonical_ref = {
+            "kind": "dbfox.data.database",
+            "id": "db-1",
+            "version": 7,
+        }
+        assert input_refs == [canonical_ref]
+        assert memory == {"active_resource": canonical_ref}
+        assert intents == [("dbfox.data.database", "db-1")]
     finally:
         engine.dispose()
 
@@ -1989,6 +2389,9 @@ def test_p4_downgrade_succeeds_for_data_backed_rows(
     """A. P4 DB containing only Data-backed Session/Run/Memory -> downgrade succeeds."""
     database_url = _sqlite_url(tmp_path / "p4-downgrade-data-backed.db")
     _upgrade(monkeypatch, database_url)
+    # Re-enter the historical P4 schema under test. The current head has
+    # physically removed Conversation.datasource_id.
+    _downgrade(monkeypatch, database_url, "a8b9c0d1e2f4")
 
     engine = create_engine(database_url)
     try:
@@ -2054,6 +2457,7 @@ def test_p4_downgrade_fails_explicitly_for_workspace_only_or_null_datasource(
     """B, C, D. P4 DB containing null datasource -> downgrade explicitly fails before destructive mutation."""
     database_url = _sqlite_url(tmp_path / "p4-downgrade-null-ds.db")
     _upgrade(monkeypatch, database_url)
+    _downgrade(monkeypatch, database_url, "a8b9c0d1e2f4")
 
     engine = create_engine(database_url)
     try:

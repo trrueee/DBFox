@@ -5,7 +5,6 @@ import type {
   DlcContributionSet,
 } from "./types";
 import type { ResourceConnectorContribution, ConnectorContext } from "../resources/types";
-import type { RequestedResourceContributor } from "../resources/requestedResourceComposition";
 import type { DockViewContribution, DockRenderContext, DockViewContext } from "../dock/types";
 import type {
   ArtifactRendererContribution,
@@ -15,8 +14,18 @@ import type {
 import { DlcErrorBoundary } from "./DlcErrorBoundary";
 import type { WorkspaceDockTab } from "../../types/workspace";
 import { fetchEnginePath } from "../../lib/api/client";
+import { pickDesktopProjectFolder } from "../../lib/desktopHost";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import type { DlcOperationInvokeOptions } from "./types";
+import type {
+  CredentialEnrollmentBatchResult,
+  CredentialEnrollmentInput,
+} from "../../../../sdk/frontend/index";
+import {
+  addCurrentConversationContextResource,
+  getCurrentConversationContextSelection,
+  removeCurrentConversationContextResource,
+} from "../conversation/conversationContextSelection";
 
 /**
  * Ensures global SDK object is mounted on window for dynamic DLC scripts.
@@ -44,6 +53,12 @@ interface ExtensionHostServices {
     options?: DlcOperationInvokeOptions,
   ): Promise<TOutput>;
   openDockTab(view: WorkspaceDockTab, activate?: boolean): void;
+  pickFolder?(): Promise<string | null>;
+  enrollCredentials?(
+    dlcId: string,
+    credentials: readonly CredentialEnrollmentInput[],
+    signal?: AbortSignal,
+  ): Promise<CredentialEnrollmentBatchResult>;
 }
 
 async function invokeBoundDlcOperation<TOutput>(
@@ -59,7 +74,12 @@ async function invokeBoundDlcOperation<TOutput>(
     `/dlcs/${encodeURIComponent(dlcId)}/operations/${encodeURIComponent(operationName)}${query}`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(options?.credentialLeaseId
+          ? { "X-Credential-Lease-Id": options.credentialLeaseId }
+          : {}),
+      },
       body: JSON.stringify(input ?? {}),
       signal: options?.signal,
     },
@@ -83,11 +103,33 @@ async function invokeBoundDlcOperation<TOutput>(
   return await response.json() as TOutput;
 }
 
+async function enrollBoundDlcCredentials(
+  dlcId: string,
+  credentials: readonly CredentialEnrollmentInput[],
+  signal?: AbortSignal,
+): Promise<CredentialEnrollmentBatchResult> {
+  const response = await fetchEnginePath(
+    `/dlcs/${encodeURIComponent(dlcId)}/credentials/batch`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credentials }),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`DLC credential enrollment failed with HTTP ${response.status}`);
+  }
+  return await response.json() as CredentialEnrollmentBatchResult;
+}
+
 const DEFAULT_EXTENSION_HOST_SERVICES: ExtensionHostServices = {
   invokeOperation: invokeBoundDlcOperation,
   openDockTab: (view, activate) => {
     useWorkspaceStore.getState().openDockTab(view, activate);
   },
+  pickFolder: pickDesktopProjectFolder,
+  enrollCredentials: enrollBoundDlcCredentials,
 };
 
 function DlcRenderCallback({ render }: { render: () => React.ReactNode }) {
@@ -108,7 +150,6 @@ export function createStagedExtensionHost(
   services: ExtensionHostServices = DEFAULT_EXTENSION_HOST_SERVICES,
 ): StagedExtensionHostResult {
   const connectors: ResourceConnectorContribution[] = [];
-  const requestedResources: RequestedResourceContributor[] = [];
   const dockViews: DockViewContribution[] = [];
   const artifactRenderers: ArtifactRendererContribution<unknown>[] = [];
 
@@ -143,21 +184,24 @@ export function createStagedExtensionHost(
         connectors.push(safeContribution);
       },
     },
-    requestedResources: {
-      register(contributor: RequestedResourceContributor): void {
-        if (typeof contributor !== "function") {
-          throw new Error(
-            `[DLC ${dlcId}] Invalid requested resource contributor: must be a function`,
-          );
-        }
-        requestedResources.push((context) => {
-          try {
-            return contributor(context);
-          } catch (error) {
-            reportCallbackFailure(dlcId, "requestedResources", error);
-            return { complete: false };
-          }
-        });
+    contextSelection: {
+      isSelected: (ref) => getCurrentConversationContextSelection().some(
+        (candidate) => candidate.kind === ref.kind && candidate.id === ref.id,
+      ),
+      list: () => getCurrentConversationContextSelection(),
+      add: (ref) => addCurrentConversationContextResource(ref),
+      remove: (ref) => removeCurrentConversationContextResource(ref),
+    },
+    nativeDialogs: {
+      pickFolder: () => (services.pickFolder ?? pickDesktopProjectFolder)(),
+    },
+    credentials: {
+      enrollBatch(credentials, options) {
+        return (services.enrollCredentials ?? enrollBoundDlcCredentials)(
+          dlcId,
+          credentials,
+          options?.signal,
+        );
       },
     },
     dockViews: {
@@ -259,7 +303,6 @@ export function createStagedExtensionHost(
     getContributions(): DlcContributionSet {
       return {
         connectors: Object.freeze([...connectors]),
-        requestedResources: Object.freeze([...requestedResources]),
         dockViews: Object.freeze([...dockViews]),
         artifactRenderers: Object.freeze([...artifactRenderers]),
       };

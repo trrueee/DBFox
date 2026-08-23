@@ -58,7 +58,7 @@ def build_test_dlc_archive(
         "displayName": "Acme Test DLC",
         "publisher": "acme",
         "description": "Test DLC for automated test suite",
-        "extensionApiVersion": "1",
+        "extensionApiVersion": "2",
         "requiresDbfox": ">=1.0.0",
         "entrypoints": {
             "backend": "backend/entry.py",

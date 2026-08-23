@@ -13,7 +13,7 @@ from engine.errors import DataSourceConnectionError
 from engine.models import DEFAULT_PROJECT_ID, DataSource, Project
 from engine.schemas.datasource import DataSourceUpdateRequest
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
-from engine.sql.pool_registry import get_pool_registry
+from dlcs.dbfox_data.backend.sql.pool_registry import get_pool_registry
 from engine.tunnel import TunnelManager
 
 

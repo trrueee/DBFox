@@ -17,6 +17,9 @@ from engine.models import CredentialLeaseRecord
 from engine.schemas.credentials import CredentialEnrollmentBatchRequest, CredentialEnrollmentRequest
 from engine.security.credential_lease import CredentialLeaseSaga, CredentialLeaseStatus
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
+from engine.tools.builtin.data_capability import (
+    legacy_data_credential_reference_probe,
+)
 
 
 def test_enrollment_returns_only_an_opaque_credential_reference(monkeypatch) -> None:
@@ -97,6 +100,8 @@ def test_batch_enrollment_returns_a_server_owned_lease_for_every_reference(db_se
     ).claim(
         enrollment.lease_id,
         {reference.id for reference in enrollment.credentials},
+        owner_id="dbfox.data",
+        owner_operation="test.batch",
     )
 
 
@@ -136,10 +141,19 @@ def test_reconcile_commits_claimed_lease_when_datasource_owns_reference(
         kind=CredentialKind.DATASOURCE_PASSWORD,
         secret="database-secret",
     )
-    saga = CredentialLeaseSaga(db_session, vault)
+    saga = CredentialLeaseSaga(
+        db_session,
+        vault,
+        reference_probes={"dbfox.data": legacy_data_credential_reference_probe},
+    )
     lease_id = saga.issue({credential_id})
     db_session.commit()
-    saga.claim(lease_id, {credential_id})
+    saga.claim(
+        lease_id,
+        {credential_id},
+        owner_id="dbfox.data",
+        owner_operation="test.recovery",
+    )
     test_datasource.password_credential_id = credential_id
     db_session.commit()
 
@@ -156,10 +170,19 @@ def test_reconcile_releases_unowned_claim_after_interrupted_operation(db_session
         kind=CredentialKind.DATASOURCE_PASSWORD,
         secret="temporary-secret",
     )
-    saga = CredentialLeaseSaga(db_session, vault)
+    saga = CredentialLeaseSaga(
+        db_session,
+        vault,
+        reference_probes={"dbfox.data": lambda _db, _refs: False},
+    )
     lease_id = saga.issue({credential_id})
     db_session.commit()
-    saga.claim(lease_id, {credential_id})
+    saga.claim(
+        lease_id,
+        {credential_id},
+        owner_id="dbfox.data",
+        owner_operation="test.interrupted",
+    )
     db_session.commit()
 
     saga.reconcile()
@@ -167,6 +190,35 @@ def test_reconcile_releases_unowned_claim_after_interrupted_operation(db_session
     lease = db_session.get(CredentialLeaseRecord, lease_id)
     assert lease is not None and lease.status == CredentialLeaseStatus.RELEASED.value
     assert vault.get(credential_id) is None
+
+
+def test_reconcile_preserves_claim_when_exact_capability_owner_is_unavailable(
+    db_session,
+) -> None:
+    vault = InMemoryCredentialVault()
+    credential_id = vault.put(
+        kind=CredentialKind.DATASOURCE_PASSWORD,
+        secret="owner-temporarily-disabled",
+    )
+    saga = CredentialLeaseSaga(db_session, vault)
+    lease_id = saga.issue({credential_id})
+    db_session.commit()
+    saga.claim(
+        lease_id,
+        {credential_id},
+        owner_id="dbfox.data",
+        owner_operation="profiles.create",
+        owner_project_id="project-a",
+    )
+    db_session.commit()
+
+    saga.reconcile()
+
+    lease = db_session.get(CredentialLeaseRecord, lease_id)
+    assert lease is not None
+    assert lease.status == CredentialLeaseStatus.CLAIMED.value
+    assert lease.owner_id == "dbfox.data"
+    assert vault.get(credential_id) == "owner-temporarily-disabled"
 
 
 def test_reconcile_releases_expired_pending_lease_after_process_restart(db_session) -> None:
@@ -273,8 +325,13 @@ def test_committed_lease_cannot_be_released(db_session) -> None:
     saga = CredentialLeaseSaga(db_session, vault)
     lease_id = saga.issue({credential_id})
     db_session.commit()
-    saga.claim(lease_id, {credential_id})
-    saga.commit_claim(lease_id)
+    saga.claim(
+        lease_id,
+        {credential_id},
+        owner_id="dbfox.data",
+        owner_operation="test.committed",
+    )
+    saga.commit_claim(lease_id, owner_id="dbfox.data")
     db_session.commit()
 
     with pytest.raises(DBFoxError) as exc_info:
@@ -306,6 +363,11 @@ def test_claim_rejects_wrong_or_expired_ownership(
         db_session.commit()
 
     with pytest.raises(DBFoxError) as exc_info:
-        saga.claim(lease_id, credential_ids)
+        saga.claim(
+            lease_id,
+            credential_ids,
+            owner_id="dbfox.data",
+            owner_operation="test.invalid",
+        )
 
     assert exc_info.value.code == "CREDENTIAL_LEASE_INVALID"

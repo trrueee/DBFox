@@ -1,49 +1,29 @@
+"""Legacy Core metadata loader for the Data DLC dialect value contract.
+
+Delete this boundary when Data execution resolves ``DatabaseResource`` from
+the System DLC state instead of the legacy Core ``DataSource`` table.
+"""
+
 from __future__ import annotations
 
-from typing import Literal
-
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from dlcs.dbfox_data.backend.sql.dialect_context import (
+    DatabaseDialectContext,
+    canonical_sql_dialect,
+)
 from engine.models import DataSource
 
 
-SqlDialect = Literal["mysql", "postgresql", "sqlite", "duckdb"]
+def dialect_context_from_datasource(datasource: DataSource) -> DatabaseDialectContext:
+    return DatabaseDialectContext(
+        resource_id=str(datasource.id),
+        dialect=canonical_sql_dialect(str(datasource.db_type or "mysql")),
+    )
 
 
-def canonical_sql_dialect(value: str | None) -> SqlDialect:
-    raw = (value or "mysql").strip().lower()
-    if raw in {"postgres", "postgresql"}:
-        return "postgresql"
-    if raw == "sqlite":
-        return "sqlite"
-    if raw == "duckdb":
-        return "duckdb"
-    return "mysql"
-
-
-class DialectContext(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    datasource_id: str
-    dialect: SqlDialect
-
-    @property
-    def sqlglot_dialect(self) -> str:
-        if self.dialect == "postgresql":
-            return "postgres"
-        return self.dialect
-
-    @classmethod
-    def from_datasource(cls, datasource: DataSource) -> "DialectContext":
-        return cls(
-            datasource_id=str(datasource.id),
-            dialect=canonical_sql_dialect(str(datasource.db_type or "mysql")),
-        )
-
-    @classmethod
-    def from_datasource_id(cls, db: Session, datasource_id: str) -> "DialectContext":
-        datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
-        if datasource is None:
-            return cls(datasource_id=datasource_id, dialect="mysql")
-        return cls.from_datasource(datasource)
+def load_dialect_context(db: Session, resource_id: str) -> DatabaseDialectContext:
+    datasource = db.query(DataSource).filter(DataSource.id == resource_id).first()
+    if datasource is None:
+        return DatabaseDialectContext(resource_id=resource_id, dialect="mysql")
+    return dialect_context_from_datasource(datasource)

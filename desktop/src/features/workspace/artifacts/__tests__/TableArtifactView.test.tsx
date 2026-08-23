@@ -12,7 +12,7 @@ vi.mock("../../../../lib/api/agent", () => ({
 }));
 
 const liveMetadata = {
-  consistency: "live_reexecution" as const,
+  consistency: "durable_snapshot" as const,
   originalExecutedAt: "2026-07-20T00:00:00Z",
   viewExecutedAt: "2026-07-20T00:00:01Z",
   viewExecutionId: "view-test",
@@ -123,8 +123,7 @@ describe("TableArtifactView", () => {
     expect(screen.getByText("结果已截断")).toBeTruthy();
     expect(screen.getByText("仅展示前 10 行")).toBeTruthy();
     expect(screen.getByText("可继续筛选")).toBeTruthy();
-    expect(screen.getByText(/分析取数/)).toBeTruthy();
-    expect(screen.getByText(/当前重查/)).toBeTruthy();
+    expect(screen.getByText("耐久快照")).toBeTruthy();
     expect(screen.getByText("2026-06-10")).toBeTruthy();
     expect(screen.queryByText("2026-06-11")).toBeNull();
   });

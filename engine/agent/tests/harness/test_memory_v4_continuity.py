@@ -264,7 +264,7 @@ def _execute_run(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=datasource_id, version=generation),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=datasource_id, version=generation),),
         content=content,
         idempotency_key=idempotency_key,
         llm_credential_id="deterministic-fixture",
@@ -290,7 +290,7 @@ def _execute_run(
 
 def _new_session(db_session, datasource_id: str, case_id: str) -> str:
     session_id = f"memory-v4-{case_id}"
-    db_session.add(AgentSession(id=session_id, project_id=None, datasource_id=datasource_id, title=case_id))
+    db_session.add(AgentSession(id=session_id, project_id=None, title=case_id))
     db_session.commit()
     return session_id
 
@@ -436,7 +436,7 @@ def test_memory_v4_generation_change_requires_justified_rediscovery(
     row = db_session.query(AgentSessionMemory).filter_by(session_id=session_id).one()
     memory = SessionMemoryStateV4.model_validate(loads(str(row.memory_v4_json)))
     projection = next(item for item in memory.projections if item.projection_id == "dbfox.catalog.working_state")
-    assert projection.scope["datasource_generation"] == 2
+    assert projection.scope["resource_ref"]["version"] == 2
     assert "重新发现" in _answer(db_session, second)
 
 

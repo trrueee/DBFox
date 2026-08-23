@@ -231,7 +231,6 @@ function run(): ConversationRun {
     input_id: "input-1",
     session_sequence: 1,
     user_message_id: "user-1",
-    datasource_id: "ds-1",
     question: "检查订单",
     status: "completed",
     version: 3,

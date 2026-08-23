@@ -56,7 +56,7 @@ Unix 开发脚本为 `./dev.sh`，但脚本存在不等同于 macOS/Linux 发布
 
 ## 架构不变量
 
-- **单一 Runtime 权威**：Rust 管理 Sidecar 生命周期、generation、endpoint 与短期 token；不要增加第二套启动或探活路径。
+- **单一 Runtime 权威**：Electron Main 管理 Sidecar 生命周期、generation、endpoint 与短期 token；不要增加第二套启动或探活路径。
 - **单一协议模型**：在真实系统边界做一次类型转换；不要堆叠 mapper、DTO、兼容表或双轨协议。
 - **Provider-neutral Agent**：Turn、Completion、Tool 与错误语义不能依赖某一家模型提供商的可选字段。
 - **SQL-first 工具链**：数据分析优先让数据库聚合、过滤和分页；SQL 必须走正式的校验、参数绑定、执行与结果制品链。

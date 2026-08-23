@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from engine.agent.repositories.artifact import ArtifactRepository
-from engine.errors import ToolInputError
 from engine.tools.builtin.artifacts import (
     preview_drafts,
     query_result_draft,
     sql_validation_drafts,
 )
-from engine.tools.builtin.contracts import (
+from dlcs.dbfox_data.backend.tool_contracts import (
     DataPreviewInput,
     DataPreviewOutput,
     QueryResultOutput,
@@ -15,11 +13,20 @@ from engine.tools.builtin.contracts import (
     SqlValidateInput,
     SqlValidateOutput,
 )
+from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
+from dlcs.dbfox_data.backend.sql_admission import (
+    admit_sql_execution,
+    resolve_validated_sql_execution,
+)
 from engine.tools.db.preview import db_preview
+from engine.tools.db.resource_selection import select_database
 from engine.tools.db.sql_execution import sql_execute_readonly, sql_validate
+from engine.query_registry import QUERY_REGISTRY
 from engine.tools.runtime import (
     BaseTool,
     ToolExecutionSpec,
+    ToolAdmissionContext,
+    ToolAdmissionDecision,
     ToolObservationProjection,
     ToolOutcome,
     ToolPolicy,
@@ -37,7 +44,7 @@ from engine.tools.runtime.observation import (
     bounded_tabular_provider_payload,
     safe_observation_facts,
 )
-from engine.sql.row_serializer import serialize_rows
+from dlcs.dbfox_data.backend.sql.row_serializer import serialize_rows
 
 
 def _result_observation(
@@ -108,7 +115,7 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
     semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SAMPLE_ROWS,))
 
@@ -117,12 +124,12 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
         tool_input: DataPreviewInput,
         context: ToolRunContext,
     ) -> ToolOutcome[DataPreviewOutput]:
-        db = context.require_database()
-        request = context.require_request()
+        selected = select_database(context, tool_input.database_id)
+        db = selected.metadata
         output = DataPreviewOutput.model_validate(
             db_preview(
                 db,
-                request.datasource_id,
+                selected.id,
                 table=tool_input.table,
                 columns=tool_input.columns,
                 limit=tool_input.limit,
@@ -142,8 +149,7 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
             output=output,
             artifacts=preview_drafts(
                 db,
-                request.datasource_id,
-                request.datasource_generation,
+                selected.ref,
                 output,
             ),
         )
@@ -172,7 +178,7 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read",),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
     semantics = ToolSemanticSpec(
         produces=(ToolSemanticCapability.VALIDATED_QUERY,),
@@ -188,11 +194,12 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
         tool_input: SqlValidateInput,
         context: ToolRunContext,
     ) -> ToolOutcome[SqlValidateOutput]:
-        db = context.require_database()
+        selected = select_database(context, tool_input.database_id)
+        db = selected.metadata
         request = context.require_request()
         raw = sql_validate(
             db,
-            request.datasource_id,
+            selected.id,
             tool_input.sql,
             request.question,
         )
@@ -210,7 +217,7 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
             output=output,
             artifacts=sql_validation_drafts(
                 db,
-                request.datasource_id,
+                selected.ref,
                 output,
             ),
         )
@@ -254,49 +261,80 @@ class SqlExecuteReadonlyTool(BaseTool[SqlExecuteReadonlyInput, QueryResultOutput
     input_model = SqlExecuteReadonlyInput
     output_model = QueryResultOutput
     presentation = ToolPresentation(title="执行只读查询", category="query")
-    policy = ToolPolicy(risk_level="safe", requires_validated_sql=True)
+    policy = ToolPolicy(
+        risk_level="safe",
+        requires_admission=True,
+        allowed_execution_modes=("user_requested_read", "agent_autonomous_read"),
+    )
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
     semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.QUERY_RESULT,))
+
+    def admit(
+        self,
+        tool_input: SqlExecuteReadonlyInput,
+        context: ToolAdmissionContext,
+    ) -> ToolAdmissionDecision:
+        return admit_sql_execution(
+            tool_input,
+            context,
+            sql_artifact_type="sql",
+            safety_artifact_type="safety",
+            result_artifact_type="result_view",
+        )
+
+    def cancel(self, invocation_id: str) -> None:
+        QUERY_REGISTRY.cancel(invocation_id)
 
     def run(
         self,
         tool_input: SqlExecuteReadonlyInput,
         context: ToolRunContext,
     ) -> ToolOutcome[QueryResultOutput]:
-        db = context.require_database()
+        selected = select_database(context, tool_input.database_id)
+        db = selected.metadata
         request = context.require_request()
-        repository = ArtifactRepository(db)
+        validated = resolve_validated_sql_execution(
+            tool_input,
+            context,
+            sql_artifact_type="sql",
+            safety_artifact_type="safety",
+            result_artifact_type="result_view",
+        )
+        payload = validated.safety_artifact.payload
+        safety = {
+            "datasource_id": payload.get("datasourceId"),
+            "policy": payload.get("policy"),
+            "original_sql": payload.get("originalSql"),
+            "safe_sql": payload.get("safeSql"),
+            "passed": payload.get("passed"),
+            "can_execute": payload.get("canExecute"),
+            "requires_confirmation": payload.get("requiresApproval"),
+            "risk_level": payload.get("riskLevel"),
+            "guardrail": payload.get("guardrail"),
+            "schema_warnings": payload.get("schemaWarnings"),
+            "scope_state": payload.get("scopeState"),
+            "blocked_reasons": payload.get("blockedReasons"),
+            "messages": payload.get("messages"),
+        }
+        execution_id = context.invocation_id or request.execution_id
+        QUERY_REGISTRY.reserve(execution_id, selected.id)
         try:
-            validated = repository.require_validated_sql(
-                session_id=request.session_id,
-                run_id=request.run_id,
-                sql_artifact_id=tool_input.validation_artifact_id,
+            raw = sql_execute_readonly(
+                db,
+                selected.id,
+                question=request.question,
+                safety=safety,
+                execution_id=execution_id,
+                expected_connection_generation=selected.require_legacy_generation(),
+                execution_authority=context.execution_authority,
+                approval_subject=validated.approval_subject,
             )
-        except ValueError as exc:
-            raise ToolInputError(str(exc)) from exc
-        existing = repository.result_for_sql_artifact(
-            session_id=request.session_id,
-            run_id=request.run_id,
-            sql_artifact_id=tool_input.validation_artifact_id,
-        )
-        if existing is not None:
-            raise ToolInputError(
-                "This validated SQL was already executed as Result Artifact "
-                f"{existing.id}; reuse that result instead of executing it again."
-            )
-        raw = sql_execute_readonly(
-            db,
-            request.datasource_id,
-            question=request.question,
-            safety=validated.safety,
-            execution_id=request.execution_id or None,
-            expected_connection_generation=request.datasource_generation,
-            execution_authority=context.execution_authority,
-        )
+        finally:
+            QUERY_REGISTRY.unregister(execution_id)
         output = QueryResultOutput(
             status="success",
             success=True,
@@ -315,9 +353,8 @@ class SqlExecuteReadonlyTool(BaseTool[SqlExecuteReadonlyInput, QueryResultOutput
         )
         result_draft = query_result_draft(
             db,
-            request.datasource_id,
+            selected.ref,
             tool_input.validation_artifact_id,
-            request.datasource_generation,
             output,
         )
         model_window = serialize_rows(

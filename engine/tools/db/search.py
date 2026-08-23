@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from dlcs.dbfox_data.backend.tool_contracts import MAX_SEARCH_QUERY_CHARS
 from engine.json_codec import JsonCodecError, loads
 
 from engine.ai_index import tokenize_query
@@ -14,7 +15,6 @@ from engine.errors import ToolInputError
 
 logger = logging.getLogger("dbfox.tools.db_search")
 
-MAX_SEARCH_QUERY_CHARS = 512
 MAX_SEARCH_RESULTS = 50
 MAX_SEARCH_TOKENS = 32
 MAX_SEARCH_CANDIDATES = 150

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from engine.connectivity.factory import ConnectionFactory
 from engine.environment.catalog_introspector import CatalogIntrospector
-from engine.environment.inventory import InspectedColumnObject, InspectedTable
+from dlcs.dbfox_data.backend.inventory import InspectedColumnObject, InspectedTable
 
 
 def db_inspect(

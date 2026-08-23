@@ -14,7 +14,6 @@ function run(id: string, sequence: number): ConversationRun {
     input_id: `input-${sequence}`,
     session_sequence: sequence,
     user_message_id: `user-${sequence}`,
-    datasource_id: "ds-1",
     question: `问题 ${sequence}`,
     status: "completed",
     version: 1,

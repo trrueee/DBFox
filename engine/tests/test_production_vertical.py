@@ -6,6 +6,7 @@ import hashlib
 import json
 from typing import Any
 
+import pytest
 from sqlalchemy.orm import sessionmaker
 
 from engine.agent.context import ContextAssembler
@@ -31,16 +32,25 @@ from engine.models import (
     AgentToolInvocation,
     Project,
 )
-from engine.runtime_composition import default_context_contributors
-from engine.tools.builtin.registry import (
-    register_workspace_extension,
-    register_workspace_write_extension,
-    register_remote_job_extension,
-)
+from engine.tools.builtin.registry import register_remote_job_extension
 from engine.tools.materialization import materialize_tools
 from engine.tools.runtime import ToolExecutor, ToolRegistry
+from engine.tests.workspace_test_support import legacy_workspace_resolver
+
+# Retired Core-only tests below are skipped in favor of signed package
+# conformance; keep their historical bodies non-executable during the split.
+WorkspaceContextContributor = object
 
 
+def register_workspace_extension(_registry):
+    raise AssertionError("retired Core Workspace test")
+
+
+def register_workspace_write_extension(_registry):
+    raise AssertionError("retired Core Workspace test")
+
+
+@pytest.mark.skip(reason="superseded by signed dbfox.workspace package conformance")
 def test_workspace_file_read_vertical_chain_lands_artifact_and_context(
     db_session,
     test_datasource,
@@ -54,7 +64,6 @@ def test_workspace_file_read_vertical_chain_lands_artifact_and_context(
         Project(
             id="project-vertical",
             name="Vertical Workspace",
-            workspace_root=str(root),
         )
     )
     db_session.flush()
@@ -63,7 +72,6 @@ def test_workspace_file_read_vertical_chain_lands_artifact_and_context(
         AgentSession(
             id="session-vertical",
             project_id="project-vertical",
-            datasource_id=str(test_datasource.id),
             title="Vertical",
         )
     )
@@ -76,7 +84,7 @@ def test_workspace_file_read_vertical_chain_lands_artifact_and_context(
     admission = sessions.admit(
         session_id="session-vertical",
         resource_refs=(
-            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),
             ResourceScopeRef(kind="workspace", id="project-vertical", version=ws_digest),
         ),
         content="read src/main.py",
@@ -124,6 +132,7 @@ def test_workspace_file_read_vertical_chain_lands_artifact_and_context(
         registry=registry,
         definition=definition,
         executor=executor,
+        resource_resolver=legacy_workspace_resolver(db_session),
     )
     run = db_session.get(AgentRun, admission.run_id)
     assert run is not None
@@ -167,7 +176,7 @@ def test_workspace_file_read_vertical_chain_lands_artifact_and_context(
 
     snapshot = ContextAssembler(
         db_session,
-        contributors=default_context_contributors(),
+        contributors=(WorkspaceContextContributor,),
     ).build(admission.run_id)
     assert len(snapshot.context_fragments) == 1
     assert snapshot.context_fragments[0].lane == "resource"
@@ -180,7 +189,6 @@ def test_vertical_chain_handoff_after_failed_run(
     db_session.add(
         AgentSession(
             id="session-vertical-failed",
-            datasource_id=str(test_datasource.id),
             title="Vertical failed run handoff",
         )
     )
@@ -188,7 +196,7 @@ def test_vertical_chain_handoff_after_failed_run(
     sessions = SessionRepository(db_session)
     first = sessions.admit(
         session_id="session-vertical-failed",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="首次分析失败",
         idempotency_key="vertical-failed-first",
         llm_credential_id="credential",
@@ -211,7 +219,7 @@ def test_vertical_chain_handoff_after_failed_run(
 
     second = sessions.admit(
         session_id="session-vertical-failed",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="上次失败，继续重试。",
         idempotency_key="vertical-failed-second",
         llm_credential_id="credential",
@@ -232,6 +240,7 @@ def test_vertical_chain_handoff_after_failed_run(
     assert snapshot.previous_run_outcome.public_message
 
 
+@pytest.mark.skip(reason="superseded by signed dbfox.workspace package conformance")
 def test_vertical_chain_handoff_after_failed_tool_run(
     db_session,
     test_datasource,
@@ -245,7 +254,6 @@ def test_vertical_chain_handoff_after_failed_tool_run(
         Project(
             id="project-vertical-tool-failed",
             name="Vertical Tool Failed",
-            workspace_root=str(root),
         )
     )
     db_session.flush()
@@ -253,7 +261,6 @@ def test_vertical_chain_handoff_after_failed_tool_run(
     db_session.add(
         AgentSession(
             id="session-vertical-tool-failed",
-            datasource_id=str(test_datasource.id),
             title="Vertical tool failed run handoff",
         )
     )
@@ -264,7 +271,7 @@ def test_vertical_chain_handoff_after_failed_tool_run(
     first = sessions.admit(
         session_id="session-vertical-tool-failed",
         resource_refs=(
-            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),
             ResourceScopeRef(kind="workspace", id="project-vertical-tool-failed", version=ws_digest),
         ),
         content="先读文件再失败",
@@ -312,6 +319,7 @@ def test_vertical_chain_handoff_after_failed_tool_run(
         registry=registry,
         definition=definition,
         executor=executor,
+        resource_resolver=legacy_workspace_resolver(db_session),
     )
     run = db_session.get(AgentRun, first.run_id)
     assert run is not None
@@ -356,7 +364,7 @@ def test_vertical_chain_handoff_after_failed_tool_run(
 
     second = sessions.admit(
         session_id="session-vertical-tool-failed",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="从失败工具链路继续。",
         idempotency_key="vertical-tool-failed-second",
         llm_credential_id="credential",
@@ -384,7 +392,6 @@ def test_vertical_chain_handoff_after_cancelled_run(
     db_session.add(
         AgentSession(
             id="session-vertical-cancel",
-            datasource_id=str(test_datasource.id),
             title="Vertical cancelled run handoff",
         )
     )
@@ -392,7 +399,7 @@ def test_vertical_chain_handoff_after_cancelled_run(
     sessions = SessionRepository(db_session)
     first = sessions.admit(
         session_id="session-vertical-cancel",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="首次分析取消",
         idempotency_key="vertical-cancel-first",
         llm_credential_id="credential",
@@ -412,7 +419,7 @@ def test_vertical_chain_handoff_after_cancelled_run(
 
     second = sessions.admit(
         session_id="session-vertical-cancel",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="取消后再发起重试。",
         idempotency_key="vertical-cancel-second",
         llm_credential_id="credential",
@@ -429,7 +436,8 @@ def test_vertical_chain_handoff_after_cancelled_run(
     assert snapshot.previous_run_outcome.public_message
 
 
-def test_vertical_chain_file_write_patch_approval_recovery(
+@pytest.mark.skip(reason="retired Core Workspace write tool is no longer a production capability")
+def test_retired_core_file_write_fails_closed_after_approval_recovery(
     db_session,
     test_datasource,
     tmp_path,
@@ -445,7 +453,6 @@ def test_vertical_chain_file_write_patch_approval_recovery(
         Project(
             id="project-vertical-write",
             name="Vertical Write Workspace",
-            workspace_root=str(root),
         )
     )
     db_session.flush()
@@ -453,7 +460,6 @@ def test_vertical_chain_file_write_patch_approval_recovery(
     db_session.add(
         AgentSession(
             id="session-vertical-write",
-            datasource_id=str(test_datasource.id),
             title="Vertical file-write",
         )
     )
@@ -464,7 +470,7 @@ def test_vertical_chain_file_write_patch_approval_recovery(
     admission = sessions.admit(
         session_id="session-vertical-write",
         resource_refs=(
-            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),
             ResourceScopeRef(kind="workspace", id="project-vertical-write", version=ws_digest),
         ),
         content="更新文件",
@@ -517,6 +523,7 @@ def test_vertical_chain_file_write_patch_approval_recovery(
         registry=registry,
         definition=definition,
         executor=executor,
+        resource_resolver=legacy_workspace_resolver(db_session),
     )
     run = db_session.get(AgentRun, admission.run_id)
     assert run is not None
@@ -595,7 +602,7 @@ def test_vertical_chain_file_write_patch_approval_recovery(
 
     assert settled is not None
     payload = json.loads(settled.output)
-    assert payload["status"] == "succeeded"
+    assert payload["status"] == "failed"
 
     db_session.expire_all()
     invocation = (
@@ -608,25 +615,23 @@ def test_vertical_chain_file_write_patch_approval_recovery(
         .filter_by(tool_invocation_id=str(recovered[0].id))
         .one()
     )
-    artifact = db_session.query(AgentArtifactRecord).one()
     approval = db_session.get(AgentApproval, first_invocation.approval_id)
     assert approval is not None and approval.status == "approved"
-    assert invocation.status == "succeeded"
-    assert invocation.attempt_count == 2
-    assert observation.status == "succeeded"
-    assert artifact.type == "dbfox.workspace.code_patch"
+    assert invocation.status == "failed"
+    assert invocation.attempt_count == 1
+    assert observation.status == "failed"
     assert (
         db_session.query(AgentArtifactRecord)
         .filter_by(type="dbfox.workspace.code_patch")
         .count()
-        == 1
+        == 0
     )
-    assert target.read_text(encoding="utf-8") == "new-content\n"
+    assert target.read_text(encoding="utf-8") == "old-content\n"
     context_lanes = {
         context.lane
         for context in ContextAssembler(
             db_session,
-            contributors=default_context_contributors(),
+            contributors=(WorkspaceContextContributor,),
         ).build(admission.run_id).context_fragments
     }
     assert context_lanes == set()
@@ -640,7 +645,6 @@ def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Vertical remote job",
         )
     )
@@ -649,7 +653,7 @@ def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
 
     first = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="提交远端任务",
         idempotency_key="vertical-remote-job-first",
         llm_credential_id="credential",
@@ -704,6 +708,7 @@ def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
         registry=registry,
         definition=definition,
         executor=executor,
+        resource_resolver=legacy_workspace_resolver(db_session),
     )
     try:
         submit_result = dispatcher.request_and_execute(
@@ -741,7 +746,7 @@ def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
 
     second = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="查询远端任务并取消",
         idempotency_key="vertical-remote-job-second",
         llm_credential_id="credential",
@@ -783,6 +788,7 @@ def test_vertical_chain_remote_job_submit_status_cancel_across_runs(
         registry=registry,
         definition=definition,
         executor=executor,
+        resource_resolver=legacy_workspace_resolver(db_session),
     )
     try:
         status_result = dispatcher.request_and_execute(
@@ -974,6 +980,7 @@ class _ScriptedZeroResourceTerminalModel:
         )
 
 
+@pytest.mark.skip(reason="superseded by signed dbfox.workspace package conformance")
 def test_workspace_only_production_vertical_file_read_and_terminalize(
     db_session,
     tmp_path,
@@ -988,7 +995,6 @@ def test_workspace_only_production_vertical_file_read_and_terminalize(
         id="project-ws-vertical-prod",
         name="Workspace Vertical Project",
         status="active",
-        workspace_root=str(root),
     )
     db_session.add(project)
     db_session.flush()
@@ -996,7 +1002,6 @@ def test_workspace_only_production_vertical_file_read_and_terminalize(
     session = AgentSession(
         id="session-ws-vertical-prod",
         project_id="project-ws-vertical-prod",
-        datasource_id=None,
         title="Workspace-only Vertical Session",
     )
     db_session.add(session)
@@ -1043,8 +1048,10 @@ def test_workspace_only_production_vertical_file_read_and_terminalize(
         session_factory=factory,
         model_factory=lambda _settings: provider,
         registry=registry,
+        context_contributors=(WorkspaceContextContributor,),
         definition=definition,
         live_stream=LiveStreamHub(),
+        resource_resolver=legacy_workspace_resolver(db_session),
     ).execute(lease=lease, run_id=admission.run_id)
 
     db_session.expire_all()
@@ -1052,7 +1059,7 @@ def test_workspace_only_production_vertical_file_read_and_terminalize(
     # 1. Run starts and finishes without datasource
     run = db_session.get(AgentRun, admission.run_id)
     assert run is not None
-    assert run.datasource_id is None
+    assert not hasattr(run, "datasource_id")
     # 10. Run reaches completed terminal state
     assert run.status == "completed"
 
@@ -1096,8 +1103,7 @@ def test_workspace_only_production_vertical_file_read_and_terminalize(
         .all()
     )
     for mem_row in memory_rows:
-        assert mem_row.datasource_id is None
-        assert mem_row.datasource_id != "None"
+        assert not hasattr(mem_row, "datasource_id")
         if mem_row.memory_json:
             parsed = json.loads(mem_row.memory_json)
             assert parsed.get("datasource_id") is None or parsed.get("datasource_id") != "None"
@@ -1105,7 +1111,7 @@ def test_workspace_only_production_vertical_file_read_and_terminalize(
     # 14. Next Context can still read normal Session history / Workspace Context
     snapshot = ContextAssembler(
         db_session,
-        contributors=default_context_contributors(),
+        contributors=(WorkspaceContextContributor,),
     ).build(admission.run_id)
     assert snapshot is not None
 
@@ -1118,7 +1124,6 @@ def test_project_only_zero_resource_production_vertical_terminalize(
         id="project-zero-res-vert",
         name="Zero Resource Project",
         status="active",
-        workspace_root=None,
     )
     db_session.add(project)
     db_session.flush()
@@ -1126,7 +1131,6 @@ def test_project_only_zero_resource_production_vertical_terminalize(
     session = AgentSession(
         id="session-zero-res-vert",
         project_id="project-zero-res-vert",
-        datasource_id=None,
         title="Zero Resource Session",
     )
     db_session.add(session)
@@ -1170,6 +1174,6 @@ def test_project_only_zero_resource_production_vertical_terminalize(
     db_session.expire_all()
     run = db_session.get(AgentRun, admission.run_id)
     assert run is not None
-    assert run.datasource_id is None
+    assert not hasattr(run, "datasource_id")
     assert run.status == "completed"
 

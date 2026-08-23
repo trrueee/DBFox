@@ -38,7 +38,6 @@ vi.mock("../../projects/useProjectState", () => ({
         name: "订单分析",
         datasource_count: 1,
         status: "active",
-        workspace_root: "C:/demo",
       },
     ],
     loadingProjects: false,
@@ -90,15 +89,16 @@ describe("ProjectResourceSidebar", () => {
     useConversationStore.setState({
       activeConversationId: null,
       summaries: [
-        { id: "conv-1", datasource_id: "ds-1", title: "分析订单趋势", updated_at: "2026-08-15T08:00:00Z" },
+        { id: "conv-1", project_id: "project-1", title: "分析订单趋势", updated_at: "2026-08-15T08:00:00Z" },
       ],
       openConversation,
     });
   });
 
-  it("renders project list", () => {
+  it("renders a single project as identity rather than a fake switch action", () => {
     renderSidebar();
-    expect(screen.getByRole("button", { name: "订单分析" })).toBeInTheDocument();
+    expect(screen.getByText("订单分析")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "切换项目" })).toBeNull();
   });
 
   it("renders conversations as Core (always visible)", () => {
@@ -107,26 +107,18 @@ describe("ProjectResourceSidebar", () => {
     expect(screen.getByRole("button", { name: "分析订单趋势" })).toBeInTheDocument();
   });
 
-  it("renders the union of direct project-scoped and legacy datasource-scoped conversations", () => {
+  it("renders only conversations owned by the active project", () => {
     useConversationStore.setState({
       activeConversationId: null,
       summaries: [
-        // Direct project conversation (P4+)
-        { id: "conv-direct-p4", project_id: "project-1", datasource_id: null, title: "工作区对话", updated_at: "2026-08-19T08:00:00Z" },
-        // Legacy conversation with datasource in project-1
-        { id: "conv-legacy-ds1", project_id: null, datasource_id: "ds-1", title: "数据库旧对话", updated_at: "2026-08-18T08:00:00Z" },
-        // Unrelated legacy conversation with datasource in another project
-        { id: "conv-legacy-other", project_id: null, datasource_id: "ds-other", title: "其他项目旧对话", updated_at: "2026-08-17T08:00:00Z" },
-        // Unrelated direct conversation in another project
-        { id: "conv-other-p4", project_id: "project-other", datasource_id: null, title: "其他工作区对话", updated_at: "2026-08-16T08:00:00Z" },
+        { id: "conv-direct", project_id: "project-1", title: "工作区对话", updated_at: "2026-08-19T08:00:00Z" },
+        { id: "conv-other", project_id: "project-other", title: "其他工作区对话", updated_at: "2026-08-16T08:00:00Z" },
       ],
       openConversation,
     });
 
     renderSidebar();
     expect(screen.getByRole("button", { name: "工作区对话" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "数据库旧对话" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "其他项目旧对话" })).toBeNull();
     expect(screen.queryByRole("button", { name: "其他工作区对话" })).toBeNull();
   });
 

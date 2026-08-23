@@ -9,6 +9,11 @@
 > 基线：`main@daa99d048decd7f5f8dc010cbe5465f332686a3c`
 >
 > 上位 RFC：[DBFox 可扩展 Runtime 与 Workbench 架构计划](./extensible-runtime-workbench-program.md)
+>
+> 替代关系：本文保留 2026-08-16 Shell/Dock 设计背景；其中 datasource-bound
+> Conversation、`Project.workspace_root`、`project_id = datasource_id` 与左栏 selection
+> authority 规则已被 [Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md)
+> 取代，不能作为当前实现依据。
 
 ## 1. 决策
 

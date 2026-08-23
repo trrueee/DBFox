@@ -18,26 +18,33 @@ from engine.app.safe_errors import (
 from engine.errors import GuardrailValidationError
 from engine.models import DataSource, SchemaTable
 from engine.policy.authority import ExecutionAuthority
-from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
+from engine.resource import ResourceScopeRef
+from dlcs.dbfox_data.backend.sql.safety_contracts import (
+    ExecutionPolicy,
+    ExecutionSafetyDecision,
+)
+from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
+from dlcs.dbfox_data.backend.sql.dialect_context import (
+    DatabaseDialectContext,
+    canonical_sql_dialect,
+)
 
 logger = logging.getLogger("dbfox.sql.executor")
 
 def validate_pagination_base_sql(base_sql: str, dialect: str = "mysql") -> list[str]:
     """Validate the persisted source SQL before deriving a paginated query."""
-    from engine.sql.dialect_context import DialectContext, canonical_sql_dialect
     from engine.sql.safety.service import SqlSafetyService
 
-    ctx = DialectContext(datasource_id="", dialect=canonical_sql_dialect(dialect))
+    ctx = DatabaseDialectContext(resource_id="", dialect=canonical_sql_dialect(dialect))
     return SqlSafetyService().validate_source_artifact_sql(base_sql, ctx)
 
 def validate_derived_sql(derived_sql: str, dialect: str = "mysql") -> list[str]:
     """Lightweight validation for derived SQLs (paging/sorting).
     Ensures it is a SELECT without dangerous operations.
     """
-    from engine.sql.dialect_context import DialectContext, canonical_sql_dialect
     from engine.sql.safety.service import SqlSafetyService
 
-    ctx = DialectContext(datasource_id="", dialect=canonical_sql_dialect(dialect))
+    ctx = DatabaseDialectContext(resource_id="", dialect=canonical_sql_dialect(dialect))
     return SqlSafetyService().validate_derived_sql(derived_sql, ctx)
 
 def guardrail_bypass_allowed() -> bool:
@@ -84,6 +91,7 @@ def _resolve_execution_safety_decision(
     policy: ExecutionPolicy = "readonly",
     parameters: Mapping[str, Any] | None = None,
     execution_authority: ExecutionAuthority | None = None,
+    approval_subject: dict[str, Any] | None = None,
     expected_connection_generation: int | None = None,
 ) -> ExecutionSafetyDecision:
     if safety_decision is not None:
@@ -115,7 +123,7 @@ def _resolve_execution_safety_decision(
                     "message": "The supplied safety decision was created for different SQL text.",
                 }],
             )
-        from engine.sql.bound_parameters import parameter_fingerprint
+        from dlcs.dbfox_data.backend.sql.bound_parameters import parameter_fingerprint
         if decision.parameter_fingerprint != parameter_fingerprint(parameters):
             raise GuardrailValidationError(
                 "TrustGate decision parameters do not match the requested execution.",
@@ -123,11 +131,15 @@ def _resolve_execution_safety_decision(
             )
         confirmation_authorized = bool(
             execution_authority
-            and isinstance(safety_decision, dict)
-            and execution_authority.authorizes_safety(
+            and approval_subject is not None
+            and execution_authority.authorizes(
                 tool_name="sql_execute_readonly",
-                safety=safety_decision,
-                datasource_generation=expected_connection_generation,
+                approval_subject=approval_subject,
+                resource_ref=ResourceScopeRef(
+                    kind=DATABASE_RESOURCE_KIND,
+                    id=datasource_id,
+                    version=expected_connection_generation,
+                ),
             )
         )
         return decision if confirmation_authorized else _block_unconfirmed_execution(decision)
@@ -188,10 +200,10 @@ def _resolve_execution_safety_decision(
             )
         )
 
-    from engine.sql.dialect_context import DialectContext
+    from engine.sql.dialect_context import load_dialect_context
     from engine.sql.safety.service import SqlSafetyService
 
-    ctx = DialectContext.from_datasource_id(db, datasource_id)
+    ctx = load_dialect_context(db, datasource_id)
     return _block_unconfirmed_execution(
         SqlSafetyService(db).build_execution_decision(
             sql_str, ctx, policy=policy, parameters=parameters

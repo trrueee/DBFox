@@ -16,7 +16,7 @@ from engine.tools.runtime import ToolRunContext
 
 
 def _session(db_session, datasource_id: str, session_id: str) -> AgentSession:
-    value = AgentSession(id=session_id, datasource_id=datasource_id, title=session_id)
+    value = AgentSession(id=session_id, title=session_id)
     db_session.add(value)
     db_session.flush()
     return value
@@ -57,7 +57,7 @@ def _context(db_session, datasource_id: str, session_id: str) -> ToolRunContext:
     return ToolRunContext.for_invocation(
         request=request,
         idempotency_key="recall-test",
-        resources={"database": db_session},
+        resources={("dbfox.data.database", datasource_id): db_session},
         metadata_session=db_session,
     )
 

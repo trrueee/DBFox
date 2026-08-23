@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 from enum import Enum
 from logging import Logger
@@ -342,6 +343,62 @@ def log_sensitive_diagnostic(
         safe_operation.value,
         subject_type,
         diagnostic_fingerprint(subject),
+    )
+
+
+_EXTENSION_DIAGNOSTIC_OPERATION = re.compile(
+    r"^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*){2,7}$"
+)
+
+
+def _safe_extension_diagnostic_operation(operation: str) -> str:
+    candidate = str(operation).strip()
+    return (
+        candidate
+        if len(candidate) <= 128 and _EXTENSION_DIAGNOSTIC_OPERATION.fullmatch(candidate)
+        else "extension.unexpected.operation"
+    )
+
+
+def log_extension_diagnostic(
+    logger: Logger,
+    *,
+    operation: str,
+    subject: object,
+    subject_type: Literal["sql", "exception", "event"],
+    level: Literal["warning", "error"] = "warning",
+) -> None:
+    """Log a namespaced DLC diagnostic without rendering sensitive content."""
+
+    safe_operation = _safe_extension_diagnostic_operation(operation)
+    log = logger.warning if level == "warning" else logger.error
+    log(
+        "code=%s type=%s fingerprint=%s",
+        safe_operation,
+        subject_type,
+        diagnostic_fingerprint(subject),
+    )
+
+
+def log_extension_exception(
+    logger: Logger,
+    *,
+    operation: str,
+    exc: Exception,
+    fingerprint_subject: object | None = None,
+    level: Literal["warning", "error"] = "error",
+) -> None:
+    """Log a DLC exception type and opaque fingerprint without its message."""
+
+    safe_operation = _safe_extension_diagnostic_operation(operation)
+    log = logger.warning if level == "warning" else logger.error
+    log(
+        "code=%s type=%s fingerprint=%s",
+        safe_operation,
+        type(exc).__name__,
+        diagnostic_fingerprint(
+            exc if fingerprint_subject is None else fingerprint_subject
+        ),
     )
 
 

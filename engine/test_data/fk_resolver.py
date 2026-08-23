@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from engine.errors import DBFoxError
 from engine.models import SchemaColumn, SchemaTable
-from engine.sql.dialect_context import DialectContext
+from engine.sql.dialect_context import load_dialect_context
 from engine.sql.executor import execute_query
 from engine.sql.safety.service import SqlSafetyService
 
@@ -42,7 +42,7 @@ def resolve_foreign_key_mappings(
                 parent_column_name,
             )
             parent_query_sql = f"SELECT `{parent_column_name}` FROM `{parent_table.table_name}` LIMIT 200"
-            ctx = DialectContext.from_datasource_id(db, datasource_id)
+            ctx = load_dialect_context(db, datasource_id)
             decision = SqlSafetyService(db).build_execution_decision(parent_query_sql, ctx, policy="readonly")
             parent_res = execute_query(
                 db,

@@ -258,15 +258,6 @@ export function register(host) {
     onAdd: ({ projectId }) => { addFormProjects.add(projectId); emitChange(); },
     render: ({ projectId }) => React.createElement(GithubConnector, { projectId }),
   });
-  host.requestedResources.register(({ projectId }) => {
-    if (!loadedProjects.has(projectId)) return { complete: false };
-    const bindingId = selectedBindingByProject.get(projectId);
-    const binding = (bindingsByProject.get(projectId) || []).find((item) => item.id === bindingId);
-    return {
-      complete: true,
-      refs: binding ? [{ kind: "github.repository", id: binding.id, version: binding.resolved_revision }] : [],
-    };
-  });
   host.dockViews.register({
     viewType: FILE_VIEW_TYPE,
     icon: () => React.createElement("span", { "aria-hidden": true }, "GH"),

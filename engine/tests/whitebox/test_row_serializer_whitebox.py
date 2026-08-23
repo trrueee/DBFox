@@ -1,6 +1,6 @@
 import datetime
 import decimal
-from engine.sql.row_serializer import _process_rows, _serialize_value
+from dlcs.dbfox_data.backend.sql.row_serializer import _process_rows, _serialize_value
 
 # covers: ROW-1 Columns count > max_columns
 def test_row1_column_truncation():

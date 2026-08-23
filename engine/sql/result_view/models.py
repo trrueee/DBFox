@@ -102,7 +102,7 @@ class VerifiedResultSource(BaseModel):
     dialect: str
     columns: list[ResultColumn]
     fingerprint: str
-    datasource_generation: int
+    datasource_generation: str | int
     original_executed_at: str | None = None
 
     @property
@@ -122,7 +122,7 @@ class ResultPage(ResultViewModel):
     original_executed_at: str | None = None
     view_executed_at: str
     view_execution_id: str
-    datasource_generation: int
+    datasource_generation: str | int
     query_fingerprint: str
     warnings: list[str] | None = None
     notices: list[str] | None = None
@@ -136,7 +136,7 @@ class ChartData(ResultViewModel):
     original_executed_at: str | None = None
     view_executed_at: str
     view_execution_id: str
-    datasource_generation: int
+    datasource_generation: str | int
     query_fingerprint: str
 
 

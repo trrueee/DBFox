@@ -56,14 +56,13 @@ def _seed_v4_context(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Memory v4 context",
         )
     )
     db_session.flush()
     admission = SessionRepository(db_session).admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=generation),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=generation),),
         content="现在有哪些订单字段？",
         idempotency_key="v4-context",
         llm_credential_id="credential",
@@ -151,8 +150,11 @@ def _seed_v4_context(
         )
     )
     scope = CatalogProjectionScope(
-        datasource_id=str(test_datasource.id),
-        datasource_generation=generation,
+        resource_ref=ResourceScopeRef(
+            kind="dbfox.data.database",
+            id=str(test_datasource.id),
+            version=generation,
+        ),
         catalog_revision=revision,
     )
     key = CatalogObjectKey(
@@ -191,7 +193,6 @@ def _seed_v4_context(
         AgentSessionMemory(
             id="memory-v4-context-row",
             session_id=session_id,
-            datasource_id=str(test_datasource.id),
             memory_json="{}",
             memory_v4_json=canonical_dumps(payload),
         )
@@ -242,9 +243,9 @@ def test_explicit_v3_rollback_does_not_inject_v4_working_state(
 @pytest.mark.parametrize(
     ("field", "value"),
     (
-        ("datasource_generation", 99),
+        ("resource_version", 99),
         ("catalog_revision", 99),
-        ("datasource_id", "other-datasource"),
+        ("resource_id", "other-datasource"),
     ),
 )
 def test_v4_context_omits_stale_resource_fence(
@@ -260,7 +261,11 @@ def test_v4_context_omits_stale_resource_fence(
         session_id="session-v4-context"
     ).one()
     payload = json.loads(row.memory_v4_json)
-    payload["projections"][0]["scope"][field] = value
+    scope = payload["projections"][0]["scope"]
+    if field == "catalog_revision":
+        scope[field] = value
+    else:
+        scope["resource_ref"][field.removeprefix("resource_")] = value
     row.memory_v4_json = canonical_dumps(payload)
     db_session.commit()
 

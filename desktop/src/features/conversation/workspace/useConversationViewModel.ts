@@ -22,6 +22,7 @@ export function useConversationViewModel(conversationId: string) {
   const streamError = useConversationStore((state) => state.streamErrorById[conversationId]);
   const openConversationAction = useConversationStore((state) => state.openConversation);
   const sendMessageAction = useConversationStore((state) => state.sendMessage);
+  const setResourceIntentsAction = useConversationStore((state) => state.setResourceIntents);
   const cancelRunAction = useConversationStore((state) => state.cancelRun);
   const resolveApprovalAction = useConversationStore((state) => state.resolveApproval);
   const resolveQuestionAction = useConversationStore((state) => state.resolveQuestion);
@@ -45,6 +46,15 @@ export function useConversationViewModel(conversationId: string) {
   });
   const cancelMutation = useMutation({
     mutationFn: cancelRunAction,
+  });
+  const resourceIntentsMutation = useMutation({
+    mutationFn: ({
+      targetConversationId,
+      resourceIntents,
+    }: {
+      targetConversationId: string;
+      resourceIntents: Parameters<typeof setResourceIntentsAction>[1];
+    }) => setResourceIntentsAction(targetConversationId, resourceIntents),
   });
   const approvalMutation = useMutation({
     mutationFn: ({
@@ -130,6 +140,12 @@ export function useConversationViewModel(conversationId: string) {
     sending: sendMutation.isPending,
     sendError: sendMutation.error
       ? getUserErrorMessage(sendMutation.error, "消息发送失败，请重试。")
+      : null,
+    setResourceIntents: (resourceIntents: Parameters<typeof setResourceIntentsAction>[1]) =>
+      resourceIntentsMutation.mutateAsync({ targetConversationId: conversationId, resourceIntents }),
+    updatingResourceIntents: resourceIntentsMutation.isPending,
+    resourceIntentError: resourceIntentsMutation.error
+      ? getUserErrorMessage(resourceIntentsMutation.error, "对话上下文更新失败，请重试。")
       : null,
     cancelRun: (runId: string) => cancelMutation.mutateAsync(runId),
     cancelling: cancelMutation.isPending,

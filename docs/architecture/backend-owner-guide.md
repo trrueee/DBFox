@@ -657,14 +657,14 @@ Event 不是先发再写。前端看到的 committed event 必须对应已提交
 ### 17.2 新增 Agent 工具
 
 1. 明确是否真的需要模型工具；后端可确定完成的聚合/分页优先做成结果服务；
-2. 在 `engine/tools/builtin/contracts.py` 定义 strict input/output；
+2. 先确定 owner：只有 Runtime/Conversation/Control primitive 的合同进入 `engine/tools/builtin/contracts.py`；Data 等业务能力的合同进入对应 DLC（例如 `dlcs/dbfox_data/backend/tool_contracts.py`）；
 3. 实现 `BaseTool`，声明 group、version、capability、policy、execution spec、recovery；
-4. 按能力归属在 `register_core_functions` / `register_conversation_functions` / `register_data_extension` 中注册，并保持 `register_dbfox_tools` facade 的 materialization parity；
+4. Core primitive 在 Core registrar 注册；capability Tool 通过该 DLC 的 `BackendExtensionHost.tools` 注册，不得新增 legacy domain registrar；
 5. 定义瞬时 provider payload 与耐久 Observation 投影；
 6. 如产生 Artifact，定义类型、关系和 reference-only payload；
 7. 增加 materialization、Policy、Runtime、RunLoop 和恢复测试。
 
-不要新增工具别名 mapper、Provider 特例或第二套函数调用协议。
+不要新增工具别名 mapper、Provider 特例、Core service locator 或第二套函数调用协议。
 
 ### 17.3 修改 Context 或 Memory
 
@@ -864,7 +864,7 @@ python -m alembic heads
 | Tool 执行限制 | `ToolExecutor` | `engine/tools/runtime/executor.py` |
 | Artifact 合同 | `ArtifactDraft` / `Artifact` / `validate_artifact_payload`（open type + `schema_version`） | `engine/agent/artifact.py` |
 | Artifact 持久化 | `ArtifactRepository` | `engine/agent/repositories/artifact.py` |
-| 完成判断 | `CompletionPolicy` + `DataResultCitationConstraint` | `engine/agent/completion.py` |
+| 完成判断 | `CompletionPolicy` + snapshot completion constraint/support contributions | `engine/agent/completion.py` / `engine/dlc/snapshot.py` |
 | 原子终态 | `Terminalizer` | `engine/agent/terminalizer.py` |
 | 历史召回 | `ConversationRecallService` | `engine/agent/conversation_recall.py` |
 | 事件提交 | `EventRepository` | `engine/agent/repositories/events.py` |

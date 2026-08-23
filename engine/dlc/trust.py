@@ -146,7 +146,7 @@ class DlcTrustStore:
         if self.trust_store_file is None:
             return dict(self._trusted_keys)
         if not self.trust_store_file.is_file():
-            return {}
+            return dict(self._trusted_keys)
 
         file_size = self.trust_store_file.stat().st_size
         if file_size > MAX_TRUST_STORE_BYTES:
@@ -158,7 +158,18 @@ class DlcTrustStore:
             raw_bytes = self.trust_store_file.read_bytes()
             data = json.loads(raw_bytes.decode("utf-8"))
             payload = TrustedPublishersPayload.model_validate(data)
-            return dict(payload.trusted_publishers)
+            # Host-bundled publisher keys are immutable trust roots. Persisted
+            # user decisions extend that set; they cannot remove or replace a
+            # key compiled into the running Host.
+            trusted_publishers = dict(payload.trusted_publishers)
+            for fingerprint, public_key in self._trusted_keys.items():
+                persisted = trusted_publishers.get(fingerprint)
+                if persisted is not None and persisted != public_key:
+                    raise ValueError(
+                        f"trusted publisher fingerprint collision: {fingerprint}"
+                    )
+                trusted_publishers[fingerprint] = public_key
+            return trusted_publishers
         except Exception as exc:
             raise DlcError(
                 DlcErrorCode.TRUST_STORE_CORRUPT,

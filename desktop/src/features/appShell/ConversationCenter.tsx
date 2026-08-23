@@ -7,6 +7,10 @@ import { useSqlConsoleStore } from "../../stores/sqlConsoleStore";
 import { getUserErrorMessage } from "../../lib/api/client";
 import { SmartQueryHome } from "../workspace/SmartQueryHome";
 import { Button, EmptyState, LoadingState } from "../../components/ui";
+import {
+  EMPTY_CONVERSATION_CONTEXT,
+  useConversationContextStore,
+} from "../../stores/conversationContextStore";
 
 const ConversationWorkspace = lazy(() =>
   import("../conversation/workspace/ConversationWorkspace").then((module) => ({ default: module.ConversationWorkspace })),
@@ -31,23 +35,34 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
   const { activeDatasource } = useDatasourceState();
   const [askInputValue, setAskInputValue] = useState("");
+  const draftResourceIntents = useConversationContextStore(
+    (s) => activeProjectId
+      ? s.byProject[activeProjectId] ?? EMPTY_CONVERSATION_CONTEXT
+      : EMPTY_CONVERSATION_CONTEXT,
+  );
+  const replaceDraftResourceIntents = useConversationContextStore((s) => s.replace);
+  const clearDraftResourceIntents = useConversationContextStore((s) => s.clear);
   const displayAsk = pendingAsk ?? askInputValue;
 
   const handleSubmitAsk = useCallback(async () => {
     const text = displayAsk.trim();
     if (!text) return;
     try {
-      const detail = await useConversationStore.getState().createAndOpenConversation(text);
+      const detail = await useConversationStore.getState().createAndOpenConversation(
+        text,
+        draftResourceIntents,
+      );
       await useConversationStore
         .getState()
         .sendMessage(detail.id, text, "queue", globalThis.crypto.randomUUID());
       clearPendingAsk();
       openConversationCenter(detail.id);
       setAskInputValue("");
+      clearDraftResourceIntents(activeProjectId);
     } catch (error) {
       showToast(getUserErrorMessage(error, "创建智能分析失败，请重试。"), "error");
     }
-  }, [clearPendingAsk, displayAsk, openConversationCenter, showToast]);
+  }, [activeProjectId, clearDraftResourceIntents, clearPendingAsk, displayAsk, draftResourceIntents, openConversationCenter, showToast]);
 
   if (!activeProjectId) {
     return (
@@ -95,6 +110,9 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
           setAskInputValue(value);
         }}
         onSubmitAsk={() => void handleSubmitAsk()}
+        projectId={activeProjectId}
+        resourceIntents={draftResourceIntents}
+        onResourceIntentsChange={(next) => replaceDraftResourceIntents(activeProjectId, next)}
       />
     </section>
   );

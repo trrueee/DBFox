@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from engine.ai_enrich import ai_enrich_catalog
 from engine.environment.authoritative_inventory import AuthoritativeInventory
-from engine.environment.inventory import SchemaInventory
+from dlcs.dbfox_data.backend.inventory import SchemaInventory
 from engine.environment.schema_catalog_sync import (
     SchemaCatalogSync,
     bump_catalog_revision,
@@ -20,7 +20,8 @@ from engine.environment.schema_catalog_sync import (
 )
 from engine.models import DataSource, SchemaColumn, SchemaTable
 from engine.tools.builtin.catalog import CatalogOverviewTool
-from engine.tools.builtin.contracts import EmptyInput
+from dlcs.dbfox_data.backend.tool_contracts import DatabaseTargetInput
+from engine.resource import ResourceScopeRef
 from engine.tools.runtime.context import ToolRunContext
 
 
@@ -34,7 +35,7 @@ def _revision(db_session, datasource_id: str) -> int:
 
 def _empty_inventory(datasource_id: str) -> AuthoritativeInventory:
     return AuthoritativeInventory.from_completed_inventory(
-        SchemaInventory(datasource_id=datasource_id, dialect="sqlite")
+        SchemaInventory(database_resource_id=datasource_id, dialect="sqlite")
     )
 
 
@@ -91,7 +92,7 @@ def test_catalog_overview_freezes_execution_time_revision(
 
     context = ToolRunContext.for_invocation(
         request=SimpleNamespace(
-            datasource_id=test_datasource.id,
+            database_resource_id=test_datasource.id,
             datasource_generation=test_datasource.connection_generation,
             session_id="session-revision",
             run_id="run-revision",
@@ -99,9 +100,15 @@ def test_catalog_overview_freezes_execution_time_revision(
         ),
         idempotency_key="catalog-revision-overview",
         raw_input={},
-        resources={"database": db_session},
+        resources={("dbfox.data.database", str(test_datasource.id)): db_session},
+        scope_refs=(ResourceScopeRef(
+            kind="dbfox.data.database",
+            id=str(test_datasource.id),
+            version=test_datasource.connection_generation,
+        ),),
+        metadata_session=db_session,
     )
-    output = CatalogOverviewTool().run(EmptyInput(), context)
+    output = CatalogOverviewTool().run(DatabaseTargetInput(), context)
     facts = CatalogOverviewTool().project_observation(
         status="success",
         output=output.model_dump(mode="json"),

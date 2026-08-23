@@ -1,6 +1,7 @@
 """Deterministic, versioned context assembly from durable Agent state."""
 
 from __future__ import annotations
+from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
 
 import hashlib
 import os
@@ -40,6 +41,11 @@ from engine.agent.context_fragment import (
     MAX_CONTEXT_ARTIFACT_PAYLOAD_BYTES,
 )
 from engine.agent.conversation_recall import ConversationRecallService
+from engine.agent.resource_refs import (
+    load_resource_refs,
+    resource_refs_for_run,
+    single_run_resource_ref,
+)
 from engine.agent.memory_v4 import (
     CatalogProjectionScope,
     CatalogWorkingState,
@@ -58,7 +64,6 @@ from engine.json_codec import (
 )
 from engine.app.safe_errors import fixed_error_detail
 from engine.tools.runtime.attempt import ResourceScopeRef
-from engine.tools.runtime.resource_context import resolve_workspace_scope_ref
 
 
 MAX_HISTORY_MESSAGES = 24
@@ -663,40 +668,18 @@ class ContextAssembler:
                     semantic_capabilities=tuple(
                         _json_strings(observation.semantic_capabilities_json)
                     ),
+                    resource_refs=(
+                        load_resource_refs(str(row.resource_refs_json))
+                        if getattr(row, "resource_refs_json", None)
+                        else ()
+                    ),
                     payload=payload,
                 )
             )
         return tuple(projected)
 
     def _resource_refs_for_run(self, run: AgentRun) -> tuple[ResourceScopeRef, ...]:
-        from engine.agent.resource_refs import load_resource_refs
-
-        # Primary: read frozen resource refs from the input
-        if run.input_id:
-            input_row = self.session.get(AgentSessionInput, str(run.input_id))
-            if input_row is not None:
-                refs = load_resource_refs(str(input_row.resource_refs_json) if input_row.resource_refs_json is not None else None)
-                if refs is not None:
-                    return refs
-
-        # Legacy fallback: derive from run.datasource_id (pre-P4 inputs)
-        resource_refs: list[ResourceScopeRef] = []
-        if run.datasource_id:
-            resource_refs.append(
-                ResourceScopeRef(
-                    kind="database",
-                    id=str(run.datasource_id),
-                    version=int(run.datasource_generation or 0),
-                )
-            )
-        workspace_ref = (
-            resolve_workspace_scope_ref(self.session, str(run.datasource_id))
-            if run.datasource_id
-            else None
-        )
-        if workspace_ref is not None:
-            resource_refs.append(workspace_ref)
-        return tuple(resource_refs)
+        return resource_refs_for_run(self.session, run)
 
     def _previous_run_outcome(
         self,
@@ -1160,14 +1143,15 @@ class ContextAssembler:
         aggregate: AgentSession,
         sources: list[ContextSource],
     ) -> dict[str, Any]:
-        if not run.datasource_id:
+        database_ref = single_run_resource_ref(self.session, run, DATABASE_RESOURCE_KIND)
+        if database_ref is None:
             sources.append(
                 ContextSource(
                     kind="session_memory",
                     source_id=str(aggregate.id),
                     version=str(aggregate.context_epoch or 0),
                     included=False,
-                    reason="no datasource for run",
+                    reason="run does not have exactly one authorized database",
                 )
             )
             return {}
@@ -1189,8 +1173,8 @@ class ContextAssembler:
             )
             return {}
         value = _json_object(row.memory_json)
-        current_datasource_id = str(run.datasource_id)
-        current_generation = int(run.datasource_generation or 0)
+        current_datasource_id = database_ref.id
+        current_generation = database_ref.version or 0
         raw_recent_runs = list(value.get("recent_runs") or [])
         matching_recent_runs = [
             item
@@ -1343,23 +1327,23 @@ class ContextAssembler:
             )
             return {}
 
-        if not run.datasource_id:
+        database_ref = single_run_resource_ref(self.session, run, DATABASE_RESOURCE_KIND)
+        if database_ref is None:
             sources.append(
                 ContextSource(
                     kind="session_memory",
                     source_id=str(row.id),
                     version=str(aggregate.context_epoch or 0),
                     included=False,
-                    reason="no datasource for run",
+                    reason="run does not have exactly one authorized database",
                 )
             )
             return {}
 
-        datasource = self.session.get(DataSource, str(run.datasource_id))
+        datasource = self.session.get(DataSource, database_ref.id)
         current_revision = int(datasource.catalog_revision or 0) if datasource is not None else -1
         if (
-            scope.datasource_id != str(run.datasource_id)
-            or scope.datasource_generation != int(run.datasource_generation or 0)
+            scope.resource_ref != database_ref
             or scope.catalog_revision != current_revision
         ):
             sources.append(
@@ -1396,8 +1380,7 @@ class ContextAssembler:
 
         value = {
             "version": 4,
-            "datasource_id": scope.datasource_id,
-            "datasource_generation": scope.datasource_generation,
+            "resource_ref": database_ref.model_dump(mode="json"),
             "catalog_revision": scope.catalog_revision,
             "SESSION_WORKING_STATE": {
                 "objects": working_objects,

@@ -27,6 +27,7 @@ jobs:
     env:
       WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
       WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      SYSTEM_DLC_SIGNING_KEY_BASE64: ${{ secrets.SYSTEM_DLC_SIGNING_KEY_BASE64 }}
     steps:
       # v4.2.2
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -36,11 +37,28 @@ jobs:
       - name: Require the Windows publisher credentials
         shell: pwsh
         run: |
-          foreach ($name in @('WINDOWS_CERTIFICATE_BASE64', 'WINDOWS_CERTIFICATE_PASSWORD')) {
+          foreach ($name in @(
+            'WINDOWS_CERTIFICATE_BASE64',
+            'WINDOWS_CERTIFICATE_PASSWORD',
+            'SYSTEM_DLC_SIGNING_KEY_BASE64'
+          )) {
             if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
               throw "Required release credential is missing: $name"
             }
           }
+
+      - name: Materialize the release-only System DLC signing key
+        shell: pwsh
+        run: |
+          $keyPath = Join-Path $env:RUNNER_TEMP 'dbfox-system-dlc-signing-key.pem'
+          [IO.File]::WriteAllBytes(
+            $keyPath,
+            [Convert]::FromBase64String($env:SYSTEM_DLC_SIGNING_KEY_BASE64)
+          )
+          "DBFOX_SYSTEM_DLC_SIGNING_KEY_PATH=$keyPath" | Out-File `
+            -FilePath $env:GITHUB_ENV `
+            -Encoding utf8 `
+            -Append
 
       - name: Require a GitHub-verified source commit
         shell: pwsh

@@ -73,17 +73,13 @@ class SessionRepository:
         self,
         *,
         project_id: str,
-        datasource_id: str | None = None,
         title: str,
-        context_tables: list[str],
     ) -> AgentSession:
         begin_agent_write(self.session)
         now = _utcnow()
         aggregate = AgentSession(
             project_id=project_id,
-            datasource_id=datasource_id,
             title=title,
-            context_tables_json=_json(context_tables),
             created_at=now,
             updated_at=now,
         )
@@ -96,7 +92,6 @@ class SessionRepository:
         *,
         session_id: str,
         title: str | None,
-        context_tables: list[str] | None,
         archived: bool | None,
     ) -> AgentSession | None:
         begin_agent_write(self.session)
@@ -109,8 +104,6 @@ class SessionRepository:
             return None
         if title is not None:
             aggregate.title = title
-        if context_tables is not None:
-            aggregate.context_tables_json = _json(context_tables)
         if archived is not None:
             aggregate.archived_at = _utcnow() if archived else None
         aggregate.updated_at = _utcnow()
@@ -195,20 +188,6 @@ class SessionRepository:
         aggregate = self._session_for_update(session_id)
         if aggregate.deleted_at is not None:
             raise ValueError("Cannot admit input to a deleted Session")
-        # Derive datasource compatibility fields from frozen resource refs
-        database_ref = next(
-            (ref for ref in resource_refs if ref.kind == "database"), None
-        )
-        datasource_id = str(database_ref.id) if database_ref else None
-        datasource_generation = int(database_ref.version or 0) if database_ref else 0
-
-        # Validate database ref belongs to session project if present
-        if datasource_id is not None and aggregate.project_id is not None:
-            from engine.models import DataSource
-            ds = self.session.get(DataSource, datasource_id)
-            if ds is None or str(ds.project_id) != str(aggregate.project_id):
-                raise ValueError("Database ref does not belong to the Session's Project")
-
         if delivery_mode is DeliveryMode.STEER:
             active_run = self.session.execute(
                 select(AgentRun)
@@ -291,8 +270,6 @@ class SessionRepository:
                 session_id=session_id,
                 input_id=input_id,
                 session_sequence=int(aggregate.input_sequence),
-                datasource_id=datasource_id,
-                datasource_generation=datasource_generation,
                 llm_credential_id=llm_credential_id,
                 api_base=api_base,
                 model_name=model_name,

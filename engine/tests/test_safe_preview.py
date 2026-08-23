@@ -4,7 +4,7 @@ import pytest
 
 from engine.errors import ToolInputError
 from engine.runtime_composition import build_product_tool_registry
-from engine.tools.builtin.contracts import DataPreviewInput
+from dlcs.dbfox_data.backend.tool_contracts import DataPreviewInput
 from engine.tools.db.preview import db_preview
 from engine.tools.materialization import materialize_tools
 

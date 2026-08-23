@@ -16,6 +16,7 @@ from engine.agent.memory_projection import (
 )
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.resource_refs import dump_resource_refs
 from engine.agent.prompt import PromptAssembler
 from engine.agent.turn import TurnStreamItem, TurnStreamKind, TurnTermination
 from engine.json_codec import dumps
@@ -24,6 +25,7 @@ from engine.models import (
     AgentObservationRecord,
     AgentRun,
     AgentSession,
+    AgentSessionInput,
     AgentSessionMemory,
     AgentToolInvocation,
     AgentTurn,
@@ -34,7 +36,6 @@ from engine.tools.runtime import ToolRegistry
 def _session(db_session, datasource_id: str, session_id: str = "session-v4-proj") -> AgentSession:
     session = AgentSession(
         id=session_id,
-        datasource_id=datasource_id,
         title="Memory v4 projection",
     )
     db_session.add(session)
@@ -53,12 +54,33 @@ def _run(
     lease_token: int = 1,
     datasource_generation: int = 1,
 ) -> AgentRun:
+    input_id = f"input_{run_id}"
+    refs = (
+        (ResourceScopeRef(
+            kind="dbfox.data.database",
+            id=datasource_id,
+            version=datasource_generation,
+        ),)
+        if datasource_id
+        else ()
+    )
+    db_session.add(
+        AgentSessionInput(
+            id=input_id,
+            session_id=session_id,
+            run_id=run_id,
+            sequence=sequence,
+            idempotency_key=f"input-key-{run_id}",
+            content="test",
+            resource_refs_json=dump_resource_refs(refs),
+        )
+    )
+    db_session.flush()
     run = AgentRun(
         id=run_id,
         session_id=session_id,
+        input_id=input_id,
         session_sequence=sequence,
-        datasource_id=datasource_id,
-        datasource_generation=datasource_generation,
         question="test",
         status=status,
         lease_token=lease_token,
@@ -220,8 +242,11 @@ def test_resource_generation_transition_resets_catalog_working_state(
         if item["projection_id"] == "dbfox.catalog.working_state"
     )
     assert projection["scope"] == {
-        "datasource_id": str(test_datasource.id),
-        "datasource_generation": 2,
+        "resource_ref": {
+            "kind": "dbfox.data.database",
+            "id": str(test_datasource.id),
+            "version": 2,
+        },
         "catalog_revision": 0,
     }
     assert projection["state"]["objects"] == []
@@ -269,7 +294,7 @@ def test_projection_contract_error_does_not_block_run_failure(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session.id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="test",
         idempotency_key="memory-v4-fail",
         llm_credential_id="credential",
@@ -315,7 +340,7 @@ def test_cancelled_run_still_folds_succeeded_observations(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session.id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="test",
         idempotency_key="memory-v4-cancel",
         llm_credential_id="credential",
@@ -488,7 +513,7 @@ def test_unsuccessful_run_projection_is_consumed_by_the_next_run_context(
     session.message_sequence = 2
     admitted = SessionRepository(db_session).admit(
         session_id=session.id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="继续使用已经确认的订单表。",
         idempotency_key=f"v4-{terminal_status}-to-context-2",
         llm_credential_id="credential",
@@ -560,7 +585,7 @@ def test_generation_transition_removes_projected_objects_from_later_context(
     session.message_sequence = 4
     admitted = SessionRepository(db_session).admit(
         session_id=session.id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=2),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=2),),
         content="数据库连接已切换，请继续。",
         idempotency_key="v4-generation-context-2",
         llm_credential_id="credential",
@@ -662,7 +687,7 @@ def test_scripted_continuation_consumes_memory_without_rediscovery(
     session.message_sequence = 2
     admitted = SessionRepository(db_session).admit(
         session_id=session.id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="继续使用 orders 表完成分析。",
         idempotency_key="v4-scripted-continuation-2",
         llm_credential_id="credential",
@@ -729,7 +754,7 @@ def test_memory_v4_matrix_workspace_only_run_preserves_catalog_and_advances_wate
         if item["projection_id"] == "dbfox.catalog.working_state"
     )
     assert projection["projected_through_session_sequence"] == 2
-    assert projection["scope"]["datasource_id"] == str(test_datasource.id)
+    assert projection["scope"]["resource_ref"]["id"] == str(test_datasource.id)
     assert len(projection["state"]["objects"]) == 1
 
     # Run 3: Database A continues
@@ -748,7 +773,7 @@ def test_memory_v4_matrix_workspace_only_run_preserves_catalog_and_advances_wate
         if item["projection_id"] == "dbfox.catalog.working_state"
     )
     assert projection_3["projected_through_session_sequence"] == 3
-    assert projection_3["scope"]["datasource_id"] == str(test_datasource.id)
+    assert projection_3["scope"]["resource_ref"]["id"] == str(test_datasource.id)
     assert len(projection_3["state"]["objects"]) == 1
 
 
@@ -799,7 +824,7 @@ def test_memory_v4_matrix_generation_invalidation_after_workspace_only_run(
         for item in payload["projections"]
         if item["projection_id"] == "dbfox.catalog.working_state"
     )
-    assert projection["scope"]["datasource_generation"] == 2
+    assert projection["scope"]["resource_ref"]["version"] == 2
     assert len(projection["state"]["objects"]) == 0
 
 
@@ -839,6 +864,6 @@ def test_memory_v4_matrix_workspace_only_first_then_database(
         for item in payload["projections"]
         if item["projection_id"] == "dbfox.catalog.working_state"
     )
-    assert projection["scope"]["datasource_id"] == str(test_datasource.id)
+    assert projection["scope"]["resource_ref"]["id"] == str(test_datasource.id)
     assert len(projection["state"]["objects"]) == 1
 

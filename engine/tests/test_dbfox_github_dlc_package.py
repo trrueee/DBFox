@@ -15,7 +15,7 @@ import pytest
 from engine.agent.artifact import artifact_payload_contracts
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.session import DeliveryMode
-from engine.dlc import ContributionCompiler, DlcPackageService
+from engine.dlc import BuiltinContributionSet, ContributionCompiler, DlcPackageService
 from engine.dlc.api import DlcOperationContext, ResourceScopeRef
 from engine.dlc.loader import derive_dlc_namespace
 from engine.models import AgentSession, AgentToolInvocation
@@ -75,10 +75,7 @@ def test_signed_github_dlc_package_activates_complete_contribution_set(
     service.set_desired_enabled("dbfox.github", True)
 
     snapshot = ContributionCompiler(service.storage_root).compile(
-        built_in_tools=[],
-        built_in_resource_providers=[],
-        built_in_resource_resolvers=[],
-        built_in_context_contributors=[],
+        built_ins=BuiltinContributionSet()
     )
     assert snapshot.activation_failures == ()
     assert [(item.dlc_id, item.package_digest) for item in snapshot.active_dlcs] == [
@@ -175,7 +172,6 @@ def _record_github_tool_history(db_session, snapshot, package_digest: str) -> st
         AgentSession(
             id=session_id,
             title="R5 GitHub history",
-            context_tables_json="[]",
             created_at=now,
             updated_at=now,
         )

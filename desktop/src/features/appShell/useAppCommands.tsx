@@ -16,6 +16,7 @@ export interface UseAppCommandsProps {
   openConversation: (conversationId: string) => void;
   openSettings: (section?: AppSettingsSection) => void;
   openConnectionDialog: (mode?: "detail" | "create") => void;
+  connectionManagementAvailable?: boolean;
   openTable: (
     tableName: string,
     initialSubtab?: string,
@@ -32,6 +33,7 @@ export function useAppCommands({
   openConversation,
   openSettings,
   openConnectionDialog,
+  connectionManagementAvailable = true,
   openTable,
   activeDatasource,
 }: UseAppCommandsProps) {
@@ -72,17 +74,10 @@ export function useAppCommands({
       },
       {
         id: "create-datasource",
-        name: "新建数据源连接",
+        name: "新建数据库连接",
         category: "数据源",
         icon: <Database size={13} />,
         action: () => openConnectionDialog("create"),
-      },
-      {
-        id: "connection-manager",
-        name: "数据源连接管理",
-        category: "数据源",
-        icon: <Database size={13} />,
-        action: () => openConnectionDialog("detail"),
       },
       {
         id: "diagnostics-logs",
@@ -92,6 +87,15 @@ export function useAppCommands({
         action: () => openSettings("diagnostics"),
       },
     ];
+    if (connectionManagementAvailable) {
+      items.splice(5, 0, {
+        id: "connection-manager",
+        name: "数据库连接管理",
+        category: "数据源",
+        icon: <Database size={13} />,
+        action: () => openConnectionDialog("detail"),
+      });
+    }
 
     conversations.slice(0, 8).forEach((conversation) => {
       items.push({
@@ -124,6 +128,7 @@ export function useAppCommands({
     openConversation,
     openSettings,
     openConnectionDialog,
+    connectionManagementAvailable,
     openTable,
     activeDatasource,
   ]);

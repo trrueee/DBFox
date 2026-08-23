@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from engine.dlc.errors import DlcError, DlcErrorCode
 
 CURRENT_DBFOX_VERSION = "1.0.3"
-CURRENT_EXTENSION_API_VERSION = "1"
+CURRENT_EXTENSION_API_VERSION = "2"
 SUPPORTED_MANIFEST_SCHEMA_VERSIONS = {1, 2}
 
 

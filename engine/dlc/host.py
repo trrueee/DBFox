@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel
+from engine.agent.completion import CompletionConstraint, CompletionSupport
+from engine.agent.artifact_view import ArtifactChartViewProvider, ArtifactTableViewProvider
 from engine.dlc.api import (
     BackendExtensionHost as IBackendExtensionHost,
     DlcOperationSpec,
@@ -15,6 +18,8 @@ from engine.dlc.api import (
     ExtensionContextContributor,
     ExtensionContextContributorFactory,
     ExtensionContextHost as IExtensionContextHost,
+    ExtensionCompletionHost as IExtensionCompletionHost,
+    ExtensionCredentialsHost as IExtensionCredentialsHost,
     ExtensionOperationsHost as IExtensionOperationsHost,
     ExtensionProjectResourceProvider,
     ExtensionResourcesHost as IExtensionResourcesHost,
@@ -24,6 +29,7 @@ from engine.dlc.errors import DlcError, DlcErrorCode
 from engine.dlc.manifest import DlcManifest
 from engine.tools.runtime.attempt import ScopedResourceResolver
 from engine.tools.runtime.base import BaseTool
+from engine.security.credential_vault import CredentialKind, get_credential_vault
 
 _OPERATION_NAME_PATTERN = re.compile(r"^[a-z0-9_.-]{1,64}$")
 _ARTIFACT_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*(?:[.:][a-z][a-z0-9_.-]*)+$")
@@ -46,7 +52,18 @@ class StagedDlcContributions:
         | type[ExtensionContextContributor]
     ] = field(default_factory=list)
     artifact_contracts: list[tuple[str, int, type[BaseModel]]] = field(default_factory=list)
+    artifact_table_views: list[tuple[str, ArtifactTableViewProvider]] = field(
+        default_factory=list
+    )
+    artifact_chart_views: list[tuple[str, ArtifactChartViewProvider]] = field(
+        default_factory=list
+    )
+    completion_constraints: list[CompletionConstraint] = field(default_factory=list)
+    completion_supports: list[CompletionSupport] = field(default_factory=list)
     operations: list[DlcOperationSpec] = field(default_factory=list)
+    credential_reference_probes: list[Callable[[frozenset[str]], bool]] = field(
+        default_factory=list
+    )
 
 
 class _StagedToolsHost:
@@ -185,6 +202,104 @@ class _StagedArtifactsHost:
                 )
         self._staging.artifact_contracts.append((artifact_type, schema_version, validator))
 
+    def register_table_view(
+        self,
+        artifact_type: str,
+        provider: ArtifactTableViewProvider,
+    ) -> None:
+        if not isinstance(artifact_type, str) or not _ARTIFACT_TYPE_PATTERN.fullmatch(artifact_type):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered an invalid table-view Artifact type '{artifact_type}'",
+            )
+        if not callable(getattr(provider, "page", None)) or not callable(
+            getattr(provider, "export_csv", None)
+        ):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered an invalid Artifact table-view provider",
+            )
+        if any(existing_type == artifact_type for existing_type, _ in self._staging.artifact_table_views):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered duplicate table view for '{artifact_type}'",
+            )
+        self._staging.artifact_table_views.append((artifact_type, provider))
+
+    def register_chart_view(
+        self,
+        artifact_type: str,
+        provider: ArtifactChartViewProvider,
+    ) -> None:
+        if not isinstance(artifact_type, str) or not _ARTIFACT_TYPE_PATTERN.fullmatch(artifact_type):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered an invalid chart-view Artifact type '{artifact_type}'",
+            )
+        if not callable(getattr(provider, "data", None)):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered an invalid Artifact chart-view provider",
+            )
+        if any(existing_type == artifact_type for existing_type, _ in self._staging.artifact_chart_views):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered duplicate chart view for '{artifact_type}'",
+            )
+        self._staging.artifact_chart_views.append((artifact_type, provider))
+
+
+class _StagedCompletionHost:
+    def __init__(self, staging: StagedDlcContributions) -> None:
+        self._staging = staging
+
+    def register_constraint(self, constraint: CompletionConstraint) -> None:
+        self._validate(
+            contribution=constraint,
+            required_method="evaluate",
+            existing=self._staging.completion_constraints,
+            family="constraint",
+        )
+        self._staging.completion_constraints.append(constraint)
+
+    def register_support(self, support: CompletionSupport) -> None:
+        self._validate(
+            contribution=support,
+            required_method="evidence_artifact_ids",
+            existing=self._staging.completion_supports,
+            family="support",
+        )
+        if not callable(getattr(support, "supports_bounded_partial", None)):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered invalid completion support",
+            )
+        self._staging.completion_supports.append(support)
+
+    def _validate(
+        self,
+        *,
+        contribution: Any,
+        required_method: str,
+        existing: list[Any],
+        family: str,
+    ) -> None:
+        contribution_id = getattr(contribution, "id", None)
+        if (
+            not isinstance(contribution_id, str)
+            or not _OPERATION_NAME_PATTERN.fullmatch(contribution_id)
+            or not callable(getattr(contribution, required_method, None))
+        ):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered invalid completion {family}",
+            )
+        if any(getattr(item, "id", None) == contribution_id for item in existing):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered duplicate completion {family} '{contribution_id}'",
+            )
+
 
 class _StagedOperationsHost:
     def __init__(self, staging: StagedDlcContributions) -> None:
@@ -222,6 +337,25 @@ class _StagedOperationsHost:
                 DlcErrorCode.REGISTRATION_CONFLICT,
                 f"DLC '{self._staging.dlc_id}' operation '{spec.name}' handler must be callable",
             )
+        if spec.credential_lease_required and spec.credential_references is None:
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' operation '{spec.name}' requires a credential lease but declares no credential reference extractor",
+            )
+        if spec.credential_references is not None:
+            if not callable(spec.credential_references):
+                raise DlcError(
+                    DlcErrorCode.REGISTRATION_CONFLICT,
+                    f"DLC '{self._staging.dlc_id}' operation '{spec.name}' has a non-callable credential reference extractor",
+                )
+            if not any(
+                permission.startswith("credentials:")
+                for permission in self._staging.manifest.permissions
+            ):
+                raise DlcError(
+                    DlcErrorCode.PERMISSION_VIOLATION,
+                    f"DLC '{self._staging.dlc_id}' operation '{spec.name}' cannot adopt credentials without a credential permission",
+                )
         for existing in self._staging.operations:
             if existing.name == spec.name:
                 raise DlcError(
@@ -229,6 +363,56 @@ class _StagedOperationsHost:
                     f"DLC '{self._staging.dlc_id}' registered duplicate operation '{spec.name}'",
                 )
         self._staging.operations.append(spec)
+
+
+class _ScopedCredentialsHost:
+    """Narrow credential broker bound to one signed DLC manifest."""
+
+    def __init__(self, staging: StagedDlcContributions) -> None:
+        self._staging = staging
+
+    def get(self, credential_ref: str, *, kind: str) -> str | None:
+        try:
+            expected_kind = CredentialKind(kind)
+        except ValueError as exc:
+            raise DlcError(
+                DlcErrorCode.PERMISSION_VIOLATION,
+                f"DLC '{self._staging.dlc_id}' requested an unsupported credential kind",
+            ) from exc
+        required_permission = f"credentials:{expected_kind.value}"
+        if required_permission not in self._staging.manifest.permissions:
+            raise DlcError(
+                DlcErrorCode.PERMISSION_VIOLATION,
+                f"DLC '{self._staging.dlc_id}' did not declare permission '{required_permission}'",
+            )
+        reference = str(credential_ref).strip()
+        if not reference.startswith(f"cred_{expected_kind.value}_"):
+            return None
+        return get_credential_vault().get(reference, expected_kind=expected_kind)
+
+    def register_reference_probe(
+        self,
+        probe: Callable[[frozenset[str]], bool],
+    ) -> None:
+        if not any(
+            permission.startswith("credentials:")
+            for permission in self._staging.manifest.permissions
+        ):
+            raise DlcError(
+                DlcErrorCode.PERMISSION_VIOLATION,
+                f"DLC '{self._staging.dlc_id}' cannot register credential ownership without a credential permission",
+            )
+        if not callable(probe):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered a non-callable credential reference probe",
+            )
+        if self._staging.credential_reference_probes:
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered more than one credential reference probe",
+            )
+        self._staging.credential_reference_probes.append(probe)
 
 
 class DefaultBackendExtensionHost(IBackendExtensionHost):
@@ -240,7 +424,9 @@ class DefaultBackendExtensionHost(IBackendExtensionHost):
         self._resources_host = _StagedResourcesHost(staging)
         self._context_host = _StagedContextHost(staging)
         self._artifacts_host = _StagedArtifactsHost(staging)
+        self._completion_host = _StagedCompletionHost(staging)
         self._operations_host = _StagedOperationsHost(staging)
+        self._credentials_host = _ScopedCredentialsHost(staging)
 
     @property
     def runtime_info(self) -> DlcRuntimeInfo:
@@ -263,5 +449,13 @@ class DefaultBackendExtensionHost(IBackendExtensionHost):
         return self._artifacts_host
 
     @property
+    def completion(self) -> IExtensionCompletionHost:
+        return self._completion_host
+
+    @property
     def operations(self) -> IExtensionOperationsHost:
         return self._operations_host
+
+    @property
+    def credentials(self) -> IExtensionCredentialsHost:
+        return self._credentials_host

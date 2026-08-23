@@ -1,6 +1,7 @@
 """Artifact identity, relationship and Evidence persistence."""
 
 from __future__ import annotations
+from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
 
 from dataclasses import dataclass
 from typing import Any
@@ -23,6 +24,12 @@ from engine.agent.artifact import (
 )
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
+from engine.agent.resource_refs import (
+    dump_resource_refs,
+    load_resource_refs,
+    resource_refs_for_run,
+    single_run_resource_ref,
+)
 from engine.agent.session import SessionLease
 from engine.json_codec import JsonCodecError, canonical_dumps as _json, loads
 from engine.models import (
@@ -31,6 +38,7 @@ from engine.models import (
     AgentRun,
     AgentSession,
 )
+from engine.tools.runtime.attempt import ResourceScopeRef
 
 
 def _loads(value: str | None, fallback: Any) -> Any:
@@ -38,15 +46,6 @@ def _loads(value: str | None, fallback: Any) -> Any:
         return loads(value or "")
     except JsonCodecError:
         return fallback
-
-
-@dataclass(frozen=True, slots=True)
-class ValidatedSqlArtifact:
-    sql_artifact_id: str
-    safety_artifact_id: str
-    original_sql: str
-    safe_sql: str
-    safety: dict[str, Any]
 
 
 class ArtifactDraftContractError(ValueError):
@@ -66,6 +65,69 @@ class ArtifactRepository:
         self.session = session
         self.sessions = SessionRepository(session)
 
+    def get_for_run(
+        self,
+        *,
+        session_id: str,
+        run_id: str,
+        artifact_id: str,
+    ) -> Artifact | None:
+        """Return one Artifact only inside the exact invoking Run boundary."""
+
+        row = self.session.get(AgentArtifactRecord, artifact_id)
+        if (
+            row is None
+            or str(row.session_id) != str(session_id)
+            or str(row.run_id) != str(run_id)
+        ):
+            return None
+        return self._domain(row)
+
+    def get(self, artifact_id: str) -> Artifact | None:
+        """Return one durable Artifact envelope by its opaque identity."""
+
+        row = self.session.get(AgentArtifactRecord, artifact_id)
+        return self._domain(row) if row is not None else None
+
+    def artifacts_relating_to_for_run(
+        self,
+        *,
+        session_id: str,
+        run_id: str,
+        artifact_id: str,
+        relation: ArtifactRelationType,
+    ) -> tuple[Artifact, ...]:
+        """Return current-Run Artifacts with an outbound relation to ``artifact_id``."""
+
+        if self.get_for_run(
+            session_id=session_id,
+            run_id=run_id,
+            artifact_id=artifact_id,
+        ) is None:
+            return ()
+        rows = self.session.execute(
+            select(AgentArtifactRecord)
+            .where(
+                AgentArtifactRecord.session_id == session_id,
+                AgentArtifactRecord.run_id == run_id,
+            )
+            .order_by(
+                AgentArtifactRecord.sequence,
+                AgentArtifactRecord.created_at,
+            )
+        ).scalars()
+        matches: list[Artifact] = []
+        for row in rows:
+            relations = _loads(str(row.relations_json or "[]"), [])
+            if any(
+                isinstance(item, dict)
+                and item.get("relation") == relation.value
+                and str(item.get("artifact_id") or "") == artifact_id
+                for item in relations
+            ):
+                matches.append(self._domain(row))
+        return tuple(matches)
+
     def create(
         self,
         *,
@@ -79,6 +141,7 @@ class ArtifactRepository:
         summary: str | None = None,
         semantic_key: str | None = None,
         payload_ref: str | None = None,
+        resource_refs: tuple[ResourceScopeRef, ...] = (),
         provenance: dict[str, Any] | None = None,
         relations: list[ArtifactRelation] | None = None,
         status: ArtifactStatus = ArtifactStatus.COMPLETED,
@@ -112,6 +175,7 @@ class ArtifactRepository:
             type=artifact_type, schema_version=schema_version, title=title,
             semantic_key=semantic_key, version=version,
             status=status, visibility=visibility, summary=summary, payload=payload, payload_ref=payload_ref,
+            resource_refs=resource_refs,
             provenance=provenance or {}, relations=relations or [],
         )
         self.session.add(AgentArtifactRecord(
@@ -122,6 +186,7 @@ class ArtifactRepository:
             presentation_json=_json({"visibility": visibility.value}),
             summary=summary,
             payload_ref=payload_ref,
+            resource_refs_json=dump_resource_refs(resource_refs),
             provenance_json=_json(provenance or {}),
             relations_json=_json([item.model_dump(mode="json") for item in relations or []]),
             status=status.value, sequence=sequence,
@@ -145,6 +210,7 @@ class ArtifactRepository:
             return []
         prepared = self._prepare_drafts(
             lease=lease,
+            run_id=run_id,
             drafts=drafts,
         )
         created: list[Artifact] = []
@@ -169,6 +235,7 @@ class ArtifactRepository:
                     or f"{draft.type}:{invocation_id}:{draft.key}"
                 ),
                 payload_ref=draft.payload_ref,
+                resource_refs=draft.resource_refs,
                 provenance=provenance,
                 relations=list(item.relations),
                 visibility=draft.visibility,
@@ -188,6 +255,7 @@ class ArtifactRepository:
         self,
         *,
         lease: SessionLease,
+        run_id: str,
         drafts: list[ArtifactDraft],
     ) -> tuple[_PreparedArtifactDraft, ...]:
         """Resolve and validate one complete draft batch before the first write."""
@@ -197,6 +265,28 @@ class ArtifactRepository:
             raise ArtifactDraftContractError(
                 "Artifact draft keys must be unique within one tool outcome"
             )
+
+        authorized_refs = resource_refs_for_run(
+            self.session,
+            self.session.get(AgentRun, run_id),
+        )
+        authorized = {
+            (ref.kind, ref.id, ref.version)
+            for ref in authorized_refs
+        }
+        for draft in drafts:
+            declared = [
+                (ref.kind, ref.id, ref.version)
+                for ref in draft.resource_refs
+            ]
+            if len(set(declared)) != len(declared):
+                raise ArtifactDraftContractError(
+                    "Artifact resource_refs must be unique by exact resource identity"
+                )
+            if any(identity not in authorized for identity in declared):
+                raise ArtifactDraftContractError(
+                    "Artifact resource_refs must be a subset of the Run authority"
+                )
 
         ids = {key: f"artifact_{uuid4().hex}" for key in keys}
         prepared: list[_PreparedArtifactDraft] = []
@@ -278,98 +368,6 @@ class ArtifactRepository:
         # intentionally refer to earlier Artifacts in the same Session.
         return tuple(prepared)
 
-    def require_validated_sql(
-        self,
-        *,
-        session_id: str,
-        run_id: str,
-        sql_artifact_id: str,
-    ) -> ValidatedSqlArtifact:
-        """Resolve one exact SQL→Safety relation as the execution source of truth."""
-
-        sql_row = self.session.get(AgentArtifactRecord, sql_artifact_id)
-        if (
-            sql_row is None
-            or str(sql_row.session_id) != str(session_id)
-            or str(sql_row.run_id) != str(run_id)
-            or str(sql_row.type) != ArtifactType.SQL.value
-        ):
-            raise ValueError("The SQL validation Artifact is unavailable in this Run")
-        sql_payload = validate_artifact_payload(
-            ArtifactType.SQL,
-            _loads(str(sql_row.payload_json or "{}"), {}),
-        )
-        relation_items = _loads(str(sql_row.relations_json or "[]"), [])
-        safety_id = next(
-            (
-                str(item.get("artifact_id") or "")
-                for item in relation_items
-                if isinstance(item, dict)
-                and item.get("relation") == ArtifactRelationType.VALIDATED_BY.value
-            ),
-            "",
-        )
-        safety_row = (
-            self.session.get(AgentArtifactRecord, safety_id)
-            if safety_id
-            else None
-        )
-        if (
-            safety_row is None
-            or str(safety_row.session_id) != str(session_id)
-            or str(safety_row.run_id) != str(run_id)
-            or str(safety_row.type) != ArtifactType.SAFETY.value
-        ):
-            raise ValueError("The SQL Artifact has no valid Safety Artifact")
-        safety_payload = validate_artifact_payload(
-            ArtifactType.SAFETY,
-            _loads(str(safety_row.payload_json or "{}"), {}),
-        )
-        safe_sql = str(safety_payload.get("safeSql") or "").strip()
-        if safe_sql != str(sql_payload.get("safeSql") or "").strip():
-            raise ValueError("The SQL and Safety Artifacts do not bind the same statement")
-        return ValidatedSqlArtifact(
-            sql_artifact_id=str(sql_row.id),
-            safety_artifact_id=str(safety_row.id),
-            original_sql=str(safety_payload.get("originalSql") or ""),
-            safe_sql=safe_sql,
-            safety={
-                "datasource_id": safety_payload["datasourceId"],
-                "policy": safety_payload["policy"],
-                "original_sql": safety_payload["originalSql"],
-                "safe_sql": safety_payload["safeSql"],
-                "passed": safety_payload["passed"],
-                "can_execute": safety_payload["canExecute"],
-                "requires_confirmation": safety_payload["requiresApproval"],
-                "risk_level": safety_payload["riskLevel"],
-                "guardrail": safety_payload["guardrail"],
-                "schema_warnings": safety_payload["schemaWarnings"],
-                "scope_state": safety_payload["scopeState"],
-                "blocked_reasons": safety_payload["blockedReasons"],
-                "messages": safety_payload["messages"],
-            },
-        )
-
-    def result_for_sql_artifact(
-        self,
-        *,
-        session_id: str,
-        run_id: str,
-        sql_artifact_id: str,
-    ) -> Artifact | None:
-        rows = self.session.execute(
-            select(AgentArtifactRecord).where(
-                AgentArtifactRecord.session_id == session_id,
-                AgentArtifactRecord.run_id == run_id,
-                AgentArtifactRecord.type == ArtifactType.RESULT_VIEW.value,
-            )
-        ).scalars()
-        for row in rows:
-            payload = _loads(str(row.payload_json or "{}"), {})
-            if str(payload.get("sourceSqlArtifactId") or "") == sql_artifact_id:
-                return self._domain(row)
-        return None
-
     def list_for_run(self, run_id: str) -> list[Artifact]:
         rows = self.session.execute(
             select(AgentArtifactRecord).where(AgentArtifactRecord.run_id == run_id)
@@ -383,15 +381,29 @@ class ArtifactRepository:
         current_run_id: str,
         artifact_id: str,
         session_id: str,
-        datasource_id: str,
-        datasource_generation: int,
+        resource_ref: ResourceScopeRef,
     ) -> Artifact | None:
-        """Resolve one Result Artifact within the durable Session/generation fence."""
+        """Resolve one Result Artifact within its exact durable resource fence."""
 
         current_run = self.session.get(AgentRun, current_run_id)
         row = self.session.get(AgentArtifactRecord, artifact_id)
         owner_run = (
             self.session.get(AgentRun, str(row.run_id)) if row is not None else None
+        )
+        current_refs = (
+            resource_refs_for_run(self.session, current_run)
+            if current_run is not None
+            else ()
+        )
+        owner_refs = (
+            resource_refs_for_run(self.session, owner_run)
+            if owner_run is not None
+            else ()
+        )
+        owner_bound_ref = (
+            self.bound_resource_ref(artifact_id, kind=resource_ref.kind)
+            if row is not None
+            else None
         )
         if (
             current_run is None
@@ -402,10 +414,9 @@ class ArtifactRepository:
             or str(row.session_id) != session_id
             or str(current_run.session_id) != session_id
             or str(owner_run.session_id) != session_id
-            or str(current_run.datasource_id) != datasource_id
-            or str(owner_run.datasource_id) != datasource_id
-            or int(current_run.datasource_generation or 0) != datasource_generation
-            or int(owner_run.datasource_generation or 0) != datasource_generation
+            or resource_ref not in current_refs
+            or resource_ref not in owner_refs
+            or owner_bound_ref != resource_ref
         ):
             return None
         if str(owner_run.id) == str(current_run.id):
@@ -417,6 +428,34 @@ class ArtifactRepository:
         ):
             return None
         return self._domain(row)
+
+    def bound_resource_ref(
+        self,
+        artifact_id: str,
+        *,
+        kind: str,
+    ) -> ResourceScopeRef | None:
+        """Return an Artifact's sole bound resource of ``kind``.
+
+        Historical Artifacts predate the envelope column. They can be resolved
+        only when their owner Run itself has one unambiguous resource of the
+        requested kind.
+        """
+
+        row = self.session.get(AgentArtifactRecord, artifact_id)
+        if row is None:
+            return None
+        raw_refs = getattr(row, "resource_refs_json", None)
+        refs = load_resource_refs(str(raw_refs)) if raw_refs else ()
+        matches = tuple(ref for ref in refs if ref.kind == kind)
+        if not matches:
+            owner_run = self.session.get(AgentRun, str(row.run_id))
+            return (
+                single_run_resource_ref(self.session, owner_run, kind)
+                if owner_run is not None
+                else None
+            )
+        return matches[0] if len(matches) == 1 else None
 
     def referenced_results_for_run(self, run_id: str) -> list[Artifact]:
         """Return prior Result Artifacts explicitly observed by this Run."""
@@ -440,12 +479,14 @@ class ArtifactRepository:
                     referenced_ids.append(artifact_id)
         artifacts: list[Artifact] = []
         for artifact_id in referenced_ids:
+            database_ref = self.bound_resource_ref(artifact_id, kind=DATABASE_RESOURCE_KIND)
+            if database_ref is None:
+                continue
             artifact = self.available_result(
                 current_run_id=run_id,
                 artifact_id=artifact_id,
                 session_id=str(current_run.session_id),
-                datasource_id=str(current_run.datasource_id),
-                datasource_generation=int(current_run.datasource_generation or 0),
+                resource_ref=database_ref,
             )
             if artifact is not None and artifact.run_id != run_id:
                 artifacts.append(artifact)
@@ -480,6 +521,11 @@ class ArtifactRepository:
             summary=str(row.summary) if row.summary else None,
             payload=payload,
             payload_ref=str(row.payload_ref) if row.payload_ref else None,
+            resource_refs=(
+                load_resource_refs(str(row.resource_refs_json))
+                if getattr(row, "resource_refs_json", None)
+                else ()
+            ),
             provenance=_loads(str(row.provenance_json or "{}"), {}),
             relations=[ArtifactRelation.model_validate(item) for item in _loads(str(row.relations_json or "[]"), [])],
         )

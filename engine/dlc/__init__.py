@@ -24,6 +24,7 @@ from engine.dlc.service import DlcInstallationResult, DlcPackageService
 from engine.dlc.snapshot import (
     ActivatedDlcIdentity,
     ArtifactContractContribution,
+    BuiltinContributionSet,
     DlcOperationContribution,
     ResourceResolverContribution,
     RuntimeContributionSnapshot,
@@ -38,6 +39,7 @@ from engine.dlc.verifier import DlcPackageVerifier
 __all__ = [
     "ActivatedDlcIdentity",
     "ArtifactContractContribution",
+    "BuiltinContributionSet",
     "BackendExtensionHost",
     "ContributionCompiler",
     "DefaultBackendExtensionHost",

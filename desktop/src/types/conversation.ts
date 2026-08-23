@@ -1,5 +1,5 @@
 import type { AgentArtifactPayload } from "../lib/api/types/artifact";
-import type { RunProjection } from "../lib/api/generated/types.gen";
+import type { RequestedResourceRef, RunProjection } from "../lib/api/generated/types.gen";
 
 /**
  * Product projection types consumed by the timeline and artifact workspace.
@@ -26,7 +26,6 @@ export interface ConversationSummary {
   id: string;
   title: string;
   project_id?: string | null;
-  datasource_id?: string | null;
   updated_at: string | null;
   selected_artifact_id?: string | null;
   last_message?: string;
@@ -41,7 +40,6 @@ export interface ConversationRun {
   input_id: string;
   session_sequence: number;
   user_message_id: string;
-  datasource_id?: string | null;
   question: string;
   status: AgentRunStatus;
   version: number;
@@ -212,8 +210,7 @@ export interface ConversationDetail {
   id: string;
   title: string;
   project_id?: string | null;
-  datasource_id?: string | null;
-  context_tables: string[];
+  resource_intents: RequestedResourceRef[];
   selected_artifact_id?: string | null;
   context_epoch?: number;
   runs: ConversationRun[];
@@ -227,9 +224,8 @@ export interface ConversationDetail {
 
 export interface ConversationCreateInput {
   project_id: string;
-  datasource_id?: string | null;
   title?: string;
-  context_tables: string[];
+  resource_intents: RequestedResourceRef[];
 }
 
 export type RuntimeEventType =

@@ -8,15 +8,12 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from engine.json_codec import canonical_dumps
+from engine.resource import ResourceScopeRef
 
 
 def canonical_hash(value: Any) -> str:
     encoded = canonical_dumps(value)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-
-
-def safety_fingerprint(safety: dict[str, Any]) -> str:
-    return canonical_hash(safety)
 
 
 class ExecutionAuthority(BaseModel):
@@ -29,18 +26,19 @@ class ExecutionAuthority(BaseModel):
     tool_name: str
     authorized_input_hash: str
     policy_fingerprint: str
-    safety_fingerprint: str | None = None
-    datasource_generation: int | None = None
+    approval_subject_fingerprint: str | None = None
+    resource_ref: ResourceScopeRef | None = None
 
-    def authorizes_safety(
+    def authorizes(
         self,
         *,
         tool_name: str,
-        safety: dict[str, Any],
-        datasource_generation: int | None,
+        approval_subject: dict[str, Any],
+        resource_ref: ResourceScopeRef | None,
     ) -> bool:
         return (
             self.tool_name == tool_name
-            and self.safety_fingerprint == safety_fingerprint(safety)
-            and self.datasource_generation == datasource_generation
+            and self.approval_subject_fingerprint
+            == canonical_hash(approval_subject)
+            and self.resource_ref == resource_ref
         )

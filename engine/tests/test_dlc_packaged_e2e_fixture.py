@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from engine.dlc import ContributionCompiler, DlcError, DlcErrorCode, DlcPackageService
+from engine.dlc import (
+    BuiltinContributionSet,
+    ContributionCompiler,
+    DlcError,
+    DlcErrorCode,
+    DlcPackageService,
+)
 from engine.dlc.api import DlcOperationContext
 from scripts.build_dlc_e2e_fixture import build_dlc_e2e_fixtures
 
@@ -53,10 +59,7 @@ def test_acme_echo_fixture_authenticates_and_activates_only_after_enable(
     service.set_desired_enabled("acme.echo", True)
     assert not marker_path.exists()
     snapshot = ContributionCompiler(service.storage_root).compile(
-        built_in_tools=[],
-        built_in_resource_providers=[],
-        built_in_resource_resolvers=[],
-        built_in_context_contributors=[],
+        built_ins=BuiltinContributionSet()
     )
 
     assert snapshot.activation_failures == ()

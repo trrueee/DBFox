@@ -9,7 +9,10 @@ lets both callers import it without creating a cycle.
 from __future__ import annotations
 
 from engine.errors import GuardrailValidationError
-from engine.sql.readonly_query import ReadonlyQueryError, parse_single_readonly_query
+from dlcs.dbfox_data.backend.sql.readonly_query import (
+    ReadonlyQueryError,
+    parse_single_readonly_query,
+)
 
 
 def validate_explain_sql(sql: str, dialect: str) -> None:

@@ -303,7 +303,6 @@ def test_sqlite_harness_tool_loop_is_deterministic(
     session_id = f"sqlite-harness-{case_id}"
     db_session.add(
         AgentSession(id=session_id, project_id=None,
-            datasource_id=str(test_datasource.id),
             title=case_id,
         )
     )
@@ -311,7 +310,7 @@ def test_sqlite_harness_tool_loop_is_deterministic(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="预览 completed 订单",
         idempotency_key=case_id,
         llm_credential_id="deterministic-fixture",
@@ -374,7 +373,6 @@ def test_sqlite_harness_recovers_from_actionable_preview_input_error(
     session_id = "sqlite-harness-preview-recovery"
     db_session.add(
         AgentSession(id=session_id, project_id=None,
-            datasource_id=str(test_datasource.id),
             title="preview-recovery",
         )
     )
@@ -382,7 +380,7 @@ def test_sqlite_harness_recovers_from_actionable_preview_input_error(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="预览订单；输入错误时先检查结构再修正。",
         idempotency_key="preview-recovery",
         llm_credential_id="deterministic-fixture",
@@ -440,7 +438,6 @@ def test_sqlite_harness_keeps_catalog_available_for_multi_stage_pivot(
     session_id = "sqlite-harness-catalog-pivot"
     db_session.add(
         AgentSession(id=session_id, project_id=None,
-            datasource_id=str(test_datasource.id),
             title="catalog-pivot",
         )
     )
@@ -448,7 +445,7 @@ def test_sqlite_harness_keeps_catalog_available_for_multi_stage_pivot(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="先验证订单计数查询，再检查 customers 表结构。",
         idempotency_key="catalog-pivot",
         llm_credential_id="deterministic-fixture",
@@ -498,7 +495,6 @@ def test_sqlite_harness_persists_and_executes_a_multi_stage_plan(
     session_id = "sqlite-harness-plan-execution"
     db_session.add(
         AgentSession(id=session_id, project_id=None,
-            datasource_id=str(test_datasource.id),
             title="plan-execution",
         )
     )
@@ -506,7 +502,7 @@ def test_sqlite_harness_persists_and_executes_a_multi_stage_plan(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="制定计划，预览订单并形成结论。",
         idempotency_key="plan-execution",
         llm_credential_id="deterministic-fixture",

@@ -3,6 +3,7 @@ import uuid
 from typing import Any
 
 from engine.schemas.project import ProjectResponse
+from engine.agent.resource_refs import ProjectResourceDescriptor
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
@@ -15,6 +16,7 @@ from engine.models import (
     Project,
 )
 from engine.projects.service import get_or_create_default_project
+from engine.runtime_composition import discover_project_resources
 from engine.schemas import ProjectCreateRequest
 
 logger = logging.getLogger("dbfox.api.projects")
@@ -51,6 +53,20 @@ def api_list_projects(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
         raise
 
 
+@router.get(
+    "/projects/{project_id}/resources",
+    response_model=list[ProjectResourceDescriptor],
+)
+def api_list_project_resources(
+    project_id: str,
+    db: Session = Depends(get_db),
+) -> tuple[ProjectResourceDescriptor, ...]:
+    project = db.get(Project, project_id)
+    if project is None or str(project.status) != "active":
+        raise DBFoxError("Project not found", "PROJECT_NOT_FOUND")
+    return discover_project_resources(db, project_id)
+
+
 @router.post("/projects", response_model=ProjectResponse)
 def api_create_project(req: ProjectCreateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     name = req.name.strip()
@@ -62,7 +78,6 @@ def api_create_project(req: ProjectCreateRequest, db: Session = Depends(get_db))
             id=str(uuid.uuid4()),
             name=name,
             description=(req.description or "").strip() or None,
-            workspace_root=(req.workspace_root or "").strip() or None,
             status="active",
         )
         db.add(project)
@@ -72,5 +87,3 @@ def api_create_project(req: ProjectCreateRequest, db: Session = Depends(get_db))
     except Exception:
         db.rollback()
         raise
-
-

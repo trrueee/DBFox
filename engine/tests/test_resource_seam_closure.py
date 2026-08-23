@@ -2,7 +2,7 @@
 
 Verifies:
 1. RequestedResourceRef wire model (intent without version).
-2. ProjectResourceProvider discovery (Data and Workspace).
+2. Core resource discovery does not absorb Workspace domain state.
 3. Server-side authorization attaching canonical versions to frozen ResourceScopeRefs.
 4. Foreign resource request rejection.
 5. Legacy admission fallback when requested_resources is omitted.
@@ -11,8 +11,6 @@ Verifies:
 """
 
 from __future__ import annotations
-
-import hashlib
 from unittest.mock import MagicMock
 
 import pytest
@@ -66,29 +64,26 @@ def _create_ds(
 
 def test_requested_resource_ref_validation() -> None:
     """Prove that RequestedResourceRef enforces kind + id and forbids version/extras."""
-    ref = RequestedResourceRef(kind="database", id="ds-100")
-    assert ref.kind == "database"
+    ref = RequestedResourceRef(kind="dbfox.data.database", id="ds-100")
+    assert ref.kind == "dbfox.data.database"
     assert ref.id == "ds-100"
 
     # Forbids version
     with pytest.raises(ValidationError):
-        RequestedResourceRef(kind="database", id="ds-100", version=1)  # type: ignore[call-arg]
+        RequestedResourceRef(kind="dbfox.data.database", id="ds-100", version=1)  # type: ignore[call-arg]
 
     # Forbids extra fields
     with pytest.raises(ValidationError):
-        RequestedResourceRef(kind="database", id="ds-100", custom_flag=True)  # type: ignore[call-arg]
+        RequestedResourceRef(kind="dbfox.data.database", id="ds-100", custom_flag=True)  # type: ignore[call-arg]
 
 
 def test_project_resource_discovery(db_session, tmp_path) -> None:
     """Prove that discover_project_resources aggregates descriptors from all providers."""
-    workspace_root = tmp_path / "ws_proj"
-    workspace_root.mkdir()
     project_id = "proj-discovery-test"
     db_session.add(
         Project(
             id=project_id,
             name="Discovery Project",
-            workspace_root=str(workspace_root),
         )
     )
     db_session.add(_create_ds("ds-active-1", project_id, name="Main Postgres", generation=5))
@@ -98,47 +93,41 @@ def test_project_resource_discovery(db_session, tmp_path) -> None:
     kinds = {(d.kind, d.id): d for d in descriptors}
 
     # Active datasource discovered
-    assert ("database", "ds-active-1") in kinds
-    assert kinds[("database", "ds-active-1")].version == 5
-    assert kinds[("database", "ds-active-1")].name == "Main Postgres"
+    assert ("dbfox.data.database", "ds-active-1") in kinds
+    assert kinds[("dbfox.data.database", "ds-active-1")].version == 5
+    assert kinds[("dbfox.data.database", "ds-active-1")].name == "Main Postgres"
 
-    # Workspace discovered with canonical digest
-    assert ("workspace", project_id) in kinds
-    ws_digest = hashlib.sha256(str(workspace_root.resolve()).encode("utf-8")).hexdigest()[:16]
-    assert kinds[("workspace", project_id)].version == ws_digest
+    # A legacy Project column must not silently become Core-owned authority.
+    assert ("workspace", project_id) not in kinds
 
 
 def test_authorize_project_resources_attaches_canonical_versions(db_session, tmp_path) -> None:
     """Prove that server validates requested resources and resolves current canonical versions."""
-    workspace_root = tmp_path / "ws_auth"
-    workspace_root.mkdir()
     project_id = "proj-auth-test"
     db_session.add(
         Project(
             id=project_id,
             name="Auth Project",
-            workspace_root=str(workspace_root),
         )
     )
     db_session.add(_create_ds("ds-auth-1", project_id, name="Analytics DB", generation=3))
     db_session.commit()
 
-    requested = [
-        RequestedResourceRef(kind="database", id="ds-auth-1"),
-        RequestedResourceRef(kind="workspace", id=project_id),
-    ]
+    requested = [RequestedResourceRef(kind="dbfox.data.database", id="ds-auth-1")]
 
     authorized = authorize_project_resources(db_session, project_id, requested)
-    assert len(authorized) == 2
+    assert len(authorized) == 1
 
-    db_ref = next(r for r in authorized if r.kind == "database")
+    db_ref = next(r for r in authorized if r.kind == "dbfox.data.database")
     assert db_ref.id == "ds-auth-1"
     assert db_ref.version == 3
 
-    ws_ref = next(r for r in authorized if r.kind == "workspace")
-    assert ws_ref.id == project_id
-    assert isinstance(ws_ref.version, str)
-    assert len(ws_ref.version) == 16
+    with pytest.raises(ValueError, match="is not available in project"):
+        authorize_project_resources(
+            db_session,
+            project_id,
+            [RequestedResourceRef(kind="workspace", id=project_id)],
+        )
 
 
 def test_authorize_project_resources_rejects_foreign_resource(db_session) -> None:
@@ -150,37 +139,25 @@ def test_authorize_project_resources_rejects_foreign_resource(db_session) -> Non
     db_session.add(_create_ds("ds-foreign", other_project_id, name="Foreign DB", generation=1))
     db_session.commit()
 
-    requested = [RequestedResourceRef(kind="database", id="ds-foreign")]
+    requested = [RequestedResourceRef(kind="dbfox.data.database", id="ds-foreign")]
 
     with pytest.raises(ValueError, match="is not available in project"):
         authorize_project_resources(db_session, project_id, requested)
 
 
-def test_authorize_project_resources_legacy_fallback(db_session, tmp_path) -> None:
-    """Prove that omitting requested_resources falls back to legacy session derivation."""
-    workspace_root = tmp_path / "ws_legacy"
-    workspace_root.mkdir()
+def test_authorize_project_resources_without_request_grants_nothing(db_session) -> None:
+    """Project membership must never become implicit Run authority."""
     project_id = "proj-legacy"
-    db_session.add(
-        Project(
-            id=project_id,
-            name="Legacy Project",
-            workspace_root=str(workspace_root),
-        )
-    )
+    db_session.add(Project(id=project_id, name="Legacy Project"))
     db_session.add(_create_ds("ds-legacy", project_id, name="Legacy DB", generation=7))
     db_session.commit()
 
-    # When requested is None (legacy), derives from fallback_datasource_id
-    legacy_refs = authorize_project_resources(
+    refs = authorize_project_resources(
         db_session,
         project_id=project_id,
         requested=None,
-        fallback_datasource_id="ds-legacy",
     )
-    kinds = {r.kind for r in legacy_refs}
-    assert "database" in kinds
-    assert "workspace" in kinds
+    assert refs == ()
 
 
 def test_in_process_execution_uses_composite_resolver(db_session, tmp_path) -> None:
@@ -193,13 +170,11 @@ def test_in_process_execution_uses_composite_resolver(db_session, tmp_path) -> N
         Project(
             id=project_id,
             name="In Proc Project",
-            workspace_root=str(workspace_root),
         )
     )
     db_session.commit()
 
-    ws_digest = hashlib.sha256(str(workspace_root.resolve()).encode("utf-8")).hexdigest()[:16]
-    ws_ref = ResourceScopeRef(kind="workspace", id=project_id, version=ws_digest)
+    ws_ref = ResourceScopeRef(kind="workspace", id=project_id, version="root-v1")
 
     class DummyWorkspaceTool(BaseTool[DummyInput, DummyOutput]):
         name = "dummy_ws"
@@ -219,16 +194,27 @@ def test_in_process_execution_uses_composite_resolver(db_session, tmp_path) -> N
     request = MagicMock()
     request.frozen_resource_refs = (ws_ref,)
 
-    scope_refs, resources = build_tool_scope_context(db_session, request, DummyWorkspaceTool())
+    resolver = (
+        CompositeResourceResolver()
+        .register("workspace", lambda _ref: workspace_root.resolve())
+        .freeze()
+    )
+    scope_refs, resources = build_tool_scope_context(
+        db_session,
+        request,
+        DummyWorkspaceTool(),
+        resolver,
+    )
     assert len(scope_refs) == 1
     assert scope_refs[0] == ws_ref
-    assert "workspace" in resources
-    assert resources["workspace"].root == workspace_root.resolve()
+    assert ws_ref.canonical() in resources
+    assert resources[ws_ref.canonical()] == workspace_root.resolve()
 
 
 def test_composite_resolver_supports_third_resource_extension(db_session) -> None:
-    """Prove that registering a third resource kind resolves without modifying Kernel scope context."""
+    """Prove that a third resource kind supports multiple same-kind identities."""
     custom_ref = ResourceScopeRef(kind="custom.source", id="source-42", version="v1.0")
+    second_ref = ResourceScopeRef(kind="custom.source", id="source-84", version="v2.0")
 
     class CustomHandle:
         def __init__(self, ref: ResourceScopeRef):
@@ -254,7 +240,7 @@ def test_composite_resolver_supports_third_resource_extension(db_session) -> Non
             return DummyOutput()
 
     request = MagicMock()
-    request.frozen_resource_refs = (custom_ref,)
+    request.frozen_resource_refs = (custom_ref, second_ref)
 
     scope_refs, resources = build_tool_scope_context(
         db_session,
@@ -262,8 +248,9 @@ def test_composite_resolver_supports_third_resource_extension(db_session) -> Non
         DummyCustomTool(),
         resolver=frozen_resolver,
     )
-    assert len(scope_refs) == 1
-    assert scope_refs[0] == custom_ref
-    assert "custom.source" in resources
-    assert isinstance(resources["custom.source"], CustomHandle)
-    assert resources["custom.source"].ref.id == "source-42"
+    assert scope_refs == (custom_ref, second_ref)
+    assert custom_ref.canonical() in resources
+    assert second_ref.canonical() in resources
+    assert isinstance(resources[custom_ref.canonical()], CustomHandle)
+    assert resources[custom_ref.canonical()].ref.id == "source-42"
+    assert resources[second_ref.canonical()].ref.id == "source-84"

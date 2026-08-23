@@ -91,11 +91,12 @@ DBFox 通过 parser/AST、dialect permission probes、guardrail 和 trust gate �
 
 相关实现：
 
-- [`engine/sql/parser.py`](../../engine/sql/parser.py)
-- [`engine/sql/guardrail.py`](../../engine/sql/guardrail.py)
-- [`engine/sql/readonly_query.py`](../../engine/sql/readonly_query.py)
-- [`engine/sql/permissions/`](../../engine/sql/permissions/)
-- [`engine/sql/trust_gate.py`](../../engine/sql/trust_gate.py)
+- [`dlcs/dbfox_data/backend/sql/parser.py`](../../dlcs/dbfox_data/backend/sql/parser.py)
+- [`dlcs/dbfox_data/backend/sql/guardrail.py`](../../dlcs/dbfox_data/backend/sql/guardrail.py)
+- [`dlcs/dbfox_data/backend/sql/readonly_query.py`](../../dlcs/dbfox_data/backend/sql/readonly_query.py)
+- [`dlcs/dbfox_data/backend/sql/permissions/`](../../dlcs/dbfox_data/backend/sql/permissions/)
+- [`dlcs/dbfox_data/backend/sql/trust_gate.py`](../../dlcs/dbfox_data/backend/sql/trust_gate.py)
+- [`dlcs/dbfox_data/backend/sql/dry_run_contracts.py`](../../dlcs/dbfox_data/backend/sql/dry_run_contracts.py)
 
 ### 4.2 `SqlSafetyService`
 
@@ -137,7 +138,7 @@ sql = f"SELECT * FROM orders WHERE tenant_id = '{tenant_id}'"
 
 ### 5.2 Bound Parameter 合同
 
-[`engine/sql/bound_parameters.py`](../../engine/sql/bound_parameters.py) 负责参数名称、类型、序列化和 driver 适配。目标：
+[`dlcs/dbfox_data/backend/sql/bound_parameters.py`](../../dlcs/dbfox_data/backend/sql/bound_parameters.py) 负责参数名称、类型、序列化和 driver 适配。目标：
 
 - Provider/工具传入 JSON 兼容值；
 - 后端校验必需/多余参数；
@@ -208,7 +209,7 @@ Agent Tool 不应有第二套“快捷执行”逻辑。
 
 ## 8. 行序列化与边界
 
-[`engine/sql/row_serializer.py`](../../engine/sql/row_serializer.py) 把 driver 特有值转换为稳定 JSON 表示，需处理：
+[`dlcs/dbfox_data/backend/sql/row_serializer.py`](../../dlcs/dbfox_data/backend/sql/row_serializer.py) 把 driver 特有值转换为稳定 JSON 表示，需处理：
 
 - `Decimal`；
 - datetime/date/time；

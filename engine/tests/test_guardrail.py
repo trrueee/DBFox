@@ -2,7 +2,7 @@
 import inspect
 import logging
 
-from engine.sql.guardrail import guardrail_check, GuardrailResult
+from dlcs.dbfox_data.backend.sql.guardrail import GuardrailResult, guardrail_check
 
 
 def _check(result: GuardrailResult, expected_result: str) -> None:
@@ -166,7 +166,7 @@ def test_syntax_error() -> None:
 
 
 def test_guardrail_parse_diagnostic_never_logs_sql_or_exception_text(caplog, monkeypatch) -> None:
-    import engine.sql.guardrail as guardrail_module
+    import dlcs.dbfox_data.backend.sql.guardrail as guardrail_module
 
     sql_secret = "SELECT token FROM users WHERE token = 'guardrail-sql-secret'"
     exception_secret = "guardrail-driver-secret"
@@ -182,7 +182,7 @@ def test_guardrail_parse_diagnostic_never_logs_sql_or_exception_text(caplog, mon
     assert result["checks"][0]["message"] == "SQL could not be parsed safely."
     assert sql_secret not in caplog.text
     assert exception_secret not in caplog.text
-    assert "code=sql_guardrail_parse" in caplog.text
+    assert "code=dbfox.data.sql_guardrail_parse" in caplog.text
     assert "type=RuntimeError" in caplog.text
     assert "fingerprint=" in caplog.text
 

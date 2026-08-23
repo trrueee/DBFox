@@ -17,7 +17,7 @@ describe("FrontendExtensionHost", () => {
     expect(window.__DBFOX_EXTENSION_HOST__?.version).toBe("1.0.0");
   });
 
-  it("stages and collects valid contributions across all 4 seams", () => {
+  it("stages and collects valid contributions across all 3 seams", () => {
     const staged = createStagedExtensionHost("acme.test_dlc");
 
     // 1. Connector
@@ -29,13 +29,7 @@ describe("FrontendExtensionHost", () => {
     };
     staged.host.connectors.register(mockConnector);
 
-    // 2. Requested Resource
-    staged.host.requestedResources.register((context) => ({
-      complete: true,
-      refs: [{ kind: "acme.resource", id: context.projectId }],
-    }));
-
-    // 3. Dock View
+    // 2. Dock View
     const mockDockView: DockViewContribution = {
       viewType: "acme.test_view",
       icon: () => null,
@@ -45,7 +39,7 @@ describe("FrontendExtensionHost", () => {
     };
     staged.host.dockViews.register(mockDockView);
 
-    // 4. Artifact Renderer
+    // 3. Artifact Renderer
     const mockRenderer: ArtifactRendererContribution<{ data: string }> = {
       type: "acme.artifact",
       supportedSchemaVersions: [1],
@@ -57,7 +51,6 @@ describe("FrontendExtensionHost", () => {
     const contribs = staged.getContributions();
     expect(contribs.connectors.length).toBe(1);
     expect(contribs.connectors[0].id).toBe("acme.test_connector");
-    expect(contribs.requestedResources.length).toBe(1);
     expect(contribs.dockViews.length).toBe(1);
     expect(contribs.dockViews[0].viewType).toBe("acme.test_view");
     expect(contribs.artifactRenderers.length).toBe(1);
@@ -79,10 +72,6 @@ describe("FrontendExtensionHost", () => {
       staged.host.artifactRenderers.register({} as ArtifactRendererContribution<unknown>);
     }).toThrow(/Invalid artifact renderer registration/);
 
-    expect(() => {
-      // @ts-expect-error test invalid type
-      staged.host.requestedResources.register(null);
-    }).toThrow(/Invalid requested resource contributor/);
   });
 
   it("isolates synchronous render throws inside the DLC error boundary", () => {
@@ -100,18 +89,6 @@ describe("FrontendExtensionHost", () => {
     render(staged.getContributions().connectors[0].render({ projectId: "project-1" }));
     expect(screen.getByText(/扩展组件加载或渲染失败/)).toBeTruthy();
     consoleError.mockRestore();
-  });
-
-  it("fails closed when a requested-resource contributor throws", () => {
-    const staged = createStagedExtensionHost("acme.throwing_dlc");
-    staged.host.requestedResources.register(() => {
-      throw new Error("authority unavailable");
-    });
-
-    expect(staged.getContributions().requestedResources[0]({
-      projectId: "project-1",
-      conversationId: "conversation-1",
-    })).toEqual({ complete: false });
   });
 
   it("contains connector onAdd callback failures", () => {
@@ -137,7 +114,11 @@ describe("FrontendExtensionHost", () => {
       dlcId: string,
       operationName: string,
       input: unknown,
-      options?: { projectId?: string; signal?: AbortSignal },
+      options?: {
+        projectId?: string;
+        credentialLeaseId?: string;
+        signal?: AbortSignal;
+      },
     ): Promise<TOutput> => {
       invokeOperationCalls(dlcId, operationName, input, options);
       return { ok: true } as TOutput;
@@ -148,16 +129,51 @@ describe("FrontendExtensionHost", () => {
     });
 
     await expect(
-      staged.host.operations.invoke("list_bindings", { project_id: "p1" }, { projectId: "p1" }),
+      staged.host.operations.invoke(
+        "list_bindings",
+        { project_id: "p1" },
+        { projectId: "p1", credentialLeaseId: "lease_credential_test" },
+      ),
     ).resolves.toEqual({ ok: true });
     expect(invokeOperationCalls).toHaveBeenCalledWith(
       "acme.bound",
       "list_bindings",
       { project_id: "p1" },
-      { projectId: "p1" },
+      { projectId: "p1", credentialLeaseId: "lease_credential_test" },
     );
     await expect(staged.host.operations.invoke("../other", {})).rejects.toThrow(
       /Invalid DLC operation name/,
+    );
+  });
+
+  it("binds credential enrollment to the current DLC identity", async () => {
+    const enrollCredentials = vi.fn(async () => ({
+      credentials: [{
+        id: "cred_datasource_password_test",
+        kind: "datasource_password",
+      }],
+      lease_id: "lease_test",
+    }));
+    const staged = createStagedExtensionHost("acme.bound", {
+      invokeOperation: async <TOutput,>() => ({} as TOutput),
+      openDockTab: vi.fn(),
+      enrollCredentials,
+    });
+
+    await expect(staged.host.credentials.enrollBatch([{
+      kind: "datasource_password",
+      secret: "transient-only",
+    }])).resolves.toEqual({
+      credentials: [{
+        id: "cred_datasource_password_test",
+        kind: "datasource_password",
+      }],
+      lease_id: "lease_test",
+    });
+    expect(enrollCredentials).toHaveBeenCalledWith(
+      "acme.bound",
+      [{ kind: "datasource_password", secret: "transient-only" }],
+      undefined,
     );
   });
 

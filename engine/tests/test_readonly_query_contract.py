@@ -3,16 +3,17 @@ from __future__ import annotations
 import pytest
 
 from engine.errors import GuardrailValidationError
-from engine.sql.dialect_context import DialectContext
-from engine.sql.dry_run import _classify_dry_run_error, dry_run_query
+from dlcs.dbfox_data.backend.sql.dialect_context import DatabaseDialectContext
+from dlcs.dbfox_data.backend.sql.dry_run_contracts import classify_dry_run_error
+from engine.sql.dry_run import dry_run_query
 from engine.sql.explain_validator import validate_explain_sql
-from engine.sql.guardrail import guardrail_check
-from engine.sql.readonly_query import (
+from dlcs.dbfox_data.backend.sql.guardrail import guardrail_check
+from dlcs.dbfox_data.backend.sql.readonly_query import (
     ReadonlyQueryError,
     parse_single_readonly_query,
 )
 from engine.sql.safety.service import SqlSafetyService
-from engine.sql.sql_backed_view import (
+from dlcs.dbfox_data.backend.sql.sql_backed_view import (
     SqlBackedViewError,
     build_sql_backed_page_sql,
 )
@@ -33,7 +34,7 @@ def test_canonical_contract_accepts_readonly_query_shapes(sql: str) -> None:
 
     assert expression is not None
     validate_explain_sql(sql, "postgres")
-    ctx = DialectContext(datasource_id="readonly-contract", dialect="postgresql")
+    ctx = DatabaseDialectContext(resource_id="readonly-contract", dialect="postgresql")
     assert SqlSafetyService().validate_source_artifact_sql(sql, ctx) == []
     derived = build_sql_backed_page_sql(
         base_sql=sql,
@@ -88,8 +89,8 @@ def test_canonical_contract_rejects_writes_locks_and_stateful_functions(
             columns=["id"],
         )
 
-    ctx = DialectContext(
-        datasource_id="readonly-contract",
+    ctx = DatabaseDialectContext(
+        resource_id="readonly-contract",
         dialect="postgresql" if dialect == "postgres" else "mysql",
     )
     assert SqlSafetyService().validate_source_artifact_sql(sql, ctx)
@@ -123,11 +124,11 @@ def test_dry_run_error_classification_uses_driver_contracts() -> None:
     class CatalogException(Exception):
         pass
 
-    assert _classify_dry_run_error(PostgresError("localized"), "postgresql") == "schema_error"
-    assert _classify_dry_run_error(Exception(1064, "localized"), "mysql") == "syntax_error"
-    assert _classify_dry_run_error(CatalogException("localized"), "duckdb") == "schema_error"
-    assert _classify_dry_run_error(Exception("no such column: missing"), "sqlite") == "schema_error"
-    assert _classify_dry_run_error(Exception("localized"), "mysql") == "explain_unavailable"
+    assert classify_dry_run_error(PostgresError("localized"), "postgresql") == "schema_error"
+    assert classify_dry_run_error(Exception(1064, "localized"), "mysql") == "syntax_error"
+    assert classify_dry_run_error(CatalogException("localized"), "duckdb") == "schema_error"
+    assert classify_dry_run_error(Exception("no such column: missing"), "sqlite") == "schema_error"
+    assert classify_dry_run_error(Exception("localized"), "mysql") == "explain_unavailable"
 
 
 @pytest.mark.parametrize(

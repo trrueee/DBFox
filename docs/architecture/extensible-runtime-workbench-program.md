@@ -9,6 +9,10 @@
 > 基线：`main@daa99d048decd7f5f8dc010cbe5465f332686a3c`
 >
 > 适用范围：Agent Runtime、跨 Run Context/Memory、Tool 执行、Artifact/Completion、桌面 Workbench Shell
+>
+> 2026-08-22 收敛说明：Project v2、Conversation resource intent、同 kind 多资源和
+> Data/Workspace System DLC 的具体所有权，以
+> [Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md) 为准。
 
 ## 1. 决策
 

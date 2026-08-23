@@ -18,7 +18,6 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 
 from engine.agent.completion import CompletionGate
-from engine.agent.completion_data import DataCompletionSupport, DataResultCitationConstraint
 from engine.agent.context import ContextAssembler
 from engine.agent.context_fragment import ContextContributionInput
 from engine.agent.control import LeaseAwareRunControl
@@ -27,7 +26,6 @@ from engine.agent.repositories.session import SessionRepository
 from engine.agent.run import RunLimits
 from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
 from engine.agent.turn import ModelToolCall
-from engine.agent.workspace_context import WorkspaceContextContributor
 from engine.errors import ToolInputError
 from engine.models import (
     AgentArtifactRecord,
@@ -43,7 +41,15 @@ from engine.runtime_composition import (
 )
 from engine.tools.materialization import materialize_tools
 from engine.tools.runtime import ToolExecutor
+from engine.tests.workspace_test_support import (
+    legacy_workspace_resolver,
+    registry_with_legacy_workspace,
+)
 from engine.tools.runtime.attempt import ResourceScopeRef
+
+# Retired Core-only tests below remain as migration history until this file is
+# split; their package-owned replacements live in test_dbfox_workspace_dlc_package.
+WorkspaceContextContributor = object
 
 
 def test_data_dlc_production_conformance(db_session, test_datasource) -> None:
@@ -64,7 +70,6 @@ def test_data_dlc_production_conformance(db_session, test_datasource) -> None:
         AgentSession(
             id=session_id,
             project_id=project_id,
-            datasource_id=str(test_datasource.id),
             title="Data DLC Session",
         )
     )
@@ -72,7 +77,7 @@ def test_data_dlc_production_conformance(db_session, test_datasource) -> None:
 
     # 2. Database-only input admission
     registry = build_product_tool_registry()
-    db_ref = ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1)
+    db_ref = ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1)
 
     sessions = SessionRepository(db_session)
     first_admission = sessions.admit(
@@ -98,7 +103,7 @@ def test_data_dlc_production_conformance(db_session, test_datasource) -> None:
     materialized = materialize_tools(
         registry,
         execution_mode=definition.execution_mode,
-        available_resource_kinds=frozenset({"database"}),
+        available_resource_kinds=frozenset({"dbfox.data.database"}),
     )
     materialized_names = {t.name for t in materialized.tools}
     assert "sql_validate" in materialized_names
@@ -130,6 +135,7 @@ def test_data_dlc_production_conformance(db_session, test_datasource) -> None:
         registry=registry,
         definition=definition,
         executor=executor,
+        resource_resolver=legacy_workspace_resolver(db_session),
     )
     run = db_session.get(AgentRun, first_admission.run_id)
     assert run is not None
@@ -240,10 +246,13 @@ def test_data_dlc_production_conformance(db_session, test_datasource) -> None:
     # 9. Data Completion Policy check
     policy = build_default_completion_policy()
     assert CompletionGate(policy) is not None
-    assert isinstance(policy.support, DataCompletionSupport)
-    assert any(isinstance(c, DataResultCitationConstraint) for c in policy.constraints)
+    assert {item.id for item in policy.supports} == {"dbfox.data.query_result"}
+    assert {item.id for item in policy.constraints} == {"dbfox.data.result_citation"}
 
 
+@pytest.mark.skip(
+    reason="superseded by signed dbfox.workspace package conformance"
+)
 def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
     """Prove the complete Workspace DLC chain:
 
@@ -263,7 +272,6 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
         Project(
             id=project_id,
             name="Workspace DLC Project",
-            workspace_root=str(workspace_root),
         )
     )
     db_session.flush()
@@ -273,7 +281,6 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
         AgentSession(
             id=session_id,
             project_id=project_id,
-            datasource_id=None,  # Pure workspace session, no user datasource
             title="Workspace Pure Session",
         )
     )
@@ -304,7 +311,7 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
         allowed_tool_groups=("workspace",),
         execution_mode="agent_autonomous_read",
     )
-    registry = build_product_tool_registry()
+    registry = registry_with_legacy_workspace()
     materialized = materialize_tools(
         registry,
         execution_mode=definition.execution_mode,
@@ -339,6 +346,7 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
         registry=registry,
         definition=definition,
         executor=executor,
+        resource_resolver=legacy_workspace_resolver(db_session),
     )
     run = db_session.get(AgentRun, first_admission.run_id)
     assert run is not None
@@ -407,7 +415,7 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
     # 6b: Verify through full ContextAssembler pipeline
     assembler = ContextAssembler(
         db_session,
-        contributors=default_context_contributors(),
+        contributors=(WorkspaceContextContributor,),
     )
     snapshot = assembler.build(second_admission.run_id)
     ws_fragments = [f for f in snapshot.context_fragments if f.source_id == "dbfox.workspace"]
@@ -450,7 +458,6 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
         AgentSession(
             id=wrong_ver_session_id,
             project_id=project_id,
-            datasource_id=None,
             title="Workspace Wrong Version Session",
         )
     )
@@ -510,23 +517,26 @@ def test_workspace_dlc_production_conformance(db_session, tmp_path) -> None:
         )
 
 
+@pytest.mark.skip(
+    reason="superseded by signed package and generic multi-resource conformance"
+)
 def test_data_and_workspace_authority_isolation(db_session, test_datasource, tmp_path) -> None:
     """Prove that dual-resource sessions correctly isolate tool execution scopes."""
     workspace_root = tmp_path / "ws_dual"
     workspace_root.mkdir()
     project_id = "project-dual"
-    db_session.add(Project(id=project_id, name="Dual Project", workspace_root=str(workspace_root)))
+    db_session.add(Project(id=project_id, name="Dual Project"))
     db_session.flush()
     test_datasource.project_id = project_id
     db_session.commit()
 
-    registry = build_product_tool_registry()
+    registry = registry_with_legacy_workspace()
 
     # 1. Dual resources materializes both sets of tools
     dual_mat = materialize_tools(
         registry,
         execution_mode="read_only",
-        available_resource_kinds=frozenset({"database", "workspace"}),
+        available_resource_kinds=frozenset({"dbfox.data.database", "workspace"}),
     )
     dual_names = {t.name for t in dual_mat.tools}
     assert "sql_execute_readonly" in dual_names
@@ -536,7 +546,7 @@ def test_data_and_workspace_authority_isolation(db_session, test_datasource, tmp
     db_only_mat = materialize_tools(
         registry,
         execution_mode="read_only",
-        available_resource_kinds=frozenset({"database"}),
+        available_resource_kinds=frozenset({"dbfox.data.database"}),
     )
     db_names = {t.name for t in db_only_mat.tools}
     assert "sql_execute_readonly" in db_names

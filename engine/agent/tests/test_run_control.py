@@ -18,7 +18,6 @@ def _run(**values) -> AgentRun:
     return AgentRun(
         id="run_budget",
         session_id="session_budget",
-        datasource_id="datasource_budget",
         question="test",
         status="running",
         started_at=started_at,

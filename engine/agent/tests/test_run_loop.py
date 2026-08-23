@@ -34,7 +34,8 @@ from engine.tools.builtin.query import SqlExecuteReadonlyTool, SqlValidateTool
 from engine.tools.builtin.results import ResultInspectTool
 from engine.tools.builtin.control import UpdatePlanCommand
 from engine.tools.builtin.artifacts import query_result_draft, sql_validation_drafts
-from engine.tools.builtin.contracts import QueryResultOutput, SqlValidateOutput
+from dlcs.dbfox_data.backend.tool_contracts import QueryResultOutput, SqlValidateOutput
+from dlcs.dbfox_data.backend.sql_admission import resolve_validated_sql_execution
 from engine.tools.runtime import (
     BaseTool,
     ToolInputModel,
@@ -267,6 +268,8 @@ def test_tool_disclosure_does_not_treat_non_result_artifact_as_result():
 
 class ValidateTool(SqlValidateTool):
     def run(self, tool_input, context):
+        database_ref = context.scope("dbfox.data.database")
+        assert database_ref is not None
         output = SqlValidateOutput(
             can_execute=True,
             requires_confirmation=False,
@@ -276,7 +279,7 @@ class ValidateTool(SqlValidateTool):
             blocked_reasons=[],
             messages=[],
             execution_safety_decision={
-                "datasource_id": context.request.datasource_id,
+                "datasource_id": database_ref.id,
                 "policy": "agent_readonly",
                 "original_sql": tool_input.sql,
                 "safe_sql": tool_input.sql,
@@ -294,8 +297,8 @@ class ValidateTool(SqlValidateTool):
         return ToolOutcome(
             output=output,
             artifacts=sql_validation_drafts(
-                context.require_database(),
-                context.request.datasource_id,
+                context.require_metadata(),
+                context.scope("dbfox.data.database"),
                 output,
             ),
         )
@@ -303,10 +306,12 @@ class ValidateTool(SqlValidateTool):
 
 class ExecuteTool(SqlExecuteReadonlyTool):
     def run(self, tool_input, context):
-        validated = ArtifactRepository(context.require_database()).require_validated_sql(
-            session_id=context.request.session_id,
-            run_id=context.request.run_id,
-            sql_artifact_id=tool_input.validation_artifact_id,
+        validated = resolve_validated_sql_execution(
+            tool_input,
+            context,
+            sql_artifact_type="sql",
+            safety_artifact_type="safety",
+            result_artifact_type="result_view",
         )
         output = QueryResultOutput(
             status="success",
@@ -327,10 +332,9 @@ class ExecuteTool(SqlExecuteReadonlyTool):
             output=output,
             artifacts=(
                 query_result_draft(
-                    context.require_database(),
-                    context.request.datasource_id,
+                    context.require_metadata(),
+                    context.scope("dbfox.data.database"),
                     tool_input.validation_artifact_id,
-                    context.request.datasource_generation,
                     output,
                 ),
             ),
@@ -812,7 +816,6 @@ def test_parallel_safe_tool_calls_are_dispatched_as_linear_barrier_batches(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Parallel barrier dispatch",
         )
     )
@@ -820,7 +823,7 @@ def test_parallel_safe_tool_calls_are_dispatched_as_linear_barrier_batches(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="请在允许并行时并发执行，顺序调用顺序保护。"
         " 验证并行、安全屏障与并发顺序。",
         idempotency_key="parallel-barrier",
@@ -889,7 +892,6 @@ def test_parallel_settlement_is_stable_in_provider_call_order(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Parallel settlement order",
         )
     )
@@ -897,7 +899,7 @@ def test_parallel_settlement_is_stable_in_provider_call_order(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="并发工具应按调用顺序沉淀观察。",
         idempotency_key="parallel-order-settle",
         llm_credential_id="credential",
@@ -966,7 +968,6 @@ def test_parallel_failed_tool_does_not_block_sibling_settlement(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Parallel mixed failure",
         )
     )
@@ -974,7 +975,7 @@ def test_parallel_failed_tool_does_not_block_sibling_settlement(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="并行时一项失败不应阻断另一项。",
         idempotency_key="parallel-batch-failure",
         llm_credential_id="credential",
@@ -1049,7 +1050,6 @@ def test_approval_required_call_halts_dispatch_before_execution(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Approval halts execution",
         )
     )
@@ -1057,7 +1057,7 @@ def test_approval_required_call_halts_dispatch_before_execution(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="先执行一个并行安全工具，再请求审批。",
         idempotency_key="approval-halts-dispatch",
         llm_credential_id="credential",
@@ -1120,7 +1120,6 @@ def test_tool_budget_preallocates_and_limits_execution_count(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Tool budget preallocation",
         )
     )
@@ -1128,7 +1127,7 @@ def test_tool_budget_preallocates_and_limits_execution_count(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="预算上限为两次，但模型一次输出三次工具调用。",
         idempotency_key="tool-budget-prealloc",
         llm_credential_id="credential",
@@ -1209,7 +1208,6 @@ def test_model_configuration_failure_settles_turn_and_fails_run(
     db_session.add(
         AgentSession(
             id="session_missing_llm_credential",
-            datasource_id=str(test_datasource.id),
             title="Missing credential",
         )
     )
@@ -1217,7 +1215,7 @@ def test_model_configuration_failure_settles_turn_and_fails_run(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_missing_llm_credential",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="分析订单",
         idempotency_key="missing-llm-credential",
         llm_credential_id="deleted-credential-reference",
@@ -1668,7 +1666,7 @@ class ResumePreviousResultModel:
             and item.get("call_id") == "resume-result"
         )
         observation = json.loads(str(output["output"]))
-        assert observation["status"] == "succeeded"
+        assert observation["status"] == "succeeded", observation
         assert observation["facts"]["returned_rows"] == 1
         assert list(observation["facts"]["rows"][0]) == ["total"]
         yield from _final_turn(
@@ -2018,7 +2016,6 @@ def test_native_assistant_commentary_precedes_durable_question_tool_call(
     db_session.add(
         AgentSession(
             id="session_commentary",
-            datasource_id=str(test_datasource.id),
             title="Commentary",
         )
     )
@@ -2026,7 +2023,7 @@ def test_native_assistant_commentary_precedes_durable_question_tool_call(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_commentary",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="分析订单",
         idempotency_key="commentary",
         llm_credential_id="credential",
@@ -2084,14 +2081,14 @@ def test_explicit_run_loop_closes_tool_artifact_evidence_and_answer_cycle(
 ):
     db_session.add(
         AgentSession(
-            id="session_loop", datasource_id=str(test_datasource.id), title="Loop"
+            id="session_loop", title="Loop"
         )
     )
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_loop",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="统计订单数量",
         idempotency_key="loop",
         llm_credential_id="credential",
@@ -2175,7 +2172,6 @@ def test_invalid_artifact_batch_settles_as_tool_contract_failure_without_failing
     db_session.add(
         AgentSession(
             id="session_invalid_artifact_contract",
-            datasource_id=str(test_datasource.id),
             title="Invalid Artifact Contract",
         )
     )
@@ -2183,7 +2179,7 @@ def test_invalid_artifact_batch_settles_as_tool_contract_failure_without_failing
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_invalid_artifact_contract",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="生成图表",
         idempotency_key="invalid-artifact-contract",
         llm_credential_id="credential",
@@ -2249,7 +2245,6 @@ def test_unexpected_artifact_persistence_failure_still_escapes_run_loop(
     db_session.add(
         AgentSession(
             id="session_artifact_storage_failure",
-            datasource_id=str(test_datasource.id),
             title="Artifact Storage Failure",
         )
     )
@@ -2257,7 +2252,7 @@ def test_unexpected_artifact_persistence_failure_still_escapes_run_loop(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_artifact_storage_failure",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="生成图表",
         idempotency_key="artifact-storage-failure",
         llm_credential_id="credential",
@@ -2294,7 +2289,6 @@ def test_run_loop_repairs_malformed_citation_before_terminal_commit(
     db_session.add(
         AgentSession(
             id="session_citation_repair",
-            datasource_id=str(test_datasource.id),
             title="Citation repair",
         )
     )
@@ -2302,7 +2296,7 @@ def test_run_loop_repairs_malformed_citation_before_terminal_commit(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_citation_repair",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="当前数据源有多少张表？",
         idempotency_key="citation-repair",
         llm_credential_id="credential",
@@ -2415,7 +2409,6 @@ def test_failed_tool_does_not_publish_capabilities_or_progress(
     db_session.add(
         AgentSession(
             id="session_failed_semantics",
-            datasource_id=str(test_datasource.id),
             title="Failed semantics",
         )
     )
@@ -2423,7 +2416,7 @@ def test_failed_tool_does_not_publish_capabilities_or_progress(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_failed_semantics",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="统计订单数量",
         idempotency_key="failed-semantics",
         llm_credential_id="credential",
@@ -2482,7 +2475,6 @@ def test_parallel_safe_tool_calls_are_dispatched_concurrently(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Parallel dispatch",
         )
     )
@@ -2490,7 +2482,7 @@ def test_parallel_safe_tool_calls_are_dispatched_concurrently(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="启动两个并行工具调用。",
         idempotency_key="parallel-safe",
         llm_credential_id="credential",
@@ -2552,7 +2544,6 @@ def test_tool_budget_returns_bounded_partial_when_verified_result_exists(
     db_session.add(
         AgentSession(
             id="session_tool_budget",
-            datasource_id=str(test_datasource.id),
             title="Budget",
         )
     )
@@ -2560,7 +2551,7 @@ def test_tool_budget_returns_bounded_partial_when_verified_result_exists(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_tool_budget",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="统计订单数量",
         idempotency_key="tool-budget",
         llm_credential_id="credential",
@@ -2615,7 +2606,6 @@ def test_finalization_reserve_synthesizes_before_the_hard_tool_limit(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Finalization reserve",
         )
     )
@@ -2623,7 +2613,7 @@ def test_finalization_reserve_synthesizes_before_the_hard_tool_limit(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="统计订单数量并给出可验证结论",
         idempotency_key="finalization-reserve",
         llm_credential_id="credential",
@@ -2697,7 +2687,6 @@ def test_unavailable_tool_during_finalization_is_rejected_without_failing_run(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Finalization unavailable tool",
         )
     )
@@ -2705,7 +2694,7 @@ def test_unavailable_tool_during_finalization_is_rejected_without_failing_run(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="统计订单数量并给出可验证结论",
         idempotency_key="finalization-unavailable-tool",
         llm_credential_id="credential",
@@ -2775,7 +2764,6 @@ def test_no_progress_returns_bounded_partial_when_verified_result_exists(
     db_session.add(
         AgentSession(
             id="session_no_progress_result",
-            datasource_id=str(test_datasource.id),
             title="No progress with durable result",
         )
     )
@@ -2783,7 +2771,7 @@ def test_no_progress_returns_bounded_partial_when_verified_result_exists(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_no_progress_result",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="统计订单数量并给出结论",
         idempotency_key="no-progress-result",
         llm_credential_id="credential",
@@ -2837,7 +2825,6 @@ def test_next_run_resumes_a_bounded_partial_from_the_previous_result_artifact(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Bounded partial resume",
         )
     )
@@ -2845,7 +2832,7 @@ def test_next_run_resumes_a_bounded_partial_from_the_previous_result_artifact(
     sessions = SessionRepository(db_session)
     first = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="统计订单数量；达到预算后保留结果。",
         idempotency_key="bounded-partial-first",
         llm_credential_id="credential",
@@ -2893,7 +2880,7 @@ def test_next_run_resumes_a_bounded_partial_from_the_previous_result_artifact(
 
     second = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="继续，直接复用上次已经保存的结果完成回答。",
         idempotency_key="bounded-partial-second",
         llm_credential_id="credential",
@@ -2949,7 +2936,6 @@ def test_token_budget_preserves_the_settled_final_answer(db_session, test_dataso
     db_session.add(
         AgentSession(
             id="session_token_budget",
-            datasource_id=str(test_datasource.id),
             title="Token Budget",
         )
     )
@@ -2957,7 +2943,7 @@ def test_token_budget_preserves_the_settled_final_answer(db_session, test_dataso
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_token_budget",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="给出当前可完成的分析",
         idempotency_key="token-budget",
         llm_credential_id="credential",

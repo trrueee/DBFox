@@ -297,7 +297,7 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
             )
             session.add_all((history, history_doc))
 
-            agent_session = AgentSession(id="agent-session-1", datasource_id=datasource.id)
+            agent_session = AgentSession(id="agent-session-1")
             agent_message = AgentMessage(
                 id="agent-message-1",
                 session_id=agent_session.id,
@@ -308,7 +308,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
             agent_run = AgentRun(
                 id="agent-run-1",
                 session_id=agent_session.id,
-                datasource_id=datasource.id,
                 llm_credential_id=llm_credential_id,
                 api_base="https://example.invalid/v1",
                 model_name="test-model",
@@ -322,7 +321,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
                     AgentSessionMemory(
                         id="agent-memory-1",
                         session_id=agent_session.id,
-                        datasource_id=datasource.id,
                     ),
                     AgentApproval(
                         id="agent-approval-1",
@@ -609,7 +607,6 @@ def test_foundation_reset_preserves_only_non_secret_endpoint_metadata(tmp_path: 
             session.add(
                 AgentSession(
                     id="agent-session-created-after-reset",
-                    datasource_id="datasource-1",
                     title="Must survive the no-op",
                 )
             )

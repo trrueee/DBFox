@@ -1,0 +1,364 @@
+.dbfox-data {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.dbfox-data__profile {
+  min-width: 0;
+}
+
+.dbfox-data__profile-row,
+.dbfox-data__database-focus,
+.dbfox-data__context,
+.dbfox-data__empty button {
+  color: inherit;
+  font: inherit;
+}
+
+.dbfox-data__profile-row,
+.dbfox-data__database-focus {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  min-width: 0;
+  text-align: left;
+}
+
+.dbfox-data__profile-row {
+  display: grid;
+  grid-template-columns: 14px 14px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  min-height: 30px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dbfox-data__profile-row:hover,
+.dbfox-data__database-row:hover,
+.dbfox-data__database-row.is-focused {
+  background: var(--surface-hover);
+}
+
+.dbfox-data__chevron {
+  color: var(--text-muted);
+  transform: rotate(0deg);
+  transition: transform 120ms ease;
+}
+
+.dbfox-data__chevron.is-expanded {
+  transform: rotate(90deg);
+}
+
+.dbfox-data__provider {
+  color: #3975e9;
+  font-size: 9px;
+}
+
+.dbfox-data__provider.is-postgresql {
+  color: #336791;
+}
+
+.dbfox-data__provider.is-sqlite {
+  color: #0f80cc;
+}
+
+.dbfox-data__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dbfox-data__count {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dbfox-data__databases {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  margin-left: 13px;
+  padding-left: 10px;
+}
+
+.dbfox-data__databases::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 1px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  content: "";
+}
+
+.dbfox-data__database-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  align-items: center;
+  min-width: 0;
+  border-radius: 6px;
+}
+
+.dbfox-data__database-focus {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  align-items: center;
+  min-height: 29px;
+  padding: 3px 4px 3px 6px;
+  cursor: pointer;
+}
+
+.dbfox-data__database-icon {
+  color: var(--text-muted);
+  font-size: 8px;
+}
+
+.dbfox-data__context {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.dbfox-data__database-row:hover .dbfox-data__context,
+.dbfox-data__context:focus-visible,
+.dbfox-data__context.is-selected {
+  opacity: 1;
+}
+
+.dbfox-data__context.is-selected {
+  color: var(--accent-fg);
+}
+
+.dbfox-data__status,
+.dbfox-data__empty {
+  margin: 0;
+  padding: 7px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dbfox-data-dialog__backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, #101318 34%, transparent);
+}
+
+.dbfox-data-dialog {
+  width: min(700px, calc(100vw - 48px));
+  max-height: min(760px, 84vh);
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--surface-panel);
+  box-shadow: 0 22px 64px rgb(0 0 0 / 24%);
+  color: var(--text-primary);
+}
+
+.dbfox-data-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 22px 24px 14px;
+}
+
+.dbfox-data-dialog__header h2,
+.dbfox-data-dialog__header p {
+  margin: 0;
+}
+
+.dbfox-data-dialog__header h2 {
+  font-size: 17px;
+  font-weight: 620;
+}
+
+.dbfox-data-dialog__header p {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.dbfox-data-dialog__close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 20px;
+}
+
+.dbfox-data-dialog__close:hover,
+.dbfox-data-dialog__disclosure:hover,
+.dbfox-data-dialog__button:hover {
+  background: var(--surface-hover);
+}
+
+.dbfox-data-dialog__body {
+  display: grid;
+  gap: 16px;
+  padding: 8px 24px 22px;
+}
+
+.dbfox-data-dialog__providers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--surface-muted);
+}
+
+.dbfox-data-dialog__providers button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.dbfox-data-dialog__providers button.is-selected {
+  background: var(--surface-panel);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 10%);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dbfox-data-dialog__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dbfox-data-dialog__grid--host {
+  grid-template-columns: minmax(0, 1fr) 128px;
+}
+
+.dbfox-data-dialog__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.dbfox-data-dialog__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  outline: none;
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.dbfox-data-dialog__input:focus {
+  border-color: var(--accent-fg);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-fg) 16%, transparent);
+}
+
+.dbfox-data-dialog__disclosure {
+  justify-self: start;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.dbfox-data-dialog__advanced {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 16px;
+  padding: 12px;
+  border-radius: 9px;
+  background: var(--surface-muted);
+}
+
+.dbfox-data-dialog__check {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.dbfox-data-dialog__check .dbfox-data-dialog__input {
+  width: auto;
+  min-height: 0;
+}
+
+.dbfox-data-dialog__error {
+  margin: 0;
+  color: var(--danger-fg);
+  font-size: 12px;
+}
+
+.dbfox-data-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.dbfox-data-dialog__button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.dbfox-data-dialog__button.is-primary {
+  border-color: var(--accent-fg);
+  background: var(--accent-fg);
+  color: white;
+}
+
+.dbfox-data-dialog__button:disabled {
+  cursor: wait;
+  opacity: 0.64;
+}
+
+@media (max-width: 640px) {
+  .dbfox-data-dialog__grid,
+  .dbfox-data-dialog__grid--host {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbfox-data__chevron {
+    transition: none;
+  }
+}

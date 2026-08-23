@@ -9,7 +9,7 @@ from engine.environment.authoritative_inventory import (
     AuthoritativeInventory,
     SchemaInspectionError,
 )
-from engine.environment.inventory import SchemaInventory
+from dlcs.dbfox_data.backend.inventory import SchemaInventory
 from engine.environment.schema_catalog_sync import SchemaCatalogSync
 from engine.models import SchemaTable
 from engine.environment.schema_catalog_sync import ensure_catalog
@@ -72,7 +72,7 @@ def test_catalog_sync_rejects_non_authoritative_inventory_without_mutation(
     with pytest.raises(TypeError, match="AuthoritativeInventory"):
         SchemaCatalogSync().sync_authoritative(
             db_session,
-            SchemaInventory(datasource_id=test_datasource.id, dialect="sqlite"),  # type: ignore[arg-type]
+            SchemaInventory(database_resource_id=test_datasource.id, dialect="sqlite"),  # type: ignore[arg-type]
         )
 
     assert _catalog_table_names(db_session, test_datasource.id) == expected_catalog
@@ -87,7 +87,7 @@ def test_successful_authoritative_empty_inventory_can_remove_obsolete_catalog(
     assert _catalog_table_names(db_session, test_datasource.id)
 
     empty_inventory = AuthoritativeInventory.from_completed_inventory(
-        SchemaInventory(datasource_id=test_datasource.id, dialect="sqlite")
+        SchemaInventory(database_resource_id=test_datasource.id, dialect="sqlite")
     )
     result = SchemaCatalogSync().sync_authoritative(db_session, empty_inventory)
 
@@ -105,7 +105,7 @@ def test_authoritative_catalog_failure_rolls_back_all_reconciliation_changes(
     db_session.commit()
     expected_catalog = _catalog_table_names(db_session, test_datasource.id)
     empty_inventory = AuthoritativeInventory.from_completed_inventory(
-        SchemaInventory(datasource_id=test_datasource.id, dialect="sqlite")
+        SchemaInventory(database_resource_id=test_datasource.id, dialect="sqlite")
     )
 
     def fail_search_rebuild(*_args: object, **_kwargs: object) -> None:

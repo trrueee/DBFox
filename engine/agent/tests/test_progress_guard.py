@@ -9,12 +9,12 @@ from engine.tools.builtin.query import SqlValidateTool
 
 
 def _admit(db_session, test_datasource, session_id: str):
-    db_session.add(AgentSession(id=session_id, datasource_id=str(test_datasource.id), title="Progress"))
+    db_session.add(AgentSession(id=session_id, title="Progress"))
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="分析数据",
         idempotency_key=f"{session_id}:input",
         llm_credential_id="credential",

@@ -4,7 +4,7 @@ import uuid
 
 from sqlalchemy import event
 
-from engine.api.projects import api_create_project, api_list_projects
+from engine.api.projects import api_create_project, api_list_project_resources, api_list_projects
 from engine.models import DEFAULT_PROJECT_ID, DataSource, Project
 from engine.schemas import ProjectCreateRequest
 from engine.projects.service import resolve_project_id
@@ -35,23 +35,22 @@ def _datasource(project_id: str | None, name: str) -> DataSource:
     )
 
 
-def test_create_project_strips_and_persists_workspace_root(db_session) -> None:
+def test_create_project_persists_only_project_identity_and_metadata(db_session) -> None:
     result = api_create_project(
         ProjectCreateRequest(
             name="  订单分析  ",
             description="  desc  ",
-            workspace_root="  C:/demo/orders  ",
         ),
         db_session,
     )
 
     assert result["name"] == "订单分析"
     assert result["description"] == "desc"
-    assert result["workspace_root"] == "C:/demo/orders"
+    assert "workspace_root" not in result
 
     persisted = db_session.get(Project, result["id"])
     assert persisted is not None
-    assert persisted.workspace_root == "C:/demo/orders"
+    assert "workspace_root" not in Project.__table__.columns
 
 
 def test_list_projects_counts_datasources_with_grouped_sql(db_session) -> None:
@@ -93,4 +92,21 @@ def test_list_projects_counts_datasources_with_grouped_sql(db_session) -> None:
         statement
         for statement in datasource_selects
         if "count(" in statement and " group by " in statement
+    ]
+
+
+def test_list_project_resources_returns_generic_discovery_descriptors(db_session) -> None:
+    project = Project(
+        id=str(uuid.uuid4()),
+        name="Project resources",
+        status="active",
+    )
+    datasource = _datasource(project.id, "Billing")
+    db_session.add_all([project, datasource])
+    db_session.commit()
+
+    resources = api_list_project_resources(project.id, db_session)
+
+    assert [(resource.kind, resource.id, resource.name) for resource in resources] == [
+        ("dbfox.data.database", datasource.id, "Billing"),
     ]

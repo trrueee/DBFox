@@ -113,6 +113,7 @@ export function createPackagedEngineLauncher(
         DBFOX_ENGINE_PORT: "0",
         DBFOX_ENGINE_TOKEN: token,
         DBFOX_DEV_CORS_ORIGINS: rendererOrigin,
+        DBFOX_SYSTEM_DLC_DIR: join(resourcesPath, "system-dlcs"),
       }, onStderr);
     },
   };

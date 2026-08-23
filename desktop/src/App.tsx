@@ -21,7 +21,11 @@ import { LoadingState } from "./components/ui";
 import { ConversationCenter } from "./features/appShell/ConversationCenter";
 import { ResizableWorkspaceLayout } from "./features/appShell/ResizableWorkspaceLayout";
 import { ProjectResourceSidebar } from "./features/resources/ProjectResourceSidebar";
-import { productResourceConnectors, ResourceConnectorDialog } from "./features/resources/resourceConnectorComposition";
+import {
+  DATA_CONNECTOR_ID,
+  productResourceConnectors,
+  ResourceConnectorDialog,
+} from "./features/resources/resourceConnectorComposition";
 import { useConnectionDialogStore } from "./features/resources/connectionDialogStore";
 import { useProductDockBootstrap } from "./features/dock/useProductDockBootstrap";
 import { useDlcStore } from "./features/dlc/extensionStore";
@@ -143,6 +147,7 @@ export default function App() {
   // ── Store selectors ──
   const { activeDatasource, activeDatasourceId, tables } = useDatasourceState();
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
+  const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
   const dock = useWorkspaceStore((s) => s.dock);
   const dockTabs = useWorkspaceStore((s) => s.dockTabs);
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
@@ -180,6 +185,7 @@ export default function App() {
   // Resource connector composition
   const dlcConnectors = useDlcStore((s) => s.contributions.connectors);
   const connectors = productResourceConnectors(toast, dlcConnectors);
+  const dataDlcConnector = dlcConnectors.find((connector) => connector.id === DATA_CONNECTOR_ID);
 
   // Layout UI states
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -325,7 +331,18 @@ export default function App() {
                 showSmartQueryHome={showSmartQueryHome}
                 openConversation={openConversationFromPalette}
                 openSettings={openSettings}
-                openConnectionDialog={() => useConnectionDialogStore.getState().openCreate()}
+                connectionManagementAvailable={!dataDlcConnector}
+                openConnectionDialog={(mode) => {
+                  if (dataDlcConnector) {
+                    if (mode === "create" && activeProjectId) {
+                      dataDlcConnector.onAdd?.({ projectId: activeProjectId });
+                    }
+                    return;
+                  }
+                  const dialog = useConnectionDialogStore.getState();
+                  if (mode === "detail") dialog.openDetail();
+                  else dialog.openCreate();
+                }}
                 openTable={(tableName) => {
                   const openDockTable = useTableWorkspaceStore.getState().openTable;
                   openDockTable(

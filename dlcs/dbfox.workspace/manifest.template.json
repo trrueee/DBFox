@@ -1,0 +1,17 @@
+{
+  "manifestSchemaVersion": 2,
+  "id": "dbfox.workspace",
+  "version": "2.0.0",
+  "displayName": "DBFox Workspace",
+  "publisher": "dbfox",
+  "description": "Local workspace resources, bounded file tools, and file views for DBFox.",
+  "extensionApiVersion": "2",
+  "requiresDbfox": ">=1.0.0",
+  "entrypoints": {
+    "backend": "backend/entry.py",
+    "frontend": "frontend/index.js"
+  },
+  "permissions": [
+    "filesystem_read:workspace"
+  ]
+}

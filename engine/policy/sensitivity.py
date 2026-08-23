@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from sqlglot import exp
 from sqlglot.lineage import lineage
@@ -9,25 +8,15 @@ from sqlglot.schema import MappingSchema
 from sqlalchemy.orm import Session
 
 from engine.models import SchemaColumn, SchemaTable, SemanticAlias
-
-_SENSITIVE_PATTERN_STRINGS = [
-    r"\b(password|passwd|secret|token|credential|api_key)\b",
-    r"\b(email|mail)\b",
-    r"\b(phone|mobile|tel|telephone|msisdn)\b",
-    r"\b(address|addr|postal|zip_code)\b",
-    r"\b(ip_address|ipaddr|client_ip|server_ip)\b",
-    r"\b(card|credit_card|debit_card)\b",
-    r"\b(ssn|social_security|tax_id|national_id)\b",
-    r"\b(passport|driver_license)\b",
-]
-# Patterns that are known-safe (bootstrapped defaults).  Any pattern added
-# by an administrator is escaped to prevent ReDoS via catastrophic backtracking.
-_SAFE_PATTERN_SET: frozenset[str] = frozenset(_SENSITIVE_PATTERN_STRINGS)
-_SENSITIVE_FALLBACK = re.compile("|".join(_SENSITIVE_PATTERN_STRINGS), re.IGNORECASE)
+from dlcs.dbfox_data.backend.sensitivity import (
+    SAFE_PATTERN_SET,
+    SENSITIVE_FALLBACK,
+    SENSITIVE_PATTERN_STRINGS,
+)
 
 def _bootstrap_sensitivity(db: Session, datasource_id: str) -> None:
     """Write built-in sensitivity patterns into the database."""
-    for pat in _SENSITIVE_PATTERN_STRINGS:
+    for pat in SENSITIVE_PATTERN_STRINGS:
         db.add(SemanticAlias(
             data_source_id=datasource_id,
             alias=pat,
@@ -71,7 +60,7 @@ def load_sensitivity(db: Session, datasource_id: str) -> re.Pattern:
         # Escape administrator-provided patterns to prevent ReDoS.
         # Bootstrapped defaults (word-boundary anchored alternations) are
         # known-safe and used verbatim.
-        if alias in _SAFE_PATTERN_SET:
+        if alias in SAFE_PATTERN_SET:
             patterns.append(alias)
         else:
             patterns.append(re.escape(alias))
@@ -90,7 +79,7 @@ def load_sensitivity(db: Session, datasource_id: str) -> re.Pattern:
         if str(column_name).strip()
     )
     if not patterns:
-        return _SENSITIVE_FALLBACK
+        return SENSITIVE_FALLBACK
     return re.compile("|".join(patterns), re.IGNORECASE)
 
 
@@ -171,19 +160,3 @@ def projection_sensitivity_mask(
         return tuple(flags)
     except Exception:
         return None
-
-
-def redact_row(
-    row: dict[str, Any],
-    sensitivity: re.Pattern | None = None,
-    *,
-    sensitive_columns: set[str] | None = None,
-) -> dict[str, Any]:
-    redacted: dict[str, Any] = {}
-    for key, value in row.items():
-        forced = sensitive_columns is not None and key in sensitive_columns
-        if forced or (sensitivity and sensitivity.search(key)):
-            redacted[key] = None if value is None else "[REDACTED]"
-        else:
-            redacted[key] = value
-    return redacted

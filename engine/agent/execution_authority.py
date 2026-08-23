@@ -8,6 +8,7 @@ from engine.agent.tool import ToolInvocation
 from engine.json_codec import JsonCodecError, loads
 from engine.policy.authority import ExecutionAuthority, canonical_hash
 from engine.policy.gate import PolicyDecision
+from engine.resource import ResourceScopeRef
 
 
 class ApprovalAuthorityError(RuntimeError):
@@ -31,7 +32,7 @@ class ApprovalAuthorityVerifier:
         invocation: ToolInvocation,
         approval: Any,
         decision: PolicyDecision,
-        datasource_generation: int | None,
+        resource_ref: ResourceScopeRef | None,
     ) -> ExecutionAuthority:
         if approval is None or str(approval.status) != "approved":
             raise ApprovalAuthorityError("The invocation has no active approval grant")
@@ -55,9 +56,10 @@ class ApprovalAuthorityVerifier:
         if persisted_contract != current_contract:
             raise ApprovalAuthorityError("Approval policy contract is stale")
         if isinstance(current_contract, dict):
-            approved_generation = current_contract.get("datasource_generation")
-            if approved_generation is not None and approved_generation != datasource_generation:
-                raise ApprovalAuthorityError("Datasource generation changed after approval")
+            approved_resource = current_contract.get("resource_ref")
+            if approved_resource is not None:
+                if ResourceScopeRef.model_validate(approved_resource) != resource_ref:
+                    raise ApprovalAuthorityError("Resource version changed after approval")
 
         return ExecutionAuthority(
             approval_id=str(approval.id),
@@ -65,16 +67,16 @@ class ApprovalAuthorityVerifier:
             tool_name=invocation.tool_name,
             authorized_input_hash=invocation.authorized_input_hash,
             policy_fingerprint=canonical_hash(decision.model_dump(mode="json")),
-            safety_fingerprint=(
-                str(current_contract.get("safety_fingerprint"))
+            approval_subject_fingerprint=(
+                str(current_contract.get("subject_fingerprint"))
                 if isinstance(current_contract, dict)
-                and current_contract.get("safety_fingerprint")
+                and current_contract.get("subject_fingerprint")
                 else None
             ),
-            datasource_generation=(
-                int(current_contract["datasource_generation"])
+            resource_ref=(
+                ResourceScopeRef.model_validate(current_contract["resource_ref"])
                 if isinstance(current_contract, dict)
-                and current_contract.get("datasource_generation") is not None
+                and current_contract.get("resource_ref") is not None
                 else None
             ),
         )

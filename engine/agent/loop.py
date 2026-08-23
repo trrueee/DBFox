@@ -58,6 +58,7 @@ from engine.models import (
 from engine.agent.resource_refs import load_resource_refs
 from engine.tools.materialization import ToolMaterialization, materialize_tools
 from engine.tools.runtime import ToolExecutionTask, ToolExecutor, ToolRegistry
+from engine.tools.runtime.attempt import CompositeResourceResolver
 from engine.tools.runtime.semantics import ToolSemanticCapability
 from engine.agent.terminalizer import Terminalizer
 from engine.agent.working_state import RunWorkingStateAssembler
@@ -219,6 +220,7 @@ class RunLoop:
         definition: AgentDefinition = DEFAULT_AGENT_DEFINITION,
         live_stream: LiveStreamHub = LIVE_STREAM_HUB,
         tool_executor: ToolExecutor | None = None,
+        resource_resolver: CompositeResourceResolver | None = None,
         pricing_resolver: (
             Callable[[ProviderSettings], ModelPricing | None] | None
         ) = None,
@@ -256,6 +258,7 @@ class RunLoop:
             registry=self.registry,
             definition=self.definition,
             executor=self.tool_executor,
+            resource_resolver=resource_resolver,
         )
         self.terminalizer = Terminalizer(session_factory=self.session_factory)
 
@@ -831,22 +834,12 @@ class RunLoop:
             )
             groups = _relevant_tool_groups(groups, context)
 
-            frozen_refs: tuple[Any, ...] | None = None
-            available_resource_kinds: frozenset[str] | None = None
+            available_resource_kinds: frozenset[str] = frozenset()
             if run.input_id:
                 input_row = db.get(AgentSessionInput, str(run.input_id))
                 if input_row is not None and input_row.resource_refs_json is not None:
                     frozen_refs = load_resource_refs(str(input_row.resource_refs_json))
-                    if frozen_refs is not None:
-                        available_resource_kinds = frozenset(r.kind for r in frozen_refs)
-            if available_resource_kinds is None:
-                # Legacy pre-P4 compatibility
-                from engine.tools.runtime.resource_context import legacy_available_resource_kinds
-
-                available_resource_kinds = legacy_available_resource_kinds(
-                    db,
-                    str(run.datasource_id or "") if run.datasource_id else None,
-                )
+                    available_resource_kinds = frozenset(r.kind for r in frozen_refs)
 
             tools = materialize_tools(
                 self.registry,

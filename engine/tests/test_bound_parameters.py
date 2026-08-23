@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from engine.sql.bound_parameters import render_dbapi_sql
-from engine.sql.builder import build_select
+from dlcs.dbfox_data.backend.sql.bound_parameters import (
+    parameter_fingerprint,
+    render_dbapi_sql,
+)
+from dlcs.dbfox_data.backend.sql.builder import build_select
 
 
 @pytest.mark.parametrize(
@@ -74,3 +77,9 @@ def test_external_placeholder_name_is_rejected() -> None:
             "sqlite",
             {"user_supplied": 1},
         )
+
+
+def test_parameter_fingerprint_preserves_the_frozen_json_contract() -> None:
+    assert parameter_fingerprint({"z": 2, "a": {"b": 1, "a": 0}}) == (
+        "07a9b429c05844e3f36fcdc9381fb8fc05133b578adffd971fec5bfbfb034a74"
+    )

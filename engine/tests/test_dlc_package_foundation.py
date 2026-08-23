@@ -279,7 +279,7 @@ VALID_MANIFEST_BYTES = canonical_json_bytes({
     "version": "1.0.0",
     "displayName": "Test DLC",
     "publisher": "acme",
-    "extensionApiVersion": "1",
+    "extensionApiVersion": "2",
     "requiresDbfox": ">=1.0.0",
     "entrypoints": {"backend": "backend/entry.py"},
 })
@@ -445,6 +445,38 @@ def test_incompatible_extension_api_version_rejected(
     assert exc_info.value.code == DlcErrorCode.INCOMPATIBLE_EXTENSION_API
 
 
+def test_retired_extension_api_v1_is_rejected(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+):
+    """A removed v1 method must fail at install, not later during tool execution."""
+    priv_key, pub_key_b64 = test_keypair
+    archive_bytes = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.legacy_api",
+            "version": "1.0.0",
+            "displayName": "Legacy API DLC",
+            "publisher": "acme",
+            "extensionApiVersion": "1",
+            "requiresDbfox": ">=1.0.0",
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        private_key=priv_key,
+    )
+    archive_path = tmp_path / "legacy_api.dbfox-dlc"
+    archive_path.write_bytes(archive_bytes)
+
+    with pytest.raises(DlcError) as exc_info:
+        dlc_service.install_from_file(
+            archive_path,
+            publisher_key_base64=pub_key_b64,
+        )
+
+    assert exc_info.value.code == DlcErrorCode.INCOMPATIBLE_EXTENSION_API
+
+
 def test_incompatible_dbfox_version_rejected(
     tmp_path: Path,
     dlc_service: DlcPackageService,
@@ -459,7 +491,7 @@ def test_incompatible_dbfox_version_rejected(
             "version": "1.0.0",
             "displayName": "Future DBFox DLC",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=9.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },

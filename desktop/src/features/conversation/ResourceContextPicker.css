@@ -1,0 +1,118 @@
+.resource-context-picker {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.resource-context-picker__chips {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.resource-context-chip,
+.resource-context-picker__add {
+  display: inline-flex;
+  height: 26px;
+  max-width: 220px;
+  align-items: center;
+  gap: 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--surface-card));
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--ui-font-label);
+  line-height: 1;
+}
+
+.resource-context-chip {
+  padding: 0 5px 0 9px;
+}
+
+.resource-context-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-context-chip > button {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.resource-context-chip > button:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.resource-context-picker__add {
+  padding: 0 9px;
+  border-style: dashed;
+  background: transparent;
+  cursor: pointer;
+}
+
+.resource-context-picker__add:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+  color: var(--color-primary);
+}
+
+.resource-context-picker__add:disabled,
+.resource-context-chip > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.resource-context-picker__menu {
+  min-width: 240px;
+  max-width: min(340px, calc(100vw - 32px));
+}
+
+.resource-context-picker__option {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 9px;
+}
+
+.resource-context-picker__option-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.resource-context-picker__option-copy strong,
+.resource-context-picker__option-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-context-picker__option-copy strong {
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-body);
+  font-weight: 550;
+}
+
+.resource-context-picker__option-copy small {
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-label);
+}
+
+.resource-context-picker__error {
+  color: var(--color-danger);
+  font-size: var(--ui-font-label);
+}

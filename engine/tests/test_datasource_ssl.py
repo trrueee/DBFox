@@ -1,8 +1,11 @@
 import pytest
 
-from engine.connectivity.factory import ConnectionFactory, build_mysql_ssl_params
+from dlcs.dbfox_data.backend.connection_primitives import (
+    ConnectionConfigurationError,
+    build_mysql_ssl_params,
+)
+from engine.connectivity.factory import ConnectionFactory
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
-from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 
 
@@ -11,7 +14,7 @@ def test_build_mysql_ssl_params_disabled() -> None:
 
 
 def test_build_mysql_ssl_params_requires_ca_for_identity_verification() -> None:
-    with pytest.raises(DataSourceConnectionError):
+    with pytest.raises(ConnectionConfigurationError):
         build_mysql_ssl_params(
             {
                 "ssl_enabled": True,

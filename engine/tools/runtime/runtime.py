@@ -13,12 +13,13 @@ from engine.app.safe_errors import (
     fixed_error_detail,
     log_unexpected_exception,
 )
-from engine.tools.runtime.attempt import ResourceScopeRef
+from engine.tools.runtime.attempt import ResourceKey, ResourceScopeRef
 from engine.tools.runtime.context import ToolRunContext
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.base import BaseTool
 
 if TYPE_CHECKING:
+    from engine.agent.artifact import Artifact, ArtifactRelationType
     from sqlalchemy.orm import Session
 
 logger = logging.getLogger("dbfox.tools.runtime")
@@ -55,12 +56,18 @@ class ToolRuntime:
         raw_input: dict[str, Any],
         request: Any | None,
         idempotency_key: str,
+        invocation_id: str = "",
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
         execution_authority: Any | None = None,
         scope_refs: tuple[ResourceScopeRef, ...] | None = None,
-        resources: dict[str, Any] | None = None,
+        resources: dict[ResourceKey, Any] | None = None,
         metadata_session: Session | None = None,
+        artifact_loader: Callable[[str], Artifact | None] | None = None,
+        artifact_relation_loader: Callable[
+            [str, ArtifactRelationType],
+            tuple[Artifact, ...],
+        ] | None = None,
     ) -> ToolResult:
         tool = self.registry.require(tool_name)
         if not isinstance(tool, BaseTool):
@@ -97,6 +104,8 @@ class ToolRuntime:
                 parsed_input,
                 ToolRunContext.for_invocation(
                     request=request,
+                    tool_name=tool_name,
+                    invocation_id=invocation_id,
                     raw_input=raw_input,
                     cancellation_probe=cancellation_probe,
                     deadline=deadline,
@@ -105,6 +114,8 @@ class ToolRuntime:
                     resources=resources,
                     idempotency_key=idempotency_key,
                     metadata_session=metadata_session,
+                    artifact_loader=artifact_loader,
+                    artifact_relation_loader=artifact_relation_loader,
                 ),
             )
             if isinstance(outcome, ToolOutcome):
@@ -207,12 +218,18 @@ class ToolRuntime:
         raw_input: dict[str, Any],
         request: Any | None,
         idempotency_key: str,
+        invocation_id: str = "",
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
         execution_authority: Any | None = None,
         scope_refs: tuple[ResourceScopeRef, ...] | None = None,
-        resources: dict[str, Any] | None = None,
+        resources: dict[ResourceKey, Any] | None = None,
         metadata_session: Session | None = None,
+        artifact_loader: Callable[[str], Artifact | None] | None = None,
+        artifact_relation_loader: Callable[
+            [str, ArtifactRelationType],
+            tuple[Artifact, ...],
+        ] | None = None,
     ) -> ToolResult:
         """Resolve an interrupted action by its stable invocation key."""
 
@@ -237,6 +254,8 @@ class ToolRuntime:
                     parsed_input,
                     ToolRunContext.for_invocation(
                         request=request,
+                        tool_name=tool_name,
+                        invocation_id=invocation_id,
                         raw_input=raw_input,
                         cancellation_probe=cancellation_probe,
                         deadline=deadline,
@@ -245,6 +264,8 @@ class ToolRuntime:
                         resources=resources,
                         idempotency_key=idempotency_key,
                         metadata_session=metadata_session,
+                        artifact_loader=artifact_loader,
+                        artifact_relation_loader=artifact_relation_loader,
                     ),
                 )
             )

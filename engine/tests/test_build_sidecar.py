@@ -579,12 +579,21 @@ def test_staged_engine_contains_build_provenance(tmp_path) -> None:
         "engine_source_sha256": "b" * 64,
     }
 
-    staged = build_sidecar.prepare_sidecar_engine_tree(tmp_path, provenance)
+    system_manifest = tmp_path / "system-dlcs.json"
+    system_manifest.write_text('{"schema_version": 1}', encoding="utf-8")
+    staged = build_sidecar.prepare_sidecar_engine_tree(
+        tmp_path,
+        provenance,
+        system_manifest,
+    )
     written = json.loads(
         (staged / build_sidecar.BUILD_PROVENANCE_FILENAME).read_text(encoding="utf-8")
     )
 
     assert written == provenance
+    assert (staged / "_system_dlc_bundle.json").read_text(encoding="utf-8") == (
+        system_manifest.read_text(encoding="utf-8")
+    )
 
 
 def test_release_build_never_writes_frontend_dev_token(monkeypatch, tmp_path) -> None:
@@ -592,7 +601,20 @@ def test_release_build_never_writes_frontend_dev_token(monkeypatch, tmp_path) ->
     binary.write_bytes(b"sidecar")
     monkeypatch.setattr(build_sidecar, "_venv_python", lambda: "python")
     monkeypatch.setattr(build_sidecar, "sync_build_environment", lambda _python: None)
-    monkeypatch.setattr(build_sidecar, "build_pyinstaller", lambda _python: binary)
+    signing_key = tmp_path / "signing-key.pem"
+    signing_key.write_text("private", encoding="utf-8")
+    system_manifest = tmp_path / "system-dlcs.json"
+    system_manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        build_sidecar,
+        "build_system_dlc_release_bundle",
+        lambda _python, _key: system_manifest,
+    )
+    monkeypatch.setattr(
+        build_sidecar,
+        "build_pyinstaller",
+        lambda _python, _manifest: binary,
+    )
     monkeypatch.setattr(build_sidecar, "install_sidecar", lambda source: source)
     monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _binary: _runtime_manifest((3, 53, 4)))
     monkeypatch.setattr(
@@ -601,7 +623,11 @@ def test_release_build_never_writes_frontend_dev_token(monkeypatch, tmp_path) ->
         lambda _binary: _release_contracts(),
     )
     monkeypatch.setattr(build_sidecar, "write_artifact_manifest", lambda *_args: tmp_path / "manifest.json")
-    monkeypatch.setattr(sys, "argv", ["build_sidecar.py"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["build_sidecar.py", "--system-dlc-signing-key", str(signing_key)],
+    )
 
     builder_source = Path(build_sidecar.__file__).read_text(encoding="utf-8")
     assert "write_env_local" not in builder_source

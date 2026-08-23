@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-06
+> 最后核验：2026-08-23
 >
 > 适用范围：HTTP、SSE、Agent、工具、持久化、日志和前端错误展示
 >
@@ -24,6 +24,11 @@
 `DBFoxError` 必须只按固定 code 查询目录；未注册 code 按 `INTERNAL_ERROR` 处理。
 
 `log_unexpected_exception()` 只记录有限集合中的 `SafeLogOperation`、异常类型和不透明诊断指纹。它不记录 `str(exc)`、异常参数、异常原因、堆栈、凭据、SQL 结果或模型服务响应正文。
+
+Runtime DLC 只能通过 Extension API 的 `log_extension_diagnostic()` / `log_extension_exception()`
+写诊断。operation 必须是至少三段的 namespaced ID（例如 `dbfox.data.sql_guardrail_parse`）；无效
+operation 统一降为 `extension.unexpected.operation`。这两个入口与 Core 日志使用同一个进程内
+HMAC fingerprint，只允许 code、subject/exception type 与 fingerprint 进入日志。
 
 ## 3. 必须遵守的规则
 

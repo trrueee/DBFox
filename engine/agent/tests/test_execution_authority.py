@@ -14,14 +14,14 @@ from engine.agent.tool import ToolInvocation, ToolInvocationStatus
 from engine.policy.authority import (
     ExecutionAuthority,
     canonical_hash,
-    safety_fingerprint,
 )
 from engine.policy.gate import PolicyDecision
+from engine.resource import ResourceScopeRef
 from engine.tools.runtime.base import ToolRecoveryPolicy
 from engine.tools.db.sql_execution import sql_execute_readonly
 
 
-def _decision(*, generation: int = 4, safety_fingerprint: str = "safety-v1") -> PolicyDecision:
+def _decision(*, generation: int = 4, subject: str = "subject-v1") -> PolicyDecision:
     safe_args = {"safe_sql": "SELECT 1"}
     return PolicyDecision(
         status="approval_required",
@@ -29,9 +29,13 @@ def _decision(*, generation: int = 4, safety_fingerprint: str = "safety-v1") -> 
         safe_args=safe_args,
         risk_level="warning",
         approval={
-            "kind": "validated_action",
-            "safety_fingerprint": safety_fingerprint,
-            "datasource_generation": generation,
+            "kind": "tool_admission",
+            "subject_fingerprint": canonical_hash({"subject": subject}),
+            "resource_ref": {
+                "kind": "dbfox.data.database",
+                "id": "datasource-1",
+                "version": generation,
+            },
         },
     )
 
@@ -77,20 +81,26 @@ def test_approved_action_becomes_scoped_execution_authority() -> None:
         invocation=invocation,
         approval=_approval(invocation, decision),
         decision=decision,
-        datasource_generation=4,
+        resource_ref=ResourceScopeRef(
+            kind="dbfox.data.database", id="datasource-1", version=4
+        ),
     )
 
     assert authority.approval_id == "approval-1"
     assert authority.authorized_input_hash == invocation.authorized_input_hash
-    assert authority.safety_fingerprint == "safety-v1"
-    assert authority.datasource_generation == 4
+    assert authority.approval_subject_fingerprint == canonical_hash(
+        {"subject": "subject-v1"}
+    )
+    assert authority.resource_ref == ResourceScopeRef(
+        kind="dbfox.data.database", id="datasource-1", version=4
+    )
 
 
 @pytest.mark.parametrize(
     ("current_decision", "generation"),
     [
         (_decision(generation=5), 5),
-        (_decision(safety_fingerprint="safety-v2"), 4),
+        (_decision(subject="subject-v2"), 4),
     ],
 )
 def test_stale_approval_cannot_authorize_changed_policy_contract(
@@ -105,7 +115,9 @@ def test_stale_approval_cannot_authorize_changed_policy_contract(
             invocation=invocation,
             approval=_approval(invocation, approved_decision),
             decision=current_decision,
-            datasource_generation=generation,
+            resource_ref=ResourceScopeRef(
+                kind="dbfox.data.database", id="datasource-1", version=generation
+            ),
         )
 
 
@@ -117,14 +129,17 @@ def test_sql_leaf_accepts_matching_approval_authority(monkeypatch) -> None:
         "requires_confirmation": True,
         "blocked_reasons": ["requires_confirmation"],
     }
+    approval_subject = {"validationArtifactId": "artifact-1", "safety": safety}
     authority = ExecutionAuthority(
         approval_id="approval-1",
         invocation_id="invocation-1",
         tool_name="sql_execute_readonly",
         authorized_input_hash=canonical_hash({"safe_sql": "SELECT 1"}),
         policy_fingerprint="policy-1",
-        safety_fingerprint=safety_fingerprint(safety),
-        datasource_generation=4,
+        approval_subject_fingerprint=canonical_hash(approval_subject),
+        resource_ref=ResourceScopeRef(
+            kind="dbfox.data.database", id="datasource-1", version=4
+        ),
     )
     monkeypatch.setattr(
         "engine.tools.db.sql_execution.execute_query",
@@ -141,6 +156,7 @@ def test_sql_leaf_accepts_matching_approval_authority(monkeypatch) -> None:
         safety=safety,
         expected_connection_generation=4,
         execution_authority=authority,
+        approval_subject=approval_subject,
     )
 
     assert result["success"] is True
@@ -155,14 +171,17 @@ def test_sql_leaf_rejects_authority_from_another_generation() -> None:
         "requires_confirmation": True,
         "blocked_reasons": ["requires_confirmation"],
     }
+    approval_subject = {"validationArtifactId": "artifact-1", "safety": safety}
     authority = ExecutionAuthority(
         approval_id="approval-1",
         invocation_id="invocation-1",
         tool_name="sql_execute_readonly",
         authorized_input_hash=canonical_hash({"safe_sql": "SELECT 1"}),
         policy_fingerprint="policy-1",
-        safety_fingerprint=safety_fingerprint(safety),
-        datasource_generation=3,
+        approval_subject_fingerprint=canonical_hash(approval_subject),
+        resource_ref=ResourceScopeRef(
+            kind="dbfox.data.database", id="datasource-1", version=3
+        ),
     )
 
     with pytest.raises(GuardrailValidationError, match="approval workflow"):
@@ -172,4 +191,5 @@ def test_sql_leaf_rejects_authority_from_another_generation() -> None:
             safety=safety,
             expected_connection_generation=4,
             execution_authority=authority,
+            approval_subject=approval_subject,
         )

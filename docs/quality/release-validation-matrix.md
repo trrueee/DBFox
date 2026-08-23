@@ -48,6 +48,13 @@ electron-builder 签 Host/NSIS、生成 `latest.yml` 和未公开 Draft Release�
 绑定解释器/锁/源码/SQLite provenance、target triplet、release contracts、固定 filename 和最终
 SHA-256。签名改变二进制后必须显式 refresh，builder 不允许二次修改 Sidecar。
 
+正式 Frozen 构建还必须通过 `--system-dlc-signing-key` 或父进程注入的
+`DBFOX_SYSTEM_DLC_SIGNING_KEY_PATH` 提供 Ed25519 私钥文件路径。私钥不进入仓库、日志、Sidecar
+或 Electron Resources；构建器只把公钥、DLC identity、版本和 exact package SHA-256 写入
+Sidecar 内的 `_system_dlc_bundle.json`。外部 `system-dlcs/` 同目录清单不是信任根：Sidecar
+启动时按内嵌 pins 校验包字节，再复用标准 package verifier、content-addressed store、registry
+selection 与 Runtime snapshot。缺少密钥、包、内嵌 pin 或 digest 不一致均阻断正式构建/启动。
+
 Frozen smoke 必须验证鉴权、Schema、只读查询、Result Artifact、durable run、restart reload，并通过
 真实 lifecycle API 驱动签名的 `acme.echo`：tampered 拒绝、安装不执行、disabled、enable/restart
 exact digest、backend/frontend contribution、disable/restart 消失，以及 inactive uninstall 保留 data。

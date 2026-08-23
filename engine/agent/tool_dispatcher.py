@@ -1,7 +1,6 @@
 """Durable tool-call admission, execution, and settlement."""
 
 from __future__ import annotations
-
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -31,16 +30,16 @@ from engine.agent.repositories.artifact import (
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
+from engine.agent.resource_refs import resource_refs_for_run
 from engine.agent.session import SessionLease
 from engine.agent.tool import ToolInvocation
 from engine.agent.turn import ModelToolCall
 from engine.agent.working_state import RunWorkingStateAssembler
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.errors import ToolInputError
-from engine.models import AgentApproval, AgentRun, AgentSessionInput, AgentToolInvocation, AgentTurn
+from engine.models import AgentApproval, AgentRun, AgentToolInvocation, AgentTurn
 from engine.policy.authority import ExecutionAuthority
 from engine.policy.gate import PolicyGate
-from engine.query_registry import QUERY_REGISTRY
 from engine.tools.materialization import (
     ToolMaterialization,
     ToolVersionMismatch,
@@ -78,14 +77,12 @@ _OUTPUT_CONTRACT_SUMMARY = "工具输出未通过合同校验。"
 class ToolRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    datasource_id: str | None = None
-    datasource_generation: int = 0
     question: str
     session_id: str
     run_id: str
     execution_id: str
     execution_mode: str
-    frozen_resource_refs: tuple[ResourceScopeRef, ...] | None = None
+    frozen_resource_refs: tuple[ResourceScopeRef, ...] = ()
 
 
 class ToolDispatchOutcome(StrEnum):
@@ -139,11 +136,13 @@ class ToolDispatcher:
         definition: AgentDefinition,
         executor: ToolExecutor,
         isolated_worker_command: tuple[str, ...] | None = None,
+        resource_resolver: CompositeResourceResolver | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.registry = registry
         self.definition = definition
         self.executor = executor
+        self.resource_resolver = resource_resolver
         self.isolated_runner = IsolatedProcessAttemptRunner(isolated_worker_command)
         self.attempt_handler = ToolAttemptHandler(
             registry=registry,
@@ -612,6 +611,7 @@ class ToolDispatcher:
                         leaf_db,
                         request,
                         tool,
+                        self.resource_resolver,
                     )
                 return self.isolated_runner.run(
                     request=attempt_request("execute", scope_refs),
@@ -622,6 +622,7 @@ class ToolDispatcher:
                     leaf_db,
                     request,
                     tool,
+                    self.resource_resolver,
                 )
                 result = self.attempt_handler.run_with_resources(
                     attempt_request("execute", scope_refs),
@@ -630,6 +631,21 @@ class ToolDispatcher:
                     deadline=tool_control.deadline,
                     execution_authority=execution_authority,
                     metadata_session=leaf_db,
+                    artifact_loader=lambda artifact_id: ArtifactRepository(
+                        leaf_db
+                    ).get_for_run(
+                        session_id=request.session_id,
+                        run_id=request.run_id,
+                        artifact_id=artifact_id,
+                    ),
+                    artifact_relation_loader=lambda artifact_id, relation: (
+                        ArtifactRepository(leaf_db).artifacts_relating_to_for_run(
+                            session_id=request.session_id,
+                            run_id=request.run_id,
+                            artifact_id=artifact_id,
+                            relation=relation,
+                        )
+                    ),
                 )
                 if result.status == "success" and not tool_control.is_cancelled():
                     leaf_db.commit()
@@ -666,6 +682,7 @@ class ToolDispatcher:
                             leaf_db,
                             request,
                             tool,
+                            self.resource_resolver,
                         )
                     return self.isolated_runner.run(
                         request=attempt_request("reconcile", scope_refs),
@@ -676,6 +693,7 @@ class ToolDispatcher:
                         leaf_db,
                         request,
                         tool,
+                        self.resource_resolver,
                     )
                     reconciled = self.attempt_handler.run_with_resources(
                         attempt_request("reconcile", scope_refs),
@@ -684,6 +702,21 @@ class ToolDispatcher:
                         deadline=tool_control.deadline,
                         execution_authority=execution_authority,
                         metadata_session=leaf_db,
+                        artifact_loader=lambda artifact_id: ArtifactRepository(
+                            leaf_db
+                        ).get_for_run(
+                            session_id=request.session_id,
+                            run_id=request.run_id,
+                            artifact_id=artifact_id,
+                        ),
+                        artifact_relation_loader=lambda artifact_id, relation: (
+                            ArtifactRepository(leaf_db).artifacts_relating_to_for_run(
+                                session_id=request.session_id,
+                                run_id=request.run_id,
+                                artifact_id=artifact_id,
+                                relation=relation,
+                            )
+                        ),
                     )
                     leaf_db.rollback()
                     return reconciled
@@ -736,30 +769,26 @@ class ToolDispatcher:
                     db.commit()
                 result = None
 
-        execution_id = str(invocation.id)
-        has_query_reservation = bool(execution_id and request.datasource_id is not None)
-
-        if has_query_reservation:
-            QUERY_REGISTRY.reserve(execution_id, request.datasource_id)
-
-        def cancel_query() -> None:
-            if has_query_reservation:
-                QUERY_REGISTRY.cancel(execution_id)
-
-        try:
-            if result is None:
-                result = self.executor.execute(
-                    tool=tool,
-                    scope_key=invocation.run_id,
-                    operation=execute_leaf,
-                    should_cancel=control.is_cancel_requested,
-                    cancel_action=cancel_query if has_query_reservation else None,
-                    on_attempt=record_attempt,
-                    deadline=control.deadline,
+        def cancel_tool() -> None:
+            try:
+                tool.cancel(invocation.id)
+            except Exception as exc:
+                logger.error(
+                    "Tool cancellation hook failed: tool=%s type=%s",
+                    invocation.tool_name,
+                    type(exc).__name__,
                 )
-        finally:
-            if has_query_reservation:
-                QUERY_REGISTRY.unregister(execution_id)
+
+        if result is None:
+            result = self.executor.execute(
+                tool=tool,
+                scope_key=invocation.run_id,
+                operation=execute_leaf,
+                should_cancel=control.is_cancel_requested,
+                cancel_action=cancel_tool,
+                on_attempt=record_attempt,
+                deadline=control.deadline,
+            )
 
         return result
 
@@ -934,7 +963,14 @@ class ToolDispatcher:
                     invocation=invocation,
                     approval=approval,
                     decision=decision,
-                    datasource_generation=int(run.datasource_generation),
+                    resource_ref=(
+                        ResourceScopeRef.model_validate(
+                            decision.approval.get("resource_ref")
+                        )
+                        if isinstance(decision.approval, dict)
+                        and decision.approval.get("resource_ref") is not None
+                        else None
+                    ),
                 )
             except ApprovalAuthorityError as exc:
                 ToolInvocationRepository(db).settle(
@@ -1028,22 +1064,8 @@ class ToolDispatcher:
         )
 
     def _tool_request(self, run: AgentRun, db: Session) -> ToolRequest:
-        from engine.agent.resource_refs import load_resource_refs
-
-        # Read frozen resource refs from the input (None = legacy, () = empty post-P4)
-        frozen_refs: tuple[ResourceScopeRef, ...] | None = None
-        if run.input_id:
-            input_row = db.get(AgentSessionInput, str(run.input_id))
-            if input_row is not None:
-                frozen_refs = load_resource_refs(
-                    str(input_row.resource_refs_json)
-                    if input_row.resource_refs_json is not None
-                    else None
-                )
-
+        frozen_refs = resource_refs_for_run(db, run)
         return ToolRequest(
-            datasource_id=str(run.datasource_id) if run.datasource_id else None,
-            datasource_generation=int(run.datasource_generation or 0),
             question=str(run.question),
             session_id=str(run.session_id),
             run_id=str(run.id),

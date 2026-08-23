@@ -75,7 +75,7 @@ describe("WorkspaceDock", () => {
         title: "SQL 控制台",
         closeable: false,
         stateKey: "sql-ds-1",
-        target: { type: "resource", kind: "database", id: "ds-1" },
+        target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
       }],
       settingsOpen: false,
     });
@@ -160,7 +160,6 @@ describe("WorkspaceDock", () => {
     });
     useDlcStore.getState().setProjectionResult("snap-dlc", {}, {
       connectors: [],
-      requestedResources: [],
       dockViews: [{
         viewType: "acme.runtime.view",
         icon: () => null,

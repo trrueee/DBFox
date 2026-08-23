@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from engine.agent.resource_refs import RequestedResourceRef
 from engine.agent.run_item import RunItem, RunProjection
 
 
@@ -163,7 +164,6 @@ class ConversationSummaryResponse(BaseModel):
 
     id: str
     project_id: str | None = None
-    datasource_id: str | None = None
     title: str
     selected_artifact_id: str | None = None
     updated_at: str
@@ -174,11 +174,10 @@ class ConversationSessionResponse(BaseModel):
 
     id: str
     project_id: str | None = None
-    datasource_id: str | None = None
     title: str
     context_epoch: int
     selected_artifact_id: str | None = None
-    context_tables: list[str]
+    resource_intents: list[RequestedResourceRef]
 
 
 class PaginationCursorResponse(BaseModel):

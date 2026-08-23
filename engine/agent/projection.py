@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.agent.run_item import project_run
+from engine.agent.repositories.resource_intent import ConversationResourceIntentRepository
 from engine.models import AgentRun, AgentRunItemRecord, AgentSession
 
 
@@ -60,7 +61,6 @@ def conversation_snapshot(
         "session": {
             "id": str(aggregate.id),
             "project_id": str(aggregate.project_id) if aggregate.project_id else None,
-            "datasource_id": str(aggregate.datasource_id) if aggregate.datasource_id else None,
             "title": str(aggregate.title),
             "context_epoch": int(aggregate.context_epoch or 0),
             "selected_artifact_id": (
@@ -68,10 +68,10 @@ def conversation_snapshot(
                 if aggregate.selected_artifact_id
                 else None
             ),
-            "context_tables": _loads(
-                str(aggregate.context_tables_json or "[]"),
-                [],
-            ),
+            "resource_intents": [
+                ref.model_dump(mode="json")
+                for ref in ConversationResourceIntentRepository(db).list(session_id)
+            ],
         },
         "runs": [project_run(row) for row in runs],
         "items": [

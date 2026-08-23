@@ -233,6 +233,10 @@ export type Artifact = {
      */
     relations?: Array<ArtifactRelation>;
     /**
+     * Resource Refs
+     */
+    resource_refs?: Array<ResourceScopeRef>;
+    /**
      * Run Id
      */
     run_id: string;
@@ -493,11 +497,11 @@ export type ChartDataResponse = {
     /**
      * Consistency
      */
-    consistency: 'live_reexecution';
+    consistency: 'durable_snapshot' | 'live_reexecution';
     /**
      * Datasourcegeneration
      */
-    datasourceGeneration: number;
+    datasourceGeneration: string | number;
     /**
      * Originalexecutedat
      */
@@ -669,17 +673,13 @@ export type ConsoleExecuteResponse = {
  */
 export type ConversationCreateRequest = {
     /**
-     * Context Tables
-     */
-    context_tables?: Array<string>;
-    /**
-     * Datasource Id
-     */
-    datasource_id?: string | null;
-    /**
      * Project Id
      */
     project_id: string;
+    /**
+     * Resource Intents
+     */
+    resource_intents?: Array<RequestedResourceRef>;
     /**
      * Title
      */
@@ -789,9 +789,9 @@ export type ConversationPatchRequest = {
      */
     archived?: boolean | null;
     /**
-     * Context Tables
+     * Resource Intents
      */
-    context_tables?: Array<string> | null;
+    resource_intents?: Array<RequestedResourceRef> | null;
     /**
      * Title
      */
@@ -829,14 +829,6 @@ export type ConversationSessionResponse = {
      */
     context_epoch: number;
     /**
-     * Context Tables
-     */
-    context_tables: Array<string>;
-    /**
-     * Datasource Id
-     */
-    datasource_id?: string | null;
-    /**
      * Id
      */
     id: string;
@@ -844,6 +836,10 @@ export type ConversationSessionResponse = {
      * Project Id
      */
     project_id?: string | null;
+    /**
+     * Resource Intents
+     */
+    resource_intents: Array<RequestedResourceRef>;
     /**
      * Selected Artifact Id
      */
@@ -882,10 +878,6 @@ export type ConversationSnapshotResponse = {
  * ConversationSummaryResponse
  */
 export type ConversationSummaryResponse = {
-    /**
-     * Datasource Id
-     */
-    datasource_id?: string | null;
     /**
      * Id
      */
@@ -2614,10 +2606,34 @@ export type ProjectCreateRequest = {
      * Name
      */
     name: string;
+};
+
+/**
+ * ProjectResourceDescriptor
+ *
+ * Project-scoped resource discovery descriptor with server-canonical freshness version.
+ */
+export type ProjectResourceDescriptor = {
     /**
-     * Workspace Root
+     * Id
      */
-    workspace_root?: string | null;
+    id: string;
+    /**
+     * Is Default
+     */
+    is_default?: boolean;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Version
+     */
+    version: number | string;
 };
 
 /**
@@ -2652,10 +2668,6 @@ export type ProjectResponse = {
      * Updated At
      */
     updated_at?: string | null;
-    /**
-     * Workspace Root
-     */
-    workspace_root?: string | null;
 };
 
 /**
@@ -2978,6 +2990,26 @@ export type RequestedResourceRef = {
 };
 
 /**
+ * ResourceScopeRef
+ *
+ * Stable identity and freshness fence for one execution resource.
+ */
+export type ResourceScopeRef = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Version
+     */
+    version?: string | number | null;
+};
+
+/**
  * RestoreOperationResponse
  */
 export type RestoreOperationResponse = {
@@ -3108,11 +3140,11 @@ export type ResultPageResponse = {
     /**
      * Consistency
      */
-    consistency: 'live_reexecution' | 'live_query';
+    consistency: 'durable_snapshot' | 'live_reexecution' | 'live_query';
     /**
      * Datasourcegeneration
      */
-    datasourceGeneration: number;
+    datasourceGeneration: string | number;
     /**
      * Hasnextpage
      */
@@ -3230,10 +3262,6 @@ export type RunProjection = {
      * Current Turn Id
      */
     current_turn_id?: string | null;
-    /**
-     * Datasource Id
-     */
-    datasource_id?: string | null;
     error?: RunError | null;
     /**
      * Id
@@ -6557,6 +6585,64 @@ export type GetDlcApiV1DlcsDlcIdGetResponses = {
 
 export type GetDlcApiV1DlcsDlcIdGetResponse = GetDlcApiV1DlcsDlcIdGetResponses[keyof GetDlcApiV1DlcsDlcIdGetResponses];
 
+export type EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostData = {
+    body: CredentialEnrollmentBatchRequestWritable;
+    path: {
+        /**
+         * Dlc Id
+         */
+        dlc_id: string;
+    };
+    query?: never;
+    url: '/api/v1/dlcs/{dlc_id}/credentials/batch';
+};
+
+export type EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostError = EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostErrors[keyof EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostErrors];
+
+export type EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: CredentialEnrollmentBatchResponse;
+};
+
+export type EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostResponse = EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostResponses[keyof EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostResponses];
+
 export type DisableDlcApiV1DlcsDlcIdDisablePostData = {
     body?: never;
     path: {
@@ -6675,6 +6761,12 @@ export type EnableDlcApiV1DlcsDlcIdEnablePostResponse = EnableDlcApiV1DlcsDlcIdE
 
 export type InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostData = {
     body?: never;
+    headers?: {
+        /**
+         * X-Credential-Lease-Id
+         */
+        'X-Credential-Lease-Id'?: string | null;
+    };
     path: {
         /**
          * Dlc Id
@@ -7088,6 +7180,66 @@ export type ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponses = {
 };
 
 export type ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponse = ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponses[keyof ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponses];
+
+export type ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/v1/projects/{project_id}/resources';
+};
+
+export type ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetError = ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetErrors[keyof ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetErrors];
+
+export type ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponses = {
+    /**
+     * Response Api List Project Resources Api V1 Projects  Project Id  Resources Get
+     *
+     * Successful Response
+     */
+    200: Array<ProjectResourceDescriptor>;
+};
+
+export type ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponse = ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponses[keyof ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponses];
 
 export type ApiCancelSqlApiV1QueryCancelPostData = {
     body: SqlCancelRequest;

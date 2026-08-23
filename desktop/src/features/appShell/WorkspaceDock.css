@@ -51,7 +51,10 @@
 .workspace-dock__tab {
   position: relative;
   display: inline-flex;
-  flex: 0 1 auto;
+  /* The overflow planner must measure the tab's real width. Allowing flex
+     shrink here makes several tabs appear to fit while their labels and close
+     buttons are already colliding. Tabs that do not fit belong in overflow. */
+  flex: 0 0 auto;
   align-items: center;
   gap: 1px;
   min-width: 0;

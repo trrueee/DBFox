@@ -8,6 +8,7 @@ import {
   getConversationHistory,
   getConversationRunArtifacts,
   listConversations,
+  patchConversation,
   resolveConversationApproval,
   resolveConversationQuestion,
   selectConversationArtifact,
@@ -37,9 +38,7 @@ import type {
   ConversationSummary,
   QuestionItem,
 } from "../types/conversation";
-import { useDatasourceSelectionStore } from "./datasourceSelectionStore";
-import { useWorkspaceStore } from "./workspaceStore";
-import { collectProductRequestedResources } from "../features/resources/requestedResourceComposition";
+import type { RequestedResourceRef } from "../lib/api/generated/types.gen";
 import {
   reduceStreamEvent,
   removeConversationState,
@@ -62,7 +61,12 @@ export interface ConversationActions {
   loadOlderHistory: (conversationId: string) => Promise<boolean>;
   createAndOpenConversation: (
     question: string,
+    resourceIntents?: readonly RequestedResourceRef[],
   ) => Promise<ConversationDetail>;
+  setResourceIntents: (
+    conversationId: string,
+    resourceIntents: readonly RequestedResourceRef[],
+  ) => Promise<void>;
   deleteConversationById: (conversationId: string) => Promise<void>;
   loadConversation: (detail: ConversationDetail) => void;
   loadRunArtifacts: (
@@ -132,23 +136,20 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     return Boolean(page.pagination?.items.has_more || page.pagination?.runs.has_more);
   },
 
-  createAndOpenConversation: async (question) => {
+  createAndOpenConversation: async (question, resourceIntents = []) => {
     requireConversationLlmPayload();
     const { useWorkspaceStore } = await import("../stores/workspaceStore");
     const projectId = useWorkspaceStore.getState().activeProjectId;
     if (!projectId) throw new Error("Please select a project first.");
-    const datasourceId = useDatasourceSelectionStore.getState().activeDatasourceId || undefined;
     const detail = await createConversation({
       project_id: projectId,
-      datasource_id: datasourceId,
       title: question.slice(0, 80),
-      context_tables: [],
+      resource_intents: [...resourceIntents],
     });
     const summary: ConversationSummary = {
       id: detail.id,
       title: detail.title,
       project_id: detail.project_id ?? projectId,
-      datasource_id: detail.datasource_id,
       updated_at: new Date().toISOString(),
     };
     set((state) => ({
@@ -156,6 +157,13 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }));
     get().loadConversation(detail);
     return detail;
+  },
+
+  setResourceIntents: async (conversationId, resourceIntents) => {
+    const detail = await patchConversation(conversationId, {
+      resource_intents: [...resourceIntents],
+    });
+    get().loadConversation(detail);
   },
 
   deleteConversationById: async (conversationId) => {
@@ -215,17 +223,6 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     const llmPayload = requireConversationLlmPayload();
     const detail = get().detailById[conversationId]
       || await get().openConversation(conversationId);
-    const projectId = detail.project_id || useWorkspaceStore.getState().activeProjectId || "";
-    const authoritySnapshot = collectProductRequestedResources({
-      projectId,
-      conversationId,
-      datasourceId: detail.datasource_id,
-    });
-    const requested_resources = authoritySnapshot.complete && authoritySnapshot.refs.length > 0
-      ? [...authoritySnapshot.refs]
-      : authoritySnapshot.complete
-        ? []
-        : undefined;
     const created = await admitConversationInput(conversationId, {
       content,
       idempotency_key: idempotencyKey,
@@ -234,10 +231,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       llm_credential_id: llmPayload.llm_credential_id,
       api_base: llmPayload.api_base,
       model_name: llmPayload.model_name,
-      requested_resources,
       workspace_context: {
-        datasource_id: detail.datasource_id,
-        selected_table_names: detail.context_tables,
         recent_agent_run_id: detail.runs.at(-1)?.id || null,
       },
     });

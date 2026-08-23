@@ -52,7 +52,7 @@ export const useSqlConsoleStore = create<SqlConsoleStore>()((set) => ({
         projectId: shell.activeProjectId || undefined,
         target: {
           type: "resource" as const,
-          kind: "database",
+          kind: "dbfox.data.database",
           id: datasourceId,
         },
       };

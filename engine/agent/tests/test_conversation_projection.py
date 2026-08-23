@@ -5,10 +5,10 @@ from engine.models import AgentSession
 
 
 def test_snapshot_is_backend_owned_and_contains_cursor(db_session, test_datasource):
-    db_session.add(AgentSession(id="session_projection", datasource_id=str(test_datasource.id), title="Projection"))
+    db_session.add(AgentSession(id="session_projection", title="Projection"))
     db_session.commit()
     admission = SessionRepository(db_session).admit(
-        session_id="session_projection", resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        session_id="session_projection", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="分析数据", idempotency_key="projection", llm_credential_id="credential",
         api_base=None, model_name="model", request_payload={}, selected_artifact_ids=[],
     )

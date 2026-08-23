@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parent
 ENGINE_DIR = ROOT / "engine"
 DESKTOP_DIR = ROOT / "desktop"
 BINARIES_DIR = DESKTOP_DIR / "electron-resources" / "sidecar"
+SYSTEM_DLCS_DIR = DESKTOP_DIR / "electron-resources" / "system-dlcs"
 BUILD_VENV = ROOT / ".build_venv"
 BUILD_LOCK = ROOT / "requirements-build.lock"
 SIDECAR_PYTHON_VERSION_PATH = ROOT / ".sidecar-python-version"
@@ -213,6 +214,34 @@ def sync_build_environment(python_exe: str) -> None:
     print(f"  [OK] Synced from {BUILD_LOCK.name} with uv pip sync")
 
 
+def build_system_dlc_release_bundle(
+    python_exe: str,
+    private_key_path: Path,
+) -> Path:
+    """Build signed official DLCs before freezing their trust pins into Sidecar."""
+
+    resolved_key = private_key_path.expanduser().resolve(strict=True)
+    command = [
+        python_exe,
+        str(ROOT / "scripts" / "build_system_dlc_bundle.py"),
+        "--output-dir",
+        str(SYSTEM_DLCS_DIR),
+        "--private-key",
+        str(resolved_key),
+    ]
+    result = subprocess.run(command, cwd=str(ROOT), capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Unable to build signed System DLC release bundle: "
+            f"{result.stderr[-2000:]}"
+        )
+    manifest = SYSTEM_DLCS_DIR / "system-dlcs.json"
+    if not manifest.is_file():
+        raise RuntimeError("System DLC builder did not produce its pinned manifest")
+    print(f"  [OK] System DLC bundle -> {SYSTEM_DLCS_DIR}")
+    return manifest
+
+
 def _ignore_sidecar_runtime(src: str, names: list[str]) -> set[str]:
     ignored: set[str] = set()
     for name in names:
@@ -367,6 +396,7 @@ def collect_build_provenance(python_exe: str) -> dict[str, object]:
 def prepare_sidecar_engine_tree(
     work_dir: Path,
     provenance: dict[str, object],
+    system_dlc_manifest: Path,
 ) -> Path:
     """Stage only runtime engine files for PyInstaller --add-data."""
     staging_root = work_dir / "_runtime_data"
@@ -378,10 +408,11 @@ def prepare_sidecar_engine_tree(
         json.dumps(provenance, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    shutil.copy2(system_dlc_manifest, staged_engine / "_system_dlc_bundle.json")
     return staged_engine
 
 
-def build_pyinstaller(python_exe: str) -> Path:
+def build_pyinstaller(python_exe: str, system_dlc_manifest: Path) -> Path:
     dist_dir = ROOT / "pyinstaller_dist"
     work_dir = ROOT / "pyinstaller_build"
     spec_paths = (ROOT / "dbfox-engine.spec", ROOT / "dbfox_engine.spec")
@@ -391,7 +422,11 @@ def build_pyinstaller(python_exe: str) -> Path:
     for spec_path in spec_paths:
         spec_path.unlink(missing_ok=True)
     provenance = collect_build_provenance(python_exe)
-    staged_engine = prepare_sidecar_engine_tree(work_dir, provenance)
+    staged_engine = prepare_sidecar_engine_tree(
+        work_dir,
+        provenance,
+        system_dlc_manifest,
+    )
 
     cmd = [
         python_exe, "-m", "PyInstaller",
@@ -650,6 +685,19 @@ def main() -> None:
         action="store_true",
         help="Recompute the Sidecar hash after official platform code signing",
     )
+    parser.add_argument(
+        "--system-dlc-signing-key",
+        type=Path,
+        default=(
+            Path(os.environ["DBFOX_SYSTEM_DLC_SIGNING_KEY_PATH"])
+            if os.environ.get("DBFOX_SYSTEM_DLC_SIGNING_KEY_PATH")
+            else None
+        ),
+        help=(
+            "PEM Ed25519 private key used only by the release builder; may also "
+            "be supplied through DBFOX_SYSTEM_DLC_SIGNING_KEY_PATH"
+        ),
+    )
     args = parser.parse_args()
 
     if args.refresh_artifact_manifest:
@@ -666,8 +714,18 @@ def main() -> None:
     print("\n[1/4] Sync locked build environment")
     sync_build_environment(python_exe)
 
+    if args.system_dlc_signing_key is None:
+        raise RuntimeError(
+            "Frozen releases require --system-dlc-signing-key or "
+            "DBFOX_SYSTEM_DLC_SIGNING_KEY_PATH"
+        )
+    system_dlc_manifest = build_system_dlc_release_bundle(
+        python_exe,
+        args.system_dlc_signing_key,
+    )
+
     print("\n[2/4] PyInstaller build")
-    binary = build_pyinstaller(python_exe)
+    binary = build_pyinstaller(python_exe, system_dlc_manifest)
 
     print("\n[3/4] Install to Electron resources")
     dest = install_sidecar(binary)

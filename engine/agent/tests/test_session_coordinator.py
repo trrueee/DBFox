@@ -44,19 +44,19 @@ class RecordingLoop:
 
 def test_coordinator_serializes_session_and_parallelizes_independent_sessions(db_session, test_datasource):
     db_session.add_all([
-        AgentSession(id="coordinator_a", datasource_id=str(test_datasource.id), title="A"),
-        AgentSession(id="coordinator_b", datasource_id=str(test_datasource.id), title="B"),
+        AgentSession(id="coordinator_a", title="A"),
+        AgentSession(id="coordinator_b", title="B"),
     ])
     db_session.commit()
     sessions = SessionRepository(db_session)
     for key in ("a1", "a2"):
         sessions.admit(
-            session_id="coordinator_a", resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+            session_id="coordinator_a", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
             content=key, idempotency_key=key, llm_credential_id="credential",
             api_base=None, model_name="model", request_payload={},
         )
     sessions.admit(
-        session_id="coordinator_b", resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        session_id="coordinator_b", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="b1", idempotency_key="b1", llm_credential_id="credential",
         api_base=None, model_name="model", request_payload={},
     )
@@ -233,13 +233,12 @@ def test_stop_interrupts_active_run_before_waiting_for_workers(db_session, test_
     session_id = "coordinator_shutdown"
     db_session.add(AgentSession(
         id=session_id,
-        datasource_id=str(test_datasource.id),
         title="Shutdown",
     ))
     db_session.commit()
     SessionRepository(db_session).admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="wait",
         idempotency_key="shutdown",
         llm_credential_id="credential",

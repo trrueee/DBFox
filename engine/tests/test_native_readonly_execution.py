@@ -11,7 +11,7 @@ from engine.connectivity.factory import ConnectionFactory
 from engine.connectivity.profile import ConnectionProfile
 from engine.errors import SQLExecutionError
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
-from engine.sql.row_serializer import FetchSerializationResult, ResultTruncation
+from dlcs.dbfox_data.backend.sql.row_serializer import FetchSerializationResult, ResultTruncation
 
 
 def _empty_fetch_result() -> FetchSerializationResult:

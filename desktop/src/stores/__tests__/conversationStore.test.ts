@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   getRunArtifacts: vi.fn(),
   follow: vi.fn(),
+  patch: vi.fn(),
 }));
 
 vi.mock("../../features/conversation/conversationRepository", () => ({
@@ -17,6 +18,7 @@ vi.mock("../../features/conversation/conversationRepository", () => ({
   getConversationHistory: vi.fn(),
   getConversationRunArtifacts: mocks.getRunArtifacts,
   listConversations: vi.fn(),
+  patchConversation: mocks.patch,
   resolveConversationApproval: vi.fn(),
   resolveConversationQuestion: vi.fn(),
   selectConversationArtifact: vi.fn(),
@@ -57,8 +59,8 @@ const initialDetail: ConversationDetail = {
   protocol_version: 2,
   id: "conversation-1",
   title: "Orders",
-  datasource_id: "datasource-1",
-  context_tables: ["orders"],
+  project_id: "project-1",
+  resource_intents: [{ kind: "dbfox.data.database", id: "datasource-1" }],
   selected_artifact_id: null,
   runs: [],
   items: [],
@@ -71,6 +73,7 @@ describe("conversationStore admission projection", () => {
     mocks.create.mockReset();
     mocks.getRunArtifacts.mockReset();
     mocks.follow.mockReset().mockResolvedValue(undefined);
+    mocks.patch.mockReset();
     useConversationStore.setState({
       summaries: [],
       activeConversationId: initialDetail.id,
@@ -83,19 +86,17 @@ describe("conversationStore admission projection", () => {
   it("creates a conversation without the removed manual table context", async () => {
     mocks.create.mockResolvedValue({
       ...initialDetail,
-      context_tables: [],
     });
 
     await useConversationStore.getState().createAndOpenConversation("分析最近订单");
 
     expect(mocks.create).toHaveBeenCalledWith({
       project_id: "project-1",
-      datasource_id: "datasource-1",
       title: "分析最近订单",
-      context_tables: [],
+      resource_intents: [],
     });
     expect(useConversationStore.getState().summaries).toContainEqual(
-      expect.objectContaining({ id: initialDetail.id, datasource_id: "datasource-1" }),
+      expect.objectContaining({ id: initialDetail.id, project_id: "project-1" }),
     );
   });
 
@@ -136,7 +137,6 @@ describe("conversationStore admission projection", () => {
           input_id: "input-1",
           session_sequence: 1,
           user_message_id: "message-user-1",
-          datasource_id: "datasource-1",
           question: "分析最近订单",
           status: "queued",
           version: 0,
@@ -167,12 +167,42 @@ describe("conversationStore admission projection", () => {
     });
     await send;
 
+    expect(mocks.admit).toHaveBeenCalledWith(
+      initialDetail.id,
+      expect.not.objectContaining({ requested_resources: expect.anything() }),
+    );
+    expect(mocks.admit.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      workspace_context: expect.not.objectContaining({ datasource_id: expect.anything() }),
+    }));
+
     expect(mocks.follow).toHaveBeenCalledWith(
       initialDetail.id,
       "run-1",
       12,
       expect.any(Object),
     );
+  });
+
+  it("persists explicit Conversation resource intent through the canonical patch endpoint", async () => {
+    const updated = {
+      ...initialDetail,
+      resource_intents: [
+        { kind: "dbfox.data.database", id: "datasource-1" },
+        { kind: "dbfox.data.database", id: "datasource-2" },
+      ],
+    };
+    mocks.patch.mockResolvedValue(updated);
+
+    await useConversationStore.getState().setResourceIntents(
+      initialDetail.id,
+      updated.resource_intents,
+    );
+
+    expect(mocks.patch).toHaveBeenCalledWith(initialDetail.id, {
+      resource_intents: updated.resource_intents,
+    });
+    expect(useConversationStore.getState().detailById[initialDetail.id].resource_intents)
+      .toEqual(updated.resource_intents);
   });
 
   it("keeps loaded history and in-flight text when reconciling an authoritative snapshot", () => {
@@ -182,7 +212,6 @@ describe("conversationStore admission projection", () => {
       input_id: "input-1",
       session_sequence: 1,
       user_message_id: "message-user-1",
-      datasource_id: "datasource-1",
       question: "分析最近订单",
       status: "running" as const,
       version: 1,

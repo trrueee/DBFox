@@ -24,6 +24,7 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
     series: ChartPoint[];
     error: string | null;
     viewExecutedAt?: string;
+    consistency?: "durable_snapshot" | "live_reexecution";
   } | null>(null);
   const series = useMemo(
     () => loaded?.artifactId === artifact.id ? loaded.series : [],
@@ -50,6 +51,7 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
         series: data.series,
         error: null,
         viewExecutedAt: data.viewExecutedAt,
+        consistency: data.consistency,
       });
     }).catch((error: unknown) => {
       if (active) setLoaded({
@@ -71,8 +73,10 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
       tone="chart"
       description={artifact.description}
       meta={loaded?.viewExecutedAt ? (
-        <span className="artifact-pill artifact-pill--live">
-          实时重查 {formatExecutionTime(loaded.viewExecutedAt)}
+        <span className={loaded.consistency === "durable_snapshot" ? "artifact-pill" : "artifact-pill artifact-pill--live"}>
+          {loaded.consistency === "durable_snapshot"
+            ? "耐久快照"
+            : `实时重查 ${formatExecutionTime(loaded.viewExecutedAt)}`}
         </span>
       ) : undefined}
       compact={compact}

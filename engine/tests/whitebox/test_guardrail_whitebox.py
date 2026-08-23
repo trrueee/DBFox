@@ -1,4 +1,4 @@
-from engine.sql.guardrail import guardrail_check, count_statement_delimiters
+from dlcs.dbfox_data.backend.sql.guardrail import guardrail_check, count_statement_delimiters
 
 # covers: G1 empty_sql
 def test_g1_empty_sql():

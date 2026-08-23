@@ -7,10 +7,10 @@ from sqlalchemy import and_, func, or_
 from engine.environment.schema_catalog_sync import SchemaCatalogSync
 from engine.errors import ToolInputError
 from engine.models import DataSource, SchemaColumn, SchemaTable
-from engine.tools.builtin.contracts import (
+from dlcs.dbfox_data.backend.tool_contracts import (
     CatalogOverviewOutput,
     CatalogRefreshOutput,
-    EmptyInput,
+    DatabaseTargetInput,
     SchemaInspectInput,
     SchemaInspectOutput,
     SchemaInspection,
@@ -22,9 +22,11 @@ from engine.tools.builtin.contracts import (
     SearchResultSet,
     TableSummary,
 )
+from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
 from engine.tools.db.inspect import db_inspect
 from engine.tools.db.observe import db_observe
 from engine.tools.db.search import db_search
+from engine.tools.db.resource_selection import select_database
 from engine.tools.runtime import (
     BaseTool,
     ToolExecutionSpec,
@@ -112,7 +114,7 @@ def _bounded_schema_inspections(inspections: list[dict[str, Any]]) -> dict[str, 
     )
 
 
-class CatalogOverviewTool(BaseTool[EmptyInput, CatalogOverviewOutput]):
+class CatalogOverviewTool(BaseTool[DatabaseTargetInput, CatalogOverviewOutput]):
     name = "catalog_overview"
     group = "catalog"
     description = (
@@ -121,14 +123,14 @@ class CatalogOverviewTool(BaseTool[EmptyInput, CatalogOverviewOutput]):
         "when orientation is needed. If it reports an empty or stale catalog, call "
         "catalog_refresh once before searching; otherwise do not repeat this call."
     )
-    input_model = EmptyInput
+    input_model = DatabaseTargetInput
     output_model = CatalogOverviewOutput
     presentation = ToolPresentation(title="了解数据库目录", category="explore")
     policy = ToolPolicy()
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read",),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(
@@ -140,13 +142,15 @@ class CatalogOverviewTool(BaseTool[EmptyInput, CatalogOverviewOutput]):
 
     def run(
         self,
-        tool_input: EmptyInput,
+        tool_input: DatabaseTargetInput,
         context: ToolRunContext,
     ) -> CatalogOverviewOutput:
-        db = context.require_database()
-        request = context.require_request()
-        overview = db_observe(db, request.datasource_id)
-        overview["catalog_revision"] = _catalog_revision(db, request.datasource_id)
+        selected = select_database(context, tool_input.database_id)
+        db = selected.metadata
+        overview = db_observe(db, selected.id)
+        overview["database_id"] = overview.pop("datasource_id", selected.id)
+        overview["database_name"] = overview.pop("datasource_name", selected.id)
+        overview["catalog_revision"] = _catalog_revision(db, selected.id)
         return CatalogOverviewOutput.model_validate(overview)
 
     def project_observation(self, *, status, output, artifacts):
@@ -169,7 +173,7 @@ class CatalogOverviewTool(BaseTool[EmptyInput, CatalogOverviewOutput]):
         )
 
 
-class CatalogRefreshTool(BaseTool[EmptyInput, CatalogRefreshOutput]):
+class CatalogRefreshTool(BaseTool[DatabaseTargetInput, CatalogRefreshOutput]):
     name = "catalog_refresh"
     group = "catalog"
     description = (
@@ -179,7 +183,7 @@ class CatalogRefreshTool(BaseTool[EmptyInput, CatalogRefreshOutput]):
         "catalog and replaces local metadata atomically; it never changes the "
         "remote datasource."
     )
-    input_model = EmptyInput
+    input_model = DatabaseTargetInput
     output_model = CatalogRefreshOutput
     presentation = ToolPresentation(
         title="刷新数据库目录",
@@ -191,7 +195,7 @@ class CatalogRefreshTool(BaseTool[EmptyInput, CatalogRefreshOutput]):
         timeout_seconds=120,
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "metadata_write", "database_read"),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
     semantics = ToolSemanticSpec(
         produces=(
@@ -202,15 +206,15 @@ class CatalogRefreshTool(BaseTool[EmptyInput, CatalogRefreshOutput]):
 
     def run(
         self,
-        tool_input: EmptyInput,
+        tool_input: DatabaseTargetInput,
         context: ToolRunContext,
     ) -> CatalogRefreshOutput:
         if context.is_cancelled():
             raise ToolInputError("Catalog refresh was cancelled.")
 
-        db = context.require_database()
-        request = context.require_request()
-        datasource_id = request.datasource_id
+        selected = select_database(context, tool_input.database_id)
+        db = selected.metadata
+        datasource_id = selected.id
         result = SchemaCatalogSync().sync(
             db,
             datasource_id,
@@ -233,7 +237,7 @@ class CatalogRefreshTool(BaseTool[EmptyInput, CatalogRefreshOutput]):
             or 0
         )
         return CatalogRefreshOutput(
-            datasource_id=datasource_id,
+            database_id=datasource_id,
             status="ready",
             refreshed_at=datasource.last_sync_at.isoformat(),
             table_count=int(table_count),
@@ -284,7 +288,7 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read",),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SCHEMA_METADATA,))
@@ -294,9 +298,9 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
         tool_input: SchemaListInput,
         context: ToolRunContext,
     ) -> SchemaListOutput:
-        db = context.require_database()
-        request = context.require_request()
-        filters: list[Any] = [SchemaTable.data_source_id == request.datasource_id]
+        selected = select_database(context, tool_input.database_id)
+        db = selected.metadata
+        filters: list[Any] = [SchemaTable.data_source_id == selected.id]
         if tool_input.cursor:
             cursor = tool_input.cursor
             filters.append(
@@ -370,7 +374,7 @@ class SchemaListTool(BaseTool[SchemaListInput, SchemaListOutput]):
         ]
         return SchemaListOutput(
             tables=tables,
-            catalog_revision=_catalog_revision(db, request.datasource_id),
+            catalog_revision=_catalog_revision(db, selected.id),
             next_cursor=(
                 SchemaListCursor(
                     schema_name=tables[-1].schema_name,
@@ -421,7 +425,7 @@ class SchemaSearchTool(BaseTool[SchemaSearchInput, SchemaSearchOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read",),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SCHEMA_METADATA,))
@@ -431,14 +435,14 @@ class SchemaSearchTool(BaseTool[SchemaSearchInput, SchemaSearchOutput]):
         tool_input: SchemaSearchInput,
         context: ToolRunContext,
     ) -> SchemaSearchOutput:
-        db = context.require_database()
-        request = context.require_request()
+        selected = select_database(context, tool_input.database_id)
+        db = selected.metadata
         searches: list[SearchResultSet] = []
         candidates: dict[tuple[str, str, str, str], dict[str, Any]] = {}
         for query in tool_input.queries:
             raw = db_search(
                 db,
-                request.datasource_id,
+                selected.id,
                 query,
                 tool_input.limit_per_query,
             )
@@ -486,7 +490,7 @@ class SchemaSearchTool(BaseTool[SchemaSearchInput, SchemaSearchOutput]):
             searches=searches,
             candidates=ranked,
             returned_count=len(ranked),
-            catalog_revision=_catalog_revision(db, request.datasource_id),
+            catalog_revision=_catalog_revision(db, selected.id),
         )
 
     def project_observation(self, *, status, output, artifacts):
@@ -520,7 +524,7 @@ class SchemaInspectTool(BaseTool[SchemaInspectInput, SchemaInspectOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read",),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(produces=(ToolSemanticCapability.SCHEMA_METADATA,))
@@ -530,11 +534,11 @@ class SchemaInspectTool(BaseTool[SchemaInspectInput, SchemaInspectOutput]):
         tool_input: SchemaInspectInput,
         context: ToolRunContext,
     ) -> SchemaInspectOutput:
-        db = context.require_database()
-        request = context.require_request()
+        selected = select_database(context, tool_input.database_id)
+        db = selected.metadata
         details = db_inspect(
             db,
-            request.datasource_id,
+            selected.id,
             tool_input.targets,
         )
         return SchemaInspectOutput(
@@ -549,7 +553,7 @@ class SchemaInspectTool(BaseTool[SchemaInspectInput, SchemaInspectOutput]):
                     strict=True,
                 )
             ],
-            catalog_revision=_catalog_revision(db, request.datasource_id),
+            catalog_revision=_catalog_revision(db, selected.id),
         )
 
     def project_observation(self, *, status, output, artifacts):

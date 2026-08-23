@@ -19,15 +19,21 @@ from engine.app.safe_errors import (
 )
 from engine.db import get_db
 from engine.errors import DBFoxError
-from engine.models import DataSource
+from engine.agent.artifact_view import (
+    ArtifactTableExportRequest,
+    ArtifactTablePageRequest,
+    ArtifactViewError,
+    ArtifactViewFilter,
+    ArtifactViewSort,
+)
+from engine.agent.repositories.artifact import ArtifactRepository
+from engine.runtime_composition import get_active_runtime_snapshot
+from engine.models import AgentArtifactRecord, DataSource
 from engine.security.audit import SecurityAuditService
 from engine.sql.execution.streaming_executor import export_max_rows_from_env
 from engine.sql.result_view.models import (
-    ResultExportQuery as ServiceResultExportQuery,
     ResultFilter as ServiceResultFilter,
-    ResultPageQuery as ServiceResultPageQuery,
     ResultSort as ServiceResultSort,
-    ResultSourceRef,
     ResultViewError,
     TableExportQuery as ServiceTableExportQuery,
     TablePageQuery as ServiceTablePageQuery,
@@ -92,11 +98,11 @@ class ResultPageResponse(BaseModel):
     rowCount: int | None = None
     hasNextPage: bool
     latencyMs: int
-    consistency: Literal["live_reexecution", "live_query"]
+    consistency: Literal["durable_snapshot", "live_reexecution", "live_query"]
     originalExecutedAt: str | None = None
     viewExecutedAt: str
     viewExecutionId: str
-    datasourceGeneration: int
+    datasourceGeneration: str | int
     queryFingerprint: str
     warnings: list[str] | None = None
     notices: list[str] | None = None
@@ -111,16 +117,12 @@ class ChartDataResponse(BaseModel):
     series: list[ChartPointResponse]
     sampleSize: int
     truncated: bool
-    consistency: Literal["live_reexecution"]
+    consistency: Literal["durable_snapshot", "live_reexecution"]
     originalExecutedAt: str | None = None
     viewExecutedAt: str
     viewExecutionId: str
-    datasourceGeneration: int
+    datasourceGeneration: str | int
     queryFingerprint: str
-
-
-def _result_source_ref(artifact_id: str) -> ResultSourceRef:
-    return ResultSourceRef(artifact_id=artifact_id)
 
 
 def _table_source_ref(
@@ -182,6 +184,7 @@ def _result_view_http_error(
 
 
 def _page_response(result: Any) -> ResultPageResponse:
+    durable = getattr(result, "consistency", None) == "durable_snapshot"
     return ResultPageResponse(
         columns=result.columns,
         rows=result.rows,
@@ -192,9 +195,11 @@ def _page_response(result: Any) -> ResultPageResponse:
         latencyMs=result.latency_ms,
         consistency=result.consistency,
         originalExecutedAt=result.original_executed_at,
-        viewExecutedAt=result.view_executed_at,
-        viewExecutionId=result.view_execution_id,
-        datasourceGeneration=result.datasource_generation,
+        viewExecutedAt=(result.read_at if durable else result.view_executed_at),
+        viewExecutionId=(result.read_id if durable else result.view_execution_id),
+        datasourceGeneration=(
+            result.resource_version if durable else result.datasource_generation
+        ),
         queryFingerprint=result.query_fingerprint,
         warnings=result.warnings,
         notices=result.notices,
@@ -216,21 +221,40 @@ def api_agent_result_page(
     db: Session = Depends(get_db),
 ) -> ResultPageResponse:
     try:
-        result = ResultViewService(db).page(
-            ServiceResultPageQuery(
-                source=_result_source_ref(artifact_id),
-                filters=_result_filters(request.filters),
-                sort=_result_sorts(request.sort),
+        artifact_row = db.get(AgentArtifactRecord, artifact_id)
+        if artifact_row is None:
+            raise ArtifactViewError("Artifact was not found.", status_code=404)
+        contribution = get_active_runtime_snapshot().get_artifact_table_view(
+            str(artifact_row.type)
+        )
+        if contribution is None:
+            raise ArtifactViewError(
+                "Artifact type has no durable table-view provider.", status_code=409
+            )
+        artifact = ArtifactRepository(db).get(artifact_id)
+        if artifact is None:
+            raise ArtifactViewError("Artifact was not found.", status_code=404)
+        result = contribution.provider.page(
+            artifact,
+            ArtifactTablePageRequest(
+                filters=tuple(
+                    ArtifactViewFilter.model_validate(item.model_dump())
+                    for item in _result_filters(request.filters)
+                ),
+                sort=tuple(
+                    ArtifactViewSort.model_validate(item.model_dump())
+                    for item in _result_sorts(request.sort)
+                ),
                 search=request.search,
                 page=request.page,
                 page_size=request.pageSize,
                 count_mode=request.countMode,
-            )
+            ),
         )
-    except ResultViewError as error:
-        raise _result_view_http_error(
-            error,
-            code=FixedErrorCode.RESULT_PAGE_ERROR,
+    except ArtifactViewError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=fixed_error_detail(FixedErrorCode.RESULT_PAGE_ERROR),
         ) from None
     except DBFoxError as error:
         raise HTTPException(status_code=400, detail=_http_detail(error))
@@ -253,11 +277,39 @@ def api_agent_chart_data(
     db: Session = Depends(get_db),
 ) -> ChartDataResponse:
     try:
-        result = ResultViewService(db).chart_data(artifact_id)
-    except ResultViewError as error:
-        raise _result_view_http_error(
-            error,
-            code=FixedErrorCode.RESULT_PAGE_ERROR,
+        artifact_row = db.get(AgentArtifactRecord, artifact_id)
+        if artifact_row is None:
+            raise ArtifactViewError("Artifact was not found.", status_code=404)
+        contribution = get_active_runtime_snapshot().get_artifact_chart_view(
+            str(artifact_row.type)
+        )
+        if contribution is None:
+            raise ArtifactViewError(
+                "Artifact type has no durable chart-view provider.", status_code=409
+            )
+        artifacts = ArtifactRepository(db)
+        artifact = artifacts.get(artifact_id)
+        if artifact is None:
+            raise ArtifactViewError("Artifact was not found.", status_code=404)
+        source_ids = tuple(
+            relation.artifact_id
+            for relation in artifact.relations
+            if relation.relation.value == "derived_from"
+        )
+        if len(source_ids) != 1:
+            raise ArtifactViewError(
+                "Chart Artifact has no unambiguous durable source.", status_code=409
+            )
+        source = artifacts.get(source_ids[0])
+        if source is None or source.session_id != artifact.session_id:
+            raise ArtifactViewError(
+                "Chart source Artifact is unavailable.", status_code=404
+            )
+        result = contribution.provider.data(artifact, source)
+    except ArtifactViewError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=fixed_error_detail(FixedErrorCode.RESULT_PAGE_ERROR),
         ) from None
     except DBFoxError as error:
         raise HTTPException(status_code=400, detail=_http_detail(error))
@@ -277,9 +329,9 @@ def api_agent_chart_data(
         truncated=result.truncated,
         consistency=result.consistency,
         originalExecutedAt=result.original_executed_at,
-        viewExecutedAt=result.view_executed_at,
-        viewExecutionId=result.view_execution_id,
-        datasourceGeneration=result.datasource_generation,
+        viewExecutedAt=result.read_at,
+        viewExecutionId=result.read_id,
+        datasourceGeneration=result.resource_version,
         queryFingerprint=result.query_fingerprint,
     )
 
@@ -395,18 +447,37 @@ def api_agent_result_export(
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     try:
-        stream, _columns = ResultViewService(db).export_csv_stream(
-            ServiceResultExportQuery(
-                source=_result_source_ref(artifact_id),
-                filters=_result_filters(request.filters),
-                sort=_result_sorts(request.sort),
-                search=request.search,
-            )
+        artifact_row = db.get(AgentArtifactRecord, artifact_id)
+        if artifact_row is None:
+            raise ArtifactViewError("Artifact was not found.", status_code=404)
+        contribution = get_active_runtime_snapshot().get_artifact_table_view(
+            str(artifact_row.type)
         )
-    except ResultViewError as error:
-        raise _result_view_http_error(
-            error,
-            code=FixedErrorCode.RESULT_EXPORT_ERROR,
+        if contribution is None:
+            raise ArtifactViewError(
+                "Artifact type has no durable table-view provider.", status_code=409
+            )
+        artifact = ArtifactRepository(db).get(artifact_id)
+        if artifact is None:
+            raise ArtifactViewError("Artifact was not found.", status_code=404)
+        exported = contribution.provider.export_csv(
+            artifact,
+            ArtifactTableExportRequest(
+                filters=tuple(
+                    ArtifactViewFilter.model_validate(item.model_dump())
+                    for item in _result_filters(request.filters)
+                ),
+                sort=tuple(
+                    ArtifactViewSort.model_validate(item.model_dump())
+                    for item in _result_sorts(request.sort)
+                ),
+                search=request.search,
+            ),
+        )
+    except ArtifactViewError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=fixed_error_detail(FixedErrorCode.RESULT_EXPORT_ERROR),
         ) from None
     except DBFoxError as error:
         raise HTTPException(status_code=400, detail=_http_detail(error))
@@ -431,10 +502,11 @@ def api_agent_result_export(
     )
     db.commit()
     return StreamingResponse(
-        stream,
+        exported.chunks,
         media_type="text/csv",
         headers={
             "Content-Disposition": 'attachment; filename="dbfox-result.csv"',
-            "X-DBFox-Export-Max-Rows": str(export_max_rows_from_env()),
+            "X-DBFox-Export-Row-Count": str(exported.row_count),
+            "X-DBFox-Source-Truncated": str(exported.source_truncated).lower(),
         },
     )
