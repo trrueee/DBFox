@@ -283,7 +283,7 @@ function createSmokeSourceDatabase(databasePath) {
 function buildPackagedDlcFixture(outputDir) {
   const result = spawnSync(resolveSmokePython(), [
     "-m",
-    "scripts.build_dlc_e2e_fixture",
+    "verification.testkit.build_dlc_e2e_fixture",
     "--output-dir",
     outputDir,
   ], {

@@ -21,19 +21,19 @@ Python（仓库根运行）：
 
 ```powershell
 # 单个测试
-python -m pytest engine/tests/test_sql_safety_service.py -q --tb=short
+python -m pytest verification/tests/system/test_sql_safety_service.py -q --tb=short
 
 # 后端核心回归（CI 同款 marker 排除）
-python -m pytest engine/tests -q --tb=short -m "not e2e and not integration and not real_llm and not migration and not engineering_contract and not platform_contract"
+python -m pytest verification/tests/system -q --tb=short -m "not e2e and not integration and not real_llm and not migration and not engineering_contract and not platform_contract"
 
 # Agent 运行时（独立目录）
-python -m pytest engine/agent/tests -q --tb=short -m "not e2e and not integration and not real_llm"
+python -m pytest verification/tests/agent_core -q --tb=short -m "not e2e and not integration and not real_llm"
 
 # 工程合同（锁文件、依赖治理）
-python -m pytest engine/tests/test_engineering_contracts.py -q
+python -m pytest verification/tests/system/test_engineering_contracts.py -q
 
 # Lint 与类型检查
-python -m pyflakes engine build_sidecar.py conftest.py scripts
+python -m pyflakes engine build_sidecar.py scripts
 python -m mypy --no-warn-unused-configs --follow-imports=skip engine build_sidecar.py --no-incremental
 ```
 
@@ -55,13 +55,15 @@ npm run build           # tsc -b + 构建脚本 + 生产 Token 与 bundle 预算
 | 路径 | 内容 |
 | --- | --- |
 | `engine/api/` | FastAPI 路由、请求合同、HTTP 边界 |
-| `engine/agent/` | SessionCoordinator、Run Loop、上下文、Provider、持久化仓库（测试在 `engine/agent/tests/`） |
+| `engine/agent/` | SessionCoordinator、Run Loop、上下文、Provider、持久化仓库（测试在 `verification/tests/agent_core/`） |
 | `engine/tools/` | 工具注册、输入合同、策略、审批、执行运行时 |
 | `engine/sql/` | SQL 安全、只读执行、分页与导出 |
 | `engine/migrations/` | DBFox 本地元数据库的 Alembic 迁移 |
 | `desktop/src/` | React 工作区（TanStack Query/Table/Virtual、Zustand、Radix UI） |
 | `desktop/main/`、`desktop/preload/` | Electron Host 与窄化 IPC；Sidecar 生命周期由 `desktop/main/engine.ts` 的 `EngineSupervisor` 管理（TypeScript，非 Rust） |
-| `scripts/agentbench/` | AgentBench 评测脚本与评分合同 |
+| `verification/bench/agentbench/` | AgentBench 评测脚本与评分合同 |
+| `verification/tests/` | 与产品物理分离的 Core、System、Integration 与 Bench 测试 |
+| `verification/testkit/` | 只供验证系统使用的 fixture 构建与外部边界控制 |
 
 ## 关键不变量（违反即架构错误）
 

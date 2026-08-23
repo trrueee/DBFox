@@ -53,8 +53,8 @@ publisher 所签名代码。签名证明身份与 bytes，用户信任决定是�
 
 ## 现有自动门禁
 
-- `engine/tests/test_dlc_package_foundation.py::test_authentic_untrusted_publisher_requires_explicit_trust`
-- `engine/tests/test_dlc_publisher_trust.py::test_v2_unsigned_package_cannot_use_developer_mode_bypass`
+- `verification/tests/system/test_dlc_package_foundation.py::test_authentic_untrusted_publisher_requires_explicit_trust`
+- `verification/tests/system/test_dlc_publisher_trust.py::test_v2_unsigned_package_cannot_use_developer_mode_bypass`
 - publisher trust persistence/corruption/restart reverify tests
 - Electron security, native sender validation, DLC asset containment, CSP and packaged-host tests
 

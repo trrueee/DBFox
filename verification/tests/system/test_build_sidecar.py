@@ -1,0 +1,636 @@
+import build_sidecar
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+from scripts import dev_environment, verify_release_artifact
+
+
+pytestmark = pytest.mark.platform_contract
+
+
+def test_frontend_env_writer_uses_frontend_engine_env_names(tmp_path) -> None:
+    desktop_dir = tmp_path / "desktop"
+    desktop_dir.mkdir()
+
+    token = "a" * 64
+    path = dev_environment.write_frontend_env(token, desktop_dir=desktop_dir)
+
+    assert path == desktop_dir / ".env.local"
+    env_text = path.read_text(encoding="utf-8")
+    assert "VITE_LOCAL_ENGINE_PORT=18625\n" in env_text
+    assert f'VITE_LOCAL_ENGINE_TOKEN="{token}"\n' in env_text
+    assert "VITE_DBFOX_STATIC_TOKEN" not in env_text
+
+
+def test_dev_launchers_delegate_frontend_env_writes_to_one_helper() -> None:
+    root = Path(__file__).resolve().parents[3]
+    powershell_source = (root / "dev.ps1").read_text(encoding="utf-8")
+    shell_source = (root / "dev.sh").read_text(encoding="utf-8")
+
+    assert "scripts\\dev_environment.py" in powershell_source
+    assert "scripts/dev_environment.py" in shell_source
+    assert "WriteAllText" not in powershell_source
+    assert ".env.local" not in powershell_source
+    assert ".env.local" not in shell_source
+
+
+def test_electron_release_rebuilds_sidecar_before_packaging() -> None:
+    root = Path(__file__).resolve().parents[3]
+    package = json.loads((root / "desktop" / "package.json").read_text(encoding="utf-8"))
+    builder = (root / "desktop" / "electron-builder.yml").read_text(encoding="utf-8")
+
+    assert package["scripts"]["electron:release"] == (
+        "python ../build_sidecar.py && npm run electron:package"
+    )
+    assert "dbfox-engine-runtime-manifest.json" in builder
+    assert '"!dbfox-engine.exe"' in builder
+    assert "rustc" not in (root / "build_sidecar.py").read_text(encoding="utf-8")
+
+
+def _runtime_manifest(version: tuple[int, int, int]) -> dict[str, object]:
+    return {
+        "schema_version": 2,
+        "frozen": True,
+        "python_version": build_sidecar.sidecar_python_version(),
+        "build_python_version": build_sidecar.sidecar_python_version(),
+        "build_python_build": build_sidecar.sidecar_python_build(),
+        "build_lock_file": build_sidecar.BUILD_LOCK.name,
+        "build_lock_sha256": build_sidecar._sha256(build_sidecar.BUILD_LOCK),
+        "build_packages": {
+            name: "test-version" for name in build_sidecar.KEY_BUILD_PACKAGES
+        },
+        "source_git_commit": "a" * 40,
+        "source_git_dirty": False,
+        "engine_source_sha256": build_sidecar._source_tree_sha256(
+            build_sidecar.ENGINE_DIR
+        ),
+        "sqlite_version": ".".join(map(str, version)),
+        "sqlite_version_info": list(version),
+        "sqlite_source_id": f"{'.'.join(map(str, version))} source-id",
+        "sqlite_compile_options": ["THREADSAFE=1"],
+    }
+
+
+def _release_contracts() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "schema_list_empty_arguments": {
+            "status": "allowed",
+            "safe_args": {"limit": 20},
+        },
+    }
+
+
+def test_runtime_manifest_gate_rejects_last_affected_sqlite() -> None:
+    with pytest.raises(RuntimeError, match=r"minimum is 3\.51\.3"):
+        build_sidecar.validate_runtime_manifest(_runtime_manifest((3, 51, 2)))
+
+
+def test_runtime_manifest_gate_accepts_fixed_sqlite() -> None:
+    build_sidecar.validate_runtime_manifest(_runtime_manifest((3, 51, 3)))
+
+
+def test_new_sidecar_must_match_the_current_engine_source_tree() -> None:
+    manifest = _runtime_manifest((3, 53, 4))
+    manifest["engine_source_sha256"] = "0" * 64
+
+    with pytest.raises(RuntimeError, match="differs from the current source tree"):
+        build_sidecar.validate_current_source_provenance(manifest)
+
+
+def test_artifact_manifest_binds_runtime_to_sidecar_hash(tmp_path, monkeypatch) -> None:
+    binary = tmp_path / "dbfox-engine-test"
+    binary.write_bytes(b"final-sidecar")
+    output = tmp_path / "runtime-manifest.json"
+    monkeypatch.setattr(build_sidecar, "RUNTIME_MANIFEST_PATH", output)
+    monkeypatch.setattr(build_sidecar, "get_target_triplet", lambda: "test-triplet")
+
+    result = build_sidecar.write_artifact_manifest(
+        binary,
+        _runtime_manifest((3, 53, 4)),
+        _release_contracts(),
+    )
+    manifest = json.loads(result.read_text(encoding="utf-8"))
+
+    assert manifest["target_triplet"] == "test-triplet"
+    assert manifest["sidecar_filename"] == binary.name
+    assert manifest["sidecar_sha256"] == "3d3e01030d00b413489c82ee644fdfac09c83dd4b21aeacd9feeea8caa4f1c5f"
+    assert manifest["minimum_sqlite_version"] == "3.51.3"
+    assert manifest["target_sqlite_version"] == "3.53.4"
+    assert manifest["schema_version"] == build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION
+    assert manifest["release_contracts"] == _release_contracts()
+
+
+def test_platform_signing_refresh_rebinds_only_the_existing_fixed_sidecar(
+    tmp_path, monkeypatch
+) -> None:
+    binary = tmp_path / ("dbfox-engine.exe" if sys.platform == "win32" else "dbfox-engine")
+    binary.write_bytes(b"signed-sidecar")
+    manifest_path = tmp_path / "dbfox-engine-runtime-manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION,
+                "sidecar_filename": binary.name,
+                "sidecar_sha256": "0" * 64,
+                "runtime": _runtime_manifest((3, 53, 4)),
+                "release_contracts": _release_contracts(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(build_sidecar, "BINARIES_DIR", tmp_path)
+    monkeypatch.setattr(build_sidecar, "RUNTIME_MANIFEST_PATH", manifest_path)
+    monkeypatch.setattr(build_sidecar, "get_target_triplet", lambda: "test-triplet")
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_runtime",
+        lambda _path: _runtime_manifest((3, 53, 4)),
+    )
+    monkeypatch.setattr(
+        build_sidecar,
+        "validate_current_source_provenance",
+        lambda _runtime: None,
+    )
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_release_contracts",
+        lambda _path: _release_contracts(),
+    )
+
+    build_sidecar.refresh_artifact_manifest_after_platform_signing()
+
+    refreshed = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert refreshed["sidecar_sha256"] == build_sidecar._sha256(binary)
+    assert refreshed["runtime"] == _runtime_manifest((3, 53, 4))
+
+
+def test_extracted_installer_must_match_manifest_hash_and_runtime(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "installer"
+    root.mkdir()
+    sidecar = root / ("dbfox-engine.exe" if sys.platform == "win32" else "dbfox-engine")
+    sidecar.write_bytes(b"installed-sidecar")
+    runtime = _runtime_manifest((3, 53, 4))
+    manifest = {
+        "schema_version": build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        "target_triplet": "test-triplet",
+        "sidecar_sha256": build_sidecar._sha256(sidecar),
+        "runtime": runtime,
+        "release_contracts": _release_contracts(),
+    }
+    expected_manifest = tmp_path / "expected.json"
+    expected_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+    (root / "dbfox-engine-runtime-manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _path: runtime)
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_release_contracts",
+        lambda _path: _release_contracts(),
+    )
+
+    result = verify_release_artifact.verify_extracted_tree(root, expected_manifest)
+
+    assert result["verified"] is True
+    assert result["sqlite_version"] == runtime["sqlite_version"]
+    assert result["sidecar_size_bytes"] == len(b"installed-sidecar")
+    assert result["package_files_scanned"] == 2
+    assert result["forbidden_file_hits"] == 0
+    assert result["forbidden_value_hits"] == 0
+
+
+def test_extracted_installer_rejects_release_token_sentinel(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "installer"
+    root.mkdir()
+    sidecar = root / ("dbfox-engine.exe" if sys.platform == "win32" else "dbfox-engine")
+    sidecar.write_bytes(b"installed-sidecar")
+    runtime = _runtime_manifest((3, 53, 4))
+    manifest = {
+        "schema_version": build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        "target_triplet": "test-triplet",
+        "sidecar_sha256": build_sidecar._sha256(sidecar),
+        "runtime": runtime,
+        "release_contracts": _release_contracts(),
+    }
+    expected_manifest = tmp_path / "expected.json"
+    expected_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+    (root / "dbfox-engine-runtime-manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    (root / "frontend.js").write_bytes(b"prefix-dbfox-release-sentinel-1234567890-suffix")
+    monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _path: runtime)
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_release_contracts",
+        lambda _path: _release_contracts(),
+    )
+
+    with pytest.raises(RuntimeError, match="forbidden production value"):
+        verify_release_artifact.verify_extracted_tree(
+            root,
+            expected_manifest,
+            forbidden_values=(b"dbfox-release-sentinel-1234567890",),
+        )
+
+
+def test_extracted_installer_rejects_development_files(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "installer"
+    root.mkdir()
+    sidecar = root / ("dbfox-engine.exe" if sys.platform == "win32" else "dbfox-engine")
+    sidecar.write_bytes(b"installed-sidecar")
+    runtime = _runtime_manifest((3, 53, 4))
+    manifest = {
+        "schema_version": build_sidecar.ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        "target_triplet": "test-triplet",
+        "sidecar_sha256": build_sidecar._sha256(sidecar),
+        "runtime": runtime,
+        "release_contracts": _release_contracts(),
+    }
+    expected_manifest = tmp_path / "expected.json"
+    expected_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+    (root / "dbfox-engine-runtime-manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    (root / ".env.local").write_text("VITE_LOCAL_ENGINE_TOKEN=forbidden", encoding="utf-8")
+    monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _path: runtime)
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_release_contracts",
+        lambda _path: _release_contracts(),
+    )
+
+    with pytest.raises(RuntimeError, match="forbidden development files"):
+        verify_release_artifact.verify_extracted_tree(root, expected_manifest)
+
+
+def test_frozen_smoke_uses_the_same_explicit_platform_mapping_as_the_builder() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "desktop" / "scripts" / "smoke-sidecar.mjs").read_text(encoding="utf-8")
+
+    assert "platformTargetTriplet" in source
+    assert "pc-windows-msvc" in source
+    assert "unknown-linux-gnu" in source
+    assert "apple-darwin" in source
+    assert "rustc" not in source
+
+
+def test_frozen_smoke_covers_schema_result_artifact_and_restart_contracts() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "desktop" / "scripts" / "smoke-sidecar.mjs").read_text(
+        encoding="utf-8"
+    )
+
+    for contract in (
+        "/api/v1/dlcs/dbfox.data/operations/catalog.refresh",
+        "/api/v1/dlcs/dbfox.data/operations/console.execute",
+        "/api/v1/artifacts/${first.result_artifact_id}/page",
+        "/api/v1/conversations/${sessionId}",
+        "stale_token_rejected",
+        "restart_reload",
+    ):
+        assert contract in source
+
+
+def test_frozen_smoke_covers_packaged_dlc_lifecycle_and_emits_evidence() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "desktop" / "scripts" / "smoke-sidecar.mjs").read_text(
+        encoding="utf-8"
+    )
+    workflow = (root / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+
+    for contract in (
+        "/api/v1/dlcs/packages/inspect",
+        "/api/v1/dlcs/publishers/trust",
+        "/api/v1/dlcs/acme.echo/enable",
+        "/api/v1/dlcs/acme.echo/disable",
+        "tampered_rejected",
+        "install_execution_blocked",
+        "enable_restart_active_exact_digest",
+        "side_by_side_install_preserved_selection",
+        "update_restart_active_exact_digest",
+        "rollback_restart_active_exact_digest",
+        "selected_and_active_delete_blocked",
+        "old_version_removed_explicitly",
+        "disable_restart_absent",
+        "executable_bytes_removed",
+        "data_retained",
+        "preparePackagedGithubDlcLifecycle",
+        "verifyPackagedGithubDlcActive",
+        "verifyPackagedGithubDlcInactiveAndUninstall",
+        'dlc_id: "dbfox.github"',
+        "absent_without_package",
+        "packaged_github_dlc",
+        "dlc-packaged-e2e-${targetTriplet}.json",
+    ):
+        assert contract in source
+    assert "reports/dlc-packaged-e2e-*.json" in workflow
+
+
+def test_frozen_smoke_runtime_uses_a_non_symlinked_checkout_parent() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "desktop" / "scripts" / "smoke-sidecar.mjs").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'mkdtemp(join(process.cwd(), ".dbfox-sidecar-smoke-"))' in source
+    assert 'from "node:os"' not in source
+
+
+def test_packaged_sidecar_preserves_control_stream_without_showing_a_window() -> None:
+    root = Path(__file__).resolve().parents[3]
+    builder_source = Path(build_sidecar.__file__).read_text(encoding="utf-8")
+    process_source = (root / "desktop" / "main" / "nodeEngineHost.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"--console"' in builder_source
+    assert '"--noconsole"' not in builder_source
+    assert 'stdio: ["ignore", "pipe", "pipe"]' in process_source
+    assert "windowsHide: true" in process_source
+    assert "DBFOX_ENGINE_TOKEN: token" in process_source
+    assert "verifyPackagedSidecar" in process_source
+
+
+def test_sidecar_builder_has_no_langsmith_plaintext_export_path() -> None:
+    source = Path(build_sidecar.__file__).read_text(encoding="utf-8")
+
+    assert not hasattr(build_sidecar, "export_langsmith_runtime_env")
+    assert "langsmith.env" not in source
+    assert "LANGCHAIN_" not in source
+    assert "LANGSMITH_" not in source
+
+
+def test_duckdb_runtime_dependency_and_sidecar_import_are_declared() -> None:
+    root = Path(__file__).resolve().parents[3]
+    requirements = (root / "requirements.txt").read_text(encoding="utf-8")
+
+    assert any(line.startswith("duckdb") for line in requirements.splitlines())
+    assert "duckdb" in build_sidecar.HIDDEN_IMPORTS
+
+
+def test_dynamic_runtime_dependencies_are_declared_for_the_frozen_sidecar() -> None:
+    root = Path(__file__).resolve().parents[3]
+    requirements = (root / "requirements.txt").read_text(encoding="utf-8")
+
+    assert any(line.startswith("openai") for line in requirements.splitlines())
+    assert not any(line.startswith(("langgraph", "langchain", "langsmith")) for line in requirements.splitlines())
+    assert "openai" in build_sidecar.HIDDEN_IMPORTS
+    assert "langsmith" not in build_sidecar.HIDDEN_IMPORTS
+
+
+def test_supported_sqlglot_dialects_are_declared_as_frozen_hidden_imports() -> None:
+    assert {
+        "sqlglot.dialects.mysql",
+        "sqlglot.dialects.postgres",
+        "sqlglot.dialects.sqlite",
+    }.issubset(build_sidecar.HIDDEN_IMPORTS)
+
+
+def test_sidecar_build_dependencies_are_separate_from_runtime_dependencies() -> None:
+    root = Path(__file__).resolve().parents[3]
+    requirements = (root / "requirements-build.txt").read_text(encoding="utf-8")
+
+    assert "-r requirements.txt" in requirements
+    assert any(line.startswith("pyinstaller") for line in requirements.lower().splitlines())
+
+
+def test_removed_local_crypto_is_not_a_direct_runtime_dependency() -> None:
+    root = Path(__file__).resolve().parents[3]
+    requirements = (root / "requirements.txt").read_text(encoding="utf-8")
+    development_requirements = (root / "requirements-dev.txt").read_text(encoding="utf-8")
+
+    assert not any(line.startswith("cryptography") for line in requirements.splitlines())
+    assert "types-cryptography" not in development_requirements
+    assert "cryptography" not in build_sidecar.HIDDEN_IMPORTS
+    assert not (root / "engine" / "crypto.py").exists()
+
+
+@pytest.mark.parametrize(
+    ("system", "machine", "expected"),
+    [
+        ("Windows", "AMD64", "x86_64-pc-windows-msvc"),
+        ("Darwin", "arm64", "aarch64-apple-darwin"),
+        ("Linux", "x86_64", "x86_64-unknown-linux-gnu"),
+    ],
+)
+def test_target_triplet_uses_explicit_platform_contract(
+    system: str, machine: str, expected: str
+) -> None:
+    assert build_sidecar.get_target_triplet(system=system, machine=machine) == expected
+
+
+def test_target_triplet_fails_closed_for_unsupported_platform() -> None:
+    with pytest.raises(RuntimeError, match="Unsupported DBFox Sidecar target"):
+        build_sidecar.get_target_triplet(system="Plan9", machine="mips")
+
+
+def test_git_source_facts_use_content_diffs_instead_of_status_metadata(
+    monkeypatch,
+) -> None:
+    observed: list[list[str]] = []
+
+    def run(command, **_kwargs):
+        observed.append(command)
+        if command == ["git", "rev-parse", "HEAD"]:
+            return subprocess.CompletedProcess(command, 0, "a" * 40 + "\n", "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(build_sidecar.subprocess, "run", run)
+
+    assert build_sidecar._git_source_facts() == {
+        "source_git_commit": "a" * 40,
+        "source_git_dirty": False,
+    }
+    assert ["git", "status", "--porcelain=v1", "--untracked-files=normal"] not in observed
+    assert ["git", "diff", "--quiet", "--ignore-submodules", "--"] in observed
+
+
+@pytest.mark.parametrize("dirty_command", ["unstaged", "staged", "untracked"])
+def test_git_source_facts_detect_content_changes(monkeypatch, dirty_command) -> None:
+    def run(command, **_kwargs):
+        if command == ["git", "rev-parse", "HEAD"]:
+            return subprocess.CompletedProcess(command, 0, "b" * 40 + "\n", "")
+        if dirty_command == "unstaged" and command[:3] == ["git", "diff", "--quiet"]:
+            return subprocess.CompletedProcess(command, 1, "", "")
+        if dirty_command == "staged" and command[:3] == ["git", "diff", "--cached"]:
+            return subprocess.CompletedProcess(command, 1, "", "")
+        if dirty_command == "untracked" and command[:3] == ["git", "ls-files", "--others"]:
+            return subprocess.CompletedProcess(command, 0, "local.tmp\0", "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(build_sidecar.subprocess, "run", run)
+
+    assert build_sidecar._git_source_facts()["source_git_dirty"] is True
+
+
+def test_release_sync_requires_uv(monkeypatch, tmp_path, capsys) -> None:
+    lock = tmp_path / "requirements-build.lock"
+    lock.write_text("", encoding="utf-8")
+    monkeypatch.setattr(build_sidecar, "BUILD_LOCK", lock)
+    monkeypatch.setattr(build_sidecar.shutil, "which", lambda _name: None)
+
+    with pytest.raises(SystemExit) as exit_info:
+        build_sidecar.sync_build_environment("python")
+
+    assert exit_info.value.code == 1
+    assert "Release builds require uv" in capsys.readouterr().err
+
+
+def test_release_sync_uses_uv_exact_environment_semantics(monkeypatch, tmp_path, capsys) -> None:
+    lock = tmp_path / "requirements-build.lock"
+    lock.write_text("", encoding="utf-8")
+    observed: list[list[str]] = []
+    monkeypatch.setattr(build_sidecar, "BUILD_LOCK", lock)
+    monkeypatch.setattr(build_sidecar.shutil, "which", lambda _name: "uv")
+
+    def run(command, **_kwargs):
+        observed.append(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(build_sidecar.subprocess, "run", run)
+
+    build_sidecar.sync_build_environment("clean-build-python")
+
+    assert observed == [[
+        "uv",
+        "pip",
+        "sync",
+        str(lock),
+        "--python",
+        "clean-build-python",
+    ]]
+    assert "Synced" in capsys.readouterr().out
+
+
+def test_sidecar_python_version_is_an_exact_repository_pin() -> None:
+    version = build_sidecar.sidecar_python_version()
+
+    assert re.fullmatch(r"\d+\.\d+\.\d+", version)
+
+
+def test_sidecar_python_build_is_an_exact_repository_pin() -> None:
+    build = build_sidecar.sidecar_python_build()
+
+    assert re.fullmatch(r"\d{8}", build)
+
+
+def test_build_provenance_rejects_a_different_interpreter(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    lock = tmp_path / "requirements-build.lock"
+    lock.write_text("locked", encoding="utf-8")
+    monkeypatch.setattr(build_sidecar, "BUILD_LOCK", lock)
+    monkeypatch.setattr(
+        build_sidecar,
+        "_build_environment_facts",
+        lambda _python: {
+            "python_version": "0.0.0",
+            "python_build": build_sidecar.sidecar_python_build(),
+            "packages": {name: "1" for name in build_sidecar.KEY_BUILD_PACKAGES},
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="does not match the production pin"):
+        build_sidecar.collect_build_provenance("wrong-python")
+
+
+def test_build_provenance_rejects_a_different_managed_python_build(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    lock = tmp_path / "requirements-build.lock"
+    lock.write_text("locked", encoding="utf-8")
+    monkeypatch.setattr(build_sidecar, "BUILD_LOCK", lock)
+    monkeypatch.setattr(
+        build_sidecar,
+        "_build_environment_facts",
+        lambda _python: {
+            "python_version": build_sidecar.sidecar_python_version(),
+            "python_build": "19000101",
+            "packages": {name: "1" for name in build_sidecar.KEY_BUILD_PACKAGES},
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="python-build-standalone build"):
+        build_sidecar.collect_build_provenance("wrong-python-build")
+
+
+def test_staged_engine_contains_build_provenance(tmp_path) -> None:
+    provenance = {
+        "schema_version": 2,
+        "python_version": build_sidecar.sidecar_python_version(),
+        "python_build": build_sidecar.sidecar_python_build(),
+        "lock_file": "requirements-build.lock",
+        "lock_sha256": "a" * 64,
+        "packages": {name: "1" for name in build_sidecar.KEY_BUILD_PACKAGES},
+        "source_git_commit": "a" * 40,
+        "source_git_dirty": False,
+        "engine_source_sha256": "b" * 64,
+    }
+
+    system_manifest = tmp_path / "system-dlcs.json"
+    system_manifest.write_text('{"schema_version": 1}', encoding="utf-8")
+    staged = build_sidecar.prepare_sidecar_engine_tree(
+        tmp_path,
+        provenance,
+        system_manifest,
+    )
+    written = json.loads(
+        (staged / build_sidecar.BUILD_PROVENANCE_FILENAME).read_text(encoding="utf-8")
+    )
+
+    assert written == provenance
+    assert (staged / "_system_dlc_bundle.json").read_text(encoding="utf-8") == (
+        system_manifest.read_text(encoding="utf-8")
+    )
+
+
+def test_release_build_never_writes_frontend_dev_token(monkeypatch, tmp_path) -> None:
+    binary = tmp_path / "dbfox-engine"
+    binary.write_bytes(b"sidecar")
+    monkeypatch.setattr(build_sidecar, "_venv_python", lambda: "python")
+    monkeypatch.setattr(build_sidecar, "sync_build_environment", lambda _python: None)
+    signing_key = tmp_path / "signing-key.pem"
+    signing_key.write_text("private", encoding="utf-8")
+    system_manifest = tmp_path / "system-dlcs.json"
+    system_manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        build_sidecar,
+        "build_system_dlc_release_bundle",
+        lambda _python, _key: system_manifest,
+    )
+    monkeypatch.setattr(
+        build_sidecar,
+        "build_pyinstaller",
+        lambda _python, _manifest: binary,
+    )
+    monkeypatch.setattr(build_sidecar, "install_sidecar", lambda source: source)
+    monkeypatch.setattr(build_sidecar, "probe_sidecar_runtime", lambda _binary: _runtime_manifest((3, 53, 4)))
+    monkeypatch.setattr(
+        build_sidecar,
+        "probe_sidecar_release_contracts",
+        lambda _binary: _release_contracts(),
+    )
+    monkeypatch.setattr(build_sidecar, "write_artifact_manifest", lambda *_args: tmp_path / "manifest.json")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["build_sidecar.py", "--system-dlc-signing-key", str(signing_key)],
+    )
+
+    builder_source = Path(build_sidecar.__file__).read_text(encoding="utf-8")
+    assert "write_env_local" not in builder_source
+    assert "write_frontend_env" not in builder_source
+
+    build_sidecar.main()

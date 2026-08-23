@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-22
+> 最后核验：2026-08-24
 >
 > 事实源：当前源码、迁移、锁文件、协议测试和绑定目标 commit 的运行证据
 
@@ -16,6 +16,7 @@
 2. [R7 Electron Host Cutover](../quality/2026-08-21-r7-electron-host-cutover.md)：当前 Sidecar、原生能力、DLC protocol、更新和发布边界。
 3. [R8A Untrusted Isolation Gate](./r8-untrusted-isolation-gate.md)：三平台 backend/frontend 隔离调查、NO-GO 结论与 trusted-publisher-only 边界。
 4. [桌面发布、恢复与个性化](./desktop-release-lifecycle.md)：外观偏好、窗口状态、异常退出、代码签名和自动更新链路。
+5. [测试与测评系统边界](./verification-system.md)：产品代码与 verification 的物理隔离、真实链路、Core/DLC/Bench 分类和 CI 门禁。
 
 ## 2. 接受后的目标架构计划
 

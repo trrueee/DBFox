@@ -931,7 +931,7 @@ DBFox 的被测对象包括：
 
 ### 14.3 当前数据集和 workflow
 
-`scripts/agentbench/datasets/regression-v1.json` 包含 60 个版本化任务：
+`verification/bench/agentbench/datasets/regression-v1.json` 包含 60 个版本化任务：
 
 | 类别 | 数量 |
 | --- | ---: |
@@ -1284,28 +1284,28 @@ DBFox 保留自有 Harness 是有明确理由的：
 | Terminalizer | `engine/agent/terminalizer.py` |
 | Conversation Recall | `engine/agent/conversation_recall.py`、`engine/tools/builtin/conversation.py` |
 | Event/SSE | `engine/agent/repositories/events.py`、`engine/api/conversation_stream.py` |
-| AgentBench | `scripts/agentbench/` |
+| AgentBench | `verification/bench/agentbench/` |
 | 夜间评测 | `.github/workflows/agent-evaluation.yml` |
 
 ### 20.3 测试索引
 
 | 合同 | 测试 |
 | --- | --- |
-| Completion/phase | `engine/agent/tests/test_prompt_and_completion.py` |
-| Provider stream | `engine/agent/tests/test_openai_model_adapter.py` |
-| 真实 Responses | `engine/agent/tests/test_real_responses_contract.py` |
-| 多轮工具闭环 | `engine/agent/tests/test_run_loop.py` |
-| Coordinator | `engine/agent/tests/test_session_coordinator.py` |
-| Tool materialization | `engine/agent/tests/test_tool_materialization.py` |
-| Tool input 分类 | `engine/agent/tests/test_tool_input_classification.py` |
-| PolicyGate | `engine/agent/tests/test_policy_gate.py` |
+| Completion/phase | `verification/tests/agent_core/test_prompt_and_completion.py` |
+| Provider stream | `verification/tests/agent_core/test_openai_model_adapter.py` |
+| 真实 Responses | `verification/tests/agent_core/test_real_responses_contract.py` |
+| 多轮工具闭环 | `verification/tests/agent_core/test_run_loop.py` |
+| Coordinator | `verification/tests/agent_core/test_session_coordinator.py` |
+| Tool materialization | `verification/tests/agent_core/test_tool_materialization.py` |
+| Tool input 分类 | `verification/tests/agent_core/test_tool_input_classification.py` |
+| PolicyGate | `verification/tests/agent_core/test_policy_gate.py` |
 | Context/Memory | `test_context_assembler.py`、`test_context_memory.py` |
 | Recall | `test_conversation_recall.py`、`test_conversation_recall_harness.py` |
-| ProgressGuard | `engine/agent/tests/test_progress_guard.py` |
+| ProgressGuard | `verification/tests/agent_core/test_progress_guard.py` |
 | 终态与取消 | `test_terminal_transaction.py`、`test_terminalizer_cancellation.py` |
-| SQLite 场景 | `engine/agent/tests/harness/test_sqlite_scenarios.py` |
-| MySQL 合同 | `engine/agent/tests/harness/test_mysql_contract.py` |
-| AgentBench scorer | `engine/agent/tests/harness/test_agentbench_*.py` |
+| SQLite 场景 | `verification/tests/integration/test_sqlite_scenarios.py` |
+| MySQL 合同 | `verification/tests/integration/test_mysql_contract.py` |
+| AgentBench scorer | `verification/tests/bench/test_agentbench_*.py` |
 
 ---
 
@@ -1313,22 +1313,22 @@ DBFox 保留自有 Harness 是有明确理由的：
 
 ```powershell
 # Agent 确定性回归
-python -m pytest engine/agent/tests -q
+python -m pytest verification/tests/agent_core -q
 
 # SQLite / Memory / Fault Harness
-python -m pytest engine/agent/tests/harness engine/agent/tests/test_conversation_recall_harness.py -q
+python -m pytest verification/tests/integration verification/tests/agent_core/test_conversation_recall_harness.py -q
 
 # AgentBench 数据集与 grader 校准
-python -m scripts.agentbench validate
-python -m scripts.agentbench calibrate
+python -m verification.bench.agentbench validate
+python -m verification.bench.agentbench calibrate
 
 # 真实 Provider：必须显式 opt-in，并从凭据库或 CI Secret 取 Key
 $env:DBFOX_RUN_REAL_LLM = "1"
 $env:DBFOX_REAL_LLM_CREDENTIAL_ID = "<opaque vault reference>"
-python -m scripts.agentbench real --tag real_provider --tag nightly --repetitions 3
+python -m verification.bench.agentbench real --tag real_provider --tag nightly --repetitions 3
 
 # 已有 trial 的离线重评分
-python -m scripts.agentbench replay --trials <trials.json> --output <new-output-dir>
+python -m verification.bench.agentbench replay --trials <trials.json> --output <new-output-dir>
 ```
 
 运行真实 Provider 前必须确认费用和数据边界。缺少 Key、网络、模型或授权时应 skip/unscored，不得伪造通过。

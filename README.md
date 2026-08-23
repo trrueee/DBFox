@@ -172,7 +172,7 @@ Agent 质量不只通过单元测试判断。仓库同时维护确定性场景�
 | `engine/tools/` | 工具注册、输入合同、策略、审批和执行运行时 |
 | `engine/sql/` | SQL 安全、执行、结果分页和导出 |
 | `engine/migrations/` | DBFox 本地元数据库的 Alembic 迁移 |
-| `scripts/agentbench/` | AgentBench 评测脚本、确定性数据集与评分合同 |
+| `verification/bench/agentbench/` | AgentBench 评测脚本、确定性数据集与评分合同 |
 | `docs/` | 当前架构、实现指南、规范、质量文档和历史档案 |
 | `.github/workflows/` | 持续集成、Agent 评测和发布候选工作流 |
 

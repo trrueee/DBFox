@@ -24,7 +24,7 @@
 
 ## 锁文件完整性契约
 
-`engine/tests/test_engineering_contracts.py` 会在离线测试中验证：
+`verification/tests/system/test_engineering_contracts.py` 会在离线测试中验证：
 
 - Python lock 中每个固定包条目都带 SHA-256 hash；
 - npm lock 使用 lockfile v3，所有第三方包来自 npm 官方 registry 且带 SHA-512 integrity；
@@ -38,7 +38,7 @@
 先执行与 CI 相同的锁文件和前端审计：
 
 ```powershell
-python -m pytest engine/tests/test_engineering_contracts.py -q
+python -m pytest verification/tests/system/test_engineering_contracts.py -q
 
 Set-Location desktop
 npm audit --package-lock-only --ignore-scripts --audit-level=high --registry=https://registry.npmjs.org

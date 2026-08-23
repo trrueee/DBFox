@@ -117,8 +117,8 @@ DBFox 自研部分主要表达产品特有的不变量：证据优先、referenc
 | `engine/policy/` | 工具授权、ExecutionAuthority、确认和脱敏 | `PolicyGate` |
 | `engine/diagnostics/` | 结构化、脱敏、有界日志 | `logs.py` |
 | `engine/migrations/` | metadata schema 的唯一演进链 | `versions/` |
-| `engine/tests/` | API、SQL、连接、安全、迁移和架构测试 | 按功能寻找 `test_*.py` |
-| `engine/agent/tests/` | Harness、Repository、Provider、上下文和恢复测试 | `harness/test_sqlite_scenarios.py` |
+| `verification/tests/system/` | API、SQL、连接、安全、迁移和架构测试 | 按功能寻找 `test_*.py` |
+| `verification/tests/agent_core/` | Harness、Repository、Provider、上下文和恢复测试 | `harness/test_sqlite_scenarios.py` |
 
 `schemas/` 是 HTTP DTO，`models.py` 是持久模型，`agent/*.py` 中的 Pydantic/Enum 是领域运行模型。这三类模型处在不同边界，不应为字段相似就互相替代，也不应再新增一套镜像 DTO。
 
@@ -713,19 +713,19 @@ Event 不是先发再写。前端看到的 committed event 必须对应已提交
 
 当前后端有两类主要测试目录：
 
-- `engine/tests/`：API、连接、SQL、安全、迁移、备份、诊断与工程合同；
-- `engine/agent/tests/`：Session/Run/Turn、Provider、工具、Context、Memory、事件、取消和恢复。
+- `verification/tests/system/`：API、连接、SQL、安全、迁移、备份、诊断与工程合同；
+- `verification/tests/agent_core/`：Session/Run/Turn、Provider、工具、Context、Memory、事件、取消和恢复。
 
 ### 推荐分层命令
 
 ```powershell
 # 某一模块快速反馈
-python -m pytest -q engine/agent/tests/test_run_loop.py
-python -m pytest -q engine/tests/test_db_tools.py
+python -m pytest -q verification/tests/agent_core/test_run_loop.py
+python -m pytest -q verification/tests/system/test_db_tools.py
 
 # Agent 确定性闭环
-python -m pytest -q engine/agent/tests/harness/test_sqlite_scenarios.py
-python -m pytest -q engine/agent/tests/test_conversation_recall_harness.py
+python -m pytest -q verification/tests/integration/test_sqlite_scenarios.py
+python -m pytest -q verification/tests/agent_core/test_conversation_recall_harness.py
 
 # 后端全量
 python -m pytest -q
@@ -741,22 +741,22 @@ python -m alembic heads
 
 | 合同 | 测试 |
 | --- | --- |
-| Runtime Token / startup | `engine/tests/test_runtime_credentials.py`、`test_startup.py` |
-| 全局错误不泄漏 | `engine/tests/test_global_error_boundary.py`、`test_public_errors.py` |
-| 凭据与 Lease Saga | `engine/tests/test_credential_vault.py`、`test_credentials_api.py` |
-| 连接 generation | `engine/tests/test_datasource_resource_lifecycle.py` |
-| Catalog 权威同步 | `engine/tests/test_authoritative_schema_sync.py` |
-| SQL 安全与参数绑定 | `engine/tests/test_sql_safety_service.py`、`test_bound_parameters.py` |
-| Result Gateway | `engine/tests/test_result_view_service.py`、`test_agent_results_api.py` |
-| Session lease/调度 | `engine/agent/tests/test_session_coordinator.py`、`test_session_repository.py` |
-| Provider Responses | `engine/agent/tests/test_openai_model_adapter.py` |
-| Tool function calling | `engine/agent/tests/test_tool_materialization.py`、`engine/tests/test_tool_runtime.py` |
-| Context/Memory | `engine/agent/tests/test_context_assembler.py`、`test_context_memory.py` |
-| Conversation recall | `engine/agent/tests/test_conversation_recall.py`、`test_conversation_recall_harness.py` |
-| 原子终态 | `engine/agent/tests/test_terminal_transaction.py` |
-| SSE/backpressure | `engine/tests/test_conversation_stream_backpressure.py` |
-| 确定性完整闭环 | `engine/agent/tests/harness/test_sqlite_scenarios.py` |
-| 真实 Provider opt-in | `engine/agent/tests/test_real_responses_contract.py` |
+| Runtime Token / startup | `verification/tests/system/test_runtime_credentials.py`、`test_startup.py` |
+| 全局错误不泄漏 | `verification/tests/system/test_global_error_boundary.py`、`test_public_errors.py` |
+| 凭据与 Lease Saga | `verification/tests/system/test_credential_vault.py`、`test_credentials_api.py` |
+| 连接 generation | `verification/tests/system/test_datasource_resource_lifecycle.py` |
+| Catalog 权威同步 | `verification/tests/system/test_authoritative_schema_sync.py` |
+| SQL 安全与参数绑定 | `verification/tests/system/test_sql_safety_service.py`、`test_bound_parameters.py` |
+| Result Gateway | `verification/tests/system/test_result_view_service.py`、`test_agent_results_api.py` |
+| Session lease/调度 | `verification/tests/agent_core/test_session_coordinator.py`、`test_session_repository.py` |
+| Provider Responses | `verification/tests/agent_core/test_openai_model_adapter.py` |
+| Tool function calling | `verification/tests/agent_core/test_tool_materialization.py`、`verification/tests/system/test_tool_runtime.py` |
+| Context/Memory | `verification/tests/agent_core/test_context_assembler.py`、`test_context_memory.py` |
+| Conversation recall | `verification/tests/agent_core/test_conversation_recall.py`、`test_conversation_recall_harness.py` |
+| 原子终态 | `verification/tests/agent_core/test_terminal_transaction.py` |
+| SSE/backpressure | `verification/tests/system/test_conversation_stream_backpressure.py` |
+| 确定性完整闭环 | `verification/tests/integration/test_sqlite_scenarios.py` |
+| 真实 Provider opt-in | `verification/tests/agent_core/test_real_responses_contract.py` |
 
 自动化测试可以证明确定性合同，但不能替代外部系统证据。真实 Provider、MySQL/PostgreSQL 权限和取消、SSH/TLS、驱动动态链接、OS keyring、安装态 Sidecar 都需要受控集成测试。`test_real_responses_contract.py` 是 opt-in，不应在没有真实凭据时伪装通过。
 
@@ -857,7 +857,7 @@ python -m alembic heads
 | Context | `ContextAssembler` | `engine/agent/context.py` |
 | Memory v4 models/reducer | `fold_catalog` / typed envelope | `engine/agent/memory_v4.py` |
 | Memory v4 projection | `project_session_memory` / `rebuild_session_memory`（terminal boundary / shadow write / fail-soft / compare-strict-repair） | `engine/agent/memory_projection.py` |
-| Memory v4 context read | `ContextAssembler._memory_v4`（`DBFOX_MEMORY_V4_CONTEXT=1`，resource fence + prior digest） | `engine/agent/context.py` |
+| Capability Memory context | `ContextAssembler` 只组合 snapshot context contributors；Kernel 不读取 Catalog Memory，也不存在测评专用 v3/v4 开关 | `engine/agent/context.py` / `engine/runtime_composition.py` |
 | Tool 注册 | `register_core_functions` / `register_conversation_functions` / `register_data_extension` / `register_dbfox_tools` facade | `engine/tools/builtin/registry.py` |
 | Tool 编排 | `ToolDispatcher` | `engine/agent/tool_dispatcher.py` |
 | Tool 叶子运行 | `ToolRuntime` | `engine/tools/runtime/runtime.py` |

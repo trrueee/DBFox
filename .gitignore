@@ -27,7 +27,7 @@ dbfox_local.db.bak_*
 .dbfox_runtime/
 
 # Test fixture databases must be tracked
-!engine/tests/fixtures/**/*.sqlite
+!verification/tests/system/fixtures/**/*.sqlite
 
 # ============================================================
 # Python

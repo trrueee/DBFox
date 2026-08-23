@@ -277,16 +277,16 @@ SSL 和 SSH tunnel 是 ConnectionProfile 的正式组成，不是 API 临时参�
 
 | 合同 | 测试 |
 | --- | --- |
-| Vault 不泄漏/存取 | [`test_credential_vault.py`](../../engine/tests/test_credential_vault.py) |
-| Credentials API | [`test_credentials_api.py`](../../engine/tests/test_credentials_api.py) |
-| 连接边界唯一性 | [`test_connectivity_boundary.py`](../../engine/tests/test_connectivity_boundary.py) |
-| Resource lifecycle | [`test_datasource_resource_lifecycle.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
-| 数据源更新 | [`test_datasource_update_api.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
-| SSL 配置与端到端 | [`test_datasource_ssl.py`](../../engine/tests/test_datasource_ssl.py)、[`test_datasource_ssl_e2e.py`](../../engine/tests/test_datasource_ssl_e2e.py) |
-| 权威 Schema sync | [`test_authoritative_schema_sync.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
-| Catalog introspection | [`test_catalog_introspector.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
-| Catalog 同步失败保留 | [`test_schema_catalog_sync.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
-| 数据源安全 | [`test_datasource_safety.py`](../../engine/tests/test_datasource_safety.py) |
+| Vault 不泄漏/存取 | [`test_credential_vault.py`](../../verification/tests/system/test_credential_vault.py) |
+| Credentials API | [`test_credentials_api.py`](../../verification/tests/system/test_credentials_api.py) |
+| 连接边界唯一性 | [`test_connectivity_boundary.py`](../../verification/tests/system/test_connectivity_boundary.py) |
+| Resource lifecycle | [`test_datasource_resource_lifecycle.py`](../../verification/tests/system/test_dbfox_data_domain_model.py) |
+| 数据源更新 | [`test_datasource_update_api.py`](../../verification/tests/system/test_dbfox_data_domain_model.py) |
+| SSL 配置与端到端 | [`test_datasource_ssl.py`](../../verification/tests/system/test_datasource_ssl.py)、[`test_datasource_ssl_e2e.py`](../../verification/tests/system/test_datasource_ssl_e2e.py) |
+| 权威 Schema sync | [`test_authoritative_schema_sync.py`](../../verification/tests/system/test_dbfox_data_domain_model.py) |
+| Catalog introspection | [`test_catalog_introspector.py`](../../verification/tests/system/test_dbfox_data_domain_model.py) |
+| Catalog 同步失败保留 | [`test_schema_catalog_sync.py`](../../verification/tests/system/test_dbfox_data_domain_model.py) |
+| 数据源安全 | [`test_datasource_safety.py`](../../verification/tests/system/test_datasource_safety.py) |
 
 ## 13. 扩展新 datasource 类型
 

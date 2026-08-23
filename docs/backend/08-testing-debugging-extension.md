@@ -48,38 +48,38 @@ git diff --check
 ### 3.1 Runtime/鉴权/错误
 
 ```powershell
-python -m pytest -q engine/tests/test_runtime_credentials.py engine/tests/test_api_security_contracts.py engine/tests/test_global_error_boundary.py engine/tests/test_problem_details.py
+python -m pytest -q verification/tests/system/test_runtime_credentials.py verification/tests/system/test_api_security_contracts.py verification/tests/system/test_global_error_boundary.py verification/tests/system/test_problem_details.py
 ```
 
 ### 3.2 SQLite/迁移/事务
 
 ```powershell
-python -m pytest -q engine/tests/test_db_init.py engine/tests/test_migrations.py engine/agent/tests/test_session_repository.py engine/agent/tests/test_terminal_transaction.py
+python -m pytest -q verification/tests/system/test_db_init.py verification/tests/system/test_migrations.py verification/tests/agent_core/test_session_repository.py verification/tests/agent_core/test_terminal_transaction.py
 ```
 
 ### 3.3 数据源/SQL/结果
 
 ```powershell
-python -m pytest -q engine/tests/test_connectivity_boundary.py engine/tests/test_sql_safety_service.py engine/tests/test_bound_parameters.py engine/tests/test_result_view_service.py
+python -m pytest -q verification/tests/system/test_connectivity_boundary.py verification/tests/system/test_sql_safety_service.py verification/tests/system/test_bound_parameters.py verification/tests/system/test_result_view_service.py
 ```
 
 ### 3.4 Agent/Provider/工具/记忆
 
 ```powershell
-python -m pytest -q engine/agent/tests/test_run_loop.py engine/agent/tests/test_openai_model_adapter.py engine/agent/tests/test_policy_gate.py engine/agent/tests/test_context_assembler.py
+python -m pytest -q verification/tests/agent_core/test_run_loop.py verification/tests/agent_core/test_openai_model_adapter.py verification/tests/agent_core/test_policy_gate.py verification/tests/agent_core/test_context_assembler.py
 ```
 
 ### 3.5 确定性 Harness
 
 ```powershell
-python -m pytest -q engine/agent/tests/harness/test_sqlite_scenarios.py
+python -m pytest -q verification/tests/integration/test_sqlite_scenarios.py
 ```
 
 真实 Provider 合同是 opt-in，只有显式提供隔离测试凭据和配置时运行；不得把开发用户 credential 写入仓库、日志或默认 CI。
 
 ## 4. 确定性 SQLite Harness 应覆盖什么
 
-[`engine/agent/tests/harness/test_sqlite_scenarios.py`](../../engine/tests/test_dbfox_data_domain_model.py) 应作为完整运行状态机的稳定场景集，优先覆盖：
+[`verification/tests/integration/test_sqlite_scenarios.py`](../../verification/tests/system/test_dbfox_data_domain_model.py) 应作为完整运行状态机的稳定场景集，优先覆盖：
 
 - 无 phase 的正常最终文本；
 - 显式 final_answer；
@@ -103,7 +103,7 @@ python -m pytest -q engine/agent/tests/harness/test_sqlite_scenarios.py
 
 ## 5. Opt-in 真实 Provider 测试
 
-[`engine/agent/tests/test_real_responses_contract.py`](../../engine/agent/tests/test_real_responses_contract.py) 的职责是验证外部边界：
+[`verification/tests/agent_core/test_real_responses_contract.py`](../../verification/tests/agent_core/test_real_responses_contract.py) 的职责是验证外部边界：
 
 - Responses 请求可被真实 Provider 接受；
 - message `phase` 可能缺失；

@@ -11,7 +11,7 @@ on:
         required: true
         default: nightly
         type: choice
-        options: [nightly, weekly, memory-smoke, memory-candidate]
+        options: [nightly, weekly]
       repetitions:
         description: Repetitions (1-5; blank uses the profile default)
         required: false
@@ -47,15 +47,15 @@ jobs:
           python -m pip install --require-hashes -r requirements-dev.lock
           python -m pip check
       - name: Validate the versioned sixty-case dataset
-        run: python -m scripts.agentbench validate
+        run: python -m verification.bench.agentbench validate
       - name: Calibrate deterministic graders
         run: >-
-          python -m scripts.agentbench calibrate
+          python -m verification.bench.agentbench calibrate
           --output output/agent-evaluation/calibration
       - name: Run deterministic SQLite, memory and fault-injection scenarios
         run: >-
-          python -m pytest engine/agent/tests/harness
-          engine/agent/tests/test_conversation_recall_harness.py
+          python -m pytest verification/tests/bench
+          verification/tests/agent_core/test_conversation_recall_harness.py
           -q --tb=short
           --junitxml=output/agent-evaluation/deterministic-harness.xml
       - name: Upload deterministic evaluation evidence
@@ -110,7 +110,7 @@ jobs:
         run: |
           mkdir -p output/agent-evaluation
           python -m pytest \
-            engine/agent/tests/harness/test_mysql_contract.py \
+            verification/tests/integration/test_mysql_contract.py \
             -q --tb=short \
             --junitxml=output/agent-evaluation/mysql-contract.xml
       - name: Upload MySQL contract evidence
@@ -163,9 +163,7 @@ jobs:
           profile="${DISPATCH_PROFILE:-nightly}"
           if [[ "$SCHEDULE" == "25 2 * * 0" ]]; then profile="weekly"; fi
           repetitions="$DISPATCH_REPETITIONS"
-          if [[ "$profile" == "memory-smoke" || "$profile" == "memory-candidate" ]]; then
-            repetitions=1
-          elif [[ -z "$repetitions" ]]; then
+          if [[ -z "$repetitions" ]]; then
             if [[ "$profile" == "weekly" ]]; then repetitions=5; else repetitions=3; fi
           fi
           if [[ ! "$repetitions" =~ ^[1-5]$ ]]; then
@@ -180,21 +178,9 @@ jobs:
           PROFILE: ${{ steps.profile.outputs.profile }}
           REPETITIONS: ${{ steps.profile.outputs.repetitions }}
         run: |
-          if [[ "$PROFILE" == "memory-smoke" ]]; then
-            python -m scripts.agentbench memory-paired \
-              --dataset scripts/agentbench/datasets/memory-v1.json \
-              --profile smoke \
-              --output output/agent-evaluation/memory-paired-smoke
-          elif [[ "$PROFILE" == "memory-candidate" ]]; then
-            python -m scripts.agentbench memory-paired \
-              --dataset scripts/agentbench/datasets/memory-candidate-v1.json \
-              --profile candidate \
-              --output output/agent-evaluation/memory-paired-candidate
-          else
-            args=(--tag real_provider --repetitions "$REPETITIONS" --output output/agent-evaluation/real-provider)
-            if [[ "$PROFILE" == "nightly" ]]; then args+=(--tag nightly); fi
-            python -m scripts.agentbench real "${args[@]}"
-          fi
+          args=(--tag real_provider --repetitions "$REPETITIONS" --output output/agent-evaluation/real-provider)
+          if [[ "$PROFILE" == "nightly" ]]; then args+=(--tag nightly); fi
+          python -m verification.bench.agentbench real "${args[@]}"
       - name: Upload real-provider evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

@@ -7,10 +7,13 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
 exclude = [
-    "tests/",
+    "verification/",
 ]
 
 [tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+testpaths = ["verification/tests"]
+python_files = ["test_*.py"]
 norecursedirs = [
     ".build_venv",
     ".cache",

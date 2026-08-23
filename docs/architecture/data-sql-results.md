@@ -99,10 +99,10 @@ Artifact wire contract：`type` 为 string，`schema_version` 独立表达 paylo
 
 ## 8. 验证入口
 
-- 连接边界：`engine/tests/test_connectivity_boundary.py`
-- Catalog 权威同步：`engine/tests/test_authoritative_schema_sync.py`、`engine/tests/test_schema_catalog_sync.py`
-- SQL 工具与安全：`engine/tests/test_db_tools.py`、`engine/tests/test_sql_safety_service.py`
-- Result API：`engine/tests/test_agent_results_api.py`
-- 跨边界合同：`engine/tests/test_engineering_contracts.py` 及对应 Agent Harness 场景集
+- 连接边界：`verification/tests/system/test_connectivity_boundary.py`
+- Catalog 权威同步：`verification/tests/system/test_authoritative_schema_sync.py`、`verification/tests/system/test_schema_catalog_sync.py`
+- SQL 工具与安全：`verification/tests/system/test_db_tools.py`、`verification/tests/system/test_sql_safety_service.py`
+- Result API：`verification/tests/system/test_agent_results_api.py`
+- 跨边界合同：`verification/tests/system/test_engineering_contracts.py` 及对应 Agent Harness 场景集
 
 真实数据库、SSH/TLS、驱动动态链接和大结果性能仍需在目标平台/数据源执行受控集成验收；确定性单元测试不替代这些证据。
