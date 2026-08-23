@@ -363,7 +363,7 @@ jobs:
           ./.build_venv/bin/python -m pytest \
             verification/tests/system/test_runtime_manifest.py \
             verification/tests/system/test_global_error_boundary.py \
-            verification/tests/system/test_sql_safety_service.py \
+            verification/tests/system/test_guardrail.py \
             verification/tests/agent_core/test_prompt_and_completion.py \
             verification/tests/agent_core/test_run_loop.py \
             -q --tb=short
@@ -563,7 +563,7 @@ jobs:
           "$SIDECAR_PYTHON" -m pytest
           verification/tests/system/test_runtime_manifest.py
           verification/tests/system/test_global_error_boundary.py
-          verification/tests/system/test_sql_safety_service.py
+          verification/tests/system/test_guardrail.py
           verification/tests/agent_core/test_prompt_and_completion.py
           verification/tests/agent_core/test_run_loop.py
           -q --tb=short

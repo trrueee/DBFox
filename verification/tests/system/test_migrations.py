@@ -70,8 +70,9 @@ def _create_real_historical_create_all_schema(database_url: str, tmp_path: Path)
     root = Path(__file__).resolve().parents[3]
     historical_models = (
         root
-        / "engine"
+        / "verification"
         / "tests"
+        / "system"
         / "fixtures"
         / f"historical_models_{HISTORICAL_MODELS_REVISION}.py"
     )
