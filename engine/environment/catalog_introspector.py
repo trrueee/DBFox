@@ -19,7 +19,7 @@ from engine.environment.authoritative_inventory import (
     AuthoritativeInventory,
     SchemaInspectionError,
 )
-from engine.environment.inventory import (
+from dlcs.dbfox_data.backend.inventory import (
     ColumnInventory,
     ForeignKeyInventory,
     ForeignKeyReference,
@@ -216,7 +216,7 @@ class CatalogIntrospector:
                     profile,
                 )
         return SchemaInventory(
-            datasource_id=str(datasource.id),
+            database_resource_id=str(datasource.id),
             dialect=profile.dialect,
             database_name=profile.database_name,
             tables=tables,

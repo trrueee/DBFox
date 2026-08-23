@@ -38,7 +38,7 @@ export interface ArtifactTableData {
   warnings: string[];
   notices: string[];
   latencyMs: number | undefined;
-  consistency: "live_reexecution" | "live_query" | undefined;
+  consistency: "durable_snapshot" | "live_reexecution" | "live_query" | undefined;
   originalExecutedAt: string | null | undefined;
   viewExecutedAt: string | undefined;
   isLoading: boolean;

@@ -136,28 +136,6 @@ export const zArtifactVisibility = z.enum([
 ]);
 
 /**
- * Artifact
- */
-export const zArtifact = z.object({
-    id: z.string(),
-    payload: z.record(z.string(), z.unknown()).optional(),
-    payload_ref: z.string().nullish(),
-    provenance: z.record(z.string(), z.unknown()).optional(),
-    relations: z.array(zArtifactRelation).optional(),
-    run_id: z.string(),
-    schema_version: z.int().gte(1).optional().default(1),
-    semantic_key: z.string().nullish(),
-    session_id: z.string(),
-    status: zArtifactStatus.optional().default('completed'),
-    summary: z.string().nullish(),
-    title: z.string(),
-    turn_id: z.string().nullish(),
-    type: z.string().min(1).max(128),
-    version: z.int().gte(1).optional().default(1),
-    visibility: zArtifactVisibility.optional().default('primary')
-});
-
-/**
  * BackupCreateRequest
  */
 export const zBackupCreateRequest = z.object({
@@ -230,8 +208,11 @@ export const zChartPointResponse = z.object({
  * ChartDataResponse
  */
 export const zChartDataResponse = z.object({
-    consistency: z.literal('live_reexecution'),
-    datasourceGeneration: z.int(),
+    consistency: z.enum(['durable_snapshot', 'live_reexecution']),
+    datasourceGeneration: z.union([
+        z.string(),
+        z.int()
+    ]),
     originalExecutedAt: z.string().nullish(),
     queryFingerprint: z.string(),
     sampleSize: z.int(),
@@ -294,30 +275,6 @@ export const zConsoleExecuteRequest = z.object({
 });
 
 /**
- * ConsoleExecuteResponse
- */
-export const zConsoleExecuteResponse = z.object({
-    artifacts: z.array(zArtifact),
-    notices: z.array(z.string()).optional(),
-    resultArtifactId: z.string().nullish(),
-    runId: z.string(),
-    safetyArtifactId: z.string().nullish(),
-    sessionId: z.string(),
-    sqlArtifactId: z.string(),
-    warnings: z.array(z.string()).optional()
-});
-
-/**
- * ConversationCreateRequest
- */
-export const zConversationCreateRequest = z.object({
-    context_tables: z.array(z.string()).optional(),
-    datasource_id: z.string().nullish(),
-    project_id: z.string(),
-    title: z.string().nullish()
-});
-
-/**
  * ConversationDeleteResponse
  */
 export const zConversationDeleteResponse = z.object({
@@ -325,32 +282,9 @@ export const zConversationDeleteResponse = z.object({
 });
 
 /**
- * ConversationPatchRequest
- */
-export const zConversationPatchRequest = z.object({
-    archived: z.boolean().nullish(),
-    context_tables: z.array(z.string()).nullish(),
-    title: z.string().nullish()
-});
-
-/**
- * ConversationSessionResponse
- */
-export const zConversationSessionResponse = z.object({
-    context_epoch: z.int(),
-    context_tables: z.array(z.string()),
-    datasource_id: z.string().nullish(),
-    id: z.string(),
-    project_id: z.string().nullish(),
-    selected_artifact_id: z.string().nullish(),
-    title: z.string()
-});
-
-/**
  * ConversationSummaryResponse
  */
 export const zConversationSummaryResponse = z.object({
-    datasource_id: z.string().nullish(),
     id: z.string(),
     project_id: z.string().nullish(),
     selected_artifact_id: z.string().nullish(),
@@ -1039,8 +973,23 @@ export const zProblemDetails = z.object({
  */
 export const zProjectCreateRequest = z.object({
     description: z.string().nullish(),
+    name: z.string()
+});
+
+/**
+ * ProjectResourceDescriptor
+ *
+ * Project-scoped resource discovery descriptor with server-canonical freshness version.
+ */
+export const zProjectResourceDescriptor = z.object({
+    id: z.string(),
+    is_default: z.boolean().optional().default(false),
+    kind: z.string(),
     name: z.string(),
-    workspace_root: z.string().nullish()
+    version: z.union([
+        z.int(),
+        z.string()
+    ])
 });
 
 /**
@@ -1053,8 +1002,7 @@ export const zProjectResponse = z.object({
     id: z.string(),
     name: z.string(),
     status: z.string().nullish(),
-    updated_at: z.string().nullish(),
-    workspace_root: z.string().nullish()
+    updated_at: z.string().nullish()
 });
 
 /**
@@ -1181,6 +1129,15 @@ export const zRequestedResourceRef = z.object({
 });
 
 /**
+ * ConversationCreateRequest
+ */
+export const zConversationCreateRequest = z.object({
+    project_id: z.string(),
+    resource_intents: z.array(zRequestedResourceRef).max(16).optional(),
+    title: z.string().nullish()
+});
+
+/**
  * ConversationInputRequest
  */
 export const zConversationInputRequest = z.object({
@@ -1190,9 +1147,81 @@ export const zConversationInputRequest = z.object({
     idempotency_key: z.string().min(8).max(256),
     llm_credential_id: z.string().min(1).max(256),
     model_name: z.string().max(256).nullish(),
-    requested_resources: z.array(zRequestedResourceRef).nullish(),
+    requested_resources: z.array(zRequestedResourceRef).max(16).nullish(),
     selected_artifact_ids: z.array(z.string()).max(20).optional(),
     workspace_context: z.record(z.string(), z.unknown()).optional()
+});
+
+/**
+ * ConversationPatchRequest
+ */
+export const zConversationPatchRequest = z.object({
+    archived: z.boolean().nullish(),
+    resource_intents: z.array(zRequestedResourceRef).max(16).nullish(),
+    title: z.string().nullish()
+});
+
+/**
+ * ConversationSessionResponse
+ */
+export const zConversationSessionResponse = z.object({
+    context_epoch: z.int(),
+    id: z.string(),
+    project_id: z.string().nullish(),
+    resource_intents: z.array(zRequestedResourceRef),
+    selected_artifact_id: z.string().nullish(),
+    title: z.string()
+});
+
+/**
+ * ResourceScopeRef
+ *
+ * Stable identity and freshness fence for one execution resource.
+ */
+export const zResourceScopeRef = z.object({
+    id: z.string().min(1).max(256),
+    kind: z.string().min(1).max(64),
+    version: z.union([
+        z.string(),
+        z.int()
+    ]).nullish()
+});
+
+/**
+ * Artifact
+ */
+export const zArtifact = z.object({
+    id: z.string(),
+    payload: z.record(z.string(), z.unknown()).optional(),
+    payload_ref: z.string().nullish(),
+    provenance: z.record(z.string(), z.unknown()).optional(),
+    relations: z.array(zArtifactRelation).optional(),
+    resource_refs: z.array(zResourceScopeRef).optional().default([]),
+    run_id: z.string(),
+    schema_version: z.int().gte(1).optional().default(1),
+    semantic_key: z.string().nullish(),
+    session_id: z.string(),
+    status: zArtifactStatus.optional().default('completed'),
+    summary: z.string().nullish(),
+    title: z.string(),
+    turn_id: z.string().nullish(),
+    type: z.string().min(1).max(128),
+    version: z.int().gte(1).optional().default(1),
+    visibility: zArtifactVisibility.optional().default('primary')
+});
+
+/**
+ * ConsoleExecuteResponse
+ */
+export const zConsoleExecuteResponse = z.object({
+    artifacts: z.array(zArtifact),
+    notices: z.array(z.string()).optional(),
+    resultArtifactId: z.string().nullish(),
+    runId: z.string(),
+    safetyArtifactId: z.string().nullish(),
+    sessionId: z.string(),
+    sqlArtifactId: z.string(),
+    warnings: z.array(z.string()).optional()
 });
 
 /**
@@ -1253,8 +1282,15 @@ export const zResultFilter = z.object({
  */
 export const zResultPageResponse = z.object({
     columns: z.array(z.string()),
-    consistency: z.enum(['live_reexecution', 'live_query']),
-    datasourceGeneration: z.int(),
+    consistency: z.enum([
+        'durable_snapshot',
+        'live_reexecution',
+        'live_query'
+    ]),
+    datasourceGeneration: z.union([
+        z.string(),
+        z.int()
+    ]),
     hasNextPage: z.boolean(),
     latencyMs: z.int(),
     notices: z.array(z.string()).nullish(),
@@ -1439,7 +1475,6 @@ export const zRunStatus = z.enum([
 export const zRunProjection = z.object({
     cancel_requested: z.boolean(),
     current_turn_id: z.string().nullish(),
-    datasource_id: z.string().nullish(),
     error: zRunError.nullish(),
     id: z.string(),
     input_id: z.string(),
@@ -2274,6 +2309,17 @@ export const zGetDlcApiV1DlcsDlcIdGetPath = z.object({
  */
 export const zGetDlcApiV1DlcsDlcIdGetResponse = zDlcLifecycleItem;
 
+export const zEnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostBody = zCredentialEnrollmentBatchRequestWritable;
+
+export const zEnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostPath = z.object({
+    dlc_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zEnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostResponse = zCredentialEnrollmentBatchResponse;
+
 export const zDisableDlcApiV1DlcsDlcIdDisablePostPath = z.object({
     dlc_id: z.string()
 });
@@ -2291,6 +2337,10 @@ export const zEnableDlcApiV1DlcsDlcIdEnablePostPath = z.object({
  * Successful Response
  */
 export const zEnableDlcApiV1DlcsDlcIdEnablePostResponse = zDlcLifecycleItem;
+
+export const zInvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostHeaders = z.object({
+    'X-Credential-Lease-Id': z.string().nullish()
+});
 
 export const zInvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostPath = z.object({
     dlc_id: z.string(),
@@ -2352,6 +2402,17 @@ export const zApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetQuery = z.obj
  * Successful Response
  */
 export const zApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponse = z.array(zBackupResponse);
+
+export const zApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetPath = z.object({
+    project_id: z.string()
+});
+
+/**
+ * Response Api List Project Resources Api V1 Projects  Project Id  Resources Get
+ *
+ * Successful Response
+ */
+export const zApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponse = z.array(zProjectResourceDescriptor);
 
 export const zApiCancelSqlApiV1QueryCancelPostBody = zSqlCancelRequest;
 

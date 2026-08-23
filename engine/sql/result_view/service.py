@@ -9,14 +9,18 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from engine.agent.resource_refs import load_resource_refs, single_run_resource_ref
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.json_codec import JsonCodecError, load_array, load_object
 from engine.models import AgentArtifactRecord, AgentRun, DataSource, SchemaColumn, SchemaTable
-from engine.sql.builder import catalog_identifier
-from engine.sql.dialect_context import DialectContext
-from engine.sql.execution.csv_export import CsvExportService
+from engine.resource import ResourceScopeRef
+from dlcs.dbfox_data.backend.sql.builder import catalog_identifier
+from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
+from dlcs.dbfox_data.backend.sql.dialect_context import DatabaseDialectContext
+from engine.sql.dialect_context import load_dialect_context
+from dlcs.dbfox_data.backend.sql.execution.csv_export import CsvExportService
 from engine.sql.execution.streaming_executor import StreamingQueryExecutor
-from engine.sql.guardrail import GuardrailResult
+from dlcs.dbfox_data.backend.sql.guardrail import GuardrailResult
 from engine.sql.result_view.compiler import ResultViewCompiler
 from engine.sql.result_view.fingerprint import result_source_fingerprint
 from engine.sql.result_view.models import (
@@ -32,9 +36,9 @@ from engine.sql.result_view.models import (
     ResultViewError,
     VerifiedResultSource,
 )
-from engine.tools.chart_suggestion import build_chart_series
+from dlcs.dbfox_data.backend.chart_suggestion import build_chart_series
 from engine.sql.safety.service import SqlSafetyService
-from engine.sql.trust_gate import ExecutionSafetyDecision
+from dlcs.dbfox_data.backend.sql.safety_contracts import ExecutionSafetyDecision
 
 logger = logging.getLogger("dbfox.sql.result_view")
 
@@ -55,10 +59,17 @@ class ResultViewService:
         self.streaming_executor = streaming_executor or StreamingQueryExecutor(db)
         self.compiler = compiler or ResultViewCompiler()
 
-    def load_verified_source(self, source_ref: ResultSourceRef, ctx: DialectContext | None = None) -> VerifiedResultSource:
+    def load_verified_source(self, source_ref: ResultSourceRef, ctx: DatabaseDialectContext | None = None) -> VerifiedResultSource:
         result, source, source_run = self._load_artifact_source(source_ref.artifact_id)
-        datasource_id = str(source_run.datasource_id)
-        ctx = ctx or DialectContext.from_datasource_id(self.db, datasource_id)
+        database_ref = _artifact_database_ref(result, source_run, self.db)
+        if database_ref is None:
+            raise ResultViewError(
+                "SOURCE_ARTIFACT_NOT_FOUND",
+                "Artifact source has no unambiguous database resource.",
+                status_code=404,
+            )
+        datasource_id = database_ref.id
+        ctx = ctx or load_dialect_context(self.db, datasource_id)
         if source.type != "sql":
             raise ResultViewError("SOURCE_ARTIFACT_UNSUPPORTED", "Source artifact must be a SQL artifact.")
 
@@ -85,8 +96,8 @@ class ResultViewService:
         if descriptor_fp and persisted_fp != descriptor_fp:
             raise ResultViewError("SOURCE_SQL_MISMATCH", "Result artifact does not match its source SQL artifact.")
 
-        source_ctx = DialectContext(
-            datasource_id=datasource_id,
+        source_ctx = DatabaseDialectContext(
+            resource_id=datasource_id,
             dialect=ctx.dialect,
         )
         warnings = SqlSafetyService().validate_source_artifact_sql(persisted_safe_sql, source_ctx)
@@ -102,31 +113,31 @@ class ResultViewService:
             dialect=artifact_dialect,
             columns=columns,
             fingerprint=persisted_fp,
-            datasource_generation=int(source_run.datasource_generation),
+            datasource_generation=database_ref.version or 0,
             original_executed_at=str(descriptor.get("executedAt") or "") or None,
         )
 
     def build_page_sql(self, query: ResultPageQuery) -> str:
         source = self.load_verified_source(query.source)
-        ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
+        ctx = load_dialect_context(self.db, source.datasource_id)
         return self.compiler.build_page_sql(query, source, ctx)
 
     def build_count_sql(self, query: ResultPageQuery) -> str:
         source = self.load_verified_source(query.source)
-        ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
+        ctx = load_dialect_context(self.db, source.datasource_id)
         count_sql = self.compiler.build_count_sql(query, source, ctx)
         self._validate_derived_sql(count_sql, ctx)
         return count_sql
 
     def build_export_sql(self, query: ResultExportQuery) -> str:
         source = self.load_verified_source(query.source)
-        ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
+        ctx = load_dialect_context(self.db, source.datasource_id)
         export_sql = self.compiler.build_export_sql(query, source, ctx)
         self._validate_derived_sql(export_sql, ctx)
         return export_sql
 
-    def load_table_source(self, source_ref: TableSourceRef, ctx: DialectContext | None = None) -> VerifiedResultSource:
-        ctx = ctx or DialectContext.from_datasource_id(self.db, source_ref.datasource_id)
+    def load_table_source(self, source_ref: TableSourceRef, ctx: DatabaseDialectContext | None = None) -> VerifiedResultSource:
+        ctx = ctx or load_dialect_context(self.db, source_ref.datasource_id)
         table = self._load_schema_table(source_ref.datasource_id, source_ref.table_id, source_ref.table_name)
         if table is None:
             raise ResultViewError(
@@ -166,7 +177,7 @@ class ResultViewService:
         )
 
     def page_table(self, query: TablePageQuery) -> ResultPage:
-        ctx = DialectContext.from_datasource_id(self.db, query.source.datasource_id)
+        ctx = load_dialect_context(self.db, query.source.datasource_id)
         source = self.load_table_source(query.source, ctx)
         page_sql = self.compiler.build_page_sql(query, source, ctx)
         self._validate_derived_sql(page_sql, ctx)
@@ -241,7 +252,7 @@ class ResultViewService:
         )
 
     def export_table_csv_stream(self, query: TableExportQuery, *, chunk_size: int = 1000) -> tuple[Iterator[str], list[str]]:
-        ctx = DialectContext.from_datasource_id(self.db, query.source.datasource_id)
+        ctx = load_dialect_context(self.db, query.source.datasource_id)
         source = self.load_table_source(query.source, ctx)
         export_sql = self.compiler.build_export_sql(query, source, ctx)
         self._validate_derived_sql(export_sql, ctx)
@@ -257,7 +268,7 @@ class ResultViewService:
 
     def page(self, query: ResultPageQuery) -> ResultPage:
         source = self.load_verified_source(query.source)
-        ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
+        ctx = load_dialect_context(self.db, source.datasource_id)
         page_sql = self.compiler.build_page_sql(query, source, ctx)
         self._validate_derived_sql(page_sql, ctx)
         page_decision = self._result_view_decision(source.datasource_id, source.safe_sql, page_sql, scope="page", parameters=source.parameters)
@@ -324,7 +335,7 @@ class ResultViewService:
 
     def export_csv_stream(self, query: ResultExportQuery, *, chunk_size: int = 1000) -> tuple[Iterator[str], list[str]]:
         source = self.load_verified_source(query.source)
-        ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
+        ctx = load_dialect_context(self.db, source.datasource_id)
         export_sql = self.compiler.build_export_sql(query, source, ctx)
         self._validate_derived_sql(export_sql, ctx)
         decision = self._result_view_decision(source.datasource_id, source.safe_sql, export_sql, scope="export", parameters=source.parameters)
@@ -439,12 +450,21 @@ class ResultViewService:
         if source_run is None or str(source.run_id) != str(result.run_id):
             raise ResultViewError("SOURCE_ARTIFACT_NOT_FOUND", "Artifact source run was not found.", status_code=404)
 
+        database_ref = _artifact_database_ref(result, source_run, self.db)
+        if database_ref is None:
+            raise ResultViewError(
+                "SOURCE_ARTIFACT_NOT_FOUND",
+                "Artifact source has no unambiguous database resource.",
+                status_code=404,
+            )
         current_generation = self.db.execute(
-            select(DataSource.connection_generation).where(DataSource.id == source_run.datasource_id)
+            select(DataSource.connection_generation).where(
+                DataSource.id == database_ref.id
+            )
         ).scalar_one_or_none()
         if current_generation is None:
             raise ResultViewError("SOURCE_ARTIFACT_NOT_FOUND", "Artifact datasource was not found.", status_code=404)
-        if int(source_run.datasource_generation) != int(current_generation):
+        if database_ref.version != int(current_generation):
             raise ResultViewError(
                 "SOURCE_DATASOURCE_CHANGED",
                 "The datasource connection changed after this result was created.",
@@ -466,7 +486,7 @@ class ResultViewService:
             .all()
         )
 
-    def _validate_derived_sql(self, sql: str, ctx: DialectContext) -> None:
+    def _validate_derived_sql(self, sql: str, ctx: DatabaseDialectContext) -> None:
         warnings = SqlSafetyService().validate_derived_sql(sql, ctx)
         if warnings:
             raise ResultViewError("DERIVED_SQL_VALIDATION_FAILED", warnings[0])
@@ -487,7 +507,7 @@ class ResultViewService:
             "checks": [],
             "message": "Result view SQL derived from persisted safe SQL artifact.",
         }
-        from engine.sql.bound_parameters import parameter_fingerprint
+        from dlcs.dbfox_data.backend.sql.bound_parameters import parameter_fingerprint
         return ExecutionSafetyDecision(
             datasource_id=datasource_id,
             policy="export" if scope == "export" else "readonly",
@@ -540,6 +560,21 @@ def _derived_from_id(record: AgentArtifactRecord, *, descriptor_id: str) -> str:
 def _safe_sql_from_payload(payload: dict[str, object]) -> str:
     value = payload.get("safeSql")
     return value.strip() if isinstance(value, str) else ""
+
+
+def _artifact_database_ref(
+    artifact: AgentArtifactRecord,
+    owner_run: AgentRun,
+    db: Session,
+) -> ResourceScopeRef | None:
+    """Resolve exact new Artifact binding, with a historical single-DB fallback."""
+
+    raw_refs = getattr(artifact, "resource_refs_json", None)
+    refs = load_resource_refs(str(raw_refs)) if raw_refs else ()
+    matches = tuple(ref for ref in refs if ref.kind == DATABASE_RESOURCE_KIND)
+    if matches:
+        return matches[0] if len(matches) == 1 else None
+    return single_run_resource_ref(db, owner_run, DATABASE_RESOURCE_KIND)
 
 
 def _result_columns_from_payload(payload: dict[str, object]) -> list[ResultColumn]:

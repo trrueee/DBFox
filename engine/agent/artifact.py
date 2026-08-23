@@ -5,9 +5,17 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import StrEnum
 import re
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from dlcs.dbfox_data.backend.artifact_contracts import (
+    ChartArtifactPayload,
+    ResultViewArtifactPayload,
+    SafetyArtifactPayload,
+    SqlArtifactPayload,
+)
+from engine.resource import ResourceScopeRef
 
 
 class ArtifactType(StrEnum):
@@ -122,6 +130,7 @@ class ArtifactDraft(BaseModel):
     summary: str | None = Field(default=None, max_length=2_000)
     semantic_key: str | None = Field(default=None, max_length=1_000)
     payload_ref: str | None = Field(default=None, max_length=1_000)
+    resource_refs: tuple[ResourceScopeRef, ...] = ()
     relations: tuple[ArtifactRelationDraft, ...] = ()
     visibility: ArtifactVisibility | None = None
     select_if_none: bool = False
@@ -130,63 +139,6 @@ class ArtifactDraft(BaseModel):
     @classmethod
     def validate_type_namespace(cls, value: str) -> str:
         return validate_artifact_type(value)
-
-class SqlArtifactPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    sql: str
-    safe_sql: str = Field(alias="safeSql")
-    dialect: str
-    query_fingerprint: str = Field(alias="queryFingerprint")
-    parameters: dict[str, JsonValue] = Field(default_factory=dict)
-
-
-class SafetyArtifactPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    can_execute: bool = Field(alias="canExecute")
-    requires_approval: bool = Field(alias="requiresApproval")
-    risk_level: str = Field(alias="riskLevel")
-    blocked_reasons: list[str] = Field(alias="blockedReasons")
-    messages: list[str]
-    datasource_id: str = Field(alias="datasourceId")
-    policy: str
-    original_sql: str = Field(alias="originalSql")
-    safe_sql: str = Field(alias="safeSql")
-    passed: bool
-    guardrail: dict[str, JsonValue]
-    schema_warnings: list[str] = Field(alias="schemaWarnings")
-    scope_state: dict[str, JsonValue] = Field(alias="scopeState")
-
-
-class ResultViewArtifactPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    source_sql_artifact_id: str = Field(alias="sourceSqlArtifactId", min_length=1)
-    query_fingerprint: str = Field(alias="queryFingerprint")
-    datasource_generation: int | None = Field(alias="datasourceGeneration")
-    columns: list[Any] = Field(default_factory=list)
-    row_count: int = Field(alias="rowCount", ge=0)
-    returned_rows: int = Field(alias="returnedRows", ge=0)
-    latency_ms: int | float | None = Field(alias="latencyMs", default=None, ge=0)
-    executed_at: str = Field(alias="executedAt", min_length=1)
-    truncated: bool = False
-    evidence_kind: Literal["sample_rows", "query_result"] = Field(
-        alias="evidenceKind",
-        default="query_result",
-    )
-
-
-class ChartArtifactPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    source_result_artifact_id: str = Field(alias="sourceResultArtifactId", min_length=1)
-    chart_type: str = Field(alias="chartType", min_length=1)
-    x: str | None = None
-    y: list[str] = Field(default_factory=list)
-    aggregation: str | None = None
-    title: str | None = None
-
 
 class ArtifactPayloadContractRegistry:
     """Direct registrar for concrete Artifact payload contracts.
@@ -320,6 +272,17 @@ def validate_artifact_payload(
     _reject_result_values(payload)
     candidate = str(artifact_type)
     model = artifact_payload_contracts.get(candidate, int(schema_version))
+    if model is None and candidate not in _KNOWN_ARTIFACT_TYPES:
+        from engine.runtime_composition import active_runtime_snapshot
+
+        snapshot = active_runtime_snapshot()
+        if snapshot is not None:
+            contribution = snapshot.get_artifact_contract(
+                candidate,
+                int(schema_version),
+            )
+            if contribution is not None:
+                model = contribution.validator
     if model is not None:
         return model.model_validate(payload).model_dump(
             mode="json",
@@ -372,6 +335,7 @@ class Artifact(BaseModel):
     summary: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     payload_ref: str | None = None
+    resource_refs: tuple[ResourceScopeRef, ...] = ()
     provenance: dict[str, Any] = Field(default_factory=dict)
     relations: list[ArtifactRelation] = Field(default_factory=list)
 

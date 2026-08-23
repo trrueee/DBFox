@@ -2,11 +2,13 @@
 
 > 文档类型：前端视觉架构与实现规范（Design Contract）
 >
-> 状态：已接受，作为本轮前端视觉重构的执行规范与 merge gate；P0.1–P6、P7（synthetic 部分）、P8（token/CSS 清理部分）已实施（2026-08-21），P0 截图基线与真实 DLC（dbfox.github / acme.echo）的 Electron 级 conformance 待补
+> 状态：已接受
 >
 > 最后核验：2026-08-21
 >
 > 适用范围：`desktop/src` React 工作区的视觉层——Workbench Shell、Resource Sidebar、Conversation、Dock、Settings、Motion、DLC 视觉契约。不改变信息架构、Agent Runtime、DLC Runtime、状态模型与后端 API。
+>
+> 实施进度：本规范作为前端视觉重构的执行规范与 merge gate；P0.1–P6、P7（synthetic 部分）、P8（token/CSS 清理部分）已实施（2026-08-21），P0 截图基线与真实 DLC（dbfox.github / acme.echo）的 Electron 级 conformance 待补。
 >
 > 与现行基线的关系：本规范描述目标形态与实施顺序，**不描述当前实现**，不覆盖 [`dbfox-design-baseline.md`](dbfox-design-baseline.md)；Shell 边界仍以 [`architecture/workbench-shell-workspace-dock.md`](architecture/workbench-shell-workspace-dock.md) ADR 为权威。若本规范与该 ADR 冲突，以 ADR 为准并先修订本文。
 
@@ -1653,6 +1655,42 @@ Light 和 Dark 是同一层级体系，而不是两套设计。
 而是：
 
 > **给已经成熟的 DBFox Agent + Runtime DLC Workbench 建立一套稳定的视觉架构，让功能继续增长时，产品界面反而越来越安静，而不是越来越像插件拼盘。**
+
+## 四十一、2026-08-22 Workbench 纠偏合同
+
+本节收敛真实页面复现后的三个当前问题，并覆盖本文中与其冲突的早期尺寸建议。只修改 Dock、Project Resource Sidebar 与 Conversation Composer；连接管理 Dialog 不属于本批次。
+
+### 41.1 Dock：overflow 先于压缩
+
+- expanded Dock 的 tab 不允许通过 flex shrink 把标题、关闭按钮和 active indicator 压到重叠；
+- Host 以 tab intrinsic width 规划 direct window，放不下的 tab 进入唯一 overflow menu；
+- active tab 始终直接可见；固定 SQL tab 可以进入 overflow，但不得被复制；
+- collapsed Dock 固定为 44px icon rail，只显示 expand control 与最多四个 view icon，不渲染 title；
+- 320px Dock、900px 应用窗口、三个长标题是最小验收场景；
+- Dock content 自己处理工具栏 overflow，不能反向撑大 Dock envelope。
+
+### 41.2 Project Resource Sidebar：浏览、选择与 authority 分离
+
+- Project identity、Conversations、Resources、Settings 保持清晰垂直层级；
+- Host 拥有 connector section chrome、宽度、overflow、keyboard focus 与 selected/focused visual grammar；
+- Sidebar viewport 永远禁止水平漂移；长名称单行 ellipsis，并通过 title/tooltip 提供完整值；
+- click resource/object 只改变 UI focus 或打开 Dock；不得静默修改 Conversation Resource Intent；
+- Conversation intent 只通过 Composer context chips 与显式 `Add to conversation` 改变；
+- datasource 行末的 `+ / ✓` 是独立显式动作；点击行本身仍只展开、聚焦或打开 Dock，两个
+  hit target 不得嵌套，也不能共享 onClick；
+- focus 与 selection 采用不同状态。键盘 focus 必须可见，selection 不只依赖颜色；
+- 不建立通用大型 Tree framework。只有当 Data、Workspace 和真实 DLC 都需要相同异步 children contract 时，才把重复行为提升为最小 Host-owned tree provider。
+
+### 41.3 Composer：恢复持续输入器的比例
+
+- Composer 与 message column、header rail 使用同一个 `--conv-rail-width`，Dock 开关不允许单独切换到另一版心；
+- 恢复上一稳定版本的空间比例：容器约 86px、textarea 最小约 44px、发送按钮 36px；
+- 外围保持透明，不恢复整块底部 gradient/footer white bar；
+- 输入框本体允许轻边界、适度 radius 和 soft shadow，默认与最后一条消息保持自然间距；
+- Composer 后续承载 Host-owned Resource Context chips；chips 表达 Conversation intent，不是当前 Run 已完成授权的证明；
+- Context chip 只显示 server discovery descriptor 的名称和 kind icon，不显示或回传 version；
+  canonical version 只由 input admission 冻结；
+- 375/768/900/1440px 下均不能溢出或遮挡正文，focus ring 与 disabled/running 状态必须可读。
 
 这也正好把“结构存在，但尽量看不到结构本身”从一句审美描述，变成真正可执行、可测试、可做 code review gate 的工程规范。
 

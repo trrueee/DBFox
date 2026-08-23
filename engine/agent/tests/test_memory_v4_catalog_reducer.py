@@ -25,6 +25,7 @@ from engine.agent.memory_v4 import (
 from engine.agent.observation import Observation, ObservationStatus
 from engine.agent.tool import ToolInvocation, ToolInvocationStatus
 from engine.tools.runtime.base import ToolRecoveryPolicy
+from engine.tools.runtime.attempt import ResourceScopeRef
 
 
 def _invocation(
@@ -76,8 +77,11 @@ def _observation(
 
 def _scope(revision: int = 1) -> CatalogProjectionScope:
     return CatalogProjectionScope(
-        datasource_id="datasource-memory-v4",
-        datasource_generation=1,
+        resource_ref=ResourceScopeRef(
+            kind="dbfox.data.database",
+            id="datasource-memory-v4",
+            version=1,
+        ),
         catalog_revision=revision,
     )
 

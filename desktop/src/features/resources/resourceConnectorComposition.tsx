@@ -1,7 +1,6 @@
 import { lazy, Suspense } from "react";
 import type { ResourceConnectorContribution } from "./types";
 import { createDataContribution, DATA_CONNECTOR_ID } from "./DataConnector";
-import { createWorkspaceContribution, WORKSPACE_CONNECTOR_ID } from "./WorkspaceConnector";
 import { useConnectionDialogStore } from "./connectionDialogStore";
 import { useDlcStore } from "../dlc/extensionStore";
 
@@ -16,9 +15,11 @@ export function productResourceConnectors(
   extraConnectors?: readonly ResourceConnectorContribution[],
 ): readonly ResourceConnectorContribution[] {
   const dlcConnectors = extraConnectors ?? useDlcStore.getState().contributions.connectors;
+  if (dlcConnectors.some((connector) => connector.id === DATA_CONNECTOR_ID)) {
+    return dlcConnectors;
+  }
   return [
     createDataContribution(toast),
-    createWorkspaceContribution(),
     ...dlcConnectors,
   ];
 }
@@ -40,4 +41,4 @@ export function ResourceConnectorDialog() {
   );
 }
 
-export { DATA_CONNECTOR_ID, WORKSPACE_CONNECTOR_ID };
+export { DATA_CONNECTOR_ID };

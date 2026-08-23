@@ -17,6 +17,11 @@ await cp(join(root, "build-resources"), join(stagingRoot, "build-resources"), {
 await cp(join(root, "electron-resources", "sidecar"), join(stagingRoot, "sidecar"), {
   recursive: true,
 });
+await cp(
+  join(root, "electron-resources", "system-dlcs"),
+  join(stagingRoot, "system-dlcs"),
+  { recursive: true },
+);
 
 const stagedPackage = {
   name: "dbfox",

@@ -5,11 +5,16 @@
 > 状态：当前
 
 >
-> 最后核验：2026-08-21
+> 最后核验：2026-08-22
 >
 > 基线：`main@2625ac366113c031149fd226075932ddca0739b2` + R8A work package
 >
 > 上位 Issue：[#59](https://github.com/trrueee/DBFox/issues/59)
+>
+> 2026-08-22 收敛说明：本文的 DLC package、verification、snapshot 与 contribution
+> lifecycle 继续有效；Project/Resource/Conversation authority 和 System DLC 迁移以
+> [Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md) 为准。
+> `Requested Resources` contributor 不再是目标 authority 路径。
 
 ## 1. Product Vision, Security Model & Protocol-First Principle
 
@@ -43,19 +48,19 @@ Local file installation is the foundational baseline. Marketplace and remote ind
 
 ## 2. Current DLC Registration Map
 
-Data and Workspace remain explicit built-ins. GitHub is no longer part of the Core production graph: the `dbfox.github` package reaches the product only through the same public typed host seams available to any DLC. Historical GitHub SQL is retained solely under the Alembic migration boundary.
+Workspace and GitHub are package-owned capabilities. Data is shipped as a verified System DLC but remains default-disabled until its execution family finishes moving; the legacy Data execution family is the only temporary built-in domain contribution. Historical domain SQL is retained solely under Alembic migration boundaries.
 
 | Seam | Backend / Frontend | Compile-Time Baseline | Target Dynamic Host Seam |
 |---|---|---|---|
-| **Tool Extension** | Backend (`engine/runtime_composition.py`) | Data and Workspace registrars | `host.tools.register(...)` |
-| **Resource Discovery** | Backend (`engine/runtime_composition.py`) | `list_database_resources`, `list_workspace_resources` | `host.resources.register_provider(...)` |
-| **Resource Resolution** | Backend (`engine/runtime_composition.py`) | database and workspace resolvers | `host.resources.register_resolver(...)` |
-| **Context Contribution** | Backend (`engine/runtime_composition.py`) | `WorkspaceContextContributor` | `host.context.register(...)` |
-| **Completion Constraints** | Backend (`engine/runtime_composition.py`) | `DataResultCitationConstraint` | `host.completion.register(...)` |
+| **Tool Extension** | Backend snapshot | temporary legacy Data registrar | `host.tools.register(...)` |
+| **Resource Discovery** | Backend snapshot | temporary legacy Data capability provider | `host.resources.register_provider(...)` |
+| **Resource Resolution** | Backend snapshot | temporary database resolver | `host.resources.register_resolver(...)` |
+| **Context Contribution** | Backend snapshot | none | `host.context.register(...)` |
+| **Completion Semantics** | Backend snapshot | temporary Data semantic declarations | `host.completion.register_constraint/register_support(...)` |
 | **Artifact Contract** | Backend (`engine/agent/artifact.py`) | Core/Data/Workspace contracts | `host.artifacts.register(...)` |
 | **Operations / API** | Backend (`engine/api/`) | Static Core product routers | `POST /api/v1/dlcs/{dlc_id}/operations/{op}` |
 | **Resource Connector** | Frontend (`desktop/src/features/resources/`) | `productResourceConnectors()` | `host.connectors.register(...)` |
-| **Requested Resources** | Frontend (`desktop/src/features/resources/`) | `PRODUCT_REQUESTED_RESOURCE_CONTRIBUTORS` | `host.requestedResources.register(...)` |
+| **Conversation Context Selection** | Frontend Host | `ConversationResourceIntent` + Project draft selection | `host.contextSelection.isSelected/list/add/remove(...)`（只响应显式用户动作） |
 | **Dock Views** | Frontend (`desktop/src/features/dock/`) | `productDockViews()` | `host.dockViews.register(...)` |
 | **Artifact Renderers** | Frontend (`desktop/src/features/workspace/artifacts/`) | `productArtifactRenderers` | `host.artifactRenderers.register(...)` |
 
@@ -146,6 +151,21 @@ To guarantee deterministic signature generation and verification across platform
       artifacts: ArtifactRegistrationScope
       operations: OperationRegistrationScope
   ```
+- **Tool Admission Boundary**: A Tool that declares `requires_admission=True` implements
+  `admit(input, ToolAdmissionContext)`. The context exposes only frozen Resource refs,
+  exact current-Run `artifact(id)`, and `artifacts_relating_to(id, relation)`. The Tool
+  returns a bounded decision and optional approval subject; Kernel re-runs admission
+  immediately before execution, verifies the selected ref against frozen Run authority,
+  and persists only a canonical subject fingerprint in the Approval contract.
+- **Tool Run Read Boundary**: `ExtensionToolRunContext` exposes frozen Resources by full
+  `(kind,id)` identity, exact current-Run Artifact/relation reads, and
+  `approval_authorizes(subject, ref)`. It never exposes a metadata Session, Artifact or
+  Approval repository, raw credential vault, or global execution authority.
+- **Cancellation Boundary**: every execution context exposes its Host-issued
+  `invocation_id`. Timeout and Run cancellation call the Tool's generic
+  `cancel(invocation_id)` hook; a capability owns the mapping from that opaque identity
+  to its active external operation. Kernel does not inspect Resource kinds or import a
+  domain query/job registry.
 - **Transactional Staging**: Each DLC registers into an isolated staging scope. If any registration fails or conflicts, the staging scope is discarded, temporary `sys.modules` entries are purged, and the DLC is marked `BROKEN` without corrupting committed host registries.
 
 ### Dependency Policy (FROZEN)

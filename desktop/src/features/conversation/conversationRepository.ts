@@ -17,6 +17,7 @@ import {
 } from "../../lib/api/generated/sdk.gen";
 import type {
   ConversationInputRequest,
+  ConversationPatchRequest,
   ConversationSnapshotResponse,
 } from "../../lib/api/generated/types.gen";
 import type {
@@ -137,7 +138,7 @@ export const getConversationRunEvidence = async (
 
 export const patchConversation = async (
   conversationId: string,
-  patch: { title?: string; context_tables?: string[]; archived?: boolean },
+  patch: ConversationPatchRequest,
 ) => {
   const { data } = await patchConversationApiV1ConversationsConversationIdPatch({
     path: { conversation_id: conversationId },
@@ -320,8 +321,7 @@ function normalizeSnapshot(raw: ConversationSnapshotResponse): ConversationDetai
       id: raw.session.id,
       title: raw.session.title,
       project_id: raw.session.project_id,
-      datasource_id: raw.session.datasource_id,
-      context_tables: raw.session.context_tables || [],
+      resource_intents: raw.session.resource_intents || [],
       selected_artifact_id: raw.session.selected_artifact_id,
       context_epoch: raw.session.context_epoch,
       runs: raw.runs.map(parseConversationRun),

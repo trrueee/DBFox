@@ -32,9 +32,14 @@ from engine.sql.dialect.mysql import _execute_on_mysql_profiled
 from engine.sql.dialect.postgres import _execute_on_postgres_profiled
 from engine.sql.dialect.sqlite import _execute_on_sqlite_profiled
 from engine.sql.explain_validator import validate_explain_sql
-from engine.sql.guardrail import GuardrailResult
-from engine.sql.result_limits import MAX_CELL_CHARS, MAX_COLUMNS, MAX_RESPONSE_BYTES, MAX_ROWS
-from engine.sql.row_serializer import (
+from dlcs.dbfox_data.backend.sql.guardrail import GuardrailResult
+from dlcs.dbfox_data.backend.sql.result_limits import (
+    MAX_CELL_CHARS,
+    MAX_COLUMNS,
+    MAX_RESPONSE_BYTES,
+    MAX_ROWS,
+)
+from dlcs.dbfox_data.backend.sql.row_serializer import (
     JSON_OVERHEAD_BYTES,
     ResultTruncation,
     _process_rows,
@@ -45,7 +50,10 @@ from engine.sql.safety_gate import (
     _decision_checks_for_history,
     _resolve_execution_safety_decision,
 )
-from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
+from dlcs.dbfox_data.backend.sql.safety_contracts import (
+    ExecutionPolicy,
+    ExecutionSafetyDecision,
+)
 from engine.policy.authority import ExecutionAuthority
 
 
@@ -128,7 +136,7 @@ def _run_approved_query(
         _assert_expected_connection_generation(ds, expected_connection_generation)
         profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
         factory = ConnectionFactory()
-        from engine.sql.bound_parameters import render_dbapi_sql
+        from dlcs.dbfox_data.backend.sql.bound_parameters import render_dbapi_sql
 
         executable_sql, bound_parameters = render_dbapi_sql(
             safe_sql, profile.dialect, parameters
@@ -225,12 +233,11 @@ def _run_approved_query(
 
     # Apply redaction pipeline at the executor level if requested
     if redact:
-        from engine.policy.sensitivity import (
-            _SENSITIVE_FALLBACK,
-            load_sensitivity,
-            projection_sensitivity_mask,
+        from dlcs.dbfox_data.backend.sensitivity import (
+            SENSITIVE_FALLBACK,
             redact_row,
         )
+        from engine.policy.sensitivity import load_sensitivity, projection_sensitivity_mask
         try:
             sensitivity = load_sensitivity(db, datasource_id)
         except Exception as exc:
@@ -240,7 +247,7 @@ def _run_approved_query(
                 exc=exc,
                 level="warning",
             )
-            sensitivity = _SENSITIVE_FALLBACK
+            sensitivity = SENSITIVE_FALLBACK
 
         projection_mask = projection_sensitivity_mask(
             db,
@@ -333,6 +340,7 @@ def execute_query(
     expected_connection_generation: int | None = None,
     parameters: Mapping[str, Any] | None = None,
     execution_authority: ExecutionAuthority | None = None,
+    approval_subject: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     execution_id = execution_id or f"exec-{uuid.uuid4()}"
     QUERY_REGISTRY.reserve(execution_id, datasource_id)
@@ -349,6 +357,7 @@ def execute_query(
             expected_connection_generation=expected_connection_generation,
             parameters=parameters,
             execution_authority=execution_authority,
+            approval_subject=approval_subject,
         )
     finally:
         QUERY_REGISTRY.unregister(execution_id)
@@ -366,6 +375,7 @@ def _execute_reserved_query(
     expected_connection_generation: int | None = None,
     parameters: Mapping[str, Any] | None = None,
     execution_authority: ExecutionAuthority | None = None,
+    approval_subject: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Resolve policy and execute an already-registered query."""
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
@@ -383,6 +393,7 @@ def _execute_reserved_query(
         policy=safety_policy,
         parameters=parameters,
         execution_authority=execution_authority,
+        approval_subject=approval_subject,
         expected_connection_generation=expected_connection_generation,
     )
     guard_res = decision.guardrail

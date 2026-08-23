@@ -7,7 +7,7 @@ const conversations: ConversationSummary[] = [
   {
     id: "conv-1",
     title: "统计订单趋势",
-    datasource_id: "ds-1",
+    project_id: "project-1",
     updated_at: new Date(Date.now() - 5 * 60_000).toISOString(),
     last_message: "请统计最近一周的订单趋势",
     message_count: 3,
@@ -17,7 +17,7 @@ const conversations: ConversationSummary[] = [
   {
     id: "conv-2",
     title: "客户分层",
-    datasource_id: "ds-1",
+    project_id: "project-1",
     updated_at: "not-a-date",
     last_message: "",
     message_count: 1,
@@ -36,7 +36,7 @@ describe("ConversationHistoryPanel", () => {
     render(
       <ConversationHistoryPanel
         conversations={conversations}
-        datasourceLabels={{ "ds-1": "CreatorHub" }}
+        projectLabels={{ "project-1": "CreatorHub" }}
         activeConversationId="conv-1"
         onOpenConversation={onOpenConversation}
         onDeleteConversation={vi.fn()}
@@ -70,7 +70,7 @@ describe("ConversationHistoryPanel", () => {
     expect(onOpenConversation).not.toHaveBeenCalled();
   });
 
-  it("shows a bounded datasource group and expands the remaining conversations", () => {
+  it("shows a bounded project group and expands the remaining conversations", () => {
     const manyConversations = Array.from({ length: 9 }, (_, index): ConversationSummary => ({
       ...conversations[0],
       id: `conv-${index + 1}`,
@@ -80,7 +80,7 @@ describe("ConversationHistoryPanel", () => {
     const { container } = render(
       <ConversationHistoryPanel
         conversations={manyConversations}
-        datasourceLabels={{ "ds-1": "CreatorHub" }}
+        projectLabels={{ "project-1": "CreatorHub" }}
         onOpenConversation={vi.fn()}
         onDeleteConversation={vi.fn()}
       />,

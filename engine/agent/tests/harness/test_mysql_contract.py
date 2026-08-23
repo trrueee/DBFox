@@ -156,7 +156,6 @@ def test_mysql_harness_uses_production_tool_and_connection_contract(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(datasource.id),
             title="MySQL contract",
         )
     )

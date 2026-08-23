@@ -9,6 +9,7 @@ and RunLoop instances without any domain DLC branches in Kernel code.
 from __future__ import annotations
 
 import logging
+import os
 import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -20,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 from engine.agent.completion import CompletionPolicy
-from engine.agent.completion_data import DataCompletionSupport, DataResultCitationConstraint
 from engine.agent.context_fragment import ContextContributor
 from engine.agent.resource_refs import (
     ProjectResourceDescriptor,
@@ -28,23 +28,26 @@ from engine.agent.resource_refs import (
     RequestedResourceRef,
 )
 from engine.db import SessionLocal
-from engine.dlc.compiler import ContributionCompiler
+from engine.dlc.compiler import ContributionCompiler, platform_builtin_contributions
+from engine.dlc.system_bundle import (
+    bootstrap_system_dlcs,
+    embedded_system_dlc_manifest_path,
+    load_system_dlc_bundle_manifest,
+)
 from engine.dlc.snapshot import (
+    BuiltinContributionSet,
+    CompletionConstraintContribution,
+    CompletionSupportContribution,
+    CredentialReferenceProbeContribution,
     ResourceResolverContribution,
     RuntimeContributionSnapshot,
+    ToolContribution,
 )
 from engine.dlc.trust import DlcTrustStore
-from engine.models import DataSource, Project
+from engine.resource import ResourceScopeRef
 from engine.runtime_paths import private_runtime_dir
 from engine.tools.runtime import ToolRegistry
-from engine.tools.runtime.attempt import (
-    CompositeResourceResolver,
-    ResourceScopeRef,
-    ScopedResourceResolver,
-)
-from engine.tools.runtime.resource_context import (
-    resolve_workspace_scope_ref,
-)
+from engine.tools.runtime.attempt import CompositeResourceResolver, ScopedResourceResolver
 
 
 
@@ -52,6 +55,75 @@ if TYPE_CHECKING:
     from engine.agent.loop import RunLoop
 
 _ACTIVE_RUNTIME_SNAPSHOT: RuntimeContributionSnapshot | None = None
+
+
+def _source_development_product_builtins() -> BuiltinContributionSet:
+    """Compose the in-tree Data capability for source-only development.
+
+    Frozen releases always supply the signed System DLC bundle. This fallback
+    keeps ``python -m engine.main`` useful from a source checkout without
+    weakening package verification or teaching the generic compiler about Data.
+    Delete it when the development launcher bootstraps signed local packages.
+    """
+
+    from engine.tools.builtin.data_capability import (
+        legacy_data_completion_constraints,
+        legacy_data_completion_supports,
+        legacy_data_credential_reference_probe,
+        legacy_data_resource_providers,
+        legacy_data_resource_resolvers,
+    )
+    from engine.tools.builtin.registry import register_data_extension
+
+    platform = platform_builtin_contributions()
+    registry = ToolRegistry(
+        available_backends=frozenset({"in_process", "isolated_process"})
+    )
+    register_data_extension(registry)
+    data_tools = tuple(
+        ToolContribution(
+            tool=registry.require(name),  # type: ignore[arg-type]
+            owner_id=registry.owner_of(name) or "dbfox.data",
+        )
+        for name in registry.tool_names()
+    )
+    return BuiltinContributionSet(
+        identifiers=(*platform.identifiers, "legacy.dbfox.data"),
+        tools=(*platform.tools, *data_tools),
+        resource_providers=legacy_data_resource_providers(),
+        resource_resolvers=tuple(
+            ResourceResolverContribution(
+                kind=kind,
+                resolver=resolver,
+                owner_id="dbfox.data",
+                binding=binding,
+            )
+            for kind, resolver, binding in legacy_data_resource_resolvers()
+        ),
+        completion_constraints=tuple(
+            CompletionConstraintContribution(
+                constraint=constraint,
+                owner_id="dbfox.data",
+            )
+            for constraint in legacy_data_completion_constraints()
+        ),
+        completion_supports=tuple(
+            CompletionSupportContribution(support=support, owner_id="dbfox.data")
+            for support in legacy_data_completion_supports()
+        ),
+        credential_reference_probes=(
+            CredentialReferenceProbeContribution(
+                probe=legacy_data_credential_reference_probe,
+                owner_id="dbfox.data",
+            ),
+        ),
+    )
+
+
+def active_runtime_snapshot() -> RuntimeContributionSnapshot | None:
+    """Return the installed snapshot without triggering runtime initialization."""
+
+    return _ACTIVE_RUNTIME_SNAPSHOT
 
 
 def get_active_runtime_snapshot() -> RuntimeContributionSnapshot:
@@ -74,6 +146,8 @@ def initialize_runtime_snapshot(
     *,
     trust_store: DlcTrustStore | None = None,
     developer_mode: bool = False,
+    system_dlc_dir: Path | None = None,
+    system_dlc_manifest: Path | None = None,
 ) -> RuntimeContributionSnapshot:
     """Build the frozen RuntimeContributionSnapshot from built-in contributions and enabled DLCs."""
     if storage_root is None:
@@ -94,13 +168,51 @@ def initialize_runtime_snapshot(
     else:
         resolved_storage = storage_root
 
+    resolved_system_dlc_dir = system_dlc_dir
+    if resolved_system_dlc_dir is None:
+        configured_system_dlc_dir = os.environ.get("DBFOX_SYSTEM_DLC_DIR", "").strip()
+        if configured_system_dlc_dir:
+            resolved_system_dlc_dir = Path(configured_system_dlc_dir)
+
+    compiler_trust_store = trust_store
+    system_data_enabled = False
+    if resolved_system_dlc_dir is not None:
+        manifest_path = system_dlc_manifest or embedded_system_dlc_manifest_path()
+        bootstrap_result = bootstrap_system_dlcs(
+            resolved_storage,
+            resolved_system_dlc_dir,
+            manifest_path=manifest_path,
+        )
+        official = load_system_dlc_bundle_manifest(manifest_path)
+        trusted_keys = compiler_trust_store.load() if compiler_trust_store else {}
+        trusted_keys[bootstrap_result.publisher_key_id] = (
+            official.publisher_public_key
+        )
+        compiler_trust_store = DlcTrustStore(
+            trusted_keys=trusted_keys,
+            storage_root=resolved_storage,
+        )
+        from engine.dlc.registry import InstalledDlcRegistry
+
+        data_record = InstalledDlcRegistry(resolved_storage).get_installed_dlc(
+            "dbfox.data"
+        )
+        system_data_enabled = bool(data_record and data_record.desired_enabled)
 
     compiler = ContributionCompiler(
         resolved_storage,
-        trust_store=trust_store,
+        trust_store=compiler_trust_store,
         developer_mode=developer_mode,
     )
-    snapshot = compiler.compile()
+    if system_data_enabled:
+        built_ins = platform_builtin_contributions()
+    else:
+        logger.warning(
+            "Signed System Data DLC is unavailable or disabled; using the "
+            "source-development Data composition"
+        )
+        built_ins = _source_development_product_builtins()
+    snapshot = compiler.compile(built_ins=built_ins)
     set_active_runtime_snapshot(snapshot)
     return snapshot
 
@@ -121,53 +233,6 @@ def build_product_tool_registry(
             package_digest=tool_contrib.package_digest,
         )
     return registry.freeze()
-
-
-# ---------------------------------------------------------------------------
-# Project Resource Providers (Discovery)
-# ---------------------------------------------------------------------------
-
-
-def list_database_resources(db: Session, project_id: str) -> tuple[ProjectResourceDescriptor, ...]:
-    """Discover database resources (DataSources) belonging to a project."""
-    if db is None or not project_id:
-        return ()
-    datasources = (
-        db.query(DataSource)
-        .filter(DataSource.project_id == project_id)
-        .order_by(DataSource.created_at.asc())
-        .all()
-    )
-    return tuple(
-        ProjectResourceDescriptor(
-            kind="database",
-            id=str(ds.id),
-            version=int(ds.connection_generation or 0),
-            name=ds.name or "Database",
-        )
-        for ds in datasources
-    )
-
-
-def list_workspace_resources(db: Session, project_id: str) -> tuple[ProjectResourceDescriptor, ...]:
-    """Discover workspace resource belonging to a project if configured."""
-    if db is None or not project_id:
-        return ()
-    project = db.get(Project, project_id)
-
-    if project is None or not project.workspace_root:
-        return ()
-    ref = resolve_workspace_scope_ref(db, None, project_id=project_id)
-    if ref is None:
-        return ()
-    return (
-        ProjectResourceDescriptor(
-            kind="workspace",
-            id=str(project.id),
-            version=ref.version or "",
-            name=project.name or "Workspace",
-        ),
-    )
 
 
 def default_project_resource_providers(
@@ -201,7 +266,6 @@ def authorize_project_resources(
     db: Session,
     project_id: str,
     requested: Sequence[RequestedResourceRef] | None,
-    fallback_datasource_id: str | None = None,
     snapshot: RuntimeContributionSnapshot | None = None,
 ) -> tuple[ResourceScopeRef, ...]:
     """Authorize requested resources against project discovery, attaching server canonical versions."""
@@ -223,27 +287,8 @@ def authorize_project_resources(
                 authorized.append(available[key].to_scope_ref())
         return tuple(authorized)
 
-    # Legacy fallback path: derive from session compatibility fields
-    legacy_refs: list[ResourceScopeRef] = []
-    if fallback_datasource_id:
-        datasource = db.get(DataSource, str(fallback_datasource_id))
-        if datasource is not None:
-            legacy_refs.append(
-                ResourceScopeRef(
-                    kind="database",
-                    id=str(datasource.id),
-                    version=int(datasource.connection_generation or 0),
-                )
-            )
-            if datasource.project_id:
-                ws_ref = resolve_workspace_scope_ref(db, str(datasource.id))
-                if ws_ref is not None:
-                    legacy_refs.append(ws_ref)
-    elif project_id:
-        ws_ref = resolve_workspace_scope_ref(db, None, project_id=project_id)
-        if ws_ref is not None:
-            legacy_refs.append(ws_ref)
-    return tuple(legacy_refs)
+    # Absence of an explicit request never grants Project resources.
+    return ()
 
 
 # ---------------------------------------------------------------------------
@@ -293,11 +338,23 @@ def default_context_contributors(
     return snap.context_contributors
 
 
-def build_default_completion_policy() -> CompletionPolicy:
-    """Compose the current Data completion contributions for DBFox."""
+def default_credential_reference_probes(
+    snapshot: RuntimeContributionSnapshot | None = None,
+) -> dict[str, Callable[[Session, frozenset[str]], bool]]:
+    """Return capability-owned read-only probes for credential lease recovery."""
+
+    snap = snapshot or get_active_runtime_snapshot()
+    return {item.owner_id: item.probe for item in snap.credential_reference_probes}
+
+
+def build_default_completion_policy(
+    snapshot: RuntimeContributionSnapshot | None = None,
+) -> CompletionPolicy:
+    """Compose completion semantics from the immutable Runtime snapshot."""
+    snap = snapshot or get_active_runtime_snapshot()
     return CompletionPolicy(
-        constraints=(DataResultCitationConstraint(),),
-        support=DataCompletionSupport(),
+        constraints=tuple(item.constraint for item in snap.completion_constraints),
+        supports=tuple(item.support for item in snap.completion_supports),
     )
 
 
@@ -315,5 +372,5 @@ def build_product_run_loop(
         session_factory=session_factory,
         registry=build_product_tool_registry(snap),
         context_contributors=default_context_contributors(snap),
-        completion=CompletionGate(build_default_completion_policy()),
+        completion=CompletionGate(build_default_completion_policy(snap)),
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -71,16 +72,97 @@ class CompletionSupport(Protocol):
     def supports_bounded_partial(self, *, context: ContextSnapshot) -> bool: ...
 
 
+@dataclass(frozen=True)
+class SemanticCitationConstraint:
+    """Require inline citation when a semantic observation family is present."""
+
+    id: str
+    semantic_capability: str
+    requirement: str = "inline_evidence"
+
+    def evaluate(
+        self,
+        *,
+        context: ContextSnapshot,
+        model_result: ModelTurnResult,
+    ) -> CompletionConstraintResult:
+        observations = [
+            item
+            for item in context.observations
+            if item.status == "succeeded"
+            and self.semantic_capability in item.capabilities
+        ]
+        if not observations:
+            return CompletionConstraintResult(
+                kind="pass",
+                reason="No matching observations require citation.",
+            )
+        artifact_ids = {
+            artifact_id
+            for observation in observations
+            for artifact_id in observation.artifact_ids
+        }
+        cited = {
+            artifact_id
+            for artifact_id, _, _ in citation_references(model_result.answer_text)
+        }
+        if cited & artifact_ids:
+            return CompletionConstraintResult(
+                kind="pass",
+                reason="The answer cites a matching observed Artifact.",
+            )
+        return CompletionConstraintResult(
+            kind="missing",
+            reason="An answer based on observed evidence must cite that Artifact inline.",
+            requirements=[self.requirement],
+        )
+
+
+@dataclass(frozen=True)
+class SemanticArtifactCompletionSupport:
+    """Treat one semantic observation family as durable completion evidence."""
+
+    id: str
+    semantic_capability: str
+
+    def evidence_artifact_ids(
+        self,
+        *,
+        context: ContextSnapshot,
+        model_result: ModelTurnResult,
+    ) -> list[str]:
+        artifacts = {
+            artifact_id
+            for observation in context.observations
+            if observation.status == "succeeded"
+            and self.semantic_capability in observation.capabilities
+            for artifact_id in observation.artifact_ids
+        }
+        cited = {
+            artifact_id
+            for artifact_id, _, _ in citation_references(model_result.answer_text)
+        }
+        return sorted(cited & artifacts)
+
+    def supports_bounded_partial(self, *, context: ContextSnapshot) -> bool:
+        return any(
+            observation.status == "succeeded"
+            and self.semantic_capability in observation.capabilities
+            and bool(observation.artifact_ids)
+            for observation in context.observations
+        )
+
+
 class CompletionPolicy:
     """Provider output is advisory; durable observations decide completion."""
 
     def __init__(
         self,
         constraints: tuple[CompletionConstraint, ...],
-        support: CompletionSupport,
+        supports: tuple[CompletionSupport, ...],
     ) -> None:
         self.constraints = constraints
-        self.support = support
+        self.supports = supports
 
     def evaluate(
         self,
@@ -98,12 +180,14 @@ class CompletionPolicy:
 
         successes = [item for item in context.observations if item.status == "succeeded"]
         failures = [item for item in context.observations if item.status == "failed"]
-        result_artifact_ids = set(
-            self.support.evidence_artifact_ids(
+        result_artifact_ids = {
+            artifact_id
+            for support in self.supports
+            for artifact_id in support.evidence_artifact_ids(
                 context=context,
                 model_result=model_result,
             )
-        )
+        }
         cited_artifact_ids = {
             artifact_id
             for artifact_id, _, _ in citation_references(model_result.answer_text)
@@ -264,7 +348,10 @@ class CompletionPolicy:
                 return decision.model_copy(update={"reason": reason})
             return decision
 
-        if self.support.supports_bounded_partial(context=context):
+        if any(
+            support.supports_bounded_partial(context=context)
+            for support in self.supports
+        ):
             return CompletionDecision(
                 kind=CompletionKind.PARTIAL,
                 reason=reason,

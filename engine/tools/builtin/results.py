@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter
-from datetime import date, datetime
-from decimal import Decimal
-from math import isfinite
-from statistics import fmean, median
-from typing import Any
+from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
 
 from engine.agent.artifact import (
     ArtifactDraft,
@@ -16,9 +11,10 @@ from engine.agent.artifact import (
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.errors import ToolInputError
 from engine.models import AgentArtifactRecord
+from engine.resource import ResourceScopeRef
 from engine.sql.result_view.models import ResultPageQuery, ResultSourceRef
 from engine.sql.result_view.service import ResultViewService
-from engine.tools.builtin.contracts import (
+from dlcs.dbfox_data.backend.tool_contracts import (
     ChartCreateInput,
     ChartCreateOutput,
     ResultInspectInput,
@@ -26,7 +22,10 @@ from engine.tools.builtin.contracts import (
     ResultProfileInput,
     ResultProfileOutput,
 )
-from engine.tools.chart_suggestion import build_chart_series, suggest_plotly_chart
+from dlcs.dbfox_data.backend.result_analysis import (
+    profile_rows,
+    resolve_chart_suggestion,
+)
 from engine.tools.runtime import (
     BaseTool,
     ToolExecutionSpec,
@@ -45,21 +44,23 @@ from engine.tools.runtime.observation import (
 )
 
 
-MAX_PROFILE_VALUE_CHARS = 256
-
-
 def _require_query_result(
     context: ToolRunContext,
     artifact_id: str,
-) -> AgentArtifactRecord:
-    db = context.require_database()
+) -> tuple[AgentArtifactRecord, ResourceScopeRef]:
+    db = context.require_metadata()
     request = context.require_request()
-    artifact = ArtifactRepository(db).available_result(
+    repository = ArtifactRepository(db)
+    database_ref = repository.bound_resource_ref(artifact_id, kind=DATABASE_RESOURCE_KIND)
+    if database_ref is None or context.scope(DATABASE_RESOURCE_KIND, database_ref.id) != database_ref:
+        raise ToolInputError(
+            "The Result Artifact database is not authorized for this Run."
+        )
+    artifact = repository.available_result(
         current_run_id=request.run_id,
         artifact_id=artifact_id,
         session_id=request.session_id,
-        datasource_id=request.datasource_id,
-        datasource_generation=request.datasource_generation,
+        resource_ref=database_ref,
     )
     if artifact is None:
         raise ToolInputError(
@@ -75,230 +76,7 @@ def _require_query_result(
     record = db.get(AgentArtifactRecord, artifact.id)
     if record is None:
         raise ToolInputError("The Result Artifact is unavailable.")
-    return record
-
-
-def _resolve_chart_suggestion(
-    tool_input: ChartCreateInput,
-    *,
-    columns: list[str],
-    rows: list[dict],
-) -> dict:
-    suggestion = suggest_plotly_chart(
-        {
-            "success": True,
-            "columns": columns,
-            "rows": rows,
-            "rowCount": len(rows),
-        }
-    )
-    if tool_input.x is None or tool_input.y is None:
-        if tool_input.chart_type != "auto" and suggestion.get("chartable"):
-            suggestion["type"] = tool_input.chart_type
-            if tool_input.aggregation == "auto":
-                suggestion["aggregation"] = (
-                    "none" if tool_input.chart_type == "scatter" else "sum"
-                )
-        if tool_input.aggregation != "auto" and suggestion.get("chartable"):
-            suggestion["aggregation"] = tool_input.aggregation
-        if tool_input.title is not None and suggestion.get("chartable"):
-            suggestion["title"] = tool_input.title
-        return suggestion
-
-    missing = [field for field in (tool_input.x, tool_input.y) if field not in columns]
-    if missing:
-        available = ", ".join(columns[:30])
-        raise ToolInputError(
-            f"Chart fields are not present in the Result Artifact: {', '.join(missing)}. "
-            f"Available columns: {available}."
-        )
-
-    chart_type = (
-        tool_input.chart_type
-        if tool_input.chart_type != "auto"
-        else _infer_chart_type(tool_input.x, rows)
-    )
-    aggregation = (
-        tool_input.aggregation
-        if tool_input.aggregation != "auto"
-        else ("none" if chart_type == "scatter" else "sum")
-    )
-    series = build_chart_series(
-        rows,
-        tool_input.x,
-        tool_input.y,
-        aggregation=aggregation,
-    )
-    if not series:
-        raise ToolInputError(
-            f"Column '{tool_input.y}' does not contain chartable numeric values "
-            "in the inspected result sample."
-        )
-    title = tool_input.title or (
-        f"{tool_input.y} vs {tool_input.x}"
-        if chart_type == "scatter"
-        else f"{tool_input.y} by {tool_input.x}"
-    )
-    return {
-        "type": chart_type,
-        "chartable": True,
-        "x": tool_input.x,
-        "y": tool_input.y,
-        "title": title,
-        "series": series,
-        "reason": (
-            "Created from the requested analytical intent with result-backed "
-            "field validation."
-        ),
-        "aggregation": aggregation,
-        "sample_size": len(rows),
-        "x_label": tool_input.x,
-        "y_label": tool_input.y,
-        "series_label": tool_input.y,
-        "data_label": chart_type in {"bar", "pie"} and len(series) <= 24,
-        "dimensions": [
-            {
-                "name": tool_input.x,
-                "column": tool_input.x,
-                "role": "x",
-                "kind": "category",
-            }
-        ],
-        "metrics": [
-            {
-                "name": tool_input.y,
-                "source_column": tool_input.y,
-                "expression": (
-                    f"SUM({tool_input.y})" if aggregation == "sum" else tool_input.y
-                ),
-                "aggregation": aggregation,
-                "role": "y",
-            }
-        ],
-    }
-
-
-def _infer_chart_type(x_column: str, rows: list[dict]) -> str:
-    values = [row.get(x_column) for row in rows[:50] if row.get(x_column) is not None]
-    if values and all(_number(value) is not None for value in values):
-        return "scatter"
-    if values and all(_temporal(value) is not None for value in values):
-        return "line"
-    return "bar"
-
-
-def _number(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
-        return None
-    number = float(value)
-    return number if isfinite(number) else None
-
-
-def _temporal(value: object) -> str | None:
-    if isinstance(value, (datetime, date)):
-        return value.isoformat()
-    if not isinstance(value, str):
-        return None
-    candidate = value.strip()
-    if len(candidate) < 8:
-        return None
-    try:
-        return datetime.fromisoformat(candidate.replace("Z", "+00:00")).isoformat()
-    except ValueError:
-        try:
-            return date.fromisoformat(candidate).isoformat()
-        except ValueError:
-            return None
-
-
-def _profile_rows(
-    rows: list[dict[str, Any]],
-    columns: list[str],
-    *,
-    top_k: int,
-) -> list[dict[str, Any]]:
-    return [
-        _profile_column(column, [row.get(column) for row in rows], top_k=top_k)
-        for column in columns
-    ]
-
-
-def _profile_column(
-    column: str,
-    values: list[object],
-    *,
-    top_k: int,
-) -> dict[str, Any]:
-    present = [value for value in values if value is not None]
-    numeric = [_number(value) for value in present]
-    temporal = [_temporal(value) for value in present]
-    if not present:
-        kind = "empty"
-    elif all(value is not None for value in numeric):
-        kind = "number"
-    elif all(isinstance(value, bool) for value in present):
-        kind = "boolean"
-    elif all(value is not None for value in temporal):
-        kind = "datetime"
-    elif all(isinstance(value, str) for value in present):
-        kind = "string"
-    else:
-        kind = "mixed"
-
-    encoded = [_profile_value(value) for value in present]
-    distinct = {value[0] for value in encoded}
-    profile: dict[str, Any] = {
-        "column": column,
-        "kind": kind,
-        "sample_count": len(values),
-        "non_null_count": len(present),
-        "null_count": len(values) - len(present),
-        "distinct_count": len(distinct),
-    }
-    if kind == "number":
-        numbers = [value for value in numeric if value is not None]
-        profile["numeric"] = {
-            "min": min(numbers),
-            "max": max(numbers),
-            "mean": fmean(numbers),
-            "median": median(numbers),
-        }
-    elif kind == "datetime":
-        timestamps = [value for value in temporal if value is not None]
-        profile["temporal"] = {
-            "min": min(timestamps),
-            "max": max(timestamps),
-        }
-
-    counts = Counter(key for key, _ in encoded)
-    display = {key: value for key, value in encoded}
-    profile["top_values"] = [
-        {
-            "value": display[key],
-            "count": count,
-            "share": count / len(present),
-        }
-        for key, count in counts.most_common(top_k)
-    ]
-    return profile
-
-
-def _profile_value(value: object) -> tuple[str, str | int | float | bool]:
-    number = _number(value)
-    if number is not None:
-        return f"number:{number}", number
-    if isinstance(value, bool):
-        return f"boolean:{value}", value
-    temporal = _temporal(value)
-    if temporal is not None:
-        return f"datetime:{temporal}", temporal
-    text = str(value)
-    display = (
-        text
-        if len(text) <= MAX_PROFILE_VALUE_CHARS
-        else f"{text[:MAX_PROFILE_VALUE_CHARS - 1]}…"
-    )
-    return f"value:{text}", display
+    return record, database_ref
 
 
 class ResultInspectTool(BaseTool[ResultInspectInput, ResultInspectOutput]):
@@ -316,7 +94,7 @@ class ResultInspectTool(BaseTool[ResultInspectInput, ResultInspectOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
     semantics = ToolSemanticSpec(
         produces=(ToolSemanticCapability.QUERY_RESULT,),
@@ -330,7 +108,7 @@ class ResultInspectTool(BaseTool[ResultInspectInput, ResultInspectOutput]):
         context: ToolRunContext,
     ) -> ResultInspectOutput:
         _require_query_result(context, tool_input.result_artifact_id)
-        service = ResultViewService(context.require_database())
+        service = ResultViewService(context.require_metadata())
         source_ref = ResultSourceRef(artifact_id=tool_input.result_artifact_id)
         source = service.load_verified_source(source_ref)
         page = service.page(
@@ -413,7 +191,7 @@ class ResultProfileTool(BaseTool[ResultProfileInput, ResultProfileOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
     semantics = ToolSemanticSpec(
         produces=(ToolSemanticCapability.RESULT_PROFILE,),
@@ -427,7 +205,7 @@ class ResultProfileTool(BaseTool[ResultProfileInput, ResultProfileOutput]):
     ) -> ResultProfileOutput:
         _require_query_result(context, tool_input.result_artifact_id)
         source_ref = ResultSourceRef(artifact_id=tool_input.result_artifact_id)
-        service = ResultViewService(context.require_database())
+        service = ResultViewService(context.require_metadata())
         source = service.load_verified_source(source_ref)
         available = source.column_names
         columns = list(tool_input.columns) or available[:12]
@@ -455,7 +233,7 @@ class ResultProfileTool(BaseTool[ResultProfileInput, ResultProfileOutput]):
             referenced_artifact_ids=[tool_input.result_artifact_id],
             query_fingerprint=source.fingerprint,
             profiled_columns=columns,
-            profiles=_profile_rows(
+            profiles=profile_rows(
                 list(page.rows),
                 columns,
                 top_k=tool_input.top_k,
@@ -506,7 +284,7 @@ class ChartCreateTool(BaseTool[ChartCreateInput, ChartCreateOutput]):
     execution = ToolExecutionSpec(
         recovery=ToolRecoveryPolicy.RETRY_SAFE,
         capabilities=("metadata_read", "database_read"),
-        required_resource_kinds=("database",),
+        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
     semantics = ToolSemanticSpec(publishes_artifact_references=True)
 
@@ -515,8 +293,11 @@ class ChartCreateTool(BaseTool[ChartCreateInput, ChartCreateOutput]):
         tool_input: ChartCreateInput,
         context: ToolRunContext,
     ) -> ToolOutcome[ChartCreateOutput]:
-        _require_query_result(context, tool_input.result_artifact_id)
-        service = ResultViewService(context.require_database())
+        _, database_ref = _require_query_result(
+            context,
+            tool_input.result_artifact_id,
+        )
+        service = ResultViewService(context.require_metadata())
         source = service.load_verified_source(
             ResultSourceRef(artifact_id=tool_input.result_artifact_id)
         )
@@ -528,7 +309,7 @@ class ChartCreateTool(BaseTool[ChartCreateInput, ChartCreateOutput]):
                 count_mode="none",
             )
         )
-        suggestion = _resolve_chart_suggestion(
+        suggestion = resolve_chart_suggestion(
             tool_input,
             columns=[str(column) for column in page.columns],
             rows=list(page.rows),
@@ -603,6 +384,7 @@ class ChartCreateTool(BaseTool[ChartCreateInput, ChartCreateOutput]):
                             artifact_id=tool_input.result_artifact_id,
                         ),
                     ),
+                    resource_refs=(database_ref,),
                     select_if_none=True,
                 ),
             )

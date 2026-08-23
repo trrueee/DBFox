@@ -25,7 +25,7 @@ from engine.tools.runtime.attempt import ResourceScopeRef
 
 
 def _session(db_session, datasource_id: str, project_id: str | None = None) -> AgentSession:
-    value = AgentSession(id="session_1", project_id=project_id, datasource_id=datasource_id, title="Test")
+    value = AgentSession(id="session_1", project_id=project_id, title="Test")
     db_session.add(value)
     db_session.commit()
     return value
@@ -33,7 +33,7 @@ def _session(db_session, datasource_id: str, project_id: str | None = None) -> A
 
 def _admit(repository: SessionRepository, datasource_id: str, key: str = "request_1"):
     resource_refs = (
-        ResourceScopeRef(kind="database", id=datasource_id, version=1),
+        ResourceScopeRef(kind="dbfox.data.database", id=datasource_id, version=1),
     ) if datasource_id else ()
     return repository.admit(
         session_id="session_1",
@@ -66,8 +66,11 @@ def test_admission_is_atomic_ordered_and_idempotent(db_session, test_datasource)
     ]
 
 
-def test_admit_keeps_the_session_datasource_fence(db_session, test_datasource) -> None:
-    """P4: a database ref outside the Session's Project is rejected."""
+def test_admit_persists_the_already_authorized_frozen_resource_set(
+    db_session,
+    test_datasource,
+) -> None:
+    """Project authorization happens before the persistence repository boundary."""
 
     from engine.models import DataSource, Project
 
@@ -97,9 +100,14 @@ def test_admit_keeps_the_session_datasource_fence(db_session, test_datasource) -
     db_session.add(ds_b)
     db_session.commit()
 
-    # Admit with database ref from project B should fail
-    with pytest.raises(ValueError, match="Database ref does not belong"):
-        _admit(SessionRepository(db_session), "ds-b")
+    admission = _admit(SessionRepository(db_session), "ds-b")
+    stored = db_session.get(AgentSessionInput, admission.input_id)
+    assert stored is not None
+    assert '"id":"ds-b"' in str(stored.resource_refs_json)
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None
+    assert not hasattr(run, "datasource_id")
+    assert not hasattr(run, "datasource_generation")
 
 
 def test_concurrent_admission_serializes_sqlite_aggregate_writes(db_session, test_datasource) -> None:
@@ -325,7 +333,7 @@ def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(
     steered = repository.admit(
         session_id="session_1",
         resource_refs=(
-            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),
         ),
         content="只看华东区域",
         idempotency_key="request-steer",
@@ -357,7 +365,7 @@ def test_orphaned_steer_cannot_revive_a_terminal_run(
     steered = repository.admit(
         session_id="session_1",
         resource_refs=(
-            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),
         ),
         content="改成按地区统计",
         idempotency_key="request-orphan-steer",
@@ -396,7 +404,7 @@ def test_cancel_and_replace_requests_cancellation_before_admitting_one_new_run(
     replacement = repository.admit(
         session_id="session_1",
         resource_refs=(
-            ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),
         ),
         content="改为统计退款",
         idempotency_key="request-replacement",

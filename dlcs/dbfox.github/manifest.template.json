@@ -1,11 +1,11 @@
 {
   "manifestSchemaVersion": 2,
   "id": "dbfox.github",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "displayName": "DBFox GitHub",
   "publisher": "dbfox",
   "description": "Public, read-only GitHub repository resources for DBFox.",
-  "extensionApiVersion": "1",
+  "extensionApiVersion": "2",
   "requiresDbfox": ">=1.0.0",
   "entrypoints": {
     "backend": "backend/entry.py",

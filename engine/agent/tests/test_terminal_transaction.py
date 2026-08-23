@@ -40,7 +40,6 @@ def test_successful_terminalization_yields_to_pending_steer(
     db_session.add(
         AgentSession(
             id="session_pending_steer",
-            datasource_id=str(test_datasource.id),
             title="Pending steer",
         )
     )
@@ -48,7 +47,7 @@ def test_successful_terminalization_yields_to_pending_steer(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_pending_steer",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="先分析订单",
         idempotency_key="pending-steer-start",
         llm_credential_id="credential",
@@ -61,7 +60,7 @@ def test_successful_terminalization_yields_to_pending_steer(
     sessions.promote_next_input(lease=lease)
     sessions.admit(
         session_id="session_pending_steer",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="只看华东",
         idempotency_key="pending-steer-input",
         llm_credential_id="credential",
@@ -94,7 +93,6 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
     db_session.add(
         AgentSession(
             id="session_terminal",
-            datasource_id=str(test_datasource.id),
             title="Terminal",
         )
     )
@@ -102,7 +100,7 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_terminal",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="统计订单",
         idempotency_key="terminal",
         llm_credential_id="credential",
@@ -198,7 +196,6 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
         AgentSessionMemory(
             id="memory_from_old_generation",
             session_id="session_terminal",
-            datasource_id=str(test_datasource.id),
             memory_json=json.dumps(
                 {
                     "version": 1,
@@ -270,7 +267,6 @@ def test_terminal_transaction_rolls_back_as_a_unit(db_session, test_datasource):
     db_session.add(
         AgentSession(
             id="session_rollback",
-            datasource_id=str(test_datasource.id),
             title="Rollback",
         )
     )
@@ -278,7 +274,7 @@ def test_terminal_transaction_rolls_back_as_a_unit(db_session, test_datasource):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_rollback",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="test",
         idempotency_key="rollback",
         llm_credential_id="credential",
@@ -326,7 +322,6 @@ def test_terminal_response_uses_the_answer_candidates_own_turn(
     db_session.add(
         AgentSession(
             id="session_cross_turn_terminal",
-            datasource_id=str(test_datasource.id),
             title="Cross-turn terminal",
         )
     )
@@ -334,7 +329,7 @@ def test_terminal_response_uses_the_answer_candidates_own_turn(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_cross_turn_terminal",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="保留早期答案",
         idempotency_key="cross-turn-terminal",
         llm_credential_id="credential",
@@ -432,7 +427,6 @@ def test_interrupted_model_turn_is_closed_before_run_recovery(
     db_session.add(
         AgentSession(
             id="session_turn_recovery",
-            datasource_id=str(test_datasource.id),
             title="Recovery",
         )
     )
@@ -440,7 +434,7 @@ def test_interrupted_model_turn_is_closed_before_run_recovery(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_turn_recovery",
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="分析趋势",
         idempotency_key="turn-recovery",
         llm_credential_id="credential",

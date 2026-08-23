@@ -1,7 +1,7 @@
 """Comprehensive test suite for DBFox Runtime DLC Backend Host (R2).
 
 Verifies:
-1. Public Extension API v1 boundary (DLC imports strictly via dbfox_dlc_api).
+1. Public Extension API v2 boundary (DLC imports strictly via dbfox_dlc_api).
 2. RuntimeContributionSnapshot determinism & canonical ordering.
 3. Pre-execution re-verification & tamper detection.
 4. Unique module namespace isolation & vendored dependency collision resistance.
@@ -78,7 +78,6 @@ def dlc_service(tmp_path: Path, trust_store: DlcTrustStore):
 
 @pytest.fixture(autouse=True)
 def reset_active_snapshot():
-    import engine.tools.builtin.workspace  # noqa: F401
     from engine.agent.artifact import artifact_payload_contracts
     from engine.db import engine
     from engine.models import Base
@@ -99,7 +98,7 @@ def reset_active_snapshot():
 
 
 # ---------------------------------------------------------------------------
-# 1. Extension API v1 & Snapshot Identity Determinism
+# 1. Extension API v2 & Snapshot Identity Determinism
 # ---------------------------------------------------------------------------
 
 
@@ -155,7 +154,7 @@ def test_multi_dlc_vendored_namespace_isolation(
             "version": "1.0.0",
             "displayName": "DLC A",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
             "permissions": ["network:api.acme.com"],
@@ -203,7 +202,7 @@ def test_multi_dlc_vendored_namespace_isolation(
             "version": "1.0.0",
             "displayName": "DLC B",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
             "permissions": ["network:api.acme.com"],
@@ -291,7 +290,7 @@ def test_broken_dlc_isolation(
             "version": "1.0.0",
             "displayName": "Valid A",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -310,7 +309,7 @@ def test_broken_dlc_isolation(
             "version": "1.0.0",
             "displayName": "Broken B",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -329,7 +328,7 @@ def test_broken_dlc_isolation(
             "version": "1.0.0",
             "displayName": "Valid C",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -384,7 +383,7 @@ def test_dynamic_tool_execution_and_permission_scope(
             "version": "1.0.0",
             "displayName": "Calculator DLC",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
             "permissions": ["network:api.math.org"],
@@ -477,7 +476,7 @@ def test_permission_violation_rejected(
             "version": "1.0.0",
             "displayName": "Unauthorized Network",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
             "permissions": [],  # No permissions declared!
@@ -547,7 +546,7 @@ def test_full_dlc_contribution_suite(
             "version": "1.0.0",
             "displayName": "Acme Analytics",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
             "permissions": ["network:api.acme.com"],
@@ -602,6 +601,9 @@ def test_full_dlc_contribution_suite(
 
     compiler = ContributionCompiler(dlc_service.storage_root, trust_store=dlc_service.trust_store)
     snapshot = compiler.compile()
+    from engine.runtime_composition import set_active_runtime_snapshot
+
+    set_active_runtime_snapshot(snapshot)
 
     # 1. Test Resource Discovery & Authorization
     descriptors = discover_project_resources(None, "p1", snapshot=snapshot)
@@ -619,7 +621,7 @@ def test_full_dlc_contribution_suite(
     # 2. Test Resource Resolver
     resolver = build_attempt_resource_resolver(snapshot=snapshot)
     resolved = resolver.resolve(authorized)
-    assert resolved["acme.report"] == {"report_data": "metrics_123"}
+    assert resolved[authorized[0].canonical()] == {"report_data": "metrics_123"}
 
     # 3. Test Artifact Validation
     validated_payload = validate_artifact_payload("acme.report", {"metrics": ["cpu", "memory"]}, schema_version=1)
@@ -661,7 +663,7 @@ def test_isolated_worker_implementation_mismatch_rejection(
             "version": "1.0.0",
             "displayName": "Worker Test",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
             "permissions": ["network:api.acme.com"],
@@ -761,7 +763,7 @@ def test_tampered_payload_on_disk_rejected(
             "version": "1.0.0",
             "displayName": "Tamper Test",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -814,7 +816,7 @@ def test_dlc_operations_api_router(
             "version": "1.0.0",
             "displayName": "Ops Test",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
             "permissions": ["network:api.acme.com"],
@@ -889,6 +891,165 @@ def test_dlc_operations_api_router(
     assert conflict_problem["status"] == 409
 
 
+def test_dlc_operation_host_commits_owner_bound_credential_adoption(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+    monkeypatch,
+):
+    from fastapi.testclient import TestClient
+
+    from engine.db import SessionLocal
+    from engine.main import LOCAL_SECURE_TOKEN, app
+    from engine.models import CredentialLeaseRecord
+    from engine.runtime_composition import set_active_runtime_snapshot
+    from engine.security.credential_lease import (
+        CredentialLeaseSaga,
+        CredentialLeaseStatus,
+    )
+    from engine.security.credential_vault import (
+        CredentialKind,
+        InMemoryCredentialVault,
+    )
+
+    private_key, publisher_key = test_keypair
+    archive = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.credential_adoption",
+            "version": "1.0.0",
+            "displayName": "Credential Adoption",
+            "publisher": "acme",
+            "extensionApiVersion": "2",
+            "requiresDbfox": ">=1.0.0",
+            "entrypoints": {"backend": "backend/entry.py"},
+            "permissions": ["credentials:datasource_password"],
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "owned = set()\n"
+                "class AdoptIn(api.BaseModel):\n"
+                "    credential_ref: str\n"
+                "class AdoptOut(api.BaseModel):\n"
+                "    adopted: bool\n"
+                "def refs(inp):\n"
+                "    return frozenset({inp.credential_ref})\n"
+                "def owns(refs):\n"
+                "    return refs.issubset(owned)\n"
+                "def adopt(inp, ctx):\n"
+                "    owned.add(inp.credential_ref)\n"
+                "    return AdoptOut(adopted=True)\n"
+                "def forget(inp, ctx):\n"
+                "    return AdoptOut(adopted=True)\n"
+                "def register(host):\n"
+                "    host.credentials.register_reference_probe(owns)\n"
+                "    host.operations.register(api.DlcOperationSpec(name='adopt', input_model=AdoptIn, output_model=AdoptOut, handler=adopt, credential_references=refs, credential_lease_required=True))\n"
+                "    host.operations.register(api.DlcOperationSpec(name='forget', input_model=AdoptIn, output_model=AdoptOut, handler=forget, credential_references=refs, credential_lease_required=True))\n"
+            ),
+        },
+        private_key=private_key,
+    )
+    package_path = tmp_path / "credential-adoption.dbfox-dlc"
+    package_path.write_bytes(archive)
+    installed = dlc_service.install_from_file(
+        package_path,
+        publisher_key_base64=publisher_key,
+    )
+    dlc_service.registry.set_desired_enabled(installed.dlc_id, True)
+    snapshot = ContributionCompiler(
+        dlc_service.storage_root,
+        trust_store=dlc_service.trust_store,
+    ).compile()
+    set_active_runtime_snapshot(snapshot)
+
+    vault = InMemoryCredentialVault()
+    monkeypatch.setattr(
+        "engine.api.credentials.get_credential_vault",
+        lambda: vault,
+    )
+    monkeypatch.setattr(
+        "engine.security.credential_lease.get_credential_vault",
+        lambda: vault,
+    )
+
+    client = TestClient(app)
+    auth_headers = {"X-Local-Token": LOCAL_SECURE_TOKEN}
+    enrollment = client.post(
+        "/api/v1/dlcs/acme.credential_adoption/credentials/batch",
+        json={
+            "credentials": [{
+                "kind": "datasource_password",
+                "secret": "operation-secret",
+            }],
+        },
+        headers=auth_headers,
+    )
+    assert enrollment.status_code == 201
+    credential_ref = enrollment.json()["credentials"][0]["id"]
+    lease_id = enrollment.json()["lease_id"]
+    denied_enrollment = client.post(
+        "/api/v1/dlcs/acme.credential_adoption/credentials/batch",
+        json={
+            "credentials": [{
+                "kind": "llm_api_key",
+                "secret": "must-not-be-stored",
+            }],
+        },
+        headers=auth_headers,
+    )
+    assert denied_enrollment.status_code == 403
+    assert denied_enrollment.json()["code"] == "DLC_CREDENTIAL_PERMISSION_DENIED"
+
+    path = "/api/v1/dlcs/acme.credential_adoption/operations/adopt"
+    missing = client.post(
+        path,
+        json={"credential_ref": credential_ref},
+        headers=auth_headers,
+    )
+    assert missing.status_code == 400
+    assert missing.json()["code"] == "CREDENTIAL_LEASE_REQUIRED"
+
+    adopted = client.post(
+        path,
+        json={"credential_ref": credential_ref},
+        headers={**auth_headers, "X-Credential-Lease-Id": lease_id},
+    )
+    assert adopted.status_code == 200
+    assert adopted.json() == {"adopted": True}
+
+    with SessionLocal() as db:
+        lease = db.get(CredentialLeaseRecord, lease_id)
+        assert lease is not None
+        assert lease.status == CredentialLeaseStatus.COMMITTED.value
+        assert lease.owner_id == "acme.credential_adoption"
+        assert lease.owner_operation == "adopt"
+
+    unowned_ref = vault.put(
+        kind=CredentialKind.DATASOURCE_PASSWORD,
+        secret="must-not-leak",
+    )
+    with SessionLocal() as db:
+        unowned_lease_id = CredentialLeaseSaga(db, vault).issue({unowned_ref})
+        db.commit()
+    not_durable = client.post(
+        "/api/v1/dlcs/acme.credential_adoption/operations/forget",
+        json={"credential_ref": unowned_ref},
+        headers={
+            **auth_headers,
+            "X-Credential-Lease-Id": unowned_lease_id,
+        },
+    )
+    assert not_durable.status_code == 500
+    assert not_durable.json()["code"] == "CREDENTIAL_ADOPTION_NOT_DURABLE"
+    with SessionLocal() as db:
+        unowned_lease = db.get(CredentialLeaseRecord, unowned_lease_id)
+        assert unowned_lease is not None
+        assert unowned_lease.status == CredentialLeaseStatus.RELEASED.value
+    assert vault.get(unowned_ref) is None
+
+
 # ---------------------------------------------------------------------------
 # 9. R2.1 Durable Implementation Identity & Recovery Mismatch Fail-Closed
 # ---------------------------------------------------------------------------
@@ -940,7 +1101,7 @@ def test_tool_invocation_durable_identity_persistence(tmp_path: Path):
         db.merge(Project(id="p1", name="Test Project"))
         db.commit()
         sess_repo = SessionRepository(db)
-        aggregate = sess_repo.create(project_id="p1", title="Test", context_tables=[])
+        aggregate = sess_repo.create(project_id="p1", title="Test")
         admission = sess_repo.admit(
             session_id=str(aggregate.id),
             resource_refs=(),
@@ -1065,7 +1226,7 @@ def test_tool_dispatcher_a_to_b_recovery_mismatch_fails_closed(
         db.merge(Project(id="p1", name="Test Project"))
         db.commit()
         sess_repo = SessionRepository(db)
-        aggregate = sess_repo.create(project_id="p1", title="Test", context_tables=[])
+        aggregate = sess_repo.create(project_id="p1", title="Test")
         admission = sess_repo.admit(
             session_id=str(aggregate.id),
             resource_refs=(),
@@ -1159,7 +1320,7 @@ def test_context_assembler_with_dlc_contributor(
             "version": "1.0.0",
             "displayName": "Context Test",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -1194,7 +1355,7 @@ def test_context_assembler_with_dlc_contributor(
         db.merge(Project(id="p1", name="Test Project"))
         db.commit()
         sess_repo = SessionRepository(db)
-        aggregate = sess_repo.create(project_id="p1", title="Test", context_tables=[])
+        aggregate = sess_repo.create(project_id="p1", title="Test")
         admission = sess_repo.admit(
             session_id=str(aggregate.id),
             resource_refs=(),
@@ -1247,7 +1408,7 @@ def test_artifact_atomic_registration_conflict_rolls_back_entire_dlc(
             "version": "1.0.0",
             "displayName": "Conflicting Artifacts",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -1260,7 +1421,7 @@ def test_artifact_atomic_registration_conflict_rolls_back_entire_dlc(
                 "    val: int\n"
                 "\n"
                 "class ConflictingContract(api.BaseModel):\n"
-                "    val: int\n"
+                "    foo: str\n"
                 "\n"
                 "def register(host: api.BackendExtensionHost) -> None:\n"
                 "    host.artifacts.register('acme.first_type', 1, FirstContract)\n"
@@ -1307,7 +1468,7 @@ def test_staged_tool_isolated_process_backend_rejected(
             "version": "1.0.0",
             "displayName": "Isolated Tool Test",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
             "permissions": ["network:api.acme.com"],
@@ -1369,7 +1530,7 @@ def test_reverification_rejects_extra_unlisted_files(
             "version": "1.0.0",
             "displayName": "Extra File Test",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -1423,7 +1584,7 @@ def test_dlc_operations_project_scope_and_size_bounds(
             "version": "1.0.0",
             "displayName": "Scope Test",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -1506,7 +1667,7 @@ def test_failed_dlc_cannot_poison_later_dlc(
             "version": "1.0.0",
             "displayName": "Bad DLC",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "permissions": ["network"],  # Missing database_read
             "entrypoints": {"backend": "backend/entry.py"},
@@ -1556,7 +1717,7 @@ def test_failed_dlc_cannot_poison_later_dlc(
             "version": "1.0.0",
             "displayName": "Good DLC",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -1629,12 +1790,8 @@ def test_isolated_worker_package_digest_mismatch_fails_closed(
     a real isolated subprocess worker, and the worker's runtime does not match digest A,
     the worker fails closed with IMPLEMENTATION_MISMATCH and does not execute.
     """
-    import hashlib
     from engine.tests.support.metadata import create_migrated_metadata_engine
-    from sqlalchemy.orm import sessionmaker
-    from engine.models import Project
     from engine.tools.runtime.attempt import (
-        ResourceScopeRef,
         ToolAttemptRequest,
         ToolImplementationIdentity,
         ToolInvocationContext,
@@ -1654,26 +1811,17 @@ def test_isolated_worker_package_digest_mismatch_fails_closed(
         def is_cancelled(self) -> bool:
             return False
 
-    root = tmp_path / "ws_worker"
-    root.mkdir(parents=True)
-    (root / "hello.txt").write_text("Hello Worker\n", encoding="utf-8")
-
     metadata_path = tmp_path / "worker-meta.db"
     metadata_engine = create_migrated_metadata_engine(metadata_path)
-    SessionLocal = sessionmaker(bind=metadata_engine)
-    with SessionLocal() as db:
-        db.add(Project(id="proj-worker-1", name="Worker Project", workspace_root=str(root)))
-        db.commit()
-
     monkeypatch.setenv("DBFOX_DATABASE_URL", f"sqlite:///{metadata_path}")
     reg = build_product_tool_registry()
-    version = current_tool_contract_hash(reg.require("file_read"))
+    tool = reg.require("conversation_search")
+    version = current_tool_contract_hash(tool)
 
-    ws_digest = hashlib.sha256(str(root.resolve()).encode("utf-8")).hexdigest()[:16]
     request = ToolAttemptRequest(
         mode="execute",
-        tool_name="file_read",
-        frozen_tool_declared_version="1.0",
+        tool_name="conversation_search",
+        frozen_tool_declared_version=tool.version,
         frozen_tool_contract_hash=version,
         invocation=ToolInvocationContext(
             session_id="sess_1",
@@ -1681,19 +1829,13 @@ def test_isolated_worker_package_digest_mismatch_fails_closed(
             turn_id="turn_1",
             invocation_id="inv_1",
             idempotency_key="idem_1",
-            scope_refs=(
-                ResourceScopeRef(
-                    kind="workspace",
-                    id="proj-worker-1",
-                    version=ws_digest,
-                ),
-            ),
+            scope_refs=(),
         ),
-        authorized_input={"path": "hello.txt"},
+        authorized_input={"query": "hello"},
         attempt_timeout_ms=5000,
         # Intentionally request a historical package digest that does not match current runtime
         implementation=ToolImplementationIdentity(
-            owner_id="dbfox.workspace",
+            owner_id="dbfox.conversation",
             package_digest="sha256_historical_mismatched_digest_1234567890",
             runtime_snapshot_id="historical_snap_1",
         ),
@@ -1735,7 +1877,7 @@ def test_dlc_operation_platform_hard_ceiling_enforced(
             "version": "1.0.0",
             "displayName": "Ceiling Test",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -1813,7 +1955,7 @@ def test_dlc_two_argument_resolver_registration_rejected(
             "version": "1.0.0",
             "displayName": "Malicious Resolver DLC",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -1874,7 +2016,7 @@ def test_dlc_resolver_never_receives_core_session(
             "version": "1.0.0",
             "displayName": "Safe Resolver DLC",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {"backend": "backend/entry.py"},
         },
@@ -1912,8 +2054,8 @@ def test_dlc_resolver_never_receives_core_session(
     ref = ResourceScopeRef(kind="acme.safe_doc", id="doc_999", version="1")
     resolved = composite.resolve([ref])
 
-    assert "acme.safe_doc" in resolved
-    doc_res = resolved["acme.safe_doc"]
+    assert ref.canonical() in resolved
+    doc_res = resolved[ref.canonical()]
     assert doc_res["arg_type"] == "ResourceScopeRef"
     assert doc_res["is_scope_ref"] is True
     assert doc_res["ref_id"] == "doc_999"

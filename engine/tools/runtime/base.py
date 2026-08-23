@@ -15,6 +15,10 @@ from engine.tools.runtime.observation import (
 from engine.tools.runtime.result import ToolOutcome, ToolReconciliation
 
 if TYPE_CHECKING:
+    from engine.tools.runtime.admission import (
+        ToolAdmissionContext,
+        ToolAdmissionDecision,
+    )
     from engine.tools.runtime.context import ToolRunContext
 
 RiskLevel = Literal["safe", "warning", "danger"]
@@ -55,7 +59,7 @@ class ToolPolicy(BaseModel):
 
     risk_level: RiskLevel = "safe"
     requires_approval: bool = False
-    requires_validated_sql: bool = False
+    requires_admission: bool = False
     allowed_execution_modes: tuple[str, ...] = ()
     visible_to_model: bool = True
 
@@ -240,6 +244,14 @@ class BaseTool(Generic[I, O]):
             raise TypeError(
                 f"{cls.__name__} declares recovery='reconcile' and must implement reconcile()"
             )
+        policy = cast(ToolPolicy, getattr(cls, "policy", ToolPolicy()))
+        if (
+            policy.requires_admission
+            and getattr(cls, "admit", None) is BaseTool.admit
+        ):
+            raise TypeError(
+                f"{cls.__name__} declares requires_admission=True and must implement admit()"
+            )
 
     @property
     def spec(self) -> ToolSpec:
@@ -263,6 +275,22 @@ class BaseTool(Generic[I, O]):
         context: ToolRunContext,
     ) -> O | ToolOutcome[O]:
         raise NotImplementedError(f"{self.__class__.__name__}.run() must be implemented")
+
+    def cancel(self, invocation_id: str) -> None:
+        """Best-effort interruption hook for the currently running invocation."""
+
+        del invocation_id
+
+    def admit(
+        self,
+        tool_input: I,
+        context: "ToolAdmissionContext",
+    ) -> "ToolAdmissionDecision":
+        """Validate domain facts before policy grants an execution attempt."""
+
+        raise NotImplementedError(
+            f"{self.__class__.__name__}.admit() must be implemented"
+        )
 
     def reconcile(
         self,

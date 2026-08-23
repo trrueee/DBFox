@@ -65,4 +65,25 @@ describe("useAppCommands", () => {
     expect(result.current.commandItems.find((item) => item.id === "updates-settings")).toBeUndefined();
     expect(openSettings).not.toHaveBeenCalled();
   });
+
+  it("omits the legacy connection manager when Data DLC owns the connector", () => {
+    const openConnectionDialog = vi.fn();
+    const { result } = renderHook(() =>
+      useAppCommands({
+        tables: [],
+        conversations: [],
+        openSqlConsole: vi.fn(),
+        showSmartQueryHome: vi.fn(),
+        openConversation: vi.fn(),
+        openSettings: vi.fn(),
+        openConnectionDialog,
+        connectionManagementAvailable: false,
+        openTable: vi.fn(),
+      }),
+    );
+
+    expect(result.current.commandItems.find((item) => item.id === "connection-manager")).toBeUndefined();
+    result.current.commandItems.find((item) => item.id === "create-datasource")?.action();
+    expect(openConnectionDialog).toHaveBeenCalledWith("create");
+  });
 });

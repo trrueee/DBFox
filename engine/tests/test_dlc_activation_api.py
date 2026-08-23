@@ -31,6 +31,8 @@ def test_dlc_activation_endpoint_baseline_built_ins() -> None:
         resource_providers=(),
         resource_resolvers=(),
         context_contributors=(),
+        completion_constraints=(),
+        completion_supports=(),
         artifact_contracts=(),
         operations=(),
     )
@@ -59,7 +61,7 @@ def test_dlc_activation_endpoint_with_active_dlcs(tmp_path: Path) -> None:
             "version": "1.2.0",
             "displayName": "Frontend Test Extension",
             "publisher": "acme",
-            "extensionApiVersion": "1",
+            "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
             "entrypoints": {
                 "backend": "backend/entry.py",

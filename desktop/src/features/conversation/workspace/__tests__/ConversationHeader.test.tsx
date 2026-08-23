@@ -7,8 +7,8 @@ const detail: ConversationDetail = {
   protocol_version: 2,
   id: "conversation-debug-identifier",
   title: "分析最近一周的订单趋势",
-  datasource_id: "datasource-1",
-  context_tables: [],
+  project_id: "project-1",
+  resource_intents: [],
   runs: [],
   items: [],
 };

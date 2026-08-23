@@ -38,7 +38,6 @@ def list_conversations(
         {
             "id": str(row.id),
             "project_id": str(row.project_id) if row.project_id else None,
-            "datasource_id": str(row.datasource_id) if row.datasource_id else None,
             "title": str(row.title),
             "selected_artifact_id": (
                 str(row.selected_artifact_id) if row.selected_artifact_id else None

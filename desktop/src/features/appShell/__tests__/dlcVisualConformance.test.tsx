@@ -28,7 +28,7 @@ vi.mock("../../datasource/useDatasourceState", () => ({
 
 vi.mock("../../projects/useProjectState", () => ({
   useProjectState: () => ({
-    projects: [{ id: "project-1", name: "订单分析", status: "active", workspace_root: "C:/demo" }],
+    projects: [{ id: "project-1", name: "订单分析", status: "active" }],
     loadingProjects: false,
     projectError: "",
   }),
@@ -148,7 +148,6 @@ describe("DLC visual conformance (spec §20/§34)", () => {
     });
     useDlcStore.getState().setProjectionResult("snap-conformance", {}, {
       connectors: [],
-      requestedResources: [],
       dockViews,
       artifactRenderers: [],
     });
@@ -188,7 +187,6 @@ describe("DLC visual conformance (spec §20/§34)", () => {
     });
     useDlcStore.getState().setProjectionResult("snap-conformance", {}, {
       connectors: [],
-      requestedResources: [],
       dockViews,
       artifactRenderers: [],
     });

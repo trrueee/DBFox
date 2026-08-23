@@ -7,13 +7,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from dlcs.dbfox_data.backend.tool_contracts import MAX_PREVIEW_ROWS
 from engine.errors import ToolInputError
 from engine.models import SchemaColumn
-from engine.sql.dialect_context import DialectContext
+from engine.sql.dialect_context import load_dialect_context
 from engine.sql.executor import execute_query
 from engine.sql.safety.service import SqlSafetyService
 from engine.tools.db._common import (
-    MAX_PREVIEW_ROWS,
     _catalog_table,
     _clamp,
     _datasource,
@@ -86,7 +86,7 @@ def db_preview(
         catalog_validated_identifiers=True,
     )
 
-    ctx = DialectContext.from_datasource_id(db, datasource_id)
+    ctx = load_dialect_context(db, datasource_id)
     decision = SqlSafetyService(db).build_execution_decision(
         sql, ctx, policy="table_preview", parameters=parameters
     )
@@ -153,7 +153,7 @@ def _build_preview_sql(
     schema_name: str | None = None,
     catalog_validated_identifiers: bool = False,
 ) -> tuple[str, dict[str, Any]]:
-    from engine.sql.builder import build_select
+    from dlcs.dbfox_data.backend.sql.builder import build_select
     return build_select(
         table=table_name,
         columns=columns,

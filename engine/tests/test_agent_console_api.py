@@ -6,8 +6,16 @@ from fastapi import HTTPException
 
 import engine.agent.console as console_module
 import engine.api.agent as agent_module
-from engine.models import AgentArtifactRecord, AgentEventRecord, AgentRun, AgentSessionMemory, DataSource
-from engine.sql.trust_gate import ExecutionSafetyDecision
+from engine.agent.resource_refs import load_resource_refs
+from engine.models import (
+    AgentArtifactRecord,
+    AgentEventRecord,
+    AgentRun,
+    AgentSessionInput,
+    AgentSessionMemory,
+    DataSource,
+)
+from dlcs.dbfox_data.backend.sql.safety_contracts import ExecutionSafetyDecision
 
 
 def _console_decision(datasource_id: str, sql: str) -> ExecutionSafetyDecision:
@@ -57,7 +65,7 @@ def test_console_execute_persists_sql_backed_artifact_chain(monkeypatch, db_sess
 
     def fake_build_execution_decision(_self, requested_sql, ctx, policy):
         assert policy == "user_readonly"
-        assert ctx.datasource_id == "ds-console"
+        assert ctx.resource_id == "ds-console"
         return _console_decision("ds-console", requested_sql)
 
     def fake_execute_query(_db, datasource_id, requested_sql, question=None, execution_id=None, **kwargs):
@@ -142,7 +150,15 @@ def test_console_execute_persists_sql_backed_artifact_chain(monkeypatch, db_sess
     run = db_session.get(AgentRun, response.runId)
     assert run is not None
     assert run.status == "completed"
-    assert run.datasource_generation == 11
+    assert not hasattr(run, "datasource_id")
+    assert not hasattr(run, "datasource_generation")
+    admitted_input = db_session.get(AgentSessionInput, run.input_id)
+    assert admitted_input is not None
+    refs = load_resource_refs(str(admitted_input.resource_refs_json))
+    assert refs is not None
+    assert [(ref.kind, ref.id, ref.version) for ref in refs] == [
+        ("dbfox.data.database", "ds-console", 11)
+    ]
     run_payload = json.loads(run.result_json)
     assert "rows" not in (run_payload.get("execution") or {})
     completed_event = (

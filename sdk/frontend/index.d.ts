@@ -21,21 +21,6 @@ export interface RequestedResourceRef {
   version?: string | number | null;
 }
 
-export interface ConversationSendResourceContext {
-  projectId: string;
-  conversationId: string;
-  datasourceId?: string | null;
-}
-
-export interface RequestedResourceContributionResult {
-  complete: boolean;
-  refs?: readonly RequestedResourceRef[];
-}
-
-export type RequestedResourceContributor = (
-  context: ConversationSendResourceContext,
-) => RequestedResourceContributionResult;
-
 export interface WorkspaceDockTab {
   viewKey: string;
   viewType: string;
@@ -103,7 +88,22 @@ export interface ArtifactRendererContribution<TPayload> {
 
 export interface DlcOperationInvokeOptions {
   readonly projectId?: string;
+  /** Opaque server-issued lease used when this operation adopts new secrets. */
+  readonly credentialLeaseId?: string;
   readonly signal?: AbortSignal;
+}
+
+export interface CredentialEnrollmentInput {
+  readonly kind: string;
+  readonly secret: string;
+}
+
+export interface CredentialEnrollmentBatchResult {
+  readonly credentials: readonly {
+    readonly id: string;
+    readonly kind: string;
+  }[];
+  readonly lease_id: string;
 }
 
 export interface FrontendExtensionHost {
@@ -111,8 +111,22 @@ export interface FrontendExtensionHost {
   readonly connectors: {
     register(contribution: ResourceConnectorContribution): void;
   };
-  readonly requestedResources: {
-    register(contributor: RequestedResourceContributor): void;
+  readonly contextSelection: {
+    isSelected(ref: RequestedResourceRef): boolean;
+    list(): readonly RequestedResourceRef[];
+    add(ref: RequestedResourceRef): Promise<void>;
+    remove(ref: RequestedResourceRef): Promise<void>;
+  };
+  readonly nativeDialogs: {
+    /** Opens the Electron-owned folder picker. Returns null when cancelled. */
+    pickFolder(): Promise<string | null>;
+  };
+  readonly credentials: {
+    /** Enrolls transient secrets under this DLC's signed manifest permissions. */
+    enrollBatch(
+      credentials: readonly CredentialEnrollmentInput[],
+      options?: { readonly signal?: AbortSignal },
+    ): Promise<CredentialEnrollmentBatchResult>;
   };
   readonly dockViews: {
     register(contribution: DockViewContribution): void;

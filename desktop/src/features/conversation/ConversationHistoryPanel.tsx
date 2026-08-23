@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, ChevronUp, Database, MessageSquare, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, FolderOpen, MessageSquare, Trash2 } from "lucide-react";
 import { Button, EmptyState } from "../../components/ui";
 import { WorkspaceShell } from "../appShell/WorkspaceShell";
 import type { ConversationSummary } from "../../types/conversation";
@@ -7,7 +7,7 @@ import "./ConversationHistoryPanel.css";
 
 interface ConversationHistoryPanelProps {
   conversations: ConversationSummary[];
-  datasourceLabels?: Record<string, string>;
+  projectLabels?: Record<string, string>;
   activeConversationId?: string;
   onOpenConversation: (conversation: ConversationSummary) => void;
   onDeleteConversation: (conversationId: string) => void;
@@ -21,12 +21,12 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 export function ConversationHistoryPanel({
   conversations,
-  datasourceLabels = {},
+  projectLabels = {},
   activeConversationId,
   onOpenConversation,
   onDeleteConversation,
 }: ConversationHistoryPanelProps) {
-  const [expandedDatasourceIds, setExpandedDatasourceIds] = useState<Set<string>>(() => new Set());
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());
 
   return (
     <WorkspaceShell
@@ -43,8 +43,8 @@ export function ConversationHistoryPanel({
         />
       ) : (
         <div className="conversation-history__groups">
-          {groupConversations(conversations, datasourceLabels).map((group) => {
-            const expanded = expandedDatasourceIds.has(group.datasourceId);
+          {groupConversations(conversations, projectLabels).map((group) => {
+            const expanded = expandedProjectIds.has(group.projectId);
             const visibleConversations = getVisibleConversations(
               group.conversations,
               activeConversationId,
@@ -53,10 +53,10 @@ export function ConversationHistoryPanel({
             const hiddenCount = group.conversations.length - visibleConversations.length;
 
             return (
-              <section className="conversation-history__group" key={group.datasourceId}>
+              <section className="conversation-history__group" key={group.projectId}>
               <div className="conversation-history__group-heading">
                 <span className="conversation-history__group-icon" aria-hidden="true">
-                  <Database size={15} />
+                  <FolderOpen size={15} />
                 </span>
                 <strong>{group.label}</strong>
                 <span className="conversation-history__group-count">
@@ -121,10 +121,10 @@ export function ConversationHistoryPanel({
                     className="conversation-history__expand"
                     aria-expanded={expanded}
                     onClick={() => {
-                      setExpandedDatasourceIds((current) => {
+                      setExpandedProjectIds((current) => {
                         const next = new Set(current);
-                        if (next.has(group.datasourceId)) next.delete(group.datasourceId);
-                        else next.add(group.datasourceId);
+                        if (next.has(group.projectId)) next.delete(group.projectId);
+                        else next.add(group.projectId);
                         return next;
                       });
                     }}
@@ -157,19 +157,19 @@ function getVisibleConversations(
 
 function groupConversations(
   conversations: ConversationSummary[],
-  datasourceLabels: Record<string, string>,
+  projectLabels: Record<string, string>,
 ) {
-  const groups = new Map<string, { datasourceId: string; label: string; conversations: ConversationSummary[] }>();
+  const groups = new Map<string, { projectId: string; label: string; conversations: ConversationSummary[] }>();
   for (const conversation of conversations) {
-    const datasourceId = conversation.datasource_id || "unassigned";
-    const existing = groups.get(datasourceId);
+    const projectId = conversation.project_id || "unassigned";
+    const existing = groups.get(projectId);
     if (existing) {
       existing.conversations.push(conversation);
       continue;
     }
-    groups.set(datasourceId, {
-      datasourceId,
-      label: datasourceLabels[datasourceId] || (datasourceId === "unassigned" ? "未关联数据源" : "已移除的数据源"),
+    groups.set(projectId, {
+      projectId,
+      label: projectLabels[projectId] || (projectId === "unassigned" ? "未关联项目" : "项目对话"),
       conversations: [conversation],
     });
   }

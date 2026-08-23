@@ -40,15 +40,10 @@ class Project(Base):  # type: ignore[misc,valid-type]
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    # Local-folder Project root. Empty/legacy Projects are DB-project-only.
-    workspace_root = Column(String, nullable=True)
     status = Column(String, nullable=False, default="active")
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-    data_sources = relationship("DataSource", back_populates="project")
-    backups = relationship("BackupRecord", back_populates="project", cascade="all, delete-orphan")
-
     def __repr__(self) -> str:
         return f"<Project id={self.id!r} name={self.name!r} status={self.status!r}>"
 
@@ -98,6 +93,9 @@ class CredentialLeaseRecord(Base):  # type: ignore[misc,valid-type]
     id = Column(String, primary_key=True)
     credential_ids_json = Column(Text, nullable=False)
     status = Column(String, nullable=False)
+    owner_id = Column(String, nullable=True)
+    owner_operation = Column(String, nullable=True)
+    owner_project_id = Column(String, nullable=True)
     version = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     expires_at = Column(DateTime, nullable=False)
@@ -171,7 +169,7 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-    project = relationship("Project", back_populates="data_sources")
+    project = relationship("Project")
     tables = relationship("SchemaTable", back_populates="datasource", cascade="all, delete-orphan")
     queries = relationship("QueryHistory", back_populates="datasource", cascade="all, delete-orphan")
     backups = relationship("BackupRecord", back_populates="datasource", cascade="all, delete-orphan")
@@ -208,7 +206,7 @@ class BackupRecord(Base):  # type: ignore[misc,valid-type]
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
-    project = relationship("Project", back_populates="backups")
+    project = relationship("Project")
     datasource = relationship("DataSource", back_populates="backups")
 
 
@@ -420,15 +418,12 @@ class AgentSession(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "agent_sessions"
     __table_args__ = (
         Index("ix_agent_sessions_project", "project_id"),
-        Index("ix_agent_sessions_datasource", "datasource_id"),
         Index("ix_agent_sessions_created", "created_at"),
     )
 
     id = Column(String, primary_key=True, default=generate_uuid)
     project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="SET NULL"), nullable=True)
     title = Column(String, nullable=True)
-    context_tables_json = Column(Text, nullable=False, default="[]")
     input_sequence = Column(Integer, nullable=False, default=0)
     event_sequence = Column(Integer, nullable=False, default=0)
     event_floor_sequence = Column(Integer, nullable=False, default=0)
@@ -450,10 +445,49 @@ class AgentSession(Base):  # type: ignore[misc,valid-type]
         order_by="AgentMessage.sequence",
     )
     runs = relationship("AgentRun", back_populates="session", cascade="all, delete-orphan")
+    resource_intents = relationship(
+        "ConversationResourceIntent",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="ConversationResourceIntent.position",
+    )
     memory = relationship("AgentSessionMemory", back_populates="session", cascade="all, delete-orphan", uselist=False)
 
     def __repr__(self) -> str:
         return f"<AgentSession id={self.id!r} title={self.title!r} project_id={self.project_id!r}>"
+
+
+class ConversationResourceIntent(Base):  # type: ignore[misc,valid-type]
+    """Durable UX intent; execution authority is still frozen per SessionInput."""
+
+    __tablename__ = "conversation_resource_intents"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "kind",
+            "resource_id",
+            name="uq_conversation_resource_intent_identity",
+        ),
+        UniqueConstraint(
+            "conversation_id",
+            "position",
+            name="uq_conversation_resource_intent_position",
+        ),
+        Index("ix_conversation_resource_intents_conversation", "conversation_id"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    conversation_id = Column(
+        String,
+        ForeignKey("agent_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kind = Column(String(64), nullable=False)
+    resource_id = Column(String(256), nullable=False)
+    position = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+    session = relationship("AgentSession", back_populates="resource_intents")
 
 
 class AgentMessage(Base):  # type: ignore[misc,valid-type]
@@ -507,13 +541,11 @@ class AgentMessageSearchDoc(Base):  # type: ignore[misc,valid-type]
 class AgentSessionMemory(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "agent_session_memories"
     __table_args__ = (
-        Index("ix_agent_session_memories_datasource", "datasource_id"),
         UniqueConstraint("session_id", name="uq_agent_session_memories_session"),
     )
 
     id = Column(String, primary_key=True, default=generate_uuid)
     session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="SET NULL"), nullable=True)
     memory_json = Column(Text, nullable=False, default="{}")
     # Shadow Memory v4 projection. ``memory_json`` keeps v3 until cutover;
     # the v4 watermark lives only inside this typed JSON envelope.
@@ -528,7 +560,6 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "agent_runs"
     __table_args__ = (
         Index("ix_agent_runs_session", "session_id"),
-        Index("ix_agent_runs_datasource", "datasource_id"),
         Index("ix_agent_runs_created", "created_at"),
     )
 
@@ -537,8 +568,6 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
     input_id = Column(String, ForeignKey("agent_session_inputs.id", ondelete="RESTRICT"), nullable=True)
     session_sequence = Column(Integer, nullable=False, default=0)
     parent_run_id = Column(String, nullable=True)
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="SET NULL"), nullable=True)
-    datasource_generation = Column(Integer, nullable=False, default=0)
     llm_credential_id = Column(String, nullable=True)
     api_base = Column(String, nullable=True)
     model_name = Column(String, nullable=True)
@@ -576,7 +605,7 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
     approvals = relationship("AgentApproval", back_populates="run", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
-        return f"<AgentRun id={self.id!r} status={self.status!r} datasource_id={self.datasource_id!r}>"
+        return f"<AgentRun id={self.id!r} status={self.status!r}>"
 
 
 class AgentApproval(Base):  # type: ignore[misc,valid-type]
@@ -643,6 +672,9 @@ class AgentArtifactRecord(Base):  # type: ignore[misc,valid-type]
     refs_json = Column(Text, nullable=True)
     summary = Column(Text, nullable=True)
     payload_ref = Column(String, nullable=True)
+    # Exact Runtime resources that produced this Artifact. Domain payloads must
+    # not carry a second, capability-specific copy of execution authority.
+    resource_refs_json = Column(Text, nullable=False, default="[]", server_default="[]")
     provenance_json = Column(Text, nullable=False, default="{}")
     relations_json = Column(Text, nullable=False, default="[]")
     status = Column(String, nullable=False, default="completed")
@@ -671,7 +703,7 @@ class AgentSessionInput(Base):  # type: ignore[misc,valid-type]
     delivery_mode = Column(String, nullable=False, default="queue")
     selected_artifact_ids_json = Column(Text, nullable=False, default="[]")
     workspace_context_json = Column(Text, nullable=False, default="{}")
-    resource_refs_json = Column(Text, nullable=True)
+    resource_refs_json = Column(Text, nullable=False, default="[]")
     reply_to_request_id = Column(String, nullable=True)
     status = Column(String, nullable=False, default="admitted")
     admitted_at = Column(DateTime, nullable=False, default=utcnow)

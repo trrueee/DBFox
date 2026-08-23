@@ -4,6 +4,7 @@ import pytest
 
 from engine.agent.artifact import (
     ArtifactDraft,
+    ArtifactRelation,
     ArtifactRelationDraft,
     ArtifactRelationType,
     ArtifactType,
@@ -14,14 +15,15 @@ from engine.agent.repositories.artifact import (
     ArtifactRepository,
 )
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.resource_refs import dump_resource_refs
 from engine.tools.runtime.attempt import ResourceScopeRef
-from engine.models import AgentArtifactRecord, AgentRun, AgentSession
+from engine.models import AgentArtifactRecord, AgentRun, AgentSession, AgentSessionInput
 from engine.tools.builtin.artifacts import (
     preview_drafts,
     query_result_draft,
     sql_validation_drafts,
 )
-from engine.tools.builtin.contracts import (
+from dlcs.dbfox_data.backend.tool_contracts import (
     ChartCreateInput,
     DataPreviewOutput,
     QueryResultOutput,
@@ -35,7 +37,6 @@ def _active_run(db_session, test_datasource, session_id: str):
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Artifacts",
         )
     )
@@ -43,7 +44,7 @@ def _active_run(db_session, test_datasource, session_id: str):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="统计订单",
         idempotency_key=f"request-{session_id}",
         llm_credential_id="credential",
@@ -69,6 +70,120 @@ def _active_run(db_session, test_datasource, session_id: str):
     return admission, lease, turn
 
 
+def test_get_for_run_never_exposes_cross_run_or_cross_session_artifacts(
+    db_session,
+    test_datasource,
+):
+    admission, lease, turn = _active_run(
+        db_session,
+        test_datasource,
+        "session_artifact_read_scope",
+    )
+    repository = ArtifactRepository(db_session)
+    artifact = repository.create(
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(turn.id),
+        artifact_type=ArtifactType.RESULT_VIEW,
+        title="Scoped result",
+        payload={
+            "sourceSqlArtifactId": "artifact_sql",
+            "queryFingerprint": "fingerprint",
+            "datasourceGeneration": 1,
+            "columns": ["id"],
+            "rowCount": 0,
+            "returnedRows": 0,
+            "latencyMs": 1,
+            "executedAt": "2026-08-23T00:00:00Z",
+            "truncated": False,
+        },
+    )
+
+    assert repository.get_for_run(
+        session_id=artifact.session_id,
+        run_id=artifact.run_id,
+        artifact_id=artifact.id,
+    ) == artifact
+    assert repository.get_for_run(
+        session_id=artifact.session_id,
+        run_id="another-run",
+        artifact_id=artifact.id,
+    ) is None
+    assert repository.get_for_run(
+        session_id="another-session",
+        run_id=artifact.run_id,
+        artifact_id=artifact.id,
+    ) is None
+
+
+def test_relation_lookup_is_exactly_scoped_to_the_current_run(
+    db_session,
+    test_datasource,
+):
+    admission, lease, turn = _active_run(
+        db_session,
+        test_datasource,
+        "session_artifact_relation_scope",
+    )
+    repository = ArtifactRepository(db_session)
+    database_ref = ResourceScopeRef(
+        kind="dbfox.data.database",
+        id=str(test_datasource.id),
+        version=1,
+    )
+    source = repository.create(
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(turn.id),
+        artifact_type=ArtifactType.SQL,
+        title="Source SQL",
+        resource_refs=(database_ref,),
+        payload={
+            "sql": "SELECT id FROM users",
+            "safeSql": "SELECT id FROM users",
+            "dialect": "sqlite",
+            "queryFingerprint": "fingerprint",
+            "parameters": {},
+        },
+    )
+    result = repository.create(
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(turn.id),
+        artifact_type=ArtifactType.RESULT_VIEW,
+        title="Derived result",
+        resource_refs=(database_ref,),
+        relations=[
+            ArtifactRelation(
+                relation=ArtifactRelationType.DERIVED_FROM,
+                artifact_id=source.id,
+            )
+        ],
+        payload={
+            "sourceSqlArtifactId": source.id,
+            "queryFingerprint": "fingerprint",
+            "datasourceGeneration": 1,
+            "columns": ["id"],
+            "rowCount": 0,
+            "returnedRows": 0,
+            "latencyMs": 1,
+            "executedAt": "2026-08-23T00:00:00Z",
+            "truncated": False,
+        },
+    )
+
+    assert repository.artifacts_relating_to_for_run(
+        session_id=source.session_id,
+        run_id=source.run_id,
+        artifact_id=source.id,
+        relation=ArtifactRelationType.DERIVED_FROM,
+    ) == (result,)
+    assert repository.artifacts_relating_to_for_run(
+        session_id=source.session_id,
+        run_id="another-run",
+        artifact_id=source.id,
+        relation=ArtifactRelationType.DERIVED_FROM,
+    ) == ()
 def test_previous_result_availability_is_fenced_by_session_generation_and_order(
     db_session,
     test_datasource,
@@ -79,12 +194,18 @@ def test_previous_result_availability_is_fenced_by_session_generation_and_order(
         "session_result_fence",
     )
     repository = ArtifactRepository(db_session)
+    database_ref = ResourceScopeRef(
+        kind="dbfox.data.database",
+        id=str(test_datasource.id),
+        version=1,
+    )
     result = repository.create(
         lease=lease,
         run_id=admission.run_id,
         turn_id=str(turn.id),
         artifact_type=ArtifactType.RESULT_VIEW,
         title="订单结果",
+        resource_refs=(database_ref,),
         payload={
             "sourceSqlArtifactId": "artifact_sql",
             "queryFingerprint": "fingerprint",
@@ -101,16 +222,26 @@ def test_previous_result_availability_is_fenced_by_session_generation_and_order(
     owner_run = db_session.get(AgentRun, admission.run_id)
     assert owner_run is not None
     owner_run.status = "completed"
+    current_input = AgentSessionInput(
+        id="input_result_consumer",
+        session_id="session_result_fence",
+        run_id="run_result_consumer",
+        sequence=2,
+        idempotency_key="input-result-consumer",
+        content="继续查看结果",
+        resource_refs_json=dump_resource_refs((database_ref,)),
+    )
     current_run = AgentRun(
         id="run_result_consumer",
         session_id="session_result_fence",
+        input_id=current_input.id,
         session_sequence=2,
-        datasource_id=str(test_datasource.id),
-        datasource_generation=1,
         question="继续查看结果",
         status="running",
         request_json="{}",
     )
+    db_session.add(current_input)
+    db_session.flush()
     db_session.add(current_run)
     db_session.commit()
 
@@ -119,14 +250,10 @@ def test_previous_result_availability_is_fenced_by_session_generation_and_order(
             current_run_id=str(overrides.get("current_run_id", current_run.id)),
             artifact_id=str(overrides.get("artifact_id", result.id)),
             session_id=str(overrides.get("session_id", current_run.session_id)),
-            datasource_id=str(
-                overrides.get("datasource_id", current_run.datasource_id)
-            ),
-            datasource_generation=int(
-                overrides.get(
-                    "datasource_generation",
-                    current_run.datasource_generation,
-                )
+            resource_ref=ResourceScopeRef(
+                kind="dbfox.data.database",
+                id=str(overrides.get("datasource_id", test_datasource.id)),
+                version=overrides.get("datasource_generation", 1),
             ),
         )
 
@@ -155,6 +282,11 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
         "session_artifacts",
     )
     repository = ArtifactRepository(db_session)
+    database_ref = ResourceScopeRef(
+        kind="dbfox.data.database",
+        id=str(test_datasource.id),
+        version=1,
+    )
     decision = {
         "datasource_id": str(test_datasource.id),
         "policy": "agent_readonly",
@@ -189,7 +321,7 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
         drafts=list(
             sql_validation_drafts(
                 db_session,
-                str(test_datasource.id),
+                database_ref,
                 validation_output,
             )
         ),
@@ -224,9 +356,8 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
         drafts=[
             query_result_draft(
                 db_session,
-                str(test_datasource.id),
+                database_ref,
                 sql_artifact.id,
-                1,
                 query_output,
             )
         ],
@@ -254,8 +385,7 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
         drafts=list(
             preview_drafts(
                 db_session,
-                str(test_datasource.id),
-                1,
+                database_ref,
                 preview_output,
             )
         ),
@@ -294,7 +424,9 @@ def test_sql_safety_result_chain_uses_real_ids_and_exact_relations(
                     run_id=admission.run_id,
                 ),
             idempotency_key="chart-create-test",
-            resources={"database": db_session},
+            resources={("dbfox.data.database", str(test_datasource.id)): db_session},
+            scope_refs=(database_ref,),
+            metadata_session=db_session,
         ),
     )
     chart = repository.persist_drafts(
@@ -497,3 +629,40 @@ def test_result_artifact_rejects_embedded_rows_before_persistence(
         .count()
         == 0
     )
+
+
+def test_artifact_draft_cannot_expand_run_resource_authority(
+    db_session,
+    test_datasource,
+) -> None:
+    admission, lease, turn = _active_run(
+        db_session,
+        test_datasource,
+        "session_artifact_resource_fence",
+    )
+    unauthorized = ResourceScopeRef(
+        kind="dbfox.data.database",
+        id="database-outside-run",
+        version="1:1",
+    )
+
+    with pytest.raises(
+        ArtifactDraftContractError,
+        match="subset of the Run authority",
+    ):
+        ArtifactRepository(db_session).persist_drafts(
+            lease=lease,
+            run_id=admission.run_id,
+            turn_id=str(turn.id),
+            invocation_id="invocation_unauthorized_artifact",
+            tool_name="example_tool",
+            drafts=[
+                ArtifactDraft(
+                    key="outside",
+                    type=ArtifactType.MARKDOWN,
+                    title="Outside authority",
+                    payload={"content": "bounded"},
+                    resource_refs=(unauthorized,),
+                )
+            ],
+        )

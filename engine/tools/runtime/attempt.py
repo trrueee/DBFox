@@ -15,19 +15,7 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from engine.tools.runtime.result import ToolResult
-
-
-class ResourceScopeRef(BaseModel):
-    """Stable identity of one authorized execution resource."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    kind: str = Field(min_length=1, max_length=64)
-    id: str = Field(min_length=1, max_length=256)
-    version: str | int | None = Field(default=None)
-
-    def canonical(self) -> tuple[str, str]:
-        return (self.kind, self.id)
+from engine.resource import ResourceKey, ResourceScopeRef
 
 
 class ToolInvocationContext(BaseModel):
@@ -50,11 +38,18 @@ class ToolInvocationContext(BaseModel):
             raise ValueError("scope_refs must be unique by (kind, id)")
         return self
 
-    def scope(self, kind: str) -> ResourceScopeRef | None:
-        return next(
-            (ref for ref in self.scope_refs if ref.kind == kind),
-            None,
-        )
+    def scopes(self, kind: str) -> tuple[ResourceScopeRef, ...]:
+        return tuple(ref for ref in self.scope_refs if ref.kind == kind)
+
+    def scope(self, kind: str, resource_id: str | None = None) -> ResourceScopeRef | None:
+        matches = self.scopes(kind)
+        if resource_id is not None:
+            return next((ref for ref in matches if ref.id == resource_id), None)
+        if len(matches) > 1:
+            raise RuntimeError(
+                f"Resource kind {kind!r} is ambiguous; select a resource by (kind, id)"
+            )
+        return matches[0] if matches else None
 
 
 class ToolImplementationIdentity(BaseModel):
@@ -118,15 +113,15 @@ class CompositeResourceResolver:
         self._frozen = True
         return self
 
-    def resolve(self, refs: tuple[ResourceScopeRef, ...]) -> dict[str, Any]:
-        resolved: dict[str, Any] = {}
+    def resolve(self, refs: tuple[ResourceScopeRef, ...]) -> dict[ResourceKey, Any]:
+        resolved: dict[ResourceKey, Any] = {}
         for ref in refs:
             resolver = self._resolvers.get(ref.kind)
             if resolver is None:
                 raise KeyError(
                     f"No resolver is registered for resource scope kind {ref.kind!r}"
                 )
-            resolved[ref.kind] = resolver(ref)
+            resolved[ref.canonical()] = resolver(ref)
         return resolved
 
 

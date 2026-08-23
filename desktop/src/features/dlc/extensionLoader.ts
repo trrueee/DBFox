@@ -46,7 +46,6 @@ export async function loadActiveFrontendExtensions(
 
   const records: Record<string, DlcRegistrationRecord> = {};
   const allConnectors = [];
-  const allRequestedResources = [];
   const allDockViews = [];
   const allArtifactRenderers = [];
 
@@ -107,9 +106,6 @@ export async function loadActiveFrontendExtensions(
         connectorIds.add(connector.id);
         allConnectors.push(connector);
       }
-      for (const req of contribs.requestedResources) {
-        allRequestedResources.push(req);
-      }
       for (const dockView of contribs.dockViews) {
         dockViewTypes.add(dockView.viewType);
         allDockViews.push(dockView);
@@ -143,7 +139,6 @@ export async function loadActiveFrontendExtensions(
 
   const mergedContributions: DlcContributionSet = {
     connectors: Object.freeze(allConnectors),
-    requestedResources: Object.freeze(allRequestedResources),
     dockViews: Object.freeze(allDockViews),
     artifactRenderers: Object.freeze(allArtifactRenderers),
   };

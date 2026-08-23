@@ -9,6 +9,10 @@
 > 基线：`main@daa99d048decd7f5f8dc010cbe5465f332686a3c`
 >
 > 关联 ADR：[Workbench Shell 与 Workspace Dock](./workbench-shell-workspace-dock.md)
+>
+> 替代关系：本指南记录旧 Shell 迁移过程；其中 datasource-bound Session 与 active
+> datasource 自动上下文规则已删除。当前 Project/Conversation/Resource/Run authority
+> 迁移以 [Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md) 为准。
 
 ## 1. 迁移原则
 

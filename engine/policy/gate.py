@@ -1,12 +1,16 @@
 from __future__ import annotations
-
 import logging
 from typing import Any, Callable, Literal
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from engine.agent.repositories.artifact import ArtifactRepository
-from engine.policy.authority import safety_fingerprint
+from engine.policy.authority import canonical_hash
+from engine.resource import ResourceScopeRef
+from engine.tools.runtime.admission import (
+    ToolAdmissionContext,
+    ToolAdmissionDecision,
+)
 from engine.tools.runtime.registry import ToolRegistry
 
 logger = logging.getLogger("dbfox.policy.gate")
@@ -108,147 +112,107 @@ def _rule_execution_mode(
     _tool: Any, policy: Any,
 ) -> PolicyDecision | None:
     reads_database = "database_read" in set(_tool.spec.execution.capabilities)
-    if reads_database or policy.requires_validated_sql:
+    allowed_modes = set(policy.allowed_execution_modes)
+    if allowed_modes and execution_mode not in allowed_modes:
+        return PolicyDecision(
+            status="blocked",
+            reason=f"Tool execution is not allowed in {execution_mode} mode.",
+            risk_level="danger",
+        )
+    if reads_database:
         effective_mode = execution_mode
         if execution_mode == "user_requested_read" and not state.get("execute", True):
             effective_mode = "suggest_only"
         if effective_mode in ("none", "suggest_only"):
-            label = "Live data reads" if reads_database else "SQL execution"
             return PolicyDecision(
                 status="blocked",
-                reason=f"{label} are not allowed in {effective_mode} mode.",
+                reason=f"Live data reads are not allowed in {effective_mode} mode.",
                 risk_level="danger",
             )
     return None
 
 
-def _rule_validated_sql(
-    gate: PolicyGate, state: dict, _tool_name: str, args: dict, execution_mode: str,
-    _tool: Any, policy: Any,
-) -> PolicyDecision | None:
-    if not policy.requires_validated_sql:
-        return None
-
-    validation_artifact_id = str(args.get("validation_artifact_id") or "").strip()
-    if not validation_artifact_id:
-        return PolicyDecision(
-            status="blocked",
-            reason=(
-                "SQL execution requires validation_artifact_id from the exact "
-                "successful sql_validate call."
-            ),
-            risk_level="danger",
-        )
-    try:
-        validated = ArtifactRepository(gate.db).require_validated_sql(
-            session_id=str(state.get("session_id") or ""),
-            run_id=str(state.get("run_id") or ""),
-            sql_artifact_id=validation_artifact_id,
-        )
-    except ValueError:
-        return PolicyDecision(
-            status="blocked",
-            reason=(
-                "The selected SQL validation is unavailable in the current Run. "
-                "Run sql_validate again and use its exact SQL Artifact ID."
-            ),
-            risk_level="danger",
-        )
-    safety = validated.safety
-    if str(safety.get("datasource_id") or "") != str(
-        state.get("datasource_id") or ""
-    ):
-        return PolicyDecision(
-            status="blocked",
-            reason="The SQL validation belongs to a different datasource.",
-            risk_level="danger",
-        )
-    passed = bool(safety.get("passed"))
-    can_execute = bool(safety.get("can_execute"))
-    safe_sql = str(safety.get("safe_sql") or "").strip()
-    blocked_reasons = [str(r) for r in safety.get("blocked_reasons", [])]
-    hard_blockers = [r for r in blocked_reasons if r != "requires_confirmation"]
-
-    if hard_blockers:
-        return PolicyDecision(status="blocked", reason=f"SQL blocked by TrustGate: {hard_blockers}", risk_level="danger")
-    if not passed or not can_execute or not safe_sql:
-        return PolicyDecision(
-            status="blocked",
-            reason=(
-                "The selected SQL validation is unavailable or cannot execute. "
-                "Run sql_validate again and use its validation_artifact_id."
-            ),
-            risk_level="danger",
-        )
-    existing_result = ArtifactRepository(gate.db).result_for_sql_artifact(
-        session_id=str(state.get("session_id") or ""),
-        run_id=str(state.get("run_id") or ""),
-        sql_artifact_id=validation_artifact_id,
-    )
-    if existing_result is not None:
-        return PolicyDecision(
-            status="blocked",
-            reason=(
-                "This validated SQL was already executed in the current Run as "
-                f"Result Artifact {existing_result.id}. Reuse that result; call "
-                "result_inspect only if its transient values are no longer available."
-            ),
-            risk_level="safe",
-        )
-
-    approval_contract = {
-        "kind": "validated_action",
-        "safety_fingerprint": safety_fingerprint(safety),
-        "datasource_generation": state.get("datasource_generation"),
-    }
-
-    # Approval is considered only after the action has passed deterministic
-    # validation. Human consent never turns an invalid action into a valid one.
-    approval_decision = _rule_agent_autonomous_read(
-        state,
-        execution_mode,
-        policy,
-        args,
-        approval_contract,
-    )
-    if approval_decision:
-        return approval_decision
-
-    if safety.get("requires_confirmation"):
-        return PolicyDecision(
-            status="approval_required",
-            reason="This SQL execution requires human approval.",
-            risk_level="warning",
-            safe_args=args,
-            approval=approval_contract,
-        )
-
-    return PolicyDecision(
-        status="allowed",
-        reason="SQL was validated by TrustGate.",
-        risk_level="safe",
-        safe_args=args,
-    )
-
-
-def _rule_agent_autonomous_read(
+def _rule_tool_admission(
+    gate: PolicyGate,
     state: dict,
-    execution_mode: str,
+    tool_name: str,
+    args: dict,
+    _execution_mode: str,
+    tool: Any,
     policy: Any,
-    args: dict[str, Any],
-    approval_contract: dict[str, Any],
 ) -> PolicyDecision | None:
-    env_profile = state.get("environment_profile") or {}
-    env = env_profile.get("env", "unknown")
-    if execution_mode == "agent_autonomous_read" and (
-        env in {"prod", "unknown"} or policy.risk_level in ("warning", "danger")
-    ):
+    if not policy.requires_admission:
+        return None
+    session_id = str(state.get("session_id") or "")
+    run_id = str(state.get("run_id") or "")
+    resource_refs = tuple(
+        ref
+        for ref in state.get("resource_refs") or ()
+        if isinstance(ref, ResourceScopeRef)
+    )
+    repository = ArtifactRepository(gate.db)
+    context = ToolAdmissionContext(
+        session_id=session_id,
+        run_id=run_id,
+        resource_refs=resource_refs,
+        artifact_loader=lambda artifact_id: repository.get_for_run(
+            session_id=session_id,
+            run_id=run_id,
+            artifact_id=artifact_id,
+        ),
+        artifact_relation_loader=lambda artifact_id, relation: (
+            repository.artifacts_relating_to_for_run(
+                session_id=session_id,
+                run_id=run_id,
+                artifact_id=artifact_id,
+                relation=relation,
+            )
+        ),
+    )
+    try:
+        tool_input = tool.input_model.model_validate(args)
+        admission = ToolAdmissionDecision.model_validate(
+            tool.admit(tool_input, context)
+        )
+    except Exception as exc:
+        logger.error(
+            "Tool admission failed closed: tool=%s type=%s",
+            tool_name,
+            type(exc).__name__,
+        )
+        return PolicyDecision(
+            status="blocked",
+            reason="Tool admission could not validate the requested action.",
+            risk_level="danger",
+        )
+    if admission.resource_ref is not None and admission.resource_ref not in resource_refs:
+        return PolicyDecision(
+            status="blocked",
+            reason="Tool admission selected a resource outside the frozen Run authority.",
+            risk_level="danger",
+        )
+    if admission.status == "blocked":
+        return PolicyDecision(
+            status="blocked",
+            reason=admission.reason,
+            risk_level=admission.risk_level,
+        )
+    if admission.status == "approval_required":
+        subject = admission.approval_subject or {}
         return PolicyDecision(
             status="approval_required",
-            reason=f"Agent-autonomous data read on {env} datasource requires human approval.",
-            risk_level="warning",
+            reason=admission.reason,
+            risk_level=admission.risk_level,
             safe_args=args,
-            approval=approval_contract,
+            approval={
+                "kind": "tool_admission",
+                "subject_fingerprint": canonical_hash(subject),
+                "resource_ref": (
+                    admission.resource_ref.model_dump(mode="json")
+                    if admission.resource_ref is not None
+                    else None
+                ),
+            },
         )
     return None
 
@@ -294,7 +258,7 @@ _RULES: list[_RuleFunc] = [
     _rule_capabilities,
     _rule_tool_group,
     _rule_execution_mode,
-    _rule_validated_sql,
+    _rule_tool_admission,
     _rule_agent_read_approval,
     _rule_requires_approval,
 ]

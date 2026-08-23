@@ -14,7 +14,8 @@ from engine.app.safe_errors import (
     fixed_error_detail,
     log_unexpected_exception,
 )
-from engine.connectivity.factory import (
+from dlcs.dbfox_data.backend.connection_primitives import (
+    ConnectionConfigurationError,
     build_mysql_ssl_params,
     build_postgres_ssl_params,
 )
@@ -50,6 +51,16 @@ from engine.security.credential_vault import (
 logger = logging.getLogger("dbfox.api.datasources.crud")
 router = APIRouter()
 _CONNECTION_TEST_FAILED_MESSAGE = "数据库连接测试失败，请检查连接配置。"
+
+
+def _validate_tls_profile(db_type: str, config: dict[str, Any]) -> None:
+    try:
+        if db_type == "mysql":
+            build_mysql_ssl_params(config)
+        elif db_type == "postgresql":
+            build_postgres_ssl_params(config)
+    except ConnectionConfigurationError as exc:
+        raise DataSourceConnectionError(str(exc)) from exc
 
 
 class DatasourceDeleteConfirmRequest(BaseModel):
@@ -133,7 +144,13 @@ def _claim_credential_lease(
             "New datasource credentials require a server-issued credential lease.",
             code="CREDENTIAL_LEASE_REQUIRED",
         )
-    CredentialLeaseSaga(db).claim(req.credential_lease_id, credential_ids)
+    CredentialLeaseSaga(db).claim(
+        req.credential_lease_id,
+        credential_ids,
+        owner_id="dbfox.data",
+        owner_operation="legacy.datasource",
+        owner_project_id=getattr(req, "project_id", None),
+    )
     return req.credential_lease_id
 
 
@@ -168,7 +185,7 @@ def _public_connection_test_failure(exc: Exception) -> DataSourceConnectionError
 
 def _commit_credential_lease(db: Session, lease_id: str | None) -> None:
     if lease_id:
-        CredentialLeaseSaga(db).commit_claim(lease_id)
+        CredentialLeaseSaga(db).commit_claim(lease_id, owner_id="dbfox.data")
         db.commit()
 
 
@@ -286,10 +303,7 @@ def api_create_datasource(
         from engine.projects.service import resolve_project_id
 
         config = req.model_dump()
-        if req.db_type == "mysql":
-            build_mysql_ssl_params(config)
-        elif req.db_type == "postgresql":
-            build_postgres_ssl_params(config)
+        _validate_tls_profile(req.db_type, config)
         project_id = resolve_project_id(db, req.project_id)
         password_credential_id = _require_credential_reference(
             vault, req.password_credential_id, CredentialKind.DATASOURCE_PASSWORD
@@ -408,10 +422,7 @@ def api_update_datasource(
             if credential_id
         }
         config = req.model_dump()
-        if req.db_type == "mysql":
-            build_mysql_ssl_params(config)
-        elif req.db_type == "postgresql":
-            build_postgres_ssl_params(config)
+        _validate_tls_profile(req.db_type, config)
         effective_references = _validate_effective_credential_references(
             vault,
             effective_references,

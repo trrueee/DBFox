@@ -35,7 +35,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from engine.api import router
 from engine.db import SessionLocal, initialize_metadata_database
 from engine.agent.coordinator import SessionCoordinator
-from engine.runtime_composition import build_product_run_loop
+from engine.runtime_composition import (
+    build_product_run_loop,
+    default_credential_reference_probes,
+    get_active_runtime_snapshot,
+)
 from engine.app.request_limits import AgentInputRequestBodyLimitMiddleware
 from engine.app.safe_errors import FixedErrorCode, fixed_error_detail
 from engine.diagnostics.logs import configure_diagnostic_logging
@@ -86,7 +90,12 @@ async def lifespan(application: FastAPI) -> Any:
         initialize_metadata_database()
 
         from engine.security.credential_lease import reconcile_credential_leases
-        reconcile_credential_leases(SessionLocal)
+
+        runtime_snapshot = get_active_runtime_snapshot()
+        reconcile_credential_leases(
+            SessionLocal,
+            reference_probes=default_credential_reference_probes(runtime_snapshot),
+        )
 
         # Security audit is local product data with an explicit bounded lifecycle.
         # Prune before the coordinator starts so startup recovery cannot race it.

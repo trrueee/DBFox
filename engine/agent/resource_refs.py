@@ -10,7 +10,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.json_codec import canonical_dumps as _json, loads as _loads
-from engine.tools.runtime.attempt import ResourceScopeRef
+from engine.resource import ResourceScopeRef
 
 MAX_INPUT_RESOURCE_REFS = 16
 
@@ -61,18 +61,12 @@ def dump_resource_refs(refs: tuple[ResourceScopeRef, ...]) -> str:
     return _json([ref.model_dump() for ref in refs])
 
 
-def load_resource_refs(raw_json: str | None) -> tuple[ResourceScopeRef, ...] | None:
+def load_resource_refs(raw_json: str) -> tuple[ResourceScopeRef, ...]:
     """Deserialize frozen resource refs from persisted JSON.
 
-    Returns:
-        tuple of refs if JSON was non-NULL (including empty tuple for "[]")
-        None if JSON was NULL (legacy pre-P4 record)
-
     Raises:
-        ValueError on malformed non-NULL JSON (fail closed)
+        ValueError on malformed JSON (fail closed)
     """
-    if raw_json is None:
-        return None
     try:
         raw = _loads(raw_json)
     except Exception as exc:
@@ -97,3 +91,38 @@ def load_resource_refs(raw_json: str | None) -> tuple[ResourceScopeRef, ...] | N
             raise ValueError(f"duplicate resource ref: {key}")
         seen.add(key)
     return tuple(refs)
+
+
+def resource_refs_for_run(
+    db: Any,
+    run: Any,
+) -> tuple[ResourceScopeRef, ...]:
+    """Return one Run's frozen authority from its admitted SessionInput.
+
+    Missing or pre-resource-ref inputs fail closed.  Durable Run compatibility
+    fields are never an authority source.
+    """
+
+    from engine.models import AgentSessionInput
+
+    input_id = str(getattr(run, "input_id", "") or "")
+    if input_id:
+        input_row = db.get(AgentSessionInput, input_id)
+        if input_row is not None:
+            return load_resource_refs(str(input_row.resource_refs_json))
+    return ()
+
+
+def single_run_resource_ref(
+    db: Any,
+    run: Any,
+    kind: str,
+) -> ResourceScopeRef | None:
+    """Return the unambiguous frozen ref for ``kind`` or ``None``."""
+
+    matches = tuple(
+        ref
+        for ref in resource_refs_for_run(db, run)
+        if ref.kind == kind
+    )
+    return matches[0] if len(matches) == 1 else None

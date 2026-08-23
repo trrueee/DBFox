@@ -51,7 +51,7 @@ def _create_test_dlc_tree(
                 "version": "1.0.0",
                 "displayName": "Feasibility Proof DLC",
                 "publisher": "acme",
-                "extensionApiVersion": "1",
+                "extensionApiVersion": "2",
                 "requiresDbfox": ">=1.0.0",
             }
         ),

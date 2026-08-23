@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
+    ResourceKey,
     ToolAttemptRequest,
 )
 from engine.tools.materialization import current_tool_contract_hash
@@ -16,13 +17,12 @@ from engine.tools.runtime.result import ToolResult
 from engine.tools.runtime.runtime import ToolRuntime
 
 if TYPE_CHECKING:
+    from engine.agent.artifact import Artifact, ArtifactRelationType
     from sqlalchemy.orm import Session
 
 
 @dataclass(frozen=True)
 class AttemptInvocationRequest:
-    datasource_id: str
-    datasource_generation: int
     question: str
     session_id: str
     run_id: str
@@ -30,13 +30,8 @@ class AttemptInvocationRequest:
     execution_id: str
 
 
-def _database_scope_request(request: ToolAttemptRequest) -> AttemptInvocationRequest:
-    database = request.invocation.scope("database")
-    datasource_id = database.id if database is not None else ""
-    generation = int(database.version or 0) if database is not None else 0
+def _invocation_request(request: ToolAttemptRequest) -> AttemptInvocationRequest:
     return AttemptInvocationRequest(
-        datasource_id=datasource_id,
-        datasource_generation=generation,
         question=f"Isolated tool attempt {request.tool_name}",
         session_id=request.invocation.session_id,
         run_id=request.invocation.run_id,
@@ -64,6 +59,11 @@ class ToolAttemptHandler:
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
         metadata_session: Session | None = None,
+        artifact_loader: Callable[[str], Artifact | None] | None = None,
+        artifact_relation_loader: Callable[
+            [str, ArtifactRelationType],
+            tuple[Artifact, ...],
+        ] | None = None,
     ) -> ToolResult:
         tool = self._resolve_tool(request)
         if isinstance(tool, ToolResult):
@@ -77,17 +77,24 @@ class ToolAttemptHandler:
             deadline=deadline,
             execution_authority=None,
             metadata_session=metadata_session,
+            artifact_loader=artifact_loader,
+            artifact_relation_loader=artifact_relation_loader,
         )
 
     def run_with_resources(
         self,
         request: ToolAttemptRequest,
-        resources: dict[str, Any],
+        resources: dict[ResourceKey, Any],
         *,
         cancellation_probe: Callable[[], bool] | None = None,
         deadline: float | None = None,
         execution_authority: Any | None = None,
         metadata_session: Session | None = None,
+        artifact_loader: Callable[[str], Artifact | None] | None = None,
+        artifact_relation_loader: Callable[
+            [str, ArtifactRelationType],
+            tuple[Artifact, ...],
+        ] | None = None,
     ) -> ToolResult:
         tool = self._resolve_tool(request)
         if isinstance(tool, ToolResult):
@@ -100,6 +107,8 @@ class ToolAttemptHandler:
             deadline=deadline,
             execution_authority=execution_authority,
             metadata_session=metadata_session,
+            artifact_loader=artifact_loader,
+            artifact_relation_loader=artifact_relation_loader,
         )
 
     def _resolve_tool(self, request: ToolAttemptRequest) -> BaseTool | ToolResult:
@@ -159,14 +168,19 @@ class ToolAttemptHandler:
         self,
         request: ToolAttemptRequest,
         tool: BaseTool,
-        resources: dict[str, Any],
+        resources: dict[ResourceKey, Any],
         *,
         cancellation_probe: Callable[[], bool] | None,
         deadline: float | None,
         execution_authority: Any | None,
         metadata_session: Session | None = None,
+        artifact_loader: Callable[[str], Artifact | None] | None = None,
+        artifact_relation_loader: Callable[
+            [str, ArtifactRelationType],
+            tuple[Artifact, ...],
+        ] | None = None,
     ) -> ToolResult:
-        invocation_request = _database_scope_request(request)
+        invocation_request = _invocation_request(request)
         runtime = ToolRuntime(self.registry)
         if request.mode == "reconcile":
             return runtime.reconcile(
@@ -174,22 +188,28 @@ class ToolAttemptHandler:
                 raw_input=dict(request.authorized_input),
                 request=invocation_request,
                 idempotency_key=request.invocation.idempotency_key,
+                invocation_id=request.invocation.invocation_id,
                 cancellation_probe=cancellation_probe,
                 deadline=deadline,
                 execution_authority=execution_authority,
                 scope_refs=request.invocation.scope_refs,
                 resources=resources,
                 metadata_session=metadata_session,
+                artifact_loader=artifact_loader,
+                artifact_relation_loader=artifact_relation_loader,
             )
         return runtime.invoke(
             tool_name=request.tool_name,
             raw_input=dict(request.authorized_input),
             request=invocation_request,
             idempotency_key=request.invocation.idempotency_key,
+            invocation_id=request.invocation.invocation_id,
             cancellation_probe=cancellation_probe,
             deadline=deadline,
             execution_authority=execution_authority,
             scope_refs=request.invocation.scope_refs,
             resources=resources,
             metadata_session=metadata_session,
+            artifact_loader=artifact_loader,
+            artifact_relation_loader=artifact_relation_loader,
         )

@@ -10,8 +10,7 @@ from engine.agent.loop import RunLoop
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.tool_dispatcher import ToolRequest
 from engine.errors import ToolInputError
-from engine.models import AgentSession, DataSource, Project
-from engine.runtime_composition import build_product_tool_registry
+from engine.models import AgentSession, Project
 from engine.tools.materialization import (
     current_tool_contract_hash,
     materialize_tools,
@@ -29,8 +28,19 @@ from engine.tools.runtime import (
 from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.tools.runtime.resource_context import (
     build_tool_scope_context,
-    legacy_available_resource_kinds,
 )
+from engine.tests.workspace_test_support import registry_with_legacy_workspace
+
+
+def _registry_with_workspace_test_fixture() -> ToolRegistry:
+    """Compose legacy workspace probes explicitly for resource-runtime tests.
+
+    Workspace is no longer part of the product's built-in registry; production
+    receives these tools from dbfox.workspace. These tests exercise generic
+    materialization/scope behavior, so their fixture must opt in explicitly.
+    """
+
+    return registry_with_legacy_workspace(include_write=True)
 
 
 class _DummyInput(ToolInputModel):
@@ -61,7 +71,7 @@ class _ProbeTool(BaseTool[_DummyInput, _DummyOutput]):
 
 
 def test_materialization_empty_available_resources() -> None:
-    registry = build_product_tool_registry()
+    registry = _registry_with_workspace_test_fixture()
     materialized = materialize_tools(
         registry,
         execution_mode="agent_autonomous_read",
@@ -98,11 +108,11 @@ def test_materialization_empty_available_resources() -> None:
 
 
 def test_materialization_database_only() -> None:
-    registry = build_product_tool_registry()
+    registry = _registry_with_workspace_test_fixture()
     materialized = materialize_tools(
         registry,
         execution_mode="agent_autonomous_read",
-        available_resource_kinds=frozenset({"database"}),
+        available_resource_kinds=frozenset({"dbfox.data.database"}),
     )
     names = {tool.name for tool in materialized.tools}
 
@@ -135,7 +145,7 @@ def test_materialization_database_only() -> None:
 
 
 def test_materialization_workspace_only() -> None:
-    registry = build_product_tool_registry()
+    registry = _registry_with_workspace_test_fixture()
     materialized = materialize_tools(
         registry,
         execution_mode="agent_autonomous_read",
@@ -166,11 +176,11 @@ def test_materialization_workspace_only() -> None:
 
 
 def test_materialization_both_database_and_workspace() -> None:
-    registry = build_product_tool_registry()
+    registry = _registry_with_workspace_test_fixture()
     materialized = materialize_tools(
         registry,
         execution_mode="agent_autonomous_read",
-        available_resource_kinds=frozenset({"database", "workspace"}),
+        available_resource_kinds=frozenset({"dbfox.data.database", "workspace"}),
     )
     names = {tool.name for tool in materialized.tools}
 
@@ -185,7 +195,7 @@ def test_materialization_both_database_and_workspace() -> None:
 
 
 def test_materialization_none_available_resources_unconstrained() -> None:
-    registry = build_product_tool_registry()
+    registry = _registry_with_workspace_test_fixture()
     materialized = materialize_tools(
         registry,
         execution_mode="agent_autonomous_read",
@@ -219,7 +229,7 @@ def test_orthogonality_capability_without_resource_requirement() -> None:
     materialized = materialize_tools(
         reg,
         execution_mode="agent_autonomous_read",
-        available_resource_kinds=frozenset({"database"}),
+        available_resource_kinds=frozenset({"dbfox.data.database"}),
     )
     assert len(materialized.tools) == 1
     assert materialized.tools[0].name == "custom_filesystem_read_no_res"
@@ -241,7 +251,7 @@ def test_orthogonality_resource_requirement_without_capability() -> None:
     db_only = materialize_tools(
         reg,
         execution_mode="agent_autonomous_read",
-        available_resource_kinds=frozenset({"database"}),
+        available_resource_kinds=frozenset({"dbfox.data.database"}),
     )
     assert len(db_only.tools) == 0
 
@@ -261,20 +271,18 @@ def test_orthogonality_resource_requirement_without_capability() -> None:
 
 
 def test_scope_context_exact_subset_resolution(db_session) -> None:
-    registry = build_product_tool_registry()
+    registry = _registry_with_workspace_test_fixture()
     db_tool = registry.require("catalog_overview")
     ws_tool = registry.require("file_read")
     free_tool = registry.require("remote_job_submit")
 
-    db_ref = ResourceScopeRef(kind="database", id="ds-1", version=1)
+    db_ref = ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version=1)
     ws_ref = ResourceScopeRef(kind="workspace", id="p-1", version="hash123")
 
     db = db_session
     if True:
         # 1. DB-only request
         req_db = ToolRequest(
-            datasource_id="ds-1",
-            datasource_generation=1,
             question="test",
             session_id="s-1",
             run_id="r-1",
@@ -284,8 +292,8 @@ def test_scope_context_exact_subset_resolution(db_session) -> None:
         )
         scopes, resources = build_tool_scope_context(db, req_db, db_tool)
         assert scopes == (db_ref,)
-        assert "database" in resources
-        assert "workspace" not in resources
+        assert db_ref.canonical() in resources
+        assert all(key[0] != "workspace" for key in resources)
 
         # Trying to execute workspace tool on DB-only request fails
         with pytest.raises(ToolInputError, match="没有已授权的本地工作目录"):
@@ -298,8 +306,6 @@ def test_scope_context_exact_subset_resolution(db_session) -> None:
 
         # 2. Workspace-only request
         req_ws = ToolRequest(
-            datasource_id=None,
-            datasource_generation=0,
             question="test",
             session_id="s-1",
             run_id="r-1",
@@ -313,8 +319,6 @@ def test_scope_context_exact_subset_resolution(db_session) -> None:
 
         # 3. Explicit zero-resource request
         req_zero = ToolRequest(
-            datasource_id=None,
-            datasource_generation=0,
             question="test",
             session_id="s-1",
             run_id="r-1",
@@ -349,7 +353,7 @@ def test_contract_hash_differs_when_required_resource_kinds_change() -> None:
         name = "probe"
         execution = ToolExecutionSpec(
             capabilities=("database_read",),
-            required_resource_kinds=("database",),
+            required_resource_kinds=("dbfox.data.database",),
         )
 
     hash_a = current_tool_contract_hash(ToolA())
@@ -373,15 +377,15 @@ def test_required_resource_kinds_validation() -> None:
 
     # No duplicates
     with pytest.raises(ValueError, match="duplicates"):
-        ToolExecutionSpec(required_resource_kinds=("database", "database"))
+        ToolExecutionSpec(required_resource_kinds=("dbfox.data.database", "dbfox.data.database"))
 
     # Max 8 items
     with pytest.raises(ValueError, match="cannot exceed 8 items"):
         ToolExecutionSpec(required_resource_kinds=tuple(f"kind_{i}" for i in range(9)))
 
     # Valid
-    spec = ToolExecutionSpec(required_resource_kinds=("database", "workspace", "custom"))
-    assert spec.required_resource_kinds == ("database", "workspace", "custom")
+    spec = ToolExecutionSpec(required_resource_kinds=("dbfox.data.database", "workspace", "custom"))
+    assert spec.required_resource_kinds == ("dbfox.data.database", "workspace", "custom")
 
 
 # ==============================================================================
@@ -397,7 +401,6 @@ def test_run_loop_turn_preparation_filters_tools_by_input_frozen_refs(
     # Create Project
     project = Project(
         name="P5 Test Project",
-        workspace_root=str(tmp_path),
     )
     db.add(project)
     db.flush()
@@ -405,7 +408,6 @@ def test_run_loop_turn_preparation_filters_tools_by_input_frozen_refs(
     # Create Session
     session = AgentSession(
         project_id=project.id,
-        datasource_id=None,
         title="P5 Turn Materialization Session",
     )
     db.add(session)
@@ -439,7 +441,7 @@ def test_run_loop_turn_preparation_filters_tools_by_input_frozen_refs(
     )
     run_loop = RunLoop(
         session_factory=factory,
-        registry=build_product_tool_registry(),
+        registry=_registry_with_workspace_test_fixture(),
         definition=all_groups_def,
     )
 
@@ -468,14 +470,12 @@ def test_run_loop_turn_preparation_zero_resources_filters_all_resource_tools(
     db = db_session
     project = Project(
         name="P5 Zero Resource Project",
-        workspace_root=str(tmp_path),
     )
     db.add(project)
     db.flush()
 
     session = AgentSession(
         project_id=project.id,
-        datasource_id=None,
         title="P5 Zero Resource Session",
     )
     db.add(session)
@@ -508,7 +508,7 @@ def test_run_loop_turn_preparation_zero_resources_filters_all_resource_tools(
     )
     run_loop = RunLoop(
         session_factory=factory,
-        registry=build_product_tool_registry(),
+        registry=_registry_with_workspace_test_fixture(),
         definition=all_groups_def,
     )
 
@@ -546,14 +546,12 @@ def test_conversation_tools_available_and_executable_in_workspace_only_session(
     db = db_session
     project = Project(
         name="Workspace Only Project",
-        workspace_root=str(tmp_path),
     )
     db.add(project)
     db.flush()
 
     session = AgentSession(
         project_id=project.id,
-        datasource_id=None,
         title="Workspace Only Session",
     )
     db.add(session)
@@ -573,7 +571,7 @@ def test_conversation_tools_available_and_executable_in_workspace_only_session(
     )
     db.commit()
 
-    registry = build_product_tool_registry()
+    registry = _registry_with_workspace_test_fixture()
     materialized = materialize_tools(
         registry,
         execution_mode="agent_autonomous_read",
@@ -619,14 +617,12 @@ def test_remote_job_lifecycle_in_zero_resource_session(
     db = db_session
     project = Project(
         name="Zero Resource Project",
-        workspace_root=str(tmp_path),
     )
     db.add(project)
     db.flush()
 
     session = AgentSession(
         project_id=project.id,
-        datasource_id=None,
         title="Zero Resource Session",
     )
     db.add(session)
@@ -645,7 +641,7 @@ def test_remote_job_lifecycle_in_zero_resource_session(
     )
     db.commit()
 
-    registry = build_product_tool_registry()
+    registry = _registry_with_workspace_test_fixture()
     materialized = materialize_tools(
         registry,
         execution_mode="agent_autonomous_read",
@@ -726,93 +722,29 @@ def test_remote_job_lifecycle_in_zero_resource_session(
     assert cancel_outcome.output.status == "cancelled"
 
 
-def test_legacy_materialization_and_execution_consistency_with_workspace(
-    tmp_path,
+def test_missing_frozen_refs_has_zero_authority(
     db_session,
 ) -> None:
-    db = db_session
-    # Project with valid workspace
-    project = Project(
-        name="Legacy WS Project",
-        workspace_root=str(tmp_path),
-    )
-    db.add(project)
-    db.flush()
-
-    ds = DataSource(
-        name="Legacy DS",
-        db_type="sqlite",
-        database_name="test.db",
-        project_id=project.id,
-    )
-    db.add(ds)
-    db.flush()
-
-    # Derived kinds must be {"database", "workspace"}
-    derived = legacy_available_resource_kinds(db, str(ds.id))
-    assert derived == frozenset({"database", "workspace"})
-
-    # Legacy execution scope context resolution:
-    # 1. Database tool resolves database
-    registry = build_product_tool_registry()
+    registry = _registry_with_workspace_test_fixture()
     db_tool = registry.require("catalog_overview")
     ws_tool = registry.require("file_read")
-
-    from types import SimpleNamespace
-    legacy_req = SimpleNamespace(
-        datasource_id=str(ds.id),
-        datasource_generation=1,
-        question="legacy test",
-        session_id="leg_sess_1",
-        run_id="leg_run_1",
-        execution_id="leg_exec_1",
-        frozen_resource_refs=None,  # Legacy pre-P4
+    request = ToolRequest(
+        question="no implicit authority",
+        session_id="no-implicit-session",
+        run_id="no-implicit-run",
+        execution_id="no-implicit-execution",
+        execution_mode="agent_autonomous_read",
     )
 
-    db_scopes, db_res = build_tool_scope_context(db, legacy_req, db_tool)
-    assert len(db_scopes) == 1
-    assert db_scopes[0].kind == "database"
-    assert "database" in db_res
+    with pytest.raises(ToolInputError, match="没有授权的数据库"):
+        build_tool_scope_context(db_session, request, db_tool)
+    with pytest.raises(ToolInputError, match="没有已授权的本地工作目录"):
+        build_tool_scope_context(db_session, request, ws_tool)
 
-    # 2. Workspace tool resolves workspace from project
-    ws_scopes, ws_res = build_tool_scope_context(db, legacy_req, ws_tool)
-    assert len(ws_scopes) == 1
-    assert ws_scopes[0].kind == "workspace"
-    assert "workspace" in ws_res
-
-
-def test_legacy_materialization_without_project_workspace(
-    db_session,
-) -> None:
-    db = db_session
-    # Project without workspace root
-    project = Project(
-        name="Legacy No-WS Project",
-        workspace_root=None,
-    )
-    db.add(project)
-    db.flush()
-
-    ds = DataSource(
-        name="Legacy No-WS DS",
-        db_type="sqlite",
-        database_name="test.db",
-        project_id=project.id,
-    )
-    db.add(ds)
-    db.flush()
-
-    # Derived kinds must be only {"database"}
-    derived = legacy_available_resource_kinds(db, str(ds.id))
-    assert derived == frozenset({"database"})
-
-    registry = build_product_tool_registry()
     materialized = materialize_tools(
         registry,
         execution_mode="agent_autonomous_read",
-        available_resource_kinds=derived,
+        available_resource_kinds=frozenset(),
     )
-    names = {t.name for t in materialized.tools}
-    assert "catalog_overview" in names
-    assert "file_read" not in names
-    assert "file_search" not in names
+    assert "catalog_overview" not in {tool.name for tool in materialized.tools}
+    assert "file_read" not in {tool.name for tool in materialized.tools}

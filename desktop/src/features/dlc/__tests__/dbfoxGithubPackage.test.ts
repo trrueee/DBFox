@@ -29,13 +29,6 @@ describe("dbfox.github packaged frontend", () => {
     expect(contributions.artifactRenderers.map((item) => item.type)).toEqual([
       "dbfox.github.file_snapshot",
     ]);
-    expect(contributions.requestedResources).toHaveLength(1);
-    expect(
-      contributions.requestedResources[0]({
-        projectId: "project-a",
-        conversationId: "conversation-a",
-      }),
-    ).toEqual({ complete: false });
     expect(invokeOperation).not.toHaveBeenCalled();
     expect(openDockTab).not.toHaveBeenCalled();
     expect(

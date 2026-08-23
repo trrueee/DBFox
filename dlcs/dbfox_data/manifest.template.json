@@ -1,0 +1,22 @@
+{
+  "manifestSchemaVersion": 2,
+  "id": "dbfox.data",
+  "version": "2.0.0",
+  "displayName": "DBFox Data",
+  "publisher": "dbfox",
+  "description": "Connection profiles and database resources for DBFox.",
+  "extensionApiVersion": "2",
+  "requiresDbfox": ">=1.0.0",
+  "entrypoints": {
+    "backend": "backend/entry.py",
+    "frontend": "frontend/index.js"
+  },
+  "permissions": [
+    "network",
+    "filesystem_read",
+    "filesystem_write",
+    "credentials:datasource_password",
+    "credentials:ssh_password",
+    "credentials:ssh_key_passphrase"
+  ]
+}

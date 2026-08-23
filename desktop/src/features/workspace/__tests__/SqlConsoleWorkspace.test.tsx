@@ -182,7 +182,7 @@ describe("SqlConsoleWorkspace", () => {
       rowCount: null,
       hasNextPage: false,
       latencyMs: 7,
-      consistency: "live_reexecution",
+      consistency: "durable_snapshot",
       originalExecutedAt: "2026-07-20T00:00:00Z",
       viewExecutedAt: "2026-07-20T00:00:01Z",
       viewExecutionId: "view-console",

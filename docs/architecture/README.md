@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-21
+> 最后核验：2026-08-22
 >
 > 事实源：当前源码、迁移、锁文件、协议测试和绑定目标 commit 的运行证据
 
@@ -21,14 +21,15 @@
 
 以下文档是 Context/Memory、Tool/Compatibility 和 Frontend Shell 三份 review 的最终收敛，描述接受后的目标边界和分阶段迁移。它们不能用来声称尚未合入的能力已经存在；每个 Phase 合入后仍需同步更新本页其他“当前实现”文档。
 
-1. [可扩展 Runtime 与 Workbench 架构计划](./extensible-runtime-workbench-program.md)：Umbrella RFC、两个 Kernel、共同不变量、贡献边界和全局非目标。
-2. [Runtime Extension Contracts](./runtime-extension-contracts.md)：Backend Extension Manifest、Invocation Context、Execution Environment、Capability Grant、Effect、Semantic 和 Completion Rule。
-3. [Runtime Extension 安全与兼容规范](./runtime-extension-security-compatibility.md)：isolated backend、Filesystem/Network/Process/Secret、Artifact envelope 和 wire compatibility。
-4. [Session Memory v4 与跨 Run 工作连续性](./session-memory-v4.md)：Catalog revision、Working State、prior Observation digest、Context 和 shadow migration。
-5. [Session Memory v4 Projection 实施合同](./session-memory-v4-projection-contract.md)：Effect/Projection model、rebuild、AgentBench、telemetry 和 bounds。
-6. [Workbench Shell 与 Workspace Dock](./workbench-shell-workspace-dock.md)：Project Sidebar、Conversation Main、注册式 Dock、Renderer 和 Shell/View state。
-7. [Workbench Shell 迁移规范](./workbench-shell-migration-guide.md)：组件复用、产品约束、迁移顺序、快捷键、测试和 Legacy 删除。
-8. [分阶段实施指南](./extensible-runtime-workbench-implementation-guide.md)：跨 ADR 的 PR 切片、依赖、质量门禁、观测、Rollout 和回滚。
+1. [Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md)：Project、Conversation intent、Run authority、ResourceKey、System DLC 与 Workbench composition 的终态权威边界。
+2. [可扩展 Runtime 与 Workbench 架构计划](./extensible-runtime-workbench-program.md)：Umbrella RFC、两个 Kernel、共同不变量、贡献边界和全局非目标；与新合同冲突处由新合同取代。
+3. [Runtime Extension Contracts](./runtime-extension-contracts.md)：Backend Extension Manifest、Invocation Context、Execution Environment、Capability Grant、Effect、Semantic 和 Completion Rule。
+4. [Runtime Extension 安全与兼容规范](./runtime-extension-security-compatibility.md)：isolated backend、Filesystem/Network/Process/Secret、Artifact envelope 和 wire compatibility。
+5. [Session Memory v4 与跨 Run 工作连续性](./session-memory-v4.md)：Catalog revision、Working State、prior Observation digest、Context 和 shadow migration。
+6. [Session Memory v4 Projection 实施合同](./session-memory-v4-projection-contract.md)：Effect/Projection model、rebuild、AgentBench、telemetry 和 bounds。
+7. [Workbench Shell 与 Workspace Dock](./workbench-shell-workspace-dock.md)：Project Sidebar、Conversation Main、注册式 Dock、Renderer 和 Shell/View state。
+8. [Workbench Shell 迁移规范](./workbench-shell-migration-guide.md)：组件复用、产品约束、迁移顺序、快捷键、测试和 Legacy 删除。
+9. [分阶段实施指南](./extensible-runtime-workbench-implementation-guide.md)：跨 ADR 的 PR 切片、依赖、质量门禁、观测、Rollout 和回滚。
 
 历史 review 继续保留问题发现价值，但不再作为与以上文档平行的实施合同。
 

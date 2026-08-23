@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from engine.sql.permissions import (
+from dlcs.dbfox_data.backend.sql.permissions import (
     MySQLPermissionProbe,
     PostgresPermissionProbe,
     SQLitePermissionProbe,
@@ -80,7 +80,10 @@ def test_sqlite_probe_reports_connection_and_file_write_state(
     db_path = tmp_path / "db.sqlite"
     db_path.write_text("", encoding="utf-8")
     cursor = _SQLiteCursor()
-    monkeypatch.setattr("engine.sql.permissions.sqlite.os.access", lambda *_args: True)
+    monkeypatch.setattr(
+        "dlcs.dbfox_data.backend.sql.permissions.sqlite.os.access",
+        lambda *_args: True,
+    )
 
     report = SQLitePermissionProbe(database_path=db_path).probe(_Connection(cursor))
 

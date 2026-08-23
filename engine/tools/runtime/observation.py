@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from engine.json_codec import byte_size
-from engine.sql.row_serializer import serialize_rows
+from dlcs.dbfox_data.backend.sql.row_serializer import serialize_rows
 
 
 RESULT_VALUE_KEYS = frozenset(

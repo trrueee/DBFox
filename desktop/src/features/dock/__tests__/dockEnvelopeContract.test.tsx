@@ -46,7 +46,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         title: "users",
         closeable: true,
         projectId: "project-1",
-        target: { type: "resource", kind: "database", id: "ds-1" },
+        target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
         stateKey: "dbfox.data.table:ds-1:users",
       };
 
@@ -177,7 +177,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       expect(shellTab.viewType).toBe("dbfox.data.sql-console");
       expect(shellTab.target).toEqual({
         type: "resource",
-        kind: "database",
+        kind: "dbfox.data.database",
         id: "ds-99",
       });
 
@@ -192,7 +192,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
 
       const tab = useWorkspaceStore.getState().dockTabs[0];
       expect(tab.viewKey).toBe("dbfox.data.table:ds-2:customers");
-      expect(tab.target).toEqual({ type: "resource", kind: "database", id: "ds-2" });
+      expect(tab.target).toEqual({ type: "resource", kind: "dbfox.data.database", id: "ds-2" });
 
       const tableState = useTableWorkspaceStore.getState().tableStateByTabId["dbfox.data.table:ds-2:customers"];
       expect(tableState).toEqual({
@@ -204,7 +204,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       useTableWorkspaceStore.getState().openMultiTable(["alpha", "beta"], { id: "ds-2", dbType: "sqlite" });
       const multiTab = useWorkspaceStore.getState().dockTabs[1];
       expect(multiTab.viewKey).toBe("dbfox.data.multi-table:ds-2:alpha|beta");
-      expect(multiTab.target).toEqual({ type: "resource", kind: "database", id: "ds-2" });
+      expect(multiTab.target).toEqual({ type: "resource", kind: "dbfox.data.database", id: "ds-2" });
 
       const multiState = useTableWorkspaceStore.getState().multiTableStateByTabId["dbfox.data.multi-table:ds-2:alpha|beta"];
       expect(multiState).toEqual({

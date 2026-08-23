@@ -9,9 +9,10 @@ from engine.agent.artifact import (
     ArtifactType,
     ArtifactVisibility,
 )
-from engine.sql.dialect_context import DialectContext
+from engine.sql.dialect_context import load_dialect_context
 from engine.sql.result_view.fingerprint import result_source_fingerprint
-from engine.tools.builtin.contracts import (
+from engine.resource import ResourceScopeRef
+from dlcs.dbfox_data.backend.tool_contracts import (
     DataPreviewOutput,
     QueryResultOutput,
     SqlValidateOutput,
@@ -20,9 +21,10 @@ from engine.tools.builtin.contracts import (
 
 def sql_validation_drafts(
     db: Session,
-    datasource_id: str,
+    database_ref: ResourceScopeRef,
     output: SqlValidateOutput,
 ) -> tuple[ArtifactDraft, ...]:
+    datasource_id = database_ref.id
     decision = output.execution_safety_decision
     dialect, fingerprint = _query_identity(db, datasource_id, output.safe_sql or output.original_sql)
     safety = ArtifactDraft(
@@ -46,6 +48,7 @@ def sql_validation_drafts(
             "schemaWarnings": decision.get("schema_warnings") or [],
             "scopeState": decision.get("scope_state") or {},
         },
+        resource_refs=(database_ref,),
     )
     query = ArtifactDraft(
         key="sql",
@@ -65,16 +68,17 @@ def sql_validation_drafts(
                 draft_key="safety",
             ),
         ),
+        resource_refs=(database_ref,),
     )
     return safety, query
 
 
 def preview_drafts(
     db: Session,
-    datasource_id: str,
-    datasource_generation: int | None,
+    database_ref: ResourceScopeRef,
     output: DataPreviewOutput,
 ) -> tuple[ArtifactDraft, ...]:
+    datasource_id = database_ref.id
     dialect, fingerprint = _query_identity(
         db, datasource_id, output.safe_sql, output.parameters
     )
@@ -91,6 +95,7 @@ def preview_drafts(
             "queryFingerprint": fingerprint,
             "parameters": output.parameters,
         },
+        resource_refs=(database_ref,),
     )
     result = ArtifactDraft(
         key="sample",
@@ -100,7 +105,7 @@ def preview_drafts(
         payload={
             "sourceSqlArtifactId": "",
             "queryFingerprint": fingerprint,
-            "datasourceGeneration": datasource_generation,
+            "datasourceGeneration": database_ref.version,
             "columns": output.columns,
             "rowCount": output.returned_rows,
             "returnedRows": output.returned_rows,
@@ -117,6 +122,7 @@ def preview_drafts(
                 draft_key="preview_sql",
             ),
         ),
+        resource_refs=(database_ref,),
         select_if_none=True,
     )
     return source, result
@@ -124,11 +130,11 @@ def preview_drafts(
 
 def query_result_draft(
     db: Session,
-    datasource_id: str,
+    database_ref: ResourceScopeRef,
     validation_artifact_id: str,
-    datasource_generation: int | None,
     output: QueryResultOutput,
 ) -> ArtifactDraft:
+    datasource_id = database_ref.id
     _, fingerprint = _query_identity(db, datasource_id, output.safe_sql)
     return ArtifactDraft(
         key="result",
@@ -138,7 +144,7 @@ def query_result_draft(
         payload={
             "sourceSqlArtifactId": validation_artifact_id,
             "queryFingerprint": fingerprint,
-            "datasourceGeneration": datasource_generation,
+            "datasourceGeneration": database_ref.version,
             "columns": output.columns,
             "rowCount": output.row_count,
             "returnedRows": output.returned_rows,
@@ -154,6 +160,7 @@ def query_result_draft(
                 artifact_id=validation_artifact_id,
             ),
         ),
+        resource_refs=(database_ref,),
         select_if_none=True,
     )
 
@@ -166,7 +173,7 @@ def _query_identity(
 ) -> tuple[str, str]:
     if not sql.strip():
         return "", ""
-    context = DialectContext.from_datasource_id(db, datasource_id)
+    context = load_dialect_context(db, datasource_id)
     return (
         context.sqlglot_dialect,
         result_source_fingerprint(sql, context.sqlglot_dialect, parameters),

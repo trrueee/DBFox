@@ -268,7 +268,7 @@ class TunnelManager:
             # The old pool creator used the prior local bind port.  Remove it
             # before publishing a reconnected tunnel so it cannot be reused if
             # the operating system later recycles that port.
-            from engine.sql.pool_registry import get_pool_registry
+            from dlcs.dbfox_data.backend.sql.pool_registry import get_pool_registry
 
             get_pool_registry().dispose_resource(resource_key)
             new_tunnel = self._start_physical_tunnel(ds_dict)

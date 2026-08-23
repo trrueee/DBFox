@@ -1279,7 +1279,7 @@ DBFox 保留自有 Harness 是有明确理由的：
 | Tool dispatch | `engine/agent/tool_dispatcher.py` |
 | Tool runtime | `engine/tools/runtime/` |
 | Policy/Approval | `engine/policy/gate.py`、`engine/agent/repositories/approval.py` |
-| SQL 参数与执行 | `engine/sql/bound_parameters.py`、`engine/sql/executor.py` |
+| SQL 参数与执行 | `dlcs/dbfox_data/backend/sql/bound_parameters.py`、`engine/sql/executor.py` |
 | Artifact/Evidence | `engine/agent/artifact.py`、`evidence.py` |
 | Terminalizer | `engine/agent/terminalizer.py` |
 | Conversation Recall | `engine/agent/conversation_recall.py`、`engine/tools/builtin/conversation.py` |

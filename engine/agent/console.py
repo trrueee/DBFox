@@ -1,6 +1,7 @@
 """Application service for artifact-backed SQL Console runs."""
 
 from __future__ import annotations
+from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -25,7 +26,8 @@ from engine.agent.terminalizer import Terminalizer
 from engine.errors import DBFoxError
 from engine.models import AgentSession, DataSource
 from engine.policy.engine import PolicyEngine
-from engine.sql.dialect_context import DialectContext
+from dlcs.dbfox_data.backend.sql.dialect_context import DatabaseDialectContext
+from engine.sql.dialect_context import dialect_context_from_datasource
 from engine.sql.executor import execute_query
 from engine.sql.result_view.fingerprint import result_source_fingerprint
 from engine.sql.safety.service import SqlSafetyService
@@ -69,7 +71,7 @@ class ConsoleRunService:
         question = request.question.strip() or "SQL Console"
 
         PolicyEngine.enforce_query_policy(datasource, sql)
-        dialect = DialectContext.from_datasource(datasource)
+        dialect = dialect_context_from_datasource(datasource)
         decision = SqlSafetyService(self.session).build_execution_decision(
             sql,
             dialect,
@@ -96,22 +98,15 @@ class ConsoleRunService:
                 AgentSession(
                     id=session_id,
                     project_id=project_id,
-                    datasource_id=request.datasource_id,
                     title="SQL Console",
-                    context_tables_json="[]",
                 )
             )
             self.session.flush()
-        elif aggregate.datasource_id is not None and str(aggregate.datasource_id) != request.datasource_id:
-            raise DBFoxError(
-                "Console Session belongs to a different datasource.",
-                code="CONSOLE_SESSION_DATASOURCE_MISMATCH",
-            )
 
         from engine.tools.runtime.attempt import ResourceScopeRef
         resource_refs = (
             ResourceScopeRef(
-                kind="database",
+                kind=DATABASE_RESOURCE_KIND,
                 id=request.datasource_id,
                 version=int(datasource.connection_generation),
             ),
@@ -202,7 +197,7 @@ class ConsoleRunService:
         run_id: str,
         turn_id: str,
         datasource: DataSource,
-        dialect: DialectContext,
+        dialect: DatabaseDialectContext,
         safe_sql: str,
         safety: dict[str, Any],
         execution: dict[str, Any],

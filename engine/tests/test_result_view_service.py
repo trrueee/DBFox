@@ -4,7 +4,9 @@ import json
 import logging
 from datetime import UTC, datetime
 
-from engine.models import AgentArtifactRecord, AgentRun, AgentSession, DataSource, SchemaColumn, SchemaTable
+from engine.agent.resource_refs import dump_resource_refs
+from engine.models import AgentArtifactRecord, AgentRun, AgentSession, AgentSessionInput, DataSource, SchemaColumn, SchemaTable
+from engine.resource import ResourceScopeRef
 from engine.sql.result_view import models as result_view_models
 from engine.sql.result_view.models import (
     ResultExportQuery,
@@ -41,17 +43,25 @@ def _add_result_source(
     )
     session = AgentSession(
         id=f"conv-{artifact_id}",
-        datasource_id=datasource_id,
         title="Result service",
-        context_tables_json="[]",
         created_at=now,
         updated_at=now,
+    )
+    input_row = AgentSessionInput(
+        id=f"input-{artifact_id}",
+        session_id=session.id,
+        run_id=f"run-{artifact_id}",
+        sequence=1,
+        idempotency_key=f"input-{artifact_id}",
+        content="Orders",
+        resource_refs_json=dump_resource_refs((
+            ResourceScopeRef(kind="dbfox.data.database", id=datasource_id, version=1),
+        )),
     )
     run = AgentRun(
         id=f"run-{artifact_id}",
         session_id=session.id,
-        datasource_id=datasource_id,
-        datasource_generation=1,
+        input_id=input_row.id,
         llm_credential_id="credential-result-service",
         question="Orders",
         request_json=json.dumps({"question": "Orders"}),
@@ -90,6 +100,8 @@ def _add_result_source(
     db_session.add(datasource)
     db_session.flush()
     db_session.add(session)
+    db_session.flush()
+    db_session.add(input_row)
     db_session.flush()
     db_session.add(run)
     db_session.flush()

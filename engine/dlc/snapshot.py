@@ -11,6 +11,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from engine.agent.context_fragment import ContextContributor
+from engine.agent.completion import CompletionConstraint, CompletionSupport
+from engine.agent.artifact_view import ArtifactChartViewProvider, ArtifactTableViewProvider
 from engine.agent.resource_refs import ProjectResourceProvider
 from engine.dlc.api import DlcOperationSpec
 from engine.dlc.compat import CURRENT_DBFOX_VERSION
@@ -29,6 +31,7 @@ class ActivatedDlcIdentity:
     publisher_key_id: str | None = None
     trust_status: DlcTrustStatus = DlcTrustStatus.TRUSTED_SIGNED
     frontend_entrypoint: str | None = None
+    permissions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -61,6 +64,48 @@ class ArtifactContractContribution:
 
 
 @dataclass(frozen=True)
+class ArtifactTableViewContribution:
+    """A durable tabular Artifact reader bound to its capability owner."""
+
+    artifact_type: str
+    provider: ArtifactTableViewProvider
+    owner_id: str
+
+
+@dataclass(frozen=True)
+class ArtifactChartViewContribution:
+    """A durable chart Artifact reader bound to its capability owner."""
+
+    artifact_type: str
+    provider: ArtifactChartViewProvider
+    owner_id: str
+
+
+@dataclass(frozen=True)
+class CompletionConstraintContribution:
+    """A completion constraint bound to its capability owner."""
+
+    constraint: CompletionConstraint
+    owner_id: str
+
+
+@dataclass(frozen=True)
+class CompletionSupportContribution:
+    """A durable-evidence support rule bound to its capability owner."""
+
+    support: CompletionSupport
+    owner_id: str
+
+
+@dataclass(frozen=True)
+class CredentialReferenceProbeContribution:
+    """A read-only credential ownership probe bound to its capability owner."""
+
+    probe: Callable[[Session, frozenset[str]], bool]
+    owner_id: str
+
+
+@dataclass(frozen=True)
 class DlcOperationContribution:
     """A registered typed operation bound to a DLC."""
 
@@ -75,6 +120,24 @@ class DlcActivationFailure:
     dlc_id: str
     error_code: str
     message: str = ""
+
+
+@dataclass(frozen=True)
+class BuiltinContributionSet:
+    """Immutable platform contribution inputs supplied to compilation.
+
+    Contribution families used by policy or conflict admission carry their
+    authoritative owner in the corresponding contribution value.
+    """
+
+    identifiers: tuple[str, ...] = ()
+    tools: tuple[ToolContribution, ...] = ()
+    resource_providers: tuple[ProjectResourceProvider, ...] = ()
+    resource_resolvers: tuple[ResourceResolverContribution, ...] = ()
+    context_contributors: tuple[Callable[[Session], ContextContributor], ...] = ()
+    completion_constraints: tuple[CompletionConstraintContribution, ...] = ()
+    completion_supports: tuple[CompletionSupportContribution, ...] = ()
+    credential_reference_probes: tuple[CredentialReferenceProbeContribution, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -99,8 +162,13 @@ class RuntimeContributionSnapshot:
     resource_providers: tuple[ProjectResourceProvider, ...]
     resource_resolvers: tuple[ResourceResolverContribution, ...]
     context_contributors: tuple[Callable[[Session], ContextContributor], ...]
+    completion_constraints: tuple[CompletionConstraintContribution, ...]
+    completion_supports: tuple[CompletionSupportContribution, ...]
     artifact_contracts: tuple[ArtifactContractContribution, ...]
     operations: tuple[DlcOperationContribution, ...]
+    artifact_table_views: tuple[ArtifactTableViewContribution, ...] = ()
+    artifact_chart_views: tuple[ArtifactChartViewContribution, ...] = ()
+    credential_reference_probes: tuple[CredentialReferenceProbeContribution, ...] = ()
     activation_failures: tuple[DlcActivationFailure, ...] = ()
 
 
@@ -126,10 +194,45 @@ class RuntimeContributionSnapshot:
                 return op
         return None
 
+    def get_artifact_contract(
+        self,
+        artifact_type: str,
+        schema_version: int,
+    ) -> ArtifactContractContribution | None:
+        for contribution in self.artifact_contracts:
+            if (
+                contribution.artifact_type == artifact_type
+                and contribution.schema_version == schema_version
+            ):
+                return contribution
+        return None
+
+    def get_artifact_table_view(
+        self,
+        artifact_type: str,
+    ) -> ArtifactTableViewContribution | None:
+        for contribution in self.artifact_table_views:
+            if contribution.artifact_type == artifact_type:
+                return contribution
+        return None
+
+    def get_artifact_chart_view(
+        self,
+        artifact_type: str,
+    ) -> ArtifactChartViewContribution | None:
+        for contribution in self.artifact_chart_views:
+            if contribution.artifact_type == artifact_type:
+                return contribution
+        return None
+
 
 def compute_snapshot_id(
     active_dlcs: tuple[ActivatedDlcIdentity, ...],
-    built_in_identifiers: tuple[str, ...] = ("builtin.data", "builtin.workspace"),
+    built_in_identifiers: tuple[str, ...] = (
+        "dbfox.core",
+        "dbfox.conversation",
+        "dbfox.remote_job",
+    ),
 ) -> str:
     """Deterministically compute the runtime snapshot ID from composition identity."""
     sorted_dlc_payload = [
@@ -142,7 +245,7 @@ def compute_snapshot_id(
     ]
     identity_payload = {
         "dbfox_version": CURRENT_DBFOX_VERSION,
-        "built_ins": list(built_in_identifiers),
+        "built_ins": sorted(set(built_in_identifiers)),
         "active_dlcs": sorted_dlc_payload,
     }
     canonical_bytes = canonical_json_bytes(identity_payload)

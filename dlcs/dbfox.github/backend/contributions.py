@@ -133,7 +133,7 @@ class GithubRepoOverviewTool(BaseTool[GithubRepoOverviewInput, GithubRepoOvervie
         context: ExtensionToolRunContext,
     ) -> GithubRepoOverviewOutput:
         del tool_input
-        service = context.require_resource("github.repository")
+        service = context.require_one("github.repository")
         if not isinstance(service, GithubReadService):
             raise RuntimeError("github.repository did not resolve to GithubReadService")
         try:
@@ -170,7 +170,7 @@ class GithubListFilesTool(BaseTool[GithubListFilesInput, GithubListFilesOutput])
         tool_input: GithubListFilesInput,
         context: ExtensionToolRunContext,
     ) -> GithubListFilesOutput:
-        service = context.require_resource("github.repository")
+        service = context.require_one("github.repository")
         if not isinstance(service, GithubReadService):
             raise RuntimeError("github.repository did not resolve to GithubReadService")
         try:
@@ -214,7 +214,7 @@ class GithubReadFileTool(BaseTool[GithubReadFileInput, GithubReadFileOutput]):
         tool_input: GithubReadFileInput,
         context: ExtensionToolRunContext,
     ) -> ToolOutcome[GithubReadFileOutput]:
-        service = context.require_resource("github.repository")
+        service = context.require_one("github.repository")
         if not isinstance(service, GithubReadService):
             raise RuntimeError("github.repository did not resolve to GithubReadService")
         try:

@@ -2,7 +2,6 @@ import type {
   ArtifactRendererContribution,
   DockViewContribution,
   FrontendExtensionHost,
-  RequestedResourceContributor,
   ResourceConnectorContribution,
 } from "../../../../sdk/frontend/index";
 
@@ -25,7 +24,6 @@ export interface RuntimeDlcActivationProjection {
 
 export interface DlcContributionSet {
   readonly connectors: readonly ResourceConnectorContribution[];
-  readonly requestedResources: readonly RequestedResourceContributor[];
   readonly dockViews: readonly DockViewContribution[];
   readonly artifactRenderers: readonly ArtifactRendererContribution<unknown>[];
 }

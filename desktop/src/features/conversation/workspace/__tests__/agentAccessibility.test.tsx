@@ -56,7 +56,6 @@ describe("Agent workspace accessibility", () => {
       input_id: "input-1",
       session_sequence: 1,
       user_message_id: "user-1",
-      datasource_id: "ds-1",
       question: "查询",
       status: "running",
       version: 1,

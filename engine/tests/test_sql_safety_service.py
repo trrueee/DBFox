@@ -5,29 +5,31 @@ import pytest
 from engine.errors import GuardrailValidationError
 from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
 from engine.sql.executor import execute_query
-from engine.sql.guardrail import GuardrailResult
-from engine.sql.dialect_context import DialectContext
+from dlcs.dbfox_data.backend.sql.guardrail import GuardrailResult
+from dlcs.dbfox_data.backend.sql.dialect_context import DatabaseDialectContext
+from engine.sql.dialect_context import dialect_context_from_datasource
 from engine.sql.safety.service import SqlSafetyService
 from engine.sql.safety_gate import validate_derived_sql, validate_pagination_base_sql
-from engine.sql.trust_gate import ExecutionSafetyDecision
-from engine.policy.authority import ExecutionAuthority, canonical_hash, safety_fingerprint
+from dlcs.dbfox_data.backend.sql.safety_contracts import ExecutionSafetyDecision
+from engine.policy.authority import ExecutionAuthority, canonical_hash
+from engine.resource import ResourceScopeRef
 
 
 def test_dialect_context_canonicalizes_datasource_dialect(test_datasource_module) -> None:
     original_db_type = test_datasource_module.db_type
     try:
         test_datasource_module.db_type = "postgres"
-        ctx = DialectContext.from_datasource(test_datasource_module)
+        ctx = dialect_context_from_datasource(test_datasource_module)
     finally:
         test_datasource_module.db_type = original_db_type
 
-    assert ctx.datasource_id == test_datasource_module.id
+    assert ctx.resource_id == test_datasource_module.id
     assert ctx.dialect == "postgresql"
     assert ctx.sqlglot_dialect == "postgres"
 
 
 def test_source_artifact_validation_reuses_guardrail_rules() -> None:
-    ctx = DialectContext(datasource_id="ds-source", dialect="mysql")
+    ctx = DatabaseDialectContext(resource_id="ds-source", dialect="mysql")
 
     warnings = SqlSafetyService().validate_source_artifact_sql("SELECT SLEEP(10)", ctx)
 
@@ -44,7 +46,7 @@ def test_source_artifact_validation_reuses_guardrail_rules() -> None:
     ],
 )
 def test_source_artifact_validation_accepts_readonly_set_operations(sql: str) -> None:
-    ctx = DialectContext(datasource_id="ds-source", dialect="postgresql")
+    ctx = DatabaseDialectContext(resource_id="ds-source", dialect="postgresql")
 
     assert SqlSafetyService().validate_source_artifact_sql(sql, ctx) == []
 
@@ -68,7 +70,7 @@ def test_build_execution_decision_uses_dialect_context(
     test_datasource_module,
 ) -> None:
     sync_schema(db_session_module, test_datasource_module.id)
-    ctx = DialectContext.from_datasource(test_datasource_module)
+    ctx = dialect_context_from_datasource(test_datasource_module)
 
     decision = SqlSafetyService(db_session_module).build_execution_decision(
         "SELECT id, username FROM users LIMIT 3",
@@ -111,11 +113,11 @@ def test_console_execute_api_passes_explicit_safety_decision(
     def fake_build_execution_decision(
         self: SqlSafetyService,
         sql: str,
-        ctx: DialectContext,
+        ctx: DatabaseDialectContext,
         *,
         policy: str = "readonly",
     ) -> ExecutionSafetyDecision:
-        built.append((sql, ctx.datasource_id))
+        built.append((sql, ctx.resource_id))
         assert policy == "user_readonly"
         return decision
 
@@ -222,6 +224,7 @@ def test_execute_query_accepts_matching_scoped_execution_authority(
         guardrail=guardrail,
     )
     safety = decision.model_dump(mode="json")
+    approval_subject = {"validationArtifactId": "artifact-1", "safety": safety}
     authority = ExecutionAuthority(
         approval_id="approval-1",
         invocation_id="invocation-1",
@@ -230,8 +233,12 @@ def test_execute_query_accepts_matching_scoped_execution_authority(
             {"validation_artifact_id": "artifact-1"}
         ),
         policy_fingerprint="policy-1",
-        safety_fingerprint=safety_fingerprint(safety),
-        datasource_generation=test_datasource.connection_generation,
+        approval_subject_fingerprint=canonical_hash(approval_subject),
+        resource_ref=ResourceScopeRef(
+            kind="dbfox.data.database",
+            id=str(test_datasource.id),
+            version=test_datasource.connection_generation,
+        ),
     )
 
     result = execute_query(
@@ -242,6 +249,7 @@ def test_execute_query_accepts_matching_scoped_execution_authority(
         safety_policy="agent_readonly",
         expected_connection_generation=test_datasource.connection_generation,
         execution_authority=authority,
+        approval_subject=approval_subject,
     )
 
     assert result["success"] is True
@@ -304,12 +312,12 @@ def test_db_preview_tool_passes_explicit_safety_decision(
     def fake_build_execution_decision(
         self: SqlSafetyService,
         sql: str,
-        ctx: DialectContext,
+        ctx: DatabaseDialectContext,
         *,
         policy: str = "readonly",
         parameters=None,
     ) -> ExecutionSafetyDecision:
-        built.append((sql, ctx.datasource_id, policy))
+        built.append((sql, ctx.resource_id, policy))
         return decision
 
     def fake_execute_query(
@@ -356,11 +364,11 @@ def test_sql_validate_tool_uses_sql_safety_service(
     def fake_build_execution_decision(
         self: SqlSafetyService,
         sql: str,
-        ctx: DialectContext,
+        ctx: DatabaseDialectContext,
         *,
         policy: str = "readonly",
     ) -> ExecutionSafetyDecision:
-        built.append((sql, ctx.datasource_id, policy))
+        built.append((sql, ctx.resource_id, policy))
         return decision
 
     monkeypatch.setattr(SqlSafetyService, "build_execution_decision", fake_build_execution_decision)
@@ -431,12 +439,12 @@ def test_test_data_fk_prefetch_passes_explicit_safety_decision(
     def fake_build_execution_decision(
         self: SqlSafetyService,
         sql: str,
-        ctx: DialectContext,
+        ctx: DatabaseDialectContext,
         *,
         policy: str = "readonly",
     ) -> ExecutionSafetyDecision:
-        built.append((sql, ctx.datasource_id, policy))
-        return _test_decision(ctx.datasource_id, policy=policy, sql=sql)
+        built.append((sql, ctx.resource_id, policy))
+        return _test_decision(ctx.resource_id, policy=policy, sql=sql)
 
     def fake_execute_query(_db, datasource_id: str, sql: str, **kwargs) -> dict[str, object]:
         received.append(kwargs.get("safety_decision"))

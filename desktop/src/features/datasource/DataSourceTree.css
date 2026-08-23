@@ -43,8 +43,10 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 0;
   padding: 8px 10px;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .hifi-sidebar-header {
@@ -160,7 +162,32 @@
 }
 
 .ds-tree-scroll-area .dbfox-scroll-area-viewport {
+  max-width: 100%;
+  overflow-x: hidden !important;
   padding: 4px 2px;
+}
+
+.ds-tree-scroll-area .dbfox-scroll-area-viewport > div,
+.ds-resource-section,
+.ds-section-content,
+.ds-connector-sections,
+.ds-connector-section,
+.ds-connector-section__content,
+.ds-connector-tree,
+.ds-tree-item-group,
+.ds-tree-item-children {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Radix uses an inline display:table wrapper to detect overflow. In a tree,
+   that wrapper adopts the longest resource name as its intrinsic width and
+   focus can then scroll the entire sidebar horizontally. This sidebar has an
+   explicit truncation contract, so its content wrapper must stay column-sized. */
+.ds-tree-scroll-area .dbfox-scroll-area-viewport > div {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
 }
 
 .ds-tree-status {
@@ -363,6 +390,52 @@
   gap: 1px;
 }
 
+.ds-tree-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 28px;
+  margin: 2px 6px 4px 22px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--control-bg-subtle, var(--agent-surface-muted));
+  color: var(--color-text-muted);
+}
+
+.ds-tree-filter:focus-within {
+  border-color: var(--control-border-hover);
+  background: var(--agent-surface-elevated);
+  box-shadow: var(--focus-ring);
+}
+
+.ds-tree-filter svg {
+  flex: 0 0 auto;
+}
+
+.ds-tree-filter input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--ui-font-caption, 11px);
+}
+
+.ds-tree-filter input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.ds-tree-filter-count {
+  flex: 0 0 auto;
+  font-size: var(--ui-font-caption, 11px);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Tree Rows & Geometry */
 .ds-tree-item-group {
   display: flex;
@@ -409,10 +482,49 @@
 }
 
 .ds-tree-table-name {
+  display: block;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ds-tree-datasource-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  min-width: 0;
+  align-items: center;
+}
+
+.ds-tree-datasource-entry .ds-tree-datasource-row {
+  min-width: 0;
+}
+
+.ds-tree-context-toggle {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ds-tree-datasource-entry:hover .ds-tree-context-toggle,
+.ds-tree-context-toggle:focus-visible,
+.ds-tree-context-toggle.is-selected {
+  opacity: 1;
+}
+
+.ds-tree-context-toggle:hover,
+.ds-tree-context-toggle.is-selected {
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  color: var(--color-primary);
 }
 
 .ds-group-chevron {

@@ -4,6 +4,8 @@ from engine.policy.gate import PolicyGate
 from engine.runtime_composition import build_product_tool_registry
 from engine.tools.runtime import (
     BaseTool,
+    ToolAdmissionContext,
+    ToolAdmissionDecision,
     ToolExecutionSpec,
     ToolInputModel,
     ToolOutputModel,
@@ -44,6 +46,38 @@ class PolicyTestTool(BaseTool[PolicyInput, PolicyOutput]):
         self.name = name
         self.policy = policy or ToolPolicy()
         self.execution = execution or ToolExecutionSpec()
+
+    def run(self, tool_input, context):
+        return PolicyOutput(ok=True)
+
+
+class ArtifactAdmissionTestTool(BaseTool[PolicyInput, PolicyOutput]):
+    name = "artifact_admission_test"
+    group = "test"
+    description = "Exercise fail-closed Artifact admission."
+    input_model = PolicyInput
+    output_model = PolicyOutput
+    policy = ToolPolicy(requires_admission=True)
+    presentation = ToolPresentation(
+        title="Artifact admission test",
+        category="manage",
+        visibility="developer",
+    )
+
+    def admit(
+        self,
+        tool_input: PolicyInput,
+        context: ToolAdmissionContext,
+    ) -> ToolAdmissionDecision:
+        try:
+            context.artifact(tool_input.validation_artifact_id or "")
+        except RuntimeError:
+            return ToolAdmissionDecision(
+                status="blocked",
+                reason="The required Artifact is unavailable in the current Run.",
+                risk_level="danger",
+            )
+        return ToolAdmissionDecision(status="allowed", reason="Artifact is current.")
 
     def run(self, tool_input, context):
         return PolicyOutput(ok=True)
@@ -171,21 +205,12 @@ def test_autonomous_database_read_requires_approval_on_unknown_environment(
     assert decision.status == "approval_required"
 
 
-def test_sql_execution_requires_an_exact_persisted_validation_artifact(db_session):
-    registry = ToolRegistry().register(
-        PolicyTestTool(
-            name="sql_execute_readonly",
-            policy=ToolPolicy(requires_validated_sql=True),
-            execution=ToolExecutionSpec(
-                capabilities=("metadata_read", "database_read")
-            ),
-        )
-    )
+def test_tool_admission_requires_an_exact_current_run_artifact(db_session):
+    registry = ToolRegistry().register(ArtifactAdmissionTestTool())
     decision = PolicyGate(registry, db_session).check(
         _state(),
-        "sql_execute_readonly",
+        "artifact_admission_test",
         {"validation_artifact_id": "artifact_missing"},
-        "agent_autonomous_read",
     )
     assert decision.status == "blocked"
     assert "current Run" in decision.reason

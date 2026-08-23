@@ -72,6 +72,24 @@ def test_ci_actions_are_pinned_to_full_commit_shas() -> None:
             assert re.fullmatch(r"[0-9a-f]{40}", revision), action
 
 
+def test_frozen_builds_bind_system_dlc_packages_to_explicit_signing_keys() -> None:
+    ci = CI_WORKFLOW.read_text(encoding="utf-8")
+    release = WINDOWS_SIGNED_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    builder = (ROOT / "build_sidecar.py").read_text(encoding="utf-8")
+    electron_builder = (ROOT / "desktop" / "electron-builder.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "DBFOX_SYSTEM_DLC_SIGNING_KEY_PATH" in builder
+    assert "Frozen releases require --system-dlc-signing-key" in builder
+    assert "ci.system-dlc-signer" in ci
+    assert "--unencrypted-key" in ci
+    assert "SYSTEM_DLC_SIGNING_KEY_BASE64" in release
+    assert "DBFOX_SYSTEM_DLC_SIGNING_KEY_PATH" in release
+    assert "dbfox.data.dbfox-dlc" in electron_builder
+    assert "dbfox.workspace.dbfox-dlc" in electron_builder
+
+
 def test_migration_archaeology_uses_a_committed_fixture_not_git_history() -> None:
     root = Path(__file__).resolve().parents[2]
     migration_tests = (root / "engine" / "tests" / "test_migrations.py").read_text(
@@ -547,12 +565,6 @@ def test_r5_core_product_graph_has_no_static_github_domain() -> None:
         / "desktop"
         / "src"
         / "features"
-        / "resources"
-        / "requestedResourceComposition.ts",
-        ROOT
-        / "desktop"
-        / "src"
-        / "features"
         / "workspace"
         / "artifacts"
         / "artifactRendererRegistry.tsx",
@@ -574,6 +586,93 @@ def test_r5_core_product_graph_has_no_static_github_domain() -> None:
         path.read_text(encoding="utf-8") for path in generated_root.rglob("*.ts")
     )
     assert "/projects/{project_id}/github" not in generated_contract
+
+
+def test_runtime_composition_does_not_own_data_domain_models() -> None:
+    """Kernel composition consumes contributions, never Data ORM entities."""
+
+    source = (ROOT / "engine" / "runtime_composition.py").read_text(
+        encoding="utf-8"
+    )
+    assert "from engine.models import" not in source
+    assert "DataSource" not in source
+    assert "list_database_resources" not in source
+
+
+def test_tool_dispatcher_has_no_data_specific_execution_or_cancellation_path() -> None:
+    """Kernel dispatch invokes generic Tool lifecycle hooks only."""
+
+    source = (ROOT / "engine" / "agent" / "tool_dispatcher.py").read_text(
+        encoding="utf-8"
+    )
+    assert "dbfox_data" not in source
+    assert "DATABASE_RESOURCE_KIND" not in source
+    assert "QUERY_REGISTRY" not in source
+
+
+def test_contribution_compiler_has_no_data_domain_branch() -> None:
+    """The generic DLC compiler accepts owner-bound seeds, never domain flags."""
+
+    source = (ROOT / "engine" / "dlc" / "compiler.py").read_text(
+        encoding="utf-8"
+    )
+    forbidden = (
+        "include_legacy_domain_builtins",
+        "data_capability",
+        "register_data_extension",
+        "dbfox.data",
+        "builtin.data",
+    )
+    assert not [token for token in forbidden if token in source]
+
+
+def test_data_resource_authority_has_one_namespaced_kind() -> None:
+    """Runtime authority never revives the retired bare Data resource kind."""
+
+    kind_source = (
+        ROOT / "dlcs" / "dbfox_data" / "backend" / "resource_kind.py"
+    ).read_text(encoding="utf-8")
+    assert 'DATABASE_RESOURCE_KIND = "dbfox.data.database"' in kind_source
+
+    authority_roots = (
+        ROOT / "engine" / "agent",
+        ROOT / "engine" / "policy",
+        ROOT / "engine" / "tools",
+        ROOT / "engine" / "sql",
+        ROOT / "dlcs" / "dbfox_data" / "backend",
+    )
+    retired_kind = re.compile(
+        r"kind\s*=\s*['\"]database['\"]|"
+        r"['\"]kind['\"]\s*:\s*['\"]database['\"]|"
+        r"(?:scope|scopes|resource|resources|require_one|register)\(\s*['\"]database['\"]"
+    )
+    offenders = [
+        path.relative_to(ROOT).as_posix()
+        for source_root in authority_roots
+        for path in source_root.rglob("*.py")
+        if "tests" not in path.parts
+        and retired_kind.search(path.read_text(encoding="utf-8"))
+    ]
+    assert not offenders, offenders
+
+
+def test_core_project_model_has_no_data_domain_collections() -> None:
+    """Data may reference Project identity; Project must not own Data object graphs."""
+
+    from engine.models import Project
+
+    assert not hasattr(Project, "data_sources")
+    assert not hasattr(Project, "backups")
+
+
+def test_credential_lease_core_has_no_data_domain_query() -> None:
+    """Credential lifecycle composes capability probes instead of Data fields."""
+
+    source = (ROOT / "engine" / "security" / "credential_lease.py").read_text(
+        encoding="utf-8"
+    )
+    assert "DataSource" not in source
+    assert "password_credential_id" not in source
 
 
 def test_readme_architecture_diagram_is_static_svg() -> None:

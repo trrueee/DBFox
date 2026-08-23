@@ -13,9 +13,11 @@ from engine.agent.question import (
 )
 from engine.agent.repositories.approval import ApprovalRepository
 from engine.agent.repositories.question import QuestionRepository
+from engine.agent.repositories.resource_intent import ConversationResourceIntentRepository
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
+from engine.agent.resource_refs import RequestedResourceRef
 from engine.agent.run_item import project_run
 from engine.app.safe_errors import FixedErrorCode, fixed_error_detail
 from engine.api.conversation_common import coordinator
@@ -31,7 +33,7 @@ from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.json_codec import loads as json_loads
 from engine.llm.config import LlmConfigurationError, normalize_product_llm_preferences
-from engine.models import AgentRun, AgentRunItemRecord, AgentSession, DataSource, Project
+from engine.models import AgentRun, AgentRunItemRecord, AgentSession, Project
 from engine.runtime_composition import authorize_project_resources
 from engine.schemas.api_responses import (
     ArtifactSelectionResponse,
@@ -45,6 +47,25 @@ from engine.schemas.api_responses import (
 router = APIRouter()
 
 
+def _requested_resource_identity(kind: str, resource_id: str) -> RequestedResourceRef:
+    return RequestedResourceRef(kind=kind, id=resource_id)
+
+
+def _merge_requested_resource_identities(
+    intent_refs: tuple[RequestedResourceRef, ...],
+    message_refs: tuple[RequestedResourceRef, ...],
+) -> tuple[RequestedResourceRef, ...]:
+    merged: list[RequestedResourceRef] = []
+    seen: set[tuple[str, str]] = set()
+    for ref in (*intent_refs, *message_refs):
+        key = (ref.kind, ref.id)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(ref)
+    return tuple(merged)
+
+
 @router.post("/conversations", response_model=ConversationSnapshotResponse)
 def create_conversation(
     payload: ConversationCreateRequest,
@@ -56,26 +77,31 @@ def create_conversation(
             status_code=404,
             detail={"code": "PROJECT_NOT_FOUND", "message": "Project not found."},
         )
-    datasource_id: str | None = None
-    if payload.datasource_id is not None:
-        datasource = db.get(DataSource, payload.datasource_id)
-        if datasource is None:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "DATASOURCE_NOT_FOUND", "message": "Datasource not found."},
-            )
-        if str(datasource.project_id) != payload.project_id:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "DATASOURCE_PROJECT_MISMATCH", "message": "Datasource does not belong to the specified Project."},
-            )
-        datasource_id = str(datasource.id)
+    requested_intents = list(payload.resource_intents)
+    try:
+        authorized_intents = authorize_project_resources(
+            db,
+            project_id=payload.project_id,
+            requested=requested_intents,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_RESOURCE_INTENT", "message": str(exc)},
+        ) from exc
+
     row = SessionRepository(db).create(
         project_id=payload.project_id,
-        datasource_id=datasource_id,
         title=payload.title or "New conversation",
-        context_tables=payload.context_tables,
     )
+    if authorized_intents:
+        ConversationResourceIntentRepository(db).replace(
+            str(row.id),
+            tuple(
+                _requested_resource_identity(ref.kind, ref.id)
+                for ref in authorized_intents
+            ),
+        )
     db.commit()
     detail = conversation_snapshot(db, str(row.id))
     if detail is None:
@@ -95,11 +121,30 @@ def patch_conversation(
     row = SessionRepository(db).update_metadata(
         session_id=conversation_id,
         title=payload.title,
-        context_tables=payload.context_tables,
         archived=payload.archived,
     )
     if row is None:
         raise DBFoxError("Conversation not found.", code="CONVERSATION_NOT_FOUND")
+    if payload.resource_intents is not None:
+        try:
+            authorized_intents = authorize_project_resources(
+                db,
+                project_id=str(row.project_id or ""),
+                requested=payload.resource_intents,
+            )
+            ConversationResourceIntentRepository(db).replace(
+                conversation_id,
+                tuple(
+                    _requested_resource_identity(ref.kind, ref.id)
+                    for ref in authorized_intents
+                ),
+            )
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_RESOURCE_INTENT", "message": str(exc)},
+            ) from exc
     db.commit()
     detail = conversation_snapshot(db, conversation_id)
     if detail is None:
@@ -149,11 +194,15 @@ def admit_conversation_input(
         )
 
     try:
+        intent_refs = ConversationResourceIntentRepository(db).list(conversation_id)
+        requested_identities = _merge_requested_resource_identities(
+            intent_refs,
+            tuple(payload.requested_resources or ()),
+        )
         resource_refs = authorize_project_resources(
             db,
             project_id=str(aggregate.project_id or ""),
-            requested=payload.requested_resources,
-            fallback_datasource_id=str(aggregate.datasource_id) if aggregate.datasource_id else None,
+            requested=list(requested_identities),
         )
     except ValueError as exc:
         raise HTTPException(

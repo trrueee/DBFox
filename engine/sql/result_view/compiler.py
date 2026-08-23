@@ -5,9 +5,9 @@ from typing import Final, cast
 import sqlglot
 from sqlglot import exp
 
-from engine.sql.dialect_context import DialectContext
+from dlcs.dbfox_data.backend.sql.dialect_context import DatabaseDialectContext
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
-from engine.sql.sql_backed_view import (
+from dlcs.dbfox_data.backend.sql.sql_backed_view import (
     SqlBackedFilter,
     SqlBackedSort,
     SqlBackedViewError,
@@ -28,7 +28,7 @@ class ResultViewCompiler:
         self,
         query: ResultViewQuery | TableViewQuery,
         source: VerifiedResultSource,
-        ctx: DialectContext,
+        ctx: DatabaseDialectContext,
         *,
         limit: int | None,
         offset: int | None,
@@ -65,7 +65,7 @@ class ResultViewCompiler:
         self,
         query: ResultPageQuery | TablePageQuery,
         source: VerifiedResultSource,
-        ctx: DialectContext,
+        ctx: DatabaseDialectContext,
     ) -> str:
         return self.build_view_sql(
             query,
@@ -79,7 +79,7 @@ class ResultViewCompiler:
         self,
         query: ResultPageQuery | TablePageQuery,
         source: VerifiedResultSource,
-        ctx: DialectContext,
+        ctx: DatabaseDialectContext,
     ) -> str:
         source_sql = self.build_view_sql(query, source, ctx, limit=None, offset=None)
         try:
@@ -107,7 +107,7 @@ class ResultViewCompiler:
         self,
         query: ResultViewQuery | TableViewQuery,
         source: VerifiedResultSource,
-        ctx: DialectContext,
+        ctx: DatabaseDialectContext,
     ) -> str:
         return self.build_view_sql(query, source, ctx, limit=None, offset=None)
 

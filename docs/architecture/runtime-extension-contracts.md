@@ -9,6 +9,10 @@
 > 基线：`main@daa99d048decd7f5f8dc010cbe5465f332686a3c`
 >
 > 上位 RFC：[DBFox 可扩展 Runtime 与 Workbench 架构计划](./extensible-runtime-workbench-program.md)
+>
+> 2026-08-22 收敛说明：Project、Conversation authority、同 kind 多资源及 System DLC
+> 所有权以 [Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md)
+> 为准；本文保留其余 Extension 合同。
 
 ## 1. 决策
 
@@ -139,6 +143,14 @@ API adapter 负责：
 
 Raw response 不直接进入 Memory 或 Prompt。
 
+### 4.1.1 Run-scoped Artifact access
+
+需要消费前序 Tool 工作产品的 DLC Tool 只使用公开 `ExtensionToolRunContext.artifact(id)`。
+Host 必须把读取限制在当前 invoking `session_id + run_id`，不得暴露 ORM Session、repository、全局
+Artifact list 或跨 Run fallback。DLC 可使用公开 `ArtifactRelationDraft`、`ArtifactRelationType` 与
+`ArtifactVisibility` 产出关系图；所有 draft 仍由 Kernel 在一次写事务前验证 payload contract、
+relation target 与 frozen resource_refs。未配置宿主 loader 的执行 backend 必须 fail closed。
+
 ### 4.2 MCP
 
 MCP 是 External Tool Provider，不是第二套 Runtime。
@@ -230,7 +242,22 @@ class ResourceScopeRef(BaseModel):
 
 ## 6. Execution resource boundary：延迟到第二个真实案例
 
-当前只有 Database Tool 时继续复用现有 `ToolRunContext.require_database()` 和 leaf-owned SQLAlchemy Session。
+`ResourceScopeRef` 的执行身份是 `(kind, id)`，不能以 `kind` 为字典 key。当前
+`ToolRunContext` 提供：
+
+```python
+context.resource(ref)       # 精确 (kind, id)
+context.resources(kind)     # 同 kind 的全部已授权 handle
+context.scopes(kind)        # 同 kind 的全部 frozen refs
+context.require_one(kind)   # 仅当恰好一个时成功
+```
+
+Extension API v2 已删除单资源兼容名 `require_resource(kind)`；v1 包会在安装兼容性检查时
+被明确拒绝。DLC 必须选择 `require_one(kind)`，或使用 `(kind, id)` 精确访问多资源。
+
+API v2 的通用低层 primitive 还包括严格 `json_dumps()` 与安全诊断入口
+`log_extension_diagnostic()` / `log_extension_exception()`。它们用于跨真实 Host/DLC 边界保持
+同一 JSON 与脱敏日志合同；不允许据此向 DLC 暴露 Core logger、JSON codec 对象或应用容器。
 
 不要提前定义一个同时包含：
 
@@ -245,7 +272,7 @@ require_secret_resolver
 
 的万能 Environment。
 
-当 Workspace/File vertical slice 出现后，以 **Database + Workspace** 两种真实资源为样本提炼最小接口。要求：
+Database + Workspace 已证明这个最小接口。后续资源继续遵守：
 
 - Tool 只能看到本 invocation 被授权的资源；
 - 不能拿到全局应用容器；

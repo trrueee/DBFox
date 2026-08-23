@@ -25,7 +25,7 @@ export const dataDockViews: readonly DockViewContribution[] = [
     isVisible: (view, context) => {
       const stateKey = view.stateKey ?? view.viewKey;
       const dsId =
-        (view.target?.type === "resource" && view.target.kind === "database"
+        (view.target?.type === "resource" && view.target.kind === "dbfox.data.database"
           ? view.target.id
           : "")
         || useSqlConsoleStore.getState().sqlConsoleState[stateKey]?.datasourceId;
@@ -48,7 +48,7 @@ export const dataDockViews: readonly DockViewContribution[] = [
     isVisible: (view, context) => {
       const stateKey = view.stateKey ?? view.viewKey;
       const dsId =
-        (view.target?.type === "resource" && view.target.kind === "database"
+        (view.target?.type === "resource" && view.target.kind === "dbfox.data.database"
           ? view.target.id
           : "")
         || useTableWorkspaceStore.getState().tableStateByTabId[stateKey]?.datasourceId;
@@ -67,7 +67,7 @@ export const dataDockViews: readonly DockViewContribution[] = [
     isVisible: (view, context) => {
       const stateKey = view.stateKey ?? view.viewKey;
       const dsId =
-        (view.target?.type === "resource" && view.target.kind === "database"
+        (view.target?.type === "resource" && view.target.kind === "dbfox.data.database"
           ? view.target.id
           : "")
         || useTableWorkspaceStore.getState().multiTableStateByTabId[stateKey]?.datasourceId;

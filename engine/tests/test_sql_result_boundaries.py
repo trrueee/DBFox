@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from engine.sql.guardrail import guardrail_check
-from engine.sql.row_serializer import (
+from dlcs.dbfox_data.backend.sql.guardrail import guardrail_check
+from dlcs.dbfox_data.backend.sql.row_serializer import (
     JSON_OVERHEAD_BYTES,
     MAX_COLUMNS,
     MAX_ROWS,
@@ -60,13 +60,13 @@ def test_server_hard_cap_is_an_informational_agent_readonly_warning(
     test_datasource,
 ) -> None:
     from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
-    from engine.sql.safety_gate import validate_sql_schema
-    from engine.sql.trust_gate import TrustGate
+    from engine.sql.dialect_context import dialect_context_from_datasource
+    from engine.sql.safety.service import SqlSafetyService
 
     sync_schema(db_session, test_datasource.id)
-    decision = TrustGate(db_session, validate_sql_schema).execution_decision(
-        test_datasource.id,
+    decision = SqlSafetyService(db_session).build_execution_decision(
         f"SELECT id FROM users LIMIT {MAX_ROWS + 1}",
+        dialect_context_from_datasource(test_datasource),
         policy="agent_readonly",
     )
 
@@ -208,6 +208,7 @@ def test_executor_recalculates_response_bytes_after_redaction(
     monkeypatch,
 ) -> None:
     import engine.policy.sensitivity as sensitivity_module
+    import dlcs.dbfox_data.backend.sensitivity as data_sensitivity_module
     import engine.sql.executor as executor
     from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
 
@@ -225,7 +226,7 @@ def test_executor_recalculates_response_bytes_after_redaction(
     monkeypatch.setattr(executor, "_execute_on_sqlite_profiled", lambda *_args, **_kwargs: bounded_result)
     monkeypatch.setattr(sensitivity_module, "load_sensitivity", lambda *_args: None)
     monkeypatch.setattr(
-        sensitivity_module,
+        data_sensitivity_module,
         "redact_row",
         lambda _row, _sensitivity, **_kwargs: {"id": "[REDACTED-LONGER-THAN-ONE]"},
     )

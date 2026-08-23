@@ -24,7 +24,7 @@ TunnelCloser = Callable[[str], None]
 
 
 def _default_pool_disposer(datasource_id: str) -> int:
-    from engine.sql.pool_registry import get_pool_registry
+    from dlcs.dbfox_data.backend.sql.pool_registry import get_pool_registry
 
     return get_pool_registry().dispose_datasource(datasource_id)
 
@@ -195,7 +195,7 @@ def close_all_managed_datasource_resources() -> None:
     """Dispose all managed connection resources during application shutdown."""
     lifecycle = get_datasource_resource_lifecycle()
     try:
-        from engine.sql.pool_registry import get_pool_registry
+        from dlcs.dbfox_data.backend.sql.pool_registry import get_pool_registry
         from engine.tunnel import close_all_tunnels
 
         get_pool_registry().dispose_all()

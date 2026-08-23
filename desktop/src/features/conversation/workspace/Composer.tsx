@@ -1,6 +1,8 @@
 import { ArrowUp, Square } from "lucide-react";
 import { useState } from "react";
+import type { RequestedResourceRef } from "../../../lib/api/generated/types.gen";
 import type { ConversationDeliveryMode } from "../../../types/conversation";
+import { ResourceContextPicker } from "../ResourceContextPicker";
 
 export function Composer({
   disabled,
@@ -10,6 +12,11 @@ export function Composer({
   error,
   onSend,
   onCancel,
+  projectId = "",
+  resourceIntents = [],
+  onResourceIntentsChange,
+  updatingResourceIntents = false,
+  resourceIntentError,
 }: {
   disabled?: string | null;
   running: boolean;
@@ -18,6 +25,11 @@ export function Composer({
   error?: string | null;
   onSend: (text: string, mode: ConversationDeliveryMode) => Promise<void>;
   onCancel: () => Promise<void>;
+  projectId?: string;
+  resourceIntents?: readonly RequestedResourceRef[];
+  onResourceIntentsChange?: (next: RequestedResourceRef[]) => Promise<void>;
+  updatingResourceIntents?: boolean;
+  resourceIntentError?: string | null;
 }) {
   const [value, setValue] = useState("");
   const [deliveryMode, setDeliveryMode] = useState<ConversationDeliveryMode>("queue");
@@ -56,6 +68,16 @@ export function Composer({
             rows={2}
           />
           <div className="conv-composer-toolbar">
+            {projectId && onResourceIntentsChange && (
+              <ResourceContextPicker
+                projectId={projectId}
+                selected={resourceIntents}
+                onChange={onResourceIntentsChange}
+                disabled={updatingResourceIntents}
+                error={resourceIntentError}
+              />
+            )}
+            <span className="conv-composer-spacer" aria-hidden="true" />
             {running ? (
               <label className="conv-delivery-control">
                 <span>发送方式</span>
@@ -69,7 +91,7 @@ export function Composer({
                   <option value="cancel_and_replace">停止并改做此任务</option>
                 </select>
               </label>
-            ) : <span className="conv-composer-spacer" aria-hidden="true" />}
+            ) : null}
             {running ? (
               <div className="conv-composer-running-actions">
                 <button

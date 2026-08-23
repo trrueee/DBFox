@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import threading
 import time
 import sys
@@ -31,9 +30,7 @@ from engine.tools.runtime.base import (
     ToolOutputModel,
     ToolPresentation,
 )
-from engine.tools.builtin.registry import register_workspace_extension
 from engine.tools.materialization import current_tool_contract_hash
-from engine.workspace.read_service import WorkspaceReadService
 
 
 class _Control:
@@ -68,8 +65,29 @@ class _DatabaseProbeTool(BaseTool[_DatabaseProbeInput, _DatabaseProbeOutput]):
         self.seen_database: object | None = None
 
     def run(self, _tool_input, context):
-        self.seen_database = context.require_database()
+        self.seen_database = context.require_one("dbfox.data.database")
         return _DatabaseProbeOutput(has_database=True)
+
+
+class _FileProbeInput(ToolInputModel):
+    path: str
+
+
+class _FileProbeOutput(ToolOutputModel):
+    ok: bool = True
+
+
+class _FileProbeTool(BaseTool[_FileProbeInput, _FileProbeOutput]):
+    name = "file_read"
+    group = "workspace"
+    description = "Generic resource-bound runner probe."
+    input_model = _FileProbeInput
+    output_model = _FileProbeOutput
+    presentation = ToolPresentation(title="File probe", category="explore")
+    execution = ToolExecutionSpec(required_resource_kinds=("workspace",))
+
+    def run(self, _input, _context):
+        return _FileProbeOutput()
 
 
 def _request(workspace, version="1", registry=None):
@@ -111,15 +129,15 @@ def test_shared_handler_runs_a_workspace_attempt(tmp_path) -> None:
     (root / "src").mkdir(parents=True)
     (root / "src" / "main.py").write_bytes(bytes([112, 114, 105, 110, 116, 40, 41, 10]))
     registry = ToolRegistry()
-    register_workspace_extension(registry)
+    registry.register(_FileProbeTool())
     registry.freeze()
     resolver = CompositeResourceResolver()
-    resolver.register("workspace", lambda ref: WorkspaceReadService(root))
+    resolver.register("workspace", lambda _ref: root)
     handler = ToolAttemptHandler(registry=registry, resolver=resolver)
 
-    result = handler.run(_request(WorkspaceReadService(root), registry=registry))
+    result = handler.run(_request(None, registry=registry))
     assert result.status == "success"
-    assert result.artifact_drafts[0].type == "dbfox.workspace.file_snapshot"
+    assert result.output == {"ok": True}
 
 
 def test_handler_preserves_exact_in_process_database_resource_identity() -> None:
@@ -136,16 +154,17 @@ def test_handler_preserves_exact_in_process_database_resource_identity() -> None
             turn_id="turn-1",
             invocation_id="invocation-1",
             idempotency_key="idem-1",
-            scope_refs=(ResourceScopeRef(kind="database", id="datasource-1", version=1),),
+            scope_refs=(ResourceScopeRef(kind="dbfox.data.database", id="datasource-1", version=1),),
         ),
         authorized_input={},
         attempt_timeout_ms=10_000,
     )
     database = object()
+    database_ref = request.invocation.scope_refs[0]
     result = ToolAttemptHandler(
         registry=registry,
         resolver=CompositeResourceResolver(),
-    ).run_with_resources(request, {"database": database})
+    ).run_with_resources(request, {database_ref.canonical(): database})
 
     assert result.status == "success"
     assert tool.seen_database is database
@@ -153,7 +172,7 @@ def test_handler_preserves_exact_in_process_database_resource_identity() -> None
 
 def test_handler_rejects_stale_frozen_tool_version(tmp_path) -> None:
     registry = ToolRegistry()
-    register_workspace_extension(registry)
+    registry.register(_FileProbeTool())
     registry.freeze()
     handler = ToolAttemptHandler(
         registry=registry,
@@ -169,10 +188,10 @@ def test_in_process_runner_suppresses_late_success_after_cancel(tmp_path) -> Non
     (root / "src").mkdir(parents=True)
     (root / "src" / "main.py").write_bytes(bytes([112, 114, 105, 110, 116, 40, 41, 10]))
     registry = ToolRegistry()
-    register_workspace_extension(registry)
+    registry.register(_FileProbeTool())
     registry.freeze()
     resolver = CompositeResourceResolver()
-    resolver.register("workspace", lambda ref: WorkspaceReadService(root))
+    resolver.register("workspace", lambda _ref: root)
     runner = InProcessAttemptRunner(
         ToolAttemptHandler(registry=registry, resolver=resolver)
     )
@@ -182,26 +201,26 @@ def test_in_process_runner_suppresses_late_success_after_cancel(tmp_path) -> Non
     assert result.error_code == "TOOL_CANCELLED"
 
 
-def test_isolated_runner_rehydrates_canonical_workspace_binding(tmp_path, monkeypatch) -> None:
+def test_isolated_worker_does_not_rehydrate_retired_core_workspace(tmp_path, monkeypatch) -> None:
     root = tmp_path / "project"
     (root / "src").mkdir(parents=True)
     (root / "src" / "main.py").write_bytes(bytes([112, 114, 105, 110, 116, 40, 41, 10]))
     registry = ToolRegistry(
         available_backends=frozenset({"in_process", "isolated_process"})
     )
-    register_workspace_extension(registry)
+    registry.register(_FileProbeTool())
     registry.freeze()
     metadata_path = tmp_path / "worker-metadata.db"
     metadata_engine = create_migrated_metadata_engine(metadata_path)
     SessionLocal = sessionmaker(bind=metadata_engine)
     with SessionLocal() as db:
-        db.add(Project(id="project-1", name="Worker Project", workspace_root=str(root)))
+        db.add(Project(id="project-1", name="Worker Project"))
         db.commit()
     monkeypatch.setenv("DBFOX_DATABASE_URL", f"sqlite:///{metadata_path}")
     runner = IsolatedProcessAttemptRunner(default_isolated_worker_command())
     try:
         version = current_tool_contract_hash(registry.require("file_read"))
-        request = _request(WorkspaceReadService(root), registry=registry)
+        request = _request(None, registry=registry)
         request = request.model_copy(
             update={
                 "invocation": request.invocation.model_copy(
@@ -210,9 +229,7 @@ def test_isolated_runner_rehydrates_canonical_workspace_binding(tmp_path, monkey
                             ResourceScopeRef(
                                 kind="workspace",
                                 id="project-1",
-                                version=hashlib.sha256(
-                                    str(root.resolve()).encode("utf-8")
-                                ).hexdigest()[:16],
+                                version="root-v1",
                             ),
                         ),
                     }
@@ -221,8 +238,9 @@ def test_isolated_runner_rehydrates_canonical_workspace_binding(tmp_path, monkey
             }
         )
         result = runner.run(request=request, control=_Control())
-        assert result.status == "success"
-        assert result.artifact_drafts[0].type == "dbfox.workspace.file_snapshot"
+        assert result.status == "failed"
+        assert result.error_code == "TOOL_EXECUTION_FAILED"
+        assert result.artifact_drafts == []
     finally:
         metadata_engine.dispose()
 
@@ -232,7 +250,7 @@ def test_isolated_runner_reports_missing_worker_as_unavailable(tmp_path) -> None
     (root / "src").mkdir(parents=True)
     (root / "src" / "main.py").write_bytes(bytes([112, 114, 105, 110, 116, 40, 41, 10]))
     runner = IsolatedProcessAttemptRunner(("definitely-missing-dbfox-worker",))
-    result = runner.run(request=_request(WorkspaceReadService(root)), control=_Control())
+    result = runner.run(request=_request(None), control=_Control())
     assert result.status == "failed"
     assert result.error_code == "TOOL_EXECUTION_BACKEND_UNAVAILABLE"
 
@@ -244,7 +262,7 @@ def test_isolated_runner_rejects_malformed_worker_output(tmp_path) -> None:
     runner = IsolatedProcessAttemptRunner(
         (sys.executable, "-c", "import sys; sys.stdout.write('garbage\\n')")
     )
-    result = runner.run(request=_request(WorkspaceReadService(root)), control=_Control())
+    result = runner.run(request=_request(None), control=_Control())
     assert result.status == "failed"
     assert result.error_code == "TOOL_EXECUTION_INVALID_RESULT"
 
@@ -256,7 +274,7 @@ def test_isolated_runner_maps_worker_crash_to_unknown_outcome(tmp_path) -> None:
     runner = IsolatedProcessAttemptRunner(
         (sys.executable, "-c", "import sys; sys.exit(3)")
     )
-    result = runner.run(request=_request(WorkspaceReadService(root)), control=_Control())
+    result = runner.run(request=_request(None), control=_Control())
     assert result.status == "failed"
     assert result.error_code == "TOOL_OUTCOME_UNKNOWN"
 
@@ -269,7 +287,7 @@ def test_isolated_runner_bounds_stdout(tmp_path) -> None:
         (sys.executable, "-c", "import sys; sys.stdout.write('x' * 100000)"),
         max_stdout_bytes=64,
     )
-    result = runner.run(request=_request(WorkspaceReadService(root)), control=_Control())
+    result = runner.run(request=_request(None), control=_Control())
     assert result.status == "failed"
     assert result.error_code == "TOOL_EXECUTION_OUTPUT_TOO_LARGE"
 
@@ -286,7 +304,7 @@ def test_isolated_runner_cancels_running_worker(tmp_path) -> None:
     timer.start()
     try:
         result = runner.run(
-            request=_request(WorkspaceReadService(root)),
+            request=_request(None),
             control=control,
         )
     finally:

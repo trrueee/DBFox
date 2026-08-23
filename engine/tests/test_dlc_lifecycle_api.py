@@ -38,6 +38,8 @@ def _snapshot(
         resource_providers=(),
         resource_resolvers=(),
         context_contributors=(),
+        completion_constraints=(),
+        completion_supports=(),
         artifact_contracts=(),
         operations=(),
         activation_failures=failures,
@@ -61,7 +63,7 @@ def _write_v2_package(
                 "publisher": "acme",
                 "publisherKey": public_key_base64,
                 "description": "Lifecycle API fixture",
-                "extensionApiVersion": "1",
+                "extensionApiVersion": "2",
                 "requiresDbfox": ">=1.0.0",
                 "entrypoints": {
                     "backend": "backend/entry.py",

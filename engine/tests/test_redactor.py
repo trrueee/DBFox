@@ -1,11 +1,10 @@
 import pytest
 
 from engine.policy.redactor import DataRedactor
+from dlcs.dbfox_data.backend.sensitivity import SENSITIVE_FALLBACK, redact_row
 from engine.policy.sensitivity import (
-    _SENSITIVE_FALLBACK,
     load_sensitivity,
     projection_sensitivity_mask,
-    redact_row,
 )
 
 def test_data_redactor_pii_and_credentials() -> None:
@@ -95,7 +94,7 @@ def test_sensitive_columns_mask_entire_values_not_only_recognizable_pii() -> Non
 
     redacted = redact_row(
         {"password": secret, "email": "person@example.test", "display_name": "Ada"},
-        _SENSITIVE_FALLBACK,
+        SENSITIVE_FALLBACK,
     )
 
     assert redacted == {
@@ -219,7 +218,7 @@ def test_executor_redacts_sensitive_projection_hidden_by_alias(
 ) -> None:
     import engine.sql.executor as executor
     from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
-    from engine.sql.row_serializer import QueryExecutionResult, ResultTruncation
+    from dlcs.dbfox_data.backend.sql.row_serializer import QueryExecutionResult, ResultTruncation
 
     sync_schema(db_session, test_datasource.id)
     bounded_result = QueryExecutionResult(
@@ -253,13 +252,13 @@ def test_streaming_executor_redacts_sensitive_projection_hidden_by_alias(
     test_datasource,
 ) -> None:
     from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
-    from engine.sql.dialect_context import DialectContext
+    from engine.sql.dialect_context import load_dialect_context
     from engine.sql.execution.streaming_executor import StreamingQueryExecutor
     from engine.sql.safety.service import SqlSafetyService
 
     sync_schema(db_session, test_datasource.id)
     sql = "SELECT email AS public_value FROM users ORDER BY id LIMIT 1"
-    ctx = DialectContext.from_datasource_id(db_session, test_datasource.id)
+    ctx = load_dialect_context(db_session, test_datasource.id)
     decision = SqlSafetyService(db_session).build_execution_decision(
         sql,
         ctx,
@@ -284,13 +283,13 @@ def test_streaming_executor_fails_closed_when_projection_lineage_is_unavailable(
     monkeypatch,
 ) -> None:
     from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
-    from engine.sql.dialect_context import DialectContext
+    from engine.sql.dialect_context import load_dialect_context
     from engine.sql.execution.streaming_executor import StreamingQueryExecutor
     from engine.sql.safety.service import SqlSafetyService
 
     sync_schema(db_session, test_datasource.id)
     sql = "SELECT username AS public_value FROM users ORDER BY id LIMIT 1"
-    ctx = DialectContext.from_datasource_id(db_session, test_datasource.id)
+    ctx = load_dialect_context(db_session, test_datasource.id)
     decision = SqlSafetyService(db_session).build_execution_decision(
         sql,
         ctx,

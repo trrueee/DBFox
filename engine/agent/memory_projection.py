@@ -8,6 +8,7 @@ here and continue to fail the canonical transaction.
 """
 
 from __future__ import annotations
+from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
 
 from typing import Any
 
@@ -27,6 +28,7 @@ from engine.agent.memory_v4 import (
     fold_catalog,
 )
 from engine.agent.repositories.tool import ToolInvocationRepository
+from engine.agent.resource_refs import single_run_resource_ref
 from engine.agent.run import TERMINAL_RUN_STATUSES
 from engine.json_codec import JsonCodecError, canonical_dumps, loads
 from engine.models import (
@@ -75,31 +77,26 @@ class RebuildOutcome(BaseModel):
 
 
 def _run_scope(
+    db: Session,
     run: AgentRun,
     state: CatalogWorkingState,
     scope: CatalogProjectionScope,
 ) -> tuple[CatalogWorkingState, CatalogProjectionScope]:
-    if run.datasource_id is None:
+    database_ref = single_run_resource_ref(db, run, DATABASE_RESOURCE_KIND)
+    if database_ref is None:
         return state, scope
-    run_datasource_id = str(run.datasource_id)
-    run_generation = int(run.datasource_generation or 0)
-    if scope.datasource_id == "":
+    if scope.resource_ref is None:
         return state, CatalogProjectionScope(
-            datasource_id=run_datasource_id,
-            datasource_generation=run_generation,
+            resource_ref=database_ref,
             catalog_revision=0,
         )
-    if (
-        scope.datasource_id != run_datasource_id
-        or scope.datasource_generation != run_generation
-    ):
+    if scope.resource_ref != database_ref:
         # A resource-generation transition invalidates every object from the
         # previous generation even when the new Run contains no Catalog
         # observation at all. The next Catalog observation still refreshes the
         # catalog_revision below.
         return CatalogWorkingState(), CatalogProjectionScope(
-            datasource_id=run_datasource_id,
-            datasource_generation=run_generation,
+            resource_ref=database_ref,
             catalog_revision=0,
         )
     return state, scope
@@ -111,7 +108,7 @@ def _fold_terminal_sequence(
     state: CatalogWorkingState,
     scope: CatalogProjectionScope,
 ) -> CatalogFoldResult:
-    state, current_scope = _run_scope(run, state, scope)
+    state, current_scope = _run_scope(db, run, state, scope)
     folded = CatalogFoldResult(state=state, scope=current_scope)
     try:
         for invocation, observation in _run_observation_pairs(db, str(run.id)):
@@ -197,7 +194,6 @@ def project_session_memory(
         row = AgentSessionMemory(
             id=f"memory_v4_{session_id}",
             session_id=session_id,
-            datasource_id=str(session.datasource_id) if session.datasource_id else None,
             memory_json="{}",
             memory_v4_json=payload_text,
         )
@@ -246,8 +242,7 @@ def rebuild_session_memory(
     expected_sequence = 1
     state = CatalogWorkingState()
     scope = CatalogProjectionScope(
-        datasource_id="",
-        datasource_generation=0,
+        resource_ref=None,
         catalog_revision=0,
     )
     runs = list(
@@ -332,7 +327,6 @@ def rebuild_session_memory(
             row = AgentSessionMemory(
                 id=f"memory_v4_{session_id}",
                 session_id=session_id,
-                datasource_id=str(session.datasource_id) if session.datasource_id else None,
                 memory_json="{}",
                 memory_v4_json=payload_text,
             )
@@ -387,8 +381,7 @@ def _catalog_projection(
         return (
             CatalogWorkingState(),
             CatalogProjectionScope(
-                datasource_id="",
-                datasource_generation=0,
+                resource_ref=None,
                 catalog_revision=0,
             ),
             0,

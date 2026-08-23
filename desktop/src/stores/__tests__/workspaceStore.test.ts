@@ -96,14 +96,14 @@ describe("workspaceStore — Dock shell", () => {
       viewType: "dbfox.data.table",
       title: "orders",
       closeable: true,
-      target: { type: "resource", kind: "database", id: "ds-1" },
+      target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
     });
     useWorkspaceStore.getState().openDockTab({
       viewKey: "dbfox.data.table:ds-1:orders",
       viewType: "dbfox.data.table",
       title: "orders",
       closeable: true,
-      target: { type: "resource", kind: "database", id: "ds-1" },
+      target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
     });
 
     expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
@@ -155,14 +155,14 @@ describe("workspaceStore — Dock shell", () => {
       viewType: "dbfox.data.table",
       title: "orders",
       closeable: true,
-      target: { type: "resource", kind: "database", id: "ds-1" },
+      target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
     });
     useWorkspaceStore.getState().openDockTab({
       viewKey: "dbfox.data.table:ds-1:users",
       viewType: "dbfox.data.table",
       title: "users",
       closeable: true,
-      target: { type: "resource", kind: "database", id: "ds-1" },
+      target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
     });
     useWorkspaceStore.getState().closeDockTab("dbfox.data.table:ds-1:orders");
 

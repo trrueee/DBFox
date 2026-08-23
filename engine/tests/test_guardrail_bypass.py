@@ -1,6 +1,6 @@
 """Regression tests for Guardrail bypass cases found in the architecture review."""
 
-from engine.sql.guardrail import guardrail_check
+from dlcs.dbfox_data.backend.sql.guardrail import guardrail_check
 
 
 def _rules(sql: str) -> set[str]:
@@ -89,5 +89,5 @@ def test_optimizer_hint_allowed() -> None:
 
 def test_hash_comment_delimiter() -> None:
     """MySQL # line comments must not cause false multi-statement detection."""
-    from engine.sql.guardrail import count_statement_delimiters
+    from dlcs.dbfox_data.backend.sql.guardrail import count_statement_delimiters
     assert count_statement_delimiters("SELECT 1 # comment with ; inside\nFROM t;") == 1

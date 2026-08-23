@@ -101,7 +101,6 @@ def _admit(db_session, test_datasource, case_id: str):
         AgentSession(
             id=session_id,
             project_id=None,
-            datasource_id=str(test_datasource.id),
             title=case_id,
         )
     )
@@ -109,7 +108,7 @@ def _admit(db_session, test_datasource, case_id: str):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content=f"fault scenario {case_id}",
         idempotency_key=case_id,
         llm_credential_id="deterministic-fixture",

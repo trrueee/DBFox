@@ -5,7 +5,7 @@ import sqlglot
 from engine.models import SchemaTable, SchemaColumn, DataSource
 from engine.sql.safety_gate import validate_sql_schema, _resolve_execution_safety_decision
 from engine.errors import GuardrailValidationError
-from engine.sql.trust_gate import ExecutionSafetyDecision
+from dlcs.dbfox_data.backend.sql.safety_contracts import ExecutionSafetyDecision
 
 def _create_test_ds(db_session, ds_id="ds-123", env="dev"):
     ds = DataSource(

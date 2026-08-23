@@ -6,7 +6,7 @@ Modules:
   confirmation — Confirmation manager for destructive operations
   gate         — PolicyGate (tool-level safety gate for agent)
 
-Note: SQL safety enforcement lives in engine.sql.guardrail (sqlglot AST),
+Note: SQL safety enforcement lives in dbfox.data (sqlglot AST),
 and approval / tool-argument gating is handled dynamically by PolicyGate.
 """
 

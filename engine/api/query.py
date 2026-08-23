@@ -13,7 +13,8 @@ from engine.app.safe_errors import (
 )
 from engine.db import get_db
 from engine.errors import DBFoxError, NotFoundError
-from engine.sql.dialect_context import DialectContext
+from dlcs.dbfox_data.backend.sql.dialect_context import DatabaseDialectContext
+from engine.sql.dialect_context import dialect_context_from_datasource
 from engine.sql.safety.service import SqlSafetyService
 from engine.models import DataSource, QueryHistory
 from engine.persistence.search_index import SearchIndexService
@@ -69,12 +70,12 @@ def _query_history_to_dict(item: QueryHistory) -> dict[str, Any]:
 
 @router.post("/query/validate", response_model=GuardrailResponse)
 def api_validate_sql(req: SQLValidateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
-    ctx = DialectContext(datasource_id=req.datasource_id or "", dialect="mysql")
+    ctx = DatabaseDialectContext(resource_id=req.datasource_id or "", dialect="mysql")
     if req.datasource_id:
         ds = db.query(DataSource).filter(DataSource.id == req.datasource_id).first()
         if not ds:
             raise NotFoundError("Datasource not found", "DATASOURCE_NOT_FOUND")
-        ctx = DialectContext.from_datasource(ds)
+        ctx = dialect_context_from_datasource(ds)
     result = SqlSafetyService(db).public_validate_sql(req.sql, ctx)
     return _public_guardrail_result(dict(result))
 

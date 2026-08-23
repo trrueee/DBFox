@@ -71,7 +71,17 @@
 
 .ask-input {
   position: relative;
+  display: grid;
   margin-bottom: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--surface-card);
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.ask-input__context {
+  min-width: 0;
+  padding: 10px 14px 0;
 }
 
 .ask-input__textarea {
@@ -79,11 +89,11 @@
   height: 100px;
   box-sizing: border-box;
   resize: none;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border: 0;
+  border-radius: 0 0 12px 12px;
   outline: none;
   background: var(--surface-card);
-  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02);
+  box-shadow: none;
   color: var(--color-text-primary);
   font-family: inherit;
   font-size: var(--ui-font-input);
@@ -93,6 +103,10 @@
 }
 
 .ask-input__textarea:focus {
+  box-shadow: none;
+}
+
+.ask-input:focus-within {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-focus-ring), 0 8px 24px color-mix(in srgb, var(--color-primary) 10%, transparent);
 }

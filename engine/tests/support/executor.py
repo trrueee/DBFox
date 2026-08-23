@@ -19,7 +19,10 @@ from engine.sql.executor import (
     _run_approved_query,
 )
 from engine.sql.safety_gate import guardrail_bypass_allowed
-from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
+from dlcs.dbfox_data.backend.sql.safety_contracts import (
+    ExecutionPolicy,
+    ExecutionSafetyDecision,
+)
 
 
 logger = logging.getLogger("dbfox.tests.support.executor")

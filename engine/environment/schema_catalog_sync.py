@@ -22,7 +22,7 @@ from engine.environment.authoritative_inventory import (
     SchemaInspectionError,
 )
 from engine.models import DataSource, SchemaTable, SchemaColumn, SchemaSearchDoc
-from engine.environment.inventory import (
+from dlcs.dbfox_data.backend.inventory import (
     SyncResult,
     TableInventory,
 )
@@ -241,7 +241,7 @@ class SchemaCatalogSync:
         """Introspect and sync. Returns counts of created/updated/removed."""
         try:
             inventory = inspect_catalog(db, datasource_id)
-            if inventory.datasource_id != datasource_id:
+            if inventory.database_resource_id != datasource_id:
                 raise SchemaInspectionError(
                     datasource_id,
                     FixedErrorCode.SCHEMA_INSPECTION_FAILED,
@@ -330,7 +330,7 @@ class SchemaCatalogSync:
             )
             enrich_result = ai_enrich_catalog(
                 db,
-                inventory.datasource_id,
+                inventory.database_resource_id,
                 llm_config=llm_config,
             )
         except Exception as exc:
@@ -358,8 +358,8 @@ class SchemaCatalogSync:
     ) -> SyncResult:
         """Perform the one transaction after authoritative input validation."""
 
-        datasource_id = inventory.datasource_id
-        result = SyncResult(datasource_id=datasource_id)
+        datasource_id = inventory.database_resource_id
+        result = SyncResult(database_resource_id=datasource_id)
 
         # Upsert tables
         existing_tables: dict[tuple[str, str], SchemaTable] = {

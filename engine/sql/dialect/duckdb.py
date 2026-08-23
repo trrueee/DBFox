@@ -8,8 +8,8 @@ from engine.connectivity.factory import ConnectionFactory
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 from engine.errors import SQLQueryCancelledError
 from engine.query_registry import QUERY_REGISTRY
-from engine.sql.result_limits import QUERY_TIMEOUT_MS
-from engine.sql.row_serializer import _fetch_and_serialize, QueryExecutionResult
+from dlcs.dbfox_data.backend.sql.result_limits import QUERY_TIMEOUT_MS
+from dlcs.dbfox_data.backend.sql.row_serializer import _fetch_and_serialize, QueryExecutionResult
 
 
 def _execute_on_duckdb_profiled(

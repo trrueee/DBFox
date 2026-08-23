@@ -24,6 +24,12 @@ extraResources:
       - dbfox-engine
       - dbfox-engine.exe
       - dbfox-engine-runtime-manifest.json
+  - from: system-dlcs
+    to: system-dlcs
+    filter:
+      - system-dlcs.json
+      - dbfox.data.dbfox-dlc
+      - dbfox.workspace.dbfox-dlc
 
 artifactName: DBFox-${version}-${os}-${arch}.${ext}
 

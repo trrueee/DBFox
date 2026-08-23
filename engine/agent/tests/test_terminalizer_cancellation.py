@@ -43,7 +43,6 @@ def _start_run(
     db_session.add(
         AgentSession(
             id=session_id,
-            datasource_id=str(test_datasource.id),
             title="Cancellation",
         )
     )
@@ -51,7 +50,7 @@ def _start_run(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
         content="继续分析",
         idempotency_key=f"{session_id}:start",
         llm_credential_id="credential",

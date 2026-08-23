@@ -9,8 +9,8 @@ import pytest
 
 from engine.environment.schema_catalog_sync import ensure_catalog as sync_schema
 from engine.sql.executor import execute_query, explain_sql
-from engine.sql.result_limits import MAX_ROWS
-from engine.sql.row_serializer import _process_rows, _serialize_value
+from dlcs.dbfox_data.backend.sql.result_limits import MAX_ROWS
+from dlcs.dbfox_data.backend.sql.row_serializer import _process_rows, _serialize_value
 
 
 class TestSerializeValue:
@@ -100,7 +100,7 @@ class TestMySQLPool:
         from engine.connectivity._pools import _get_mysql_pool, _ping_mysql_connection
         from engine.connectivity.profile import ConnectionProfile
         from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
-        from engine.sql.pool_registry import get_pool_registry
+        from dlcs.dbfox_data.backend.sql.pool_registry import get_pool_registry
 
         class FakeConnection:
             pinged = False
@@ -362,13 +362,13 @@ class TestPerformanceAndExplain:
         assert "schema validation" in str(exc_info.value).lower() or "unknown" in str(exc_info.value).lower()
 
     def test_execute_query_rejects_mismatched_safety_decision(self, db_session_module, test_datasource_module) -> None:
-        from engine.sql.safety_gate import validate_sql_schema
+        from engine.sql.dialect_context import dialect_context_from_datasource
+        from engine.sql.safety.service import SqlSafetyService
         from engine.errors import GuardrailValidationError
-        from engine.sql.trust_gate import TrustGate
 
-        decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
-            test_datasource_module.id,
+        decision = SqlSafetyService(db_session_module).build_execution_decision(
             "SELECT id FROM users LIMIT 3",
+            dialect_context_from_datasource(test_datasource_module),
         )
 
         with pytest.raises(GuardrailValidationError) as exc_info:

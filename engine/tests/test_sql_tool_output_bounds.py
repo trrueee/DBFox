@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from engine.agent.repositories.artifact import ArtifactRepository
 from engine.json_codec import byte_size
+from engine.resource import ResourceScopeRef
 from engine.tools.builtin.query import SqlExecuteReadonlyTool
 from engine.tools.runtime import ToolExecutor, ToolRegistry, ToolRuntime
 
@@ -11,25 +11,38 @@ from engine.tools.runtime import ToolExecutor, ToolRegistry, ToolRuntime
 def test_sql_result_keeps_artifact_draft_while_bounding_immediate_model_output(
     db_session, test_datasource, monkeypatch
 ) -> None:
+    from engine.tools.builtin import query as query_module
+
+    database_ref = ResourceScopeRef(
+        kind="dbfox.data.database",
+        id=str(test_datasource.id),
+        version=1,
+    )
     monkeypatch.setattr(
-        ArtifactRepository,
-        "require_validated_sql",
-        lambda self, **kwargs: SimpleNamespace(
-            safety={
-                "can_execute": True,
-                "safe_sql": "SELECT payload FROM wide_rows",
-                "original_sql": "SELECT payload FROM wide_rows",
-                "blocked_reasons": [],
-            }
+        query_module,
+        "resolve_validated_sql_execution",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            resource_ref=database_ref,
+            safety_artifact=SimpleNamespace(
+                payload={
+                    "datasourceId": str(test_datasource.id),
+                    "policy": "agent_readonly",
+                    "originalSql": "SELECT payload FROM wide_rows",
+                    "safeSql": "SELECT payload FROM wide_rows",
+                    "passed": True,
+                    "canExecute": True,
+                    "requiresApproval": False,
+                    "riskLevel": "safe",
+                    "guardrail": {},
+                    "schemaWarnings": [],
+                    "scopeState": {},
+                    "blockedReasons": [],
+                    "messages": [],
+                }
+            ),
+            approval_subject={},
         ),
     )
-    monkeypatch.setattr(
-        ArtifactRepository,
-        "result_for_sql_artifact",
-        lambda self, **kwargs: None,
-    )
-
-    from engine.tools.builtin import query as query_module
 
     monkeypatch.setattr(
         query_module,
@@ -76,7 +89,9 @@ def test_sql_result_keeps_artifact_draft_while_bounding_immediate_model_output(
                 raw_input={"validation_artifact_id": "artifact_sql_bounds"},
                 request=request,
                 idempotency_key="invocation_bounds",
-                resources={"database": db_session},
+                resources={("dbfox.data.database", str(test_datasource.id)): db_session},
+                scope_refs=(database_ref,),
+                metadata_session=db_session,
             ),
         )
     finally:

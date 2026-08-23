@@ -302,10 +302,12 @@ payload: object
 
 ### 6.3 PR：Completion constraint
 
-保持 Completion Core 的 lifecycle/pending work/answer/citation ownership/budget 逻辑，只抽：
+保持 Completion Core 的 lifecycle/pending work/answer/citation ownership/budget 逻辑，领域通过
+`host.completion.register_constraint/register_support` 声明 semantic capability：
 
 ```text
-DataResultCitationConstraint
+SemanticCitationConstraint(query_result)
+SemanticArtifactCompletionSupport(query_result)
 ```
 
 使用 immutable tuple composition，不建 RuleManager。现有 Completion decision 与 evidence Artifact IDs 必须 parity。

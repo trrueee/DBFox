@@ -13,7 +13,7 @@ const echartsMock = vi.hoisted(() => ({
 const chartDataMock = vi.hoisted(() => ({ fetch: vi.fn() }));
 
 const liveChartMetadata = {
-  consistency: "live_reexecution" as const,
+  consistency: "durable_snapshot" as const,
   originalExecutedAt: "2026-07-20T00:00:00Z",
   viewExecutedAt: "2026-07-20T00:00:01Z",
   viewExecutionId: "view-chart",

@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-12
+> 最后核验：2026-08-22
 >
 > 适用范围：当前生产实现与后续合并版本
 
@@ -45,12 +45,13 @@
 
 ### 修改 Agent、工具或上下文
 
-1. [`architecture/agent-runtime.md`](architecture/agent-runtime.md)
-2. [`architecture/agent-runtime-item-protocol.md`](architecture/agent-runtime-item-protocol.md)
-3. [`architecture/agent-tool-context-memory-contract.md`](architecture/agent-tool-context-memory-contract.md)
-4. [`architecture/agent-conversation-recall-contract.md`](architecture/agent-conversation-recall-contract.md)
-5. [`specs/agent.md`](specs/agent.md)
-6. [`quality/agent-evaluation-methodology.md`](quality/agent-evaluation-methodology.md)
+1. [`architecture/agent-core-capability-dlc-contract.md`](architecture/agent-core-capability-dlc-contract.md)
+2. [`architecture/agent-runtime.md`](architecture/agent-runtime.md)
+3. [`architecture/agent-runtime-item-protocol.md`](architecture/agent-runtime-item-protocol.md)
+4. [`architecture/agent-tool-context-memory-contract.md`](architecture/agent-tool-context-memory-contract.md)
+5. [`architecture/agent-conversation-recall-contract.md`](architecture/agent-conversation-recall-contract.md)
+6. [`specs/agent.md`](specs/agent.md)
+7. [`quality/agent-evaluation-methodology.md`](quality/agent-evaluation-methodology.md)
 
 ### 修改 SQL、结果或数据源能力
 
@@ -84,6 +85,7 @@
 | 文档 | 主要问题 |
 | --- | --- |
 | [`architecture/system-overview.md`](architecture/system-overview.md) | 系统由哪些进程组成，谁拥有状态，哪些是不变量？ |
+| [`architecture/agent-core-capability-dlc-contract.md`](architecture/agent-core-capability-dlc-contract.md) | Project、Conversation intent、Run authority 与 Capability DLC 的终态边界是什么？ |
 | [`architecture/backend-owner-guide.md`](architecture/backend-owner-guide.md) | 不熟悉代码时，如何从真实入口和代码符号理解后端并安全修改？ |
 | [`backend/README.md`](backend/README.md) | 如何按多卷手册逐层理解后端运行链、事务、失败路径、调试和扩展？ |
 | [`architecture/implementation-map.md`](architecture/implementation-map.md) | 一项功能具体落在哪些代码符号、表和测试中？ |

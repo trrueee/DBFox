@@ -41,6 +41,7 @@ class ContextArtifactObservation(BaseModel):
     artifact_type: str
     schema_version: int = Field(ge=1)
     semantic_capabilities: tuple[str, ...] = ()
+    resource_refs: tuple[ResourceScopeRef, ...] = ()
     payload: dict[str, JsonValue] = Field(default_factory=dict)
 
 

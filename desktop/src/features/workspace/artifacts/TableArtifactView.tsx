@@ -272,6 +272,9 @@ function InlineTableMeta({
       <span className="artifact-pill">{table.columns.length} 列</span>
       {table.latencyMs !== undefined && <span className="artifact-pill">{table.latencyMs}ms</span>}
       {artifact.truncated && <span className="artifact-pill artifact-pill--warning">结果已截断</span>}
+      {table.consistency === "durable_snapshot" && (
+        <span className="artifact-pill">耐久快照</span>
+      )}
       {table.consistency === "live_reexecution" && table.viewExecutedAt && (
         <>
           {table.originalExecutedAt && (

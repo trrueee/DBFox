@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import io
 
-from engine.sql.execution.csv_export import CsvExportService, escape_csv_cell
+from dlcs.dbfox_data.backend.sql.execution.csv_export import CsvExportService, escape_csv_cell
 
 
 def test_escape_csv_cell_uses_the_cross_runtime_formula_guard_contract() -> None:

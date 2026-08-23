@@ -16,9 +16,10 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from engine.agent.observation import Observation, ObservationStatus
 from engine.agent.tool import ToolInvocation
 from engine.json_codec import canonical_dumps
+from engine.resource import ResourceScopeRef
 
 CATALOG_PROJECTION_ID = "dbfox.catalog.working_state"
-CATALOG_PROJECTION_SCHEMA_VERSION = 1
+CATALOG_PROJECTION_SCHEMA_VERSION = 2
 MEMORY_V4_SCHEMA_VERSION: Literal[4] = 4
 CORE_POLICY_VERSION = 1
 
@@ -74,8 +75,7 @@ class CatalogObjectKey(BaseModel):
 class CatalogProjectionScope(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    datasource_id: str
-    datasource_generation: int = Field(ge=0)
+    resource_ref: ResourceScopeRef | None = None
     catalog_revision: int = Field(ge=0)
 
 

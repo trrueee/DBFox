@@ -17,15 +17,11 @@ from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 from engine.datasource import datasource_connection_dict
 from engine.errors import GuardrailValidationError, SQLExecutionError, SQLQueryTimeoutError
 from engine.models import DataSource
-from engine.policy.sensitivity import (
-    _SENSITIVE_FALLBACK,
-    load_sensitivity,
-    projection_sensitivity_mask,
-    redact_row,
-)
-from engine.sql.row_serializer import _serialize_value
+from dlcs.dbfox_data.backend.sensitivity import SENSITIVE_FALLBACK, redact_row
+from engine.policy.sensitivity import load_sensitivity, projection_sensitivity_mask
+from dlcs.dbfox_data.backend.sql.row_serializer import _serialize_value
 from engine.sql.safety_gate import _resolve_execution_safety_decision
-from engine.sql.trust_gate import ExecutionSafetyDecision
+from dlcs.dbfox_data.backend.sql.safety_contracts import ExecutionSafetyDecision
 
 
 DEFAULT_EXPORT_MAX_ROWS = 100_000
@@ -258,7 +254,7 @@ class StreamingQueryExecutor:
             profile.dialect,
             sensitivity,
         )
-        from engine.sql.bound_parameters import render_dbapi_sql
+        from dlcs.dbfox_data.backend.sql.bound_parameters import render_dbapi_sql
         executable_sql, bound_parameters = render_dbapi_sql(
             safe_sql, profile.dialect, parameters
         )
@@ -308,7 +304,7 @@ class StreamingQueryExecutor:
         try:
             return load_sensitivity(self.db, datasource_id)
         except Exception:
-            return _SENSITIVE_FALLBACK
+            return SENSITIVE_FALLBACK
 
     def _redact(
         self,
@@ -326,7 +322,7 @@ class StreamingQueryExecutor:
         except Exception:
             return redact_row(
                 row,
-                _SENSITIVE_FALLBACK,
+                SENSITIVE_FALLBACK,
                 sensitive_columns=set(row),
             )
 

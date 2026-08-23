@@ -22,7 +22,7 @@
   - `build_tool_scope_context(db, request, tool)`
   - Database scope：`kind=database, id=datasource_id, version=generation`
   - Workspace scope：只在 tool capability 含 `filesystem_read` 时从 `DataSource.project_id -> Project.workspace_root` 解析 `WorkspaceReadService`
-- `engine/tools/runtime/context.py` 增加 `scope_refs` 和 `resources`，Tool 通过 `context.require_resource("workspace")` 取授权资源。
+- `engine/tools/runtime/context.py` 增加 `scope_refs` 和 `resources`；该阶段使用的 `require_resource("workspace")` 已在 Extension API v2 中由 `require_one("workspace")` 取代。
 - `engine/agent/tool_dispatcher.py` 已接入 `build_tool_scope_context`，现有 DB Tool 路径未改。
 
 ### P5A backend Workspace substrate

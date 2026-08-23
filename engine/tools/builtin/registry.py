@@ -1,43 +1,10 @@
 from __future__ import annotations
 
-from engine.tools.builtin.catalog import (
-    CatalogOverviewTool,
-    CatalogRefreshTool,
-    SchemaInspectTool,
-    SchemaListTool,
-    SchemaSearchTool,
-)
-from engine.tools.builtin.control import (
-    RequestClarificationCommand,
-    UpdatePlanCommand,
-)
-from engine.tools.builtin.conversation import ConversationReadTool, ConversationSearchTool
-from engine.tools.builtin.query import (
-    DataPreviewTool,
-    SqlExecuteReadonlyTool,
-    SqlValidateTool,
-)
-from engine.tools.builtin.results import (
-    ChartCreateTool,
-    ResultInspectTool,
-    ResultProfileTool,
-)
-from engine.tools.builtin.workspace import (
-    WorkspaceFileReadTool,
-    WorkspaceFileSearchTool,
-    WorkspaceFileWritePatchTool,
-)
-from engine.tools.builtin.remote_job import (
-    RemoteJobCancelTool,
-    RemoteJobStatusTool,
-    RemoteJobSubmitTool,
-)
 from engine.tools.runtime import ToolRegistry
 
 CORE_OWNER = "dbfox.core"
 CONVERSATION_OWNER = "dbfox.conversation"
 DATA_OWNER = "dbfox.data"
-WORKSPACE_OWNER = "dbfox.workspace"
 REMOTE_JOB_OWNER = "dbfox.remote_job"
 
 
@@ -48,6 +15,11 @@ def register_core_functions(registry: ToolRegistry) -> None:
     to a domain extension such as ``dbfox.data``.
     """
 
+    from engine.tools.builtin.control import (
+        RequestClarificationCommand,
+        UpdatePlanCommand,
+    )
+
     registry.register(RequestClarificationCommand(), owner=CORE_OWNER)
     registry.register(UpdatePlanCommand(), owner=CORE_OWNER)
 
@@ -55,12 +27,35 @@ def register_core_functions(registry: ToolRegistry) -> None:
 def register_conversation_functions(registry: ToolRegistry) -> None:
     """Register Conversation-owned recall functions."""
 
+    from engine.tools.builtin.conversation import (
+        ConversationReadTool,
+        ConversationSearchTool,
+    )
+
     registry.register(ConversationSearchTool(), owner=CONVERSATION_OWNER)
     registry.register(ConversationReadTool(), owner=CONVERSATION_OWNER)
 
 
 def register_data_extension(registry: ToolRegistry) -> None:
     """Register the built-in Data capability family."""
+
+    from engine.tools.builtin.catalog import (
+        CatalogOverviewTool,
+        CatalogRefreshTool,
+        SchemaInspectTool,
+        SchemaListTool,
+        SchemaSearchTool,
+    )
+    from engine.tools.builtin.query import (
+        DataPreviewTool,
+        SqlExecuteReadonlyTool,
+        SqlValidateTool,
+    )
+    from engine.tools.builtin.results import (
+        ChartCreateTool,
+        ResultInspectTool,
+        ResultProfileTool,
+    )
 
     registry.register(CatalogOverviewTool(), owner=DATA_OWNER)
     registry.register(CatalogRefreshTool(), owner=DATA_OWNER)
@@ -75,21 +70,14 @@ def register_data_extension(registry: ToolRegistry) -> None:
     registry.register(ChartCreateTool(), owner=DATA_OWNER)
 
 
-def register_workspace_extension(registry: ToolRegistry) -> None:
-    """Register the Workspace read-only capability family."""
-
-    registry.register(WorkspaceFileReadTool(), owner=WORKSPACE_OWNER)
-    registry.register(WorkspaceFileSearchTool(), owner=WORKSPACE_OWNER)
-
-
-def register_workspace_write_extension(registry: ToolRegistry) -> None:
-    """Register the isolated Workspace write capability."""
-
-    registry.register(WorkspaceFileWritePatchTool(), owner=WORKSPACE_OWNER)
-
-
 def register_remote_job_extension(registry: ToolRegistry) -> None:
     """Register the built-in Remote Job capability family."""
+
+    from engine.tools.builtin.remote_job import (
+        RemoteJobCancelTool,
+        RemoteJobStatusTool,
+        RemoteJobSubmitTool,
+    )
 
     registry.register(RemoteJobSubmitTool(), owner=REMOTE_JOB_OWNER)
     registry.register(RemoteJobStatusTool(), owner=REMOTE_JOB_OWNER)

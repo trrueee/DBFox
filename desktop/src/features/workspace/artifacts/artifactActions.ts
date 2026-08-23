@@ -9,7 +9,7 @@ export async function copyText(text: string) {
 
 const DANGEROUS_CSV_PREFIXES = new Set(["=", "+", "-", "@"]);
 
-// Keep this list aligned with engine/sql/execution/csv_export.py.  Spreadsheet
+// Keep this list aligned with dlcs/dbfox_data/backend/sql/execution/csv_export.py. Spreadsheet
 // programs can ignore these leading characters before evaluating a formula.
 const CSV_UNICODE_WHITESPACE_CODE_POINTS = new Set([
   0x0020,

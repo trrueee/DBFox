@@ -1,4 +1,4 @@
-"""Public Extension API v1 for DBFox Runtime DLCs.
+"""Public Extension API v2 for DBFox Runtime DLCs.
 
 This module is the stable, narrow public interface exposed to Runtime DLCs.
 DLC implementations MUST import extension contracts from this module (or
@@ -27,13 +27,39 @@ from engine.agent.context_fragment import (
     MAX_CONTEXT_ARTIFACT_OBSERVATIONS,
     MAX_CONTEXT_ARTIFACT_PAYLOAD_BYTES,
 )
-from engine.agent.artifact import ArtifactDraft
+from engine.agent.artifact import (
+    Artifact,
+    ArtifactDraft,
+    ArtifactRelationDraft,
+    ArtifactRelationType,
+    ArtifactVisibility,
+)
+from engine.agent.artifact_view import (
+    ArtifactChartData,
+    ArtifactChartViewProvider,
+    ArtifactCsvStream,
+    ArtifactTableExportRequest,
+    ArtifactTablePage,
+    ArtifactTablePageRequest,
+    ArtifactTableViewProvider,
+    ArtifactViewError,
+    ArtifactViewFilter,
+    ArtifactViewSort,
+)
+from engine.agent.completion import (
+    CompletionConstraint,
+    CompletionSupport,
+    SemanticArtifactCompletionSupport,
+    SemanticCitationConstraint,
+)
 from engine.errors import ToolInputError
+from engine.app.safe_errors import log_extension_diagnostic, log_extension_exception
+from engine.json_codec import dumps as json_dumps
 from engine.agent.resource_refs import (
     ProjectResourceDescriptor,
     RequestedResourceRef,
 )
-from engine.tools.runtime.attempt import ResourceScopeRef, ScopedResourceResolver
+from engine.tools.runtime.attempt import ResourceKey, ResourceScopeRef, ScopedResourceResolver
 from engine.tools.runtime.base import (
     BaseTool,
     ToolCapability,
@@ -44,7 +70,9 @@ from engine.tools.runtime.base import (
     ToolPresentation,
     ToolRecoveryPolicy,
 )
-from engine.tools.runtime.result import ToolOutcome
+from engine.tools.runtime.result import ToolOutcome, ToolReconciliation
+from engine.tools.runtime.admission import ToolAdmissionContext, ToolAdmissionDecision
+from engine.tools.runtime.observation import ToolObservationProjection
 from engine.tools.runtime.semantics import ToolSemanticSpec
 
 TInput = TypeVar("TInput", bound=BaseModel)
@@ -61,8 +89,42 @@ ExtensionContextContributorFactory: TypeAlias = Callable[[], ContextContributor]
 class ExtensionToolRunContext(Protocol):
     """Narrow execution context exposed to installable DLC tools."""
 
-    def require_resource(self, kind: str) -> Any:
-        """Return the already-authorized resource bound to ``kind``."""
+    invocation_id: str
+
+    def resource(self, ref: ResourceScopeRef | ResourceKey) -> Any:
+        """Return one authorized resource selected by its full identity."""
+        ...
+
+    def resources(self, kind: str) -> tuple[Any, ...]:
+        """Return every authorized resource of ``kind`` in frozen scope order."""
+        ...
+
+    def scopes(self, kind: str) -> tuple[ResourceScopeRef, ...]:
+        """Return the frozen scope refs for every authorized resource of ``kind``."""
+        ...
+
+    def require_one(self, kind: str) -> Any:
+        """Return the sole resource of ``kind`` or reject missing/ambiguous scope."""
+        ...
+
+    def artifact(self, artifact_id: str) -> Artifact:
+        """Return one immutable Artifact only when it belongs to the invoking Run."""
+        ...
+
+    def artifacts_relating_to(
+        self,
+        artifact_id: str,
+        relation: ArtifactRelationType,
+    ) -> tuple[Artifact, ...]:
+        """Return current-Run Artifacts relating to one immutable source."""
+        ...
+
+    def approval_authorizes(
+        self,
+        approval_subject: dict[str, Any],
+        resource_ref: ResourceScopeRef | None,
+    ) -> bool:
+        """Verify the current invocation's exact durable approval contract."""
         ...
 
 
@@ -117,6 +179,8 @@ class DlcOperationSpec:
     capabilities: tuple[str, ...] = ()
     description: str = ""
     max_output_bytes: int = 1_048_576  # 1 MiB
+    credential_references: Callable[[Any], frozenset[str]] | None = None
+    credential_lease_required: bool = False
 
 
 class ExtensionToolsHost(Protocol):
@@ -166,12 +230,60 @@ class ExtensionArtifactsHost(Protocol):
         """Register a concrete Artifact payload write validation schema."""
         ...
 
+    def register_table_view(
+        self,
+        artifact_type: str,
+        provider: ArtifactTableViewProvider,
+    ) -> None:
+        """Register the durable table reader for one owned Artifact type."""
+        ...
+
+    def register_chart_view(
+        self,
+        artifact_type: str,
+        provider: ArtifactChartViewProvider,
+    ) -> None:
+        """Register the durable chart reader for one owned Artifact type."""
+        ...
+
 
 class ExtensionOperationsHost(Protocol):
     """Registration surface for DLC typed operations / management RPCs."""
 
     def register(self, spec: DlcOperationSpec) -> None:
         """Register a typed operation specification."""
+        ...
+
+
+class ExtensionCompletionHost(Protocol):
+    """Registration surface for terminal completion semantics."""
+
+    def register_constraint(self, constraint: CompletionConstraint) -> None:
+        """Register one monotonic terminal constraint."""
+        ...
+
+    def register_support(self, support: CompletionSupport) -> None:
+        """Register one durable evidence family used by terminalization."""
+        ...
+
+
+class ExtensionCredentialsHost(Protocol):
+    """Permission-scoped access to opaque OS credential references.
+
+    The host deliberately exposes no enumeration and no global vault object.
+    Installable DLCs can resolve only the exact credential kinds declared in
+    their signed manifest.
+    """
+
+    def get(self, credential_ref: str, *, kind: str) -> str | None:
+        """Resolve one opaque reference after exact kind/permission checks."""
+        ...
+
+    def register_reference_probe(
+        self,
+        probe: Callable[[frozenset[str]], bool],
+    ) -> None:
+        """Register a read-only ownership probe used by credential recovery."""
         ...
 
 
@@ -194,17 +306,26 @@ class BackendExtensionHost(Protocol):
     def artifacts(self) -> ExtensionArtifactsHost: ...
 
     @property
+    def completion(self) -> ExtensionCompletionHost: ...
+
+    @property
     def operations(self) -> ExtensionOperationsHost: ...
+
+    @property
+    def credentials(self) -> ExtensionCredentialsHost: ...
 
 
 __all__ = [
+    "Artifact",
     # Host & Registration interfaces
     "BackendExtensionHost",
     "ExtensionToolsHost",
     "ExtensionResourcesHost",
     "ExtensionContextHost",
     "ExtensionArtifactsHost",
+    "ExtensionCompletionHost",
     "ExtensionOperationsHost",
+    "ExtensionCredentialsHost",
     "DlcRuntimeInfo",
     "DlcOperationError",
     # Tool contracts
@@ -218,13 +339,38 @@ __all__ = [
     "ToolCapability",
     "ToolSemanticSpec",
     "ToolOutcome",
+    "ToolReconciliation",
+    "ToolAdmissionContext",
+    "ToolAdmissionDecision",
+    "ToolObservationProjection",
     "ToolInputError",
+    "log_extension_diagnostic",
+    "log_extension_exception",
+    "json_dumps",
     "ExtensionToolRunContext",
     "ArtifactDraft",
+    "ArtifactRelationDraft",
+    "ArtifactRelationType",
+    "ArtifactVisibility",
+    "ArtifactCsvStream",
+    "ArtifactChartData",
+    "ArtifactChartViewProvider",
+    "ArtifactTableExportRequest",
+    "ArtifactTablePage",
+    "ArtifactTablePageRequest",
+    "ArtifactTableViewProvider",
+    "ArtifactViewError",
+    "ArtifactViewFilter",
+    "ArtifactViewSort",
+    "CompletionConstraint",
+    "CompletionSupport",
+    "SemanticArtifactCompletionSupport",
+    "SemanticCitationConstraint",
     # Resource contracts
     "ProjectResourceDescriptor",
     "ExtensionProjectResourceProvider",
     "RequestedResourceRef",
+    "ResourceKey",
     "ResourceScopeRef",
     "ScopedResourceResolver",
     # Context contracts

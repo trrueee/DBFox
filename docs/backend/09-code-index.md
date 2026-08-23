@@ -56,35 +56,53 @@
 
 | Symbol/能力 | 文件 |
 | --- | --- |
-| ConnectionProfile | [`connectivity/profile.py`](../../engine/connectivity/profile.py) |
+| Data ConnectionProfile / DatabaseResource state | [`backend/store.py`](../../dlcs/dbfox_data/backend/store.py) |
+| Data direct connection boundary | [`backend/connection.py`](../../dlcs/dbfox_data/backend/connection.py) |
+| Data authoritative catalog reflection | [`backend/catalog_reflection.py`](../../dlcs/dbfox_data/backend/catalog_reflection.py) |
+| Data Catalog tools | [`backend/catalog_tools.py`](../../dlcs/dbfox_data/backend/catalog_tools.py) |
+| Data structured preview tool | [`backend/preview_tool.py`](../../dlcs/dbfox_data/backend/preview_tool.py) |
+| Data durable result store | [`backend/store.py`](../../dlcs/dbfox_data/backend/store.py) (`query_results / query_result_rows`) |
+| Data durable result inspect/profile/chart tools | [`backend/result_tool.py`](../../dlcs/dbfox_data/backend/result_tool.py) |
+| Data result statistics/chart inference | [`backend/result_analysis.py`](../../dlcs/dbfox_data/backend/result_analysis.py) |
+| Data SQLite online backup / isolated restore | [`backend/backup.py`](../../dlcs/dbfox_data/backend/backup.py) |
+| Data sensitivity/redaction defaults | [`backend/sensitivity.py`](../../dlcs/dbfox_data/backend/sensitivity.py) |
+| Data catalog/introspection contracts | [`backend/inventory.py`](../../dlcs/dbfox_data/backend/inventory.py) |
+| Legacy ConnectionProfile | [`connectivity/profile.py`](../../engine/connectivity/profile.py) |
+| Legacy Catalog (temporary default composition) | [`environment/catalog_introspector.py`](../../engine/environment/catalog_introspector.py)、[`environment/schema_catalog_sync.py`](../../engine/environment/schema_catalog_sync.py) |
 | ConnectionFactory | [`connectivity/factory.py`](../../engine/connectivity/factory.py) |
 | DatasourceResourceLifecycle | [`connectivity/lifecycle.py`](../../engine/connectivity/lifecycle.py) |
 | pool resources | [`connectivity/_pools.py`](../../engine/connectivity/_pools.py)、[`resources.py`](../../engine/connectivity/resources.py) |
 | tunnel | [`tunnel.py`](../../engine/tunnel.py) |
 | Authoritative Inventory | [`environment/authoritative_inventory.py`](../../engine/environment/authoritative_inventory.py) |
-| Catalog introspection | [`environment/catalog_introspector.py`](../../engine/environment/catalog_introspector.py) |
-| SchemaCatalogSync | [`environment/schema_catalog_sync.py`](../../engine/environment/schema_catalog_sync.py) |
 | ER diagram | [`environment/er_diagram.py`](../../engine/environment/er_diagram.py) |
 
 ## 5. SQL
 
 | 能力 | 文件 |
 | --- | --- |
-| Parser | [`sql/parser.py`](../../engine/sql/parser.py) |
-| Dialect context | [`sql/dialect_context.py`](../../engine/sql/dialect_context.py) |
+| Parser | [`backend/sql/parser.py`](../../dlcs/dbfox_data/backend/sql/parser.py) |
 | Dialects | [`sql/dialect/`](../../engine/sql/dialect/) |
 | Safety service | [`sql/safety/service.py`](../../engine/sql/safety/service.py) |
-| Bound parameters | [`sql/bound_parameters.py`](../../engine/sql/bound_parameters.py) |
-| Guardrail | [`sql/guardrail.py`](../../engine/sql/guardrail.py) |
-| Trust gate | [`sql/trust_gate.py`](../../engine/sql/trust_gate.py) |
-| Readonly | [`sql/readonly_query.py`](../../engine/sql/readonly_query.py) |
-| Permission probes | [`sql/permissions/`](../../engine/sql/permissions/) |
+| Bound parameters | [`backend/sql/bound_parameters.py`](../../dlcs/dbfox_data/backend/sql/bound_parameters.py) |
+| Identifier/query builder | [`backend/sql/builder.py`](../../dlcs/dbfox_data/backend/sql/builder.py) |
+| Guardrail | [`backend/sql/guardrail.py`](../../dlcs/dbfox_data/backend/sql/guardrail.py) |
+| Safety decision contracts | [`backend/sql/safety_contracts.py`](../../dlcs/dbfox_data/backend/sql/safety_contracts.py) |
+| Database dialect value contract | [`backend/sql/dialect_context.py`](../../dlcs/dbfox_data/backend/sql/dialect_context.py) |
+| Trust gate | [`backend/sql/trust_gate.py`](../../dlcs/dbfox_data/backend/sql/trust_gate.py) |
+| EXPLAIN decision contracts | [`backend/sql/dry_run_contracts.py`](../../dlcs/dbfox_data/backend/sql/dry_run_contracts.py) |
+| Legacy Core metadata → dialect loader | [`sql/dialect_context.py`](../../engine/sql/dialect_context.py) |
+| Readonly | [`backend/sql/readonly_query.py`](../../dlcs/dbfox_data/backend/sql/readonly_query.py) |
+| Permission probes | [`backend/sql/permissions/`](../../dlcs/dbfox_data/backend/sql/permissions/) |
 | Executor | [`sql/executor.py`](../../engine/sql/executor.py) |
-| Streaming executor/export | [`sql/execution/`](../../engine/sql/execution/) |
-| Row serializer | [`sql/row_serializer.py`](../../engine/sql/row_serializer.py) |
-| Result limits | [`sql/result_limits.py`](../../engine/sql/result_limits.py) |
-| ResultViewService | [`sql/result_view/service.py`](../../engine/sql/result_view/service.py) |
-| SQL-backed view | [`sql/sql_backed_view.py`](../../engine/sql/sql_backed_view.py) |
+| Streaming executor | [`sql/execution/streaming_executor.py`](../../engine/sql/execution/streaming_executor.py) |
+| CSV export | [`backend/sql/execution/csv_export.py`](../../dlcs/dbfox_data/backend/sql/execution/csv_export.py) |
+| Data-owned row serializer | [`row_serializer.py`](../../dlcs/dbfox_data/backend/sql/row_serializer.py) |
+| Result limits | [`backend/sql/result_limits.py`](../../dlcs/dbfox_data/backend/sql/result_limits.py) |
+| Generic durable Artifact view contracts | [`agent/artifact_view.py`](../../engine/agent/artifact_view.py) |
+| Data Result/Chart Workbench reader | [`backend/result_view.py`](../../dlcs/dbfox_data/backend/result_view.py) |
+| Legacy live query table browser (not Artifact replay) | [`sql/result_view/service.py`](../../engine/sql/result_view/service.py) |
+| SQL-backed view | [`backend/sql/sql_backed_view.py`](../../dlcs/dbfox_data/backend/sql/sql_backed_view.py) |
+| Connection pool registry | [`backend/sql/pool_registry.py`](../../dlcs/dbfox_data/backend/sql/pool_registry.py) |
 
 ## 6. Agent 调度与循环
 
@@ -121,10 +139,12 @@
 | 能力 | 文件 |
 | --- | --- |
 | Built-in registry | [`tools/builtin/registry.py`](../../engine/tools/builtin/registry.py) |
-| Catalog tools | [`tools/builtin/catalog.py`](../../engine/tools/builtin/catalog.py) |
+| Data Catalog tools | [`backend/catalog_tools.py`](../../dlcs/dbfox_data/backend/catalog_tools.py) |
+| Legacy Catalog tools (temporary default composition) | [`tools/builtin/catalog.py`](../../engine/tools/builtin/catalog.py) |
 | Conversation tools | [`tools/builtin/conversation.py`](../../engine/tools/builtin/conversation.py) |
 | Query tools | [`tools/builtin/query.py`](../../engine/tools/builtin/query.py) |
-| Result tools | [`tools/builtin/results.py`](../../engine/tools/builtin/results.py) |
+| Data durable result inspect/profile/chart tools | [`backend/result_tool.py`](../../dlcs/dbfox_data/backend/result_tool.py) |
+| Legacy default-composition result tools | [`tools/builtin/results.py`](../../engine/tools/builtin/results.py) |
 | Control tools | [`tools/builtin/control.py`](../../engine/tools/builtin/control.py) |
 | Materialization | [`tools/materialization.py`](../../engine/tools/materialization.py) |
 | Tool registry | [`tools/runtime/registry.py`](../../engine/tools/runtime/registry.py) |
@@ -149,6 +169,7 @@
 | SSE API | [`api/conversation_stream.py`](../../engine/api/conversation_stream.py) |
 | Evidence | [`agent/evidence.py`](../../engine/agent/evidence.py) |
 | Artifact | [`agent/artifact.py`](../../engine/agent/artifact.py) |
+| Artifact durable view contribution | [`agent/artifact_view.py`](../../engine/agent/artifact_view.py) |
 
 ## 10. 快速调用链索引
 

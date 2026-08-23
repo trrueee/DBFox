@@ -7,7 +7,6 @@ import {
   dataArtifactRenderers,
   type DataArtifactRendererActions,
 } from "./dataArtifactRenderers";
-import { workspaceArtifactRenderers } from "./workspaceArtifactRenderers";
 import type {
   ArtifactEnvelope,
   ArtifactRendererContext,
@@ -26,7 +25,6 @@ export {
   coreArtifactRenderers,
   createDataArtifactRenderers,
   dataArtifactRenderers,
-  workspaceArtifactRenderers,
 };
 
 export interface ArtifactRendererRegistry {
@@ -66,7 +64,6 @@ export function productArtifactRenderers(options?: {
     ...(options?.dataActions
       ? createDataArtifactRenderers(options.dataActions)
       : dataArtifactRenderers),
-    ...workspaceArtifactRenderers,
   ];
 }
 

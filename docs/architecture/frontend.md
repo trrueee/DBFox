@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-16
+> 最后核验：2026-08-22
 >
 > 适用范围：`desktop/src/` 的工作区、传输、状态和用户交互
 >
@@ -88,7 +88,7 @@ flowchart LR
 
   CENTER --> HOME["智能问数首页"]
   CENTER --> CONV["Conversation Workspace"]
-  CENTER --> PROJECT["新建项目（本地文件夹）"]
+  CENTER --> PROJECT["新建项目"]
 
   MODAL --> DS["Datasource Management"]
 
@@ -106,9 +106,9 @@ flowchart LR
 布局原则：
 
 - 左侧是实体导航：顶层「项目/连接」胶囊切换。项目行内是「对话/文件」子胶囊，连接行内是「对话/数据库」子胶囊；下方内容随当前实体子模式直接切换，不再出现“对话列表/文件/数据库对象树”这类分区标题。项目图标使用 Folder 激活/非激活两态，连接使用官方数据库图标，当前数据库节点使用数据源品牌图标。
-- 中间只放对话与「新建项目」表单。新建项目由 Electron preload 的 `pickProjectFolder` 弹出系统文件夹选择器，自动用文件夹名作为项目名，并把 `workspace_root` 写入 Project API；表单提交后回到智能问数首页。
+- 中间只放对话与「新建项目」表单。Project 只创建名称与可选描述；本地目录由 `dbfox.workspace` Connector 在创建后通过通用 DLC operation 建立 binding，不进入 Project API。
 - 新建连接采用 Navicat 式 `Dialog` 弹窗承载 `DataSourcesPage`，不再让数据源管理页占满中间对话区；旧 `centerMode === "datasource"` 分支和 `openDatasourceCenter`/`centerDatasourceMode` Shell 状态已删除，命令面板的「管理连接」动作改为打开该 Dialog。
-- 项目「文件」子模式通过 Electron preload 的 `listProjectFolder` 逐层懒加载本地目录（跳过 `.git`、`node_modules`、`target` 等重目录），点击文本文件用 `readProjectFile` 读取（UTF-8、≤ 1 MiB），并在 Dock 打开只读 `dbfox.workspace.file` 视图；文件内容不进入 Shell Store。
+- Workspace 资源树由 `dbfox.workspace` frontend contribution 提供；目录选择走 Host 的 `nativeDialogs.pickFolder`，列举/读取走 typed DLC operations，文件 Artifact/Dock renderer 也归该包。Core Shell 只拥有 Connector/Dock/Artifact contribution slots 与焦点、折叠、overflow 规则。
 - 顶部不再显示项目名与连接状态。
 - 右侧 `WorkspaceDock` 是统一 Tab 容器：SQL 控制台、表详情、只读项目文件、工件总览和工件 Tab 都在这里。项目文件 Tab 按 `projectId` 对当前 Project 可见，切换 Project 后其他 Project 的文件 Tab 隐藏。
 - Shell/View 状态已分 owner：`workspaceStore` 只保存 Shell identity/layout 和通用 `openDockTab`/`updateDockTab`；SQL draft/entries 归 `sqlConsoleStore`，表选择/表子页归 `tableWorkspaceStore`，工件/文件 Dock 打开动作归 `artifactDockStore`/`workspaceFileStore`。`WorkspaceDockTabKind` 是开放 string，未知 view 走统一 fallback。

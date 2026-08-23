@@ -7,46 +7,37 @@ import { ProjectCreateForm } from "../ProjectCreateForm";
 const projectState = vi.hoisted(() => ({
   createProject: vi.fn(),
 }));
-const folderApi = vi.hoisted(() => ({
-  pickProjectFolder: vi.fn(),
-}));
 
 vi.mock("../useProjectState", () => ({
   useProjectState: () => ({ createProject: projectState.createProject }),
-}));
-vi.mock("../../../lib/projectFolder", () => ({
-  pickProjectFolder: folderApi.pickProjectFolder,
 }));
 
 describe("ProjectCreateForm", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
-    folderApi.pickProjectFolder.mockResolvedValue(null);
     projectState.createProject.mockResolvedValue({ id: "project-new" });
   });
 
-  it("selects a local folder, derives the default name, and sends workspace_root", async () => {
-    folderApi.pickProjectFolder.mockResolvedValue("C:/demo/orders");
+  it("creates an identity-only project without requiring a folder", async () => {
     const onCreated = vi.fn();
     render(<ProjectCreateForm onCreated={onCreated} onCancel={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "选择文件夹" }));
-    await waitFor(() => expect(screen.getByDisplayValue("orders")).toBeInTheDocument());
-    expect(screen.getByText("C:/demo/orders")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("例如：电商经营分析"), {
+      target: { value: "orders" },
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "创建项目" }));
     await waitFor(() =>
       expect(projectState.createProject).toHaveBeenCalledWith({
         name: "orders",
         description: null,
-        workspace_root: "C:/demo/orders",
       }),
     );
     expect(onCreated).toHaveBeenCalledWith("project-new");
   });
 
-  it("requires a folder before submitting", async () => {
+  it("requires only a project name", async () => {
     render(<ProjectCreateForm onCreated={vi.fn()} onCancel={vi.fn()} />);
 
     fireEvent.change(screen.getByPlaceholderText("例如：电商经营分析"), {
@@ -54,24 +45,26 @@ describe("ProjectCreateForm", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "创建项目" }));
 
-    expect(await screen.findByText("请先选择项目文件夹。")).toBeInTheDocument();
-    expect(projectState.createProject).not.toHaveBeenCalled();
+    await waitFor(() => expect(projectState.createProject).toHaveBeenCalledWith({
+      name: "手工项目",
+      description: null,
+    }));
   });
 
-  it("keeps a user-entered name when the folder picker returns", async () => {
-    folderApi.pickProjectFolder.mockResolvedValue("D:/work/project-x");
+  it("preserves an optional project description", async () => {
     render(<ProjectCreateForm onCreated={vi.fn()} onCancel={vi.fn()} />);
 
     fireEvent.change(screen.getByPlaceholderText("例如：电商经营分析"), {
       target: { value: "保留名称" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "选择文件夹" }));
-    await waitFor(() => expect(screen.getByDisplayValue("保留名称")).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText("这个项目主要分析什么？"), {
+      target: { value: "  项目说明  " },
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "创建项目" }));
     await waitFor(() =>
       expect(projectState.createProject).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "保留名称", workspace_root: "D:/work/project-x" }),
+        { name: "保留名称", description: "项目说明" },
       ),
     );
   });

@@ -16,7 +16,7 @@ from sqlalchemy.pool import QueuePool
 from engine.connectivity.profile import ConnectionProfile
 from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import CredentialKind, CredentialVault
-from engine.sql.pool_registry import get_pool_registry
+from dlcs.dbfox_data.backend.sql.pool_registry import get_pool_registry
 
 
 def _pool_key(

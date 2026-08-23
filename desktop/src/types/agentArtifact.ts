@@ -44,7 +44,7 @@ export type ResultViewArtifact = AgentArtifactBase & {
   sourceSqlArtifactId: string;
   columns: ResultArtifactColumn[];
   queryFingerprint: string;
-  datasourceGeneration?: number;
+  datasourceGeneration?: string | number;
   rowCount?: number;
   returnedRows?: number;
   latencyMs?: number;
@@ -62,21 +62,3 @@ export type DataReference =
   | { type: "sql"; artifactId: string; label: string; sql?: string }
   | { type: "result"; artifactId: string; rowCount?: number; label: string }
   | { type: "chart"; artifactId: string; label: string };
-
-
-export type WorkspaceFileSnapshotArtifact = AgentArtifactBase & {
-  type: "dbfox.workspace.file_snapshot";
-  relativePath: string;
-  sizeBytes: number;
-  sha256: string;
-  truncated: boolean;
-};
-
-export type WorkspaceCodePatchArtifact = AgentArtifactBase & {
-  type: "dbfox.workspace.code_patch";
-  relativePath: string;
-  oldSha256?: string | null;
-  newSha256: string;
-  sizeBytes: number;
-  created: boolean;
-};

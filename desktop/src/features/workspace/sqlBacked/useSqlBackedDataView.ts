@@ -29,7 +29,7 @@ export interface SqlBackedDataViewState {
   rowCount: number | null | undefined;
   hasNextPage: boolean;
   latencyMs: number | undefined;
-  consistency: "live_reexecution" | "live_query" | undefined;
+  consistency: "durable_snapshot" | "live_reexecution" | "live_query" | undefined;
   originalExecutedAt: string | null | undefined;
   viewExecutedAt: string | undefined;
   viewExecutionId: string | undefined;

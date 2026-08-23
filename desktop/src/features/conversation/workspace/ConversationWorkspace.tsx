@@ -26,6 +26,9 @@ export function ConversationWorkspace({
     sendMessage,
     sending,
     sendError,
+    setResourceIntents,
+    updatingResourceIntents,
+    resourceIntentError,
     cancelRun,
     cancelling,
     resolveApproval,
@@ -124,6 +127,11 @@ export function ConversationWorkspace({
         error={sendError || streamError}
         onSend={(text, mode) => sendMessage(conversationId, text, mode)}
         onCancel={() => runningRun ? cancelRun(runningRun.id) : Promise.resolve()}
+        projectId={detail.project_id || ""}
+        resourceIntents={detail.resource_intents}
+        onResourceIntentsChange={setResourceIntents}
+        updatingResourceIntents={updatingResourceIntents}
+        resourceIntentError={resourceIntentError}
       />
     </section>
   );

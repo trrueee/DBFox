@@ -8,10 +8,12 @@ from sqlalchemy.orm import Session
 
 from engine.errors import GuardrailValidationError, ToolInputError
 from engine.policy.authority import ExecutionAuthority
-from engine.sql.dialect_context import DialectContext
+from engine.resource import ResourceScopeRef
+from engine.sql.dialect_context import load_dialect_context
 from engine.sql.executor import execute_query
 from engine.sql.safety.service import SqlSafetyService
 from engine.tools.db.preview import _infer_column_types
+from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
 
 
 def sql_validate(db: Session, datasource_id: str, sql: str, question: str = "") -> dict[str, Any]:
@@ -20,7 +22,7 @@ def sql_validate(db: Session, datasource_id: str, sql: str, question: str = "") 
     if not sql:
         raise ValueError("sql is required.")
 
-    ctx = DialectContext.from_datasource_id(db, datasource_id)
+    ctx = load_dialect_context(db, datasource_id)
     decision = SqlSafetyService(db).build_execution_decision(sql, ctx, policy="agent_readonly")
 
     return {
@@ -43,6 +45,7 @@ def sql_execute_readonly(
     execution_id: str | None = None,
     expected_connection_generation: int | None = None,
     execution_authority: ExecutionAuthority | None = None,
+    approval_subject: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute a read-only SELECT SQL statement using the pre-validated safety decision."""
     start = time.perf_counter()
@@ -76,10 +79,15 @@ def sql_execute_readonly(
 
     approval_granted = bool(
         execution_authority
-        and execution_authority.authorizes_safety(
+        and approval_subject is not None
+        and execution_authority.authorizes(
             tool_name="sql_execute_readonly",
-            safety=safety,
-            datasource_generation=expected_connection_generation,
+            approval_subject=approval_subject,
+            resource_ref=ResourceScopeRef(
+                kind=DATABASE_RESOURCE_KIND,
+                id=datasource_id,
+                version=expected_connection_generation,
+            ),
         )
     )
     if safety.get("requires_confirmation") and not approval_granted:
@@ -103,6 +111,7 @@ def sql_execute_readonly(
         execution_id=execution_id,
         expected_connection_generation=expected_connection_generation,
         execution_authority=execution_authority,
+        approval_subject=approval_subject,
     )
 
     rows = result.get("rows") or []

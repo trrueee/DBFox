@@ -11,7 +11,11 @@ from engine.connectivity.factory import (
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import get_credential_vault
-from engine.sql.permissions import MySQLPermissionProbe, PostgresPermissionProbe, SQLitePermissionProbe
+from dlcs.dbfox_data.backend.sql.permissions import (
+    MySQLPermissionProbe,
+    PostgresPermissionProbe,
+    SQLitePermissionProbe,
+)
 
 
 logger = logging.getLogger("dbfox.datasource")

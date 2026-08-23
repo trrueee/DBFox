@@ -9,9 +9,15 @@ import ssl
 import stat
 from typing import Any, Generator, Mapping
 
-import pymysql
 from sqlalchemy import Connection, create_engine
 from sqlalchemy.pool import StaticPool
+
+from dlcs.dbfox_data.backend.connection_primitives import (
+    ConnectionConfigurationError,
+    existing_regular_file,
+    network_driver_params,
+    open_network_connection,
+)
 
 from engine.connectivity.lifecycle import (
     DatasourceResourceLifecycle,
@@ -53,72 +59,6 @@ class MySQLClientInvocation:
         return {"MYSQL_PWD": self._password}
 
 
-def _config_value(config: Mapping[str, Any] | ConnectionProfile, key: str, default: Any = None) -> Any:
-    if isinstance(config, ConnectionProfile):
-        return getattr(config, key, default)
-    return config.get(key, default)
-
-
-def _normalized_optional_path(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
-def build_mysql_ssl_params(config: Mapping[str, Any] | ConnectionProfile) -> dict[str, Any]:
-    """Build PyMySQL SSL parameters with certificate verification enabled."""
-    if not _config_value(config, "ssl_enabled", False):
-        return {}
-
-    ca_path = _normalized_optional_path(_config_value(config, "ssl_ca_path"))
-    cert_path = _normalized_optional_path(_config_value(config, "ssl_cert_path"))
-    key_path = _normalized_optional_path(_config_value(config, "ssl_key_path"))
-    verify_identity = bool(_config_value(config, "ssl_verify_identity", True))
-    if verify_identity and not ca_path:
-        raise DataSourceTlsConnectionError(
-            "SSL identity verification requires a CA certificate path."
-        )
-
-    ssl_params: dict[str, Any] = {
-        "ssl_verify_cert": True,
-        "ssl_verify_identity": verify_identity,
-    }
-    if ca_path:
-        ssl_params["ssl_ca"] = ca_path
-    if cert_path:
-        ssl_params["ssl_cert"] = cert_path
-    if key_path:
-        ssl_params["ssl_key"] = key_path
-    return ssl_params
-
-
-def build_postgres_ssl_params(config: Mapping[str, Any] | ConnectionProfile) -> dict[str, Any]:
-    """Build psycopg2 SSL parameters from the shared datasource SSL fields."""
-    if not _config_value(config, "ssl_enabled", False):
-        return {}
-
-    ca_path = _normalized_optional_path(_config_value(config, "ssl_ca_path"))
-    cert_path = _normalized_optional_path(_config_value(config, "ssl_cert_path"))
-    key_path = _normalized_optional_path(_config_value(config, "ssl_key_path"))
-    verify_identity = bool(_config_value(config, "ssl_verify_identity", True))
-    if verify_identity and not ca_path:
-        raise DataSourceTlsConnectionError(
-            "PostgreSQL SSL identity verification requires a CA certificate path."
-        )
-
-    params: dict[str, Any] = {
-        "sslmode": "verify-full" if verify_identity else ("verify-ca" if ca_path else "require"),
-    }
-    if ca_path:
-        params["sslrootcert"] = ca_path
-    if cert_path:
-        params["sslcert"] = cert_path
-    if key_path:
-        params["sslkey"] = key_path
-    return params
-
-
 class ConnectionFactory:
     """The sole boundary that resolves datasource passwords for driver use."""
 
@@ -139,13 +79,9 @@ class ConnectionFactory:
         if profile.dialect != "sqlite":
             raise DataSourceConnectionError("The profile is not a SQLite datasource.")
         try:
-            path = Path(profile.database_name).expanduser()
-            path_stat = path.lstat()
-        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            return existing_regular_file(profile.database_name, label="SQLite")
+        except ConnectionConfigurationError as exc:
             raise DataSourceConnectionError("SQLite database file is unavailable.") from exc
-        if stat.S_ISLNK(path_stat.st_mode) or not stat.S_ISREG(path_stat.st_mode):
-            raise DataSourceConnectionError("SQLite database file is unavailable.")
-        return path
 
     @contextmanager
     def sqlite_connection_scope(
@@ -411,31 +347,17 @@ class ConnectionFactory:
         endpoint: ConnectionEndpoint,
     ) -> dict[str, Any]:
         """Build driver metadata without resolving a password."""
-        if profile.dialect == "mysql":
-            params = {
-                "host": endpoint.host,
-                "port": endpoint.port,
-                "user": profile.username,
-                "database": profile.database_name,
-                "charset": "utf8mb4",
-                "connect_timeout": 5,
-                "read_timeout": 10,
-                "write_timeout": 10,
-            }
-            params.update(build_mysql_ssl_params(profile))
-            return params
-
-        if profile.dialect == "postgresql":
-            params = {
-                "host": endpoint.host,
-                "port": endpoint.port,
-                "user": profile.username,
-                "database": profile.database_name,
-            }
-            params.update(build_postgres_ssl_params(profile))
-            return params
-
-        raise DataSourceConnectionError("Unsupported datasource dialect.")
+        try:
+            return network_driver_params(
+                provider=profile.dialect,
+                host=endpoint.host,
+                port=endpoint.port,
+                username=str(profile.username or ""),
+                database=profile.database_name,
+                config=profile,
+            )
+        except ConnectionConfigurationError as exc:
+            raise DataSourceTlsConnectionError(str(exc)) from exc
 
     @staticmethod
     def _raw_connection(connection_proxy: Any) -> Any:
@@ -462,21 +384,17 @@ class ConnectionFactory:
     @staticmethod
     def _direct_connection(profile: ConnectionProfile, params: Mapping[str, Any]) -> Any:
         try:
-            if profile.dialect == "mysql":
-                return pymysql.connect(**dict(params))
-            if profile.dialect == "postgresql":
-                import psycopg2
-
-                return psycopg2.connect(**dict(params), connect_timeout=5)
+            return open_network_connection(profile.dialect, params)
         except (DataSourceConnectionError, CredentialVaultUnavailableError):
             raise
+        except ConnectionConfigurationError as exc:
+            raise DataSourceConnectionError("Unsupported datasource dialect.") from exc
         except ssl.SSLError as exc:
             raise DataSourceTlsConnectionError(
                 "Database TLS connection could not be established."
             ) from exc
         except Exception as exc:
             raise DataSourceConnectionError("Database connection could not be opened.") from exc
-        raise DataSourceConnectionError("Unsupported datasource dialect.")
 
     @staticmethod
     def _sqlalchemy_url(profile: ConnectionProfile) -> str:

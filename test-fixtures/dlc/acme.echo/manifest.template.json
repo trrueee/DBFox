@@ -6,7 +6,7 @@
   "publisher": "acme",
   "publisherKey": "__PUBLISHER_KEY_BASE64__",
   "description": "Cross-platform packaged lifecycle conformance fixture",
-  "extensionApiVersion": "1",
+  "extensionApiVersion": "2",
   "requiresDbfox": ">=1.0.0",
   "entrypoints": {
     "backend": "backend/entry.py",

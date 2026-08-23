@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Header, HTTPException, Request, Response, status
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
@@ -14,6 +14,7 @@ from engine.db import SessionLocal
 from engine.dlc.api import DlcOperationContext, DlcOperationError
 from engine.models import Project
 from engine.runtime_composition import get_active_runtime_snapshot
+from engine.security.credential_lease import CredentialLeaseSaga
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,83 @@ router = APIRouter(prefix="/dlcs", tags=["dlc_operations"])
 
 MAX_DLC_OPERATION_INPUT_BYTES = 10 * 1024 * 1024  # 10 MiB
 PLATFORM_MAX_DLC_OPERATION_OUTPUT_BYTES = 10 * 1024 * 1024  # 10 MiB host ceiling
+
+
+def _credential_references(spec, input_data: Any) -> frozenset[str]:
+    if spec.credential_references is None:
+        return frozenset()
+    values = spec.credential_references(input_data)
+    if not isinstance(values, frozenset) or any(
+        not isinstance(value, str) or not value.strip() for value in values
+    ):
+        raise RuntimeError("DLC credential reference extractor returned an invalid set")
+    return frozenset(value.strip() for value in values)
+
+
+def _claim_operation_credentials(
+    *,
+    lease_id: str,
+    references: frozenset[str],
+    dlc_id: str,
+    operation_name: str,
+    project_id: str | None,
+) -> None:
+    with SessionLocal() as db:
+        CredentialLeaseSaga(db).claim(
+            lease_id,
+            set(references),
+            owner_id=dlc_id,
+            owner_operation=operation_name,
+            owner_project_id=project_id,
+        )
+        db.commit()
+
+
+def _recover_operation_credentials(
+    *,
+    lease_id: str,
+    dlc_id: str,
+    snapshot,
+) -> None:
+    probes = {
+        item.owner_id: item.probe
+        for item in snapshot.credential_reference_probes
+    }
+    try:
+        with SessionLocal() as db:
+            CredentialLeaseSaga(db, reference_probes=probes).recover_claim(
+                lease_id,
+                owner_id=dlc_id,
+            )
+    except Exception:
+        # The claim remains durable and startup recovery will retry.  Never mask
+        # the operation's original failure or guess that the secret is unused.
+        logger.exception(
+            "Credential claim recovery deferred lease_id=%s dlc_id=%s",
+            lease_id,
+            dlc_id,
+        )
+
+
+def _verify_operation_credentials(
+    *,
+    lease_id: str,
+    dlc_id: str,
+    snapshot,
+) -> None:
+    probes = {
+        item.owner_id: item.probe
+        for item in snapshot.credential_reference_probes
+    }
+    with SessionLocal() as db:
+        settled = CredentialLeaseSaga(
+            db,
+            reference_probes=probes,
+        ).recover_claim(lease_id, owner_id=dlc_id)
+    if settled is not True:
+        raise RuntimeError(
+            "DLC operation returned success before credential ownership was durable"
+        )
 
 
 @router.post(
@@ -32,6 +110,10 @@ async def invoke_dlc_operation(
     dlc_id: str,
     operation_name: str,
     request: Request,
+    credential_lease_id: Annotated[
+        str | None,
+        Header(alias="X-Credential-Lease-Id"),
+    ] = None,
 ) -> Any:
     """Execute a typed DLC operation with input/output bounds and single-call semantics."""
     snapshot = get_active_runtime_snapshot()
@@ -145,15 +227,69 @@ async def invoke_dlc_operation(
         project_id=project_id,
     )
 
+    try:
+        credential_references = _credential_references(spec, input_data)
+    except Exception as exc:
+        logger.error(
+            "Credential reference extraction failed for operation '%s' in DLC '%s'",
+            operation_name,
+            dlc_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "CREDENTIAL_REFERENCE_EXTRACTION_FAILED",
+                "message": "Operation credential contract failed.",
+            },
+        ) from exc
+
+    if spec.credential_lease_required and credential_references and not credential_lease_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "CREDENTIAL_LEASE_REQUIRED",
+                "message": "This operation requires a server-issued credential lease.",
+            },
+        )
+    if credential_lease_id and not credential_references:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "CREDENTIAL_LEASE_INVALID",
+                "message": "Credential lease has no matching operation references.",
+            },
+        )
+    if credential_lease_id:
+        _claim_operation_credentials(
+            lease_id=credential_lease_id,
+            references=credential_references,
+            dlc_id=dlc_id,
+            operation_name=operation_name,
+            project_id=project_id,
+        )
+
     # 6. Execute handler exactly once in threadpool (non-blocking)
     try:
         result = await run_in_threadpool(spec.handler, input_data, ctx)
     except DlcOperationError as exc:
+        if credential_lease_id:
+            _recover_operation_credentials(
+                lease_id=credential_lease_id,
+                dlc_id=dlc_id,
+                snapshot=snapshot,
+            )
         raise HTTPException(
             status_code=exc.status_code,
             detail={"code": exc.code, "message": exc.message},
         ) from exc
     except Exception as exc:
+        if credential_lease_id:
+            _recover_operation_credentials(
+                lease_id=credential_lease_id,
+                dlc_id=dlc_id,
+                snapshot=snapshot,
+            )
         logger.error(
             f"Operation '{operation_name}' for DLC '{dlc_id}' failed: {exc}",
             exc_info=True,
@@ -174,6 +310,12 @@ async def invoke_dlc_operation(
             validated_output = spec.output_model.model_validate(result)
         output_dict = validated_output.model_dump(mode="json")
     except Exception as exc:
+        if credential_lease_id:
+            _recover_operation_credentials(
+                lease_id=credential_lease_id,
+                dlc_id=dlc_id,
+                snapshot=snapshot,
+            )
         logger.error(
             f"Operation '{operation_name}' for DLC '{dlc_id}' produced invalid output: {exc}",
             exc_info=True,
@@ -194,6 +336,12 @@ async def invoke_dlc_operation(
     )
     output_json_bytes = json.dumps(output_dict).encode("utf-8")
     if len(output_json_bytes) > effective_max_output:
+        if credential_lease_id:
+            _recover_operation_credentials(
+                lease_id=credential_lease_id,
+                dlc_id=dlc_id,
+                snapshot=snapshot,
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -201,6 +349,28 @@ async def invoke_dlc_operation(
                 "message": f"Operation output size ({len(output_json_bytes)} bytes) exceeds effective limit of {effective_max_output} bytes.",
             },
         )
+
+    if credential_lease_id:
+        try:
+            _verify_operation_credentials(
+                lease_id=credential_lease_id,
+                dlc_id=dlc_id,
+                snapshot=snapshot,
+            )
+        except Exception as exc:
+            logger.error(
+                "Credential adoption verification failed for operation '%s' in DLC '%s'",
+                operation_name,
+                dlc_id,
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "code": "CREDENTIAL_ADOPTION_NOT_DURABLE",
+                    "message": "Operation did not durably adopt its credential references.",
+                },
+            ) from exc
 
     return Response(
         content=output_json_bytes,

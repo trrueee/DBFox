@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from engine.agent.artifact import (
     _KNOWN_ARTIFACT_TYPES,
     artifact_payload_contracts,
-    register_artifact_payload_contracts_atomic,
 )
 from engine.agent.context_fragment import ContextContributor
 from engine.agent.resource_refs import ProjectResourceProvider
@@ -35,6 +34,12 @@ from engine.dlc.registry import InstalledDlcRecord, InstalledDlcRegistry
 from engine.dlc.snapshot import (
     ActivatedDlcIdentity,
     ArtifactContractContribution,
+    ArtifactChartViewContribution,
+    ArtifactTableViewContribution,
+    BuiltinContributionSet,
+    CompletionConstraintContribution,
+    CompletionSupportContribution,
+    CredentialReferenceProbeContribution,
     DlcActivationFailure,
     DlcOperationContribution,
     ResourceResolverContribution,
@@ -98,6 +103,33 @@ def _check_operation_permissions(manifest: DlcManifest, spec: DlcOperationSpec) 
             )
 
 
+def platform_builtin_contributions() -> BuiltinContributionSet:
+    """Build the Runtime-owned contribution seed without business domains."""
+
+    from engine.tools.builtin.registry import (
+        register_conversation_functions,
+        register_core_functions,
+        register_remote_job_extension,
+    )
+
+    registry = ToolRegistry(
+        available_backends=frozenset({"in_process", "isolated_process"})
+    )
+    register_core_functions(registry)
+    register_conversation_functions(registry)
+    register_remote_job_extension(registry)
+    return BuiltinContributionSet(
+        identifiers=("dbfox.core", "dbfox.conversation", "dbfox.remote_job"),
+        tools=tuple(
+            ToolContribution(
+                tool=registry.require(name),  # type: ignore[arg-type]
+                owner_id=registry.owner_of(name) or "dbfox.core",
+            )
+            for name in registry.tool_names()
+        ),
+    )
+
+
 class ContributionCompiler:
     """Compiles built-in product contributions and enabled DLCs into a frozen RuntimeContributionSnapshot."""
 
@@ -118,10 +150,7 @@ class ContributionCompiler:
     def compile(
         self,
         *,
-        built_in_tools: Sequence[ToolContribution | BaseTool[Any, Any]] | None = None,
-        built_in_resource_providers: Sequence[ProjectResourceProvider] | None = None,
-        built_in_resource_resolvers: Sequence[tuple[str, Any] | tuple[str, Any, str] | ResourceResolverContribution] | None = None,
-        built_in_context_contributors: Sequence[Callable[[Session], ContextContributor]] | None = None,
+        built_ins: BuiltinContributionSet | None = None,
     ) -> RuntimeContributionSnapshot:
         """Execute the full compilation pipeline and return an immutable RuntimeContributionSnapshot."""
         # Installed package trees are immutable integrity roots.  Keep Python from
@@ -151,97 +180,42 @@ class ContributionCompiler:
         ]
         enabled_records.sort(key=lambda r: r.dlc_id)
 
-        # 3. Resolve built-in contributions
-        if built_in_tools is None:
-            from engine.tools.builtin.registry import (
-                register_conversation_functions,
-                register_core_functions,
-                register_data_extension,
-                register_remote_job_extension,
-                register_workspace_extension,
-                register_workspace_write_extension,
-            )
-            temp_reg = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
-            register_core_functions(temp_reg)
-            register_conversation_functions(temp_reg)
-            register_data_extension(temp_reg)
-            register_workspace_extension(temp_reg)
-            register_workspace_write_extension(temp_reg)
-            register_remote_job_extension(temp_reg)
-            resolved_built_in_tools: list[ToolContribution] = [
-                ToolContribution(
-                    tool=temp_reg.require(name),  # type: ignore[arg-type]
-                    owner_id=temp_reg.owner_of(name) or "dbfox.builtin",
-                    package_digest=None,
-                )
-                for name in temp_reg.tool_names()
-            ]
-        else:
-            resolved_built_in_tools = [
-                t if isinstance(t, ToolContribution)
-                else ToolContribution(tool=t, owner_id="dbfox.builtin", package_digest=None)
-                for t in built_in_tools
-            ]
-
-        if built_in_resource_providers is None:
-            from engine.runtime_composition import (
-                list_database_resources,
-                list_workspace_resources,
-            )
-            resolved_providers: list[ProjectResourceProvider] = [
-                list_database_resources,
-                list_workspace_resources,
-            ]
-        else:
-            resolved_providers = list(built_in_resource_providers)
-
-        if built_in_resource_resolvers is None:
-            from engine.tools.runtime.resource_context import resolve_workspace_resource
-
-            resolved_resolvers: list[ResourceResolverContribution] = [
-                ResourceResolverContribution(kind="database", resolver=lambda db, _ref: db, owner_id="dbfox.builtin", binding="metadata_session"),
-                ResourceResolverContribution(kind="workspace", resolver=resolve_workspace_resource, owner_id="dbfox.builtin", binding="metadata_session"),
-            ]
-        else:
-            resolved_resolvers = []
-            for r in built_in_resource_resolvers:
-                if isinstance(r, ResourceResolverContribution):
-                    resolved_resolvers.append(r)
-                elif isinstance(r, tuple) and len(r) >= 3:
-                    resolved_resolvers.append(
-                        ResourceResolverContribution(kind=r[0], resolver=r[1], owner_id="dbfox.builtin", binding=r[2])  # type: ignore[arg-type]
-                    )
-                else:
-                    resolved_resolvers.append(
-                        ResourceResolverContribution(kind=r[0], resolver=r[1], owner_id="dbfox.builtin", binding="metadata_session")
-                    )
-
-        if built_in_context_contributors is None:
-            from engine.agent.workspace_context import WorkspaceContextContributor
-
-            resolved_context: list[Callable[[Session], ContextContributor]] = [
-                WorkspaceContextContributor,
-            ]
-        else:
-            resolved_context = list(built_in_context_contributors)
+        # 3. Resolve the immutable, owner-bound platform seed.
+        seed = built_ins or platform_builtin_contributions()
 
         # 4. Accepted global state initialized with built-in contributions
         accepted_tool_registry = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
-        for tc in resolved_built_in_tools:
+        for tc in seed.tools:
             accepted_tool_registry.register(tc.tool, owner=tc.owner_id, package_digest=tc.package_digest)
 
-        known_resolver_kinds: set[str] = {rc.kind for rc in resolved_resolvers}
+        known_resolver_kinds: set[str] = {rc.kind for rc in seed.resource_resolvers}
         known_artifact_types: set[str] = set(_KNOWN_ARTIFACT_TYPES) | {
-            t for t, _ in artifact_payload_contracts.snapshot().keys()
+            artifact_type
+            for artifact_type, _schema_version in artifact_payload_contracts.snapshot()
         }
         known_operations: set[tuple[str, str]] = set()
-
+        known_completion_constraint_ids = {
+            item.constraint.id for item in seed.completion_constraints
+        }
+        known_completion_support_ids = {
+            item.support.id for item in seed.completion_supports
+        }
         active_dlcs: list[ActivatedDlcIdentity] = []
-        all_tools: list[ToolContribution] = list(resolved_built_in_tools)
-        all_resource_providers: list[ProjectResourceProvider] = list(resolved_providers)
-        all_resource_resolvers: list[ResourceResolverContribution] = list(resolved_resolvers)
-        all_context_contributors: list[Callable[[Session], ContextContributor]] = list(resolved_context)
+        all_tools: list[ToolContribution] = list(seed.tools)
+        all_resource_providers: list[ProjectResourceProvider] = list(seed.resource_providers)
+        all_resource_resolvers: list[ResourceResolverContribution] = list(seed.resource_resolvers)
+        all_context_contributors: list[Callable[[Session], ContextContributor]] = list(seed.context_contributors)
+        all_completion_constraints = list(seed.completion_constraints)
+        all_completion_supports = list(seed.completion_supports)
+        all_credential_reference_probes = list(seed.credential_reference_probes)
+        known_credential_probe_owner_ids = {
+            item.owner_id for item in all_credential_reference_probes
+        }
         all_artifact_contracts: list[ArtifactContractContribution] = []
+        all_artifact_table_views: list[ArtifactTableViewContribution] = []
+        known_artifact_table_view_types: set[str] = set()
+        all_artifact_chart_views: list[ArtifactChartViewContribution] = []
+        known_artifact_chart_view_types: set[str] = set()
         all_operations: list[DlcOperationContribution] = []
 
         def _clone_tool_registry(base: ToolRegistry) -> ToolRegistry:
@@ -284,6 +258,7 @@ class ContributionCompiler:
                             publisher_key_id=key_fingerprint,
                             trust_status=trust_status,
                             frontend_entrypoint=manifest.entrypoints.frontend,
+                            permissions=tuple(sorted(manifest.permissions)),
                         )
                     )
                     continue
@@ -390,9 +365,129 @@ class ContributionCompiler:
                         )
                     )
 
+                candidate_artifact_table_views: list[ArtifactTableViewContribution] = []
+                candidate_artifact_table_view_types: set[str] = set()
+                for art_type, table_provider in staging.artifact_table_views:
+                    if art_type not in candidate_artifact_types:
+                        raise DlcError(
+                            DlcErrorCode.REGISTRATION_CONFLICT,
+                            f"Artifact table view '{art_type}' from DLC '{dlc_id}' must target an Artifact contract registered by the same DLC",
+                        )
+                    if (
+                        art_type in known_artifact_table_view_types
+                        or art_type in candidate_artifact_table_view_types
+                    ):
+                        raise DlcError(
+                            DlcErrorCode.REGISTRATION_CONFLICT,
+                            f"Artifact table view '{art_type}' from DLC '{dlc_id}' conflicts with an existing provider",
+                        )
+                    candidate_artifact_table_view_types.add(art_type)
+                    candidate_artifact_table_views.append(
+                        ArtifactTableViewContribution(
+                            artifact_type=art_type,
+                            provider=table_provider,
+                            owner_id=dlc_id,
+                        )
+                    )
+
+                candidate_artifact_chart_views: list[ArtifactChartViewContribution] = []
+                candidate_artifact_chart_view_types: set[str] = set()
+                for art_type, chart_provider in staging.artifact_chart_views:
+                    if art_type not in candidate_artifact_types:
+                        raise DlcError(
+                            DlcErrorCode.REGISTRATION_CONFLICT,
+                            f"Artifact chart view '{art_type}' from DLC '{dlc_id}' must target an Artifact contract registered by the same DLC",
+                        )
+                    if (
+                        art_type in known_artifact_chart_view_types
+                        or art_type in candidate_artifact_chart_view_types
+                    ):
+                        raise DlcError(
+                            DlcErrorCode.REGISTRATION_CONFLICT,
+                            f"Artifact chart view '{art_type}' from DLC '{dlc_id}' conflicts with an existing provider",
+                        )
+                    candidate_artifact_chart_view_types.add(art_type)
+                    candidate_artifact_chart_views.append(
+                        ArtifactChartViewContribution(
+                            artifact_type=art_type,
+                            provider=chart_provider,
+                            owner_id=dlc_id,
+                        )
+                    )
+
+                candidate_completion_constraints: list[CompletionConstraintContribution] = []
+                candidate_constraint_ids: set[str] = set()
+                for constraint in staging.completion_constraints:
+                    if (
+                        constraint.id in known_completion_constraint_ids
+                        or constraint.id in candidate_constraint_ids
+                    ):
+                        raise DlcError(
+                            DlcErrorCode.REGISTRATION_CONFLICT,
+                            f"Completion constraint '{constraint.id}' from DLC '{dlc_id}' conflicts with an existing contribution",
+                        )
+                    candidate_constraint_ids.add(constraint.id)
+                    candidate_completion_constraints.append(
+                        CompletionConstraintContribution(
+                            constraint=constraint,
+                            owner_id=dlc_id,
+                        )
+                    )
+
+                candidate_completion_supports: list[CompletionSupportContribution] = []
+                candidate_support_ids: set[str] = set()
+                for support in staging.completion_supports:
+                    if (
+                        support.id in known_completion_support_ids
+                        or support.id in candidate_support_ids
+                    ):
+                        raise DlcError(
+                            DlcErrorCode.REGISTRATION_CONFLICT,
+                            f"Completion support '{support.id}' from DLC '{dlc_id}' conflicts with an existing contribution",
+                        )
+                    candidate_support_ids.add(support.id)
+                    candidate_completion_supports.append(
+                        CompletionSupportContribution(
+                            support=support,
+                            owner_id=dlc_id,
+                        )
+                    )
+
+                candidate_credential_reference_probes: list[
+                    CredentialReferenceProbeContribution
+                ] = []
+                if (
+                    staging.credential_reference_probes
+                    and dlc_id in known_credential_probe_owner_ids
+                ):
+                    raise DlcError(
+                        DlcErrorCode.REGISTRATION_CONFLICT,
+                        f"Credential ownership probe for '{dlc_id}' is already registered",
+                    )
+                for probe in staging.credential_reference_probes:
+                    def _make_credential_probe(
+                        package_probe: Callable[[frozenset[str]], bool],
+                    ) -> Callable[[Session, frozenset[str]], bool]:
+                        return lambda _session, refs: bool(package_probe(refs))
+
+                    candidate_credential_reference_probes.append(
+                        CredentialReferenceProbeContribution(
+                            probe=_make_credential_probe(probe),
+                            owner_id=dlc_id,
+                        )
+                    )
+
                 # 6. Validate candidate operations
                 candidate_operations: list[DlcOperationContribution] = []
                 candidate_op_keys: set[tuple[str, str]] = set()
+                if any(
+                    op_spec.credential_references is not None
+                    for op_spec in staging.operations
+                ) and not staging.credential_reference_probes:
+                    raise DlcError(
+                        DlcErrorCode.REGISTRATION_CONFLICT,
+                        f"DLC '{dlc_id}' declares credential-adopting operations without an ownership probe",
+                    )
                 for op_spec in staging.operations:
                     _check_operation_permissions(manifest, op_spec)
                     op_key = (dlc_id, op_spec.name)
@@ -410,10 +505,6 @@ class ContributionCompiler:
                 # PROMOTE: All validations passed, commit candidate contributions
                 # -----------------------------------------------------------------
 
-                # Atomically register artifact payload contracts for this DLC
-                if staging.artifact_contracts:
-                    register_artifact_payload_contracts_atomic(staging.artifact_contracts)
-
                 # Promote tools & registry
                 accepted_tool_registry = candidate_tool_registry
                 all_tools.extend(candidate_tools)
@@ -426,9 +517,29 @@ class ContributionCompiler:
                 # Promote context
                 all_context_contributors.extend(candidate_context)
 
+                known_completion_constraint_ids.update(candidate_constraint_ids)
+                known_completion_support_ids.update(candidate_support_ids)
+                all_completion_constraints.extend(candidate_completion_constraints)
+                all_completion_supports.extend(candidate_completion_supports)
+                all_credential_reference_probes.extend(
+                    candidate_credential_reference_probes
+                )
+                known_credential_probe_owner_ids.update(
+                    item.owner_id
+                    for item in candidate_credential_reference_probes
+                )
+
                 # Promote artifacts
                 known_artifact_types.update(candidate_artifact_types)
                 all_artifact_contracts.extend(candidate_artifacts)
+                known_artifact_table_view_types.update(
+                    candidate_artifact_table_view_types
+                )
+                all_artifact_table_views.extend(candidate_artifact_table_views)
+                known_artifact_chart_view_types.update(
+                    candidate_artifact_chart_view_types
+                )
+                all_artifact_chart_views.extend(candidate_artifact_chart_views)
 
                 # Promote operations
                 known_operations.update(candidate_op_keys)
@@ -443,6 +554,7 @@ class ContributionCompiler:
                         publisher_key_id=key_fingerprint,
                         trust_status=trust_status,
                         frontend_entrypoint=manifest.entrypoints.frontend,
+                        permissions=tuple(sorted(manifest.permissions)),
                     )
                 )
 
@@ -467,7 +579,10 @@ class ContributionCompiler:
 
         # 6. Compute deterministic snapshot ID
         active_dlc_tuple = tuple(active_dlcs)
-        snapshot_id = compute_snapshot_id(active_dlc_tuple)
+        snapshot_id = compute_snapshot_id(
+            active_dlc_tuple,
+            built_in_identifiers=seed.identifiers,
+        )
 
         return RuntimeContributionSnapshot(
             snapshot_id=snapshot_id,
@@ -476,7 +591,12 @@ class ContributionCompiler:
             resource_providers=tuple(all_resource_providers),
             resource_resolvers=tuple(all_resource_resolvers),
             context_contributors=tuple(all_context_contributors),
+            completion_constraints=tuple(all_completion_constraints),
+            completion_supports=tuple(all_completion_supports),
             artifact_contracts=tuple(all_artifact_contracts),
+            artifact_table_views=tuple(all_artifact_table_views),
+            artifact_chart_views=tuple(all_artifact_chart_views),
             operations=tuple(all_operations),
+            credential_reference_probes=tuple(all_credential_reference_probes),
             activation_failures=tuple(activation_failures),
         )

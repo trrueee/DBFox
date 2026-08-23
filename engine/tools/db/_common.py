@@ -6,14 +6,13 @@ from sqlalchemy.orm import Session
 
 from engine.errors import ToolInputError
 from engine.models import DataSource, SchemaColumn, SchemaTable
-from engine.policy.sensitivity import _SENSITIVE_FALLBACK
+from dlcs.dbfox_data.backend.sensitivity import is_sensitive_name
 
-MAX_PREVIEW_ROWS = 20
 DEFAULT_PREVIEW_ROWS = 10
 
 
 def _looks_sensitive(column_name: str) -> bool:
-    return bool(_SENSITIVE_FALLBACK.search(column_name))
+    return is_sensitive_name(column_name)
 
 
 def _datasource(db: Session, datasource_id: str) -> DataSource:

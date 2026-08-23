@@ -1,16 +1,35 @@
 import { ArrowUp } from "lucide-react";
 import { Button } from "../../../components/ui";
+import type { RequestedResourceRef } from "../../../lib/api/generated/types.gen";
+import { ResourceContextPicker } from "../../conversation/ResourceContextPicker";
 import "../SmartQueryHome.css";
 
 interface AskInputBoxProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  projectId: string;
+  resourceIntents: readonly RequestedResourceRef[];
+  onResourceIntentsChange: (next: RequestedResourceRef[]) => void;
 }
 
-export function AskInputBox({ value, onChange, onSubmit }: AskInputBoxProps) {
+export function AskInputBox({
+  value,
+  onChange,
+  onSubmit,
+  projectId,
+  resourceIntents,
+  onResourceIntentsChange,
+}: AskInputBoxProps) {
   return (
     <div className="ask-input">
+      <div className="ask-input__context">
+        <ResourceContextPicker
+          projectId={projectId}
+          selected={resourceIntents}
+          onChange={onResourceIntentsChange}
+        />
+      </div>
       <textarea
         className="ask-input__textarea"
         value={value}

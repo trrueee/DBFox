@@ -9,7 +9,7 @@ function tab(overrides: Partial<WorkspaceDockTab> = {}): WorkspaceDockTab {
     viewType: "dbfox.data.table",
     title: "orders",
     closeable: true,
-    target: { type: "resource", kind: "database", id: "ds-1" },
+    target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
     ...overrides,
   };
 }
@@ -30,7 +30,7 @@ describe("dock view registry", () => {
     const console = getDockView("dbfox.data.sql-console");
     expect(
       table?.isVisible(
-        tab({ target: { type: "resource", kind: "database", id: "ds-2" } }),
+        tab({ target: { type: "resource", kind: "dbfox.data.database", id: "ds-2" } }),
         {
           activeProjectId: "project-1",
           activeDatasourceId: "ds-1",
@@ -42,7 +42,7 @@ describe("dock view registry", () => {
       console?.isVisible(
         tab({
           viewType: "dbfox.data.sql-console",
-          target: { type: "resource", kind: "database", id: "ds-1" },
+          target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
         }),
         {
           activeProjectId: "project-1",

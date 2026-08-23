@@ -7,7 +7,7 @@ from engine.environment.authoritative_inventory import (
     AuthoritativeInventory,
     SchemaInspectionError,
 )
-from engine.environment.inventory import ColumnInventory, SchemaInventory, TableInventory
+from dlcs.dbfox_data.backend.inventory import ColumnInventory, SchemaInventory, TableInventory
 from engine.environment.er_diagram import build_er_diagram as build_er_diagram_data
 from engine.environment.schema_catalog_sync import (
     SchemaCatalogSync,
@@ -36,7 +36,7 @@ def test_catalog_sync_preserves_unknown_and_known_zero_row_estimates(
     db_session, test_datasource
 ) -> None:
     inventory = SchemaInventory(
-        datasource_id=test_datasource.id,
+        database_resource_id=test_datasource.id,
         dialect="mysql",
         database_name="creatorhub",
         tables=[
@@ -166,7 +166,7 @@ def test_sync_idempotent(db_session, test_datasource) -> None:
 def test_catalog_sync_preserves_same_table_name_in_different_schemas(db_session, test_datasource) -> None:
     syncer = SchemaCatalogSync()
     initial_inventory = SchemaInventory(
-        datasource_id=test_datasource.id,
+        database_resource_id=test_datasource.id,
         dialect="postgresql",
         database_name="demo",
         tables=[
@@ -194,7 +194,7 @@ def test_catalog_sync_preserves_same_table_name_in_different_schemas(db_session,
     )
 
     updated_inventory = SchemaInventory(
-        datasource_id=test_datasource.id,
+        database_resource_id=test_datasource.id,
         dialect="postgresql",
         database_name="demo",
         tables=[

@@ -41,11 +41,11 @@ export interface SqlBackedPageResponse {
   rowCount?: number | null;
   hasNextPage: boolean;
   latencyMs: number;
-  consistency: "live_reexecution" | "live_query";
+  consistency: "durable_snapshot" | "live_reexecution" | "live_query";
   originalExecutedAt?: string | null;
   viewExecutedAt: string;
   viewExecutionId: string;
-  datasourceGeneration: number;
+  datasourceGeneration: string | number;
   queryFingerprint: string;
   warnings?: string[] | null;
   notices?: string[] | null;

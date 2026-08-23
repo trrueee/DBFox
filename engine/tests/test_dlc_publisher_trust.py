@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from engine.dlc import (
+    BuiltinContributionSet,
     ContributionCompiler,
     DlcError,
     DlcErrorCode,
@@ -40,7 +41,7 @@ def _v2_manifest(public_key_base64: str, *, dlc_id: str = "acme.echo") -> dict[s
         "publisher": "acme",
         "publisherKey": public_key_base64,
         "description": "R4 publisher trust fixture",
-        "extensionApiVersion": "1",
+        "extensionApiVersion": "2",
         "requiresDbfox": ">=1.0.0",
         "entrypoints": {
             "backend": "backend/entry.py",
@@ -158,10 +159,7 @@ def test_trust_then_single_file_install_survives_service_rebuild_and_restart(
 
     rebuilt_service.registry.set_desired_enabled(result.dlc_id, True)
     snapshot = ContributionCompiler(storage_root).compile(
-        built_in_tools=(),
-        built_in_resource_providers=(),
-        built_in_resource_resolvers=(),
-        built_in_context_contributors=(),
+        built_ins=BuiltinContributionSet()
     )
     assert [identity.dlc_id for identity in snapshot.active_dlcs] == ["acme.echo"]
     assert snapshot.activation_failures == ()
@@ -207,10 +205,7 @@ def test_restart_reverify_rejects_valid_but_different_embedded_key(
     )
 
     snapshot = ContributionCompiler(storage_root).compile(
-        built_in_tools=(),
-        built_in_resource_providers=(),
-        built_in_resource_resolvers=(),
-        built_in_context_contributors=(),
+        built_ins=BuiltinContributionSet()
     )
     assert snapshot.active_dlcs == ()
     assert [failure.error_code for failure in snapshot.activation_failures] == [

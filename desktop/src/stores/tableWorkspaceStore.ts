@@ -74,7 +74,7 @@ export const useTableWorkspaceStore = create<TableWorkspaceStore>()((set) => ({
     const target = datasource?.id
       ? {
           type: "resource" as const,
-          kind: "database",
+          kind: "dbfox.data.database",
           id: datasource.id,
         }
       : undefined;
@@ -112,7 +112,7 @@ export const useTableWorkspaceStore = create<TableWorkspaceStore>()((set) => ({
     const target = datasource?.id
       ? {
           type: "resource" as const,
-          kind: "database",
+          kind: "dbfox.data.database",
           id: datasource.id,
         }
       : undefined;

@@ -12,8 +12,8 @@ from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.errors import SQLExecutionError, SQLQueryCancelledError
 from engine.query_registry import QUERY_REGISTRY
-from engine.sql.result_limits import QUERY_TIMEOUT_MS
-from engine.sql.row_serializer import _fetch_and_serialize, QueryExecutionResult
+from dlcs.dbfox_data.backend.sql.result_limits import QUERY_TIMEOUT_MS
+from dlcs.dbfox_data.backend.sql.row_serializer import _fetch_and_serialize, QueryExecutionResult
 
 
 logger = logging.getLogger("dbfox.sql.executor")

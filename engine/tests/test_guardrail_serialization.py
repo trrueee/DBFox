@@ -5,23 +5,11 @@ from fastapi.testclient import TestClient
 from sqlglot import exp
 
 from engine.main import LOCAL_SECURE_TOKEN, app
-import engine.sql.guardrail as guardrail_module
-from engine.sql.dialect_context import DialectContext
+import dlcs.dbfox_data.backend.sql.guardrail as guardrail_module
+from dlcs.dbfox_data.backend.sql.dialect_context import DatabaseDialectContext
 from engine.sql.safety.service import SqlSafetyService
-from engine.sql.trust_gate import TrustGate
-
-
-class _DummyQuery:
-    def filter(self, *_args: Any, **_kwargs: Any) -> "_DummyQuery":
-        return self
-
-    def first(self) -> None:
-        return None
-
-
-class _DummyDb:
-    def query(self, *_args: Any, **_kwargs: Any) -> _DummyQuery:
-        return _DummyQuery()
+from dlcs.dbfox_data.backend.sql.safety_contracts import DatabaseSafetyScope
+from dlcs.dbfox_data.backend.sql.trust_gate import TrustGate
 
 
 def test_query_validate_response_is_json_serializable_without_internal_ast() -> None:
@@ -42,7 +30,7 @@ def test_query_validate_response_is_json_serializable_without_internal_ast() -> 
 def test_query_validate_routes_through_sql_safety_service(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
 
-    def fake_public_validate_sql(self: SqlSafetyService, sql: str, ctx: DialectContext) -> dict[str, Any]:
+    def fake_public_validate_sql(self: SqlSafetyService, sql: str, ctx: DatabaseDialectContext) -> dict[str, Any]:
         calls.append((sql, ctx.dialect))
         return {
             "result": "pass",
@@ -149,12 +137,12 @@ def test_guardrail_fails_closed_when_renderer_contract_breaks(monkeypatch) -> No
 
 
 def test_trust_gate_public_result_does_not_expose_internal_ast() -> None:
-    trust_gate = TrustGate(
-        _DummyDb(),  # type: ignore[arg-type]
-        lambda _sql_or_ast, _db, _datasource_id: [],
-    )
+    trust_gate = TrustGate(lambda _sql_or_ast: [])
 
-    result = trust_gate.evaluate("missing-ds", "SELECT 1")
+    result = trust_gate.evaluate(
+        DatabaseSafetyScope(resource_id="missing-ds", exists=False),
+        "SELECT 1",
+    )
 
     assert "_parsed_ast" not in result["guardrail"]
     json.dumps(result)

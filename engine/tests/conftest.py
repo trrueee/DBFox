@@ -22,7 +22,6 @@ from engine.tests.support.metadata import (
     sqlite_metadata_url,
 )
 
-
 def _open_db_session(database_path: Path):
     """Open one isolated copy of the migrated metadata template."""
     engine = build_metadata_engine(sqlite_metadata_url(database_path))

@@ -111,13 +111,13 @@ describe("ArtifactDock", () => {
     vi.mocked(agentApi.fetchArtifactPage).mockResolvedValue({
       columns: ["id", "amount"], rows: [{ id: 1, amount: 20 }],
       page: 1, pageSize: 10, rowCount: 1, hasNextPage: false,
-      latencyMs: 1, consistency: "live_reexecution",
+      latencyMs: 1, consistency: "durable_snapshot",
       originalExecutedAt: "2026-07-20T00:00:00Z", viewExecutedAt: "2026-07-20T00:00:01Z",
       viewExecutionId: "view-dock", datasourceGeneration: 1, queryFingerprint: "query-dock",
     });
     vi.mocked(agentApi.fetchArtifactChartData).mockResolvedValue({
       series: [{ label: "1", value: 20 }], sampleSize: 1, truncated: false,
-      consistency: "live_reexecution", originalExecutedAt: "2026-07-20T00:00:00Z",
+      consistency: "durable_snapshot", originalExecutedAt: "2026-07-20T00:00:00Z",
       viewExecutedAt: "2026-07-20T00:00:01Z", viewExecutionId: "view-chart-dock",
       datasourceGeneration: 1, queryFingerprint: "query-chart-dock",
     });

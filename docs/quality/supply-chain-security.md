@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-15
+> 最后核验：2026-08-22
 >
 > 适用范围：Python、npm 锁文件与持续集成安全审计
 
@@ -100,6 +100,20 @@ gh attestation verify .\DBFox_1.0.3_x64_en-US.msi --repo trrueee/DBFox
 验证成功只证明该文件由规范仓库的已记录工作流构建，不能替代 Windows 代码签名、
 安装态验收或漏洞扫描。旧提交不会通过重写历史补签；启用签名之前的原创时间线继续由
 既有公开历史证明。作者和正式来源说明见 [`../../AUTHORS.md`](../../AUTHORS.md)。
+
+## 官方 System DLC 信任根
+
+`dbfox.data` 与 `dbfox.workspace` 使用同一条 `.dbfox-dlc` verifier/registry/snapshot 生命周期，
+不从源码目录直载。正式构建的 Ed25519 私钥只以文件路径进入隔离构建进程；构建器生成确定性
+包，并把 publisher 公钥及每个包的 exact digest 烘焙进 Frozen Sidecar。Electron Resources
+中的相邻 JSON 或包名不能扩大信任：启动只接受 Sidecar 内嵌的 ID、版本、文件名和 SHA-256，
+随后仍重新验证包签名。用户禁用状态跨启动保留；应用升级选择新的内嵌 digest，但不会静默重新
+启用已被用户禁用的 capability。
+
+当前 Data package 已进入同一签名安装链，但在 SQL、Result、Backup/Restore 执行族完成迁移前
+默认禁用；Workspace 默认启用。这个迁移门槛由 bundle manifest 的 `default_enabled` 明示，
+不是运行时 fallback 或双写。Data 完整 cutover 后必须删除 legacy Data composition 开关，并将
+Data pin 改为默认启用。
 
 ## 当前残余风险
 

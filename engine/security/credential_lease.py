@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from uuid import uuid4
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from engine.errors import DBFoxError
 from engine.json_codec import canonical_dumps, load_array
-from engine.models import CredentialLeaseRecord, DataSource
+from engine.models import CredentialLeaseRecord
 from engine.security.credential_vault import CredentialVault, get_credential_vault
 
 
@@ -28,9 +29,18 @@ class CredentialLeaseStatus(StrEnum):
 
 
 class CredentialLeaseSaga:
-    def __init__(self, session: Session, vault: CredentialVault | None = None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        vault: CredentialVault | None = None,
+        *,
+        reference_probes: Mapping[
+            str, Callable[[Session, frozenset[str]], bool]
+        ] | None = None,
+    ) -> None:
         self.session = session
         self.vault = vault
+        self.reference_probes = dict(reference_probes or {})
 
     def issue(self, credential_ids: set[str], *, ttl_seconds: int = 3600) -> str:
         if not credential_ids:
@@ -48,30 +58,69 @@ class CredentialLeaseSaga:
         self.session.flush()
         return lease_id
 
-    def claim(self, lease_id: str, credential_ids: set[str]) -> set[str]:
+    def claim(
+        self,
+        lease_id: str,
+        credential_ids: set[str],
+        *,
+        owner_id: str,
+        owner_operation: str,
+        owner_project_id: str | None = None,
+    ) -> set[str]:
         row = self._locked(lease_id)
         expected = self._credential_ids(row)
         expires_at = self._aware(row.expires_at)
         if (
             row.status != CredentialLeaseStatus.PENDING.value
-            or expected != credential_ids
+            or not expected.issubset(credential_ids)
             or expires_at <= datetime.now(UTC)
+            or not owner_id.strip()
+            or not owner_operation.strip()
         ):
             raise self._invalid()
         row.status = CredentialLeaseStatus.CLAIMED.value
+        row.owner_id = owner_id
+        row.owner_operation = owner_operation
+        row.owner_project_id = owner_project_id
         row.claimed_at = datetime.now(UTC)
         row.version = int(row.version or 0) + 1
         self.session.flush()
         return expected
 
-    def commit_claim(self, lease_id: str) -> None:
+    def commit_claim(self, lease_id: str, *, owner_id: str) -> None:
         row = self._locked(lease_id)
-        if row.status != CredentialLeaseStatus.CLAIMED.value:
+        if (
+            row.status != CredentialLeaseStatus.CLAIMED.value
+            or row.owner_id != owner_id
+        ):
             raise self._invalid("Credential lease was not claimed.")
         row.status = CredentialLeaseStatus.COMMITTED.value
         row.committed_at = datetime.now(UTC)
         row.version = int(row.version or 0) + 1
         self.session.flush()
+
+    def recover_claim(self, lease_id: str, *, owner_id: str) -> bool | None:
+        """Settle one interrupted claim using only its exact owner probe.
+
+        ``None`` means the owner is not active, so the fail-closed action is to
+        preserve the claim for startup recovery rather than delete its secret.
+        """
+
+        row = self._locked(lease_id)
+        if (
+            row.status != CredentialLeaseStatus.CLAIMED.value
+            or row.owner_id != owner_id
+        ):
+            raise self._invalid("Credential lease owner does not match the claim.")
+        probe = self.reference_probes.get(owner_id)
+        if probe is None:
+            return None
+        if probe(self.session, frozenset(self._credential_ids(row))):
+            self.commit_claim(lease_id, owner_id=owner_id)
+            self.session.commit()
+            return True
+        self.release(lease_id)
+        return False
 
     def release(self, lease_id: str) -> bool:
         """Persist cleanup intent before touching the external credential vault."""
@@ -129,27 +178,18 @@ class CredentialLeaseSaga:
         ))
         for lease_id in candidate_ids:
             row = self._locked(str(lease_id))
-            credential_ids = self._credential_ids(row)
-            if row.status == CredentialLeaseStatus.CLAIMED.value and self._is_referenced(
-                credential_ids
-            ):
-                row.status = CredentialLeaseStatus.COMMITTED.value
-                row.committed_at = current_time
-                row.version = int(row.version or 0) + 1
-                self.session.commit()
+            if row.status == CredentialLeaseStatus.CLAIMED.value:
+                probe = self.reference_probes.get(str(row.owner_id or ""))
+                if probe is None:
+                    logger.warning(
+                        "Credential lease recovery deferred because owner is unavailable lease_id=%s owner_id=%s",
+                        lease_id,
+                        row.owner_id,
+                    )
+                    continue
+                self.recover_claim(str(lease_id), owner_id=str(row.owner_id))
                 continue
             self.release(str(lease_id))
-
-    def _is_referenced(self, credential_ids: set[str]) -> bool:
-        if not credential_ids:
-            return False
-        return self.session.execute(
-            select(DataSource.id).where(or_(
-                DataSource.password_credential_id.in_(credential_ids),
-                DataSource.ssh_password_credential_id.in_(credential_ids),
-                DataSource.ssh_key_passphrase_credential_id.in_(credential_ids),
-            )).limit(1)
-        ).scalar_one_or_none() is not None
 
     def _locked(self, lease_id: str) -> CredentialLeaseRecord:
         row = self.session.execute(
@@ -174,6 +214,15 @@ class CredentialLeaseSaga:
         return DBFoxError(message, code="CREDENTIAL_LEASE_INVALID")
 
 
-def reconcile_credential_leases(session_factory) -> None:
+def reconcile_credential_leases(
+    session_factory,
+    *,
+    reference_probes: Mapping[
+        str, Callable[[Session, frozenset[str]], bool]
+    ] | None = None,
+) -> None:
     with session_factory() as session:
-        CredentialLeaseSaga(session).reconcile()
+        CredentialLeaseSaga(
+            session,
+            reference_probes=reference_probes,
+        ).reconcile()

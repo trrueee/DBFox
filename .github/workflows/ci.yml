@@ -116,9 +116,12 @@ jobs:
           engine build_sidecar.py --no-incremental
 
       - name: Type-check installable DLC backends against the public API
-        run: >-
-          python -m mypy --no-warn-unused-configs --follow-imports=skip
-          --explicit-package-bases dlcs/*/backend --no-incremental
+        shell: bash
+        run: |
+          for backend in dlcs/*/backend; do
+            python -m mypy --no-warn-unused-configs --follow-imports=skip \
+              --explicit-package-bases "$backend" --no-incremental
+          done
 
       - name: Verify committed dependency lock contracts
         run: python -m pytest engine/tests/test_engineering_contracts.py -q --tb=short
@@ -256,6 +259,10 @@ jobs:
           python -m engine.dlc.cli test "$RUNNER_TEMP/acme-echo/acme.echo.dbfox-dlc"
           python -m scripts.build_dbfox_github_dlc_fixture --output-dir "$RUNNER_TEMP/dbfox-github"
           python -m engine.dlc.cli test "$RUNNER_TEMP/dbfox-github/dbfox.github.dbfox-dlc"
+          python -m scripts.build_dbfox_workspace_dlc_fixture --output-dir "$RUNNER_TEMP/dbfox-workspace"
+          python -m engine.dlc.cli test "$RUNNER_TEMP/dbfox-workspace/dbfox.workspace.dbfox-dlc"
+          python -m scripts.build_dbfox_data_dlc_fixture --output-dir "$RUNNER_TEMP/dbfox-data"
+          python -m engine.dlc.cli test "$RUNNER_TEMP/dbfox-data/dbfox.data.dbfox-dlc"
 
   production-python-compatibility:
     name: Production Python compatibility regression
@@ -364,7 +371,15 @@ jobs:
 
       - name: Build and smoke the clean PyInstaller sidecar
         run: |
-          ./.build_venv/bin/python build_sidecar.py
+          SYSTEM_KEY_ROOT="$(mktemp -d)"
+          ./.build_venv/bin/python -m engine.dlc.cli init \
+            "$SYSTEM_KEY_ROOT/source" \
+            --id ci.system-dlc-signer \
+            --publisher dbfox-ci \
+            --generate-key "$SYSTEM_KEY_ROOT/private-key.pem" \
+            --unencrypted-key
+          DBFOX_SYSTEM_DLC_SIGNING_KEY_PATH="$SYSTEM_KEY_ROOT/private-key.pem" \
+            ./.build_venv/bin/python build_sidecar.py
           test -x desktop/electron-resources/sidecar/dbfox-engine
           SIDECAR_PYTHON=./.build_venv/bin/python node desktop/scripts/smoke-sidecar.mjs
 
@@ -576,7 +591,15 @@ jobs:
       - name: Build and probe the frozen Sidecar
         shell: bash
         run: |
-          "$SIDECAR_PYTHON" build_sidecar.py
+          SYSTEM_KEY_ROOT="$(mktemp -d)"
+          "$SIDECAR_PYTHON" -m engine.dlc.cli init \
+            "$SYSTEM_KEY_ROOT/source" \
+            --id ci.system-dlc-signer \
+            --publisher dbfox-ci \
+            --generate-key "$SYSTEM_KEY_ROOT/private-key.pem" \
+            --unencrypted-key
+          DBFOX_SYSTEM_DLC_SIGNING_KEY_PATH="$SYSTEM_KEY_ROOT/private-key.pem" \
+            "$SIDECAR_PYTHON" build_sidecar.py
 
       - name: Build final Electron desktop installers
         working-directory: desktop

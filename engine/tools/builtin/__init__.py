@@ -5,8 +5,6 @@ from engine.tools.builtin.registry import (
     register_core_functions,
     register_data_extension,
     register_remote_job_extension,
-    register_workspace_extension,
-    register_workspace_write_extension,
 )
 
 __all__ = [
@@ -14,6 +12,4 @@ __all__ = [
     "register_core_functions",
     "register_data_extension",
     "register_remote_job_extension",
-    "register_workspace_extension",
-    "register_workspace_write_extension",
 ]

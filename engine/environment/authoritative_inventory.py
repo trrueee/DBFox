@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
-from engine.environment.inventory import SchemaInventory, TableInventory
+from dlcs.dbfox_data.backend.inventory import SchemaInventory, TableInventory
 from engine.errors import DBFoxError
 
 
@@ -30,7 +30,7 @@ class SchemaInspectionError(DBFoxError):
 class AuthoritativeInventory:
     """A fully captured schema snapshot eligible for catalog reconciliation."""
 
-    datasource_id: str
+    database_resource_id: str
     generation: int
     tables: tuple[TableInventory, ...]
     captured_at: datetime
@@ -55,7 +55,7 @@ class AuthoritativeInventory:
     ) -> "AuthoritativeInventory":
         """Freeze a completed inspector result before any catalog mutation."""
         return cls(
-            datasource_id=inventory.datasource_id,
+            database_resource_id=inventory.database_resource_id,
             generation=generation,
             tables=tuple(table.model_copy(deep=True) for table in inventory.tables),
             captured_at=captured_at or datetime.now(UTC),
