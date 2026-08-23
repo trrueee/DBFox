@@ -11,6 +11,11 @@
 .dbfox-data__profile-row,
 .dbfox-data__database-focus,
 .dbfox-data__context,
+.dbfox-data__refresh,
+.dbfox-data__sql,
+.dbfox-data__table-row,
+.dbfox-data__load-more,
+.dbfox-data__catalog-empty button,
 .dbfox-data__empty button {
   color: inherit;
   font: inherit;
@@ -23,6 +28,18 @@
   background: transparent;
   min-width: 0;
   text-align: left;
+}
+
+.dbfox-data__table-row,
+.dbfox-data__refresh,
+.dbfox-data__sql,
+.dbfox-data__load-more,
+.dbfox-data__catalog-empty button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
 }
 
 .dbfox-data__profile-row {
@@ -96,7 +113,7 @@
 
 .dbfox-data__database-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 26px;
+  grid-template-columns: minmax(0, 1fr) 28px 24px 26px;
   align-items: center;
   min-width: 0;
   border-radius: 6px;
@@ -104,11 +121,105 @@
 
 .dbfox-data__database-focus {
   display: grid;
-  grid-template-columns: 15px minmax(0, 1fr);
+  grid-template-columns: 12px 15px minmax(0, 1fr);
   align-items: center;
   min-height: 29px;
   padding: 3px 4px 3px 6px;
   cursor: pointer;
+}
+
+.dbfox-data__refresh,
+.dbfox-data__sql {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.62;
+}
+
+.dbfox-data__database-row:hover .dbfox-data__refresh,
+.dbfox-data__database-row:hover .dbfox-data__sql,
+.dbfox-data__refresh:focus-visible,
+.dbfox-data__sql:focus-visible {
+  opacity: 1;
+}
+
+.dbfox-data__refresh:hover,
+.dbfox-data__sql:hover,
+.dbfox-data__context:hover,
+.dbfox-data__table-row:hover {
+  background: var(--surface-hover);
+}
+
+.dbfox-data__tables {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  margin-left: 26px;
+  padding-left: 9px;
+}
+
+.dbfox-data__tables::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 1px;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+  content: "";
+}
+
+.dbfox-data__table-row {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr) auto;
+  align-items: center;
+  min-width: 0;
+  min-height: 27px;
+  padding: 3px 7px 3px 5px;
+  border-radius: 5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dbfox-data__table-icon {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.dbfox-data__catalog-error {
+  margin: 0;
+  padding: 6px 8px;
+  color: var(--danger-fg);
+  font-size: 11px;
+}
+
+.dbfox-data__catalog-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.dbfox-data__catalog-empty button,
+.dbfox-data__load-more {
+  min-height: 26px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.dbfox-data__catalog-empty button:hover,
+.dbfox-data__load-more:hover {
+  background: var(--surface-hover);
+}
+
+.dbfox-data__load-more {
+  margin: 3px 5px;
+  color: var(--text-secondary);
+  text-align: left;
 }
 
 .dbfox-data__database-icon {
@@ -127,7 +238,7 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.62;
 }
 
 .dbfox-data__database-row:hover .dbfox-data__context,
@@ -157,6 +268,297 @@
   place-items: center;
   padding: 24px;
   background: color-mix(in srgb, #101318 34%, transparent);
+}
+
+.dbfox-data-table {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  color: var(--text-primary);
+}
+
+.dbfox-data-table__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dbfox-data-table__tabs button {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.dbfox-data-table__tabs button:hover {
+  color: var(--text-primary);
+}
+
+.dbfox-data-table__tabs button.is-active {
+  border-bottom-color: var(--accent-fg);
+  color: var(--text-primary);
+}
+
+.dbfox-data-table__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dbfox-data-table__header div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.dbfox-data-table__header strong,
+.dbfox-data-table__header small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dbfox-data-table__header small,
+.dbfox-data-table__header > span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.dbfox-data-table__scroll {
+  min-height: 0;
+  overflow: auto;
+}
+
+.dbfox-data-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.dbfox-data-table th,
+.dbfox-data-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.dbfox-data-table th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--surface-panel);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.dbfox-data-table code {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.dbfox-data-table__status {
+  margin: 0;
+  padding: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.dbfox-data-table__status.is-error {
+  color: var(--danger-fg);
+}
+
+.dbfox-data-table__preview {
+  min-height: 0;
+  overflow: auto;
+}
+
+.dbfox-data-table__notice {
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.dbfox-data-console {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  color: var(--text-primary);
+}
+
+.dbfox-data-console__header,
+.dbfox-data-console__result-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dbfox-data-console__header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dbfox-data-console__header div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.dbfox-data-console__header small,
+.dbfox-data-console__header > span,
+.dbfox-data-console__actions span,
+.dbfox-data-console__result-meta span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.dbfox-data-console__editor {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dbfox-data-console__editor textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 116px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  outline: none;
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font: 12px/1.6 var(--font-mono);
+  tab-size: 2;
+}
+
+.dbfox-data-console__editor textarea:focus {
+  border-color: var(--accent-fg);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-fg) 14%, transparent);
+}
+
+.dbfox-data-console__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dbfox-data-console__actions button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--accent-fg);
+  border-radius: 7px;
+  background: var(--accent-fg);
+  color: white;
+  cursor: pointer;
+  font: inherit;
+}
+
+.dbfox-data-console__actions button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.dbfox-data-console__error {
+  margin: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--danger-fg);
+  font-size: 12px;
+}
+
+.dbfox-data-console__result {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.dbfox-data-console__result-meta {
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+
+.dbfox-data-console__placeholder {
+  display: grid;
+  place-content: center;
+  gap: 5px;
+  min-height: 0;
+  padding: 24px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 12px;
+}
+
+.dbfox-data-console__placeholder strong {
+  color: var(--text-secondary);
+  font-weight: 560;
+}
+
+.dbfox-data-console__messages {
+  margin: 0;
+  padding: 14px 36px;
+  overflow: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.dbfox-data-result__scroll {
+  min-height: 0;
+  overflow: auto;
+}
+
+.dbfox-data-result__scroll table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.dbfox-data-result__scroll th,
+.dbfox-data-result__scroll td {
+  max-width: 360px;
+  padding: 7px 11px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dbfox-data-result__scroll th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--surface-panel);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.dbfox-data-result__empty {
+  margin: 0;
+  padding: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .dbfox-data-dialog {

@@ -144,7 +144,7 @@ def test_repository_persists_schema_version_and_reads_unknown_soft(
     db_session.commit()
     admission = SessionRepository(db_session).admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="test",
         idempotency_key="open-artifact",
         llm_credential_id="credential",

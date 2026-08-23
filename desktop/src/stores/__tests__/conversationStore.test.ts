@@ -41,12 +41,6 @@ vi.mock("../../lib/llmConfig", () => ({
   getStoredApiConfig: () => ({}),
 }));
 
-vi.mock("../datasourceSelectionStore", () => ({
-  useDatasourceSelectionStore: {
-    getState: () => ({ activeDatasourceId: "datasource-1" }),
-  },
-}));
-
 vi.mock("../workspaceStore", () => ({
   useWorkspaceStore: {
     getState: () => ({ activeProjectId: "project-1" }),

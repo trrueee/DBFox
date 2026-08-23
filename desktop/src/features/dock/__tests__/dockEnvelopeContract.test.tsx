@@ -3,9 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
 import type { WorkspaceDockTab } from "../../../types/workspace";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
-import { useSqlConsoleStore } from "../../../stores/sqlConsoleStore";
-import { useTableWorkspaceStore } from "../../../stores/tableWorkspaceStore";
-import { useWorkspaceFileStore } from "../../../stores/workspaceFileStore";
 import { useArtifactDockStore } from "../../../stores/artifactDockStore";
 import {
   createDockViewRegistry,
@@ -21,14 +18,6 @@ function resetAll() {
     dockTabs: [],
     settingsOpen: false,
   });
-  useSqlConsoleStore.setState({ sqlConsoleState: {} });
-  useTableWorkspaceStore.setState({
-    selectedTables: [],
-    tableSubTabs: {},
-    tableStateByTabId: {},
-    multiTableStateByTabId: {},
-  });
-  useWorkspaceFileStore.setState({ fileStateByKey: {} });
   useArtifactDockStore.setState({ artifactById: {}, conversationIdByArtifactId: {} });
 }
 
@@ -91,16 +80,6 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
   });
 
   describe("B. Canonical viewKey Identity", () => {
-    it("deduplicates multiple opens to the exact same Dock view instance", () => {
-      useTableWorkspaceStore.getState().openTable("orders", "preview", { id: "ds-1", dbType: "mysql" });
-      useTableWorkspaceStore.getState().openTable("orders", "schema", { id: "ds-1", dbType: "mysql" });
-
-      const tabs = useWorkspaceStore.getState().dockTabs;
-      expect(tabs).toHaveLength(1);
-      expect(tabs[0].viewKey).toBe("dbfox.data.table:ds-1:orders");
-      expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("dbfox.data.table:ds-1:orders");
-    });
-
     it("activates, updates, and closes Dock views using viewKey", () => {
       useWorkspaceStore.getState().openDockTab({
         viewKey: "custom:1",
@@ -167,72 +146,6 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
     });
   });
 
-  describe("C. Data Capability State Ownership", () => {
-    it("keeps SQL console datasource identity in sqlConsoleStore", () => {
-      useWorkspaceStore.getState().setActiveProject("proj-abc");
-      useSqlConsoleStore.getState().openConsole("ds-99", "postgresql", "SELECT 42");
-
-      const shellTab = useWorkspaceStore.getState().dockTabs[0];
-      expect(shellTab.viewKey).toBe("dbfox.data.sql-console:proj-abc");
-      expect(shellTab.viewType).toBe("dbfox.data.sql-console");
-      expect(shellTab.target).toEqual({
-        type: "resource",
-        kind: "dbfox.data.database",
-        id: "ds-99",
-      });
-
-      const storeState = useSqlConsoleStore.getState().sqlConsoleState["sql-proj-abc"];
-      expect(storeState.datasourceId).toBe("ds-99");
-      expect(storeState.datasourceDbType).toBe("postgresql");
-      expect(storeState.draftSql).toBe("SELECT 42");
-    });
-
-    it("keeps table and multi-table metadata in tableWorkspaceStore with datasource scoping", () => {
-      useTableWorkspaceStore.getState().openTable("customers", "er", { id: "ds-2", dbType: "sqlite" });
-
-      const tab = useWorkspaceStore.getState().dockTabs[0];
-      expect(tab.viewKey).toBe("dbfox.data.table:ds-2:customers");
-      expect(tab.target).toEqual({ type: "resource", kind: "dbfox.data.database", id: "ds-2" });
-
-      const tableState = useTableWorkspaceStore.getState().tableStateByTabId["dbfox.data.table:ds-2:customers"];
-      expect(tableState).toEqual({
-        tableName: "customers",
-        datasourceId: "ds-2",
-        datasourceDbType: "sqlite",
-      });
-
-      useTableWorkspaceStore.getState().openMultiTable(["alpha", "beta"], { id: "ds-2", dbType: "sqlite" });
-      const multiTab = useWorkspaceStore.getState().dockTabs[1];
-      expect(multiTab.viewKey).toBe("dbfox.data.multi-table:ds-2:alpha|beta");
-      expect(multiTab.target).toEqual({ type: "resource", kind: "dbfox.data.database", id: "ds-2" });
-
-      const multiState = useTableWorkspaceStore.getState().multiTableStateByTabId["dbfox.data.multi-table:ds-2:alpha|beta"];
-      expect(multiState).toEqual({
-        datasourceId: "ds-2",
-        datasourceDbType: "sqlite",
-        tables: ["alpha", "beta"],
-      });
-    });
-  });
-
-  describe("D. Workspace Capability State Ownership", () => {
-    it("keeps file path metadata in workspaceFileStore", () => {
-      useWorkspaceFileStore.getState().openFile("D:/project/src/index.ts", "index.ts", "proj-x");
-
-      const tab = useWorkspaceStore.getState().dockTabs[0];
-      expect(tab.viewKey).toBe("dbfox.workspace.file:proj-x:D:/project/src/index.ts");
-      expect(tab.viewType).toBe("dbfox.workspace.file");
-      expect(tab.target).toEqual({ type: "resource", kind: "workspace", id: "proj-x" });
-
-      const fileState = useWorkspaceFileStore.getState().fileStateByKey["dbfox.workspace.file:proj-x:D:/project/src/index.ts"];
-      expect(fileState).toEqual({
-        projectId: "proj-x",
-        filePath: "D:/project/src/index.ts",
-        fileName: "index.ts",
-      });
-    });
-  });
-
   describe("E. Artifact Capability State Ownership", () => {
     it("stores artifact reference as identity target without full object in shell tab", () => {
       const artifact = {
@@ -257,23 +170,20 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
   });
 
   describe("F. Registry Composition & Duplicate Rejection", () => {
-    it("assembles core, data, and workspace dock views", () => {
+    it("assembles only capability-neutral Core dock views", () => {
       const views = productDockViews();
       const viewTypes = views.map((v) => v.viewType);
 
       expect(viewTypes).toContain("core.artifacts");
       expect(viewTypes).toContain("core.artifact");
-      expect(viewTypes).toContain("dbfox.data.sql-console");
-      expect(viewTypes).toContain("dbfox.data.table");
-      expect(viewTypes).toContain("dbfox.data.multi-table");
-      expect(viewTypes).toContain("dbfox.workspace.file");
+      expect(viewTypes).toEqual(["core.artifacts", "core.artifact"]);
     });
 
     it("fails closed deterministically on duplicate viewType registration", () => {
       const duplicateContribution: DockViewContribution = {
-        viewType: "dbfox.data.table",
+        viewType: "core.artifact",
         icon: () => null,
-        resolveTitle: () => "Duplicate Table",
+        resolveTitle: () => "Duplicate Artifact",
         isVisible: () => true,
         render: () => null,
       };
@@ -283,7 +193,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
           ...productDockViews(),
           duplicateContribution,
         ]);
-      }).toThrow(/Duplicate Dock viewType contribution detected: "dbfox\.data\.table"/);
+      }).toThrow(/Duplicate Dock viewType contribution detected: "core\.artifact"/);
     });
   });
 
@@ -302,7 +212,6 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       render(
         <TooltipProvider>
           <WorkspaceDock
-            activeDatasourceId="ds-1"
             activeConversationId="conv-1"
             showToast={vi.fn()}
           />
@@ -323,7 +232,6 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       render(
         <TooltipProvider>
           <WorkspaceDock
-            activeDatasourceId="ds-1"
             activeConversationId="conv-1"
             showToast={vi.fn()}
           />
@@ -345,7 +253,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         render: (tab, ctx) => (
           <div data-testid="custom-rendered-view">
             <h3>Rendered {tab.title}</h3>
-            <p>Active DS: {ctx.activeDatasourceId}</p>
+            <p>Active project: {ctx.activeProjectId}</p>
           </div>
         ),
       };
@@ -377,7 +285,6 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         <TooltipProvider>
           <WorkspaceDock
             registry={customRegistry}
-            activeDatasourceId="ds-demo"
             activeConversationId="conv-demo"
             showToast={vi.fn()}
           />
@@ -394,7 +301,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       // 3. Custom renderer ACTUALLY rendered in DOM
       expect(screen.getByTestId("custom-rendered-view")).toBeTruthy();
       expect(screen.getByText("Rendered My Extension")).toBeTruthy();
-      expect(screen.getByText("Active DS: ds-demo")).toBeTruthy();
+      expect(screen.getByText("Active project: project-1")).toBeTruthy();
 
       // 4. Closing the tab closes it and removes the rendered view
       const closeButton = screen.getByRole("button", { name: "关闭 My Extension" });

@@ -47,7 +47,7 @@ def test_successful_terminalization_yields_to_pending_steer(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_pending_steer",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="先分析订单",
         idempotency_key="pending-steer-start",
         llm_credential_id="credential",
@@ -60,7 +60,7 @@ def test_successful_terminalization_yields_to_pending_steer(
     sessions.promote_next_input(lease=lease)
     sessions.admit(
         session_id="session_pending_steer",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="只看华东",
         idempotency_key="pending-steer-input",
         llm_credential_id="credential",
@@ -100,7 +100,7 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_terminal",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="统计订单",
         idempotency_key="terminal",
         llm_credential_id="credential",
@@ -208,7 +208,7 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
                             "datasource_generation": 0,
                         }
                     ],
-                    "stable_context": {"database_name": "stale_database"},
+                    "stable_context": {"response_style": "compact"},
                 }
             ),
         )
@@ -233,7 +233,7 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
         .one()
     )
     memory = json.loads(memory_row.memory_json)
-    assert memory["version"] == 3
+    assert memory["version"] == 1
     assert "recent_runs" not in memory
     assert memory["working_set"]["referenced_artifact_ids"] == [artifact.id]
     stored_reference = memory["stable_context"]["evidence_references"][0]
@@ -241,21 +241,10 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
         key: stored_reference[key] for key in evidence_reference
     } == evidence_reference
     assert "claim" not in stored_reference
-    assert stored_reference["datasource_id"] == str(test_datasource.id)
-    assert stored_reference["datasource_generation"] == 1
     assert "verified_claims" not in memory["stable_context"]
-    assert "database_name" not in memory["stable_context"]
+    assert memory["stable_context"]["response_style"] == "compact"
     assert "rows" not in memory_row.memory_json
-    assert memory_row.memory_v4_json
-    memory_v4 = json.loads(memory_row.memory_v4_json)
-    assert memory_v4["schema_version"] == 4
-    catalog_projection = next(
-        item
-        for item in memory_v4["projections"]
-        if item["projection_id"] == "dbfox.catalog.working_state"
-    )
-    assert catalog_projection["projected_through_session_sequence"] == 1
-    assert catalog_projection["state_hash"]
+    assert not memory_row.memory_v4_json
     assert (
         db_session.get(AgentSession, "session_terminal").selected_artifact_id
         == artifact.id
@@ -274,7 +263,7 @@ def test_terminal_transaction_rolls_back_as_a_unit(db_session, test_datasource):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_rollback",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="test",
         idempotency_key="rollback",
         llm_credential_id="credential",
@@ -329,7 +318,7 @@ def test_terminal_response_uses_the_answer_candidates_own_turn(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_cross_turn_terminal",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="保留早期答案",
         idempotency_key="cross-turn-terminal",
         llm_credential_id="credential",
@@ -434,7 +423,7 @@ def test_interrupted_model_turn_is_closed_before_run_recovery(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_turn_recovery",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="分析趋势",
         idempotency_key="turn-recovery",
         llm_credential_id="credential",

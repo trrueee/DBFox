@@ -20,7 +20,7 @@ def test_approval_resolves_once_and_resumes_exact_invocation(db_session, test_da
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
-        session_id="session_approval", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        session_id="session_approval", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="执行查询", idempotency_key="approval", llm_credential_id="credential",
         api_base=None, model_name="model", request_payload={},
     )
@@ -66,7 +66,7 @@ def test_rejected_approval_becomes_a_model_visible_observation(db_session, test_
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
-        session_id="session_rejection", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        session_id="session_rejection", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="执行查询", idempotency_key="rejection", llm_credential_id="credential",
         api_base=None, model_name="model", request_payload={},
     )
@@ -107,7 +107,7 @@ def test_exact_rejected_action_requires_new_formal_input_before_reapproval(db_se
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
-        session_id="session_repeat_rejection", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        session_id="session_repeat_rejection", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="执行查询", idempotency_key="repeat-rejection", llm_credential_id="credential",
         api_base=None, model_name="model", request_payload={},
     )
@@ -167,7 +167,7 @@ def test_expired_approval_is_durably_rejected_and_run_resumes(db_session, test_d
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_expired_approval",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="执行查询",
         idempotency_key="expired-approval",
         llm_credential_id="credential",

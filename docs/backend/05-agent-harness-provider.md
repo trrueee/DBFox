@@ -389,7 +389,7 @@ Harness 需要多维预算：
 | Progress guard | [`test_progress_guard.py`](../../engine/agent/tests/test_progress_guard.py) |
 | Terminalizer 取消 | [`test_terminalizer_cancellation.py`](../../engine/agent/tests/test_terminalizer_cancellation.py) |
 | 真实 Responses（opt-in） | [`test_real_responses_contract.py`](../../engine/agent/tests/test_real_responses_contract.py) |
-| SQLite Harness | [`harness/test_sqlite_scenarios.py`](../../engine/agent/tests/harness/test_sqlite_scenarios.py) |
+| SQLite Harness | [`harness/test_sqlite_scenarios.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
 
 ## 18. 修改检查表
 

@@ -1,10 +1,4 @@
-"""Capability DLC P0 characterization of the pre-migration runtime boundary.
-
-P1 replaces the former parent/worker registrar duplication with one product
-composition root. RemoteJob remains in-process-only, so exposing its frozen
-tool definitions to the isolated worker does not change model materialization
-or select a different execution backend.
-"""
+"""Kernel-only characterization of the shared parent/worker composition root."""
 
 from __future__ import annotations
 
@@ -12,23 +6,12 @@ from engine.runtime_composition import build_product_tool_registry
 
 
 PARENT_TOOL_NAMES = (
-    "catalog_overview",
-    "catalog_refresh",
-    "chart_create",
     "conversation_read",
     "conversation_search",
-    "data_preview",
     "remote_job_cancel",
     "remote_job_status",
     "remote_job_submit",
     "request_clarification",
-    "result_inspect",
-    "result_profile",
-    "schema_inspect",
-    "schema_list",
-    "schema_search",
-    "sql_execute_readonly",
-    "sql_validate",
     "update_plan",
 )
 

@@ -59,7 +59,7 @@ try {
     await expectRejectedToken(path, "wrong-token");
   }
 
-  for (const resource of ["datasources", "conversations"]) {
+  for (const resource of ["projects", "conversations", "dlcs"]) {
     const authenticated = await fetch(`http://127.0.0.1:${port}/api/v1/${resource}`, {
       headers: {
         "X-Local-Token": token,
@@ -83,9 +83,12 @@ try {
   );
 
   await restartFrozenSidecar();
-  const reloadedDatasources = await apiJson("/api/v1/datasources");
-  if (!reloadedDatasources.some((item) => item.id === frozenContract.datasourceId)) {
-    throw new Error("Frozen sidecar restart did not reload the smoke datasource");
+  const reloadedProfiles = await apiJson(
+    `/api/v1/dlcs/dbfox.data/operations/profiles.list?project_id=${encodeURIComponent(frozenContract.projectId)}`,
+    { method: "POST", body: {} },
+  );
+  if (!reloadedProfiles.profiles?.some((item) => item.databases?.some((database) => database.id === frozenContract.databaseId))) {
+    throw new Error("Frozen sidecar restart did not reload the System Data database resource");
   }
   const reloadedConversation = await apiJson(
     `/api/v1/conversations/${frozenContract.sessionId}`,
@@ -352,8 +355,8 @@ async function preparePackagedDlcLifecycle(fixture) {
   }
   const systemData = initialList.dlcs.find((item) => item.dlc_id === "dbfox.data");
   const systemWorkspace = initialList.dlcs.find((item) => item.dlc_id === "dbfox.workspace");
-  if (!systemData || systemData.desired_enabled || systemData.active) {
-    throw new Error(`dbfox.data migration gate is invalid: ${JSON.stringify(systemData)}`);
+  if (!systemData || !systemData.desired_enabled || !systemData.active) {
+    throw new Error(`dbfox.data System DLC is inactive: ${JSON.stringify(systemData)}`);
   }
   if (!systemWorkspace || !systemWorkspace.desired_enabled || !systemWorkspace.active) {
     throw new Error(`dbfox.workspace System DLC is inactive: ${JSON.stringify(systemWorkspace)}`);
@@ -797,47 +800,64 @@ async function expectApiProblem(path, {
 }
 
 async function verifyFrozenDataContract(databasePath) {
-  const datasource = await apiJson("/api/v1/datasources", {
+  const project = await apiJson("/api/v1/projects", {
     method: "POST",
-    body: {
-      name: "Frozen smoke SQLite",
-      db_type: "sqlite",
-      database_name: databasePath,
-      is_read_only: true,
-      env: "test",
-    },
+    body: { name: "Frozen System Data smoke" },
   });
-  if (!datasource.id) throw new Error("Frozen datasource creation returned no id");
+  if (!project.id) throw new Error("Frozen Project creation returned no id");
 
-  const sync = await apiJson(`/api/v1/datasources/${datasource.id}/sync`, {
+  const profile = await apiJson(
+    `/api/v1/dlcs/dbfox.data/operations/profiles.create?project_id=${encodeURIComponent(project.id)}`,
+    {
+      method: "POST",
+      body: {
+        name: "Frozen smoke SQLite",
+        provider: "sqlite",
+        is_read_only: true,
+        environment: "test",
+        initial_database_name: databasePath,
+        initial_database_display_name: "smoke-source.sqlite",
+      },
+    },
+  );
+  const database = profile.databases?.[0];
+  if (!database?.id) throw new Error("System Data profile creation returned no database resource");
+
+  const sync = await apiJson(
+    `/api/v1/dlcs/dbfox.data/operations/catalog.refresh?project_id=${encodeURIComponent(project.id)}`,
+    {
     method: "POST",
-    body: { ai_enrich: false },
-  });
-  if (!sync.ok || sync.tablesSynced < 1) {
+      body: { database_id: database.id },
+    },
+  );
+  if (sync.tables_synced < 1) {
     throw new Error(`Frozen schema sync returned an invalid result: ${JSON.stringify(sync)}`);
   }
   const tables = await apiJson(
-    `/api/v1/schema/tables?datasource_id=${encodeURIComponent(datasource.id)}`,
+    `/api/v1/dlcs/dbfox.data/operations/catalog.tables?project_id=${encodeURIComponent(project.id)}`,
+    { method: "POST", body: { database_id: database.id, limit: 50 } },
   );
-  if (!tables.some((table) => table.table_name === "smoke_items")) {
+  if (!tables.tables?.some((table) => table.name === "smoke_items")) {
     throw new Error("Frozen schema catalog omitted smoke_items");
   }
 
   const sessionId = `frozen-smoke-${randomBytes(12).toString("hex")}`;
-  const first = await apiJson("/api/v1/agent/console/execute", {
+  const first = await apiJson(
+    `/api/v1/dlcs/dbfox.data/operations/console.execute?project_id=${encodeURIComponent(project.id)}`,
+    {
     method: "POST",
     body: {
-      datasourceId: datasource.id,
+      database_id: database.id,
       sql: "SELECT id, name FROM smoke_items ORDER BY id",
       question: "Frozen result contract",
-      sessionId,
-      executionId: `smoke-query-${randomBytes(8).toString("hex")}`,
+      session_id: sessionId,
+      execution_id: `smoke-query-${randomBytes(8).toString("hex")}`,
     },
   });
-  if (!first.resultArtifactId || !first.runId) {
+  if (!first.result_artifact_id || !first.run_id) {
     throw new Error("Frozen console query omitted its durable result artifact");
   }
-  const page = await apiJson(`/api/v1/artifacts/${first.resultArtifactId}/page`, {
+  const page = await apiJson(`/api/v1/artifacts/${first.result_artifact_id}/page`, {
     method: "POST",
     body: { page: 1, pageSize: 10, countMode: "exact" },
   });
@@ -845,27 +865,26 @@ async function verifyFrozenDataContract(databasePath) {
     throw new Error(`Frozen result artifact could not be replayed: ${JSON.stringify(page)}`);
   }
 
-  const second = await apiJson("/api/v1/agent/console/execute", {
+  const second = await apiJson(
+    `/api/v1/dlcs/dbfox.data/operations/console.execute?project_id=${encodeURIComponent(project.id)}`,
+    {
     method: "POST",
     body: {
-      datasourceId: datasource.id,
+      database_id: database.id,
       sql: "SELECT COUNT(*) AS total FROM smoke_items",
       question: "Frozen durable second turn",
-      sessionId,
-      executionId: `smoke-query-${randomBytes(8).toString("hex")}`,
+      session_id: sessionId,
+      execution_id: `smoke-query-${randomBytes(8).toString("hex")}`,
     },
   });
-  if (!second.runId || second.runId === first.runId) {
+  if (!second.run_id || second.run_id === first.run_id) {
     throw new Error("Frozen durable second turn did not create an independent run");
   }
   const snapshot = await apiJson(`/api/v1/conversations/${sessionId}`);
   if (!Array.isArray(snapshot.runs) || snapshot.runs.length < 2) {
     throw new Error("Frozen conversation projection omitted durable multi-turn history");
   }
-  if (!datasource.project_id) {
-    throw new Error("Frozen datasource creation returned no project identity");
-  }
-  return { datasourceId: datasource.id, projectId: datasource.project_id, sessionId };
+  return { databaseId: database.id, projectId: project.id, sessionId };
 }
 
 async function expectRejectedToken(path, rejectedToken) {

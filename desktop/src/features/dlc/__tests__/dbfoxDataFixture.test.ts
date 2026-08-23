@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe("dbfox.data System DLC frontend fixture", () => {
-  it("registers one hosted Connection → Database resource connector", async () => {
+  it("registers the hosted Connection → Database → Table workbench", async () => {
     initExtensionHostGlobalSdk();
     vi.stubGlobal("document", undefined);
     const source = await readFile(fixturePath, "utf8");
@@ -35,5 +35,9 @@ describe("dbfox.data System DLC frontend fixture", () => {
     expect(contributions.connectors[0].title).toBe("数据");
     expect(contributions.connectors[0].addLabel).toBe("新建数据库连接");
     expect(contributions.connectors[0].onAdd).toBeTypeOf("function");
+    expect(contributions.dockViews.map((item) => item.viewType)).toEqual([
+      "dbfox.data.catalog-table",
+      "dbfox.data.sql-console",
+    ]);
   });
 });

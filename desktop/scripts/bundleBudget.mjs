@@ -14,8 +14,6 @@ export const CHART_BUDGET = Object.freeze({
 
 const REQUIRED_ROUTE_CHUNKS = Object.freeze([
   "ConversationWorkspace-",
-  "TableWorkspace-",
-  "DataSourcesPage-",
 ]);
 
 function metric(filePath) {
@@ -57,7 +55,7 @@ export function inspectBundle(distDir) {
 
   const missingRouteChunks = REQUIRED_ROUTE_CHUNKS.filter((prefix) => !files.some((file) => file.startsWith(prefix)));
   if (missingRouteChunks.length > 0) {
-    throw new Error(`Workspace routes must remain independently loaded: ${missingRouteChunks.join(", ")}`);
+    throw new Error(`Core workspace routes must remain independently loaded: ${missingRouteChunks.join(", ")}`);
   }
 
   const entryMetrics = metric(join(assetsDir, entry));

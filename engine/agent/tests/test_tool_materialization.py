@@ -231,22 +231,24 @@ def test_dbfox_tool_capabilities_are_the_single_resource_access_contract() -> No
     registry = build_product_tool_registry()
 
     assert registry.require("catalog_overview").execution.capabilities == (
-        "metadata_read",
+        "filesystem_read",
     )
     assert registry.require("catalog_refresh").execution.capabilities == (
-        "metadata_read",
-        "metadata_write",
-        "database_read",
+        "network",
+        "filesystem_read",
     )
-    assert registry.require("schema_inspect").execution.capabilities == ("metadata_read",)
+    assert registry.require("schema_inspect").execution.capabilities == (
+        "network",
+        "filesystem_read",
+    )
     assert registry.require("conversation_search").execution.capabilities == ("metadata_read",)
     assert registry.require("conversation_read").execution.capabilities == ("metadata_read",)
     assert registry.require("data_preview").execution.capabilities == (
-        "metadata_read",
-        "database_read",
+        "network",
+        "filesystem_read",
     )
     assert registry.require("sql_execute_readonly").execution.capabilities == (
-        "metadata_read",
-        "database_read",
+        "network",
+        "filesystem_read",
     )
     assert registry.require("update_plan").execution.capabilities == ()

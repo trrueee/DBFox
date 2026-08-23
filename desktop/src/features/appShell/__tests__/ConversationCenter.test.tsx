@@ -8,15 +8,6 @@ const smartQueryProps = vi.hoisted(() => ({
   latest: null as Record<string, unknown> | null,
 }));
 
-const datasourceState = vi.hoisted(() => ({
-  activeDatasource: null as Record<string, unknown> | null,
-}));
-
-vi.mock("../../datasource/useDatasourceState", () => ({
-  useDatasourceState: () => ({
-    activeDatasource: datasourceState.activeDatasource,
-  }),
-}));
 vi.mock("../../workspace/SmartQueryHome", () => ({
   SmartQueryHome: (props: Record<string, unknown>) => {
     smartQueryProps.latest = props;
@@ -33,7 +24,6 @@ describe("ConversationCenter", () => {
   beforeEach(() => {
     cleanup();
     smartQueryProps.latest = null;
-    datasourceState.activeDatasource = null;
     useWorkspaceStore.setState({
       activeProjectId: "",
       centerMode: "home",

@@ -13,11 +13,6 @@ def _test_app() -> FastAPI:
         await request.body()
         return {"conversation_id": conversation_id}
 
-    @app.post("/api/v1/agent/console/execute")
-    async def console_execute(request: Request) -> dict[str, bool]:
-        await request.body()
-        return {"accepted": True}
-
     @app.post("/api/v1/unrelated")
     async def unrelated(request: Request) -> dict[str, int]:
         return {"size": len(await request.body())}
@@ -27,10 +22,7 @@ def _test_app() -> FastAPI:
 
 def test_agent_input_routes_reject_oversized_bodies() -> None:
     with TestClient(_test_app()) as client:
-        for path in (
-            "/api/v1/conversations/session_1/inputs",
-            "/api/v1/agent/console/execute",
-        ):
+        for path in ("/api/v1/conversations/session_1/inputs",):
             response = client.post(path, content=b"123456789")
             assert response.status_code == 413
             assert response.headers["content-type"].startswith("application/problem+json")

@@ -4,7 +4,6 @@ from engine.tools.runtime import ToolRegistry
 
 CORE_OWNER = "dbfox.core"
 CONVERSATION_OWNER = "dbfox.conversation"
-DATA_OWNER = "dbfox.data"
 REMOTE_JOB_OWNER = "dbfox.remote_job"
 
 
@@ -34,40 +33,6 @@ def register_conversation_functions(registry: ToolRegistry) -> None:
 
     registry.register(ConversationSearchTool(), owner=CONVERSATION_OWNER)
     registry.register(ConversationReadTool(), owner=CONVERSATION_OWNER)
-
-
-def register_data_extension(registry: ToolRegistry) -> None:
-    """Register the built-in Data capability family."""
-
-    from engine.tools.builtin.catalog import (
-        CatalogOverviewTool,
-        CatalogRefreshTool,
-        SchemaInspectTool,
-        SchemaListTool,
-        SchemaSearchTool,
-    )
-    from engine.tools.builtin.query import (
-        DataPreviewTool,
-        SqlExecuteReadonlyTool,
-        SqlValidateTool,
-    )
-    from engine.tools.builtin.results import (
-        ChartCreateTool,
-        ResultInspectTool,
-        ResultProfileTool,
-    )
-
-    registry.register(CatalogOverviewTool(), owner=DATA_OWNER)
-    registry.register(CatalogRefreshTool(), owner=DATA_OWNER)
-    registry.register(SchemaListTool(), owner=DATA_OWNER)
-    registry.register(SchemaSearchTool(), owner=DATA_OWNER)
-    registry.register(SchemaInspectTool(), owner=DATA_OWNER)
-    registry.register(DataPreviewTool(), owner=DATA_OWNER)
-    registry.register(SqlValidateTool(), owner=DATA_OWNER)
-    registry.register(SqlExecuteReadonlyTool(), owner=DATA_OWNER)
-    registry.register(ResultInspectTool(), owner=DATA_OWNER)
-    registry.register(ResultProfileTool(), owner=DATA_OWNER)
-    registry.register(ChartCreateTool(), owner=DATA_OWNER)
 
 
 def register_remote_job_extension(registry: ToolRegistry) -> None:

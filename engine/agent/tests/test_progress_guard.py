@@ -14,7 +14,7 @@ def _admit(db_session, test_datasource, session_id: str):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="分析数据",
         idempotency_key=f"{session_id}:input",
         llm_credential_id="credential",

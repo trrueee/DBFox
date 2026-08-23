@@ -4,31 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import { useConversationStore } from "../../../stores/conversationStore";
-import type { DataSource } from "../../../lib/api/types";
 import type { ConversationDetail } from "../../../types/conversation";
 import type { ResourceConnectorContribution } from "../../resources/types";
 import { ProjectResourceSidebar } from "../../resources/ProjectResourceSidebar";
-
-const datasourceState = vi.hoisted(() => ({
-  activeDatasourceId: "ds-1",
-  setActiveDatasourceId: vi.fn((id: string) => {
-    datasourceState.activeDatasourceId = id;
-  }),
-}));
-
-vi.mock("../../datasource/useDatasourceState", () => ({
-  useDatasourceState: (projectId?: string) => ({
-    datasources: projectId
-      ? datasources.filter((d) => d.project_id === projectId)
-      : datasources,
-    activeDatasourceId: datasourceState.activeDatasourceId,
-    activeDatasource: datasources.find((item) => item.id === datasourceState.activeDatasourceId) ?? null,
-    setActiveDatasourceId: datasourceState.setActiveDatasourceId,
-    tables: [],
-    loadingSchema: false,
-    schemaError: "",
-  }),
-}));
 
 vi.mock("../../projects/useProjectState", () => ({
   useProjectState: () => ({
@@ -36,7 +14,6 @@ vi.mock("../../projects/useProjectState", () => ({
       {
         id: "project-1",
         name: "订单分析",
-        datasource_count: 1,
         status: "active",
       },
     ],
@@ -44,10 +21,6 @@ vi.mock("../../projects/useProjectState", () => ({
     projectError: "",
   }),
 }));
-
-const datasources = [
-  { id: "ds-1", name: "primary", db_type: "mysql", status: "active", database_name: "creatorhub", connection_generation: 1, project_id: "project-1" },
-] as DataSource[];
 
 const openConversation = vi.fn(async () => ({} as ConversationDetail));
 
@@ -81,7 +54,6 @@ describe("ProjectResourceSidebar", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
-    datasourceState.activeDatasourceId = "ds-1";
     useWorkspaceStore.setState({
       activeProjectId: "project-1",
       projectShell: {},

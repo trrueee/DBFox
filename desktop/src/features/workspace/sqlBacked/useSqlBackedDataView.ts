@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ResultFilter, ResultSort } from "../../../lib/api/types";
+import type { ArtifactViewFilter, ArtifactViewSort } from "../../../lib/api/types";
 import type {
   SqlBackedDataViewSource,
   SqlBackedExportRequest,
@@ -19,10 +19,10 @@ export interface SqlBackedDataViewState {
   setPageSize: (value: number) => void;
   search: string;
   setSearch: (value: string) => void;
-  sort: ResultSort[];
-  setSort: (value: ResultSort[]) => void;
-  filters: ResultFilter[];
-  setFilters: (value: ResultFilter[]) => void;
+  sort: ArtifactViewSort[];
+  setSort: (value: ArtifactViewSort[]) => void;
+  filters: ArtifactViewFilter[];
+  setFilters: (value: ArtifactViewFilter[]) => void;
   data: SqlBackedPageResponse | null;
   rows: unknown[][];
   columns: string[];
@@ -53,8 +53,8 @@ export function useSqlBackedDataView({
   const [page, setPageState] = useState(1);
   const [pageSize, setPageSizeState] = useState(initialPageSize);
   const [search, setSearchState] = useState("");
-  const [sort, setSortState] = useState<ResultSort[]>([]);
-  const [filters, setFiltersState] = useState<ResultFilter[]>([]);
+  const [sort, setSortState] = useState<ArtifactViewSort[]>([]);
+  const [filters, setFiltersState] = useState<ArtifactViewFilter[]>([]);
   const [data, setData] = useState<SqlBackedPageResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingMode, setLoadingMode] = useState<SqlBackedLoadingMode>("idle");
@@ -133,13 +133,13 @@ export function useSqlBackedDataView({
     setPageState(1);
   }, []);
 
-  const setSort = useCallback((value: ResultSort[]) => {
+  const setSort = useCallback((value: ArtifactViewSort[]) => {
     nextLoadingModeRef.current = "filter";
     setSortState(value);
     setPageState(1);
   }, []);
 
-  const setFilters = useCallback((value: ResultFilter[]) => {
+  const setFilters = useCallback((value: ArtifactViewFilter[]) => {
     nextLoadingModeRef.current = "filter";
     setFiltersState(value);
     setPageState(1);

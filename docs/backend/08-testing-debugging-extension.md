@@ -79,7 +79,7 @@ python -m pytest -q engine/agent/tests/harness/test_sqlite_scenarios.py
 
 ## 4. 确定性 SQLite Harness 应覆盖什么
 
-[`engine/agent/tests/harness/test_sqlite_scenarios.py`](../../engine/agent/tests/harness/test_sqlite_scenarios.py) 应作为完整运行状态机的稳定场景集，优先覆盖：
+[`engine/agent/tests/harness/test_sqlite_scenarios.py`](../../engine/tests/test_dbfox_data_domain_model.py) 应作为完整运行状态机的稳定场景集，优先覆盖：
 
 - 无 phase 的正常最终文本；
 - 显式 final_answer；

@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AdmitConversationInputApiV1ConversationsConversationIdInputsPostData, AdmitConversationInputApiV1ConversationsConversationIdInputsPostErrors, AdmitConversationInputApiV1ConversationsConversationIdInputsPostResponses, ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostData, ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostErrors, ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostResponses, ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostData, ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostErrors, ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostResponses, ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostData, ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostErrors, ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostResponses, ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostData, ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostErrors, ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostResponses, ApiAgentTableResultExportApiV1AgentResultsTableExportPostData, ApiAgentTableResultExportApiV1AgentResultsTableExportPostErrors, ApiAgentTableResultExportApiV1AgentResultsTableExportPostResponses, ApiAgentTableResultPageApiV1AgentResultsTablePagePostData, ApiAgentTableResultPageApiV1AgentResultsTablePagePostErrors, ApiAgentTableResultPageApiV1AgentResultsTablePagePostResponses, ApiCancelSqlApiV1QueryCancelPostData, ApiCancelSqlApiV1QueryCancelPostErrors, ApiCancelSqlApiV1QueryCancelPostResponses, ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostData, ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostErrors, ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostResponses, ApiClearQueryHistoryApiV1QueryHistoryDeleteData, ApiClearQueryHistoryApiV1QueryHistoryDeleteErrors, ApiClearQueryHistoryApiV1QueryHistoryDeleteResponses, ApiCreateBackupApiV1BackupsPostData, ApiCreateBackupApiV1BackupsPostErrors, ApiCreateBackupApiV1BackupsPostResponses, ApiCreateDatasourceApiV1DatasourcesPostData, ApiCreateDatasourceApiV1DatasourcesPostErrors, ApiCreateDatasourceApiV1DatasourcesPostResponses, ApiCreateProjectApiV1ProjectsPostData, ApiCreateProjectApiV1ProjectsPostErrors, ApiCreateProjectApiV1ProjectsPostResponses, ApiDeleteDatasourceApiV1DatasourcesIdDeleteData, ApiDeleteDatasourceApiV1DatasourcesIdDeleteErrors, ApiDeleteDatasourceApiV1DatasourcesIdDeleteResponses, ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteData, ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteErrors, ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteResponses, ApiEnrollCredentialApiV1CredentialsPostData, ApiEnrollCredentialApiV1CredentialsPostErrors, ApiEnrollCredentialApiV1CredentialsPostResponses, ApiEnrollCredentialsApiV1CredentialsBatchPostData, ApiEnrollCredentialsApiV1CredentialsBatchPostErrors, ApiEnrollCredentialsApiV1CredentialsBatchPostResponses, ApiExplainSqlApiV1QueryExplainPostData, ApiExplainSqlApiV1QueryExplainPostErrors, ApiExplainSqlApiV1QueryExplainPostResponses, ApiGenerateTestDataApiV1SchemaGenerateTestDataPostData, ApiGenerateTestDataApiV1SchemaGenerateTestDataPostErrors, ApiGenerateTestDataApiV1SchemaGenerateTestDataPostResponses, ApiGetBackupApiV1BackupsBackupIdGetData, ApiGetBackupApiV1BackupsBackupIdGetErrors, ApiGetBackupApiV1BackupsBackupIdGetResponses, ApiGetErDiagramApiV1SchemaErDiagramGetData, ApiGetErDiagramApiV1SchemaErDiagramGetErrors, ApiGetErDiagramApiV1SchemaErDiagramGetResponses, ApiHealthApiV1HealthGetData, ApiHealthApiV1HealthGetErrors, ApiHealthApiV1HealthGetResponses, ApiListColumnsApiV1SchemaTablesTableIdColumnsGetData, ApiListColumnsApiV1SchemaTablesTableIdColumnsGetErrors, ApiListColumnsApiV1SchemaTablesTableIdColumnsGetResponses, ApiListDatasourcesApiV1DatasourcesGetData, ApiListDatasourcesApiV1DatasourcesGetErrors, ApiListDatasourcesApiV1DatasourcesGetResponses, ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetData, ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetErrors, ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponses, ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetData, ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetErrors, ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponses, ApiListProjectsApiV1ProjectsGetData, ApiListProjectsApiV1ProjectsGetErrors, ApiListProjectsApiV1ProjectsGetResponses, ApiListTablesApiV1SchemaTablesGetData, ApiListTablesApiV1SchemaTablesGetErrors, ApiListTablesApiV1SchemaTablesGetResponses, ApiLlmTestApiV1AgentLlmTestPostData, ApiLlmTestApiV1AgentLlmTestPostErrors, ApiLlmTestApiV1AgentLlmTestPostResponses, ApiQueryHistoryApiV1QueryHistoryGetData, ApiQueryHistoryApiV1QueryHistoryGetErrors, ApiQueryHistoryApiV1QueryHistoryGetResponses, ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteData, ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteErrors, ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteResponses, ApiReleaseDatasourceApiV1DatasourcesIdReleasePostData, ApiReleaseDatasourceApiV1DatasourcesIdReleasePostErrors, ApiReleaseDatasourceApiV1DatasourcesIdReleasePostResponses, ApiRestoreBackupApiV1BackupsBackupIdRestorePostData, ApiRestoreBackupApiV1BackupsBackupIdRestorePostErrors, ApiRestoreBackupApiV1BackupsBackupIdRestorePostResponses, ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostData, ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostErrors, ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostResponses, ApiSyncSchemaApiV1DatasourcesIdSyncPostData, ApiSyncSchemaApiV1DatasourcesIdSyncPostErrors, ApiSyncSchemaApiV1DatasourcesIdSyncPostResponses, ApiTestConnectionApiV1DatasourcesTestPostData, ApiTestConnectionApiV1DatasourcesTestPostErrors, ApiTestConnectionApiV1DatasourcesTestPostResponses, ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutData, ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutErrors, ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutResponses, ApiUpdateDatasourceApiV1DatasourcesIdPutData, ApiUpdateDatasourceApiV1DatasourcesIdPutErrors, ApiUpdateDatasourceApiV1DatasourcesIdPutResponses, ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutData, ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutErrors, ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutResponses, ApiValidateSqlApiV1QueryValidatePostData, ApiValidateSqlApiV1QueryValidatePostErrors, ApiValidateSqlApiV1QueryValidatePostResponses, CancelRunApiV1RunsRunIdCancelPostData, CancelRunApiV1RunsRunIdCancelPostErrors, CancelRunApiV1RunsRunIdCancelPostResponses, ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostData, ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostErrors, ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostResponses, ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostData, ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostErrors, ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponses, CreateConversationApiV1ConversationsPostData, CreateConversationApiV1ConversationsPostErrors, CreateConversationApiV1ConversationsPostResponses, DeleteConversationApiV1ConversationsConversationIdDeleteData, DeleteConversationApiV1ConversationsConversationIdDeleteErrors, DeleteConversationApiV1ConversationsConversationIdDeleteResponses, DisableDlcApiV1DlcsDlcIdDisablePostData, DisableDlcApiV1DlcsDlcIdDisablePostErrors, DisableDlcApiV1DlcsDlcIdDisablePostResponses, EnableDlcApiV1DlcsDlcIdEnablePostData, EnableDlcApiV1DlcsDlcIdEnablePostErrors, EnableDlcApiV1DlcsDlcIdEnablePostResponses, EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostData, EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostErrors, EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostResponses, GetConversationApiV1ConversationsConversationIdGetData, GetConversationApiV1ConversationsConversationIdGetErrors, GetConversationApiV1ConversationsConversationIdGetResponses, GetConversationHistoryApiV1ConversationsConversationIdHistoryGetData, GetConversationHistoryApiV1ConversationsConversationIdHistoryGetErrors, GetConversationHistoryApiV1ConversationsConversationIdHistoryGetResponses, GetDiagnosticLogsApiV1DiagnosticsLogsGetData, GetDiagnosticLogsApiV1DiagnosticsLogsGetErrors, GetDiagnosticLogsApiV1DiagnosticsLogsGetResponses, GetDlcActivationProjectionApiV1DlcsActivationGetData, GetDlcActivationProjectionApiV1DlcsActivationGetErrors, GetDlcActivationProjectionApiV1DlcsActivationGetResponses, GetDlcApiV1DlcsDlcIdGetData, GetDlcApiV1DlcsDlcIdGetErrors, GetDlcApiV1DlcsDlcIdGetResponses, GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetData, GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetErrors, GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetResponses, GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetData, GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetErrors, GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetResponses, InspectDlcPackageApiV1DlcsPackagesInspectPostData, InspectDlcPackageApiV1DlcsPackagesInspectPostErrors, InspectDlcPackageApiV1DlcsPackagesInspectPostResponses, InstallDlcPackageApiV1DlcsInstallPostData, InstallDlcPackageApiV1DlcsInstallPostErrors, InstallDlcPackageApiV1DlcsInstallPostResponses, InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostData, InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostErrors, InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostResponses, ListConversationEventsApiV1ConversationsConversationIdEventsGetData, ListConversationEventsApiV1ConversationsConversationIdEventsGetErrors, ListConversationEventsApiV1ConversationsConversationIdEventsGetResponses, ListConversationsApiV1ConversationsGetData, ListConversationsApiV1ConversationsGetErrors, ListConversationsApiV1ConversationsGetResponses, ListDlcsApiV1DlcsGetData, ListDlcsApiV1DlcsGetErrors, ListDlcsApiV1DlcsGetResponses, PatchConversationApiV1ConversationsConversationIdPatchData, PatchConversationApiV1ConversationsConversationIdPatchErrors, PatchConversationApiV1ConversationsConversationIdPatchResponses, ReadRootGetData, ReadRootGetErrors, ReadRootGetResponses, RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteData, RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteErrors, RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteResponses, ResolveApprovalApiV1ApprovalsApprovalIdResolvePostData, ResolveApprovalApiV1ApprovalsApprovalIdResolvePostErrors, ResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponses, ResolveQuestionApiV1QuestionsQuestionIdResolvePostData, ResolveQuestionApiV1QuestionsQuestionIdResolvePostErrors, ResolveQuestionApiV1QuestionsQuestionIdResolvePostResponses, SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostData, SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostErrors, SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostResponses, SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostData, SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostErrors, SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostResponses, StreamConversationApiV1ConversationsConversationIdStreamGetData, StreamConversationApiV1ConversationsConversationIdStreamGetErrors, StreamConversationApiV1ConversationsConversationIdStreamGetResponses, TrustDlcPublisherApiV1DlcsPublishersTrustPostData, TrustDlcPublisherApiV1DlcsPublishersTrustPostErrors, TrustDlcPublisherApiV1DlcsPublishersTrustPostResponses, UninstallDlcApiV1DlcsDlcIdDeleteData, UninstallDlcApiV1DlcsDlcIdDeleteErrors, UninstallDlcApiV1DlcsDlcIdDeleteResponses } from './types.gen';
+import type { AdmitConversationInputApiV1ConversationsConversationIdInputsPostData, AdmitConversationInputApiV1ConversationsConversationIdInputsPostErrors, AdmitConversationInputApiV1ConversationsConversationIdInputsPostResponses, ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostData, ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostErrors, ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostResponses, ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostData, ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostErrors, ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostResponses, ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostData, ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostErrors, ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostResponses, ApiCreateProjectApiV1ProjectsPostData, ApiCreateProjectApiV1ProjectsPostErrors, ApiCreateProjectApiV1ProjectsPostResponses, ApiEnrollCredentialApiV1CredentialsPostData, ApiEnrollCredentialApiV1CredentialsPostErrors, ApiEnrollCredentialApiV1CredentialsPostResponses, ApiEnrollCredentialsApiV1CredentialsBatchPostData, ApiEnrollCredentialsApiV1CredentialsBatchPostErrors, ApiEnrollCredentialsApiV1CredentialsBatchPostResponses, ApiHealthApiV1HealthGetData, ApiHealthApiV1HealthGetErrors, ApiHealthApiV1HealthGetResponses, ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetData, ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetErrors, ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponses, ApiListProjectsApiV1ProjectsGetData, ApiListProjectsApiV1ProjectsGetErrors, ApiListProjectsApiV1ProjectsGetResponses, ApiLlmTestApiV1AgentLlmTestPostData, ApiLlmTestApiV1AgentLlmTestPostErrors, ApiLlmTestApiV1AgentLlmTestPostResponses, ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteData, ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteErrors, ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteResponses, CancelRunApiV1RunsRunIdCancelPostData, CancelRunApiV1RunsRunIdCancelPostErrors, CancelRunApiV1RunsRunIdCancelPostResponses, ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostData, ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostErrors, ClearDiagnosticLogsApiV1DiagnosticsLogsClearPostResponses, ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostData, ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostErrors, ClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPostResponses, CreateConversationApiV1ConversationsPostData, CreateConversationApiV1ConversationsPostErrors, CreateConversationApiV1ConversationsPostResponses, DeleteConversationApiV1ConversationsConversationIdDeleteData, DeleteConversationApiV1ConversationsConversationIdDeleteErrors, DeleteConversationApiV1ConversationsConversationIdDeleteResponses, DisableDlcApiV1DlcsDlcIdDisablePostData, DisableDlcApiV1DlcsDlcIdDisablePostErrors, DisableDlcApiV1DlcsDlcIdDisablePostResponses, EnableDlcApiV1DlcsDlcIdEnablePostData, EnableDlcApiV1DlcsDlcIdEnablePostErrors, EnableDlcApiV1DlcsDlcIdEnablePostResponses, EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostData, EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostErrors, EnrollDlcCredentialsApiV1DlcsDlcIdCredentialsBatchPostResponses, GetConversationApiV1ConversationsConversationIdGetData, GetConversationApiV1ConversationsConversationIdGetErrors, GetConversationApiV1ConversationsConversationIdGetResponses, GetConversationHistoryApiV1ConversationsConversationIdHistoryGetData, GetConversationHistoryApiV1ConversationsConversationIdHistoryGetErrors, GetConversationHistoryApiV1ConversationsConversationIdHistoryGetResponses, GetDiagnosticLogsApiV1DiagnosticsLogsGetData, GetDiagnosticLogsApiV1DiagnosticsLogsGetErrors, GetDiagnosticLogsApiV1DiagnosticsLogsGetResponses, GetDlcActivationProjectionApiV1DlcsActivationGetData, GetDlcActivationProjectionApiV1DlcsActivationGetErrors, GetDlcActivationProjectionApiV1DlcsActivationGetResponses, GetDlcApiV1DlcsDlcIdGetData, GetDlcApiV1DlcsDlcIdGetErrors, GetDlcApiV1DlcsDlcIdGetResponses, GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetData, GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetErrors, GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetResponses, GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetData, GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetErrors, GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetResponses, InspectDlcPackageApiV1DlcsPackagesInspectPostData, InspectDlcPackageApiV1DlcsPackagesInspectPostErrors, InspectDlcPackageApiV1DlcsPackagesInspectPostResponses, InstallDlcPackageApiV1DlcsInstallPostData, InstallDlcPackageApiV1DlcsInstallPostErrors, InstallDlcPackageApiV1DlcsInstallPostResponses, InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostData, InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostErrors, InvokeDlcOperationApiV1DlcsDlcIdOperationsOperationNamePostResponses, ListConversationEventsApiV1ConversationsConversationIdEventsGetData, ListConversationEventsApiV1ConversationsConversationIdEventsGetErrors, ListConversationEventsApiV1ConversationsConversationIdEventsGetResponses, ListConversationsApiV1ConversationsGetData, ListConversationsApiV1ConversationsGetErrors, ListConversationsApiV1ConversationsGetResponses, ListDlcsApiV1DlcsGetData, ListDlcsApiV1DlcsGetErrors, ListDlcsApiV1DlcsGetResponses, PatchConversationApiV1ConversationsConversationIdPatchData, PatchConversationApiV1ConversationsConversationIdPatchErrors, PatchConversationApiV1ConversationsConversationIdPatchResponses, ReadRootGetData, ReadRootGetErrors, ReadRootGetResponses, RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteData, RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteErrors, RemoveDlcVersionApiV1DlcsDlcIdVersionsPackageDigestDeleteResponses, ResolveApprovalApiV1ApprovalsApprovalIdResolvePostData, ResolveApprovalApiV1ApprovalsApprovalIdResolvePostErrors, ResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponses, ResolveQuestionApiV1QuestionsQuestionIdResolvePostData, ResolveQuestionApiV1QuestionsQuestionIdResolvePostErrors, ResolveQuestionApiV1QuestionsQuestionIdResolvePostResponses, SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostData, SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostErrors, SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostResponses, SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostData, SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostErrors, SelectDlcVersionApiV1DlcsDlcIdVersionsPackageDigestSelectPostResponses, StreamConversationApiV1ConversationsConversationIdStreamGetData, StreamConversationApiV1ConversationsConversationIdStreamGetErrors, StreamConversationApiV1ConversationsConversationIdStreamGetResponses, TrustDlcPublisherApiV1DlcsPublishersTrustPostData, TrustDlcPublisherApiV1DlcsPublishersTrustPostErrors, TrustDlcPublisherApiV1DlcsPublishersTrustPostResponses, UninstallDlcApiV1DlcsDlcIdDeleteData, UninstallDlcApiV1DlcsDlcIdDeleteErrors, UninstallDlcApiV1DlcsDlcIdDeleteResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -26,18 +26,6 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 export const readRootGet = <ThrowOnError extends boolean = false>(options?: Options<ReadRootGetData, ThrowOnError>): RequestResult<ReadRootGetResponses, ReadRootGetErrors, ThrowOnError> => (options?.client ?? client).get<ReadRootGetResponses, ReadRootGetErrors, ThrowOnError>({ url: '/', ...options });
 
 /**
- * Api Agent Console Execute
- */
-export const apiAgentConsoleExecuteApiV1AgentConsoleExecutePost = <ThrowOnError extends boolean = false>(options: Options<ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostData, ThrowOnError>): RequestResult<ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostResponses, ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostErrors, ThrowOnError> => (options.client ?? client).post<ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostResponses, ApiAgentConsoleExecuteApiV1AgentConsoleExecutePostErrors, ThrowOnError>({
-    url: '/api/v1/agent/console/execute',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * Api Llm Test
  *
  * Test the exact Responses capability required by the Agent runtime.
@@ -47,30 +35,6 @@ export const apiAgentConsoleExecuteApiV1AgentConsoleExecutePost = <ThrowOnError 
  */
 export const apiLlmTestApiV1AgentLlmTestPost = <ThrowOnError extends boolean = false>(options: Options<ApiLlmTestApiV1AgentLlmTestPostData, ThrowOnError>): RequestResult<ApiLlmTestApiV1AgentLlmTestPostResponses, ApiLlmTestApiV1AgentLlmTestPostErrors, ThrowOnError> => (options.client ?? client).post<ApiLlmTestApiV1AgentLlmTestPostResponses, ApiLlmTestApiV1AgentLlmTestPostErrors, ThrowOnError>({
     url: '/api/v1/agent/llm/test',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api Agent Table Result Export
- */
-export const apiAgentTableResultExportApiV1AgentResultsTableExportPost = <ThrowOnError extends boolean = false>(options: Options<ApiAgentTableResultExportApiV1AgentResultsTableExportPostData, ThrowOnError>): RequestResult<ApiAgentTableResultExportApiV1AgentResultsTableExportPostResponses, ApiAgentTableResultExportApiV1AgentResultsTableExportPostErrors, ThrowOnError> => (options.client ?? client).post<ApiAgentTableResultExportApiV1AgentResultsTableExportPostResponses, ApiAgentTableResultExportApiV1AgentResultsTableExportPostErrors, ThrowOnError>({
-    url: '/api/v1/agent/results/table/export',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api Agent Table Result Page
- */
-export const apiAgentTableResultPageApiV1AgentResultsTablePagePost = <ThrowOnError extends boolean = false>(options: Options<ApiAgentTableResultPageApiV1AgentResultsTablePagePostData, ThrowOnError>): RequestResult<ApiAgentTableResultPageApiV1AgentResultsTablePagePostResponses, ApiAgentTableResultPageApiV1AgentResultsTablePagePostErrors, ThrowOnError> => (options.client ?? client).post<ApiAgentTableResultPageApiV1AgentResultsTablePagePostResponses, ApiAgentTableResultPageApiV1AgentResultsTablePagePostErrors, ThrowOnError>({
-    url: '/api/v1/agent/results/table/page',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -118,48 +82,6 @@ export const apiAgentResultPageApiV1ArtifactsArtifactIdPagePost = <ThrowOnError 
         ...options.headers
     }
 });
-
-/**
- * Api Create Backup
- *
- * Create and persist a logical backup.
- */
-export const apiCreateBackupApiV1BackupsPost = <ThrowOnError extends boolean = false>(options: Options<ApiCreateBackupApiV1BackupsPostData, ThrowOnError>): RequestResult<ApiCreateBackupApiV1BackupsPostResponses, ApiCreateBackupApiV1BackupsPostErrors, ThrowOnError> => (options.client ?? client).post<ApiCreateBackupApiV1BackupsPostResponses, ApiCreateBackupApiV1BackupsPostErrors, ThrowOnError>({
-    url: '/api/v1/backups',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api Get Backup
- *
- * Return one backup record.
- */
-export const apiGetBackupApiV1BackupsBackupIdGet = <ThrowOnError extends boolean = false>(options: Options<ApiGetBackupApiV1BackupsBackupIdGetData, ThrowOnError>): RequestResult<ApiGetBackupApiV1BackupsBackupIdGetResponses, ApiGetBackupApiV1BackupsBackupIdGetErrors, ThrowOnError> => (options.client ?? client).get<ApiGetBackupApiV1BackupsBackupIdGetResponses, ApiGetBackupApiV1BackupsBackupIdGetErrors, ThrowOnError>({ url: '/api/v1/backups/{backup_id}', ...options });
-
-/**
- * Api Restore Backup
- *
- * Restore to a new database and switch only after validation and generation CAS.
- */
-export const apiRestoreBackupApiV1BackupsBackupIdRestorePost = <ThrowOnError extends boolean = false>(options: Options<ApiRestoreBackupApiV1BackupsBackupIdRestorePostData, ThrowOnError>): RequestResult<ApiRestoreBackupApiV1BackupsBackupIdRestorePostResponses, ApiRestoreBackupApiV1BackupsBackupIdRestorePostErrors, ThrowOnError> => (options.client ?? client).post<ApiRestoreBackupApiV1BackupsBackupIdRestorePostResponses, ApiRestoreBackupApiV1BackupsBackupIdRestorePostErrors, ThrowOnError>({
-    url: '/api/v1/backups/{backup_id}/restore',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api Restore Precheck
- *
- * Validate a backup before isolated restore.
- */
-export const apiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPost = <ThrowOnError extends boolean = false>(options: Options<ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostData, ThrowOnError>): RequestResult<ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostResponses, ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostErrors, ThrowOnError> => (options.client ?? client).post<ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostResponses, ApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostErrors, ThrowOnError>({ url: '/api/v1/backups/{backup_id}/restore-precheck', ...options });
 
 /**
  * List Conversations
@@ -279,81 +201,6 @@ export const apiEnrollCredentialsApiV1CredentialsBatchPost = <ThrowOnError exten
  * Revoke only credentials held by this still-uncommitted server lease.
  */
 export const apiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDelete = <ThrowOnError extends boolean = false>(options: Options<ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteData, ThrowOnError>): RequestResult<ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteResponses, ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteErrors, ThrowOnError> => (options.client ?? client).delete<ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteResponses, ApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteErrors, ThrowOnError>({ url: '/api/v1/credentials/leases/{lease_id}', ...options });
-
-/**
- * Api List Datasources
- */
-export const apiListDatasourcesApiV1DatasourcesGet = <ThrowOnError extends boolean = false>(options?: Options<ApiListDatasourcesApiV1DatasourcesGetData, ThrowOnError>): RequestResult<ApiListDatasourcesApiV1DatasourcesGetResponses, ApiListDatasourcesApiV1DatasourcesGetErrors, ThrowOnError> => (options?.client ?? client).get<ApiListDatasourcesApiV1DatasourcesGetResponses, ApiListDatasourcesApiV1DatasourcesGetErrors, ThrowOnError>({ url: '/api/v1/datasources', ...options });
-
-/**
- * Api Create Datasource
- */
-export const apiCreateDatasourceApiV1DatasourcesPost = <ThrowOnError extends boolean = false>(options: Options<ApiCreateDatasourceApiV1DatasourcesPostData, ThrowOnError>): RequestResult<ApiCreateDatasourceApiV1DatasourcesPostResponses, ApiCreateDatasourceApiV1DatasourcesPostErrors, ThrowOnError> => (options.client ?? client).post<ApiCreateDatasourceApiV1DatasourcesPostResponses, ApiCreateDatasourceApiV1DatasourcesPostErrors, ThrowOnError>({
-    url: '/api/v1/datasources',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api Test Connection
- */
-export const apiTestConnectionApiV1DatasourcesTestPost = <ThrowOnError extends boolean = false>(options: Options<ApiTestConnectionApiV1DatasourcesTestPostData, ThrowOnError>): RequestResult<ApiTestConnectionApiV1DatasourcesTestPostResponses, ApiTestConnectionApiV1DatasourcesTestPostErrors, ThrowOnError> => (options.client ?? client).post<ApiTestConnectionApiV1DatasourcesTestPostResponses, ApiTestConnectionApiV1DatasourcesTestPostErrors, ThrowOnError>({
-    url: '/api/v1/datasources/test',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api Delete Datasource
- */
-export const apiDeleteDatasourceApiV1DatasourcesIdDelete = <ThrowOnError extends boolean = false>(options: Options<ApiDeleteDatasourceApiV1DatasourcesIdDeleteData, ThrowOnError>): RequestResult<ApiDeleteDatasourceApiV1DatasourcesIdDeleteResponses, ApiDeleteDatasourceApiV1DatasourcesIdDeleteErrors, ThrowOnError> => (options.client ?? client).delete<ApiDeleteDatasourceApiV1DatasourcesIdDeleteResponses, ApiDeleteDatasourceApiV1DatasourcesIdDeleteErrors, ThrowOnError>({
-    url: '/api/v1/datasources/{id}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api Update Datasource
- */
-export const apiUpdateDatasourceApiV1DatasourcesIdPut = <ThrowOnError extends boolean = false>(options: Options<ApiUpdateDatasourceApiV1DatasourcesIdPutData, ThrowOnError>): RequestResult<ApiUpdateDatasourceApiV1DatasourcesIdPutResponses, ApiUpdateDatasourceApiV1DatasourcesIdPutErrors, ThrowOnError> => (options.client ?? client).put<ApiUpdateDatasourceApiV1DatasourcesIdPutResponses, ApiUpdateDatasourceApiV1DatasourcesIdPutErrors, ThrowOnError>({
-    url: '/api/v1/datasources/{id}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api Check Datasource Health
- */
-export const apiCheckDatasourceHealthApiV1DatasourcesIdHealthPost = <ThrowOnError extends boolean = false>(options: Options<ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostData, ThrowOnError>): RequestResult<ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostResponses, ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostErrors, ThrowOnError> => (options.client ?? client).post<ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostResponses, ApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostErrors, ThrowOnError>({ url: '/api/v1/datasources/{id}/health', ...options });
-
-/**
- * Api Release Datasource
- */
-export const apiReleaseDatasourceApiV1DatasourcesIdReleasePost = <ThrowOnError extends boolean = false>(options: Options<ApiReleaseDatasourceApiV1DatasourcesIdReleasePostData, ThrowOnError>): RequestResult<ApiReleaseDatasourceApiV1DatasourcesIdReleasePostResponses, ApiReleaseDatasourceApiV1DatasourcesIdReleasePostErrors, ThrowOnError> => (options.client ?? client).post<ApiReleaseDatasourceApiV1DatasourcesIdReleasePostResponses, ApiReleaseDatasourceApiV1DatasourcesIdReleasePostErrors, ThrowOnError>({ url: '/api/v1/datasources/{id}/release', ...options });
-
-/**
- * Api Sync Schema
- */
-export const apiSyncSchemaApiV1DatasourcesIdSyncPost = <ThrowOnError extends boolean = false>(options: Options<ApiSyncSchemaApiV1DatasourcesIdSyncPostData, ThrowOnError>): RequestResult<ApiSyncSchemaApiV1DatasourcesIdSyncPostResponses, ApiSyncSchemaApiV1DatasourcesIdSyncPostErrors, ThrowOnError> => (options.client ?? client).post<ApiSyncSchemaApiV1DatasourcesIdSyncPostResponses, ApiSyncSchemaApiV1DatasourcesIdSyncPostErrors, ThrowOnError>({
-    url: '/api/v1/datasources/{id}/sync',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
 
 /**
  * Get Diagnostic Logs
@@ -499,67 +346,9 @@ export const apiCreateProjectApiV1ProjectsPost = <ThrowOnError extends boolean =
 });
 
 /**
- * Api List Project Backups
- *
- * List backups owned by one project, optionally narrowed to a datasource.
- */
-export const apiListProjectBackupsApiV1ProjectsProjectIdBackupsGet = <ThrowOnError extends boolean = false>(options: Options<ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetData, ThrowOnError>): RequestResult<ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponses, ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetErrors, ThrowOnError> => (options.client ?? client).get<ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponses, ApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetErrors, ThrowOnError>({ url: '/api/v1/projects/{project_id}/backups', ...options });
-
-/**
  * Api List Project Resources
  */
 export const apiListProjectResourcesApiV1ProjectsProjectIdResourcesGet = <ThrowOnError extends boolean = false>(options: Options<ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetData, ThrowOnError>): RequestResult<ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponses, ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetErrors, ThrowOnError> => (options.client ?? client).get<ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponses, ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetErrors, ThrowOnError>({ url: '/api/v1/projects/{project_id}/resources', ...options });
-
-/**
- * Api Cancel Sql
- */
-export const apiCancelSqlApiV1QueryCancelPost = <ThrowOnError extends boolean = false>(options: Options<ApiCancelSqlApiV1QueryCancelPostData, ThrowOnError>): RequestResult<ApiCancelSqlApiV1QueryCancelPostResponses, ApiCancelSqlApiV1QueryCancelPostErrors, ThrowOnError> => (options.client ?? client).post<ApiCancelSqlApiV1QueryCancelPostResponses, ApiCancelSqlApiV1QueryCancelPostErrors, ThrowOnError>({
-    url: '/api/v1/query/cancel',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api Explain Sql
- */
-export const apiExplainSqlApiV1QueryExplainPost = <ThrowOnError extends boolean = false>(options: Options<ApiExplainSqlApiV1QueryExplainPostData, ThrowOnError>): RequestResult<ApiExplainSqlApiV1QueryExplainPostResponses, ApiExplainSqlApiV1QueryExplainPostErrors, ThrowOnError> => (options.client ?? client).post<ApiExplainSqlApiV1QueryExplainPostResponses, ApiExplainSqlApiV1QueryExplainPostErrors, ThrowOnError>({
-    url: '/api/v1/query/explain',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api Clear Query History
- */
-export const apiClearQueryHistoryApiV1QueryHistoryDelete = <ThrowOnError extends boolean = false>(options: Options<ApiClearQueryHistoryApiV1QueryHistoryDeleteData, ThrowOnError>): RequestResult<ApiClearQueryHistoryApiV1QueryHistoryDeleteResponses, ApiClearQueryHistoryApiV1QueryHistoryDeleteErrors, ThrowOnError> => (options.client ?? client).delete<ApiClearQueryHistoryApiV1QueryHistoryDeleteResponses, ApiClearQueryHistoryApiV1QueryHistoryDeleteErrors, ThrowOnError>({ url: '/api/v1/query/history', ...options });
-
-/**
- * Api Query History
- */
-export const apiQueryHistoryApiV1QueryHistoryGet = <ThrowOnError extends boolean = false>(options?: Options<ApiQueryHistoryApiV1QueryHistoryGetData, ThrowOnError>): RequestResult<ApiQueryHistoryApiV1QueryHistoryGetResponses, ApiQueryHistoryApiV1QueryHistoryGetErrors, ThrowOnError> => (options?.client ?? client).get<ApiQueryHistoryApiV1QueryHistoryGetResponses, ApiQueryHistoryApiV1QueryHistoryGetErrors, ThrowOnError>({ url: '/api/v1/query/history', ...options });
-
-/**
- * Api Delete Query History
- */
-export const apiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDelete = <ThrowOnError extends boolean = false>(options: Options<ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteData, ThrowOnError>): RequestResult<ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteResponses, ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteErrors, ThrowOnError> => (options.client ?? client).delete<ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteResponses, ApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteErrors, ThrowOnError>({ url: '/api/v1/query/history/{history_id}', ...options });
-
-/**
- * Api Validate Sql
- */
-export const apiValidateSqlApiV1QueryValidatePost = <ThrowOnError extends boolean = false>(options: Options<ApiValidateSqlApiV1QueryValidatePostData, ThrowOnError>): RequestResult<ApiValidateSqlApiV1QueryValidatePostResponses, ApiValidateSqlApiV1QueryValidatePostErrors, ThrowOnError> => (options.client ?? client).post<ApiValidateSqlApiV1QueryValidatePostResponses, ApiValidateSqlApiV1QueryValidatePostErrors, ThrowOnError>({
-    url: '/api/v1/query/validate',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
 
 /**
  * Resolve Question
@@ -577,54 +366,3 @@ export const resolveQuestionApiV1QuestionsQuestionIdResolvePost = <ThrowOnError 
  * Cancel Run
  */
 export const cancelRunApiV1RunsRunIdCancelPost = <ThrowOnError extends boolean = false>(options: Options<CancelRunApiV1RunsRunIdCancelPostData, ThrowOnError>): RequestResult<CancelRunApiV1RunsRunIdCancelPostResponses, CancelRunApiV1RunsRunIdCancelPostErrors, ThrowOnError> => (options.client ?? client).post<CancelRunApiV1RunsRunIdCancelPostResponses, CancelRunApiV1RunsRunIdCancelPostErrors, ThrowOnError>({ url: '/api/v1/runs/{run_id}/cancel', ...options });
-
-/**
- * Api Update Column Metadata
- */
-export const apiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPut = <ThrowOnError extends boolean = false>(options: Options<ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutData, ThrowOnError>): RequestResult<ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutResponses, ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutErrors, ThrowOnError> => (options.client ?? client).put<ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutResponses, ApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutErrors, ThrowOnError>({
-    url: '/api/v1/schema/columns/{column_id}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api Get Er Diagram
- */
-export const apiGetErDiagramApiV1SchemaErDiagramGet = <ThrowOnError extends boolean = false>(options: Options<ApiGetErDiagramApiV1SchemaErDiagramGetData, ThrowOnError>): RequestResult<ApiGetErDiagramApiV1SchemaErDiagramGetResponses, ApiGetErDiagramApiV1SchemaErDiagramGetErrors, ThrowOnError> => (options.client ?? client).get<ApiGetErDiagramApiV1SchemaErDiagramGetResponses, ApiGetErDiagramApiV1SchemaErDiagramGetErrors, ThrowOnError>({ url: '/api/v1/schema/er-diagram', ...options });
-
-/**
- * Api Generate Test Data
- */
-export const apiGenerateTestDataApiV1SchemaGenerateTestDataPost = <ThrowOnError extends boolean = false>(options: Options<ApiGenerateTestDataApiV1SchemaGenerateTestDataPostData, ThrowOnError>): RequestResult<ApiGenerateTestDataApiV1SchemaGenerateTestDataPostResponses, ApiGenerateTestDataApiV1SchemaGenerateTestDataPostErrors, ThrowOnError> => (options.client ?? client).post<ApiGenerateTestDataApiV1SchemaGenerateTestDataPostResponses, ApiGenerateTestDataApiV1SchemaGenerateTestDataPostErrors, ThrowOnError>({
-    url: '/api/v1/schema/generate-test-data',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api List Tables
- */
-export const apiListTablesApiV1SchemaTablesGet = <ThrowOnError extends boolean = false>(options: Options<ApiListTablesApiV1SchemaTablesGetData, ThrowOnError>): RequestResult<ApiListTablesApiV1SchemaTablesGetResponses, ApiListTablesApiV1SchemaTablesGetErrors, ThrowOnError> => (options.client ?? client).get<ApiListTablesApiV1SchemaTablesGetResponses, ApiListTablesApiV1SchemaTablesGetErrors, ThrowOnError>({ url: '/api/v1/schema/tables', ...options });
-
-/**
- * Api Update Table Metadata
- */
-export const apiUpdateTableMetadataApiV1SchemaTablesTableIdPut = <ThrowOnError extends boolean = false>(options: Options<ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutData, ThrowOnError>): RequestResult<ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutResponses, ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutErrors, ThrowOnError> => (options.client ?? client).put<ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutResponses, ApiUpdateTableMetadataApiV1SchemaTablesTableIdPutErrors, ThrowOnError>({
-    url: '/api/v1/schema/tables/{table_id}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Api List Columns
- */
-export const apiListColumnsApiV1SchemaTablesTableIdColumnsGet = <ThrowOnError extends boolean = false>(options: Options<ApiListColumnsApiV1SchemaTablesTableIdColumnsGetData, ThrowOnError>): RequestResult<ApiListColumnsApiV1SchemaTablesTableIdColumnsGetResponses, ApiListColumnsApiV1SchemaTablesTableIdColumnsGetErrors, ThrowOnError> => (options.client ?? client).get<ApiListColumnsApiV1SchemaTablesTableIdColumnsGetResponses, ApiListColumnsApiV1SchemaTablesTableIdColumnsGetErrors, ThrowOnError>({ url: '/api/v1/schema/tables/{table_id}/columns', ...options });

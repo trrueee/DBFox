@@ -3,7 +3,6 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from fastapi import HTTPException
 from pydantic import ValidationError
 
 import engine.api.agent_results as result_module
@@ -11,6 +10,8 @@ from engine.agent.resource_refs import dump_resource_refs
 from engine.agent.artifact_view import (
     ArtifactCsvStream,
     ArtifactTablePage,
+    ArtifactViewFilter as ResultFilter,
+    ArtifactViewSort as ResultSort,
 )
 from engine.dlc.snapshot import (
     ArtifactContractContribution,
@@ -29,13 +30,8 @@ from engine.models import (
     AgentRun,
     AgentSession,
     AgentSessionInput,
-    DataSource,
-    SchemaColumn,
-    SchemaTable,
-    SecurityAuditRecord,
 )
 from engine.sql.result_view.fingerprint import result_source_fingerprint
-from engine.sql.result_view.models import ResultFilter, ResultSort
 
 
 def _add_pagination_source(
@@ -47,16 +43,7 @@ def _add_pagination_source(
     columns: list[str] | None = None,
 ) -> str:
     now = datetime.now(UTC)
-    datasource = DataSource(
-        id="ds-page",
-        name="Page DS",
-        db_type="mysql",
-        host="localhost",
-        port=3306,
-        database_name="dbfox",
-        username="root",
-        connection_generation=1,
-    )
+    datasource_id = "ds-page"
     session = AgentSession(
         id="conv-page",
         title="Page",
@@ -71,7 +58,7 @@ def _add_pagination_source(
         idempotency_key="input-page",
         content="Orders",
         resource_refs_json=dump_resource_refs(
-            (ResourceScopeRef(kind="dbfox.data.database", id=datasource.id, version=1),)
+            (ResourceScopeRef(kind="dbfox.data.database", id=datasource_id, version=1),)
         ),
     )
     run = AgentRun(
@@ -115,8 +102,6 @@ def _add_pagination_source(
     # The fixture uses scalar FK IDs rather than ORM relationships. Flush each
     # parent first so strict SQLite foreign-key enforcement validates the same
     # insertion order required by real persistence code.
-    db_session.add(datasource)
-    db_session.flush()
     db_session.add(session)
     db_session.flush()
     db_session.add(input_row)
@@ -155,56 +140,6 @@ def _add_pagination_source(
     )
     db_session.commit()
     return result_id
-
-
-def _add_table_result_source(
-    db_session,
-    *,
-    datasource_id: str = "ds-table-page",
-    table_id: str = "schema-table-page-orders",
-    table_name: str = "orders",
-) -> None:
-    datasource = DataSource(
-        id=datasource_id,
-        name="Table Page DS",
-        db_type="mysql",
-        host="localhost",
-        port=3306,
-        database_name="dbfox",
-        username="root",
-    )
-    table = SchemaTable(
-        id=table_id,
-        data_source_id=datasource_id,
-        table_schema="dbfox",
-        table_name=table_name,
-        table_type="BASE TABLE",
-    )
-    columns = [
-        SchemaColumn(
-            id="schema-col-page-id",
-            table_id=table_id,
-            column_name="id",
-            data_type="integer",
-            ordinal_position=1,
-        ),
-        SchemaColumn(
-            id="schema-col-page-amount",
-            table_id=table_id,
-            column_name="amount",
-            data_type="decimal",
-            ordinal_position=2,
-        ),
-        SchemaColumn(
-            id="schema-col-page-status",
-            table_id=table_id,
-            column_name="status",
-            data_type="text",
-            ordinal_position=3,
-        ),
-    ]
-    db_session.add_all([datasource, table, *columns])
-    db_session.commit()
 
 
 class _CapturedDurableTableView:
@@ -328,122 +263,6 @@ def test_artifact_page_and_export_dispatch_to_durable_capability_view(
     assert provider.export_request.search == "40"
     assert body == "id,amount\n2,40\n"
     assert exported.headers["x-dbfox-export-row-count"] == "1"
-
-
-def test_table_result_page_uses_schema_table_source_for_derived_query(
-    monkeypatch, db_session
-):
-    _add_table_result_source(db_session)
-    executed_sql: dict[str, str] = {}
-
-    def fake_execute_query(_db, datasource_id, sql, **kwargs):
-        safety_decision = kwargs["safety_decision"]
-        executed_sql["datasource_id"] = datasource_id
-        executed_sql["sql"] = sql
-        assert safety_decision.can_execute is True
-        return {
-            "columns": ["id", "amount", "status"],
-            "rows": [
-                {"id": 1, "amount": 20, "status": "paid"},
-                {"id": 2, "amount": 30, "status": "paid"},
-            ],
-            "latencyMs": 3,
-            "warnings": [],
-            "notices": [],
-        }
-
-    monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
-
-    response = result_module.api_agent_table_result_page(
-        result_module.TableResultPageRequest(
-            datasourceId="ds-table-page",
-            tableId="schema-table-page-orders",
-            tableName="orders",
-            page=1,
-            pageSize=1,
-            filters=[ResultFilter(column="status", operator="equals", value="paid")],
-            search="paid",
-            sort=[ResultSort(column="amount", direction="desc")],
-        ),
-        db_session,
-    )
-
-    assert response.rows == [{"id": 1, "amount": 20, "status": "paid"}]
-    assert response.hasNextPage is True
-    assert "FROM `dbfox`.`orders`" in executed_sql["sql"]
-    assert "`status` = 'paid'" in executed_sql["sql"]
-    assert "LIKE '%paid%'" in executed_sql["sql"]
-    assert "ORDER BY `amount` DESC" in executed_sql["sql"]
-
-
-def test_table_result_export_streams_schema_table_source(monkeypatch, db_session):
-    _add_table_result_source(db_session)
-    executed_sql: dict[str, str] = {}
-
-    def fake_stream_rows(
-        _self, datasource_id, sql, safety_decision, chunk_size=1000, **_kwargs
-    ):
-        executed_sql["datasource_id"] = datasource_id
-        executed_sql["sql"] = sql
-        assert safety_decision.can_execute is True
-        yield {"id": 2, "amount": 30, "status": "paid"}
-        yield {"id": 1, "amount": 20, "status": "paid"}
-
-    monkeypatch.setattr(
-        "engine.sql.execution.streaming_executor.StreamingQueryExecutor.stream_rows",
-        fake_stream_rows,
-    )
-
-    response = result_module.api_agent_table_result_export(
-        result_module.TableResultExportRequest(
-            datasourceId="ds-table-page",
-            tableId="schema-table-page-orders",
-            tableName="orders",
-            filters=[ResultFilter(column="status", operator="equals", value="paid")],
-            search="paid",
-            sort=[ResultSort(column="amount", direction="desc")],
-        ),
-        db_session,
-    )
-    body = asyncio.run(_streaming_response_text(response))
-
-    assert response.status_code == 200
-    assert response.media_type == "text/csv"
-    assert body.splitlines()[0] == "id,amount,status"
-    assert "2,30,paid" in body
-    assert "FROM `dbfox`.`orders`" in executed_sql["sql"]
-    assert "`status` = 'paid'" in executed_sql["sql"]
-    assert "LIKE '%paid%'" in executed_sql["sql"]
-    assert "ORDER BY `amount` DESC" in executed_sql["sql"]
-    assert "LIMIT" not in executed_sql["sql"].upper()
-    audit = (
-        db_session.query(SecurityAuditRecord)
-        .filter_by(
-            action="table.result.export",
-            resource_id="schema-table-page-orders",
-        )
-        .one()
-    )
-    assert audit.outcome == "requested"
-    assert "paid" not in audit.details_json
-
-
-def test_table_result_page_returns_structured_datasource_not_found_error(db_session):
-    with pytest.raises(HTTPException) as exc_info:
-        result_module.api_agent_table_result_page(
-            result_module.TableResultPageRequest(
-                datasourceId="missing-ds",
-                tableId="missing-table",
-                tableName="orders",
-                page=1,
-                pageSize=20,
-            ),
-            db_session,
-        )
-
-    assert exc_info.value.status_code == 404
-    assert exc_info.value.detail["code"] == "DATASOURCE_NOT_FOUND"
-    assert "Datasource not found" in exc_info.value.detail["message"]
 
 
 @pytest.mark.parametrize(

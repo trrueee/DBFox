@@ -125,6 +125,49 @@ export const zArtifactStatus = z.enum([
 ]);
 
 /**
+ * ArtifactViewFilter
+ */
+export const zArtifactViewFilter = z.object({
+    column: z.string().min(1).max(256),
+    operator: z.enum([
+        'equals',
+        'not_equals',
+        'contains',
+        'starts_with',
+        'ends_with',
+        'gt',
+        'gte',
+        'lt',
+        'lte',
+        'is_null',
+        'is_not_null',
+        'in',
+        'not_in'
+    ]),
+    value: z.union([
+        z.string().max(4096),
+        z.int(),
+        z.number(),
+        z.boolean(),
+        z.array(z.union([
+            z.string().max(4096),
+            z.int(),
+            z.number(),
+            z.boolean(),
+            z.null()
+        ])).max(100)
+    ]).nullish()
+});
+
+/**
+ * ArtifactViewSort
+ */
+export const zArtifactViewSort = z.object({
+    column: z.string().min(1).max(256),
+    direction: z.enum(['asc', 'desc'])
+});
+
+/**
  * ArtifactVisibility
  *
  * Product presentation tier, independent from durable audit retention.
@@ -134,60 +177,6 @@ export const zArtifactVisibility = z.enum([
     'supporting',
     'internal'
 ]);
-
-/**
- * BackupCreateRequest
- */
-export const zBackupCreateRequest = z.object({
-    datasource_id: z.string().min(1).max(128),
-    label: z.string().max(128).nullish()
-});
-
-/**
- * BackupPrecheckResponse
- */
-export const zBackupPrecheckResponse = z.object({
-    checksumSha256: z.string().nullish(),
-    errors: z.array(z.string()).optional(),
-    filePath: z.string().nullish(),
-    fileSizeBytes: z.int(),
-    ok: z.boolean(),
-    restoreAvailable: z.boolean(),
-    warnings: z.array(z.string()).optional()
-});
-
-/**
- * BackupResponse
- */
-export const zBackupResponse = z.object({
-    backup_type: z.string().nullish(),
-    checksum_sha256: z.string().nullish(),
-    completed_at: z.string().nullish(),
-    created_at: z.string().nullish(),
-    datasource_id: z.string().nullish(),
-    duration_ms: z.int().nullish(),
-    error_message: z.string().nullish(),
-    file_path: z.string().nullish(),
-    file_size_bytes: z.int().nullish(),
-    id: z.string(),
-    label: z.string().nullish(),
-    project_id: z.string().nullish(),
-    source_connection_generation: z.int().nullish(),
-    source_database_name: z.string().nullish(),
-    source_profile_fingerprint: z.string().nullish(),
-    started_at: z.string().nullish(),
-    status: z.string().nullish()
-});
-
-/**
- * BackupRestoreRequest
- *
- * Explicit generation-fenced request for isolated restore and cutover.
- */
-export const zBackupRestoreRequest = z.object({
-    confirmation: z.literal('restore-to-isolated-database'),
-    expected_datasource_generation: z.int().gte(1)
-});
 
 /**
  * Body_clear_security_audit_api_v1_diagnostics_security_audit_clear_post
@@ -223,16 +212,6 @@ export const zChartDataResponse = z.object({
 });
 
 /**
- * ColumnMetadataUpdateRequest
- */
-export const zColumnMetadataUpdateRequest = z.object({
-    ai_confidence: z.number().gte(0).lte(1).nullish(),
-    ai_description: z.string().max(2000).nullish(),
-    business_terms: z.string().max(1000).nullish(),
-    semantic_tags: z.string().max(1000).nullish()
-});
-
-/**
  * CompletionDisposition
  */
 export const zCompletionDisposition = z.enum(['complete', 'bounded_partial']);
@@ -251,28 +230,6 @@ export const zCompletionLimitationCode = z.enum([
     'PROVIDER_LIMIT',
     'NO_PROGRESS'
 ]);
-
-/**
- * ConfirmationRequiredResponse
- */
-export const zConfirmationRequiredResponse = z.object({
-    confirm_token: z.string(),
-    expected_confirm_text: z.string(),
-    impact_summary: z.string(),
-    requires_confirmation: z.literal(true).optional().default(true),
-    success: z.literal(false).optional().default(false)
-});
-
-/**
- * ConsoleExecuteRequest
- */
-export const zConsoleExecuteRequest = z.object({
-    datasourceId: z.string().min(1).max(128),
-    executionId: z.string().min(1).max(128).nullish(),
-    question: z.string().max(20000).nullish(),
-    sessionId: z.string().min(1).max(128).nullish(),
-    sql: z.string().min(1).max(200000)
-});
 
 /**
  * ConversationDeleteResponse
@@ -338,207 +295,6 @@ export const zCredentialReference = z.object({
 export const zCredentialEnrollmentBatchResponse = z.object({
     credentials: z.array(zCredentialReference),
     lease_id: z.string()
-});
-
-/**
- * DataSourceCreateRequest
- */
-export const zDataSourceCreateRequest = z.object({
-    connection_mode: z.literal('direct').optional().default('direct'),
-    credential_lease_id: z.string().min(1).max(128).nullish(),
-    database_name: z.string().min(1).max(1024),
-    db_type: z.enum([
-        'mysql',
-        'postgresql',
-        'sqlite'
-    ]).optional().default('mysql'),
-    env: z.enum([
-        'dev',
-        'test',
-        'prod'
-    ]).optional().default('dev'),
-    host: z.string().max(255).nullish(),
-    is_read_only: z.boolean().optional().default(false),
-    name: z.string().min(1).max(128),
-    password_credential_id: z.string().min(1).max(256).nullish(),
-    port: z.int().gte(0).lte(65535).nullish(),
-    project_id: z.string().max(128).nullish(),
-    ssh_enabled: z.boolean().optional().default(false),
-    ssh_host: z.string().max(255).nullish(),
-    ssh_key_passphrase_credential_id: z.string().min(1).max(256).nullish(),
-    ssh_password_credential_id: z.string().min(1).max(256).nullish(),
-    ssh_pkey_path: z.string().max(1024).nullish(),
-    ssh_port: z.int().gte(1).lte(65535).optional().default(22),
-    ssh_username: z.string().max(255).nullish(),
-    ssl_ca_path: z.string().max(1024).nullish(),
-    ssl_cert_path: z.string().max(1024).nullish(),
-    ssl_enabled: z.boolean().optional().default(false),
-    ssl_key_path: z.string().max(1024).nullish(),
-    ssl_verify_identity: z.boolean().optional().default(true),
-    username: z.string().max(255).nullish()
-});
-
-/**
- * DataSourceResponse
- */
-export const zDataSourceResponse = z.object({
-    connection_generation: z.int().optional().default(1),
-    connection_mode: z.string().nullish(),
-    created_at: z.string().nullish(),
-    database_name: z.string().nullish(),
-    db_type: z.enum([
-        'mysql',
-        'postgresql',
-        'sqlite'
-    ]),
-    env: z.enum([
-        'dev',
-        'test',
-        'prod'
-    ]).optional().default('dev'),
-    host: z.string().nullish(),
-    id: z.string(),
-    is_read_only: z.boolean().optional().default(false),
-    last_sync_at: z.string().nullish(),
-    last_sync_error: z.string().nullish(),
-    last_sync_status: z.string().nullish(),
-    last_test_at: z.string().nullish(),
-    last_test_error: z.string().nullish(),
-    last_test_latency_ms: z.int().nullish(),
-    last_test_readonly: z.boolean().nullish(),
-    last_test_server_version: z.string().nullish(),
-    last_test_status: z.string().nullish(),
-    last_test_tables_count: z.int().nullish(),
-    last_test_warnings: z.array(z.string()).optional(),
-    name: z.string(),
-    password_credential_id: z.string().nullish(),
-    port: z.int().nullish(),
-    project_id: z.string().nullish(),
-    ssh_enabled: z.boolean().optional().default(false),
-    ssh_host: z.string().nullish(),
-    ssh_key_passphrase_credential_id: z.string().nullish(),
-    ssh_password_credential_id: z.string().nullish(),
-    ssh_pkey_path: z.string().nullish(),
-    ssh_port: z.int().nullish(),
-    ssh_username: z.string().nullish(),
-    ssl_ca_path: z.string().nullish(),
-    ssl_cert_path: z.string().nullish(),
-    ssl_enabled: z.boolean().optional().default(false),
-    ssl_key_path: z.string().nullish(),
-    ssl_verify_identity: z.boolean().optional().default(false),
-    status: z.string().nullish(),
-    username: z.string().nullish()
-});
-
-/**
- * DataSourceHealthResponse
- */
-export const zDataSourceHealthResponse = z.object({
-    checkedAt: z.string().nullish(),
-    code: z.string().nullish(),
-    datasource: zDataSourceResponse,
-    latencyMs: z.int(),
-    message: z.string(),
-    ok: z.boolean(),
-    readonly: z.boolean().nullish(),
-    serverVersion: z.string().nullish(),
-    status: z.enum(['success', 'failed']),
-    tablesCount: z.int().nullish(),
-    warnings: z.array(z.string()).optional()
-});
-
-/**
- * DataSourceTestRequest
- */
-export const zDataSourceTestRequest = z.object({
-    credential_lease_id: z.string().min(1).max(128).nullish(),
-    database_name: z.string().min(1).max(1024),
-    db_type: z.enum([
-        'mysql',
-        'postgresql',
-        'sqlite'
-    ]).optional().default('mysql'),
-    host: z.string().max(255).nullish(),
-    password_credential_id: z.string().min(1).max(256).nullish(),
-    port: z.int().gte(0).lte(65535).nullish(),
-    ssh_enabled: z.boolean().optional().default(false),
-    ssh_host: z.string().max(255).nullish(),
-    ssh_key_passphrase_credential_id: z.string().min(1).max(256).nullish(),
-    ssh_password_credential_id: z.string().min(1).max(256).nullish(),
-    ssh_pkey_path: z.string().max(1024).nullish(),
-    ssh_port: z.int().gte(1).lte(65535).optional().default(22),
-    ssh_username: z.string().max(255).nullish(),
-    ssl_ca_path: z.string().max(1024).nullish(),
-    ssl_cert_path: z.string().max(1024).nullish(),
-    ssl_enabled: z.boolean().optional().default(false),
-    ssl_key_path: z.string().max(1024).nullish(),
-    ssl_verify_identity: z.boolean().optional().default(true),
-    username: z.string().max(255).nullish()
-});
-
-/**
- * DataSourceTestResponse
- */
-export const zDataSourceTestResponse = z.object({
-    message: z.string(),
-    readonly: z.boolean().nullish(),
-    serverVersion: z.string().nullish(),
-    success: z.boolean(),
-    tablesCount: z.int().nullish(),
-    warnings: z.array(z.string()).optional()
-});
-
-/**
- * DataSourceUpdateRequest
- */
-export const zDataSourceUpdateRequest = z.object({
-    connection_mode: z.literal('direct').optional().default('direct'),
-    credential_lease_id: z.string().min(1).max(128).nullish(),
-    database_name: z.string().min(1).max(1024),
-    db_type: z.enum([
-        'mysql',
-        'postgresql',
-        'sqlite'
-    ]).optional().default('mysql'),
-    env: z.enum([
-        'dev',
-        'test',
-        'prod'
-    ]).optional().default('dev'),
-    host: z.string().max(255).nullish(),
-    is_read_only: z.boolean().optional().default(false),
-    name: z.string().min(1).max(128),
-    password_credential_id: z.string().min(1).max(256).nullish(),
-    port: z.int().gte(0).lte(65535).nullish(),
-    ssh_enabled: z.boolean().optional().default(false),
-    ssh_host: z.string().max(255).nullish(),
-    ssh_key_passphrase_credential_id: z.string().min(1).max(256).nullish(),
-    ssh_password_credential_id: z.string().min(1).max(256).nullish(),
-    ssh_pkey_path: z.string().max(1024).nullish(),
-    ssh_port: z.int().gte(1).lte(65535).optional().default(22),
-    ssh_username: z.string().max(255).nullish(),
-    ssl_ca_path: z.string().max(1024).nullish(),
-    ssl_cert_path: z.string().max(1024).nullish(),
-    ssl_enabled: z.boolean().optional().default(false),
-    ssl_key_path: z.string().max(1024).nullish(),
-    ssl_verify_identity: z.boolean().optional().default(true),
-    username: z.string().max(255).nullish()
-});
-
-/**
- * DatasourceDeleteConfirmRequest
- */
-export const zDatasourceDeleteConfirmRequest = z.object({
-    confirm_text: z.string().min(1).max(256).nullish(),
-    confirm_token: z.string().min(1).max(256).nullish()
-});
-
-/**
- * DeleteCountResponse
- */
-export const zDeleteCountResponse = z.object({
-    deleted: z.int(),
-    success: z.literal(true).optional().default(true)
 });
 
 /**
@@ -752,50 +508,6 @@ export const zDlcVersionRemovalResponse = z.object({
 });
 
 /**
- * EREdgeResponse
- */
-export const zErEdgeResponse = z.object({
-    edge_type: z.enum(['real', 'inferred']).nullish(),
-    id: z.string(),
-    label: z.string().nullish(),
-    source: z.string(),
-    sourceHandle: z.string().nullish(),
-    target: z.string(),
-    targetHandle: z.string().nullish()
-});
-
-/**
- * ERFieldResponse
- */
-export const zErFieldResponse = z.object({
-    comment: z.string().nullish(),
-    is_fk: z.boolean(),
-    is_pk: z.boolean(),
-    name: z.string(),
-    type: z.string()
-});
-
-/**
- * ERNodeResponse
- */
-export const zErNodeResponse = z.object({
-    comment: z.string(),
-    fields: z.array(zErFieldResponse),
-    id: z.string(),
-    label: z.string(),
-    module_tag: z.string().nullish(),
-    row_count_estimate: z.int().nullish()
-});
-
-/**
- * ERDiagramResponse
- */
-export const zErDiagramResponse = z.object({
-    edges: z.array(zErEdgeResponse),
-    nodes: z.array(zErNodeResponse)
-});
-
-/**
  * EvidenceReference
  */
 export const zEvidenceReference = z.object({
@@ -838,30 +550,6 @@ export const zFunctionCallOutputPayload = z.object({
 });
 
 /**
- * GuardrailCheckResponse
- */
-export const zGuardrailCheckResponse = z.object({
-    level: z.enum(['warn', 'reject']),
-    message: z.string(),
-    rule: z.string()
-});
-
-/**
- * GuardrailResponse
- */
-export const zGuardrailResponse = z.object({
-    checks: z.array(zGuardrailCheckResponse).optional(),
-    message: z.string(),
-    originalSql: z.string(),
-    result: z.enum([
-        'pass',
-        'warn',
-        'reject'
-    ]),
-    safeSql: z.string()
-});
-
-/**
  * LlmTestRequest
  */
 export const zLlmTestRequest = z.object({
@@ -893,14 +581,6 @@ export const zMessagePayload = z.object({
     limitation_codes: z.array(zCompletionLimitationCode).optional(),
     phase: z.enum(['commentary', 'final_answer']).nullish(),
     role: z.enum(['user', 'assistant'])
-});
-
-/**
- * OperationMessageResponse
- */
-export const zOperationMessageResponse = z.object({
-    message: z.string(),
-    success: z.literal(true).optional().default(true)
 });
 
 /**
@@ -997,58 +677,11 @@ export const zProjectResourceDescriptor = z.object({
  */
 export const zProjectResponse = z.object({
     created_at: z.string().nullish(),
-    datasource_count: z.int().optional().default(0),
     description: z.string().nullish(),
     id: z.string(),
     name: z.string(),
     status: z.string().nullish(),
     updated_at: z.string().nullish()
-});
-
-/**
- * QueryCancelResponse
- */
-export const zQueryCancelResponse = z.object({
-    cancelled: z.boolean(),
-    executionId: z.string(),
-    message: z.string(),
-    success: z.boolean()
-});
-
-/**
- * QueryExplainResponse
- *
- * Dialect-neutral public EXPLAIN envelope.
- *
- * Plans are intentionally JSON values because MySQL, PostgreSQL and SQLite
- * return different native plan structures.  The HTTP envelope itself remains
- * stable and generated into the frontend contract.
- */
-export const zQueryExplainResponse = z.object({
-    plan: z.unknown().nullish(),
-    rows: z.array(z.record(z.string(), z.unknown())).nullish(),
-    success: z.boolean().nullish(),
-    warnings: z.array(z.string()).optional()
-});
-
-/**
- * QueryHistoryResponse
- */
-export const zQueryHistoryResponse = z.object({
-    columns_returned: z.int().nullish(),
-    created_at: z.string().nullish(),
-    error_message: z.string().nullish(),
-    executed_sql: z.string().nullish(),
-    execution_status: z.string().nullish(),
-    execution_time_ms: z.int().nullish(),
-    generated_sql: z.string().nullish(),
-    guardrail_checks: z.string().nullish(),
-    guardrail_result: z.string().nullish(),
-    id: z.string(),
-    question: z.string().nullish(),
-    rows_returned: z.int().nullish(),
-    safe_sql: z.string().nullish(),
-    submitted_sql: z.string().nullish()
 });
 
 /**
@@ -1211,70 +844,28 @@ export const zArtifact = z.object({
 });
 
 /**
- * ConsoleExecuteResponse
+ * ResultExportRequest
  */
-export const zConsoleExecuteResponse = z.object({
-    artifacts: z.array(zArtifact),
-    notices: z.array(z.string()).optional(),
-    resultArtifactId: z.string().nullish(),
-    runId: z.string(),
-    safetyArtifactId: z.string().nullish(),
-    sessionId: z.string(),
-    sqlArtifactId: z.string(),
-    warnings: z.array(z.string()).optional()
+export const zResultExportRequest = z.object({
+    filters: z.array(zArtifactViewFilter).max(16).nullish(),
+    search: z.string().max(512).nullish(),
+    sort: z.array(zArtifactViewSort).max(16).nullish()
 });
 
 /**
- * RestoreOperationResponse
+ * ResultPageRequest
  */
-export const zRestoreOperationResponse = z.object({
-    backup_id: z.string(),
-    committed_generation: z.int().nullish(),
-    completed_at: z.string().nullish(),
-    datasource_id: z.string(),
-    error_code: z.string().nullish(),
-    expected_generation: z.int(),
-    id: z.string(),
-    source_database_name: z.string(),
-    started_at: z.string().nullish(),
-    status: z.string(),
-    target_database_name: z.string(),
-    validated_table_count: z.int().nullish()
-});
-
-/**
- * ResultFilter
- */
-export const zResultFilter = z.object({
-    column: z.string().min(1).max(256),
-    operator: z.enum([
-        'equals',
-        'not_equals',
-        'contains',
-        'starts_with',
-        'ends_with',
-        'gt',
-        'gte',
-        'lt',
-        'lte',
-        'is_null',
-        'is_not_null',
-        'in',
-        'not_in'
-    ]),
-    value: z.union([
-        z.string().max(4096),
-        z.int(),
-        z.number(),
-        z.boolean(),
-        z.array(z.union([
-            z.string().max(4096),
-            z.int(),
-            z.number(),
-            z.boolean(),
-            z.null()
-        ])).max(100)
-    ]).nullish()
+export const zResultPageRequest = z.object({
+    countMode: z.enum([
+        'none',
+        'exact',
+        'estimate'
+    ]).optional().default('none'),
+    filters: z.array(zArtifactViewFilter).max(16).nullish(),
+    page: z.int().gte(1),
+    pageSize: z.int().gte(1).lte(500),
+    search: z.string().max(512).nullish(),
+    sort: z.array(zArtifactViewSort).max(16).nullish()
 });
 
 /**
@@ -1303,39 +894,6 @@ export const zResultPageResponse = z.object({
     viewExecutedAt: z.string(),
     viewExecutionId: z.string(),
     warnings: z.array(z.string()).nullish()
-});
-
-/**
- * ResultSort
- */
-export const zResultSort = z.object({
-    column: z.string().min(1).max(256),
-    direction: z.enum(['asc', 'desc'])
-});
-
-/**
- * ResultExportRequest
- */
-export const zResultExportRequest = z.object({
-    filters: z.array(zResultFilter).max(16).nullish(),
-    search: z.string().max(512).nullish(),
-    sort: z.array(zResultSort).max(16).nullish()
-});
-
-/**
- * ResultPageRequest
- */
-export const zResultPageRequest = z.object({
-    countMode: z.enum([
-        'none',
-        'exact',
-        'estimate'
-    ]).optional().default('none'),
-    filters: z.array(zResultFilter).max(16).nullish(),
-    page: z.int().gte(1),
-    pageSize: z.int().gte(1).lte(500),
-    search: z.string().max(512).nullish(),
-    sort: z.array(zResultSort).max(16).nullish()
 });
 
 /**
@@ -1504,122 +1062,6 @@ export const zRuntimeEventType = z.enum([
 ]);
 
 /**
- * SQLCancelRequest
- */
-export const zSqlCancelRequest = z.object({
-    execution_id: z.string().min(1).max(128)
-});
-
-/**
- * SQLExplainRequest
- */
-export const zSqlExplainRequest = z.object({
-    datasource_id: z.string().min(1).max(128),
-    sql: z.string().min(1).max(200000)
-});
-
-/**
- * SQLValidateRequest
- */
-export const zSqlValidateRequest = z.object({
-    datasource_id: z.string().min(1).max(128).nullish(),
-    sql: z.string().min(1).max(200000)
-});
-
-/**
- * SchemaAiEnrichResponse
- */
-export const zSchemaAiEnrichResponse = z.object({
-    ai_enriched: z.boolean(),
-    capped: z.boolean().nullish(),
-    enriched_count: z.int(),
-    errors: z.array(z.string()).optional(),
-    max_tables_per_run: z.int().nullish(),
-    reason: z.string().nullish(),
-    total_changed: z.int().nullish()
-});
-
-/**
- * SchemaColumnResponse
- */
-export const zSchemaColumnResponse = z.object({
-    ai_confidence: z.number().nullish(),
-    ai_description: z.string(),
-    business_terms: z.string(),
-    column_comment: z.string(),
-    column_default: z.string(),
-    column_name: z.string(),
-    column_type: z.string().nullish(),
-    data_type: z.string().nullish(),
-    foreign_column_id: z.string().nullish(),
-    foreign_table_id: z.string().nullish(),
-    id: z.string(),
-    is_foreign_key: z.boolean(),
-    is_nullable: z.boolean(),
-    is_primary_key: z.boolean(),
-    semantic_tags: z.string()
-});
-
-/**
- * SchemaColumnUpdateResponse
- */
-export const zSchemaColumnUpdateResponse = z.object({
-    column: zSchemaColumnResponse,
-    success: z.literal(true).optional().default(true)
-});
-
-/**
- * SchemaSyncRequest
- */
-export const zSchemaSyncRequest = z.object({
-    ai_enrich: z.boolean().optional().default(false),
-    api_base: z.string().nullish(),
-    llm_credential_id: z.string().nullish(),
-    model_name: z.string().nullish()
-});
-
-/**
- * SchemaSyncResponse
- */
-export const zSchemaSyncResponse = z.object({
-    aiEnrich: zSchemaAiEnrichResponse.nullish(),
-    columnsCreated: z.int(),
-    columnsRemoved: z.int(),
-    columnsUpdated: z.int(),
-    message: z.string(),
-    ok: z.boolean(),
-    tablesDropped: z.int(),
-    tablesSynced: z.int()
-});
-
-/**
- * SchemaTableResponse
- */
-export const zSchemaTableResponse = z.object({
-    ai_confidence: z.number().nullish(),
-    ai_description: z.string(),
-    business_terms: z.string(),
-    columns_count: z.int(),
-    id: z.string(),
-    module_tag: z.string().nullish(),
-    row_count_estimate: z.int().nullish(),
-    semantic_tags: z.string(),
-    subject_area: z.string(),
-    table_comment: z.string(),
-    table_name: z.string(),
-    table_schema: z.string(),
-    table_type: z.string().nullish()
-});
-
-/**
- * SchemaTableUpdateResponse
- */
-export const zSchemaTableUpdateResponse = z.object({
-    success: z.literal(true).optional().default(true),
-    table: zSchemaTableResponse
-});
-
-/**
  * SecurityAuditClearedResponse
  */
 export const zSecurityAuditClearedResponse = z.object({
@@ -1663,71 +1105,6 @@ export const zDiagnosticLogsResponse = z.object({
     policy: zDiagnosticPolicyResponse,
     security_audit: zSecurityAuditDiagnosticsResponse,
     sources: z.array(zDiagnosticLogSourceResponse)
-});
-
-/**
- * TableMetadataUpdateRequest
- */
-export const zTableMetadataUpdateRequest = z.object({
-    ai_confidence: z.number().gte(0).lte(1).nullish(),
-    ai_description: z.string().max(2000).nullish(),
-    business_terms: z.string().max(1000).nullish(),
-    semantic_tags: z.string().max(1000).nullish(),
-    subject_area: z.string().max(128).nullish()
-});
-
-/**
- * TableResultExportRequest
- */
-export const zTableResultExportRequest = z.object({
-    datasourceId: z.string().min(1).max(256),
-    filters: z.array(zResultFilter).max(16).nullish(),
-    search: z.string().max(512).nullish(),
-    sort: z.array(zResultSort).max(16).nullish(),
-    tableId: z.string().min(1).max(256).nullish(),
-    tableName: z.string().min(1).max(256)
-});
-
-/**
- * TableResultPageRequest
- */
-export const zTableResultPageRequest = z.object({
-    countMode: z.enum([
-        'none',
-        'exact',
-        'estimate'
-    ]).optional().default('none'),
-    datasourceId: z.string().min(1).max(256),
-    filters: z.array(zResultFilter).max(16).nullish(),
-    page: z.int().gte(1),
-    pageSize: z.int().gte(1).lte(500),
-    search: z.string().max(512).nullish(),
-    sort: z.array(zResultSort).max(16).nullish(),
-    tableId: z.string().min(1).max(256).nullish(),
-    tableName: z.string().min(1).max(256)
-});
-
-/**
- * TestDataGenerateRequest
- */
-export const zTestDataGenerateRequest = z.object({
-    confirm_text: z.string().max(512).nullish(),
-    confirm_token: z.string().max(256).nullish(),
-    datasource_id: z.string().min(1).max(128),
-    language: z.enum(['zh', 'en']).optional().default('zh'),
-    row_count: z.int().gte(1).lte(10000).optional().default(10),
-    table_name: z.string().min(1).max(256)
-});
-
-/**
- * TestDataGeneratedResponse
- */
-export const zTestDataGeneratedResponse = z.object({
-    insertedRows: z.int(),
-    latencyMs: z.int(),
-    message: z.string(),
-    success: z.literal(true).optional().default(true),
-    tableName: z.string()
 });
 
 /**
@@ -1894,28 +1271,12 @@ export const zCredentialEnrollmentBatchRequestWritable = z.object({
  */
 export const zReadRootGetResponse = z.record(z.string(), z.string());
 
-export const zApiAgentConsoleExecuteApiV1AgentConsoleExecutePostBody = zConsoleExecuteRequest;
-
-/**
- * Successful Response
- */
-export const zApiAgentConsoleExecuteApiV1AgentConsoleExecutePostResponse = zConsoleExecuteResponse;
-
 export const zApiLlmTestApiV1AgentLlmTestPostBody = zLlmTestRequest;
 
 /**
  * Successful Response
  */
 export const zApiLlmTestApiV1AgentLlmTestPostResponse = zLlmTestResponse;
-
-export const zApiAgentTableResultExportApiV1AgentResultsTableExportPostBody = zTableResultExportRequest;
-
-export const zApiAgentTableResultPageApiV1AgentResultsTablePagePostBody = zTableResultPageRequest;
-
-/**
- * Successful Response
- */
-export const zApiAgentTableResultPageApiV1AgentResultsTablePagePostResponse = zResultPageResponse;
 
 export const zResolveApprovalApiV1ApprovalsApprovalIdResolvePostBody = zApprovalResolutionRequest;
 
@@ -1953,42 +1314,6 @@ export const zApiAgentResultPageApiV1ArtifactsArtifactIdPagePostPath = z.object(
  * Successful Response
  */
 export const zApiAgentResultPageApiV1ArtifactsArtifactIdPagePostResponse = zResultPageResponse;
-
-export const zApiCreateBackupApiV1BackupsPostBody = zBackupCreateRequest;
-
-/**
- * Successful Response
- */
-export const zApiCreateBackupApiV1BackupsPostResponse = zBackupResponse;
-
-export const zApiGetBackupApiV1BackupsBackupIdGetPath = z.object({
-    backup_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiGetBackupApiV1BackupsBackupIdGetResponse = zBackupResponse;
-
-export const zApiRestoreBackupApiV1BackupsBackupIdRestorePostBody = zBackupRestoreRequest;
-
-export const zApiRestoreBackupApiV1BackupsBackupIdRestorePostPath = z.object({
-    backup_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiRestoreBackupApiV1BackupsBackupIdRestorePostResponse = zRestoreOperationResponse;
-
-export const zApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostPath = z.object({
-    backup_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiRestorePrecheckApiV1BackupsBackupIdRestorePrecheckPostResponse = zBackupPrecheckResponse;
 
 export const zListConversationsApiV1ConversationsGetQuery = z.object({
     limit: z.int().gte(1).lte(100).optional().default(50),
@@ -2152,93 +1477,6 @@ export const zApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeletePath =
  */
 export const zApiReleaseCredentialLeaseApiV1CredentialsLeasesLeaseIdDeleteResponse = z.void();
 
-export const zApiListDatasourcesApiV1DatasourcesGetQuery = z.object({
-    project_id: z.string().nullish()
-});
-
-/**
- * Response Api List Datasources Api V1 Datasources Get
- *
- * Successful Response
- */
-export const zApiListDatasourcesApiV1DatasourcesGetResponse = z.array(zDataSourceResponse);
-
-export const zApiCreateDatasourceApiV1DatasourcesPostBody = zDataSourceCreateRequest;
-
-/**
- * Successful Response
- */
-export const zApiCreateDatasourceApiV1DatasourcesPostResponse = zDataSourceResponse;
-
-export const zApiTestConnectionApiV1DatasourcesTestPostBody = zDataSourceTestRequest;
-
-/**
- * Successful Response
- */
-export const zApiTestConnectionApiV1DatasourcesTestPostResponse = zDataSourceTestResponse;
-
-/**
- * Confirm
- */
-export const zApiDeleteDatasourceApiV1DatasourcesIdDeleteBody = zDatasourceDeleteConfirmRequest.nullable();
-
-export const zApiDeleteDatasourceApiV1DatasourcesIdDeletePath = z.object({
-    id: z.string()
-});
-
-/**
- * Response Api Delete Datasource Api V1 Datasources  Id  Delete
- *
- * Successful Response
- */
-export const zApiDeleteDatasourceApiV1DatasourcesIdDeleteResponse = z.union([
-    zOperationMessageResponse,
-    zConfirmationRequiredResponse
-]);
-
-export const zApiUpdateDatasourceApiV1DatasourcesIdPutBody = zDataSourceUpdateRequest;
-
-export const zApiUpdateDatasourceApiV1DatasourcesIdPutPath = z.object({
-    id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiUpdateDatasourceApiV1DatasourcesIdPutResponse = zDataSourceResponse;
-
-export const zApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostPath = z.object({
-    id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiCheckDatasourceHealthApiV1DatasourcesIdHealthPostResponse = zDataSourceHealthResponse;
-
-export const zApiReleaseDatasourceApiV1DatasourcesIdReleasePostPath = z.object({
-    id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiReleaseDatasourceApiV1DatasourcesIdReleasePostResponse = zOperationMessageResponse;
-
-/**
- * Req
- */
-export const zApiSyncSchemaApiV1DatasourcesIdSyncPostBody = zSchemaSyncRequest.nullable();
-
-export const zApiSyncSchemaApiV1DatasourcesIdSyncPostPath = z.object({
-    id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiSyncSchemaApiV1DatasourcesIdSyncPostResponse = zSchemaSyncResponse;
-
 export const zGetDiagnosticLogsApiV1DiagnosticsLogsGetQuery = z.object({
     max_lines: z.int().gte(1).lte(1000).optional().default(300)
 });
@@ -2388,21 +1626,6 @@ export const zApiCreateProjectApiV1ProjectsPostBody = zProjectCreateRequest;
  */
 export const zApiCreateProjectApiV1ProjectsPostResponse = zProjectResponse;
 
-export const zApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetPath = z.object({
-    project_id: z.string()
-});
-
-export const zApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetQuery = z.object({
-    datasource_id: z.string().nullish()
-});
-
-/**
- * Response Api List Project Backups Api V1 Projects  Project Id  Backups Get
- *
- * Successful Response
- */
-export const zApiListProjectBackupsApiV1ProjectsProjectIdBackupsGetResponse = z.array(zBackupResponse);
-
 export const zApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetPath = z.object({
     project_id: z.string()
 });
@@ -2413,59 +1636,6 @@ export const zApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetPath = z.
  * Successful Response
  */
 export const zApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponse = z.array(zProjectResourceDescriptor);
-
-export const zApiCancelSqlApiV1QueryCancelPostBody = zSqlCancelRequest;
-
-/**
- * Successful Response
- */
-export const zApiCancelSqlApiV1QueryCancelPostResponse = zQueryCancelResponse;
-
-export const zApiExplainSqlApiV1QueryExplainPostBody = zSqlExplainRequest;
-
-/**
- * Successful Response
- */
-export const zApiExplainSqlApiV1QueryExplainPostResponse = zQueryExplainResponse;
-
-export const zApiClearQueryHistoryApiV1QueryHistoryDeleteQuery = z.object({
-    datasource_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiClearQueryHistoryApiV1QueryHistoryDeleteResponse = zDeleteCountResponse;
-
-export const zApiQueryHistoryApiV1QueryHistoryGetQuery = z.object({
-    datasource_id: z.string().nullish(),
-    search: z.string().max(200).nullish(),
-    status: z.string().nullish(),
-    limit: z.int().gte(1).lte(200).optional().default(50)
-});
-
-/**
- * Response Api Query History Api V1 Query History Get
- *
- * Successful Response
- */
-export const zApiQueryHistoryApiV1QueryHistoryGetResponse = z.array(zQueryHistoryResponse);
-
-export const zApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeletePath = z.object({
-    history_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiDeleteQueryHistoryApiV1QueryHistoryHistoryIdDeleteResponse = zDeleteCountResponse;
-
-export const zApiValidateSqlApiV1QueryValidatePostBody = zSqlValidateRequest;
-
-/**
- * Successful Response
- */
-export const zApiValidateSqlApiV1QueryValidatePostResponse = zGuardrailResponse;
 
 export const zResolveQuestionApiV1QuestionsQuestionIdResolvePostBody = zQuestionResolutionRequest;
 
@@ -2486,68 +1656,3 @@ export const zCancelRunApiV1RunsRunIdCancelPostPath = z.object({
  * Successful Response
  */
 export const zCancelRunApiV1RunsRunIdCancelPostResponse = zRunCancelledResponse;
-
-export const zApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutBody = zColumnMetadataUpdateRequest;
-
-export const zApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutPath = z.object({
-    column_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiUpdateColumnMetadataApiV1SchemaColumnsColumnIdPutResponse = zSchemaColumnUpdateResponse;
-
-export const zApiGetErDiagramApiV1SchemaErDiagramGetQuery = z.object({
-    datasource_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiGetErDiagramApiV1SchemaErDiagramGetResponse = zErDiagramResponse;
-
-export const zApiGenerateTestDataApiV1SchemaGenerateTestDataPostBody = zTestDataGenerateRequest;
-
-/**
- * Response Api Generate Test Data Api V1 Schema Generate Test Data Post
- *
- * Successful Response
- */
-export const zApiGenerateTestDataApiV1SchemaGenerateTestDataPostResponse = z.union([
-    zTestDataGeneratedResponse,
-    zConfirmationRequiredResponse
-]);
-
-export const zApiListTablesApiV1SchemaTablesGetQuery = z.object({
-    datasource_id: z.string()
-});
-
-/**
- * Response Api List Tables Api V1 Schema Tables Get
- *
- * Successful Response
- */
-export const zApiListTablesApiV1SchemaTablesGetResponse = z.array(zSchemaTableResponse);
-
-export const zApiUpdateTableMetadataApiV1SchemaTablesTableIdPutBody = zTableMetadataUpdateRequest;
-
-export const zApiUpdateTableMetadataApiV1SchemaTablesTableIdPutPath = z.object({
-    table_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiUpdateTableMetadataApiV1SchemaTablesTableIdPutResponse = zSchemaTableUpdateResponse;
-
-export const zApiListColumnsApiV1SchemaTablesTableIdColumnsGetPath = z.object({
-    table_id: z.string()
-});
-
-/**
- * Response Api List Columns Api V1 Schema Tables  Table Id  Columns Get
- *
- * Successful Response
- */
-export const zApiListColumnsApiV1SchemaTablesTableIdColumnsGetResponse = z.array(zSchemaColumnResponse);

@@ -4,11 +4,11 @@
 >
 > 状态：已接受
 >
-> 最后核验：2026-08-22
+> 最后核验：2026-08-23
 >
 > 适用范围：Project、Conversation、Run authority、Resource Runtime、Capability DLC、Workbench resource/context composition
 >
-> 实施状态：分阶段迁移中；当前差距与批次见 [`../quality/2026-08-22-agent-core-dlc-workbench-review.md`](../quality/2026-08-22-agent-core-dlc-workbench-review.md)
+> 实施状态：已完成；切换证据见 [`../quality/2026-08-22-agent-core-dlc-workbench-review.md`](../quality/2026-08-22-agent-core-dlc-workbench-review.md)
 
 ## 1. 决策
 
@@ -109,8 +109,8 @@ Project resource 应保持粗粒度。Database 是 Resource；Schema/Table/Colum
 
 ## 6. Resource Runtime v2
 
-> 实施状态：阶段 A 已于 2026-08-22 落地；内置单资源工具迁移与 Extension API v2
-> 兼容名删除仍按第 12 节条件推进。
+> 实施状态：已完成。Runtime、Tool context、resolver 与 prompt summary 均使用
+> `(kind,id)` identity，不再保留单值 datasource 执行通道。
 
 ```python
 ResourceKey = (kind, id)
@@ -208,6 +208,8 @@ inline citation 的通用原语，`RuntimeContributionSnapshot` 保存带 owner 
 原子消失，冲突会拒绝整个 package，不保留半激活状态。Core 不再 import Data completion 模块。
 
 ### 8.1 执行代码迁移决策
+
+> 状态：历史。本节保留切换期的决策与每批证据；当前生产状态以 11.1 和第 12 节为准。
 
 现有 `engine.connectivity`、`engine.sql` 与 Data Tool 已有成熟的凭据、SSH/TLS、pool、SQL
 guardrail、不可变 validation Artifact、只读执行和大结果边界；迁移必须复用这些行为与测试，
@@ -570,6 +572,16 @@ Project
 
 Host 拥有 section chrome、overflow、focus、keyboard 与 selection visual contract；DLC 提供 typed tree data/action，不直接控制 Sidebar 外层布局。实现遵循 WAI-ARIA Tree View 中 focus 与 selection 分离的语义，并参考 VS Code contribution points 的 Host-owned Workbench 原则，但不引入完整 IDE framework。
 
+### 11.1 最终切换状态（2026-08-23）
+
+- `dbfox.data` 与 `dbfox.workspace` 均以签名 System DLC 默认启用；Kernel-only 启动仅是包不可用时的明确 fail-closed 状态，不会注册 legacy Data/Workspace fallback。
+- Core HTTP 不再注册 DataSource、Schema、Query、Backup 业务路由；Data Workbench 通过 typed DLC operations 和 Artifact views 工作。
+- Alembic head `e2f3a4b5c6d8` 先将历史 Connection/DataSource identity 与 opaque credential refs 幂等导入 `dbfox.data/state.sqlite3`，验证后删除 Core Data 表和 Data FTS。Catalog、history 与 result rows 是可重建/有界领域状态，不在 Core 保留镜像。
+- Project 当前模型只保留 identity/metadata；Conversation 只保留 Project 归属和 generic resource intent；Run 只从 frozen refs 获得权限。
+- Data Connector 以 `ConnectionProfile → DatabaseResource → provider objects` 展示资源；左侧 focus 与 Composer context selection 是两个独立状态。
+- Dock collapsed state 使用独立 rail layout，不压缩 expanded tab strip；Composer 与 Conversation content column 共用版心，不作为 footer panel。
+- 迁移没有引入新依赖、双写、通用 `ProjectResourceBinding(config_json)`、service locator 或 Data 兼容 API；SQLite/Alembic、现有 DLC verifier/compiler、Credential Broker、Tool Runtime 与 Artifact envelope 被直接复用。
+
 ## 12. 分阶段迁移与删除条件
 
 | 阶段 | 状态 | 新事实 | 旧事实删除条件 |
@@ -578,9 +590,9 @@ Host 拥有 section chrome、overflow、focus、keyboard 与 selection visual co
 | B | 已完成 | ConversationResourceIntent + Composer Context Host | 前端不再调用 requested-resource contributors；浏览资源不改变 Run refs |
 | C | 已完成 | Session/Run 只从 frozen refs 工作；Conversation API/UI 已删除 datasource/table context 合同；`agent_sessions.datasource_id/context_tables_json` 已物理删除 | 无 |
 | D | 已完成 | Project v2 + Workspace DLC binding；`projects.workspace_root` 已物理删除 | 无 |
-| E | 进行中 | ConnectionProfile + DatabaseResource、显式多数据库 Tool selection、generic Tool Admission、Artifact/approval ResourceRef fence、System Data `sql_validate → sql_execute_readonly`、Database-scoped Catalog、结构化/遮罩 Preview、不重执行 SQL 的耐久 result inspect/profile/chart、Workbench Result page/export/chart-data，以及 SQLite online backup + isolated restore 已完成；网络 backup 在官方 client 尚未固定前明确不支持 | 删除旧 DataSource HTTP/Workbench 管理面与源码开发 fallback；不以私有 dump format 扩大范围 |
+| E | 已完成 | ConnectionProfile + DatabaseResource、显式多数据库 Tool selection、generic Tool Admission、Artifact/approval ResourceRef fence、System Data `sql_validate → sql_execute_readonly`、Database-scoped Catalog、结构化/遮罩 Preview、不重执行 SQL 的耐久 result inspect/profile/chart、Workbench Result page/export/chart-data，以及 SQLite online backup + isolated restore | 旧 DataSource HTTP/Workbench 管理面、Core Data tables 与源码开发 fallback 已删除；网络 backup 未在官方 client 固定前不以私有 dump format 扩大范围 |
 | F | 已完成 | Frozen Sidecar 已内嵌官方 publisher key 与 Data/Workspace exact package pins；Electron Resources 只承载包字节，启动走 verify → content-addressed install → selected snapshot；Data/Workspace 均默认启用 | 无 |
-| G | 进行中 | Conversation legacy API、implicit datasource authority fallback、Session 历史物理列与 `projects.workspace_root` 已删除 | 删除 `DataSource`、Run/Memory 历史物理列和过期文档 |
+| G | 已完成 | Conversation legacy API、implicit datasource authority fallback、Session 历史物理列、Core Data tables 与 `projects.workspace_root` 已删除 | 无 |
 
 临时兼容代码只能存在于明确阶段，必须有调用量或 characterization test，不承载新业务逻辑，也不能被新模块依赖。
 

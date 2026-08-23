@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-22
+> 最后核验：2026-08-23
 >
 > 基线：`feat/quiet-workbench@7902ced52339fb0e5d12282d03bf07a71166cbcd`
 >
@@ -20,13 +20,13 @@
 | --- | --- | --- | --- |
 | P1 | 同 kind 多资源在 Tool Runtime 中退化为单值 | 已修复（阶段 A） | Runtime 已以 `(kind,id)` 解析并有双同类资源回归测试 |
 | P1 | 前端 UI focus 与 DLC contributor 可静默扩大下一次 Run 的 requested resources | 已修复（阶段 B） | durable intent、显式 context selection 与 server admission 已闭环 |
-| P1 | `DataSource.database_name` 曾把 Connection 与 Database 粘连；`Project.workspace_root` 已物理删除 | 新模型已落地，旧管理面待删除 | System Data 已使用 `ConnectionProfile → DatabaseResource(s)`；旧 HTTP/Workbench DataSource 只保留在明确迁移边界 |
+| P1 | `DataSource.database_name` 曾把 Connection 与 Database 粘连；`Project.workspace_root` 已物理删除 | 已修复 | System Data 使用 `ConnectionProfile → DatabaseResource(s)`；旧 HTTP/Workbench DataSource 管理面与 Core Data 表已删除 |
 | P2 | Dock tab 使用 flex 收缩后的宽度规划 overflow | 已修复并实机验收 | 900px 窗口下 active tab 可读，其余进入 overflow |
 | P2 | 左侧 Resource ScrollArea 可发生水平漂移；Composer 在当前提交被压缩 | 已修复并实机验收 | 资源树固定列宽；Composer 恢复旧版比例并与正文同 rail |
 
 System Data 的连接创建 Dialog 已由 DLC 自有 Connector 接管：核心字段首屏完成、数据库类型使用轻量
 segmented choice、连接选项渐进披露、凭据经 Host broker 写入 OS vault。旧连接管理 Dialog 仅供源码
-fallback，不与激活的 System Data Connector 同时呈现。
+System Data 是源码与 Frozen 发行的唯一连接管理面；Kernel-only 启动不会注册旧连接 fallback。
 
 ## 2. 值得保留的基础
 
@@ -332,3 +332,12 @@ fallback，不与激活的 System Data Connector 同时呈现。
   Electron Main/Preload `9 files / 28 tests`。Core 与三个官方 DLC 的 pyflakes/mypy、frontend lint
   （0 error，22 条既有 Fast Refresh warning）、test typecheck、production token/bundle budget 和生产
   build 均通过。
+
+## 9. 最终 Data cutover 证据（2026-08-23）
+
+- Alembic head `e2f3a4b5c6d8` 使用与 Workspace/GitHub 相同的单向、可重放、冲突失败迁移方式：先保存 ConnectionProfile、DatabaseResource identity 和 opaque credential refs，验证 DLC state，再删除 Core Data tables/FTS。没有跨 SQLite 双写、ATTACH 假事务或恢复 fallback。
+- Catalog、search docs、query history 与 result rows 没有被复制到第二份事实源：Catalog 在 owner 状态中重建，Result 继续通过有界 Artifact view 访问。
+- 生产 composition 只注册 Kernel/Conversation/Remote Job built-ins 与已验证 DLC contributions；旧 Data registrar、Core HTTP routes、Workbench Data components 和 automatic requested-resource contributor 已移除。
+- Agent 测试启动与产品相同的签名 System DLC bundle。与旧 Core DataSource/Catalog Memory v4 物理表绑定的场景已退役，Data package domain tests 接管连接、Catalog、SQL、Result 和 backup/restore 证明。
+- 本次调查直接复用项目现有 DLC verifier/compiler、typed Host API、Credential Broker、Tool Runtime、Artifact envelope、SQLite/Alembic 和 Workspace 迁移模式。未引入新依赖或供应商锁定；未采用通用 binding JSON、service locator 或内外两套 Data execution chain。
+- 最终门禁：Engine deterministic `633 passed, 4 skipped, 120 deselected`；Agent Runtime `282 passed, 8 skipped, 3 deselected`；Frontend `86 files / 369 tests`；Electron `9 files / 28 tests`；Runtime Reset `25 passed`；engineering contracts `36 passed`；pyflakes、mypy（301 source files）、frontend lint/typecheck 和 production build 通过。

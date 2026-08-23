@@ -33,8 +33,6 @@ describe("bundle budget contract", () => {
       "index-entry.js": "console.log('entry')",
       "ChartArtifactView-chart.js": "console.log('chart')",
       "ConversationWorkspace-route.js": "export {}",
-      "TableWorkspace-route.js": "export {}",
-      "DataSourcesPage-route.js": "export {}",
     });
 
     expect(inspectBundle(distDir)).toMatchObject({
@@ -48,8 +46,6 @@ describe("bundle budget contract", () => {
       "index-entry.js": "a".repeat(700 * 1024),
       "ChartArtifactView-chart.js": "console.log('chart')",
       "ConversationWorkspace-route.js": "export {}",
-      "TableWorkspace-route.js": "export {}",
-      "DataSourcesPage-route.js": "export {}",
     });
 
     expect(() => inspectBundle(distDir)).toThrow("Initial desktop entry exceeds its bundle budget");
@@ -59,8 +55,6 @@ describe("bundle budget contract", () => {
     const distDir = makeBundle({
       "index-entry.js": "console.log('entry')",
       "ConversationWorkspace-route.js": "export {}",
-      "TableWorkspace-route.js": "export {}",
-      "DataSourcesPage-route.js": "export {}",
     });
 
     expect(() => inspectBundle(distDir)).toThrow("ChartArtifactView must remain an independently deferred chart chunk");

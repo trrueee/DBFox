@@ -1,7 +1,7 @@
 import { ArrowUpDown, Copy, Download, Filter, RefreshCw, Search } from "lucide-react";
 import { useState } from "react";
 import { Button, Input, Popover, PopoverContent, PopoverTrigger, Select, Toolbar, ToolbarGroup } from "../../../../components/ui";
-import type { ResultFilter, ResultFilterOperator } from "../../../../lib/api/types";
+import type { ArtifactViewFilter, ArtifactViewFilterOperator } from "../../../../lib/api/types";
 import type { SortDirection, SortState } from "./useArtifactTableData";
 
 interface ArtifactTableToolbarProps {
@@ -13,8 +13,8 @@ interface ArtifactTableToolbarProps {
   sort: SortState | null;
   onApplySort: (columnIndex: number, direction: SortDirection) => void;
   onClearSort: () => void;
-  filters: ResultFilter[];
-  onFiltersChange: (value: ResultFilter[]) => void;
+  filters: ArtifactViewFilter[];
+  onFiltersChange: (value: ArtifactViewFilter[]) => void;
   isLoading: boolean;
   onRefresh: () => void;
   onExport: () => void;
@@ -38,7 +38,7 @@ export function ArtifactTableToolbar({
   onCopy,
 }: ArtifactTableToolbarProps) {
   const [filterColumn, setFilterColumn] = useState(columns[0] ?? "");
-  const [filterOperator, setFilterOperator] = useState<ResultFilterOperator>("contains");
+  const [filterOperator, setFilterOperator] = useState<ArtifactViewFilterOperator>("contains");
   const [filterValue, setFilterValue] = useState("");
   const [sortColumn, setSortColumn] = useState(columns[sort?.columnIndex ?? 0] ?? columns[0] ?? "");
   const [sortDirection, setSortDirection] = useState<SortDirection>(sort?.direction ?? "desc");
@@ -49,7 +49,7 @@ export function ArtifactTableToolbar({
 
   const applyFilter = () => {
     if (!selectedFilterColumn) return;
-    const nextFilter: ResultFilter = {
+    const nextFilter: ArtifactViewFilter = {
       column: selectedFilterColumn,
       operator: filterOperator,
       value: filterNeedsValue ? filterValue : undefined,
@@ -107,7 +107,7 @@ export function ArtifactTableToolbar({
                 </label>
                 <label className="artifact-table-control-field">
                   <span>筛选条件</span>
-                  <Select className="artifact-table-control-select" value={filterOperator} onChange={(event) => setFilterOperator(event.target.value as ResultFilterOperator)}>
+                  <Select className="artifact-table-control-select" value={filterOperator} onChange={(event) => setFilterOperator(event.target.value as ArtifactViewFilterOperator)}>
                     <option value="contains">包含</option>
                     <option value="equals">等于</option>
                     <option value="not_equals">不等于</option>

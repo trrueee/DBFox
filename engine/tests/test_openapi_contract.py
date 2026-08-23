@@ -3,27 +3,22 @@
 from engine.main import app
 
 
-def test_openapi_does_not_expose_raw_rows_query_execution() -> None:
-    assert "/api/v1/query/execute" not in app.openapi()["paths"]
+def test_openapi_exposes_data_only_through_generic_dlc_operations() -> None:
+    paths = app.openapi()["paths"]
+    retired = (
+        "/api/v1/datasources",
+        "/api/v1/query/execute",
+        "/api/v1/query/validate",
+        "/api/v1/query/history",
+        "/api/v1/backups",
+        "/api/v1/schema/tables",
+        "/api/v1/agent/console/execute",
+    )
+    assert all(path not in paths for path in retired)
+    assert "/api/v1/dlcs/{dlc_id}/operations/{operation_name}" in paths
 
 
-def test_openapi_keeps_schema_sync_response_closed() -> None:
-    schema = app.openapi()["components"]["schemas"]["SchemaSyncResponse"]
-
-    assert schema["additionalProperties"] is False
-    assert {
-        "tablesDropped",
-        "columnsCreated",
-        "columnsUpdated",
-        "columnsRemoved",
-    } <= set(schema["properties"])
-
-
-def test_openapi_marks_datasource_connection_fields_nullable() -> None:
-    properties = app.openapi()["components"]["schemas"]["DataSourceResponse"]["properties"]
-
-    for name in ("host", "username"):
-        assert {variant.get("type") for variant in properties[name]["anyOf"]} == {
-            "string",
-            "null",
-        }
+def test_openapi_does_not_publish_retired_core_data_schemas() -> None:
+    schemas = app.openapi()["components"]["schemas"]
+    assert "DataSourceResponse" not in schemas
+    assert "SchemaSyncResponse" not in schemas

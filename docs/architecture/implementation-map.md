@@ -4,9 +4,9 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-16
+> 最后核验：2026-08-23
 >
-> 适用范围：启动、数据源、SQL、Agent、工具、事件、取消和恢复链路
+> 适用范围：启动、Agent Core、Capability DLC、Workbench、工具、事件、取消和恢复链路
 >
 > 配套总览：[当前系统架构](./system-overview.md)
 
@@ -29,23 +29,23 @@
 flowchart TB
     HOST["Electron Host"] --> UI["React App Shell"]
     UI --> CONV["Conversation Product Layer"]
-    UI --> WORK["Datasource / SQL / Settings Workspaces"]
+    UI --> WORK["Host-owned Workbench Slots"]
     CONV --> CLIENT["Typed API + Stream Client"]
     WORK --> CLIENT
     CLIENT --> API["FastAPI + Security Middleware"]
 
-    API --> DS["Datasource / Schema"]
-    API --> SQL["SQL Safety / Result Gateway"]
+    API --> DLC["Verified Capability DLC Host"]
     API --> AGENT["SessionCoordinator / RunLoop"]
     API --> OPS["Backup / Diagnostics / Eval"]
 
     AGENT --> TOOL["Tool Registry / Policy / Executor"]
     AGENT --> REPO["Agent Repositories"]
-    TOOL --> SQL
-    DS --> CONN["Connection Factory / Lifecycle"]
-    SQL --> CONN
+    DLC --> DATA["dbfox.data"]
+    DLC --> WORKSPACE["dbfox.workspace"]
+    DLC --> GITHUB["dbfox.github"]
+    TOOL --> DLC
     REPO --> META[("SQLite Metadata")]
-    DS --> META
+    DLC --> DLCSTATE[("Capability-owned SQLite")]
     OPS --> META
 ```
 
@@ -58,18 +58,15 @@ flowchart TB
 | Conversation Product | Message、Activity、Approval、Question、Artifact Dock | snapshot/events/live | 用户可理解过程 | 后端投影的前端缓存 | 原始调试 trace、结果历史 |
 | Typed API Client | token、错误映射、AbortSignal、SSE | request DTO | response/event DTO | 无 | 静默 fallback、业务重试 |
 | API Middleware | loopback 安全、输入限制、错误边界 | HTTP | 安全 response | 无 | 返回秘密/异常原文 |
-| Datasource | 数据源 CRUD、凭据引用、generation | 配置/credential ID | DataSource/Profile | metadata + vault | 保存明文凭据 |
-| Connection Lifecycle | pool/tunnel 获取、fence、dispose | ConnectionProfile | connection scope | 进程资源 registry | 接受旧 generation |
-| Schema Catalog | 内省、同步、搜索索引 | datasource | tables/columns/search docs | metadata | 全库结构无界注入 Prompt |
-| SQL Safety/Execution | 解析、policy、guardrail、执行、取消 | SQL/dialect/profile | bounded execution | QueryHistory/Artifact metadata | 绕过安全链 |
-| Result Gateway | Artifact ID 解析、视图 SQL、实时重查 | artifact ID + view params | current page/export/chart | SQL Artifact + current DB | 持久化 rows |
+| Data System DLC | ConnectionProfile/DatabaseResource、Catalog、SQL safety/execution、Result view、Backup | typed operation + frozen ResourceRef | Data resources/artifacts/views | `dbfox.data/state.sqlite3` + vault refs | 向 Core 泄露 SQL/连接领域状态 |
+| Workspace System DLC | workspace binding、路径 containment、file/patch tools | Project binding + frozen ResourceRef | file artifacts/dock views | `dbfox.workspace/state.sqlite3` | 把 workspace root 写回 Project |
 | Session Core | input admission、sequence、lease、event | user command | stable IDs/snapshot | canonical tables | 内存 queue 作为事实源 |
 | ReAct Harness | Turn、model、tool、completion、response | admitted Run | answer/artifacts/evidence | Run/Turn records | 固定 graph、第二 checkpoint |
 | Tool Runtime | 注册、物化、授权、有界执行、结算 | tool call | transient result/observation | Invocation/Observation | 任意函数反射调用 |
 | Artifact/Evidence | 工件关系、来源、citation；open string type + `schema_version` | tool/response | reference-only products | canonical records | 结果集副本 |
 | Event/Live | replay、notification、前端归并 | domain change/token | event/live item | Event Log；live 无持久权威 | 用 live 代替提交 |
 | Security Audit | 结构化安全动作、保留和导出 | approval/cancel/export | redacted records | SecurityAuditRecord | secret/result rows |
-| Backup/Restore | 备份、校验、隔离恢复、generation cutover | datasource/backup | backup/restore state | metadata + private files | 覆盖当前库后再验证 |
+| Capability Backup/Restore | 由资源 owner 执行备份、校验、隔离恢复和 generation fence | ResourceRef + operation input | owner-specific state/artifact | DLC state + private files | 让 Core 解析业务 dump |
 | Eval/Quality | golden tasks、契约、构建门禁 | fixtures/code | score/build evidence | test artifacts | 把 smoke 当完整验收 |
 
 ## 4. 模块详细设计
@@ -89,11 +86,11 @@ flowchart TB
 
 ### 4.2 App Shell 与 Workspace
 
-App Shell 组织实体侧栏（顶层项目/连接胶囊 + 每行 `对话|文件` / `对话|数据库` 子胶囊）、固定 Main Surface、Dock registry、命令面板、连接管理 Dialog、设置和对话。Workspace Store 只保存 Shell identity/layout（含 `sidebarEntityMode`、`projectSubMode`、`connectionSubMode`、per-project shell state 和通用 Dock tab identity）；SQL draft/entries 归 `sqlConsoleStore`，表选择/表子页归 `tableWorkspaceStore`，Artifact 与文件 Dock 打开动作归 `artifactDockStore`/`workspaceFileStore`，业务实体由各领域 Store 从后端加载。
+App Shell 组织 Project/Conversation、Host-owned resource connector slot、固定 Main Surface、Dock registry、命令面板和设置。Resource tree、SQL/Table Dock 与连接 Dialog 由已激活 DLC 贡献；Shell 只保存 focus/layout/tab identity，不复制领域状态。Dock 折叠态是独立 rail layout，Composer 与消息内容列共用版心。左侧资源 focus 只导航；只有 Composer context chip 会改变 durable Conversation Resource Intent。
 
-本地项目文件链路由 Electron Main 承担 I/O 并保持有界：
+本地项目文件链路由 `dbfox.workspace` 使用 Host 的 native picker/credential 等窄 OS boundary 并保持有界：
 
-- `pick_project_folder`：新建项目时选择本地工作目录，并把该目录写入应用配置目录的 `project_folder_access.json` 授权根集合；
+- Project 创建只需名称与可选描述；workspace folder 是创建后的 DLC binding，不是 Project 字段；
 - `list_project_folder`：文件树按需读取单层，跳过 `.git`/`node_modules`/`target` 等重目录，最多 600 项；
 - `read_project_file`：只读 UTF-8 文本，≤ 1 MiB；二进制/超大/非 UTF-8 返回明确错误；
 - `list_project_folder` / `read_project_file` 在 Main 侧 realpath 路径并拒绝不在任何已选择授权根之内的路径（含 symlink 逃逸）；
@@ -119,27 +116,27 @@ API Client 统一发送 local token、解析固定错误结构并向可取消请
 
 Reducer 以 entity ID、event sequence、live revision 和 correlation 幂等更新。任何 sequence gap 都不能靠“继续追加”修补，必须重载 snapshot。
 
-### 4.5 Datasource、Credential 与 Connection Profile
+### 4.5 Data DLC、Credential 与 Connection Profile
 
-前端提交凭据时，后端先写入 OS vault，再只保存 credential ID。DataSource 更新在事务中推进 `connection_generation`；提交后 Connection Lifecycle 发布新 profile、清理旧 pool/tunnel 和旧 credential。
+前端 Data Connector 通过 Credential Broker 将秘密写入 OS vault，DLC state 只保存 opaque credential ref。`ConnectionProfile` 更新推进 `connection_generation`；其下多个 `DatabaseResource` 各自拥有 resource generation。普通网络连接、SSH/TLS 和 SQLite file-backed profile 由 Data DLC provider adapter 验证，Core 不保存镜像。
 
 若资源清理失败，不能先删除旧 credential，否则仍在运行的旧连接无法被安全收尾。旧 profile 在 generation 更新后即使被并发请求持有，也不能创建新的可复用资源。
 
-### 4.6 Schema Catalog 与 Search
+### 4.6 Data DLC Schema Catalog 与 Search
 
-同步任务从权威数据库内省结构，更新 table/column/relation/index 元数据并重建搜索文档。同步是 datasource-scoped；失败保留上一次完整 catalog，并记录新的失败状态，避免半同步结构成为 Agent Context。
+同步任务从权威数据库内省结构，在 `dbfox.data/state.sqlite3` 更新 table/column/relation/index 元数据并重建搜索文档。同步是 DatabaseResource-scoped；失败保留上一次完整 catalog，避免半同步结构成为 Agent Context。
 
 Agent 通过 schema 工具按问题检索候选表，再按需 inspect；Context 只包含相关摘要和引用。
 
-### 4.7 SQL Safety、Execution 与 QueryRegistry
+### 4.7 Data DLC SQL Safety、Execution 与 QueryRegistry
 
 用户 SQL 和 Agent SQL 都必须进入统一安全链。策略根据 datasource read-only、环境和调用来源判定是否允许、需要 Approval 或拒绝。
 
 执行前注册 execution ID，执行后无论成功失败都注销。取消路径：SQLite/DuckDB 调用 interrupt，PostgreSQL 调用 connection cancel，MySQL 使用独立连接 `KILL QUERY`。取消请求已发出不等于数据库立刻停止，所以最终结算仍检查 cancel/deadline。
 
-### 4.8 Result Gateway
+### 4.8 Data Artifact View Gateway
 
-Result Gateway 接口只接受 Result Artifact ID 与 page/pageSize/sort/filter/search 等视图参数。后端解析来源 SQL、校验 fingerprint/generation，并生成受约束的外层查询。
+Core Artifact API 只接受 Artifact ID 与 page/pageSize/sort/filter/search 等通用视图参数，再把 typed view 调用交给该 Artifact owner。Data DLC 解析来源资源、fingerprint/generation 和有界结果页；Core 不理解 SQL 或表结构。
 
 返回 rows 只存在于 HTTP response 和当前组件状态。关闭工件、切换来源或发起新请求会取消并释放旧页面。Chart data 同样按 source Result Artifact 实时加载，Chart Artifact 不复制 series。
 
@@ -165,7 +162,7 @@ Policy 对规范化工具名和 canonical input 判定。Approval 与具体 Invo
 
 Transient Tool Result 可以在当前 ReAct step 内含有界 rows；它只在进程内 buffer 中短暂存在。Durable Observation 不含 rows，只保存摘要、Artifact IDs、计数、耗时、指纹和安全错误。
 
-Session Memory v3 保存工作集、未解决问题、最近工件引用和有界摘要。Memory v4 的 typed envelope 与纯 Catalog reducer 已落在 [`engine/agent/memory_v4.py`](../../engine/agent/memory_v4.py)：incremental、catch-up、rebuild 共用 `fold_catalog`。Terminal projection 服务在 [`engine/agent/memory_projection.py`](../../engine/agent/memory_projection.py)：completed/failed/cancelled 同一边界，projection 合同失败不阻断 canonical terminalization，watermark 连续 catch-up 且不跨 gap；`rebuild_session_memory` 提供 compare/strict/repair 三种 full rebuild 模式。Context v4 读路径在 [`engine/agent/context.py`](../../engine/agent/context.py) 中由 `DBFOX_MEMORY_V4_CONTEXT=1` 启用，先做 datasource/generation/`catalog_revision` read fence，再确定性选择至多 8 个 prior objects 并回源 canonical Observation 生成 bounded digest。Projection 只保存 bounded footprint，完整 facts 仍回源 canonical Observation。选中工件进入 Context 时只注入 reference metadata；模型若需具体值必须调用 inspect/query。
+Session Memory 仅保存通用工作集、未解决问题、最近 Artifact/Evidence 引用和有界摘要。Catalog prior objects 不再作为 datasource-shaped Core Memory 投影；Data 上下文由当前 snapshot 中的 DLC context contributor 根据 frozen ResourceRef 按需提供。选中工件进入 Context 时只注入 reference metadata；模型若需具体值必须调用 owner tool。
 
 ### 4.13 Event Log、Snapshot 与 LiveStreamHub
 

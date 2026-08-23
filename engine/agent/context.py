@@ -1,14 +1,12 @@
 """Deterministic, versioned context assembly from durable Agent state."""
 
 from __future__ import annotations
-from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
 
 import hashlib
-import os
 from collections.abc import Callable
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -19,11 +17,9 @@ from engine.models import (
     AgentRun,
     AgentSession,
     AgentSessionInput,
-    AgentSessionMemory,
     AgentTaskPlanRecord,
     AgentToolInvocation,
     AgentTurn,
-    DataSource,
 )
 from engine.agent.context_budget import (
     ContextBudgetPlanner,
@@ -44,25 +40,14 @@ from engine.agent.conversation_recall import ConversationRecallService
 from engine.agent.resource_refs import (
     load_resource_refs,
     resource_refs_for_run,
-    single_run_resource_ref,
 )
-from engine.agent.memory_v4 import (
-    CatalogProjectionScope,
-    CatalogWorkingState,
-    MAX_PRIOR_DIGEST_BYTES,
-    MAX_PRIOR_DIGEST_COLUMNS,
-    MAX_PRIOR_RELATED_OBJECTS,
-    SessionMemoryStateV4,
-    catalog_contract_fingerprint,
-    select_prior_catalog_objects,
-)
+from engine.app.safe_errors import fixed_error_detail
 from engine.json_codec import (
     JsonCodecError,
     byte_size,
     canonical_dumps as _canonical,
     loads,
 )
-from engine.app.safe_errors import fixed_error_detail
 from engine.tools.runtime.attempt import ResourceScopeRef
 
 
@@ -71,19 +56,6 @@ MAX_MESSAGE_CHARS = 32_768
 MAX_SELECTED_ARTIFACTS = 10
 MAX_OBSERVATIONS = 24
 MAX_CURRENT_REQUEST_CHARS = 40_000
-def _memory_v4_context_enabled(value: str | None) -> bool:
-    """Enable v4 by default while retaining the explicit v3 rollback fence."""
-
-    if value is None or value == "1":
-        return True
-    if value == "0":
-        return False
-    raise ValueError("DBFOX_MEMORY_V4_CONTEXT must be '0' or '1' when set")
-
-
-MEMORY_V4_CONTEXT_ENABLED = _memory_v4_context_enabled(
-    os.environ.get("DBFOX_MEMORY_V4_CONTEXT")
-)
 
 
 def _load_json(value: object | None) -> Any:
@@ -477,10 +449,17 @@ class ContextAssembler:
         response_batches = self._response_batches(run, sources)
         selected_artifacts = self._selected_artifacts(aggregate, admitted, sources)
         observations = self._observations(run, sources)
-        memory = (
-            self._memory_v4(run, aggregate, sources, current_request)
-            if MEMORY_V4_CONTEXT_ENABLED
-            else self._memory(run, aggregate, sources)
+        # Capability-owned durable context is supplied through Context
+        # contributors. The Kernel does not interpret database/catalog memory.
+        memory: dict[str, Any] = {}
+        sources.append(
+            ContextSource(
+                kind="session_memory",
+                source_id=str(aggregate.id),
+                version=str(aggregate.context_epoch or 0),
+                included=False,
+                reason="capability memory is supplied by context contributors",
+            )
         )
         context_fragments = self._context_fragments(run, aggregate)
         if context_fragments:
@@ -1136,423 +1115,6 @@ class ContextAssembler:
             )
         )
         return values
-
-    def _memory(
-        self,
-        run: AgentRun,
-        aggregate: AgentSession,
-        sources: list[ContextSource],
-    ) -> dict[str, Any]:
-        database_ref = single_run_resource_ref(self.session, run, DATABASE_RESOURCE_KIND)
-        if database_ref is None:
-            sources.append(
-                ContextSource(
-                    kind="session_memory",
-                    source_id=str(aggregate.id),
-                    version=str(aggregate.context_epoch or 0),
-                    included=False,
-                    reason="run does not have exactly one authorized database",
-                )
-            )
-            return {}
-
-        row = self.session.execute(
-            select(AgentSessionMemory).where(
-                AgentSessionMemory.session_id == aggregate.id
-            )
-        ).scalar_one_or_none()
-        if row is None:
-            sources.append(
-                ContextSource(
-                    kind="session_memory",
-                    source_id=str(aggregate.id),
-                    version=str(aggregate.context_epoch or 0),
-                    included=False,
-                    reason="no session memory projection",
-                )
-            )
-            return {}
-        value = _json_object(row.memory_json)
-        current_datasource_id = database_ref.id
-        current_generation = database_ref.version or 0
-        raw_recent_runs = list(value.get("recent_runs") or [])
-        matching_recent_runs = [
-            item
-            for item in raw_recent_runs
-            if isinstance(item, dict)
-            and item.get("datasource_id") == current_datasource_id
-            and item.get("datasource_generation") == current_generation
-        ]
-        raw_stable_context = dict(value.get("stable_context") or {})
-        raw_evidence_references = list(
-            raw_stable_context.get("evidence_references") or []
-        )
-        evidence_references = [
-            item
-            for item in raw_evidence_references
-            if isinstance(item, dict)
-            and item.get("artifact_id")
-            and item.get("datasource_id") == current_datasource_id
-            and item.get("datasource_generation") == current_generation
-        ]
-        stable_context = (
-            {
-                key: item
-                for key, item in raw_stable_context.items()
-                if key not in {"verified_claims", "evidence_references"}
-            }
-            if (
-                value.get("datasource_id") == current_datasource_id
-                and value.get("datasource_generation") == current_generation
-            )
-            else {}
-        )
-        working_set = dict(value.get("working_set") or {})
-        if (
-            working_set.get("datasource_id") != current_datasource_id
-            or working_set.get("datasource_generation") != current_generation
-        ):
-            working_set = {}
-        stable_context["evidence_references"] = evidence_references
-        # Canonical completed messages already carry recent conversation history.
-        # Re-injecting verbatim recent questions and answers through Session Memory
-        # duplicates assistant text and can make an older answer outweigh the active
-        # request. Memory contributes only generation-scoped durable state here.
-        value = {
-            "version": int(value.get("version") or 1),
-            "datasource_id": current_datasource_id,
-            "datasource_generation": current_generation,
-            "working_set": working_set,
-            "stable_context": stable_context,
-            "freshness": {
-                "omitted_stale_runs": max(
-                    0,
-                    len(raw_recent_runs) - len(matching_recent_runs),
-                ),
-                "omitted_stale_evidence_references": max(
-                    0,
-                    len(raw_evidence_references) - len(evidence_references),
-                ),
-                "omitted_legacy_verified_claims": len(
-                    list(raw_stable_context.get("verified_claims") or [])
-                ),
-            },
-        }
-        sources.append(
-            ContextSource(
-                kind="session_memory",
-                source_id=str(row.id),
-                version=str(aggregate.context_epoch or 0),
-                included=True,
-                reason=(
-                    "included memory matching datasource generation "
-                    f"{current_generation}; stale facts were omitted"
-                ),
-            )
-        )
-        return value
-
-    def _memory_v4(
-        self,
-        run: AgentRun,
-        aggregate: AgentSession,
-        sources: list[ContextSource],
-        current_request: str,
-    ) -> dict[str, Any]:
-        row = self.session.execute(
-            select(AgentSessionMemory).where(
-                AgentSessionMemory.session_id == aggregate.id
-            )
-        ).scalar_one_or_none()
-        if row is None or not str(row.memory_v4_json or ""):
-            sources.append(
-                ContextSource(
-                    kind="session_memory",
-                    source_id=str(aggregate.id),
-                    version=str(aggregate.context_epoch or 0),
-                    included=False,
-                    reason="no Memory v4 shadow projection",
-                )
-            )
-            return {}
-
-        try:
-            memory = SessionMemoryStateV4.model_validate(
-                loads(str(row.memory_v4_json))
-            )
-        except (JsonCodecError, ValidationError, TypeError, ValueError):
-            sources.append(
-                ContextSource(
-                    kind="session_memory",
-                    source_id=str(row.id),
-                    version=str(aggregate.context_epoch or 0),
-                    included=False,
-                    reason="invalid Memory v4 projection contract",
-                )
-            )
-            return {}
-
-        projection = next(
-            (
-                item
-                for item in memory.projections
-                if item.projection_id == "dbfox.catalog.working_state"
-            ),
-            None,
-        )
-        if projection is None or projection.contract_fingerprint != catalog_contract_fingerprint():
-            sources.append(
-                ContextSource(
-                    kind="session_memory",
-                    source_id=str(row.id),
-                    version=str(aggregate.context_epoch or 0),
-                    included=False,
-                    reason="missing or incompatible Catalog projection",
-                )
-            )
-            return {}
-
-        try:
-            scope = CatalogProjectionScope.model_validate(projection.scope)
-            state = CatalogWorkingState.model_validate(projection.state)
-        except (ValidationError, TypeError, ValueError):
-            sources.append(
-                ContextSource(
-                    kind="session_memory",
-                    source_id=str(row.id),
-                    version=str(aggregate.context_epoch or 0),
-                    included=False,
-                    reason="Catalog projection envelope does not match typed scope/state",
-                )
-            )
-            return {}
-
-        database_ref = single_run_resource_ref(self.session, run, DATABASE_RESOURCE_KIND)
-        if database_ref is None:
-            sources.append(
-                ContextSource(
-                    kind="session_memory",
-                    source_id=str(row.id),
-                    version=str(aggregate.context_epoch or 0),
-                    included=False,
-                    reason="run does not have exactly one authorized database",
-                )
-            )
-            return {}
-
-        datasource = self.session.get(DataSource, database_ref.id)
-        current_revision = int(datasource.catalog_revision or 0) if datasource is not None else -1
-        if (
-            scope.resource_ref != database_ref
-            or scope.catalog_revision != current_revision
-        ):
-            sources.append(
-                ContextSource(
-                    kind="session_memory",
-                    source_id=str(row.id),
-                    version=str(aggregate.context_epoch or 0),
-                    included=False,
-                    reason="Memory v4 projection is outside the current resource fence",
-                )
-            )
-            return {}
-
-        watermark = int(projection.projected_through_session_sequence)
-        latest_terminal = self.session.execute(
-            select(AgentRun.session_sequence)
-            .where(
-                AgentRun.session_id == aggregate.id,
-                AgentRun.status.in_(("completed", "failed", "cancelled")),
-            )
-            .order_by(AgentRun.session_sequence.desc())
-            .limit(1)
-        ).scalar_one_or_none()
-        projection_lag = max(0, (latest_terminal or watermark) - watermark)
-
-        selected_objects = select_prior_catalog_objects(
-            state,
-            current_request=current_request,
-        )
-        working_objects = self._v4_prior_working_objects(
-            run,
-            selected_objects,
-        )
-
-        value = {
-            "version": 4,
-            "resource_ref": database_ref.model_dump(mode="json"),
-            "catalog_revision": scope.catalog_revision,
-            "SESSION_WORKING_STATE": {
-                "objects": working_objects,
-                "selected_count": len(working_objects),
-                "object_limit": 8,
-                "projection_lag": projection_lag,
-            },
-            "SESSION_EVIDENCE_INDEX": {
-                "referenced_artifact_ids": list(
-                    memory.core.referenced_artifact_ids[:24]
-                ),
-                "runtime_evidence_references": list(
-                    memory.core.runtime_evidence_references[:32]
-                ),
-            },
-            "freshness": {
-                "projection_watermark": watermark,
-                "projection_lag": projection_lag,
-                "resource_fence": "matched",
-            },
-        }
-        sources.append(
-            ContextSource(
-                kind="session_memory",
-                source_id=str(row.id),
-                version=str(aggregate.context_epoch or 0),
-                included=bool(working_objects),
-                reason=(
-                    f"included {len(working_objects)} bounded prior Catalog objects "
-                    f"at revision {scope.catalog_revision}; lag={projection_lag}"
-                ),
-            )
-        )
-        return value
-
-    def _v4_prior_working_objects(
-        self,
-        run: AgentRun,
-        selected_objects: Any,
-    ) -> list[dict[str, Any]]:
-        if not selected_objects:
-            return []
-        observation_ids = {
-            str(item.last_inspected_observation_id or item.last_seen_observation_id)
-            for item in selected_objects
-        }
-        rows = {
-            str(row.id): row
-            for row in self.session.query(AgentObservationRecord)
-            .filter(AgentObservationRecord.id.in_(observation_ids))
-            .all()
-        }
-        result: list[dict[str, Any]] = []
-        for item in selected_objects:
-            observation_id = str(
-                item.last_inspected_observation_id or item.last_seen_observation_id
-            )
-            row = rows.get(observation_id)
-            if row is None:
-                continue
-            facts = _json_object(row.facts_json)
-            digest: dict[str, Any] = {
-                "key": {
-                    "kind": item.key.kind,
-                    "schema_name": item.key.schema_name,
-                    "table_name": item.key.table_name,
-                    "column_name": item.key.column_name,
-                },
-                "primary_key": [],
-                "key_columns": [],
-                "related_objects": [],
-                "observed_at": (
-                    row.created_at.isoformat()
-                    if row.created_at is not None
-                    else None
-                ),
-                "source_observation_id": observation_id,
-            }
-            inspection = self._matching_inspection(facts, item.key)
-            if inspection is not None:
-                if item.key.kind == "table":
-                    digest["primary_key"] = list(
-                        inspection.get("primary_key") or []
-                    )[:MAX_PRIOR_DIGEST_COLUMNS]
-                    columns = [
-                        str(column.get("name") or "")
-                        for column in inspection.get("columns") or []
-                        if isinstance(column, dict)
-                    ]
-                    digest["key_columns"] = columns[:MAX_PRIOR_DIGEST_COLUMNS]
-                    digest["related_objects"] = _related_objects(
-                        inspection
-                    )[:MAX_PRIOR_RELATED_OBJECTS]
-                else:
-                    digest["key_columns"] = [
-                        str(item.key.column_name),
-                        str(inspection.get("type") or inspection.get("data_type") or ""),
-                    ][:MAX_PRIOR_DIGEST_COLUMNS]
-                    digest["related_objects"] = _related_objects(
-                        inspection
-                    )[:MAX_PRIOR_RELATED_OBJECTS]
-            result.append(digest)
-
-        # Apply deterministic size/token bounds without changing selection order.
-        while result and (
-            byte_size(_canonical(result)) > MAX_PRIOR_DIGEST_BYTES
-            or len(_canonical(result)) // 4 > 2_000
-        ):
-            removed = result.pop()
-            if removed.get("related_objects"):
-                removed["related_objects"] = []
-                result.append(removed)
-                continue
-            if removed.get("key_columns"):
-                removed["key_columns"] = []
-                result.append(removed)
-                continue
-            if removed.get("primary_key"):
-                removed["primary_key"] = []
-                result.append(removed)
-                continue
-        return result
-
-    def _matching_inspection(
-        self,
-        facts: dict[str, Any],
-        key: Any,
-    ) -> dict[str, Any] | None:
-        inspections = facts.get("inspections")
-        if not isinstance(inspections, list):
-            return None
-        for inspection in inspections:
-            if not isinstance(inspection, dict):
-                continue
-            details = inspection.get("details")
-            if not isinstance(details, dict):
-                continue
-            if str(details.get("object_type") or "") != key.kind:
-                continue
-            schema_name = str(details.get("schema_name") or "")
-            if schema_name != key.schema_name:
-                continue
-            if key.kind == "table":
-                if str(details.get("name") or "") == key.table_name:
-                    return details
-            elif (
-                str(details.get("table") or "") == key.table_name
-                and str(details.get("name") or "") == key.column_name
-            ):
-                return details
-        return None
-
-
-def _related_objects(inspection: dict[str, Any]) -> list[str]:
-    related: list[str] = []
-    for key in ("foreign_keys_out", "foreign_keys_in"):
-        for edge in inspection.get(key) or []:
-            if not isinstance(edge, dict):
-                continue
-            reference = edge.get("references") or edge
-            if not isinstance(reference, dict):
-                continue
-            parts = [
-                str(reference.get("schema_name") or "").strip(),
-                str(reference.get("table") or "").strip(),
-                str(reference.get("column") or "").strip(),
-            ]
-            value = ".".join(part for part in parts if part)
-            if value and value not in related:
-                related.append(value)
-    return related
-
 
 def _context_artifact_descriptor(artifact_type: str, payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):

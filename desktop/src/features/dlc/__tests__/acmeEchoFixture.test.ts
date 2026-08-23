@@ -36,7 +36,6 @@ describe("acme.echo packaged frontend fixture", () => {
       },
       {
         activeProjectId: "project-1",
-        activeDatasourceId: "datasource-1",
         activeConversationId: null,
       },
     )).toBe(true);

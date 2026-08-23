@@ -10,10 +10,7 @@ import "./App.css";
 import { setDialogContainer } from "./components/ui/dialogContainer";
 import { setToastRoot, useToast } from "./components/toastState";
 import { installClientErrorLogging, recordClientLog } from "./lib/diagnostics/clientLog";
-import { useDatasourceState } from "./features/datasource/useDatasourceState";
 import { useWorkspaceStore } from "./stores/workspaceStore";
-import { useSqlConsoleStore } from "./stores/sqlConsoleStore";
-import { useTableWorkspaceStore } from "./stores/tableWorkspaceStore";
 import { useArtifactDockStore } from "./stores/artifactDockStore";
 import { useConversationStore } from "./stores/conversationStore";
 import { DesktopLifecycleMonitor } from "./features/appShell/DesktopLifecycleMonitor";
@@ -21,12 +18,7 @@ import { LoadingState } from "./components/ui";
 import { ConversationCenter } from "./features/appShell/ConversationCenter";
 import { ResizableWorkspaceLayout } from "./features/appShell/ResizableWorkspaceLayout";
 import { ProjectResourceSidebar } from "./features/resources/ProjectResourceSidebar";
-import {
-  DATA_CONNECTOR_ID,
-  productResourceConnectors,
-  ResourceConnectorDialog,
-} from "./features/resources/resourceConnectorComposition";
-import { useConnectionDialogStore } from "./features/resources/connectionDialogStore";
+import { productResourceConnectors } from "./features/resources/resourceConnectorComposition";
 import { useProductDockBootstrap } from "./features/dock/useProductDockBootstrap";
 import { useDlcStore } from "./features/dlc/extensionStore";
 import { fetchAndLoadActiveExtensions } from "./features/dlc/extensionLoader";
@@ -145,14 +137,10 @@ export default function App() {
   }, []);
 
   // ── Store selectors ──
-  const { activeDatasource, activeDatasourceId, tables } = useDatasourceState();
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
-  const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
   const dock = useWorkspaceStore((s) => s.dock);
   const dockTabs = useWorkspaceStore((s) => s.dockTabs);
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
-  const setDockActiveTab = useWorkspaceStore((s) => s.setDockActiveTab);
-  const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
   const openDockArtifacts = useArtifactDockStore((s) => s.openArtifacts);
   const showSmartQueryHome = useWorkspaceStore((s) => s.showSmartQueryHome);
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
@@ -164,14 +152,6 @@ export default function App() {
 
   // Product-level Dock bootstrap (Console for active datasource, Artifacts for active conversation)
   useProductDockBootstrap(activeConversationId);
-
-  const openDockConsoleForActiveDatasource = useCallback(
-    (initialSql?: string) => {
-      if (!activeDatasource) return;
-      openDockConsole(activeDatasource.id, activeDatasource.db_type, initialSql);
-    },
-    [activeDatasource, openDockConsole],
-  );
 
   const openConversationFromPalette = useCallback(
     (conversationId: string) => {
@@ -185,7 +165,6 @@ export default function App() {
   // Resource connector composition
   const dlcConnectors = useDlcStore((s) => s.contributions.connectors);
   const connectors = productResourceConnectors(toast, dlcConnectors);
-  const dataDlcConnector = dlcConnectors.find((connector) => connector.id === DATA_CONNECTOR_ID);
 
   // Layout UI states
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -210,19 +189,6 @@ export default function App() {
         if (activeConversationId) openConversationCenter(activeConversationId);
         else showSmartQueryHome();
       }
-      if (event.key === "2") {
-        event.preventDefault();
-        openDockConsoleForActiveDatasource();
-      }
-      if (event.key === "3") {
-        event.preventDefault();
-        const tableTab = dockTabs.find(
-          (tab) =>
-            tab.viewType === "dbfox.data.table"
-            && (!activeDatasourceId || (tab.target?.type === "resource" && tab.target.id === activeDatasourceId)),
-        );
-        if (tableTab) setDockActiveTab(tableTab.viewKey);
-      }
       if (event.key === "4" && activeConversationId) {
         event.preventDefault();
         openDockArtifacts(activeConversationId);
@@ -236,13 +202,10 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [
     activeConversationId,
-    activeDatasourceId,
     dock.open,
     dockTabs,
     openConversationCenter,
     openDockArtifacts,
-    openDockConsoleForActiveDatasource,
-    setDockActiveTab,
     setDockOpen,
     showSmartQueryHome,
   ]);
@@ -306,7 +269,6 @@ export default function App() {
                     </section>
                     <Suspense fallback={<WorkspaceDockFallback />}>
                       <WorkspaceDock
-                        activeDatasourceId={activeDatasourceId}
                         activeConversationId={activeConversationId}
                         showToast={toast}
                       />
@@ -317,8 +279,6 @@ export default function App() {
             />
           </Suspense>
 
-          <ResourceConnectorDialog />
-
           <Suspense fallback={null}>
             <ProjectCreateDialog />
           </Suspense>
@@ -326,36 +286,9 @@ export default function App() {
           {showCommandPalette && (
             <Suspense fallback={null}>
               <AppCommandPalette
-                tables={tables}
-                openSqlConsole={openDockConsoleForActiveDatasource}
                 showSmartQueryHome={showSmartQueryHome}
                 openConversation={openConversationFromPalette}
                 openSettings={openSettings}
-                connectionManagementAvailable={!dataDlcConnector}
-                openConnectionDialog={(mode) => {
-                  if (dataDlcConnector) {
-                    if (mode === "create" && activeProjectId) {
-                      dataDlcConnector.onAdd?.({ projectId: activeProjectId });
-                    }
-                    return;
-                  }
-                  const dialog = useConnectionDialogStore.getState();
-                  if (mode === "detail") dialog.openDetail();
-                  else dialog.openCreate();
-                }}
-                openTable={(tableName) => {
-                  const openDockTable = useTableWorkspaceStore.getState().openTable;
-                  openDockTable(
-                    tableName,
-                    undefined,
-                    activeDatasource ? { id: activeDatasource.id, dbType: activeDatasource.db_type ?? null } : undefined,
-                  );
-                }}
-                activeDatasource={
-                  activeDatasource
-                    ? { id: activeDatasource.id, dbType: activeDatasource.db_type ?? null }
-                    : undefined
-                }
                 onClose={() => setShowCommandPalette(false)}
               />
             </Suspense>

@@ -17,7 +17,9 @@ import pytest
 from pydantic import ValidationError
 
 from engine.agent.resource_refs import RequestedResourceRef
-from engine.models import DataSource, Project
+from engine.agent.resource_refs import ProjectResourceDescriptor
+from engine.dlc import BuiltinContributionSet, ContributionCompiler
+from engine.models import Project
 from engine.runtime_composition import (
     authorize_project_resources,
     discover_project_resources,
@@ -43,22 +45,12 @@ class DummyOutput(ToolOutputModel):
     pass
 
 
-def _create_ds(
-    id: str,
-    project_id: str,
-    name: str = "Test DB",
-    generation: int = 1,
-) -> DataSource:
-    return DataSource(
-        id=id,
-        project_id=project_id,
-        name=name,
-        db_type="sqlite",
-        host="localhost",
-        port=0,
-        database_name=":memory:",
-        username="",
-        connection_generation=generation,
+def _snapshot_with_resources(tmp_path, resources_by_project):
+    def provider(_db, project_id):
+        return tuple(resources_by_project.get(project_id, ()))
+
+    return ContributionCompiler(tmp_path / "dlcs").compile(
+        built_ins=BuiltinContributionSet(resource_providers=(provider,)),
     )
 
 
@@ -86,16 +78,25 @@ def test_project_resource_discovery(db_session, tmp_path) -> None:
             name="Discovery Project",
         )
     )
-    db_session.add(_create_ds("ds-active-1", project_id, name="Main Postgres", generation=5))
     db_session.commit()
+    snapshot = _snapshot_with_resources(tmp_path, {
+        project_id: (
+            ProjectResourceDescriptor(
+                kind="dbfox.data.database",
+                id="db-active-1",
+                name="Main Postgres",
+                version="5:2",
+            ),
+        ),
+    })
 
-    descriptors = discover_project_resources(db_session, project_id)
+    descriptors = discover_project_resources(db_session, project_id, snapshot=snapshot)
     kinds = {(d.kind, d.id): d for d in descriptors}
 
     # Active datasource discovered
-    assert ("dbfox.data.database", "ds-active-1") in kinds
-    assert kinds[("dbfox.data.database", "ds-active-1")].version == 5
-    assert kinds[("dbfox.data.database", "ds-active-1")].name == "Main Postgres"
+    assert ("dbfox.data.database", "db-active-1") in kinds
+    assert kinds[("dbfox.data.database", "db-active-1")].version == "5:2"
+    assert kinds[("dbfox.data.database", "db-active-1")].name == "Main Postgres"
 
     # A legacy Project column must not silently become Core-owned authority.
     assert ("workspace", project_id) not in kinds
@@ -110,52 +111,85 @@ def test_authorize_project_resources_attaches_canonical_versions(db_session, tmp
             name="Auth Project",
         )
     )
-    db_session.add(_create_ds("ds-auth-1", project_id, name="Analytics DB", generation=3))
     db_session.commit()
+    snapshot = _snapshot_with_resources(tmp_path, {
+        project_id: (
+            ProjectResourceDescriptor(
+                kind="dbfox.data.database",
+                id="db-auth-1",
+                name="Analytics DB",
+                version="3:7",
+            ),
+        ),
+    })
 
-    requested = [RequestedResourceRef(kind="dbfox.data.database", id="ds-auth-1")]
+    requested = [RequestedResourceRef(kind="dbfox.data.database", id="db-auth-1")]
 
-    authorized = authorize_project_resources(db_session, project_id, requested)
+    authorized = authorize_project_resources(
+        db_session, project_id, requested, snapshot=snapshot,
+    )
     assert len(authorized) == 1
 
     db_ref = next(r for r in authorized if r.kind == "dbfox.data.database")
-    assert db_ref.id == "ds-auth-1"
-    assert db_ref.version == 3
+    assert db_ref.id == "db-auth-1"
+    assert db_ref.version == "3:7"
 
     with pytest.raises(ValueError, match="is not available in project"):
         authorize_project_resources(
             db_session,
             project_id,
             [RequestedResourceRef(kind="workspace", id=project_id)],
+            snapshot=snapshot,
         )
 
 
-def test_authorize_project_resources_rejects_foreign_resource(db_session) -> None:
+def test_authorize_project_resources_rejects_foreign_resource(db_session, tmp_path) -> None:
     """Prove that requesting a resource not belonging to the project fails closed."""
     project_id = "proj-auth-1"
     other_project_id = "proj-auth-2"
     db_session.add(Project(id=project_id, name="Project 1"))
     db_session.add(Project(id=other_project_id, name="Project 2"))
-    db_session.add(_create_ds("ds-foreign", other_project_id, name="Foreign DB", generation=1))
     db_session.commit()
+    snapshot = _snapshot_with_resources(tmp_path, {
+        other_project_id: (
+            ProjectResourceDescriptor(
+                kind="dbfox.data.database",
+                id="db-foreign",
+                name="Foreign DB",
+                version="1:1",
+            ),
+        ),
+    })
 
-    requested = [RequestedResourceRef(kind="dbfox.data.database", id="ds-foreign")]
+    requested = [RequestedResourceRef(kind="dbfox.data.database", id="db-foreign")]
 
     with pytest.raises(ValueError, match="is not available in project"):
-        authorize_project_resources(db_session, project_id, requested)
+        authorize_project_resources(
+            db_session, project_id, requested, snapshot=snapshot,
+        )
 
 
-def test_authorize_project_resources_without_request_grants_nothing(db_session) -> None:
+def test_authorize_project_resources_without_request_grants_nothing(db_session, tmp_path) -> None:
     """Project membership must never become implicit Run authority."""
     project_id = "proj-legacy"
     db_session.add(Project(id=project_id, name="Legacy Project"))
-    db_session.add(_create_ds("ds-legacy", project_id, name="Legacy DB", generation=7))
     db_session.commit()
+    snapshot = _snapshot_with_resources(tmp_path, {
+        project_id: (
+            ProjectResourceDescriptor(
+                kind="dbfox.data.database",
+                id="db-member",
+                name="Member DB",
+                version="7:1",
+            ),
+        ),
+    })
 
     refs = authorize_project_resources(
         db_session,
         project_id=project_id,
         requested=None,
+        snapshot=snapshot,
     )
     assert refs == ()
 

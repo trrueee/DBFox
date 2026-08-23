@@ -25,7 +25,7 @@ from engine.tools.runtime import (
     ToolRegistry,
     ToolRunContext,
 )
-from engine.tools.runtime.attempt import ResourceScopeRef
+from engine.tools.runtime.attempt import CompositeResourceResolver, ResourceScopeRef
 from engine.tools.runtime.resource_context import (
     build_tool_scope_context,
 )
@@ -276,10 +276,16 @@ def test_scope_context_exact_subset_resolution(db_session) -> None:
     ws_tool = registry.require("file_read")
     free_tool = registry.require("remote_job_submit")
 
-    db_ref = ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version=1)
+    db_ref = ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version="1:1")
     ws_ref = ResourceScopeRef(kind="workspace", id="p-1", version="hash123")
 
     db = db_session
+    resolver = (
+        CompositeResourceResolver()
+        .register("dbfox.data.database", lambda _ref: db)
+        .register("workspace", lambda _ref: object())
+        .freeze()
+    )
     if True:
         # 1. DB-only request
         req_db = ToolRequest(
@@ -290,17 +296,17 @@ def test_scope_context_exact_subset_resolution(db_session) -> None:
             execution_mode="agent_autonomous_read",
             frozen_resource_refs=(db_ref,),
         )
-        scopes, resources = build_tool_scope_context(db, req_db, db_tool)
+        scopes, resources = build_tool_scope_context(db, req_db, db_tool, resolver)
         assert scopes == (db_ref,)
         assert db_ref.canonical() in resources
         assert all(key[0] != "workspace" for key in resources)
 
         # Trying to execute workspace tool on DB-only request fails
         with pytest.raises(ToolInputError, match="没有已授权的本地工作目录"):
-            build_tool_scope_context(db, req_db, ws_tool)
+            build_tool_scope_context(db, req_db, ws_tool, resolver)
 
         # Executing resource-free tool on DB-only request succeeds with empty subset
-        scopes_free, resources_free = build_tool_scope_context(db, req_db, free_tool)
+        scopes_free, resources_free = build_tool_scope_context(db, req_db, free_tool, resolver)
         assert scopes_free == ()
         assert resources_free == {}
 
@@ -315,7 +321,7 @@ def test_scope_context_exact_subset_resolution(db_session) -> None:
         )
         # Trying to execute database tool on WS-only request fails
         with pytest.raises(ToolInputError, match="没有授权的数据库"):
-            build_tool_scope_context(db, req_ws, db_tool)
+            build_tool_scope_context(db, req_ws, db_tool, resolver)
 
         # 3. Explicit zero-resource request
         req_zero = ToolRequest(
@@ -327,11 +333,11 @@ def test_scope_context_exact_subset_resolution(db_session) -> None:
             frozen_resource_refs=(),
         )
         with pytest.raises(ToolInputError, match="没有授权的数据库"):
-            build_tool_scope_context(db, req_zero, db_tool)
+            build_tool_scope_context(db, req_zero, db_tool, resolver)
         with pytest.raises(ToolInputError, match="没有已授权的本地工作目录"):
-            build_tool_scope_context(db, req_zero, ws_tool)
+            build_tool_scope_context(db, req_zero, ws_tool, resolver)
 
-        scopes_zero_free, res_zero_free = build_tool_scope_context(db, req_zero, free_tool)
+        scopes_zero_free, res_zero_free = build_tool_scope_context(db, req_zero, free_tool, resolver)
         assert scopes_zero_free == ()
         assert res_zero_free == {}
 

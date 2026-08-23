@@ -78,19 +78,20 @@ def collect_release_contracts() -> dict[str, Any]:
                 {
                     "session_id": "release-contract",
                     "run_id": "release-contract",
-                    "datasource_id": "release-contract",
-                    "datasource_generation": 1,
                     "environment_profile": {"env": "test"},
-                    "allowed_tool_groups": ["catalog"],
+                    "allowed_tool_groups": ["control"],
                 },
-                "schema_list",
-                {},
+                "request_clarification",
+                {
+                    "question": "Select a target",
+                    "reason": "A target is required.",
+                },
             )
     finally:
         engine.dispose()
     return {
         "schema_version": 1,
-        "schema_list_empty_arguments": {
+        "request_clarification_defaults": {
             "status": decision.status,
             "safe_args": decision.safe_args,
         },

@@ -327,8 +327,6 @@ def _make_datasource(
         db_type="sqlite",
         status="active",
     )
-    db_session.add(ds)
-    db_session.commit()
     return ds
 
 

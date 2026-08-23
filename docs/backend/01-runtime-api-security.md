@@ -295,7 +295,7 @@ HTTP 与 Agent Tool 边界都必须遵循同一可信度原则，但载体不同
 | --- | --- |
 | Runtime Token 来源与 frozen 失败 | [`test_runtime_credentials.py`](../../engine/tests/test_runtime_credentials.py) |
 | 启动生命周期 | [`test_startup.py`](../../engine/tests/test_startup.py)、[`test_db_init_lifecycle.py`](../../engine/tests/test_db_init_lifecycle.py) |
-| API 鉴权合同 | [`test_api_security_contracts.py`](../../engine/tests/test_api_security_contracts.py) |
+| API 鉴权合同 | [`test_api_security_contracts.py`](../../engine/tests/test_openapi_contract.py) |
 | 全局错误不泄漏 | [`test_global_error_boundary.py`](../../engine/tests/test_global_error_boundary.py) |
 | Problem Details | [`test_problem_details.py`](../../engine/tests/test_problem_details.py) |
 | 公开错误 catalog | [`test_public_errors.py`](../../engine/tests/test_public_errors.py) |

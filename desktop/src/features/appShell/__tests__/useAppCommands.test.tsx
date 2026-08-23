@@ -7,14 +7,10 @@ describe("useAppCommands", () => {
     const openSettings = vi.fn();
     const { result } = renderHook(() =>
       useAppCommands({
-        tables: [],
         conversations: [],
-        openSqlConsole: vi.fn(),
         showSmartQueryHome: vi.fn(),
         openConversation: vi.fn(),
         openSettings,
-        openConnectionDialog: vi.fn(),
-        openTable: vi.fn(),
       }),
     );
 
@@ -28,14 +24,10 @@ describe("useAppCommands", () => {
     const openSettings = vi.fn();
     const { result } = renderHook(() =>
       useAppCommands({
-        tables: [],
         conversations: [],
-        openSqlConsole: vi.fn(),
         showSmartQueryHome: vi.fn(),
         openConversation: vi.fn(),
         openSettings,
-        openConnectionDialog: vi.fn(),
-        openTable: vi.fn(),
       }),
     );
 
@@ -51,14 +43,10 @@ describe("useAppCommands", () => {
     const openSettings = vi.fn();
     const { result } = renderHook(() =>
       useAppCommands({
-        tables: [],
         conversations: [],
-        openSqlConsole: vi.fn(),
         showSmartQueryHome: vi.fn(),
         openConversation: vi.fn(),
         openSettings,
-        openConnectionDialog: vi.fn(),
-        openTable: vi.fn(),
       }),
     );
 
@@ -66,24 +54,18 @@ describe("useAppCommands", () => {
     expect(openSettings).not.toHaveBeenCalled();
   });
 
-  it("omits the legacy connection manager when Data DLC owns the connector", () => {
-    const openConnectionDialog = vi.fn();
+  it("does not expose Data-specific commands from Core composition", () => {
     const { result } = renderHook(() =>
       useAppCommands({
-        tables: [],
         conversations: [],
-        openSqlConsole: vi.fn(),
         showSmartQueryHome: vi.fn(),
         openConversation: vi.fn(),
         openSettings: vi.fn(),
-        openConnectionDialog,
-        connectionManagementAvailable: false,
-        openTable: vi.fn(),
       }),
     );
 
     expect(result.current.commandItems.find((item) => item.id === "connection-manager")).toBeUndefined();
-    result.current.commandItems.find((item) => item.id === "create-datasource")?.action();
-    expect(openConnectionDialog).toHaveBeenCalledWith("create");
+    expect(result.current.commandItems.find((item) => item.id === "create-datasource")).toBeUndefined();
+    expect(result.current.commandItems.find((item) => item.id === "new-sql")).toBeUndefined();
   });
 });

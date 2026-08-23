@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Final, Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,18 +28,8 @@ from engine.agent.artifact_view import (
 )
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.runtime_composition import get_active_runtime_snapshot
-from engine.models import AgentArtifactRecord, DataSource
+from engine.models import AgentArtifactRecord
 from engine.security.audit import SecurityAuditService
-from engine.sql.execution.streaming_executor import export_max_rows_from_env
-from engine.sql.result_view.models import (
-    ResultFilter as ServiceResultFilter,
-    ResultSort as ServiceResultSort,
-    ResultViewError,
-    TableExportQuery as ServiceTableExportQuery,
-    TablePageQuery as ServiceTablePageQuery,
-    TableSourceRef,
-)
-from engine.sql.result_view.service import ResultViewService
 
 
 logger = logging.getLogger("dbfox.api.agent.results")
@@ -51,42 +41,17 @@ class ResultPageRequest(BaseModel):
 
     page: int = Field(ge=1)
     pageSize: int = Field(ge=1, le=500)
-    sort: list[ServiceResultSort] | None = Field(default=None, max_length=16)
-    filters: list[ServiceResultFilter] | None = Field(default=None, max_length=16)
+    sort: list[ArtifactViewSort] | None = Field(default=None, max_length=16)
+    filters: list[ArtifactViewFilter] | None = Field(default=None, max_length=16)
     search: str | None = Field(default=None, max_length=512)
     countMode: Literal["none", "exact", "estimate"] = "none"
-
-
-class TableResultPageRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    datasourceId: str = Field(min_length=1, max_length=256)
-    tableId: str | None = Field(default=None, min_length=1, max_length=256)
-    tableName: str = Field(min_length=1, max_length=256)
-    page: int = Field(ge=1)
-    pageSize: int = Field(ge=1, le=500)
-    sort: list[ServiceResultSort] | None = Field(default=None, max_length=16)
-    filters: list[ServiceResultFilter] | None = Field(default=None, max_length=16)
-    search: str | None = Field(default=None, max_length=512)
-    countMode: Literal["none", "exact", "estimate"] = "none"
-
-
-class TableResultExportRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    datasourceId: str = Field(min_length=1, max_length=256)
-    tableId: str | None = Field(default=None, min_length=1, max_length=256)
-    tableName: str = Field(min_length=1, max_length=256)
-    sort: list[ServiceResultSort] | None = Field(default=None, max_length=16)
-    filters: list[ServiceResultFilter] | None = Field(default=None, max_length=16)
-    search: str | None = Field(default=None, max_length=512)
 
 
 class ResultExportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    sort: list[ServiceResultSort] | None = Field(default=None, max_length=16)
-    filters: list[ServiceResultFilter] | None = Field(default=None, max_length=16)
+    sort: list[ArtifactViewSort] | None = Field(default=None, max_length=16)
+    filters: list[ArtifactViewFilter] | None = Field(default=None, max_length=16)
     search: str | None = Field(default=None, max_length=512)
 
 
@@ -125,66 +90,23 @@ class ChartDataResponse(BaseModel):
     queryFingerprint: str
 
 
-def _table_source_ref(
-    request: TableResultPageRequest | TableResultExportRequest,
-) -> TableSourceRef:
-    return TableSourceRef(
-        datasource_id=request.datasourceId,
-        table_id=request.tableId,
-        table_name=request.tableName,
-    )
-
-
 def _result_filters(
-    filters: list[ServiceResultFilter] | None,
-) -> list[ServiceResultFilter]:
+    filters: list[ArtifactViewFilter] | None,
+) -> list[ArtifactViewFilter]:
     return list(filters or [])
 
 
 def _result_sorts(
-    sorts: list[ServiceResultSort] | None,
-) -> list[ServiceResultSort]:
+    sorts: list[ArtifactViewSort] | None,
+) -> list[ArtifactViewSort]:
     return list(sorts or [])
-
-
-_RESULT_VIEW_ERROR_CODES: Final[dict[str, FixedErrorCode]] = {
-    code.value: code
-    for code in (
-        FixedErrorCode.SOURCE_ARTIFACT_NOT_FOUND,
-        FixedErrorCode.SOURCE_ARTIFACT_UNSUPPORTED,
-        FixedErrorCode.SOURCE_SQL_MISSING,
-        FixedErrorCode.SOURCE_SQL_MISMATCH,
-        FixedErrorCode.SOURCE_SQL_VALIDATION_FAILED,
-        FixedErrorCode.SOURCE_DATASOURCE_CHANGED,
-        FixedErrorCode.TABLE_SOURCE_NOT_FOUND,
-        FixedErrorCode.TABLE_COLUMNS_NOT_FOUND,
-        FixedErrorCode.DERIVED_SQL_VALIDATION_FAILED,
-        FixedErrorCode.DERIVED_SQL_BUILD_FAILED,
-        FixedErrorCode.COUNT_SQL_BUILD_FAILED,
-        FixedErrorCode.FILTER_COLUMN_NOT_ALLOWED,
-        FixedErrorCode.SORT_COLUMN_NOT_ALLOWED,
-        FixedErrorCode.FILTER_OPERATOR_NOT_ALLOWED,
-    )
-}
 
 
 def _http_detail(_error: DBFoxError) -> dict[str, str]:
     return fixed_error_detail(FixedErrorCode.AGENT_REQUEST_ERROR)
 
 
-def _result_view_http_error(
-    error: ResultViewError,
-    *,
-    code: FixedErrorCode,
-) -> HTTPException:
-    return HTTPException(
-        status_code=error.status_code,
-        detail=fixed_error_detail(_RESULT_VIEW_ERROR_CODES.get(error.code, code)),
-    )
-
-
 def _page_response(result: Any) -> ResultPageResponse:
-    durable = getattr(result, "consistency", None) == "durable_snapshot"
     return ResultPageResponse(
         columns=result.columns,
         rows=result.rows,
@@ -195,23 +117,13 @@ def _page_response(result: Any) -> ResultPageResponse:
         latencyMs=result.latency_ms,
         consistency=result.consistency,
         originalExecutedAt=result.original_executed_at,
-        viewExecutedAt=(result.read_at if durable else result.view_executed_at),
-        viewExecutionId=(result.read_id if durable else result.view_execution_id),
-        datasourceGeneration=(
-            result.resource_version if durable else result.datasource_generation
-        ),
+        viewExecutedAt=result.read_at,
+        viewExecutionId=result.read_id,
+        datasourceGeneration=result.resource_version,
         queryFingerprint=result.query_fingerprint,
         warnings=result.warnings,
         notices=result.notices,
     )
-
-
-def _require_datasource(db: Session, datasource_id: str) -> None:
-    if db.get(DataSource, datasource_id) is None:
-        raise HTTPException(
-            status_code=404,
-            detail=fixed_error_detail(FixedErrorCode.DATASOURCE_NOT_FOUND),
-        )
 
 
 @router.post("/artifacts/{artifact_id}/page", response_model=ResultPageResponse)
@@ -333,102 +245,6 @@ def api_agent_chart_data(
         viewExecutionId=result.read_id,
         datasourceGeneration=result.resource_version,
         queryFingerprint=result.query_fingerprint,
-    )
-
-
-@router.post("/agent/results/table/page", response_model=ResultPageResponse)
-def api_agent_table_result_page(
-    request: TableResultPageRequest,
-    db: Session = Depends(get_db),
-) -> ResultPageResponse:
-    _require_datasource(db, request.datasourceId)
-    try:
-        result = ResultViewService(db).page_table(
-            ServiceTablePageQuery(
-                source=_table_source_ref(request),
-                filters=_result_filters(request.filters),
-                sort=_result_sorts(request.sort),
-                search=request.search,
-                page=request.page,
-                page_size=request.pageSize,
-                count_mode=request.countMode,
-            )
-        )
-    except ResultViewError as error:
-        raise _result_view_http_error(
-            error,
-            code=FixedErrorCode.TABLE_RESULT_PAGE_ERROR,
-        ) from None
-    except DBFoxError as error:
-        raise HTTPException(status_code=400, detail=_http_detail(error))
-    except Exception as error:
-        log_unexpected_exception(
-            logger,
-            operation=SafeLogOperation.AGENT_TABLE_RESULT_PAGE,
-            exc=error,
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=fixed_error_detail(FixedErrorCode.TABLE_RESULT_PAGE_ERROR),
-        ) from None
-    return _page_response(result)
-
-
-@router.post(
-    "/agent/results/table/export",
-    responses={
-        200: {
-            "content": {"text/csv": {"schema": {"type": "string", "format": "binary"}}},
-            "description": "CSV export",
-        }
-    },
-)
-def api_agent_table_result_export(
-    request: TableResultExportRequest,
-    db: Session = Depends(get_db),
-) -> StreamingResponse:
-    _require_datasource(db, request.datasourceId)
-    try:
-        stream, _columns = ResultViewService(db).export_table_csv_stream(
-            ServiceTableExportQuery(
-                source=_table_source_ref(request),
-                filters=_result_filters(request.filters),
-                sort=_result_sorts(request.sort),
-                search=request.search,
-            )
-        )
-    except ResultViewError as error:
-        raise _result_view_http_error(
-            error,
-            code=FixedErrorCode.TABLE_RESULT_EXPORT_ERROR,
-        ) from None
-    except DBFoxError as error:
-        raise HTTPException(status_code=400, detail=_http_detail(error))
-    except Exception as error:
-        log_unexpected_exception(
-            logger,
-            operation=SafeLogOperation.AGENT_TABLE_RESULT_EXPORT,
-            exc=error,
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=fixed_error_detail(FixedErrorCode.TABLE_RESULT_EXPORT_ERROR),
-        ) from None
-    SecurityAuditService(db).record(
-        action="table.result.export",
-        outcome="requested",
-        resource_type="schema_table",
-        resource_id=request.tableId,
-        details={"format": "csv", "datasource_id": request.datasourceId},
-    )
-    db.commit()
-    return StreamingResponse(
-        stream,
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": 'attachment; filename="dbfox-table.csv"',
-            "X-DBFox-Export-Max-Rows": str(export_max_rows_from_env()),
-        },
     )
 
 

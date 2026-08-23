@@ -46,27 +46,16 @@ class _EchoTool(BaseTool[_EchoInput, _EchoOutput]):
 
 
 FROZEN_MATERIALIZATION_HASH = (
-    "277a162d2c9e1b1bcaddc19e8194b5a39334689782b7cecb7feb9b3bd75c87e7"
+    "bd34c525cfca439f04997c46203e14f3225cf848ede7301da5e7a04bdb17d789"
 )
 
 FROZEN_BUILTIN_NAMES = (
-    "catalog_overview",
-    "catalog_refresh",
-    "chart_create",
     "conversation_read",
     "conversation_search",
-    "data_preview",
     "remote_job_cancel",
     "remote_job_status",
     "remote_job_submit",
     "request_clarification",
-    "result_inspect",
-    "result_profile",
-    "schema_inspect",
-    "schema_list",
-    "schema_search",
-    "sql_execute_readonly",
-    "sql_validate",
     "update_plan",
 )
 
@@ -75,17 +64,6 @@ FROZEN_OWNERS = {
     "update_plan": "dbfox.core",
     "conversation_read": "dbfox.conversation",
     "conversation_search": "dbfox.conversation",
-    "catalog_overview": "dbfox.data",
-    "catalog_refresh": "dbfox.data",
-    "chart_create": "dbfox.data",
-    "data_preview": "dbfox.data",
-    "result_inspect": "dbfox.data",
-    "result_profile": "dbfox.data",
-    "schema_inspect": "dbfox.data",
-    "schema_list": "dbfox.data",
-    "schema_search": "dbfox.data",
-    "sql_execute_readonly": "dbfox.data",
-    "sql_validate": "dbfox.data",
     "remote_job_cancel": "dbfox.remote_job",
     "remote_job_status": "dbfox.remote_job",
     "remote_job_submit": "dbfox.remote_job",

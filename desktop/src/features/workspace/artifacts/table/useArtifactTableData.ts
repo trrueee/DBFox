@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { agentApi } from "../../../../lib/api/agent";
-import type { ResultFilter } from "../../../../lib/api/types";
+import type { ArtifactViewFilter } from "../../../../lib/api/types";
 import type { ResultViewArtifact } from "../../../../types/agentArtifact";
 import type {
   SqlBackedDataViewSource,
@@ -26,8 +26,8 @@ export interface ArtifactTableData {
   setSortColumn: (columnIndex: number) => void;
   setSortState: (columnIndex: number, direction: SortDirection) => void;
   clearSort: () => void;
-  filters: ResultFilter[];
-  setFilters: (value: ResultFilter[]) => void;
+  filters: ArtifactViewFilter[];
+  setFilters: (value: ArtifactViewFilter[]) => void;
   page: number;
   setPage: (updater: number | ((page: number) => number)) => void;
   pageSize: number;

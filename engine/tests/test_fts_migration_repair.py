@@ -28,7 +28,7 @@ def _config(database_url: str) -> Config:
     return config
 
 
-def test_fts_repair_migration_restores_a_schema_that_was_historically_stamped_head(
+def test_fts_repair_history_converges_to_the_current_core_only_fts_contract(
     tmp_path: Path,
 ) -> None:
     metadata_path = tmp_path / "metadata.db"
@@ -58,11 +58,10 @@ def test_fts_repair_migration_restores_a_schema_that_was_historically_stamped_he
                     text("SELECT name FROM sqlite_master WHERE type IN ('table', 'trigger')")
                 )
             }
-            assert {"schema_search_fts", "query_history_fts", "agent_message_fts"}.issubset(objects)
-            assert _TRIGGERS.issubset(objects)
+            assert "agent_message_fts" in objects
+            assert {"schema_search_fts", "query_history_fts"}.isdisjoint(objects)
+            assert _TRIGGERS.isdisjoint(objects)
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == ScriptDirectory.from_config(config).get_current_head()
-            connection.execute(text("SELECT search_text FROM schema_search_fts LIMIT 0"))
-            connection.execute(text("SELECT search_text FROM query_history_fts LIMIT 0"))
             connection.execute(text("SELECT search_text FROM agent_message_fts LIMIT 0"))
     finally:
         engine.dispose()

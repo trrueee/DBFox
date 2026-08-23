@@ -68,7 +68,7 @@ def test_question_persists_user_response_and_resumes_original_run_once(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_question",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="统计收入",
         idempotency_key="question-start",
         llm_credential_id="credential",
@@ -174,7 +174,7 @@ def test_expired_question_terminalizes_the_waiting_run(db_session, test_datasour
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_expired_question",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="统计收入",
         idempotency_key="expired-question",
         llm_credential_id="credential",

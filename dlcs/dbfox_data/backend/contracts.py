@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from dbfox_dlc_api import BaseModel, ConfigDict, Field
+from pydantic import JsonValue
 
 DatabaseProvider = Literal["mysql", "postgresql", "sqlite"]
 Environment = Literal["dev", "test", "staging", "prod"]
@@ -77,6 +78,48 @@ class DatabaseIdInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     database_id: str = Field(min_length=1, max_length=128)
+
+
+class ConsoleExecuteInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    database_id: str = Field(min_length=1, max_length=128)
+    sql: str = Field(min_length=1, max_length=50_000)
+    question: str | None = Field(default=None, max_length=20_000)
+    session_id: str | None = Field(default=None, min_length=1, max_length=128)
+    execution_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class ConsoleExecuteOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: Literal["success", "blocked"]
+    run_id: str
+    session_id: str
+    sql_artifact_id: str
+    safety_artifact_id: str
+    result_artifact_id: str | None = None
+    columns: list[str] = Field(default_factory=list)
+    rows: list[dict[str, JsonValue]] = Field(default_factory=list)
+    row_count: int = Field(default=0, ge=0)
+    returned_rows: int = Field(default=0, ge=0)
+    truncated: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    messages: list[str] = Field(default_factory=list)
+
+
+class TablePreviewOperationOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run_id: str
+    session_id: str
+    result_artifact_id: str
+    table: str
+    columns: list[str]
+    rows: list[dict[str, JsonValue]] = Field(default_factory=list)
+    returned_rows: int = Field(ge=0)
+    truncated: bool
+    warnings: list[str] = Field(default_factory=list)
 
 
 class CreateProfileInput(BaseModel):

@@ -6,32 +6,52 @@ from datetime import UTC, datetime
 import pytest
 
 from engine.agent.events import RuntimeEventType
-from engine.agent.resource_refs import load_resource_refs
+from engine.agent.resource_refs import ProjectResourceDescriptor, load_resource_refs
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.run_item import dump_run_item, function_call_item
 from engine.agent.session import DeliveryMode
 from engine.main import LOCAL_SECURE_TOKEN, app
+from engine.dlc import BuiltinContributionSet, ContributionCompiler
+from engine.runtime_composition import active_runtime_snapshot, set_active_runtime_snapshot
 from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
     AgentRun,
     AgentSession,
     AgentSessionInput,
     AgentToolInvocation,
-    DataSource,
     Project,
 )
 
 
 @pytest.fixture(autouse=True)
-def conversation_datasource(db_session):
+def conversation_resources(db_session, tmp_path):
     db_session.add(Project(id="proj-test", name="Test Project"))
-    db_session.add(DataSource(
-        id="ds-1", name="Conversation datasource", db_type="sqlite",
-        host="", port=0, database_name=":memory:", username="",
-        project_id="proj-test",
-    ))
     db_session.commit()
+    descriptors = (
+        ProjectResourceDescriptor(
+            kind="dbfox.data.database",
+            id="db-1",
+            name="Conversation database",
+            version="1:1",
+        ),
+        ProjectResourceDescriptor(
+            kind="dbfox.data.database",
+            id="db-2",
+            name="Analytics",
+            version="1:1",
+        ),
+    )
+    provider = lambda _db, project_id: descriptors if project_id == "proj-test" else ()
+    previous = active_runtime_snapshot()
+    snapshot = ContributionCompiler(tmp_path / "dlcs").compile(
+        built_ins=BuiltinContributionSet(resource_providers=(provider,)),
+    )
+    set_active_runtime_snapshot(snapshot)
+    try:
+        yield
+    finally:
+        set_active_runtime_snapshot(previous)
 
 
 def _headers() -> dict[str, str]:
@@ -44,14 +64,14 @@ def test_create_patch_list_and_delete_conversation(client, db_session):
         json={
             "project_id": "proj-test",
             "title": "Revenue",
-            "resource_intents": [{"kind": "dbfox.data.database", "id": "ds-1"}],
+            "resource_intents": [{"kind": "dbfox.data.database", "id": "db-1"}],
         },
         headers=_headers(),
     )
     assert created.status_code == 200
     conversation_id = created.json()["session"]["id"]
     assert created.json()["session"]["resource_intents"] == [
-        {"kind": "dbfox.data.database", "id": "ds-1"}
+        {"kind": "dbfox.data.database", "id": "db-1"}
     ]
     stored_session = db_session.get(AgentSession, conversation_id)
     assert stored_session is not None
@@ -79,7 +99,7 @@ def test_snapshot_restores_messages_run_artifact_and_event_cursor(client, db_ses
     ))
     db_session.flush()
     admitted = SessionRepository(db_session).admit(
-        session_id="conversation-1", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version=1),),
+        session_id="conversation-1", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id="db-1", version="1:1"),),
         content="分析订单", idempotency_key="request-0001", llm_credential_id="credential-1",
         api_base="https://api.openai.com/v1", model_name="gpt-4.1-mini",
         request_payload={"content": "分析订单"}, delivery_mode=DeliveryMode.QUEUE,
@@ -171,25 +191,19 @@ def test_conversation_resource_intent_is_durable_and_message_attachments_are_add
     db_session,
     monkeypatch,
 ):
-    db_session.add(DataSource(
-        id="ds-2", name="Analytics", db_type="sqlite",
-        host="", port=0, database_name=":memory:", username="",
-        project_id="proj-test",
-    ))
-    db_session.commit()
     created = client.post(
         "/api/v1/conversations",
         json={
             "project_id": "proj-test",
             "title": "Multi resource",
-            "resource_intents": [{"kind": "dbfox.data.database", "id": "ds-1"}],
+            "resource_intents": [{"kind": "dbfox.data.database", "id": "db-1"}],
         },
         headers=_headers(),
     )
     assert created.status_code == 200
     conversation_id = created.json()["session"]["id"]
     assert created.json()["session"]["resource_intents"] == [
-        {"kind": "dbfox.data.database", "id": "ds-1"}
+        {"kind": "dbfox.data.database", "id": "db-1"}
     ]
 
     class Coordinator:
@@ -205,7 +219,7 @@ def test_conversation_resource_intent_is_durable_and_message_attachments_are_add
             "content": "对比两个数据库",
             "idempotency_key": "resource-intent-additive-1",
             "delivery_mode": "queue",
-            "requested_resources": [{"kind": "dbfox.data.database", "id": "ds-2"}],
+            "requested_resources": [{"kind": "dbfox.data.database", "id": "db-2"}],
             "llm_credential_id": "credential-1",
         },
         headers=_headers(),
@@ -216,8 +230,8 @@ def test_conversation_resource_intent_is_durable_and_message_attachments_are_add
     refs = load_resource_refs(str(stored_input.resource_refs_json))
     assert refs is not None
     assert [ref.canonical() for ref in refs] == [
-        ("dbfox.data.database", "ds-1"),
-        ("dbfox.data.database", "ds-2"),
+        ("dbfox.data.database", "db-1"),
+        ("dbfox.data.database", "db-2"),
     ]
     stored_run = db_session.get(AgentRun, admitted.json()["run_id"])
     assert stored_run is not None
@@ -396,7 +410,7 @@ def test_snapshot_pages_messages_and_exposes_history_cursor(client, db_session):
     for sequence in (1, 2, 3):
         repository.admit(
             session_id="conversation-paged",
-            resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version=1),),
+            resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id="db-1", version="1:1"),),
             content=f"message {sequence}",
             idempotency_key=f"paged-{sequence}",
             llm_credential_id="credential-1",
@@ -437,7 +451,7 @@ def test_delete_active_conversation_soft_deletes_and_requests_cancel(
     db_session.flush()
     admitted = SessionRepository(db_session).admit(
         session_id="conversation-delete-active",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id="db-1", version="1:1"),),
         content="分析订单",
         idempotency_key="delete-active",
         llm_credential_id="credential",

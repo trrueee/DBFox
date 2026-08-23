@@ -1,4 +1,4 @@
-import type { ApiConfig, LlmConfigDraft, SchemaSyncOptions } from "./api/types";
+import type { ApiConfig, LlmConfigDraft } from "./api/types";
 import { validateApiConfig } from "./api/types";
 import { DEFAULT_LLM_API_BASE } from "./llmPresets";
 
@@ -97,21 +97,6 @@ export function buildConversationLlmPayload(
   const llm = normalizeProductLlmConfig(config);
   if (!llm.hasCredential) return {};
   return {
-    llm_credential_id: llm.credentialId,
-    api_base: llm.apiBase,
-    model_name: llm.modelName || undefined,
-  };
-}
-
-export function buildSchemaSyncOptions(
-  aiEnrich: boolean,
-  config: Partial<ApiConfig> | null | undefined = getStoredApiConfig(),
-): SchemaSyncOptions | undefined {
-  if (!aiEnrich) return undefined;
-  const llm = normalizeProductLlmConfig(config);
-  if (!llm.hasCredential) return { ai_enrich: true };
-  return {
-    ai_enrich: true,
     llm_credential_id: llm.credentialId,
     api_base: llm.apiBase,
     model_name: llm.modelName || undefined,

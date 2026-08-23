@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import event
-
 from engine.api.projects import api_create_project, api_list_project_resources, api_list_projects
-from engine.models import DEFAULT_PROJECT_ID, DataSource, Project
+from engine.agent.resource_refs import ProjectResourceDescriptor
+from engine.dlc import BuiltinContributionSet, ContributionCompiler
+from engine.models import DEFAULT_PROJECT_ID, Project
+from engine.runtime_composition import set_active_runtime_snapshot
 from engine.schemas import ProjectCreateRequest
 from engine.projects.service import resolve_project_id
 
@@ -18,21 +19,6 @@ def test_project_id_resolution_fallback_creates_default_project(db_session) -> N
     project = db_session.get(Project, DEFAULT_PROJECT_ID)
     assert project is not None
     assert project.status == "active"
-
-
-def _datasource(project_id: str | None, name: str) -> DataSource:
-    return DataSource(
-        id=str(uuid.uuid4()),
-        project_id=project_id,
-        name=name,
-        db_type="sqlite",
-        host="localhost",
-        port=0,
-        database_name=":memory:",
-        username="",
-        connection_generation=1,
-        status="active",
-    )
 
 
 def test_create_project_persists_only_project_identity_and_metadata(db_session) -> None:
@@ -53,60 +39,45 @@ def test_create_project_persists_only_project_identity_and_metadata(db_session) 
     assert "workspace_root" not in Project.__table__.columns
 
 
-def test_list_projects_counts_datasources_with_grouped_sql(db_session) -> None:
+def test_list_projects_returns_only_active_project_metadata(db_session) -> None:
     project_a = Project(id=str(uuid.uuid4()), name="Project A", status="active")
     project_b = Project(id=str(uuid.uuid4()), name="Project B", status="active")
     inactive = Project(id=str(uuid.uuid4()), name="Inactive", status="archived")
     db_session.add_all([project_a, project_b, inactive])
-    db_session.add_all([
-        _datasource(project_a.id, "a1"),
-        _datasource(project_a.id, "a2"),
-        _datasource(project_b.id, "b1"),
-        _datasource(None, "orphan"),
-        _datasource(inactive.id, "inactive"),
-    ])
     db_session.commit()
 
-    statements: list[str] = []
-
-    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany) -> None:
-        statements.append(" ".join(statement.lower().split()))
-
-    event.listen(db_session.bind, "before_cursor_execute", capture_sql)
-    try:
-        result = api_list_projects(db_session)
-    finally:
-        event.remove(db_session.bind, "before_cursor_execute", capture_sql)
+    result = api_list_projects(db_session)
 
     by_id = {item["id"]: item for item in result}
-    assert by_id[project_a.id]["datasource_count"] == 2
-    assert by_id[project_b.id]["datasource_count"] == 1
+    assert "datasource_count" not in by_id[project_a.id]
+    assert "datasource_count" not in by_id[project_b.id]
     assert inactive.id not in by_id
 
-    datasource_selects = [
-        statement
-        for statement in statements
-        if statement.startswith("select") and " from data_sources" in statement
-    ]
-    assert datasource_selects == [
-        statement
-        for statement in datasource_selects
-        if "count(" in statement and " group by " in statement
-    ]
 
-
-def test_list_project_resources_returns_generic_discovery_descriptors(db_session) -> None:
+def test_list_project_resources_returns_generic_discovery_descriptors(db_session, tmp_path) -> None:
     project = Project(
         id=str(uuid.uuid4()),
         name="Project resources",
         status="active",
     )
-    datasource = _datasource(project.id, "Billing")
-    db_session.add_all([project, datasource])
+    db_session.add(project)
     db_session.commit()
-
-    resources = api_list_project_resources(project.id, db_session)
+    descriptor = ProjectResourceDescriptor(
+        kind="acme.resource",
+        id="resource-1",
+        name="External resource",
+        version="v3",
+    )
+    provider = lambda _db, project_id: (descriptor,) if project_id == project.id else ()
+    snapshot = ContributionCompiler(tmp_path / "dlcs").compile(
+        built_ins=BuiltinContributionSet(resource_providers=(provider,)),
+    )
+    set_active_runtime_snapshot(snapshot)
+    try:
+        resources = api_list_project_resources(project.id, db_session)
+    finally:
+        set_active_runtime_snapshot(None)
 
     assert [(resource.kind, resource.id, resource.name) for resource in resources] == [
-        ("dbfox.data.database", datasource.id, "Billing"),
+        ("acme.resource", "resource-1", "External resource"),
     ]
