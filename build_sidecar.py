@@ -126,6 +126,7 @@ HIDDEN_IMPORTS = [
     # SQLGlot resolves dialect modules with importlib at runtime, which static
     # PyInstaller analysis cannot discover.  Bundle only DBFox's supported
     # dialects instead of collecting SQLGlot's entire dialect package.
+    "sqlglot.dialects.duckdb",
     "sqlglot.dialects.mysql",
     "sqlglot.dialects.postgres",
     "sqlglot.dialects.sqlite",
@@ -409,7 +410,10 @@ def prepare_sidecar_engine_tree(
         json.dumps(provenance, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    shutil.copy2(system_dlc_manifest, staged_engine / "_system_dlc_bundle.json")
+    shutil.copy2(
+        system_dlc_manifest,
+        staged_engine / "dlc" / "_system_dlc_bundle.json",
+    )
     return staged_engine
 
 

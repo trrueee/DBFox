@@ -435,7 +435,7 @@ def test_data_console_operation_uses_durable_action_run_and_owned_tool_chain(
     database = created.databases[0]
     contribution = snapshot.get_operation("dbfox.data", "console.execute")
     assert contribution is not None
-    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    factory = sessionmaker(bind=db_session.get_bind())
     action_runs = DlcActionRunsHostImpl(
         dlc_id="dbfox.data",
         project_id="project-console",

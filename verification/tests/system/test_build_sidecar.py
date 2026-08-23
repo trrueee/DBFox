@@ -412,6 +412,7 @@ def test_dynamic_runtime_dependencies_are_declared_for_the_frozen_sidecar() -> N
 
 def test_supported_sqlglot_dialects_are_declared_as_frozen_hidden_imports() -> None:
     assert {
+        "sqlglot.dialects.duckdb",
         "sqlglot.dialects.mysql",
         "sqlglot.dialects.postgres",
         "sqlglot.dialects.sqlite",
@@ -613,7 +614,7 @@ def test_staged_engine_contains_build_provenance(tmp_path) -> None:
     )
 
     assert written == provenance
-    assert (staged / "_system_dlc_bundle.json").read_text(encoding="utf-8") == (
+    assert (staged / "dlc" / "_system_dlc_bundle.json").read_text(encoding="utf-8") == (
         system_manifest.read_text(encoding="utf-8")
     )
 
