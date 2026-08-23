@@ -52,32 +52,6 @@ def _meaningful(value: Any) -> Any:
     return value
 
 
-def _catalog_meaningful(value: Any) -> Any:
-    """Remove search-ranking metadata without weakening other tool evidence."""
-
-    if isinstance(value, dict):
-        return {
-            str(key): _catalog_meaningful(item)
-            for key, item in value.items()
-            if (
-                str(key).replace("_", "").lower()
-                not in {*_VOLATILE_KEYS, "score", "matchedqueries"}
-                and not str(key).replace("_", "").lower().endswith("id")
-                and not str(key).replace("_", "").lower().endswith("ids")
-            )
-        }
-    if isinstance(value, list):
-        return [_catalog_meaningful(item) for item in value]
-    return _meaningful(value)
-
-
-_CATALOG_COLLECTION_BY_TOOL = {
-    "schema_search": "candidates",
-    "schema_list": "tables",
-    "schema_inspect": "inspections",
-}
-
-
 def observation_evidence_signatures(
     *,
     tool_name: str,
@@ -85,63 +59,13 @@ def observation_evidence_signatures(
     facts: dict[str, Any],
     error_code: str,
 ) -> set[str]:
-    """Project observations onto cumulative knowledge, not call history.
-
-    Catalog searches and pages often return overlapping objects.  A new query,
-    score, ordering or subset is not new evidence when the same schema identities
-    were already observed.  Other tools retain the original whole-observation
-    signature because their facts represent one atomic result contract.
-    """
+    """Project one typed observation onto durable, domain-neutral evidence."""
 
     base = {
         "tool": tool_name,
         "status": status,
         "error_code": error_code,
     }
-    if status != "succeeded":
-        return {_canonical({**base, "facts": _meaningful(facts)})}
-
-    if tool_name == "sql_validate":
-        # SQL text, messages and Artifact identity are procedural details. The
-        # only durable state transition for loop progress is whether validation
-        # produced an executable hand-off for sql_execute_readonly. This admits
-        # one repair transition while repeated query rewrites remain stalled.
-        return {
-            _canonical(
-                {
-                    **base,
-                    "evidence_kind": "validation_readiness",
-                    "can_execute": bool(facts.get("can_execute")),
-                }
-            )
-        }
-
-    collection_key = _CATALOG_COLLECTION_BY_TOOL.get(tool_name)
-    if collection_key is not None:
-        raw_items = facts.get(collection_key)
-        if not isinstance(raw_items, list):
-            return {_canonical({**base, "facts": _meaningful(facts)})}
-        if not raw_items:
-            return {
-                _canonical(
-                    {
-                        **base,
-                        "evidence_kind": collection_key,
-                        "empty": True,
-                    }
-                )
-            }
-        return {
-            _canonical(
-                {
-                    **base,
-                    "evidence_kind": collection_key,
-                    "item": _catalog_meaningful(item),
-                }
-            )
-            for item in raw_items
-        }
-
     return {_canonical({**base, "facts": _meaningful(facts)})}
 
 

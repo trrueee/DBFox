@@ -10,7 +10,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from engine.agent.artifact import ArtifactSelectionSuggestion, ArtifactType
+from engine.agent.artifact import ArtifactSelectionSuggestion, ArtifactVisibility
 from engine.agent.evidence import (
     CITATION_PATTERN,
     Evidence,
@@ -63,16 +63,16 @@ class Terminalizer:
             partial = disposition is CompletionDisposition.BOUNDED_PARTIAL
             artifact_repository = ArtifactRepository(db)
             artifacts = artifact_repository.list_for_run(run_id)
-            referenced_result_artifacts = (
-                artifact_repository.referenced_results_for_run(run_id)
+            referenced_artifacts = (
+                artifact_repository.referenced_artifacts_for_run(run_id)
             )
-            current_result_artifacts = [
-                item for item in artifacts if item.type == ArtifactType.RESULT_VIEW.value
+            current_primary_artifacts = [
+                item for item in artifacts if item.visibility is ArtifactVisibility.PRIMARY
             ]
-            result_artifacts = [
+            evidence_artifacts = [
                 item
-                for item in [*artifacts, *referenced_result_artifacts]
-                if item.type == ArtifactType.RESULT_VIEW.value
+                for item in [*artifacts, *referenced_artifacts]
+                if item.visibility is ArtifactVisibility.PRIMARY
             ]
             final_text = (
                 result.answer_text if result.has_completed_answer_candidate else ""
@@ -81,7 +81,7 @@ class Terminalizer:
                 _bounded_partial_summary(
                     db,
                     run_id=run_id,
-                    result_artifact_count=len(result_artifacts),
+                    result_artifact_count=len(evidence_artifacts),
                     limitation_codes=limitation_codes,
                 )
                 if partial
@@ -91,7 +91,7 @@ class Terminalizer:
                 raise ValueError(
                     "Terminal answer contains malformed DBFox citation markup"
                 )
-            result_by_id = {item.id: item for item in result_artifacts}
+            result_by_id = {item.id: item for item in evidence_artifacts}
             references = citation_references(text)
             bound_artifact_ids = [
                 artifact_id
@@ -138,10 +138,7 @@ class Terminalizer:
                         claim_id=f"claim:{run_id}:{citation_index}:{item.id}",
                         artifact_id=item.id,
                         label=claim,
-                        query_fingerprint=str(
-                            item.payload.get("queryFingerprint") or ""
-                        ),
-                        observed_at=_observed_at(item.payload.get("executedAt")),
+                        observed_at=datetime.now(UTC),
                         locator=EvidenceLocator(
                             kind="artifact",
                             value=locator_value,
@@ -160,10 +157,10 @@ class Terminalizer:
             )
             suggestion = (
                 ArtifactSelectionSuggestion(
-                    artifact_id=current_result_artifacts[-1].id,
-                    reason="本次分析的主要查询结果",
+                    artifact_id=current_primary_artifacts[-1].id,
+                    reason="本次运行的主要交付物",
                 )
-                if current_result_artifacts
+                if current_primary_artifacts
                 else None
             )
             response = self.responses.compose(
@@ -173,7 +170,7 @@ class Terminalizer:
                 limitation_codes=limitation_codes,
                 answer=answer,
                 artifacts=artifacts,
-                evidence_artifacts=referenced_result_artifacts,
+                evidence_artifacts=referenced_artifacts,
                 selection_suggestion=suggestion,
             )
             completed = self.complete_in_session(
@@ -194,7 +191,6 @@ class Terminalizer:
                         {
                             "evidence_id": item.id,
                             "artifact_id": item.artifact_id,
-                            "query_fingerprint": item.query_fingerprint,
                             "observed_at": item.observed_at.isoformat(),
                             "run_id": run_id,
                         }
@@ -402,13 +398,3 @@ def _limitation_caveat(code: CompletionLimitationCode) -> str:
         CompletionLimitationCode.PROVIDER_LIMIT: "模型服务未能继续，以下为当前可验证结果。",
         CompletionLimitationCode.NO_PROGRESS: "已停止重复尝试，以下为当前可验证结果。",
     }[code]
-
-
-def _observed_at(value: Any) -> datetime:
-    if isinstance(value, str) and value.strip():
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
-        except ValueError:
-            pass
-    return datetime.now(UTC)

@@ -13,6 +13,7 @@ from engine.tools.runtime import (
     ToolPresentation,
     ToolRegistry,
 )
+from verification.support.agent_tools import verification_registry
 
 
 class PolicyInput(ToolInputModel):
@@ -87,9 +88,6 @@ def _state(**overrides):
     return {
         "session_id": "session-1",
         "run_id": "run-1",
-        "datasource_id": "datasource-1",
-        "datasource_generation": 1,
-        "environment_profile": {"env": "dev"},
         "allowed_tool_groups": ["test"],
         **overrides,
     }
@@ -155,10 +153,10 @@ def test_update_plan_empty_call_reports_missing_required_fields(db_session):
     assert "steps (missing)" in decision.reason
 
 
-def test_schema_list_empty_arguments_apply_canonical_model_defaults(db_session):
-    decision = PolicyGate(build_product_tool_registry(), db_session).check(
-        _state(allowed_tool_groups=["catalog"]),
-        "schema_list",
+def test_tool_empty_arguments_apply_canonical_model_defaults(db_session):
+    decision = PolicyGate(verification_registry(), db_session).check(
+        _state(allowed_tool_groups=["verification"]),
+        "verification_read",
         {},
     )
 
@@ -184,23 +182,6 @@ def test_declared_approval_requirement_is_preserved(db_session):
         _state(),
         "policy_test",
         {},
-    )
-    assert decision.status == "approval_required"
-
-
-def test_autonomous_database_read_requires_approval_on_unknown_environment(
-    db_session,
-):
-    registry = ToolRegistry().register(
-        PolicyTestTool(
-            execution=ToolExecutionSpec(capabilities=("database_read",))
-        )
-    )
-    decision = PolicyGate(registry, db_session).check(
-        _state(environment_profile={"env": "unknown"}),
-        "policy_test",
-        {},
-        "agent_autonomous_read",
     )
     assert decision.status == "approval_required"
 

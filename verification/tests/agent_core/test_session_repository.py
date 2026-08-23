@@ -24,17 +24,17 @@ from engine.models import (
 from engine.tools.runtime.attempt import ResourceScopeRef
 
 
-def _session(db_session, datasource_id: str, project_id: str | None = None) -> AgentSession:
+def _session(db_session, resource_id: str, project_id: str | None = None) -> AgentSession:
     value = AgentSession(id="session_1", project_id=project_id, title="Test")
     db_session.add(value)
     db_session.commit()
     return value
 
 
-def _admit(repository: SessionRepository, datasource_id: str, key: str = "request_1"):
+def _admit(repository: SessionRepository, resource_id: str, key: str = "request_1"):
     resource_refs = (
-        ResourceScopeRef(kind="dbfox.data.database", id=datasource_id, version="1:1"),
-    ) if datasource_id else ()
+        ResourceScopeRef(kind="verification.resource", id=resource_id, version="1:1"),
+    ) if resource_id else ()
     return repository.admit(
         session_id="session_1",
         resource_refs=resource_refs,
@@ -47,13 +47,13 @@ def _admit(repository: SessionRepository, datasource_id: str, key: str = "reques
     )
 
 
-def test_admission_is_atomic_ordered_and_idempotent(db_session, test_datasource) -> None:
-    _session(db_session, str(test_datasource.id))
+def test_admission_is_atomic_ordered_and_idempotent(db_session, test_resource) -> None:
+    _session(db_session, str(test_resource.id))
     repository = SessionRepository(db_session)
 
-    first = _admit(repository, str(test_datasource.id))
+    first = _admit(repository, str(test_resource.id))
     db_session.commit()
-    repeated = _admit(repository, str(test_datasource.id))
+    repeated = _admit(repository, str(test_resource.id))
     db_session.commit()
 
     assert repeated == first
@@ -68,26 +68,26 @@ def test_admission_is_atomic_ordered_and_idempotent(db_session, test_datasource)
 
 def test_admit_persists_the_already_authorized_frozen_resource_set(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     """Project authorization happens before the persistence repository boundary."""
 
-    _session(db_session, str(test_datasource.id))
+    _session(db_session, str(test_resource.id))
 
     admission = _admit(SessionRepository(db_session), "ds-b")
     stored = db_session.get(AgentSessionInput, admission.input_id)
     assert stored is not None
     assert '"id":"ds-b"' in str(stored.resource_refs_json)
-    assert '"kind":"dbfox.data.database"' in str(stored.resource_refs_json)
+    assert '"kind":"verification.resource"' in str(stored.resource_refs_json)
     run = db_session.get(AgentRun, admission.run_id)
     assert run is not None
-    assert not hasattr(run, "datasource_id")
+    assert not hasattr(run, "resource_id")
     assert not hasattr(run, "datasource_generation")
 
 
-def test_concurrent_admission_serializes_sqlite_aggregate_writes(db_session, test_datasource) -> None:
-    datasource_id = str(test_datasource.id)
-    _session(db_session, datasource_id)
+def test_concurrent_admission_serializes_sqlite_aggregate_writes(db_session, test_resource) -> None:
+    resource_id = str(test_resource.id)
+    _session(db_session, resource_id)
     session_factory = sessionmaker(bind=db_session.get_bind())
     worker_count = 8
     barrier = Barrier(worker_count)
@@ -95,7 +95,7 @@ def test_concurrent_admission_serializes_sqlite_aggregate_writes(db_session, tes
     def admit(index: int):
         with session_factory() as session:
             barrier.wait(timeout=5)
-            value = _admit(SessionRepository(session), datasource_id, key=f"request-{index}")
+            value = _admit(SessionRepository(session), resource_id, key=f"request-{index}")
             session.commit()
             return value
 
@@ -132,9 +132,9 @@ def test_begin_agent_write_tracks_the_physical_sqlite_transaction(db_session) ->
     assert not driver_connection.in_transaction
 
 
-def test_direct_event_append_serializes_sqlite_sequence_writes(db_session, test_datasource) -> None:
-    datasource_id = str(test_datasource.id)
-    _session(db_session, datasource_id)
+def test_direct_event_append_serializes_sqlite_sequence_writes(db_session, test_resource) -> None:
+    resource_id = str(test_resource.id)
+    _session(db_session, resource_id)
     repository = SessionRepository(db_session)
     lease = repository.claim(session_id="session_1", owner="worker")
     assert lease is not None
@@ -175,9 +175,9 @@ def test_direct_event_append_serializes_sqlite_sequence_writes(db_session, test_
     assert stored_sequences == list(range(1, worker_count + 1))
 
 
-def test_concurrent_idempotent_admission_returns_one_run(db_session, test_datasource) -> None:
-    datasource_id = str(test_datasource.id)
-    _session(db_session, datasource_id)
+def test_concurrent_idempotent_admission_returns_one_run(db_session, test_resource) -> None:
+    resource_id = str(test_resource.id)
+    _session(db_session, resource_id)
     session_factory = sessionmaker(bind=db_session.get_bind())
     worker_count = 6
     barrier = Barrier(worker_count)
@@ -185,7 +185,7 @@ def test_concurrent_idempotent_admission_returns_one_run(db_session, test_dataso
     def admit_once(_: int):
         with session_factory() as session:
             barrier.wait(timeout=5)
-            value = _admit(SessionRepository(session), datasource_id, key="same-request")
+            value = _admit(SessionRepository(session), resource_id, key="same-request")
             session.commit()
             return value
 
@@ -200,17 +200,17 @@ def test_concurrent_idempotent_admission_returns_one_run(db_session, test_dataso
 
 
 def test_event_history_compacts_to_a_snapshot_replay_boundary(
-    db_session, test_datasource, monkeypatch
+    db_session, test_resource, monkeypatch
 ) -> None:
     from engine.agent.repositories import events as events_module
 
     monkeypatch.setattr(events_module, "EVENT_REPLAY_RETAINED", 3)
     monkeypatch.setattr(events_module, "EVENT_COMPACTION_TRIGGER", 4)
-    _session(db_session, str(test_datasource.id))
+    _session(db_session, str(test_resource.id))
     repository = SessionRepository(db_session)
 
     for index in range(3):
-        _admit(repository, str(test_datasource.id), key=f"compact-{index}")
+        _admit(repository, str(test_resource.id), key=f"compact-{index}")
         db_session.commit()
 
     aggregate = db_session.get(AgentSession, "session_1")
@@ -222,10 +222,10 @@ def test_event_history_compacts_to_a_snapshot_replay_boundary(
     assert [event.sequence for event in repository.events.list("session_1", after_sequence=2)] == [3, 4, 5, 6]
 
 
-def test_session_lease_fences_old_owner_and_promotes_input(db_session, test_datasource) -> None:
-    aggregate = _session(db_session, str(test_datasource.id))
+def test_session_lease_fences_old_owner_and_promotes_input(db_session, test_resource) -> None:
+    aggregate = _session(db_session, str(test_resource.id))
     repository = SessionRepository(db_session)
-    admission = _admit(repository, str(test_datasource.id))
+    admission = _admit(repository, str(test_resource.id))
     db_session.commit()
 
     now = datetime.now(UTC)
@@ -251,10 +251,10 @@ def test_session_lease_fences_old_owner_and_promotes_input(db_session, test_data
     assert run.lease_token == second.token
 
 
-def test_turn_snapshot_is_frozen_under_the_session_lease(db_session, test_datasource) -> None:
-    _session(db_session, str(test_datasource.id))
+def test_turn_snapshot_is_frozen_under_the_session_lease(db_session, test_resource) -> None:
+    _session(db_session, str(test_resource.id))
     repository = SessionRepository(db_session)
-    admission = _admit(repository, str(test_datasource.id))
+    admission = _admit(repository, str(test_resource.id))
     lease = repository.claim(session_id="session_1", owner="worker_a")
     assert lease is not None
     assert repository.promote_next_input(lease=lease) == admission.run_id
@@ -284,22 +284,22 @@ def test_turn_snapshot_is_frozen_under_the_session_lease(db_session, test_dataso
 
 def test_admit_rejects_a_soft_deleted_session_at_the_domain_boundary(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
-    session = _session(db_session, str(test_datasource.id))
+    session = _session(db_session, str(test_resource.id))
     session.deleted_at = datetime.now(UTC)
     db_session.commit()
 
     with pytest.raises(ValueError, match="deleted Session"):
-        _admit(SessionRepository(db_session), str(test_datasource.id))
+        _admit(SessionRepository(db_session), str(test_resource.id))
 
 
 def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(
-    db_session, test_datasource
+    db_session, test_resource
 ) -> None:
-    _session(db_session, str(test_datasource.id))
+    _session(db_session, str(test_resource.id))
     repository = SessionRepository(db_session)
-    original = _admit(repository, str(test_datasource.id))
+    original = _admit(repository, str(test_resource.id))
     lease = repository.claim(session_id="session_1", owner="worker")
     assert lease is not None
     repository.promote_next_input(lease=lease)
@@ -308,7 +308,7 @@ def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(
     steered = repository.admit(
         session_id="session_1",
         resource_refs=(
-            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),
+            ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),
         ),
         content="只看华东区域",
         idempotency_key="request-steer",
@@ -329,18 +329,18 @@ def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(
 
 
 def test_orphaned_steer_cannot_revive_a_terminal_run(
-    db_session, test_datasource
+    db_session, test_resource
 ) -> None:
-    _session(db_session, str(test_datasource.id))
+    _session(db_session, str(test_resource.id))
     repository = SessionRepository(db_session)
-    original = _admit(repository, str(test_datasource.id))
+    original = _admit(repository, str(test_resource.id))
     lease = repository.claim(session_id="session_1", owner="worker")
     assert lease is not None
     assert repository.promote_next_input(lease=lease) == original.run_id
     steered = repository.admit(
         session_id="session_1",
         resource_refs=(
-            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),
+            ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),
         ),
         content="改成按地区统计",
         idempotency_key="request-orphan-steer",
@@ -368,18 +368,18 @@ def test_orphaned_steer_cannot_revive_a_terminal_run(
 
 
 def test_cancel_and_replace_requests_cancellation_before_admitting_one_new_run(
-    db_session, test_datasource
+    db_session, test_resource
 ) -> None:
-    _session(db_session, str(test_datasource.id))
+    _session(db_session, str(test_resource.id))
     repository = SessionRepository(db_session)
-    first = _admit(repository, str(test_datasource.id), key="request-first")
-    second = _admit(repository, str(test_datasource.id), key="request-second")
+    first = _admit(repository, str(test_resource.id), key="request-first")
+    second = _admit(repository, str(test_resource.id), key="request-second")
     db_session.commit()
 
     replacement = repository.admit(
         session_id="session_1",
         resource_refs=(
-            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),
+            ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),
         ),
         content="改为统计退款",
         idempotency_key="request-replacement",

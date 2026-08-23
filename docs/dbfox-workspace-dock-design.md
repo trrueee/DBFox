@@ -8,7 +8,7 @@
 >
 > 适用范围：`desktop/src` React 工作区信息架构、右栏 Dock Tab 模型与工件打开方式
 >
-> 与现行基线的关系：本草案的 Shell 边界决策已被 [`docs/architecture/workbench-shell-workspace-dock.md`](architecture/workbench-shell-workspace-dock.md) 取代为实施基线；本文保留交互与视觉细节，不再作为边界决策依据。当前已实现的部分以源码为准，文档描述目标形态，不覆盖 [`dbfox-design-baseline.md`](dbfox-design-baseline.md) v2.1。
+> 与现行基线的关系：本文只保留交互与视觉细节，不再作为边界决策依据；当前 Workbench 边界见 [`docs/architecture/frontend.md`](architecture/frontend.md)，历史 Shell ADR 已归档。当前已实现的部分以源码为准，文档描述目标形态，不覆盖 [`dbfox-design-baseline.md`](dbfox-design-baseline.md) v2.1。
 >
 > 实现进度（2026-08-15）：核心布局已落地（`App` 左树 / `ConversationCenter` 中间对话 / `WorkspaceDock` 右侧 Tab）；项目级持久 Console、表 Tab、工件总览与「打开为 Tab」已接入。Dock 宽度拖拽、Console 落盘恢复、WebView 尚未实现。
 

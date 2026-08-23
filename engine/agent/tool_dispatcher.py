@@ -80,7 +80,6 @@ class ToolRequest(BaseModel):
     question: str
     session_id: str
     run_id: str
-    execution_id: str
     execution_mode: str
     frozen_resource_refs: tuple[ResourceScopeRef, ...] = ()
 
@@ -127,6 +126,21 @@ class _CompletedToolExecution:
 
 class ToolDispatcher:
     """Own the durable boundary around model-authored tool calls."""
+
+    def cancel_invocation(self, invocation_id: str, tool_name: str) -> None:
+        """Request cancellation through the owning Tool implementation."""
+
+        tool = self.registry.require(tool_name)
+        if not isinstance(tool, BaseTool):
+            raise TypeError(f"{tool_name} is not an executable tool")
+        try:
+            tool.cancel(invocation_id)
+        except Exception as exc:
+            logger.error(
+                "Tool cancellation hook failed: tool=%s type=%s",
+                tool_name,
+                type(exc).__name__,
+            )
 
     def __init__(
         self,
@@ -770,14 +784,7 @@ class ToolDispatcher:
                 result = None
 
         def cancel_tool() -> None:
-            try:
-                tool.cancel(invocation.id)
-            except Exception as exc:
-                logger.error(
-                    "Tool cancellation hook failed: tool=%s type=%s",
-                    invocation.tool_name,
-                    type(exc).__name__,
-                )
+            self.cancel_invocation(invocation.id, invocation.tool_name)
 
         if result is None:
             result = self.executor.execute(
@@ -1069,7 +1076,6 @@ class ToolDispatcher:
             question=str(run.question),
             session_id=str(run.session_id),
             run_id=str(run.id),
-            execution_id=str(run.execution_id or ""),
             execution_mode=self.definition.execution_mode,
             frozen_resource_refs=frozen_refs,
         )

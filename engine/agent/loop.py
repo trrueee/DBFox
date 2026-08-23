@@ -59,7 +59,6 @@ from engine.agent.resource_refs import load_resource_refs
 from engine.tools.materialization import ToolMaterialization, materialize_tools
 from engine.tools.runtime import ToolExecutionTask, ToolExecutor, ToolRegistry
 from engine.tools.runtime.attempt import CompositeResourceResolver
-from engine.tools.runtime.semantics import ToolSemanticCapability
 from engine.agent.terminalizer import Terminalizer
 from engine.agent.working_state import RunWorkingStateAssembler
 
@@ -141,58 +140,14 @@ def _relevant_tool_groups(
     configured_groups: set[str],
     context: ContextSnapshot,
 ) -> set[str]:
-    """Hide only tools whose hard prerequisites are provably absent.
+    """Return configured groups without interpreting capability artifacts."""
 
-    This is prerequisite gating, not intent routing.  Catalog and conversation
-    tools remain available because a later model turn can legitimately pivot or
-    because prompt-budget truncation happens after tool materialization.  Result
-    tools are the only currently gated group: without any durable result
-    Artifact reference they cannot perform a valid operation.
-    """
-
-    groups = set(configured_groups)
-    has_result_artifact = any(
-        artifact.type == "result_view" for artifact in context.selected_artifacts
-    ) or any(
-        observation.status == "succeeded"
-        and ToolSemanticCapability.QUERY_RESULT.value in observation.capabilities
-        for observation in context.observations
-    )
-    evidence_references = (
-        context.session_memory.get("stable_context", {}).get("evidence_references", [])
-        if isinstance(context.session_memory.get("stable_context"), dict)
-        else []
-    )
-    has_result_artifact = has_result_artifact or any(
-        isinstance(item, dict) and bool(item.get("artifact_id"))
-        for item in evidence_references
-    )
-    tool_outcomes = (
-        context.previous_run_outcome.tool_outcomes
-        if context.previous_run_outcome is not None
-        else []
-    )
-    previous_artifacts = (
-        context.previous_run_outcome.artifacts
-        if context.previous_run_outcome is not None
-        else []
-    )
-    has_result_artifact = has_result_artifact or any(
-        artifact.type == "result_view" for artifact in previous_artifacts
-    )
-    has_result_artifact = has_result_artifact or any(
-        any(artifact.type == "result_view" for artifact in item.artifacts)
-        for item in tool_outcomes
-    )
-    if not has_result_artifact:
-        groups.discard("result")
-    return groups
+    del context
+    return set(configured_groups)
 
 
 LIVE_STREAM_HUB = LiveStreamHub()
-_FINALIZATION_TOOL_NAMES = frozenset(
-    {"update_plan", "result_inspect", "result_profile"}
-)
+_FINALIZATION_TOOL_NAMES = frozenset({"update_plan"})
 
 
 def _default_model_factory(settings: ProviderSettings) -> ModelAdapter:
@@ -843,7 +798,7 @@ class RunLoop:
 
             tools = materialize_tools(
                 self.registry,
-                allowed_groups=groups,
+                allowed_groups=(groups or None),
                 allowed_names=(set(_FINALIZATION_TOOL_NAMES) if finalizing else None),
                 execution_mode=self.definition.execution_mode,
                 available_resource_kinds=available_resource_kinds,

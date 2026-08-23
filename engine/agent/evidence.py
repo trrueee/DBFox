@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import re
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -41,7 +41,10 @@ def has_invalid_citation_syntax(text: str) -> bool:
 class EvidenceLocator(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["artifact", "metric", "column", "row", "cell_range", "sql_fragment"] = "artifact"
+    kind: str = Field(
+        default="artifact",
+        pattern=r"^(?:artifact|[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*){1,7})$",
+    )
     value: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -54,7 +57,6 @@ class Evidence(BaseModel):
     claim_id: str
     artifact_id: str
     label: str
-    query_fingerprint: str
     observed_at: datetime
     locator: EvidenceLocator = Field(default_factory=EvidenceLocator)
     value: str | int | float | None = None

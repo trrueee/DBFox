@@ -80,7 +80,7 @@ class ArtifactTablePage(BaseModel):
     read_at: str
     read_id: str
     resource_version: str
-    query_fingerprint: str
+    source_fingerprint: str
     warnings: list[str] = Field(default_factory=list)
     notices: list[str] = Field(default_factory=list)
 
@@ -103,7 +103,7 @@ class ArtifactChartData(BaseModel):
     read_at: str
     read_id: str
     resource_version: str
-    query_fingerprint: str
+    source_fingerprint: str
 
 
 class ArtifactViewError(Exception):

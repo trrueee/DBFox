@@ -113,13 +113,13 @@ describe("ArtifactDock", () => {
       page: 1, pageSize: 10, rowCount: 1, hasNextPage: false,
       latencyMs: 1, consistency: "durable_snapshot",
       originalExecutedAt: "2026-07-20T00:00:00Z", viewExecutedAt: "2026-07-20T00:00:01Z",
-      viewExecutionId: "view-dock", datasourceGeneration: 1, queryFingerprint: "query-dock",
+      viewExecutionId: "view-dock", resourceVersion: 1, sourceFingerprint: "query-dock",
     });
     vi.mocked(agentApi.fetchArtifactChartData).mockResolvedValue({
       series: [{ label: "1", value: 20 }], sampleSize: 1, truncated: false,
       consistency: "durable_snapshot", originalExecutedAt: "2026-07-20T00:00:00Z",
       viewExecutedAt: "2026-07-20T00:00:01Z", viewExecutionId: "view-chart-dock",
-      datasourceGeneration: 1, queryFingerprint: "query-chart-dock",
+      resourceVersion: 1, sourceFingerprint: "query-chart-dock",
     });
   });
 

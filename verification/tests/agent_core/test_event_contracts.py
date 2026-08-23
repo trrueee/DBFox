@@ -96,8 +96,8 @@ def test_security_audit_redacts_secret_values(db_session) -> None:
     record = SecurityAuditService(db_session).record(
         action="credential.update",
         outcome="succeeded",
-        resource_type="datasource",
-        resource_id="ds-1",
+        resource_type="resource",
+        resource_id="resource-1",
         details={
             "Password": "do-not-store",
             "nested": {"api_key": "also-secret"},
@@ -123,9 +123,9 @@ def test_security_audit_redacts_composite_keys_and_secrets_inside_text(db_sessio
     record = SecurityAuditService(db_session).record(
         action="diagnostic.event",
         outcome="failed",
-        resource_type="datasource",
+        resource_type="resource",
         details={
-            "database_url": f"mysql://root:{sentinel}@localhost/prod",
+            "credential_url": f"https://user:{sentinel}@example.test/private",
             "client-secret-value": sentinel,
             "message": f"authorization=Bearer {sentinel}",
         },
@@ -137,7 +137,7 @@ def test_security_audit_redacts_composite_keys_and_secrets_inside_text(db_sessio
     assert sentinel not in stored.details_json
     assert json.loads(stored.details_json) == {
         "client-secret-value": "[REDACTED]",
-        "database_url": "[REDACTED]",
+        "credential_url": "[REDACTED]",
         "message": "authorization=Bearer [REDACTED]",
     }
 

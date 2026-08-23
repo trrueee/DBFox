@@ -42,7 +42,7 @@ class RecordingLoop:
             self.active_sessions.remove(lease.session_id)
 
 
-def test_coordinator_serializes_session_and_parallelizes_independent_sessions(db_session, test_datasource):
+def test_coordinator_serializes_session_and_parallelizes_independent_sessions(db_session, test_resource):
     db_session.add_all([
         AgentSession(id="coordinator_a", title="A"),
         AgentSession(id="coordinator_b", title="B"),
@@ -51,12 +51,12 @@ def test_coordinator_serializes_session_and_parallelizes_independent_sessions(db
     sessions = SessionRepository(db_session)
     for key in ("a1", "a2"):
         sessions.admit(
-            session_id="coordinator_a", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+            session_id="coordinator_a", resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
             content=key, idempotency_key=key, llm_credential_id="credential",
             api_base=None, model_name="model", request_payload={},
         )
     sessions.admit(
-        session_id="coordinator_b", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        session_id="coordinator_b", resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="b1", idempotency_key="b1", llm_credential_id="credential",
         api_base=None, model_name="model", request_payload={},
     )
@@ -112,7 +112,7 @@ def test_heartbeat_retries_after_a_transient_storage_failure(monkeypatch):
             assert ttl_seconds == 30
             attempts += 1
             if attempts == 1:
-                raise RuntimeError("temporary database interruption")
+                raise RuntimeError("temporary resource interruption")
             stop.set()
 
     monkeypatch.setattr("engine.agent.coordinator.SessionRepository", FlakySessionRepository)
@@ -229,7 +229,7 @@ def test_scheduled_capacity_cannot_be_smaller_than_worker_capacity() -> None:
         )
 
 
-def test_stop_interrupts_active_run_before_waiting_for_workers(db_session, test_datasource) -> None:
+def test_stop_interrupts_active_run_before_waiting_for_workers(db_session, test_resource) -> None:
     session_id = "coordinator_shutdown"
     db_session.add(AgentSession(
         id=session_id,
@@ -238,7 +238,7 @@ def test_stop_interrupts_active_run_before_waiting_for_workers(db_session, test_
     db_session.commit()
     SessionRepository(db_session).admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="wait",
         idempotency_key="shutdown",
         llm_credential_id="credential",

@@ -26,10 +26,7 @@ from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.result import ToolOutcome, ToolReconciliation, ToolResult
 from engine.tools.runtime.observation import ToolObservationProjection
 from engine.tools.runtime.runtime import ToolRuntime
-from engine.tools.runtime.semantics import (
-    ToolSemanticCapability,
-    ToolSemanticSpec,
-)
+from engine.tools.runtime.semantics import ToolSemanticSpec
 
 __all__ = [
     "BaseTool",
@@ -59,7 +56,6 @@ __all__ = [
     "ToolRegistry",
     "ToolResult",
     "ToolRuntime",
-    "ToolSemanticCapability",
     "ToolSemanticSpec",
     "ToolSpec",
 ]

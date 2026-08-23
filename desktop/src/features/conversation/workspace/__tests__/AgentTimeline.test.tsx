@@ -149,7 +149,6 @@ describe("AgentTimeline", () => {
         claim_id: "claim-1",
         artifact_id: "result-2",
         label: "共有 42 条订单",
-        query_fingerprint: "fingerprint",
         observed_at: "2026-08-15T00:00:00Z",
         locator: {},
       },

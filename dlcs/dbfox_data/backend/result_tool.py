@@ -102,7 +102,7 @@ class ResultInspectTool(BaseTool[ResultInspectInput, ResultInspectOutput]):
         required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
     semantics = ToolSemanticSpec(
-        produces=("query_result",),
+        produces=("dbfox.data.query_result",),
         publishes_artifact_references=True,
     )
     presentation = ToolPresentation(title="查看查询结果", category="explore")

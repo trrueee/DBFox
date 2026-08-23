@@ -331,10 +331,10 @@ class CompletionPolicy:
         """Decide whether a forced stop has durable, safe work to return.
 
         A completed answer candidate still passes the normal evidence and
-        citation policy. Without an answer, only a settled query-result
-        Artifact can support the generic bounded-partial response composed by
-        Terminalizer. The summary reports saved work but makes no data claim,
-        so it must not manufacture Evidence for an arbitrary Result Artifact.
+        citation policy. Without an answer, only a capability support that has
+        verified durable work can opt into the bounded-partial response
+        composed by Terminalizer. Core never infers domain evidence from an
+        Artifact payload.
         """
 
         if model_result.has_completed_answer_candidate:
@@ -359,7 +359,7 @@ class CompletionPolicy:
             )
         return CompletionDecision(
             kind=CompletionKind.FAIL,
-            reason="The forced stop has no completed answer or durable query result.",
+            reason="The forced stop has no completed answer or supported durable work.",
             missing=["usable_partial_result"],
         )
 

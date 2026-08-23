@@ -25,7 +25,6 @@ from engine.agent.run_item import (
 )
 from engine.agent.session import SessionLease
 from engine.agent.tool import ToolInvocation, ToolInvocationStatus
-from engine.query_registry import QUERY_REGISTRY
 from engine.json_codec import canonical_dumps as _json, load_array, load_object
 from engine.models import AgentObservationRecord, AgentToolInvocation, AgentTurn
 from engine.tools.materialization import ToolMaterialization
@@ -320,16 +319,16 @@ class ToolInvocationRepository:
         ).scalars()
         return [self._domain(row) for row in rows]
 
-    def running_invocation_ids_for_run(self, run_id: str) -> list[str]:
+    def running_invocations_for_run(self, run_id: str) -> list[tuple[str, str]]:
         rows = self.session.execute(
-            select(AgentToolInvocation.id)
+            select(AgentToolInvocation.id, AgentToolInvocation.tool_name)
             .where(
                 AgentToolInvocation.run_id == run_id,
                 AgentToolInvocation.status == ToolInvocationStatus.RUNNING.value,
             )
             .order_by(AgentToolInvocation.created_at)
-        ).scalars().all()
-        return [str(value) for value in rows]
+        ).all()
+        return [(str(invocation_id), str(tool_name)) for invocation_id, tool_name in rows]
 
     def cancel_active_for_run(
         self,
@@ -356,8 +355,6 @@ class ToolInvocationRepository:
         for row in rows:
             if str(row.session_id) != lease.session_id:
                 raise ValueError("ToolInvocation is outside the Session")
-            if row.status == ToolInvocationStatus.RUNNING.value:
-                QUERY_REGISTRY.cancel(str(row.id))
             observations.append(
                 self.settle(
                     lease=lease,

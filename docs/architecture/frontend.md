@@ -8,7 +8,7 @@
 >
 > 适用范围：`desktop/src/` 的工作区、传输、状态和用户交互
 >
-> 目标实施基线：已接受的 [Workbench Shell 与 Workspace Dock](./workbench-shell-workspace-dock.md) 和 [迁移规范](./workbench-shell-migration-guide.md)。本文继续描述当前迁移中的实现；两文档冲突时，当前代码与测试是第一事实源，已接受 ADR 是目标合同。
+> 权威边界：[Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md)。已完成的 Shell 迁移方案保存在 [`docs/archive/designs/`](../archive/designs/)；当前代码、测试和本文是 Workbench 事实源。
 
 ## 1. 设计目标
 

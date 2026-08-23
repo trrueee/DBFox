@@ -62,7 +62,7 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
         capabilities=("network", "filesystem_read"),
         required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
-    semantics = ToolSemanticSpec(produces=("validated_query",))
+    semantics = ToolSemanticSpec(produces=("dbfox.data.validated_query",))
     presentation = ToolPresentation(title="验证分析 SQL", category="query")
 
     def __init__(self, connection: DataConnectionBoundary) -> None:
@@ -183,7 +183,7 @@ class SqlExecuteReadonlyTool(
         capabilities=("network", "filesystem_read"),
         required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
-    semantics = ToolSemanticSpec(produces=("query_result",))
+    semantics = ToolSemanticSpec(produces=("dbfox.data.query_result",))
     presentation = ToolPresentation(title="执行只读查询", category="query")
 
     def __init__(

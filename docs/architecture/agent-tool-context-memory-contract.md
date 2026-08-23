@@ -362,60 +362,28 @@ Artifact 和执行授权仍限定在其原 Run，不能跨 Run 重放。
 
 只有真实评测证明精确历史检索不足主要来自同义表达时，才评估 embedding/semantic memory。
 
-## 9. SQL 与结果上下文
+## 9. Capability 结果上下文
 
-完整结果的权威来源是用户数据库和 Result Gateway。模型使用 SQL 聚合、筛选、排序、分页和 profile，而不是接收整表。
+完整结果的权威来源是 capability-owned durable store；Core 只保存 Artifact envelope。以 Data DLC 为例，模型使用 SQL 聚合、筛选、排序、分页和 profile，而不是接收整表。
 
 ```text
 SQL Artifact -> Result Artifact -> 有界 Observation -> Provider output
                          └-------> Result Gateway 按 ID 回源
 ```
 
-Artifact 元数据禁止保存 `rows`、`previewRows`、chart series 和重复结果值。当前 Run 可使用瞬时有界 provider payload；恢复或新 Run 需要值时通过 Artifact ID 再读取。
+Core Artifact/Evidence 禁止镜像 `rows`、Data fingerprint 或其他 capability payload。当前 Run 可使用瞬时有界 provider payload；恢复或新 Run 需要值时通过 Artifact ID 和当前 snapshot 的 provider 再读取。
 
-## 10. Memory 写入规则
+## 10. 跨 Run 连续性
 
-Memory 与最终 Message、Evidence、Run terminal state 和 terminal events 在同一事务提交。
+最终 Message、Evidence、Run terminal state 和 terminal events 在同一事务提交。Core 连续性来自 Conversation history、受控 recall、Artifact/Evidence 引用和 capability context contributor，而不是一份 Data-scoped Memory 镜像。
 
 写入来源分为：
 
-- Runtime 确定性投影：Run ID、datasource generation、Artifact ID、Evidence 引用、开放问题；
+- Runtime 确定性事实：Run ID、Artifact ID、Evidence 引用、开放问题；
 - 用户明确确认：偏好、命名、业务口径；
 - 模型建议但需验证：不得直接进入 stable context。
 
-Memory 更新失败时整个终态事务回滚，不能出现“回答已完成但记忆未写”或相反状态。
-
-当前 `version 3` 结构：
-
-```json
-{
-  "version": 3,
-  "datasource_id": "...",
-  "datasource_generation": 7,
-  "working_set": {
-    "datasource_id": "...",
-    "datasource_generation": 7,
-    "selected_artifact_id": "artifact_...",
-    "referenced_artifact_ids": ["artifact_..."],
-    "open_questions": []
-  },
-  "stable_context": {
-    "evidence_references": [
-      {
-        "evidence_id": "evidence_...",
-        "artifact_id": "artifact_...",
-        "query_fingerprint": "...",
-        "observed_at": "...",
-        "run_id": "run_...",
-        "datasource_id": "...",
-        "datasource_generation": 7
-      }
-    ]
-  }
-}
-```
-
-`recent_runs`、`answer_summary` 和完整 Message 不属于 Memory。旧投影无需数据库迁移；下一次成功终态提交会用 v3 投影原子替换，读取端始终忽略旧的重复问答字段。
+Evidence 只通过 `artifact_id` 指向不可变来源；freshness 由 Artifact 的 frozen ResourceRefs/version 保证。Data Catalog、file selection、repository facts 等领域上下文由各 DLC contributor 在预算内生成，Core 不保存第二份领域模型。已删除的 Data Catalog Memory v4/v3 compatibility 字段不得重新引入。
 
 ## 11. 压缩策略
 

@@ -31,6 +31,7 @@ _NORMALIZED_SECRET_KEYS = frozenset({
     "passphrase",
     "credential",
     "credentialvalue",
+    "credentialurl",
     "authorization",
     "dsn",
     "databaseurl",

@@ -61,25 +61,6 @@ class FoundationRuntimeState(Base):  # type: ignore[misc,valid-type]
     reset_completed_at = Column(DateTime, nullable=True)
 
 
-class ConfirmationToken(Base):  # type: ignore[misc,valid-type]
-    """Persistent, one-time confirmation state for destructive operations.
-
-    The token record intentionally has no foreign key to a datasource: a
-    confirmation is validated immediately before an operation may delete that
-    datasource, and the binding is enforced atomically by the policy service.
-    """
-
-    __tablename__ = "confirmation_tokens"
-    __table_args__ = (
-        Index("ix_confirmation_tokens_expires_at", "expires_at"),
-    )
-
-    token = Column(Text, primary_key=True)
-    expires_at = Column(Float, nullable=False)
-    datasource_id = Column(Text, nullable=False)
-    action = Column(Text, nullable=False)
-    details_json = Column(Text, nullable=False, default="{}")
-    expected_confirm_text = Column(Text, nullable=False, default="")
 
 
 class CredentialLeaseRecord(Base):  # type: ignore[misc,valid-type]
@@ -105,313 +86,20 @@ class CredentialLeaseRecord(Base):  # type: ignore[misc,valid-type]
     released_at = Column(DateTime, nullable=True)
 
 
-class DataSource(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "data_sources"
-    __table_args__ = (
-        UniqueConstraint("project_id", "name", name="uq_datasources_project_name"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    project_id = Column(String, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
-    name = Column(String, nullable=False)
-    db_type = Column(String, nullable=False, default="mysql")
-
-    # Network coordinates do not apply to file-backed SQLite datasources.
-    host = Column(String, nullable=True)
-    port = Column(Integer, nullable=True)
-    database_name = Column(String, nullable=False)
-    username = Column(String, nullable=True)
-
-    # Secrets are held exclusively in the OS credential vault.  Metadata may
-    # contain their opaque identifiers but never ciphertext/nonces.
-    password_credential_id = Column(String, nullable=True)
-
-    # SSH Tunnel configurations
-    ssh_enabled = Column(Boolean, nullable=False, default=False)
-    ssh_host = Column(String, nullable=True)
-    ssh_port = Column(Integer, nullable=False, default=22)
-    ssh_username = Column(String, nullable=True)
-    ssh_password_credential_id = Column(String, nullable=True)
-    ssh_pkey_path = Column(String, nullable=True)
-    ssh_key_passphrase_credential_id = Column(String, nullable=True)
-
-    ssl_enabled = Column(Boolean, nullable=False, default=False)
-    ssl_ca_path = Column(String, nullable=True)
-    ssl_cert_path = Column(String, nullable=True)
-    ssl_key_path = Column(String, nullable=True)
-    ssl_verify_identity = Column(Boolean, nullable=False, default=True)
-
-    connection_mode = Column(String, nullable=False, default="direct")
-    # Incremented with every connection-affecting metadata or credential
-    # reference change.  Reusable pools and SSH tunnels are fenced by this
-    # value so a later update can never reuse a prior connection profile.
-    connection_generation = Column(Integer, nullable=False, default=1, server_default="1")
-    # Incremented atomically whenever search-visible catalog publication
-    # succeeds. It is the freshness fence for Catalog observations and Memory
-    # projections, not a connection-profile generation.
-    catalog_revision = Column(Integer, nullable=False, default=0, server_default="0")
-    is_read_only = Column(Boolean, nullable=False, default=False)
-    env = Column(String, nullable=False, default="dev")
-    status = Column(String, nullable=False, default="active")
-
-    last_test_at = Column(DateTime, nullable=True)
-    last_test_status = Column(String, nullable=True)
-    last_test_error = Column(String, nullable=True)
-    last_test_latency_ms = Column(Integer, nullable=True)
-    last_test_readonly = Column(Boolean, nullable=True)
-    last_test_server_version = Column(String, nullable=True)
-    last_test_tables_count = Column(Integer, nullable=True)
-    last_test_warnings = Column(Text, nullable=True)
-
-    last_sync_at = Column(DateTime, nullable=True)
-    last_sync_status = Column(String, nullable=True)
-    last_sync_error = Column(String, nullable=True)
-
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-    project = relationship("Project")
-    tables = relationship("SchemaTable", back_populates="datasource", cascade="all, delete-orphan")
-    queries = relationship("QueryHistory", back_populates="datasource", cascade="all, delete-orphan")
-    backups = relationship("BackupRecord", back_populates="datasource", cascade="all, delete-orphan")
-
-    def __repr__(self) -> str:
-        return f"<DataSource id={self.id!r} name={self.name!r} db_type={self.db_type!r} env={self.env!r}>"
 
 
-class BackupRecord(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "backup_records"
-    __table_args__ = (
-        Index("ix_backup_records_project", "project_id"),
-        Index("ix_backup_records_datasource", "datasource_id"),
-        Index("ix_backup_records_created", "created_at"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-
-    label = Column(String, nullable=True)
-    backup_type = Column(String, nullable=False, default="mysqldump")
-    status = Column(String, nullable=False, default="running")
-    file_path = Column(Text, nullable=True)
-    file_size_bytes = Column(Integer, nullable=True)
-    checksum_sha256 = Column(String, nullable=True)
-    source_connection_generation = Column(Integer, nullable=True)
-    source_profile_fingerprint = Column(String, nullable=True)
-    source_database_name = Column(String, nullable=True)
-
-    started_at = Column(DateTime, nullable=False, default=utcnow)
-    completed_at = Column(DateTime, nullable=True)
-    duration_ms = Column(Integer, nullable=True)
-    error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-
-    project = relationship("Project")
-    datasource = relationship("DataSource", back_populates="backups")
 
 
-class RestoreOperation(Base):  # type: ignore[misc,valid-type]
-    """Durable audit record for isolated database restore and metadata cutover."""
-
-    __tablename__ = "restore_operations"
-    __table_args__ = (
-        Index("ix_restore_operations_backup", "backup_id"),
-        Index("ix_restore_operations_datasource", "datasource_id"),
-        Index("ix_restore_operations_created", "created_at"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    backup_id = Column(String, ForeignKey("backup_records.id", ondelete="CASCADE"), nullable=False)
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    status = Column(String, nullable=False, default="running")
-    source_database_name = Column(String, nullable=False)
-    target_database_name = Column(String, nullable=False)
-    expected_generation = Column(Integer, nullable=False)
-    committed_generation = Column(Integer, nullable=True)
-    validated_table_count = Column(Integer, nullable=True)
-    error_code = Column(String, nullable=True)
-    started_at = Column(DateTime, nullable=False, default=utcnow)
-    completed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
 
 
-class SchemaTable(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "schema_tables"
-    __table_args__ = (
-        Index("ix_schema_tables_datasource", "data_source_id"),
-        UniqueConstraint("data_source_id", "table_schema", "table_name", name="uq_schema_tables_ds_schema_table"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-
-    table_schema = Column(String, nullable=False)
-    table_name = Column(String, nullable=False)
-    table_comment = Column(String, nullable=True)
-    table_type = Column(String, nullable=True)
-    row_count_estimate = Column(Integer, nullable=True)
-    engine_name = Column(String, nullable=True)
-    schema_hash = Column(String, nullable=True)
-
-    ai_description = Column(Text, nullable=True)
-    semantic_tags = Column(Text, nullable=True)
-    business_terms = Column(Text, nullable=True)
-    aliases = Column(Text, nullable=True)
-    table_role = Column(String, nullable=True)
-    grain = Column(String, nullable=True)
-    subject_area = Column(String, nullable=True)
-    ai_confidence = Column(Float, nullable=True)
-    ai_enriched_at = Column(DateTime, nullable=True)
-
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-    datasource = relationship("DataSource", back_populates="tables")
-    columns = relationship("SchemaColumn", back_populates="table", cascade="all, delete-orphan",
-                           foreign_keys="[SchemaColumn.table_id]")
-
-    def __repr__(self) -> str:
-        return f"<SchemaTable id={self.id!r} table_name={self.table_name!r} data_source_id={self.data_source_id!r}>"
 
 
-class SchemaColumn(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "schema_columns"
-    __table_args__ = (
-        Index("ix_schema_columns_table", "table_id"),
-        UniqueConstraint("table_id", "column_name", name="uq_schema_columns_table_column"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    table_id = Column(String, ForeignKey("schema_tables.id", ondelete="CASCADE"), nullable=False)
-
-    column_name = Column(String, nullable=False)
-    data_type = Column(String, nullable=True)
-    column_type = Column(String, nullable=True)
-    is_nullable = Column(Boolean, nullable=False, default=True)
-    column_default = Column(String, nullable=True)
-    column_comment = Column(String, nullable=True)
-    ai_description = Column(Text, nullable=True)
-    semantic_tags = Column(Text, nullable=True)
-    business_terms = Column(Text, nullable=True)
-    aliases = Column(Text, nullable=True)
-    column_role = Column(String, nullable=True)
-    metric_type = Column(String, nullable=True)
-    is_pii = Column(Boolean, nullable=False, default=False)
-    ai_confidence = Column(Float, nullable=True)
-    ai_enriched_at = Column(DateTime, nullable=True)
-
-    is_primary_key = Column(Boolean, nullable=False, default=False)
-    is_foreign_key = Column(Boolean, nullable=False, default=False)
-
-    foreign_table_id = Column(String, ForeignKey("schema_tables.id", ondelete="SET NULL"), nullable=True)
-    foreign_column_id = Column(String, ForeignKey("schema_columns.id", ondelete="SET NULL"), nullable=True)
-
-    ordinal_position = Column(Integer, nullable=True)
-
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
-    table = relationship("SchemaTable", back_populates="columns",
-                         foreign_keys="[SchemaColumn.table_id]")
-
-    def __repr__(self) -> str:
-        return f"<SchemaColumn id={self.id!r} column_name={self.column_name!r} data_type={self.data_type!r}>"
 
 
-class SchemaSearchDoc(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "schema_search_docs"
-    __table_args__ = (
-        Index("ix_schema_search_docs_datasource", "datasource_id"),
-        Index(
-            "ix_schema_search_docs_table",
-            "datasource_id",
-            "table_schema",
-            "table_name",
-        ),
-        Index("ix_schema_search_docs_entity", "entity_type", "entity_id"),
-    )
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    entity_type = Column(String, nullable=False)
-    entity_id = Column(String, nullable=False)
-    table_schema = Column(String, nullable=False, default="")
-    table_name = Column(String, nullable=False)
-    column_name = Column(String, nullable=True)
-    name = Column(String, nullable=False)
-
-    ai_description = Column(Text, nullable=True)
-    semantic_tags = Column(Text, nullable=True)
-    business_terms = Column(Text, nullable=True)
-    aliases = Column(Text, nullable=True)
-    table_role = Column(String, nullable=True)
-    grain = Column(String, nullable=True)
-    subject_area = Column(String, nullable=True)
-    column_role = Column(String, nullable=True)
-    metric_type = Column(String, nullable=True)
-    column_summary = Column(Text, nullable=True)
-    relation_summary = Column(Text, nullable=True)
-    search_text = Column(Text, nullable=False, default="")
-    ai_confidence = Column(Float, nullable=True)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
 
-class QueryHistory(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "query_history"
-    __table_args__ = (
-        Index("ix_query_history_datasource", "data_source_id"),
-        Index("ix_query_history_created", "created_at"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-
-    question = Column(String, nullable=True)
-    submitted_sql = Column(Text, nullable=True)
-    generated_sql = Column(Text, nullable=True)
-    safe_sql = Column(Text, nullable=True)
-    executed_sql = Column(Text, nullable=True)
-
-    guardrail_result = Column(String, nullable=False)
-    guardrail_checks = Column(Text, nullable=True)
-
-    execution_status = Column(String, nullable=True)
-    execution_time_ms = Column(Integer, nullable=True)
-    connect_ms = Column(Integer, nullable=True)
-    guardrail_ms = Column(Integer, nullable=True)
-    execute_ms = Column(Integer, nullable=True)
-    fetch_ms = Column(Integer, nullable=True)
-    serialize_ms = Column(Integer, nullable=True)
-    rows_returned = Column(Integer, nullable=True)
-    columns_returned = Column(Integer, nullable=True)
-
-    error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-
-    datasource = relationship("DataSource", back_populates="queries")
-
-    def __repr__(self) -> str:
-        return f"<QueryHistory id={self.id!r} status={self.execution_status!r} latency_ms={self.execution_time_ms!r}>"
 
 
-class QueryHistorySearchDoc(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "query_history_search_docs"
-    __table_args__ = (
-        Index("ix_query_history_search_docs_datasource", "datasource_id"),
-    )
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    history_id = Column(String, ForeignKey("query_history.id", ondelete="CASCADE"), nullable=False, unique=True)
-    datasource_id = Column(String, nullable=False)
-
-    question = Column(Text, nullable=True)
-    submitted_sql = Column(Text, nullable=True)
-    generated_sql = Column(Text, nullable=True)
-    safe_sql = Column(Text, nullable=True)
-    executed_sql = Column(Text, nullable=True)
-    error_message = Column(Text, nullable=True)
-    search_text = Column(Text, nullable=False, default="")
-    created_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
 
 class AgentSession(Base):  # type: ignore[misc,valid-type]
@@ -547,9 +235,6 @@ class AgentSessionMemory(Base):  # type: ignore[misc,valid-type]
     id = Column(String, primary_key=True, default=generate_uuid)
     session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
     memory_json = Column(Text, nullable=False, default="{}")
-    # Shadow Memory v4 projection. ``memory_json`` keeps v3 until cutover;
-    # the v4 watermark lives only inside this typed JSON envelope.
-    memory_v4_json = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
@@ -577,7 +262,6 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
     status = Column(String, nullable=False, default="running")
     version = Column(Integer, nullable=False, default=0)
     lease_token = Column(Integer, nullable=False, default=0)
-    execution_id = Column(String, nullable=True)
     current_turn_id = Column(String, nullable=True)
     request_json = Column(Text, nullable=False, default="{}")
     result_json = Column(Text, nullable=True)
@@ -822,7 +506,6 @@ class AgentEvidenceRecord(Base):  # type: ignore[misc,valid-type]
     claim_id = Column(String, nullable=False)
     artifact_id = Column(String, ForeignKey("agent_artifacts.id", ondelete="RESTRICT"), nullable=False)
     label = Column(String, nullable=False)
-    query_fingerprint = Column(String, nullable=False)
     observed_at = Column(DateTime, nullable=False)
     locator_json = Column(Text, nullable=False, default="{}")
     value_json = Column(Text, nullable=True)
@@ -942,59 +625,3 @@ class SecurityAuditRecord(Base):  # type: ignore[misc,valid-type]
     correlation_id = Column(String, nullable=False)
     details_json = Column(Text, nullable=False, default="{}")
     created_at = Column(DateTime, nullable=False, default=utcnow)
-
-
-class SemanticAlias(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "semantic_aliases"
-    __table_args__ = (
-        Index("ix_semantic_aliases_datasource", "data_source_id"),
-        Index("ix_semantic_aliases_alias", "alias"),
-        UniqueConstraint("data_source_id", "alias", "target_type", "target", name="uq_semantic_aliases_ds_alias_target"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    alias = Column(String, nullable=False)
-    target_type = Column(String, nullable=False)
-    target = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
-
-class DomainTagRule(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "domain_tag_rules"
-    __table_args__ = (
-        Index("ix_domain_tag_rules_datasource", "data_source_id"),
-        UniqueConstraint("data_source_id", "pattern", "tag", name="uq_domain_tag_rules_ds_pattern_tag"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    pattern = Column(String, nullable=False)
-    tag = Column(String, nullable=False)
-    priority = Column(Integer, nullable=False, default=0)
-
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
-
-# These declarations are retained only so immutable historical migrations and
-# their fixtures can deserialize pre-cutover rows. They are deliberately not
-# part of the current Core metadata contract; dbfox.data owns the live schema.
-for _retired_data_table in (
-    "confirmation_tokens",
-    "restore_operations",
-    "backup_records",
-    "schema_columns",
-    "schema_search_docs",
-    "query_history_search_docs",
-    "query_history",
-    "semantic_aliases",
-    "domain_tag_rules",
-    "schema_tables",
-    "data_sources",
-):
-    _table = Base.metadata.tables.get(_retired_data_table)
-    if _table is not None:
-        Base.metadata.remove(_table)

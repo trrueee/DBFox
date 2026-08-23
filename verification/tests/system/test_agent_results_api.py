@@ -31,7 +31,14 @@ from engine.models import (
     AgentSession,
     AgentSessionInput,
 )
-from engine.sql.result_view.fingerprint import result_source_fingerprint
+from dlcs.dbfox_data.backend.query_identity import query_fingerprint
+
+
+def _query_fingerprint(safe_sql: str) -> str:
+    return query_fingerprint(
+        ResourceScopeRef(kind="dbfox.data.database", id="ds-page", version=1),
+        safe_sql,
+    )
 
 
 def _add_pagination_source(
@@ -86,7 +93,7 @@ def _add_pagination_source(
             {
                 "safeSql": safe_sql,
                 "dialect": "mysql",
-                "queryFingerprint": result_source_fingerprint(safe_sql, "mysql"),
+                "queryFingerprint": _query_fingerprint(safe_sql),
             }
         ),
         presentation_json=json.dumps(
@@ -122,7 +129,7 @@ def _add_pagination_source(
             payload_json=json.dumps(
                 {
                     "sourceSqlArtifactId": artifact_id,
-                    "queryFingerprint": result_source_fingerprint(safe_sql, "mysql"),
+                    "queryFingerprint": _query_fingerprint(safe_sql),
                     "datasourceGeneration": 1,
                     "columns": columns or ["id", "amount"],
                 }
@@ -161,7 +168,7 @@ class _CapturedDurableTableView:
             read_at="2026-08-23T08:01:00Z",
             read_id="read-api",
             resource_version=str(artifact.resource_refs[0].version),
-            query_fingerprint=str(artifact.payload["queryFingerprint"]),
+            source_fingerprint=str(artifact.payload["queryFingerprint"]),
             notices=["durable"],
         )
 
@@ -217,8 +224,8 @@ def test_artifact_page_and_export_dispatch_to_durable_capability_view(
     result.payload_json = json.dumps(
         {
             "sourceSqlArtifactId": "artifact-sql-page",
-            "queryFingerprint": result_source_fingerprint(
-                "SELECT id, amount FROM orders", "mysql"
+            "queryFingerprint": _query_fingerprint(
+                "SELECT id, amount FROM orders"
             ),
             "datasourceGeneration": 1,
             "columns": ["id", "amount"],
@@ -257,7 +264,10 @@ def test_artifact_page_and_export_dispatch_to_durable_capability_view(
 
     assert page.consistency == "durable_snapshot"
     assert page.rows == [{"id": "2", "amount": "40"}]
-    assert page.datasourceGeneration == "1"
+    assert page.resourceVersion == "1"
+    assert page.sourceFingerprint == _query_fingerprint(
+        "SELECT id, amount FROM orders"
+    )
     assert provider.page_request.filters[0].column == "amount"
     assert provider.page_request.sort[0].direction == "desc"
     assert provider.export_request.search == "40"

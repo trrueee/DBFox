@@ -15,7 +15,7 @@ from engine.tools.builtin.conversation import (
 from engine.tools.runtime import ToolRunContext
 
 
-def _session(db_session, datasource_id: str, session_id: str) -> AgentSession:
+def _session(db_session, resource_id: str, session_id: str) -> AgentSession:
     value = AgentSession(id=session_id, title=session_id)
     db_session.add(value)
     db_session.flush()
@@ -45,10 +45,9 @@ def _message(
     return value
 
 
-def _context(db_session, datasource_id: str, session_id: str) -> ToolRunContext:
+def _context(db_session, resource_id: str, session_id: str) -> ToolRunContext:
     request = SimpleNamespace(
-        datasource_id=datasource_id,
-        datasource_generation=1,
+        resource_id=resource_id,
         question="回忆本轮对话",
         session_id=session_id,
         run_id="run_recall",
@@ -57,17 +56,17 @@ def _context(db_session, datasource_id: str, session_id: str) -> ToolRunContext:
     return ToolRunContext.for_invocation(
         request=request,
         idempotency_key="recall-test",
-        resources={("dbfox.data.database", datasource_id): db_session},
+        resources={("verification.resource", resource_id): db_session},
         metadata_session=db_session,
     )
 
 
 def test_fts_search_tracks_completed_canonical_messages_and_updates(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     session_id = "recall_fts"
-    _session(db_session, str(test_datasource.id), session_id)
+    _session(db_session, str(test_resource.id), session_id)
     assistant = _message(
         db_session,
         session_id=session_id,
@@ -129,11 +128,11 @@ def test_fts_search_tracks_completed_canonical_messages_and_updates(
 
 def test_search_is_current_session_only_and_short_queries_are_bound(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
-    datasource_id = str(test_datasource.id)
-    _session(db_session, datasource_id, "recall_local")
-    _session(db_session, datasource_id, "recall_foreign")
+    resource_id = str(test_resource.id)
+    _session(db_session, resource_id, "recall_local")
+    _session(db_session, resource_id, "recall_foreign")
     _message(
         db_session,
         session_id="recall_local",
@@ -180,10 +179,10 @@ def test_search_is_current_session_only_and_short_queries_are_bound(
 
 def test_read_uses_stable_sequence_paging_and_excludes_unfinished_assistant(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     session_id = "recall_page"
-    _session(db_session, str(test_datasource.id), session_id)
+    _session(db_session, str(test_resource.id), session_id)
     for sequence, role, status in [
         (1, "user", "completed"),
         (2, "assistant", "completed"),
@@ -216,13 +215,13 @@ def test_read_uses_stable_sequence_paging_and_excludes_unfinished_assistant(
 
 def test_tools_redact_provider_text_and_persist_only_structural_facts(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     session_id = "recall_redaction"
-    datasource_id = str(test_datasource.id)
+    resource_id = str(test_resource.id)
     secret = "sk" + "-abcdefgh123456"
     dsn_password = "dsn-password-recall"
-    _session(db_session, datasource_id, session_id)
+    _session(db_session, resource_id, session_id)
     _message(
         db_session,
         session_id=session_id,
@@ -235,7 +234,7 @@ def test_tools_redact_provider_text_and_persist_only_structural_facts(
         ),
     )
     db_session.commit()
-    context = _context(db_session, datasource_id, session_id)
+    context = _context(db_session, resource_id, session_id)
 
     search_tool = ConversationSearchTool()
     search_output = search_tool.run(

@@ -21,8 +21,8 @@ function pageResponse(rows: Array<Record<string, unknown>>, page: number): SqlBa
     originalExecutedAt: "2026-07-20T00:00:00Z",
     viewExecutedAt: "2026-07-20T00:00:01Z",
     viewExecutionId: `view-${page}`,
-    datasourceGeneration: 1,
-    queryFingerprint: "query-1",
+    resourceVersion: 1,
+    sourceFingerprint: "source-1",
     warnings: [],
     notices: [],
   };

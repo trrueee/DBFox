@@ -8,7 +8,7 @@
 >
 > 基线：`main@daa99d048decd7f5f8dc010cbe5465f332686a3c`
 >
-> 上位 RFC：[DBFox 可扩展 Runtime 与 Workbench 架构计划](./extensible-runtime-workbench-program.md)
+> 上位合同：[Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md)
 >
 > 2026-08-22 收敛说明：Project、Conversation authority、同 kind 多资源及 System DLC
 > 所有权以 [Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md)

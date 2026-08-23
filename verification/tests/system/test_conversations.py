@@ -147,14 +147,9 @@ def test_snapshot_restores_messages_run_artifact_and_event_cursor(client, db_ses
     from engine.agent.artifact import ArtifactType
     ArtifactRepository(db_session).create(
         lease=lease, run_id=admitted.run_id, turn_id=turn.id,
-        artifact_type=ArtifactType.SQL, title="执行的 SQL",
-        payload={
-            "sql": "SELECT * FROM orders",
-            "safeSql": "SELECT * FROM orders",
-            "dialect": "sqlite",
-            "queryFingerprint": "orders-query",
-        },
-        semantic_key="orders-sql",
+        artifact_type=ArtifactType.MARKDOWN, title="已验证工作产物",
+        payload={"content": "Verified output"},
+        semantic_key="verified-output",
     )
     db_session.commit()
 
@@ -175,7 +170,7 @@ def test_snapshot_restores_messages_run_artifact_and_event_cursor(client, db_ses
         headers=_headers(),
     )
     assert artifacts.status_code == 200
-    assert artifacts.json()[0]["type"] == "sql"
+    assert artifacts.json()[0]["type"] == "markdown"
 
 def test_removed_datasource_create_field_is_rejected(client):
     response = client.post(

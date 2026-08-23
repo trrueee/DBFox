@@ -198,14 +198,14 @@ export const zChartPointResponse = z.object({
  */
 export const zChartDataResponse = z.object({
     consistency: z.enum(['durable_snapshot', 'live_reexecution']),
-    datasourceGeneration: z.union([
+    originalExecutedAt: z.string().nullish(),
+    resourceVersion: z.union([
         z.string(),
         z.int()
     ]),
-    originalExecutedAt: z.string().nullish(),
-    queryFingerprint: z.string(),
     sampleSize: z.int(),
     series: z.array(zChartPointResponse),
+    sourceFingerprint: z.string(),
     truncated: z.boolean(),
     viewExecutedAt: z.string(),
     viewExecutionId: z.string()
@@ -517,7 +517,6 @@ export const zEvidenceReference = z.object({
     label: z.string(),
     locator: z.record(z.string(), z.unknown()).optional(),
     observed_at: z.iso.datetime(),
-    query_fingerprint: z.string(),
     value: z.unknown().nullish()
 });
 
@@ -531,7 +530,6 @@ export const zEvidenceResponse = z.object({
     label: z.string(),
     locator: z.record(z.string(), z.unknown()),
     observed_at: z.string(),
-    query_fingerprint: z.string(),
     run_id: z.string(),
     session_id: z.string(),
     value: z.unknown().nullish()
@@ -878,19 +876,19 @@ export const zResultPageResponse = z.object({
         'live_reexecution',
         'live_query'
     ]),
-    datasourceGeneration: z.union([
-        z.string(),
-        z.int()
-    ]),
     hasNextPage: z.boolean(),
     latencyMs: z.int(),
     notices: z.array(z.string()).nullish(),
     originalExecutedAt: z.string().nullish(),
     page: z.int(),
     pageSize: z.int(),
-    queryFingerprint: z.string(),
+    resourceVersion: z.union([
+        z.string(),
+        z.int()
+    ]),
     rowCount: z.int().nullish(),
     rows: z.array(z.record(z.string(), z.unknown())),
+    sourceFingerprint: z.string(),
     viewExecutedAt: z.string(),
     viewExecutionId: z.string(),
     warnings: z.array(z.string()).nullish()

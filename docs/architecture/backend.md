@@ -115,7 +115,7 @@ stateDiagram-v2
 - 测试连接允许短暂使用请求密钥，但不得写日志或普通配置；
 - 删除或替换凭据后清理不再引用的安全存储记录。
 
-## 4. SQL 安全执行链
+## 4. Data DLC 的 SQL 安全执行链
 
 ```mermaid
 flowchart LR
@@ -127,34 +127,32 @@ flowchart LR
   POLICY -->|"是"| APPROVAL["Durable Approval"]
   APPROVAL --> EXEC["Authorized Leaf Execution"]
   POLICY -->|"否"| EXEC
-  EXEC --> RESULT["Transient Rows + Durable Descriptor"]
+  EXEC --> RESULT["Capability-owned Durable Result"]
 ```
 
 核心约束：
 
 - 实际执行只能使用经过 Policy 固化的 `authorized_input`；
 - Approval 展示的 SQL、批准后的 SQL 和叶子执行 SQL 必须具有同一 hash；
-- 只读分析、手工 SQL 和 Artifact Result Gateway 复用同一安全决策模型；
+- SQL parser、guardrail、EXPLAIN、执行和结果存储全部属于 `dbfox.data`；Core 只执行通用 Tool admission/approval；
 - 导出使用流式执行、边界大小和截止时间，不允许无界 `fetchall`。
 
-## 5. Reference-only Result Gateway
+## 5. Artifact View Gateway
 
 ```mermaid
 flowchart LR
-  REQUEST["Artifact ID + View Query"] --> LOAD["Load Result Artifact"]
-  LOAD --> REL["Resolve derived_from SQL Artifact"]
-  REL --> CHECK["Session / Generation / Fingerprint Check"]
-  CHECK --> COMPILE["Compile page / sort / filter / search"]
-  COMPILE --> SAFETY["Revalidate Safe SQL"]
-  SAFETY --> EXEC["Execute against User DB"]
-  EXEC --> RESPONSE["Current Request Rows"]
+  REQUEST["Artifact ID + View Query"] --> LOAD["Load Core Artifact envelope"]
+  LOAD --> PROVIDER["Resolve capability view provider from Runtime snapshot"]
+  PROVIDER --> CHECK["Validate Artifact/resource ownership"]
+  CHECK --> READ["Read capability-owned durable result"]
+  READ --> RESPONSE["Bounded page/profile/chart/export"]
 ```
 
-Result Artifact 持久化边界：
+边界：
 
-- 保存：`sourceSqlArtifactId`、`queryFingerprint`、`datasourceGeneration`、列描述、行数、耗时、执行时间、截断状态；
-- 不保存：结果行、预览行、图表 series、重复 SQL；
-- Chart Artifact 只保存来源 Result Artifact ID 和展示规格。
+- Core 保存通用 Artifact envelope、opaque payload 与 frozen ResourceRefs，不保存 Data 专用 fingerprint 字段；
+- Data DLC 保存有界耐久结果，并通过一次边界映射向 Core API 返回 `resourceVersion` 与 `sourceFingerprint`；
+- 分页、profile、chart 和 export 不重新执行 SQL；模型上下文只得到有界 Observation/Artifact 摘要。
 
 ## 6. 持久化与事务边界
 

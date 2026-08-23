@@ -30,7 +30,7 @@ class _Output(ToolOutputModel):
 
 
 class _ReadTool(BaseTool[_Input, _Output]):
-    name = "schema_read"
+    name = "verification_inspect"
     group = "schema"
     description = "Read schema"
     input_model = _Input
@@ -60,7 +60,7 @@ def test_materialization_is_filtered_versioned_and_stable() -> None:
     second = materialize_tools(registry, allowed_groups={"schema"}, execution_mode="user_requested_read")
 
     assert first.hash == second.hash
-    assert [tool.name for tool in first.tools] == ["schema_read"]
+    assert [tool.name for tool in first.tools] == ["verification_inspect"]
     assert first.tools[0].recovery_policy is ToolRecoveryPolicy.RETRY_SAFE
     assert first.provider_schemas()[0]["parameters"]["properties"]["value"]["type"] == "string"
     assert first.provider_schemas()[0]["parameters"]["additionalProperties"] is False
@@ -73,16 +73,12 @@ def test_materialization_can_narrow_a_group_to_an_explicit_completion_set() -> N
 
     materialization = materialize_tools(
         registry,
-        allowed_groups={"control", "result"},
-        allowed_names={"update_plan", "result_inspect", "result_profile"},
+        allowed_groups={"control"},
+        allowed_names={"update_plan"},
         execution_mode="agent_autonomous_read",
     )
 
-    assert {tool.name for tool in materialization.tools} == {
-        "update_plan",
-        "result_inspect",
-        "result_profile",
-    }
+    assert {tool.name for tool in materialization.tools} == {"update_plan"}
 
 
 def test_tools_are_not_retry_safe_without_an_explicit_recovery_contract() -> None:
@@ -120,7 +116,7 @@ def test_pending_call_cannot_cross_a_tool_version_boundary() -> None:
         allowed_groups={"schema"},
         execution_mode="user_requested_read",
     )
-    frozen_contract = materialization.require("schema_read").contract_hash
+    frozen_contract = materialization.require("verification_inspect").contract_hash
 
     class _ReadToolV2(_ReadTool):
         version = "2"
@@ -130,7 +126,7 @@ def test_pending_call_cannot_cross_a_tool_version_boundary() -> None:
         require_current_tool(
             current_registry,
             materialization,
-            name="schema_read",
+            name="verification_inspect",
             contract_hash=frozen_contract,
         )
 
@@ -138,7 +134,7 @@ def test_pending_call_cannot_cross_a_tool_version_boundary() -> None:
         require_current_tool(
             ToolRegistry(),
             materialization,
-            name="schema_read",
+            name="verification_inspect",
             contract_hash=frozen_contract,
         )
 
@@ -149,7 +145,7 @@ def test_pending_call_cannot_cross_a_contract_change_with_same_declared_version(
         allowed_groups={"schema"},
         execution_mode="user_requested_read",
     )
-    frozen_contract = materialization.require("schema_read").contract_hash
+    frozen_contract = materialization.require("verification_inspect").contract_hash
 
     class _ChangedInput(ToolInputModel):
         value: int
@@ -162,7 +158,7 @@ def test_pending_call_cannot_cross_a_contract_change_with_same_declared_version(
         require_current_tool(
             ToolRegistry().register(_ReadToolChangedContract()),
             materialization,
-            name="schema_read",
+            name="verification_inspect",
             contract_hash=frozen_contract,
         )
 
@@ -173,7 +169,7 @@ def test_pending_call_cannot_cross_a_policy_change_with_same_declared_version() 
         allowed_groups={"schema"},
         execution_mode="user_requested_read",
     )
-    frozen_contract = materialization.require("schema_read").contract_hash
+    frozen_contract = materialization.require("verification_inspect").contract_hash
 
     class _ReadToolChangedPolicy(_ReadTool):
         policy = ToolPolicy(requires_approval=True)
@@ -182,7 +178,7 @@ def test_pending_call_cannot_cross_a_policy_change_with_same_declared_version() 
         require_current_tool(
             ToolRegistry().register(_ReadToolChangedPolicy()),
             materialization,
-            name="schema_read",
+            name="verification_inspect",
             contract_hash=frozen_contract,
         )
 
@@ -213,13 +209,6 @@ def test_dbfox_tools_publish_openai_strict_schemas() -> None:
         assert schema["strict"] is True
         assert_strict_objects(schema["parameters"])
 
-    search = materialization.require("schema_search")
-    search_properties = search.input_schema["properties"]
-    assert search_properties["queries"]["maxItems"] == 4
-    assert search_properties["queries"]["items"]["maxLength"] == 512
-    assert search_properties["limit_per_query"]["minimum"] == 1
-    assert search_properties["limit_per_query"]["maximum"] == 20
-
     update_plan = materialization.require("update_plan")
     assert "complete current objective and complete steps array" in (
         update_plan.description
@@ -230,25 +219,6 @@ def test_dbfox_tools_publish_openai_strict_schemas() -> None:
 def test_dbfox_tool_capabilities_are_the_single_resource_access_contract() -> None:
     registry = build_product_tool_registry()
 
-    assert registry.require("catalog_overview").execution.capabilities == (
-        "filesystem_read",
-    )
-    assert registry.require("catalog_refresh").execution.capabilities == (
-        "network",
-        "filesystem_read",
-    )
-    assert registry.require("schema_inspect").execution.capabilities == (
-        "network",
-        "filesystem_read",
-    )
     assert registry.require("conversation_search").execution.capabilities == ("metadata_read",)
     assert registry.require("conversation_read").execution.capabilities == ("metadata_read",)
-    assert registry.require("data_preview").execution.capabilities == (
-        "network",
-        "filesystem_read",
-    )
-    assert registry.require("sql_execute_readonly").execution.capabilities == (
-        "network",
-        "filesystem_read",
-    )
     assert registry.require("update_plan").execution.capabilities == ()

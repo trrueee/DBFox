@@ -140,13 +140,13 @@ def register(host: BackendExtensionHost) -> None:
     host.completion.register_constraint(
         SemanticCitationConstraint(
             id="dbfox.data.result_citation",
-            semantic_capability="query_result",
+            semantic_capability="dbfox.data.query_result",
         )
     )
     host.completion.register_support(
         SemanticArtifactCompletionSupport(
             id="dbfox.data.query_result",
-            semantic_capability="query_result",
+            semantic_capability="dbfox.data.query_result",
         )
     )
 

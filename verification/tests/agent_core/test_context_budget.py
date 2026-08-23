@@ -21,7 +21,7 @@ def test_budget_keeps_current_request_and_drops_old_history_first() -> None:
         observations=[
             ContextObservation(
                 id="latest-observation",
-                tool_name="sql_execute_readonly",
+                tool_name="verification_read",
                 status="succeeded",
                 summary="verified",
                 facts={"payload": "y" * 3_000},
@@ -79,12 +79,12 @@ def test_budget_accounts_for_typed_response_items_and_drops_complete_old_pairs()
             ContextObservation(
                 id=f"observation-{index}",
                 turn_id=f"turn-{index}",
-                tool_name="sql_execute_readonly",
+                tool_name="verification_read",
                 status="succeeded",
                 summary=f"durable-result-{index}",
                 artifact_ids=[f"artifact-result-{index}"],
                 facts={"returned_rows": index + 1},
-                capabilities=("query_result",),
+                capabilities=("verification.evidence",),
             )
             for index in range(2)
         ],

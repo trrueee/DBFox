@@ -7,7 +7,7 @@
 > 最后核验：2026-08-15
 >
 > 版本：v2.1（评审修订版 · IA 冻结）
-> 定位：产品与视觉/交互基线。Shell 边界、导航所有权与实现迁移以已接受的 [`docs/architecture/workbench-shell-workspace-dock.md`](architecture/workbench-shell-workspace-dock.md) / [`workbench-shell-migration-guide.md`](architecture/workbench-shell-migration-guide.md) 为准；本文历史方案中仍提及 `WorkspaceTabs` 的部分不再作为实现依据。
+> 定位：产品与视觉/交互基线。当前 Shell 边界、导航所有权以 [`docs/architecture/frontend.md`](architecture/frontend.md) 和源码测试为准；已完成的迁移方案位于 `docs/archive/designs/`，本文历史方案中仍提及 `WorkspaceTabs` 的部分不再作为实现依据。
 > v2.0：所有「文字 Tab 切换」升级为产品化组件；补齐视觉语言、组件规格、快捷键、动效与空状态。
 > v2.1：信息架构（IA）正式冻结，不再推翻 Project / Conversation / SQL / Artifact 关系；Switcher 锁定「图标 + 短文字」；Console 执行块去卡片化，回归连续 Transcript；色彩降级为辅助线索。
 

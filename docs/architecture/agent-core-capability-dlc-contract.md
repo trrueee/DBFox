@@ -245,14 +245,14 @@ Data System DLC frontend 已贡献 hosted Resource Connector：第一层只展�
 含多个数据库时恢复来源。Resource version 保持 `str | int` 原值，Core 不解析 Data DLC 的
 复合 generation，也不把它强转成整数。
 
-Run/Memory 的旧 datasource compatibility 存储也已完成物理清理。Alembic head
+Run/Memory 的旧 datasource compatibility 存储也已完成物理清理。历史迁移
 `c0d1e2f3a4b7` 删除 `agent_runs.datasource_id/datasource_generation` 及
 `agent_session_memories.datasource_id`、对应 FK 与索引；公共 Run projection 同步删除
 `datasource_id`。`resource_refs_for_run()` 对缺少冻结 refs 的历史输入 fail closed，不再从 Run 行
 恢复或扩大 authority。Extension API v2 进一步把 Memory JSON 内的 Data Catalog scope 改为
 canonical `ResourceScopeRef`，不再镜像 `datasource_id/datasource_generation`。Alembic
 `c0d1e2f3a4ba` 只移除可重建的旧 Catalog projection，保留 Memory Core 与其他 DLC projection；
-后续投影从 canonical Runs/Observations 重建，不引入双读或长期兼容解析。Alembic
+该历史投影随后整体退役，不引入双读或长期兼容解析。Alembic
 `d1e2f3a4b5c7` 随后把 Conversation intent、Input、Artifact 与 Memory 中旧的裸 `database`
 resource kind 单向改写为 `dbfox.data.database`；运行时代码不保留 alias、mapper 或双读协议。
 
@@ -265,38 +265,17 @@ Alembic `c0d1e2f3a4b8` 进一步把 `agent_session_inputs.resource_refs_json` �
 历史 NULL 在迁移中一次性写成 `[]`，之后空数组是零 authority 的唯一耐久表示。Codec 因此只返回
 `tuple[ResourceScopeRef, ...]`，不再用 `None` 表示另一种“未指定”状态。
 
-Core `Project` 的 ORM 对象也不再声明 `data_sources` 或 `backups` 集合，避免 Kernel identity
-反向认识 Data 领域。迁移期 Data 模型只保留到 `Project` 的单向关系，用于同一事务中的外键写入排序；
-删除行为继续由既有数据库 FK 的 `SET NULL/CASCADE` 定义，不增加 ORM 级第二套生命周期规则。
-
-临时 legacy Data 的 provider、metadata-session resolver 与 completion 声明已集中到
-`engine.tools.builtin.data_capability`。`runtime_composition.py` 不再 import `DataSource`，只遍历通用
-snapshot contribution；这些 legacy contribution 的 owner 统一为 `dbfox.data`。Data System DLC
-完成执行链 cutover 后会整体删除该模块，而不是保留 alias、wrapper 或 fallback。
-
-Data execution 源码迁移使用单一权威树 `dlcs/dbfox_data/backend`。第一步已把纯 Data chart
-suggestion/series 算法从 Core 物理迁入该目录；迁移期间仍需要结果 API 的 Core 调用方直接 import
-同一实现，不复制 wrapper。删除条件是 Result/Chart API 与 Tools 全部由 `dbfox.data` 注册后，Core
-不再引用该包，legacy results 与 result-view Data 路径一起删除。
-
-第二步已把 schema inventory 与 Data Tool 的全部 model-facing contracts 物理迁入同一权威树：
-`inventory.py` 拥有 catalog/introspection Pydantic 类型，`tool_contracts.py` 拥有 Catalog、Preview、
-SQL、Result、Chart 的输入输出合同及其边界常量。Core `engine.tools.builtin.contracts` 现在只保留
-Conversation 与 Control 合同；legacy Data 执行服务在迁移期直接 import DLC 的唯一类型定义，未保留
-re-export、mapper 或镜像模型。删除条件是对应 catalog/query/result Tool 实现和测试完成物理迁移，
-届时这些从 Core 到 DLC 的临时直接 import 会随 legacy Tool 文件一起消失。
-
-第三步已迁出 Data Artifact payload 与无 Core state 依赖的 SQL primitives。SQL/Safety/ResultView/Chart
-payload 现在由 `dbfox.data` 定义，DLC 注册最终 namespaced artifact type；Core 只在 legacy 执行期用
-同一 validator 登记历史 flat type。Parser、single-readonly-query、SQL-backed view、result limits、
-CSV export、permission probes 与 pool registry 也已物理迁入 `backend/sql`，原调用方直接改 import，
-没有保留旧路径 alias。Data package 的私有 ABI 合同测试改为递归扫描整个 backend tree。
+Core `Project` 与当前 ORM 已完全删除 DataSource、Catalog、Backup 和 Workspace domain state。历史表只由
+Alembic cutover migration 读取；生产 Kernel 不保留 legacy provider、metadata resolver、HTTP route、
+旧 import path、开发 fallback 或领域 ORM。Data 的唯一权威源码树是 `dlcs/dbfox_data/backend`，其中
+拥有 inventory、tool contracts、Artifact payload、SQL primitives、guardrail、execution、result view、
+backup 和 Workbench contribution。
 
 这一步同时修正了 Artifact contribution 的 snapshot lifecycle：DLC payload validator 只存在于
 不可变 `RuntimeContributionSnapshot.artifact_contracts`，编译器不再把它写入可冻结的进程全局
 registry。Artifact 写入从当前 active snapshot 精确解析 namespaced type/version；DLC 被禁用后新写
 立即失去该合同，历史读取仍按 unknown historical payload fail-soft。Core 全局 registry 只保留
-内置与迁移期 flat type，因此 package 可重复编译，也不会在 Core freeze 后因动态注册而失败；不同
+Kernel-owned type，因此 package 可重复编译，也不会在 Core freeze 后因动态注册而失败；不同
 active owner 的 type 冲突仍在单次 snapshot 编译中原子拒绝。
 
 第四步已迁出 SQL guardrail、bound-parameter rendering/fingerprint、identifier/query builder 与
@@ -305,12 +284,9 @@ active owner 的 type 冲突仍在单次 snapshot 编译中原子拒绝。
 Kernel Extension API 新增的只有严格 JSON dumps 与安全诊断两个通用 primitive：DLC diagnostic 必须
 使用 namespaced operation code，Host 只记录 code、异常类型与进程内 opaque fingerprint，不记录
 SQL 或异常正文。`TrustGate` 已迁入 Data DLC，并只消费不可变 `DatabaseSafetyScope` 及显式注入的
-schema validation / EXPLAIN 边界函数；它不再持有 ORM Session，也不再导入 `DataSource`。Legacy
-`SqlSafetyService` 暂时负责从 Core 元数据构造该 scope 并连接现有执行设施。Data 方言值对象也已
-迁入 DLC，统一使用 `DatabaseDialectContext(resource_id, dialect)`；Core
-`engine/sql/dialect_context.py` 只保留遗留 `DataSource` 元数据加载函数，并已写明删除条件。它不再
-向调用方伪装成带 ORM classmethod 的领域对象。待遗留执行依赖迁出后，该 loader 文件整体删除，
-不为它建立 service locator。
+schema validation / EXPLAIN 边界函数；它不持有 Core ORM Session。Data 方言值对象统一使用
+`DatabaseDialectContext(resource_id, dialect)`。Core 不再包含 SQL safety、dialect loader 或 Data
+policy engine，也没有从 Core 指向 `dlcs.dbfox_data` 的反向 import。
 
 第五步已建立第一条由 System Data package 自己注册的真实 Tool 垂直链。`sql_validate` v2 只从
 frozen `dbfox.data.database` scope 解析 `DatabaseHandle`；多数据库 Run 未显式提供 `database_id`
@@ -318,8 +294,7 @@ frozen `dbfox.data.database` scope 解析 `DatabaseHandle`；多数据库 Run �
 通过真实只读 EXPLAIN 校验 guardrail 产出的 `safe_sql`，并原子产生 namespaced
 `dbfox.data.safety → dbfox.data.sql` Artifact drafts；每个 draft 都绑定完整 `ResourceScopeRef`。
 SSH profile 当前明确返回 explain unavailable，不会退回 direct host。System Data 在签名发行 bundle 中
-默认启用；Runtime 只在 DLC 未激活的源码开发环境组合 legacy Tool，因此两组 Tool 不会同时出现在一个
-snapshot。
+默认启用；package 缺失或未激活时 Runtime fail closed，不组合 legacy Tool。
 
 第六步已把 `sql_execute_readonly` v2 接到同一条 System Data 垂直链。Kernel 的 `ToolPolicy` 不再
 包含 `requires_validated_sql` 或任何 SQL 字段；它只提供通用 `requires_admission`。声明该策略的
@@ -502,9 +477,8 @@ publisher in-process DLC，不构成恶意代码沙箱。凭据创建/lease adop
 因此继续采用可恢复 saga，不切换 journal mode，也不引入双写 mapper。
 
 **实施状态（2026-08-23）：owner-bound adoption 与恢复闭环已完成。** `CredentialLeaseSaga` 不再 import
-或查询 `DataSource`，只执行 immutable Runtime snapshot 中 capability-owned 的只读 reference probe。
-临时 legacy Data probe 查询旧 metadata state；签名 `dbfox.data` package 通过
-`host.credentials.register_reference_probe(...)` 查询自身 `state.sqlite3`。Probe 注册要求 manifest
+或查询领域表，只执行 immutable Runtime snapshot 中 capability-owned 的只读 reference probe。签名
+`dbfox.data` package 通过 `host.credentials.register_reference_probe(...)` 查询自身 `state.sqlite3`。Probe 注册要求 manifest
 至少声明一个 `credentials:<kind>` 权限，并随 package activation 原子加入/移出 snapshot。这样崩溃后
 已进入 `claimed` 的 lease 可以在 active capability 的 durable state 已落盘时安全收敛为 `committed`。
 
@@ -576,7 +550,7 @@ Host 拥有 section chrome、overflow、focus、keyboard 与 selection visual co
 
 - `dbfox.data` 与 `dbfox.workspace` 均以签名 System DLC 默认启用；Kernel-only 启动仅是包不可用时的明确 fail-closed 状态，不会注册 legacy Data/Workspace fallback。
 - Core HTTP 不再注册 DataSource、Schema、Query、Backup 业务路由；Data Workbench 通过 typed DLC operations 和 Artifact views 工作。
-- Alembic head `e2f3a4b5c6d8` 先将历史 Connection/DataSource identity 与 opaque credential refs 幂等导入 `dbfox.data/state.sqlite3`，验证后删除 Core Data 表和 Data FTS。Catalog、history 与 result rows 是可重建/有界领域状态，不在 Core 保留镜像。
+- Alembic `e2f3a4b5c6d8` 将历史 Connection/DataSource identity 与 opaque credential refs 幂等导入 `dbfox.data/state.sqlite3`，验证后删除 Core Data 表和 Data FTS；当前 head `f3a4b5c6d7e9` 又移除最后的 Run/Data compatibility columns。Catalog、history 与 result rows 是 capability-owned 领域状态，不在 Core 保留镜像。
 - Project 当前模型只保留 identity/metadata；Conversation 只保留 Project 归属和 generic resource intent；Run 只从 frozen refs 获得权限。
 - Data Connector 以 `ConnectionProfile → DatabaseResource → provider objects` 展示资源；左侧 focus 与 Composer context selection 是两个独立状态。
 - Dock collapsed state 使用独立 rail layout，不压缩 expanded tab strip；Composer 与 Conversation content column 共用版心，不作为 footer panel。

@@ -179,7 +179,7 @@ def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
     completed_call = _function_call(
         "fc_1",
         call_id="call_1",
-        name="schema_inspect",
+        name="verification_inspect",
         arguments='{"table_name":"orders"}',
         status="completed",
     )
@@ -231,7 +231,7 @@ def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
                     "item": _function_call(
                         "fc_1",
                         call_id="call_1",
-                        name="schema_inspect",
+                        name="verification_inspect",
                         arguments="",
                         status="in_progress",
                     ),
@@ -315,7 +315,7 @@ def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
     tools = [
         {
             "type": "function",
-            "name": "schema_inspect",
+            "name": "verification_inspect",
             "description": "读取表结构",
             "parameters": {"type": "object", "properties": {}},
         }
@@ -329,7 +329,7 @@ def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
     assert result.messages[0].phase == "commentary"
     assert result.reasoning_summary == "正在确认所需数据。"
     assert result.tool_calls[0].id == "call_1"
-    assert result.tool_calls[0].name == "schema_inspect"
+    assert result.tool_calls[0].name == "verification_inspect"
     assert result.tool_calls[0].arguments == {"table_name": "orders"}
     assert [item["type"] for item in result.output_items] == [
         "message",
@@ -930,7 +930,7 @@ def test_fallback_to_chat_completion_on_responses_404_with_tool_call() -> None:
                                     "id": "call_1",
                                     "type": "function",
                                     "function": {
-                                        "name": "schema_inspect",
+                                        "name": "verification_inspect",
                                         "arguments": "{\"table_name\":\"orders\"}",
                                     },
                                 }
@@ -961,7 +961,7 @@ def test_fallback_to_chat_completion_on_responses_404_with_tool_call() -> None:
             tools=[
                 {
                     "type": "function",
-                    "name": "schema_inspect",
+                    "name": "verification_inspect",
                     "description": "读取表结构",
                     "parameters": {"type": "object", "properties": {}},
                 }
@@ -970,14 +970,14 @@ def test_fallback_to_chat_completion_on_responses_404_with_tool_call() -> None:
     )
 
     assert result.tool_calls[0].id == "call_1"
-    assert result.tool_calls[0].name == "schema_inspect"
+    assert result.tool_calls[0].name == "verification_inspect"
     assert result.tool_calls[0].arguments == {"table_name": "orders"}
     assert result.output_items == [
         {
             "type": "function_call",
             "id": "call_1",
             "call_id": "call_1",
-            "name": "schema_inspect",
+            "name": "verification_inspect",
             "arguments": "{\"table_name\":\"orders\"}",
             "status": "completed",
         }

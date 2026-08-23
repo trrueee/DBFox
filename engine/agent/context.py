@@ -684,7 +684,6 @@ class ContextAssembler:
                 .where(
                     AgentArtifactRecord.run_id == previous.id,
                     AgentArtifactRecord.status == "completed",
-                    AgentArtifactRecord.type == "result_view",
                 )
                 .limit(1)
             ).scalar_one_or_none()
@@ -1117,49 +1116,7 @@ class ContextAssembler:
         return values
 
 def _context_artifact_descriptor(artifact_type: str, payload: Any) -> dict[str, Any]:
-    if not isinstance(payload, dict):
-        return {}
-    common = {
-        key: payload[key]
-        for key in ("queryFingerprint", "datasourceGeneration")
-        if key in payload
-    }
-    if artifact_type == "result_view":
-        return {
-            **common,
-            **{
-                key: payload[key]
-                for key in (
-                    "sourceSqlArtifactId",
-                    "columns",
-                    "rowCount",
-                    "returnedRows",
-                    "latencyMs",
-                    "truncated",
-                )
-                if key in payload
-            },
-        }
-    if artifact_type == "chart":
-        return {
-            **common,
-            **{
-                key: payload[key]
-                for key in (
-                    "sourceResultArtifactId",
-                    "chartType",
-                    "x",
-                    "y",
-                    "title",
-                    "reason",
-                )
-                if key in payload
-            },
-        }
-    if artifact_type == "sql":
-        return {
-            key: payload[key]
-            for key in ("sql", "safeSql", "dialect", "queryFingerprint")
-            if key in payload
-        }
+    del artifact_type, payload
+    # Core supplies only the Artifact envelope. Capability payload semantics
+    # belong to DLC context contributors.
     return {}

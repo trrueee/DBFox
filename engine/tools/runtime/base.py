@@ -30,8 +30,6 @@ ToolProgressStyle = Literal["indeterminate", "determinate", "none"]
 ToolCapability = Literal[
     "metadata_read",
     "metadata_write",
-    "database_read",
-    "database_write",
     "filesystem_read",
     "filesystem_write",
     "network",

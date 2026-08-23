@@ -758,10 +758,7 @@ class RunRepository:
             if isinstance(item, dict) and item.get("artifact_id")
         ]
         evidence_by_key = {
-            (
-                str(item["artifact_id"]),
-                str(item.get("query_fingerprint") or ""),
-            ): item
+            str(item["artifact_id"]): item
             for item in [*previous_evidence, *incoming_evidence]
         }
         stable_delta = {

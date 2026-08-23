@@ -6,7 +6,7 @@ import logging
 from starlette.requests import Request
 
 from engine.app.safe_errors import FixedErrorCode
-from engine.errors import DBFoxError, NotFoundError, SQLExecutionError
+from engine.errors import DBFoxError, NotFoundError
 from engine.main import dbfox_error_handler, global_unhandled_exception_handler
 from engine.security.credential_vault import CredentialVaultUnavailableError
 
@@ -100,12 +100,17 @@ def test_dbfox_error_handler_uses_catalog_message_for_registered_code(
     )
     logger = _isolated_main_logger(caplog, monkeypatch, level=logging.WARNING)
     try:
-        response = asyncio.run(dbfox_error_handler(request, SQLExecutionError(SENTINEL)))
+        response = asyncio.run(
+            dbfox_error_handler(
+                request,
+                DBFoxError(SENTINEL, code=FixedErrorCode.AGENT_REQUEST_ERROR.value),
+            )
+        )
 
         payload = response.body.decode()
         assert response.status_code == 400
-        assert "SQL_EXECUTION_FAILED" in payload
-        assert "The SQL request could not be completed." in payload
+        assert "AGENT_REQUEST_ERROR" in payload
+        assert "The agent request could not be completed." in payload
         assert SENTINEL not in payload
         assert SENTINEL not in caplog.text
     finally:
@@ -120,7 +125,7 @@ def test_dbfox_not_found_preserves_status_only_for_registered_code(
         {
             "type": "http",
             "method": "GET",
-            "path": "/api/v1/datasources/missing",
+            "path": "/api/v1/projects/missing",
             "headers": [],
         }
     )
@@ -129,13 +134,13 @@ def test_dbfox_not_found_preserves_status_only_for_registered_code(
         response = asyncio.run(
             dbfox_error_handler(
                 request,
-                NotFoundError(SENTINEL, code=FixedErrorCode.DATASOURCE_NOT_FOUND.value),
+                NotFoundError(SENTINEL, code=FixedErrorCode.NOT_FOUND.value),
             )
         )
 
         payload = response.body.decode()
         assert response.status_code == 404
-        assert "DATASOURCE_NOT_FOUND" in payload
+        assert "NOT_FOUND" in payload
         assert SENTINEL not in payload
     finally:
         logger.removeHandler(caplog.handler)

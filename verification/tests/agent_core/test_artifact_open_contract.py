@@ -19,9 +19,10 @@ from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import AgentArtifactRecord, AgentSession
 
 
-def test_legacy_flat_type_ids_remain_valid() -> None:
-    assert validate_artifact_type("result_view") == "result_view"
-    assert validate_artifact_type(ArtifactType.SQL.value) == "sql"
+def test_only_core_owned_flat_type_ids_remain_valid() -> None:
+    assert validate_artifact_type(ArtifactType.MARKDOWN.value) == "markdown"
+    with pytest.raises(ValueError, match="namespaced"):
+        validate_artifact_type("result_view")
 
 
 def test_new_extension_type_must_be_namespaced() -> None:
@@ -33,15 +34,15 @@ def test_new_extension_type_must_be_namespaced() -> None:
 
 
 def test_known_type_with_unknown_future_version_is_soft_on_read() -> None:
-    payload = {"sql": "SELECT 1", "futureField": True}
+    payload = {"content": "future", "futureField": True}
     assert validate_artifact_payload(
-        "sql",
+        "markdown",
         payload,
         schema_version=2,
         allow_unknown=True,
     ) == payload
     with pytest.raises(ValueError, match="schema_version=2"):
-        validate_artifact_payload("sql", payload, schema_version=2)
+        validate_artifact_payload("markdown", payload, schema_version=2)
 
 
 def test_artifact_payload_registry_registers_directly_and_freezes() -> None:
@@ -87,19 +88,14 @@ def test_registered_extension_payload_can_be_written_without_core_changes(
 
 def test_known_payload_contract_uses_schema_version_1() -> None:
     payload = validate_artifact_payload(
-        "sql",
-        {
-            "sql": "SELECT 1",
-            "safeSql": "SELECT 1",
-            "dialect": "sqlite",
-            "queryFingerprint": "fingerprint",
-        },
+        "markdown",
+        {"content": "bounded"},
         schema_version=1,
     )
-    assert payload["safeSql"] == "SELECT 1"
+    assert payload["content"] == "bounded"
 
     with pytest.raises(ValueError, match="schema_version=2"):
-        validate_artifact_payload("sql", {"sql": "SELECT 1"}, schema_version=2)
+        validate_artifact_payload("markdown", {"content": "bounded"}, schema_version=2)
 
 
 def test_unknown_new_write_is_rejected_but_historical_read_is_soft() -> None:
@@ -132,7 +128,7 @@ def test_artifact_draft_accepts_namespaced_type_and_schema_version() -> None:
 
 def test_repository_persists_schema_version_and_reads_unknown_soft(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     session_id = "session-open-artifact"
     db_session.add(
@@ -144,7 +140,7 @@ def test_repository_persists_schema_version_and_reads_unknown_soft(
     db_session.commit()
     admission = SessionRepository(db_session).admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version=1),),
         content="test",
         idempotency_key="open-artifact",
         llm_credential_id="credential",
@@ -161,18 +157,13 @@ def test_repository_persists_schema_version_and_reads_unknown_soft(
         lease=lease,
         run_id=admission.run_id,
         turn_id=None,
-        artifact_type=ArtifactType.SQL.value,
-        title="SQL",
-        payload={
-            "sql": "SELECT 1",
-            "safeSql": "SELECT 1",
-            "dialect": "sqlite",
-            "queryFingerprint": "fingerprint",
-        },
+        artifact_type=ArtifactType.MARKDOWN.value,
+        title="Markdown",
+        payload={"content": "bounded"},
     )
     db_session.commit()
 
-    assert artifact.type == "sql"
+    assert artifact.type == "markdown"
     assert artifact.schema_version == 1
     row = db_session.get(AgentArtifactRecord, artifact.id)
     assert row is not None and row.schema_version == 1

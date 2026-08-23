@@ -189,7 +189,7 @@ class PlanRepository:
         available_ids = {str(value) for value in rows}
         available_ids.update(
             artifact.id
-            for artifact in ArtifactRepository(self.session).referenced_results_for_run(
+            for artifact in ArtifactRepository(self.session).referenced_artifacts_for_run(
                 run_id
             )
         )

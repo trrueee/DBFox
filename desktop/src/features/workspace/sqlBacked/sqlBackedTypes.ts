@@ -45,8 +45,8 @@ export interface SqlBackedPageResponse {
   originalExecutedAt?: string | null;
   viewExecutedAt: string;
   viewExecutionId: string;
-  datasourceGeneration: string | number;
-  queryFingerprint: string;
+  resourceVersion: string | number;
+  sourceFingerprint: string;
   warnings?: string[] | null;
   notices?: string[] | null;
 }

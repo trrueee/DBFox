@@ -67,8 +67,8 @@ class ResultPageResponse(BaseModel):
     originalExecutedAt: str | None = None
     viewExecutedAt: str
     viewExecutionId: str
-    datasourceGeneration: str | int
-    queryFingerprint: str
+    resourceVersion: str | int
+    sourceFingerprint: str
     warnings: list[str] | None = None
     notices: list[str] | None = None
 
@@ -86,8 +86,8 @@ class ChartDataResponse(BaseModel):
     originalExecutedAt: str | None = None
     viewExecutedAt: str
     viewExecutionId: str
-    datasourceGeneration: str | int
-    queryFingerprint: str
+    resourceVersion: str | int
+    sourceFingerprint: str
 
 
 def _result_filters(
@@ -119,8 +119,8 @@ def _page_response(result: Any) -> ResultPageResponse:
         originalExecutedAt=result.original_executed_at,
         viewExecutedAt=result.read_at,
         viewExecutionId=result.read_id,
-        datasourceGeneration=result.resource_version,
-        queryFingerprint=result.query_fingerprint,
+        resourceVersion=result.resource_version,
+        sourceFingerprint=result.source_fingerprint,
         warnings=result.warnings,
         notices=result.notices,
     )
@@ -243,8 +243,8 @@ def api_agent_chart_data(
         originalExecutedAt=result.original_executed_at,
         viewExecutedAt=result.read_at,
         viewExecutionId=result.read_id,
-        datasourceGeneration=result.resource_version,
-        queryFingerprint=result.query_fingerprint,
+        resourceVersion=result.resource_version,
+        sourceFingerprint=result.source_fingerprint,
     )
 
 

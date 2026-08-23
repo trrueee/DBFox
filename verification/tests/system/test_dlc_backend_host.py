@@ -1669,7 +1669,7 @@ def test_failed_dlc_cannot_poison_later_dlc(
             "publisher": "acme",
             "extensionApiVersion": "2",
             "requiresDbfox": ">=1.0.0",
-            "permissions": ["network"],  # Missing database_read
+            "permissions": ["network"],  # Missing filesystem_write
             "entrypoints": {"backend": "backend/entry.py"},
         },
         payload_files={
@@ -1696,13 +1696,13 @@ def test_failed_dlc_cannot_poison_later_dlc(
                 "\n"
                 "def register(host: api.BackendExtensionHost) -> None:\n"
                 "    host.tools.register(SharedTool())\n"
-                "    # Register operation with ungranted database_read capability -> will fail validation\n"
+                "    # Register operation with ungranted filesystem_write capability -> will fail validation\n"
                 "    host.operations.register(api.DlcOperationSpec(\n"
                 "        name='forbidden_op',\n"
                 "        input_model=ToolIn,\n"
                 "        output_model=ToolOut,\n"
                 "        handler=lambda inp, ctx: ToolOut(),\n"
-                "        capabilities=('database_read',),\n"
+                "        capabilities=('filesystem_write',),\n"
                 "    ))\n"
             ),
         },
@@ -1790,7 +1790,7 @@ def test_isolated_worker_package_digest_mismatch_fails_closed(
     a real isolated subprocess worker, and the worker's runtime does not match digest A,
     the worker fails closed with IMPLEMENTATION_MISMATCH and does not execute.
     """
-    from verification.tests.system.support.metadata import create_migrated_metadata_engine
+    from verification.support.metadata import create_migrated_metadata_engine
     from engine.tools.runtime.attempt import (
         ToolAttemptRequest,
         ToolImplementationIdentity,

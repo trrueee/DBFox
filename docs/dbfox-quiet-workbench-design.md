@@ -10,7 +10,7 @@
 >
 > 实施进度：本规范作为前端视觉重构的执行规范与 merge gate；P0.1–P6、P7（synthetic 部分）、P8（token/CSS 清理部分）已实施（2026-08-21），P0 截图基线与真实 DLC（dbfox.github / acme.echo）的 Electron 级 conformance 待补。
 >
-> 与现行基线的关系：本规范描述目标形态与实施顺序，**不描述当前实现**，不覆盖 [`dbfox-design-baseline.md`](dbfox-design-baseline.md)；Shell 边界仍以 [`architecture/workbench-shell-workspace-dock.md`](architecture/workbench-shell-workspace-dock.md) ADR 为权威。若本规范与该 ADR 冲突，以 ADR 为准并先修订本文。
+> 与现行基线的关系：本规范描述视觉目标，**不描述当前实现**，不覆盖 [`dbfox-design-baseline.md`](dbfox-design-baseline.md)；当前 Shell 边界以 [`architecture/frontend.md`](architecture/frontend.md) 和源码测试为权威。
 
 它不是一次“换皮”，也不是重新做一套前端架构，而是在现在已经完成的 **Agent Runtime + Workbench Shell + Runtime DLC** 上，建立长期稳定的产品视觉语言。
 

@@ -35,7 +35,7 @@ from engine.models import (
 
 
 def test_successful_terminalization_yields_to_pending_steer(
-    db_session, test_datasource
+    db_session, test_resource
 ) -> None:
     db_session.add(
         AgentSession(
@@ -47,7 +47,7 @@ def test_successful_terminalization_yields_to_pending_steer(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_pending_steer",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="先分析订单",
         idempotency_key="pending-steer-start",
         llm_credential_id="credential",
@@ -60,7 +60,7 @@ def test_successful_terminalization_yields_to_pending_steer(
     sessions.promote_next_input(lease=lease)
     sessions.admit(
         session_id="session_pending_steer",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="只看华东",
         idempotency_key="pending-steer-input",
         llm_credential_id="credential",
@@ -88,7 +88,7 @@ def test_successful_terminalization_yields_to_pending_steer(
 
 
 def test_answer_evidence_memory_and_terminal_state_commit_together(
-    db_session, test_datasource
+    db_session, test_resource
 ):
     db_session.add(
         AgentSession(
@@ -100,7 +100,7 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_terminal",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="统计订单",
         idempotency_key="terminal",
         llm_credential_id="credential",
@@ -124,40 +124,25 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
         model_name="test",
     )
     artifacts = ArtifactRepository(db_session)
-    sql_artifact = artifacts.create(
+    source_artifact = artifacts.create(
         lease=lease,
         run_id=admission.run_id,
         turn_id=str(turn.id),
-        artifact_type=ArtifactType.SQL,
-        title="订单统计 SQL",
-        payload={
-            "sql": "SELECT COUNT(*) AS count FROM orders",
-            "safeSql": "SELECT COUNT(*) AS count FROM orders",
-            "dialect": "sqlite",
-            "queryFingerprint": "fingerprint_total",
-        },
+        artifact_type=ArtifactType.MARKDOWN,
+        title="Source work product",
+        payload={"content": "source"},
     )
     artifact = artifacts.create(
         lease=lease,
         run_id=admission.run_id,
         turn_id=str(turn.id),
-        artifact_type=ArtifactType.RESULT_VIEW,
-        title="订单数",
-        payload={
-            "sourceSqlArtifactId": sql_artifact.id,
-            "queryFingerprint": "fingerprint_total",
-            "datasourceGeneration": 1,
-            "columns": [{"name": "count", "type": "integer"}],
-            "rowCount": 1,
-            "returnedRows": 1,
-            "latencyMs": 1,
-            "executedAt": datetime.now(UTC).isoformat(),
-            "truncated": False,
-        },
+        artifact_type=ArtifactType.MARKDOWN,
+        title="Derived work product",
+        payload={"content": "42"},
         relations=[
             ArtifactRelation(
                 relation=ArtifactRelationType.DERIVED_FROM,
-                artifact_id=sql_artifact.id,
+                artifact_id=source_artifact.id,
             )
         ],
     )
@@ -168,9 +153,11 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
         claim_id="claim_total",
         artifact_id=artifact.id,
         label="订单数 42",
-        query_fingerprint="fingerprint_total",
         observed_at=datetime.now(UTC),
-        locator=EvidenceLocator(kind="metric", value={"column": "count"}),
+        locator=EvidenceLocator(
+            kind="verification.metric",
+            value={"field": "count"},
+        ),
         value=42,
     )
     answer = AnswerCandidate(text="共有 42 条订单。", evidence=[evidence])
@@ -188,7 +175,6 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
     evidence_reference = {
         "evidence_id": evidence.id,
         "artifact_id": artifact.id,
-        "query_fingerprint": evidence.query_fingerprint,
         "observed_at": evidence.observed_at.isoformat(),
         "run_id": admission.run_id,
     }
@@ -199,13 +185,11 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
             memory_json=json.dumps(
                 {
                     "version": 1,
-                    "datasource_id": str(test_datasource.id),
-                    "datasource_generation": 0,
+                    "resource_id": str(test_resource.id),
                     "recent_runs": [
                         {
                             "run_id": "stale-run",
-                            "datasource_id": str(test_datasource.id),
-                            "datasource_generation": 0,
+                            "resource_id": str(test_resource.id),
                         }
                     ],
                     "stable_context": {"response_style": "compact"},
@@ -244,14 +228,13 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
     assert "verified_claims" not in memory["stable_context"]
     assert memory["stable_context"]["response_style"] == "compact"
     assert "rows" not in memory_row.memory_json
-    assert not memory_row.memory_v4_json
     assert (
         db_session.get(AgentSession, "session_terminal").selected_artifact_id
         == artifact.id
     )
 
 
-def test_terminal_transaction_rolls_back_as_a_unit(db_session, test_datasource):
+def test_terminal_transaction_rolls_back_as_a_unit(db_session, test_resource):
     # A foreign-key failure in Evidence must not leave a completed Run or answer.
     db_session.add(
         AgentSession(
@@ -263,7 +246,7 @@ def test_terminal_transaction_rolls_back_as_a_unit(db_session, test_datasource):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_rollback",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="test",
         idempotency_key="rollback",
         llm_credential_id="credential",
@@ -281,10 +264,9 @@ def test_terminal_transaction_rolls_back_as_a_unit(db_session, test_datasource):
         claim_id="claim",
         artifact_id="artifact_missing",
         label="invalid",
-        query_fingerprint="fingerprint_invalid",
         observed_at=datetime.now(UTC),
     )
-    # Bypass Composer deliberately to prove the database transaction boundary.
+    # Bypass Composer deliberately to prove the durable transaction boundary.
     from engine.agent.response import ComposedResponse
 
     response = ComposedResponse(
@@ -306,7 +288,7 @@ def test_terminal_transaction_rolls_back_as_a_unit(db_session, test_datasource):
 
 def test_terminal_response_uses_the_answer_candidates_own_turn(
     db_session,
-    test_datasource,
+    test_resource,
 ):
     db_session.add(
         AgentSession(
@@ -318,7 +300,7 @@ def test_terminal_response_uses_the_answer_candidates_own_turn(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_cross_turn_terminal",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="保留早期答案",
         idempotency_key="cross-turn-terminal",
         llm_credential_id="credential",
@@ -411,7 +393,7 @@ def test_terminal_response_uses_the_answer_candidates_own_turn(
 
 
 def test_interrupted_model_turn_is_closed_before_run_recovery(
-    db_session, test_datasource
+    db_session, test_resource
 ):
     db_session.add(
         AgentSession(
@@ -423,7 +405,7 @@ def test_interrupted_model_turn_is_closed_before_run_recovery(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_turn_recovery",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="分析趋势",
         idempotency_key="turn-recovery",
         llm_credential_id="credential",

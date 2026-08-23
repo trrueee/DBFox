@@ -33,7 +33,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "e2f3a4b5c6d8"
+FOUNDATION_HEAD_REVISION = "f3a4b5c6d7e9"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -200,8 +200,9 @@ def _assert_final_contract(engine) -> None:
         "released_at",
     }
 
-    assert "memory_v4_json" in _column_names(engine, "agent_session_memories")
-    assert "datasource_id" not in _column_names(engine, "agent_session_memories")
+    assert {"datasource_id", "memory_v4_json"}.isdisjoint(
+        _column_names(engine, "agent_session_memories")
+    )
     assert "schema_version" in _column_names(engine, "agent_artifacts")
     assert "workspace_root" not in _column_names(engine, "projects")
 
@@ -217,7 +218,7 @@ def _assert_final_contract(engine) -> None:
         "result_json",
         "cancel_requested",
     }.issubset(_column_names(engine, "agent_runs"))
-    assert {"datasource_id", "datasource_generation"}.isdisjoint(
+    assert {"datasource_id", "datasource_generation", "execution_id"}.isdisjoint(
         _column_names(engine, "agent_runs")
     )
 
@@ -250,6 +251,7 @@ def _assert_final_contract(engine) -> None:
         agent_turn_columns
     )
     assert "model_output_json" in _column_names(engine, "agent_observations")
+    assert "query_fingerprint" not in _column_names(engine, "agent_evidence")
     assert {
         "input_sequence",
         "event_sequence",
@@ -424,7 +426,7 @@ def test_extension_api_v2_invalidates_only_retired_catalog_memory_projection(
     finally:
         engine.dispose()
 
-    _upgrade(monkeypatch, database_url)
+    _upgrade(monkeypatch, database_url, "c0d1e2f3a4ba")
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
@@ -437,6 +439,16 @@ def test_extension_api_v2_invalidates_only_retired_catalog_memory_projection(
         migrated = json.loads(encoded)
         assert migrated["core"]["referenced_artifact_ids"] == ["artifact-1"]
         assert migrated["projections"] == [payload["projections"][1]]
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        assert "memory_v4_json" not in _column_names(
+            engine,
+            "agent_session_memories",
+        )
     finally:
         engine.dispose()
 
@@ -469,7 +481,7 @@ def test_workspace_root_drop_reimports_rows_written_after_initial_cutover(
     finally:
         engine.dispose()
 
-    _upgrade(monkeypatch, database_url)
+    _upgrade(monkeypatch, database_url, "d1e2f3a4b5c7")
     engine = create_engine(database_url)
     try:
         assert "workspace_root" not in _column_names(engine, "projects")
@@ -525,7 +537,7 @@ def test_frozen_resource_ref_cutover_backfills_null_to_empty_authority(
     finally:
         engine.dispose()
 
-    _upgrade(monkeypatch, database_url)
+    _upgrade(monkeypatch, database_url, "d1e2f3a4b5c7")
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
@@ -693,7 +705,7 @@ def test_data_resource_kind_migration_converges_durable_authority(
     finally:
         engine.dispose()
 
-    _upgrade(monkeypatch, database_url)
+    _upgrade(monkeypatch, database_url, "d1e2f3a4b5c7")
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
@@ -717,6 +729,16 @@ def test_data_resource_kind_migration_converges_durable_authority(
         assert input_refs == [canonical_ref]
         assert memory == {"active_resource": canonical_ref}
         assert intents == [("dbfox.data.database", "db-1")]
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        assert "memory_v4_json" not in _column_names(
+            engine,
+            "agent_session_memories",
+        )
     finally:
         engine.dispose()
 
