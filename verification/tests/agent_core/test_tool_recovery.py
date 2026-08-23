@@ -35,7 +35,7 @@ from engine.tools.runtime import (
 
 
 def test_unknown_provider_tool_is_durably_rejected_without_failing_the_run(
-    db_session, test_datasource
+    db_session, test_resource
 ) -> None:
     db_session.add(
         AgentSession(
@@ -47,7 +47,7 @@ def test_unknown_provider_tool_is_durably_rejected_without_failing_the_run(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_unknown_tool",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="call a tool",
         idempotency_key="request_unknown_tool",
         llm_credential_id="credential",
@@ -151,7 +151,7 @@ class _RecoveryOutput(ToolOutputModel):
 )
 def test_recovery_reconciles_by_invocation_key_before_repeating_an_action(
     db_session,
-    test_datasource,
+    test_resource,
     reconciliation_status,
     expected_execution_count,
 ) -> None:
@@ -200,7 +200,7 @@ def test_recovery_reconciles_by_invocation_key_before_repeating_an_action(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_external_recovery",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="write once",
         idempotency_key="request_external_recovery",
         llm_credential_id="credential",
@@ -306,7 +306,7 @@ def test_recovery_reconciles_by_invocation_key_before_repeating_an_action(
 
 def test_tool_run_context_is_indexed_by_invocation_id(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     observed_invocation_ids: list[str] = []
 
@@ -339,7 +339,7 @@ def test_tool_run_context_is_indexed_by_invocation_id(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_invocation_execution_key",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="执行两个工具并验证执行标识",
         idempotency_key="request_execution_key",
         llm_credential_id="credential",

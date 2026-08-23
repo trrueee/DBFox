@@ -5,7 +5,7 @@ DBFox 本地引擎主入口模块 (Main Entrypoint Module)
 这是 DBFox 后端服务的核心入口文件。
 它基于 FastAPI 异步 Web 框架构建，提供了：
 - 安全策略（CORS 跨域控制、本地 Token 令牌鉴权中间件）
-- 异步生命周期管理（启动时连接 SQLite 数据库，退出时关闭 SSH 隧道）
+- 异步生命周期管理（启动时验证本地元数据库，退出时停止 Agent Runtime）
 - 异常处理器（拦截全局业务异常）
 - 路由挂载
 """
@@ -43,7 +43,7 @@ from engine.runtime_composition import (
 from engine.app.request_limits import AgentInputRequestBodyLimitMiddleware
 from engine.app.safe_errors import FixedErrorCode, fixed_error_detail
 from engine.diagnostics.logs import configure_diagnostic_logging
-from engine.errors import BackupSourceMismatchError, DBFoxError, NotFoundError
+from engine.errors import DBFoxError, NotFoundError
 from engine.engine_runtime.credentials import RuntimeCredentialPolicy
 from engine.problem_details import REQUEST_ID_HEADER, new_request_id, problem_response
 from engine.schemas import ProblemDetails
@@ -342,8 +342,6 @@ async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse
     status = 500 if code == FixedErrorCode.INTERNAL_ERROR.value else 400
     if isinstance(exc, NotFoundError) and status != 500:
         status = 404
-    elif isinstance(exc, BackupSourceMismatchError):
-        status = 409
     return problem_response(
         request,
         status=status,

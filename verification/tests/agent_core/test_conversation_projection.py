@@ -4,11 +4,11 @@ from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import AgentSession
 
 
-def test_snapshot_is_backend_owned_and_contains_cursor(db_session, test_datasource):
+def test_snapshot_is_backend_owned_and_contains_cursor(db_session, test_resource):
     db_session.add(AgentSession(id="session_projection", title="Projection"))
     db_session.commit()
     admission = SessionRepository(db_session).admit(
-        session_id="session_projection", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        session_id="session_projection", resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="分析数据", idempotency_key="projection", llm_credential_id="credential",
         api_base=None, model_name="model", request_payload={}, selected_artifact_ids=[],
     )

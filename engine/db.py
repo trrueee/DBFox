@@ -206,7 +206,7 @@ if os.environ.get("AGENT_DB_WRITE_TRACE", "").lower() == "true":
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # 创建声明式 ORM 模型基类 (Declarative Base)
-# 项目中所有的实体模型类（如 User, DataSource, BackupRecord 等）都必须继承自这个 Base 基类，
+# Core 中所有的耐久实体模型都必须继承自这个 Base 基类，
 # 这样 SQLAlchemy 才能识别并将它们映射到实际的数据库表中。
 Base = declarative_base()
 

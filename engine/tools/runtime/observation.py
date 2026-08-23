@@ -9,8 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from engine.json_codec import byte_size
-from dlcs.dbfox_data.backend.sql.row_serializer import serialize_rows
+from engine.json_codec import byte_size, to_json_value
 
 
 RESULT_VALUE_KEYS = frozenset(
@@ -85,29 +84,45 @@ def bounded_tabular_provider_payload(
 ) -> dict[str, Any]:
     """Return a structured model window without persisting or string-truncating rows."""
 
-    serialized = serialize_rows(
-        rows[:MODEL_RESULT_WINDOW_ROWS],
-        columns,
-        max_columns=MODEL_RESULT_WINDOW_COLUMNS,
-        max_cell_chars=MODEL_RESULT_CELL_CHARS,
-        max_response_bytes=MODEL_RESULT_WINDOW_BYTES,
-    )
+    selected_columns = columns[:MODEL_RESULT_WINDOW_COLUMNS]
+    serialized_rows: list[dict[str, Any]] = []
+    response_bytes = 2
+    cells_truncated = False
+    response_truncated = False
+    for raw_row in rows[:MODEL_RESULT_WINDOW_ROWS]:
+        candidate: dict[str, Any] = {}
+        for column in selected_columns:
+            raw_value = raw_row.get(column) if isinstance(raw_row, dict) else None
+            value = to_json_value(raw_value)
+            if isinstance(value, str) and len(value) > MODEL_RESULT_CELL_CHARS:
+                value = value[:MODEL_RESULT_CELL_CHARS] + "..."
+                cells_truncated = True
+            candidate[column] = value
+        candidate_bytes = byte_size(candidate)
+        separator_bytes = 1 if serialized_rows else 0
+        if response_bytes + separator_bytes + candidate_bytes > MODEL_RESULT_WINDOW_BYTES:
+            response_truncated = True
+            break
+        response_bytes += separator_bytes + candidate_bytes
+        serialized_rows.append(candidate)
     return {
         **facts,
-        "rows": serialized.rows,
+        "rows": serialized_rows,
         "window": {
-            "returned_rows": len(serialized.rows),
+            "returned_rows": len(serialized_rows),
             "max_rows": MODEL_RESULT_WINDOW_ROWS,
             "truncated": (
                 source_truncated
-                or total_returned_rows > len(serialized.rows)
-                or serialized.truncated
+                or total_returned_rows > len(serialized_rows)
+                or len(columns) > len(selected_columns)
+                or response_truncated
+                or cells_truncated
             ),
             "truncation_reasons": {
-                "rows": total_returned_rows > len(serialized.rows),
-                "columns": serialized.truncation.columns,
-                "response_bytes": serialized.truncation.response_bytes,
-                "cells": serialized.truncation.cells,
+                "rows": total_returned_rows > len(serialized_rows),
+                "columns": len(columns) > len(selected_columns),
+                "response_bytes": response_truncated,
+                "cells": cells_truncated,
             },
         },
     }

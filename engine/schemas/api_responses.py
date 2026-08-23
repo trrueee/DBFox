@@ -249,7 +249,6 @@ class EvidenceResponse(BaseModel):
     claim_id: str
     artifact_id: str
     label: str
-    query_fingerprint: str
     observed_at: str
     locator: dict[str, Any]
     value: Any | None = None

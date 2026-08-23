@@ -365,6 +365,6 @@ workflow/job 和原始输出；权威命令与分层门禁见 [`quality/engineer
 | Agent Harness | `engine/agent/coordinator.py`、`engine/agent/loop.py` |
 | Agent persistence | `engine/agent/repositories/` |
 | Tool Runtime | `engine/tools/runtime/` |
-| Result Gateway | `engine/sql/result_view/service.py` |
+| Artifact View Gateway | `engine/api/agent_results.py`、capability `artifact_view_providers` |
 | Security Audit | `engine/security/audit.py` |
 | Metadata schema | `engine/models.py`、`engine/migrations/` |

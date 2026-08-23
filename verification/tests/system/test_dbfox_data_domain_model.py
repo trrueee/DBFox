@@ -9,7 +9,6 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 
 from engine.dlc import BuiltinContributionSet, ContributionCompiler, DlcPackageService
-from engine.dlc.snapshot import CompletionConstraintContribution
 from engine.dlc.api import (
     ArtifactTableExportRequest,
     ArtifactTablePageRequest,
@@ -1103,40 +1102,6 @@ def test_data_package_probe_recovers_interrupted_core_credential_claim(
     assert vault.get(credential_ref) == "durable-secret"
 
 
-def test_data_completion_conflict_rejects_the_whole_package(tmp_path: Path) -> None:
-    built = build_dbfox_data_dlc_fixture(tmp_path / "archives")
-    service = DlcPackageService(tmp_path / "runtime" / "dlcs")
-    service.trust_publisher_from_file(
-        built.archive,
-        expected_package_digest=built.package_digest,
-        expected_publisher_key_id=built.publisher_fingerprint,
-    )
-    service.install_from_file(built.archive)
-    service.set_desired_enabled("dbfox.data", True)
-
-    from engine.tools.builtin.data_capability import legacy_data_completion_constraints
-
-    snapshot = ContributionCompiler(service.storage_root).compile(
-        built_ins=BuiltinContributionSet(
-            identifiers=("legacy.dbfox.data",),
-            completion_constraints=tuple(
-                CompletionConstraintContribution(
-                    constraint=constraint,
-                    owner_id="dbfox.data",
-                )
-                for constraint in legacy_data_completion_constraints()
-            ),
-        )
-    )
-
-    assert snapshot.active_dlcs == ()
-    assert snapshot.resource_providers == ()
-    assert snapshot.operations == ()
-    assert [item.owner_id for item in snapshot.completion_constraints] == [
-        "dbfox.data"
-    ]
-    assert len(snapshot.activation_failures) == 1
-    assert snapshot.activation_failures[0].error_code == "registration_conflict"
 
 
 def test_one_profile_owns_multiple_database_resources_and_only_databases_are_authority(

@@ -57,7 +57,8 @@ npm run build           # tsc -b + 构建脚本 + 生产 Token 与 bundle 预算
 | `engine/api/` | FastAPI 路由、请求合同、HTTP 边界 |
 | `engine/agent/` | SessionCoordinator、Run Loop、上下文、Provider、持久化仓库（测试在 `verification/tests/agent_core/`） |
 | `engine/tools/` | 工具注册、输入合同、策略、审批、执行运行时 |
-| `engine/sql/` | SQL 安全、只读执行、分页与导出 |
+| `dlcs/dbfox_data/` | Data System DLC：连接、数据库资源、Catalog、SQL 与结果视图 |
+| `dlcs/dbfox.workspace/` | Workspace System DLC：目录绑定与文件能力 |
 | `engine/migrations/` | DBFox 本地元数据库的 Alembic 迁移 |
 | `desktop/src/` | React 工作区（TanStack Query/Table/Virtual、Zustand、Radix UI） |
 | `desktop/main/`、`desktop/preload/` | Electron Host 与窄化 IPC；Sidecar 生命周期由 `desktop/main/engine.ts` 的 `EngineSupervisor` 管理（TypeScript，非 Rust） |

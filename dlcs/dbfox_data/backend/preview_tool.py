@@ -50,7 +50,7 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
         capabilities=("network", "filesystem_read"),
         required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
-    semantics = ToolSemanticSpec(produces=("sample_rows",))
+    semantics = ToolSemanticSpec(produces=("dbfox.data.sample_rows",))
     presentation = ToolPresentation(title="查看数据样例", category="query")
 
     def __init__(

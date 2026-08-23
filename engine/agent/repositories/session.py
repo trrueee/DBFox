@@ -59,7 +59,7 @@ class Admission:
 @dataclass(frozen=True)
 class SessionDeletion:
     status: Literal["ok", "deleting"]
-    execution_ids: tuple[str, ...] = ()
+    running_invocations: tuple[tuple[str, str], ...] = ()
 
 
 class SessionRepository:
@@ -141,22 +141,20 @@ class SessionRepository:
         from engine.agent.repositories.run import RunRepository
 
         runs = RunRepository(self.session)
-        execution_ids: list[str] = []
+        running_invocations: list[tuple[str, str]] = []
         for run in active_runs:
             runs.request_cancel(run_id=str(run.id))
-            if run.execution_id:
-                execution_ids.append(str(run.execution_id))
             from engine.agent.repositories.tool import ToolInvocationRepository
 
-            execution_ids.extend(
-                ToolInvocationRepository(self.session).running_invocation_ids_for_run(
+            running_invocations.extend(
+                ToolInvocationRepository(self.session).running_invocations_for_run(
                     run_id=str(run.id),
                 )
             )
         self.session.flush()
         return SessionDeletion(
             status="deleting",
-            execution_ids=tuple(execution_ids),
+            running_invocations=tuple(running_invocations),
         )
 
     def admit(
@@ -279,7 +277,6 @@ class SessionRepository:
                 status=RunStatus.QUEUED.value,
                 version=0,
                 lease_token=0,
-                execution_id=f"agent_{run_id}",
                 request_json=_json(request_payload),
                 cancel_requested=False,
                 created_at=now,

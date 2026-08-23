@@ -143,7 +143,6 @@ def get_run_evidence(
             "claim_id": str(row.claim_id),
             "artifact_id": str(row.artifact_id),
             "label": str(row.label),
-            "query_fingerprint": str(row.query_fingerprint),
             "observed_at": required_iso(row.observed_at, "observed_at"),
             "locator": json_loads(str(row.locator_json or "{}")),
             "value": json_loads(str(row.value_json)) if row.value_json else None,

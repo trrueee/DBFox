@@ -363,7 +363,7 @@ Result Artifact 允许字段：
 {
   "sourceSqlArtifactId": "artifact_sql_xxx",
   "queryFingerprint": "...",
-  "datasourceGeneration": 3,
+  "resourceVersion": "3",
   "columns": [],
   "rowCount": 1280,
   "returnedRows": 50,

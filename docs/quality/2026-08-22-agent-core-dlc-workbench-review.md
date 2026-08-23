@@ -279,12 +279,9 @@ System Data 是源码与 Frozen 发行的唯一连接管理面；Kernel-only 启
   验证发现同事务插入仍需要 Data child 到 Project 的单向关系做 SQLAlchemy dependency ordering，
   因而保留真实的 `Data → Project identity` 边界，而不是恢复双向对象图。Project/Backup/
   datasource lifecycle/runtime reset 定向回归 `51 passed`。
-- 临时 legacy Data provider、resolver 与 completion 声明已从 Kernel composition 收拢到
-  `engine.tools.builtin.data_capability`，owner 统一为 `dbfox.data`；`runtime_composition.py` 不再
-  import `DataSource`，Compiler 只在明确的 legacy 开关内取这些通用 contribution。未新增依赖、
-  状态镜像、service locator 或 fallback；Data/DLC/Resource/Completion 定向回归 `47 passed,
-  2 skipped`，独立 Data package conformance `10 passed`。新增防回归工程合同后该集合为
-  `32 passed`。
+- 中间阶段曾将 legacy Data contribution 收拢到单一 owner，以避免继续扩散；最终 cutover 已物理删除
+  该临时 registrar、Core Data ORM/API/SQL 源码和开发 fallback。`runtime_composition.py` 只遍历 typed
+  snapshot contributions，Kernel import graph 不再指向 `dbfox.data`。
 - 本次 composition/Project 边界收口后的完整 Engine deterministic 集合为 `966 passed,
   6 skipped, 113 deselected`；全量 pyflakes 与 mypy（312 source files）通过，`git diff --check`
   无空白错误（仅工作树既有 LF→CRLF 提示）。
@@ -335,7 +332,7 @@ System Data 是源码与 Frozen 发行的唯一连接管理面；Kernel-only 启
 
 ## 9. 最终 Data cutover 证据（2026-08-23）
 
-- Alembic head `e2f3a4b5c6d8` 使用与 Workspace/GitHub 相同的单向、可重放、冲突失败迁移方式：先保存 ConnectionProfile、DatabaseResource identity 和 opaque credential refs，验证 DLC state，再删除 Core Data tables/FTS。没有跨 SQLite 双写、ATTACH 假事务或恢复 fallback。
+- Alembic `e2f3a4b5c6d8` 使用与 Workspace/GitHub 相同的单向、可重放、冲突失败迁移方式：先保存 ConnectionProfile、DatabaseResource identity 和 opaque credential refs，验证 DLC state，再删除 Core Data tables/FTS。当前 head `f3a4b5c6d7e9` 继续删除最后的 compatibility columns；没有跨 SQLite 双写、ATTACH 假事务或恢复 fallback。
 - Catalog、search docs、query history 与 result rows 没有被复制到第二份事实源：Catalog 在 owner 状态中重建，Result 继续通过有界 Artifact view 访问。
 - 生产 composition 只注册 Kernel/Conversation/Remote Job built-ins 与已验证 DLC contributions；旧 Data registrar、Core HTTP routes、Workbench Data components 和 automatic requested-resource contributor 已移除。
 - Agent 测试启动与产品相同的签名 System DLC bundle。与旧 Core DataSource/Catalog Memory v4 物理表绑定的场景已退役，Data package domain tests 接管连接、Catalog、SQL、Result 和 backup/restore 证明。

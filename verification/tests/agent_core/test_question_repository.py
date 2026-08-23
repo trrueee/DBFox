@@ -59,7 +59,7 @@ def _waiting_question_invocation(
 
 
 def test_question_persists_user_response_and_resumes_original_run_once(
-    db_session, test_datasource
+    db_session, test_resource
 ) -> None:
     db_session.add(AgentSession(
         id="session_question", title="Question"
@@ -68,7 +68,7 @@ def test_question_persists_user_response_and_resumes_original_run_once(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_question",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="统计收入",
         idempotency_key="question-start",
         llm_credential_id="credential",
@@ -166,7 +166,7 @@ def test_question_persists_user_response_and_resumes_original_run_once(
         )
 
 
-def test_expired_question_terminalizes_the_waiting_run(db_session, test_datasource) -> None:
+def test_expired_question_terminalizes_the_waiting_run(db_session, test_resource) -> None:
     db_session.add(AgentSession(id="session_expired_question", project_id=None,
         title="Expired question",
     ))
@@ -174,7 +174,7 @@ def test_expired_question_terminalizes_the_waiting_run(db_session, test_datasour
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_expired_question",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="统计收入",
         idempotency_key="expired-question",
         llm_credential_id="credential",

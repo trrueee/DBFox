@@ -170,8 +170,10 @@ Agent 质量不只通过单元测试判断。仓库同时维护确定性场景�
 | `engine/api/` | FastAPI 路由、请求合同和 HTTP 边界 |
 | `engine/agent/` | Coordinator、Run Loop、上下文、Provider、Completion 和持久化仓库 |
 | `engine/tools/` | 工具注册、输入合同、策略、审批和执行运行时 |
-| `engine/sql/` | SQL 安全、执行、结果分页和导出 |
+| `dlcs/dbfox_data/` | Data System DLC：连接、数据库资源、Catalog、SQL 与结果视图 |
+| `dlcs/dbfox.workspace/` | Workspace System DLC：项目目录绑定与文件能力 |
 | `engine/migrations/` | DBFox 本地元数据库的 Alembic 迁移 |
+| `verification/tests/` | 与产品物理分离的 Agent Core、System、Integration 与 Bench 验证 |
 | `verification/bench/agentbench/` | AgentBench 评测脚本、确定性数据集与评分合同 |
 | `docs/` | 当前架构、实现指南、规范、质量文档和历史档案 |
 | `.github/workflows/` | 持续集成、Agent 评测和发布候选工作流 |
@@ -183,7 +185,7 @@ Agent 质量不只通过单元测试判断。仓库同时维护确定性场景�
 | [文档中心](docs/README.md) | 文档分类、阅读路线、当前与历史资料边界 |
 | [系统总览](docs/architecture/system-overview.md) | 进程拓扑、状态所有权、关键不变量和运行链路 |
 | [后端代码导览](docs/architecture/backend-owner-guide.md) | 从入口、调用链、数据表和测试理解 Python Engine |
-| [后端实现手册](docs/backend/README.md) | Runtime、事务、数据源、SQL、Agent、工具、记忆和恢复 |
+| [后端实现入口](docs/backend/README.md) | Core/DLC、Agent Runtime、Data 能力与验证文档导航 |
 | [Agent Runtime](docs/architecture/agent-runtime.md) | Turn、流式输出、完成判断、取消与错误语义 |
 | [工具、上下文与记忆](docs/architecture/agent-tool-context-memory-contract.md) | SQL-first 工具、上下文预算、持久化和历史召回 |
 | [功能和代码索引](docs/architecture/implementation-map.md) | 功能到代码 Symbol、数据表和测试的索引 |

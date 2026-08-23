@@ -199,7 +199,6 @@ function answerItem(): AssistantMessageItem {
         claim_id: "claim-1",
         artifact_id: "result-1",
         label: "查询结果",
-        query_fingerprint: "query-revenue",
         observed_at: "2026-07-26T00:00:00Z",
         locator: {},
       }],

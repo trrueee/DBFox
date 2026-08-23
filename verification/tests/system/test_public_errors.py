@@ -15,13 +15,13 @@ from engine.app.safe_errors import (
 
 
 def test_public_error_uses_only_fixed_catalog_entries() -> None:
-    detail = fixed_error_detail(FixedErrorCode.CONSOLE_EXECUTION_ERROR)
+    detail = fixed_error_detail(FixedErrorCode.AGENT_REQUEST_ERROR)
 
     assert detail == {
-        "code": "CONSOLE_EXECUTION_ERROR",
-        "message": "The SQL Console request could not be completed.",
+        "code": "AGENT_REQUEST_ERROR",
+        "message": "The agent request could not be completed.",
     }
-    assert fixed_error_message(FixedErrorCode.SQL_EMPTY) == "SQL cannot be empty."
+    assert fixed_error_message(FixedErrorCode.TOOL_INPUT_ERROR) == "The tool input is invalid."
 
 
 def test_every_fixed_error_code_has_a_nonempty_catalog_message() -> None:
@@ -50,7 +50,7 @@ def test_safe_error_helpers_never_render_arbitrary_exception_or_operation_text(c
     logger.propagate = False
     logger.addHandler(caplog.handler)
     try:
-        detail = fixed_error_detail(FixedErrorCode.DATASOURCE_POOL_RELEASE_FAILED)
+        detail = fixed_error_detail(FixedErrorCode.AGENT_RUNTIME_ERROR)
         log_unexpected_exception(
             logger,
             operation=cast(SafeLogOperation, f"caller-operation-{sentinel}"),
@@ -60,8 +60,8 @@ def test_safe_error_helpers_never_render_arbitrary_exception_or_operation_text(c
         logger.removeHandler(caplog.handler)
 
     assert detail == {
-        "code": "DATASOURCE_POOL_RELEASE_FAILED",
-        "message": "Datasource connection pool could not be released.",
+        "code": "AGENT_RUNTIME_ERROR",
+        "message": "The agent run could not be completed.",
     }
     assert sentinel not in caplog.text
     assert "unexpected_internal_error" in caplog.text

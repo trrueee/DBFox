@@ -78,10 +78,10 @@ def test_registry_denies_privileged_capabilities_without_an_isolated_backend():
 def test_registry_preserves_the_declared_capability_contract():
     class ReadTool(EchoTool):
         name = "test_read"
-        execution = ToolExecutionSpec(capabilities=("database_read",))
+        execution = ToolExecutionSpec(capabilities=("network",))
 
     registry = ToolRegistry().register(ReadTool())
-    assert registry.require("test_read").spec.execution.capabilities == ("database_read",)
+    assert registry.require("test_read").spec.execution.capabilities == ("network",)
 
 
 def test_registry_rejects_an_unavailable_execution_backend():
@@ -199,7 +199,7 @@ def test_runtime_uses_registered_public_contract_for_domain_error() -> None:
         def run(self, _tool_input: EchoInput, _context: ToolRunContext) -> dict[str, Any]:
             raise DBFoxError(
                 "secret://driver-detail-must-not-cross-boundary",
-                code="SCHEMA_INSPECTION_FAILED",
+                code="VALIDATION_FAILED",
             )
 
     result = ToolRuntime(ToolRegistry().register(DomainFailureTool())).invoke(
@@ -210,12 +210,12 @@ def test_runtime_uses_registered_public_contract_for_domain_error() -> None:
     )
 
     assert result.status == "failed"
-    assert result.error_code == "SCHEMA_INSPECTION_FAILED"
-    assert result.error == "Schema inspection could not be completed."
+    assert result.error_code == "VALIDATION_FAILED"
+    assert result.error == "The request did not satisfy the required validation rules."
     assert result.output == {
         "status": "failed",
-        "error_code": "SCHEMA_INSPECTION_FAILED",
-        "safe_message": "Schema inspection could not be completed.",
+        "error_code": "VALIDATION_FAILED",
+        "safe_message": "The request did not satisfy the required validation rules.",
     }
     assert "secret://" not in str(result.model_dump(mode="json"))
 

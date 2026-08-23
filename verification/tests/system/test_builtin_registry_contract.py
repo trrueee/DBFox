@@ -118,10 +118,10 @@ def test_invalid_owner_id_is_rejected() -> None:
         registry.register(_EchoTool(), owner="DBFox.Data")
 
 
-def test_semantic_capability_accepts_legacy_and_namespaced_ids() -> None:
+def test_semantic_capability_requires_namespaced_ids() -> None:
     from engine.tools.runtime.semantics import ToolSemanticSpec
 
-    legacy = ToolSemanticSpec(produces=("query_result",))
+    with pytest.raises(ValueError, match="namespaced ID"):
+        ToolSemanticSpec(produces=("query_result",))
     namespaced = ToolSemanticSpec(produces=("dbfox.workspace.file_snapshot",))
-    assert legacy.produces == ("query_result",)
     assert namespaced.produces == ("dbfox.workspace.file_snapshot",)

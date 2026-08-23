@@ -56,7 +56,6 @@ _AGENT_KERNEL_CAPABILITIES = frozenset(
     {
         "metadata_read",
         "metadata_write",
-        "database_read",
         "filesystem_read",
         "filesystem_write",
         "network",
@@ -111,7 +110,6 @@ def _rule_execution_mode(
     _gate: PolicyGate, state: dict, tool_name: str, _args: dict, execution_mode: str,
     _tool: Any, policy: Any,
 ) -> PolicyDecision | None:
-    reads_database = "database_read" in set(_tool.spec.execution.capabilities)
     allowed_modes = set(policy.allowed_execution_modes)
     if allowed_modes and execution_mode not in allowed_modes:
         return PolicyDecision(
@@ -119,16 +117,6 @@ def _rule_execution_mode(
             reason=f"Tool execution is not allowed in {execution_mode} mode.",
             risk_level="danger",
         )
-    if reads_database:
-        effective_mode = execution_mode
-        if execution_mode == "user_requested_read" and not state.get("execute", True):
-            effective_mode = "suggest_only"
-        if effective_mode in ("none", "suggest_only"):
-            return PolicyDecision(
-                status="blocked",
-                reason=f"Live data reads are not allowed in {effective_mode} mode.",
-                risk_level="danger",
-            )
     return None
 
 
@@ -217,24 +205,6 @@ def _rule_tool_admission(
     return None
 
 
-def _rule_agent_read_approval(
-    _gate: PolicyGate, state: dict, tool_name: str, args: dict, execution_mode: str,
-    _tool: Any, policy: Any,
-) -> PolicyDecision | None:
-    reads_database = "database_read" in set(_tool.spec.execution.capabilities)
-    if reads_database and execution_mode == "agent_autonomous_read":
-        env_profile = state.get("environment_profile") or {}
-        env = env_profile.get("env", "unknown")
-        if env in {"prod", "unknown"} or policy.risk_level in ("warning", "danger"):
-            return PolicyDecision(
-                status="approval_required",
-                reason=f"Agent-autonomous data read with {tool_name} on {env} datasource requires human approval.",
-                risk_level="warning",
-                safe_args=args,
-            )
-    return None
-
-
 def _rule_requires_approval(
     _gate: PolicyGate, _state: dict, tool_name: str, args: dict, _mode: str,
     _tool: Any, policy: Any,
@@ -259,7 +229,6 @@ _RULES: list[_RuleFunc] = [
     _rule_tool_group,
     _rule_execution_mode,
     _rule_tool_admission,
-    _rule_agent_read_approval,
     _rule_requires_approval,
 ]
 

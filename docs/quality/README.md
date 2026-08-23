@@ -25,7 +25,7 @@
 - [P2 Memory v4 DeepSeek 真实 Provider 调查与修复记录](../archive/reviews/2026-08-17-memory-v4-projection-deepseek-investigation.md)：已归档的 projection 故障调查；当前评测不得把已删除开关当作 A/B 变化轴。
 - [Agent 生产评测方法](./agent-evaluation-methodology.md)：分层 Harness、数据集角色、Grader、统计门禁与脱敏 Trace 合同。
 - [DBFox AgentBench](./agentbench-implementation.md)：60 场景数据集、评分器校准、真实 RunLoop、故障注入、CLI 和 CI。
-- [Agent Harness 设计、优化与评测复盘](./agent-harness-evolution-retrospective.md)：从真实故障、边界合同和关键提交理解当前 Harness 为什么这样设计，以及如何科学评价后续优化。
+- [Agent Harness 设计、优化与评测复盘](../archive/reviews/agent-harness-evolution-retrospective.md)：历史演进背景；当前合同以架构文档和 verification system 为准。
 - [供应链安全](./supply-chain-security.md)：锁文件、依赖审计、提交签名和正式产物来源证明。
 - [发布验证矩阵](./release-validation-matrix.md)：平台、Runner、产物和人工验收的证据要求。
 

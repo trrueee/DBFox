@@ -47,7 +47,7 @@ def test_turn_stream_assembler_merges_reasoning_summary_and_fragmented_tool_call
                 revision=1,
                 tool_call_index=0,
                 tool_call_id="call_1",
-                tool_name="sql_execute_readonly",
+                tool_name="verification_read",
             ),
             TurnStreamItem(
                 kind=TurnStreamKind.TOOL_CALL_DELTA,
@@ -71,7 +71,7 @@ def test_turn_stream_assembler_merges_reasoning_summary_and_fragmented_tool_call
                 model_output_item={
                     "type": "function_call",
                     "call_id": "call_1",
-                    "name": "sql_execute_readonly",
+                    "name": "verification_read",
                     "arguments": '{"sql":"SELECT 1"}',
                 },
             ),
@@ -86,7 +86,7 @@ def test_turn_stream_assembler_merges_reasoning_summary_and_fragmented_tool_call
 
     assert result.answer_text == ""
     assert result.reasoning_summary == "分析中"
-    assert result.tool_calls[0].name == "sql_execute_readonly"
+    assert result.tool_calls[0].name == "verification_read"
     assert result.tool_calls[0].arguments == {"sql": "SELECT 1"}
     assert result.termination is TurnTermination.COMPLETED
 
@@ -110,7 +110,7 @@ def test_turn_stream_assembler_rejects_gaps_and_bad_tool_json() -> None:
                     revision=1,
                     tool_call_index=0,
                     tool_call_id="call_1",
-                    tool_name="sql_validate",
+                    tool_name="verification_validate",
                     arguments_delta="{",
                 ),
                 TurnStreamItem(
@@ -163,19 +163,9 @@ def _artifact(artifact_id: str = "artifact_result_1") -> Artifact:
         id=artifact_id,
         session_id="session_1",
         run_id="run_1",
-        type=ArtifactType.RESULT_VIEW,
-        title="查询结果",
-        payload={
-            "sourceSqlArtifactId": "artifact_sql_1",
-            "queryFingerprint": "fingerprint_1",
-            "datasourceGeneration": 1,
-            "columns": [{"name": "count", "type": "integer"}],
-            "rowCount": 1,
-            "returnedRows": 1,
-            "latencyMs": 1,
-            "executedAt": datetime.now(UTC).isoformat(),
-            "truncated": False,
-        },
+        type=ArtifactType.MARKDOWN,
+        title="Verified work product",
+        payload={"content": "42"},
     )
 
 
@@ -191,7 +181,6 @@ def test_response_composer_accepts_only_real_artifact_ids() -> None:
                 claim_id="claim_1",
                 artifact_id=artifact.id,
                 label="查询结果",
-                query_fingerprint="fingerprint_1",
                 observed_at=datetime.now(UTC),
                 value=42,
             )
@@ -252,7 +241,6 @@ def test_response_composer_never_falls_back_to_semantic_identity() -> None:
                 claim_id="claim_1",
                 artifact_id="result_view",
                 label="查询结果",
-                query_fingerprint="fingerprint_1",
                 observed_at=datetime.now(UTC),
             )
         ],

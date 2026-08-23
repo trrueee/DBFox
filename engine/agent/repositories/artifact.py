@@ -1,8 +1,6 @@
 """Artifact identity, relationship and Evidence persistence."""
 
 from __future__ import annotations
-from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
-
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
@@ -17,7 +15,6 @@ from engine.agent.artifact import (
     ArtifactRelation,
     ArtifactRelationType,
     ArtifactStatus,
-    ArtifactType,
     ArtifactVisibility,
     default_artifact_visibility,
     validate_artifact_payload,
@@ -28,7 +25,6 @@ from engine.agent.resource_refs import (
     dump_resource_refs,
     load_resource_refs,
     resource_refs_for_run,
-    single_run_resource_ref,
 )
 from engine.agent.session import SessionLease
 from engine.json_codec import JsonCodecError, canonical_dumps as _json, loads
@@ -375,15 +371,14 @@ class ArtifactRepository:
         ).scalars()
         return [self._domain(row) for row in rows]
 
-    def available_result(
+    def available_artifact(
         self,
         *,
         current_run_id: str,
         artifact_id: str,
         session_id: str,
-        resource_ref: ResourceScopeRef,
     ) -> Artifact | None:
-        """Resolve one Result Artifact within its exact durable resource fence."""
+        """Resolve one prior Artifact within its durable resource fence."""
 
         current_run = self.session.get(AgentRun, current_run_id)
         row = self.session.get(AgentArtifactRecord, artifact_id)
@@ -400,23 +395,21 @@ class ArtifactRepository:
             if owner_run is not None
             else ()
         )
-        owner_bound_ref = (
-            self.bound_resource_ref(artifact_id, kind=resource_ref.kind)
-            if row is not None
-            else None
+        artifact_refs = (
+            load_resource_refs(str(row.resource_refs_json))
+            if row is not None and row.resource_refs_json
+            else ()
         )
         if (
             current_run is None
             or row is None
             or owner_run is None
-            or str(row.type) != ArtifactType.RESULT_VIEW.value
             or str(row.status) != ArtifactStatus.COMPLETED.value
             or str(row.session_id) != session_id
             or str(current_run.session_id) != session_id
             or str(owner_run.session_id) != session_id
-            or resource_ref not in current_refs
-            or resource_ref not in owner_refs
-            or owner_bound_ref != resource_ref
+            or any(ref not in current_refs for ref in artifact_refs)
+            or any(ref not in owner_refs for ref in artifact_refs)
         ):
             return None
         if str(owner_run.id) == str(current_run.id):
@@ -429,36 +422,8 @@ class ArtifactRepository:
             return None
         return self._domain(row)
 
-    def bound_resource_ref(
-        self,
-        artifact_id: str,
-        *,
-        kind: str,
-    ) -> ResourceScopeRef | None:
-        """Return an Artifact's sole bound resource of ``kind``.
-
-        Historical Artifacts predate the envelope column. They can be resolved
-        only when their owner Run itself has one unambiguous resource of the
-        requested kind.
-        """
-
-        row = self.session.get(AgentArtifactRecord, artifact_id)
-        if row is None:
-            return None
-        raw_refs = getattr(row, "resource_refs_json", None)
-        refs = load_resource_refs(str(raw_refs)) if raw_refs else ()
-        matches = tuple(ref for ref in refs if ref.kind == kind)
-        if not matches:
-            owner_run = self.session.get(AgentRun, str(row.run_id))
-            return (
-                single_run_resource_ref(self.session, owner_run, kind)
-                if owner_run is not None
-                else None
-            )
-        return matches[0] if len(matches) == 1 else None
-
-    def referenced_results_for_run(self, run_id: str) -> list[Artifact]:
-        """Return prior Result Artifacts explicitly observed by this Run."""
+    def referenced_artifacts_for_run(self, run_id: str) -> list[Artifact]:
+        """Return prior Artifacts explicitly observed by this Run."""
 
         current_run = self.session.get(AgentRun, run_id)
         if current_run is None:
@@ -479,14 +444,10 @@ class ArtifactRepository:
                     referenced_ids.append(artifact_id)
         artifacts: list[Artifact] = []
         for artifact_id in referenced_ids:
-            database_ref = self.bound_resource_ref(artifact_id, kind=DATABASE_RESOURCE_KIND)
-            if database_ref is None:
-                continue
-            artifact = self.available_result(
+            artifact = self.available_artifact(
                 current_run_id=run_id,
                 artifact_id=artifact_id,
                 session_id=str(current_run.session_id),
-                resource_ref=database_ref,
             )
             if artifact is not None and artifact.run_id != run_id:
                 artifacts.append(artifact)

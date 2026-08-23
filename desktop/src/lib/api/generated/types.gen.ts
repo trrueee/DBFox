@@ -393,17 +393,13 @@ export type ChartDataResponse = {
      */
     consistency: 'durable_snapshot' | 'live_reexecution';
     /**
-     * Datasourcegeneration
-     */
-    datasourceGeneration: string | number;
-    /**
      * Originalexecutedat
      */
     originalExecutedAt?: string | null;
     /**
-     * Queryfingerprint
+     * Resourceversion
      */
-    queryFingerprint: string;
+    resourceVersion: string | number;
     /**
      * Samplesize
      */
@@ -412,6 +408,10 @@ export type ChartDataResponse = {
      * Series
      */
     series: Array<ChartPointResponse>;
+    /**
+     * Sourcefingerprint
+     */
+    sourceFingerprint: string;
     /**
      * Truncated
      */
@@ -1185,10 +1185,6 @@ export type EvidenceReference = {
      */
     observed_at: string;
     /**
-     * Query Fingerprint
-     */
-    query_fingerprint: string;
-    /**
      * Value
      */
     value?: unknown | null;
@@ -1224,10 +1220,6 @@ export type EvidenceResponse = {
      * Observed At
      */
     observed_at: string;
-    /**
-     * Query Fingerprint
-     */
-    query_fingerprint: string;
     /**
      * Run Id
      */
@@ -2025,10 +2017,6 @@ export type ResultPageResponse = {
      */
     consistency: 'durable_snapshot' | 'live_reexecution' | 'live_query';
     /**
-     * Datasourcegeneration
-     */
-    datasourceGeneration: string | number;
-    /**
      * Hasnextpage
      */
     hasNextPage: boolean;
@@ -2053,9 +2041,9 @@ export type ResultPageResponse = {
      */
     pageSize: number;
     /**
-     * Queryfingerprint
+     * Resourceversion
      */
-    queryFingerprint: string;
+    resourceVersion: string | number;
     /**
      * Rowcount
      */
@@ -2066,6 +2054,10 @@ export type ResultPageResponse = {
     rows: Array<{
         [key: string]: unknown;
     }>;
+    /**
+     * Sourcefingerprint
+     */
+    sourceFingerprint: string;
     /**
      * Viewexecutedat
      */

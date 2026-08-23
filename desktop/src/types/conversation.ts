@@ -74,7 +74,6 @@ export interface ConversationEvidence {
   claim_id: string;
   artifact_id: string;
   label: string;
-  query_fingerprint: string;
   observed_at: string;
   locator: Record<string, unknown>;
   value?: unknown;

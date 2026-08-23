@@ -9,21 +9,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from dlcs.dbfox_data.backend.artifact_contracts import (
-    ChartArtifactPayload,
-    ResultViewArtifactPayload,
-    SafetyArtifactPayload,
-    SqlArtifactPayload,
-)
 from engine.resource import ResourceScopeRef
 
 
 class ArtifactType(StrEnum):
     ANALYSIS_PLAN = "analysis_plan"
-    SQL = "sql"
-    SAFETY = "safety"
-    RESULT_VIEW = "result_view"
-    CHART = "chart"
     MARKDOWN = "markdown"
     ERROR = "error"
 
@@ -45,10 +35,6 @@ class ArtifactVisibility(StrEnum):
 
 _DEFAULT_VISIBILITY_BY_TYPE: dict[ArtifactType, ArtifactVisibility] = {
     ArtifactType.ANALYSIS_PLAN: ArtifactVisibility.INTERNAL,
-    ArtifactType.SQL: ArtifactVisibility.SUPPORTING,
-    ArtifactType.SAFETY: ArtifactVisibility.INTERNAL,
-    ArtifactType.RESULT_VIEW: ArtifactVisibility.PRIMARY,
-    ArtifactType.CHART: ArtifactVisibility.PRIMARY,
     ArtifactType.MARKDOWN: ArtifactVisibility.PRIMARY,
     ArtifactType.ERROR: ArtifactVisibility.INTERNAL,
 }
@@ -220,6 +206,35 @@ class ArtifactPayloadContractRegistry:
 artifact_payload_contracts = ArtifactPayloadContractRegistry()
 
 
+class _AnalysisPlanPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    objective: str
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class _MarkdownPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    content: str
+
+
+class _ErrorPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    message: str
+
+
+artifact_payload_contracts.register_many_atomic(
+    (
+        (ArtifactType.ANALYSIS_PLAN.value, 1, _AnalysisPlanPayload),
+        (ArtifactType.MARKDOWN.value, 1, _MarkdownPayload),
+        (ArtifactType.ERROR.value, 1, _ErrorPayload),
+    )
+)
+
+
 def register_artifact_payload_contract(
     artifact_type: str,
     schema_version: int,
@@ -246,11 +261,6 @@ def freeze_artifact_payload_contracts() -> ArtifactPayloadContractRegistry:
     return artifact_payload_contracts.freeze()
 
 
-
-register_artifact_payload_contract(ArtifactType.SQL.value, 1, SqlArtifactPayload)
-register_artifact_payload_contract(ArtifactType.SAFETY.value, 1, SafetyArtifactPayload)
-register_artifact_payload_contract(ArtifactType.RESULT_VIEW.value, 1, ResultViewArtifactPayload)
-register_artifact_payload_contract(ArtifactType.CHART.value, 1, ChartArtifactPayload)
 
 _RESULT_VALUE_KEYS = frozenset({"rows", "previewRows", "preview_rows", "series"})
 

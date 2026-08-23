@@ -17,7 +17,7 @@ from engine.models import (
 
 
 def test_task_plan_is_versioned_and_replayed_as_a_public_event(
-    db_session, test_datasource
+    db_session, test_resource
 ) -> None:
     db_session.add(
         AgentSession(
@@ -28,7 +28,7 @@ def test_task_plan_is_versioned_and_replayed_as_a_public_event(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session-plan",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="分析订单增长并解释异常",
         idempotency_key="plan-request",
         llm_credential_id="credential-1",
@@ -96,7 +96,7 @@ def test_task_plan_is_versioned_and_replayed_as_a_public_event(
 
 def test_task_plan_rejects_artifacts_from_another_run_in_the_same_session(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     db_session.add(
         AgentSession(
@@ -107,7 +107,7 @@ def test_task_plan_rejects_artifacts_from_another_run_in_the_same_session(
     sessions = SessionRepository(db_session)
     active = sessions.admit(
         session_id="session-plan-scope",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="当前分析",
         idempotency_key="active",
         llm_credential_id="credential",
@@ -133,7 +133,7 @@ def test_task_plan_rejects_artifacts_from_another_run_in_the_same_session(
     )
     other = sessions.admit(
         session_id="session-plan-scope",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="下一轮分析",
         idempotency_key="queued",
         llm_credential_id="credential",
@@ -146,7 +146,7 @@ def test_task_plan_rejects_artifacts_from_another_run_in_the_same_session(
             id="artifact-other-run",
             run_id=other.run_id,
             session_id="session-plan-scope",
-            type="result_view",
+            type="verification.result",
             title="其他 Run 结果",
             payload_json="{}",
             presentation_json="{}",
@@ -177,7 +177,7 @@ def test_task_plan_rejects_artifacts_from_another_run_in_the_same_session(
 
 def test_task_plan_accepts_a_prior_result_observed_by_the_current_run(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     session_id = "session-plan-observed-result"
     db_session.add(
@@ -189,7 +189,7 @@ def test_task_plan_accepts_a_prior_result_observed_by_the_current_run(
     sessions = SessionRepository(db_session)
     previous = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="先生成结果",
         idempotency_key="plan-previous",
         llm_credential_id="credential",
@@ -208,15 +208,9 @@ def test_task_plan_accepts_a_prior_result_observed_by_the_current_run(
             id="artifact-observed-result",
             run_id=previous.run_id,
             session_id=session_id,
-            type="result_view",
-            title="前序查询结果",
-            payload_json=(
-                '{"sourceSqlArtifactId":"artifact-sql","queryFingerprint":"fp",'
-                '"datasourceGeneration":1,"columns":["total"],"rowCount":1,'
-                '"returnedRows":1,"latencyMs":1,'
-                '"executedAt":"2026-08-15T00:00:00Z","truncated":false,'
-                '"evidenceKind":"query_result"}'
-            ),
+            type="verification.evidence",
+            title="前序证据产物",
+            payload_json='{"summary":"verified"}',
             presentation_json="{}",
             provenance_json="{}",
             relations_json="[]",
@@ -226,7 +220,7 @@ def test_task_plan_accepts_a_prior_result_observed_by_the_current_run(
 
     current = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
         content="继续分析已保存结果",
         idempotency_key="plan-current",
         llm_credential_id="credential",

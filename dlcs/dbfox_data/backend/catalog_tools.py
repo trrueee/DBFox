@@ -80,7 +80,7 @@ class CatalogOverviewTool(
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(
-        produces=("environment_profile", "schema_metadata")
+        produces=("dbfox.data.environment_profile", "dbfox.data.schema_metadata")
     )
     presentation = ToolPresentation(title="了解数据库目录", category="explore")
 
@@ -129,7 +129,7 @@ class CatalogRefreshTool(
         required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
     semantics = ToolSemanticSpec(
-        produces=("environment_profile", "schema_metadata")
+        produces=("dbfox.data.environment_profile", "dbfox.data.schema_metadata")
     )
     presentation = ToolPresentation(
         title="刷新数据库目录",
@@ -191,7 +191,7 @@ class SchemaListTool(
         required_resource_kinds=(DATABASE_RESOURCE_KIND,),
         concurrency="parallel_safe",
     )
-    semantics = ToolSemanticSpec(produces=("schema_metadata",))
+    semantics = ToolSemanticSpec(produces=("dbfox.data.schema_metadata",))
     presentation = ToolPresentation(title="浏览数据表", category="explore")
 
     def run(
@@ -236,7 +236,7 @@ class SchemaSearchTool(
         required_resource_kinds=(DATABASE_RESOURCE_KIND,),
         concurrency="parallel_safe",
     )
-    semantics = ToolSemanticSpec(produces=("schema_metadata",))
+    semantics = ToolSemanticSpec(produces=("dbfox.data.schema_metadata",))
     presentation = ToolPresentation(title="查找相关表和字段", category="explore")
 
     def run(
@@ -330,7 +330,7 @@ class SchemaInspectTool(
         capabilities=("network", "filesystem_read"),
         required_resource_kinds=(DATABASE_RESOURCE_KIND,),
     )
-    semantics = ToolSemanticSpec(produces=("schema_metadata",))
+    semantics = ToolSemanticSpec(produces=("dbfox.data.schema_metadata",))
     presentation = ToolPresentation(title="检查数据库对象", category="explore")
 
     def run(

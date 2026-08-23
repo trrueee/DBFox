@@ -14,7 +14,7 @@ from engine.tools.runtime.attempt import ResourceScopeRef
 
 def test_dump_and_load_roundtrip() -> None:
     refs = (
-        ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version="1:1"),
+        ResourceScopeRef(kind="verification.resource", id="ds-1", version="1:1"),
         ResourceScopeRef(kind="workspace", id="proj-1", version="v1"),
     )
     raw = dump_resource_refs(refs)
@@ -24,7 +24,7 @@ def test_dump_and_load_roundtrip() -> None:
 
 def test_dump_at_max_limit_succeeds() -> None:
     refs = tuple(
-        ResourceScopeRef(kind="dbfox.data.database", id=f"ds-{i}", version="1:1")
+        ResourceScopeRef(kind="verification.resource", id=f"ds-{i}", version="1:1")
         for i in range(MAX_INPUT_RESOURCE_REFS)
     )
     raw = dump_resource_refs(refs)
@@ -35,7 +35,7 @@ def test_dump_at_max_limit_succeeds() -> None:
 
 def test_dump_exceeding_max_limit_rejected() -> None:
     refs = tuple(
-        ResourceScopeRef(kind="dbfox.data.database", id=f"ds-{i}", version="1:1")
+        ResourceScopeRef(kind="verification.resource", id=f"ds-{i}", version="1:1")
         for i in range(MAX_INPUT_RESOURCE_REFS + 1)
     )
     with pytest.raises(ValueError, match="exceeds maximum"):
@@ -44,8 +44,8 @@ def test_dump_exceeding_max_limit_rejected() -> None:
 
 def test_dump_duplicate_canonical_key_rejected() -> None:
     refs = (
-        ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version="1:1"),
-        ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version=2),
+        ResourceScopeRef(kind="verification.resource", id="ds-1", version="1:1"),
+        ResourceScopeRef(kind="verification.resource", id="ds-1", version=2),
     )
     with pytest.raises(ValueError, match="duplicate resource ref"):
         dump_resource_refs(refs)
@@ -62,7 +62,7 @@ def test_load_malformed_json_rejected() -> None:
 
 def test_load_non_list_json_rejected() -> None:
     with pytest.raises(ValueError, match="must be a list"):
-        load_resource_refs('{"kind": "dbfox.data.database", "id": "ds-1"}')
+        load_resource_refs('{"kind": "verification.resource", "id": "ds-1"}')
 
     with pytest.raises(ValueError, match="must be a list"):
         load_resource_refs('"just a string"')
@@ -78,7 +78,7 @@ def test_load_non_dict_item_rejected() -> None:
 
 def test_load_missing_kind_or_id_rejected() -> None:
     with pytest.raises(ValueError, match="missing kind/id"):
-        load_resource_refs('[{"kind": "dbfox.data.database"}]')
+        load_resource_refs('[{"kind": "verification.resource"}]')
 
     with pytest.raises(ValueError, match="missing kind/id"):
         load_resource_refs('[{"id": "ds-1"}]')
@@ -86,12 +86,12 @@ def test_load_missing_kind_or_id_rejected() -> None:
 
 def test_load_invalid_extra_field_rejected() -> None:
     with pytest.raises(ValueError):
-        load_resource_refs('[{"kind": "dbfox.data.database", "id": "ds-1", "unexpected_extra": "bad"}]')
+        load_resource_refs('[{"kind": "verification.resource", "id": "ds-1", "unexpected_extra": "bad"}]')
 
 
 def test_load_exceeding_max_rejected() -> None:
     items = [
-        {"kind": "dbfox.data.database", "id": f"ds-{i}", "version": 1}
+        {"kind": "verification.resource", "id": f"ds-{i}", "version": 1}
         for i in range(MAX_INPUT_RESOURCE_REFS + 1)
     ]
     import json
@@ -101,8 +101,8 @@ def test_load_exceeding_max_rejected() -> None:
 
 def test_load_duplicate_key_rejected() -> None:
     items = [
-        {"kind": "dbfox.data.database", "id": "ds-1", "version": 1},
-        {"kind": "dbfox.data.database", "id": "ds-1", "version": 2},
+        {"kind": "verification.resource", "id": "ds-1", "version": 1},
+        {"kind": "verification.resource", "id": "ds-1", "version": 2},
     ]
     import json
     with pytest.raises(ValueError, match="duplicate resource ref"):

@@ -24,7 +24,7 @@ def _object(value: str | None) -> dict[str, Any]:
 
 
 class ApprovalAuthorityVerifier:
-    """Turn an approved database record into a scoped execution capability."""
+    """Turn an approved action into a scoped execution capability."""
 
     def verify(
         self,

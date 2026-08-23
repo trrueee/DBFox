@@ -496,26 +496,6 @@ def task_correct(case: EvalCase, score: TrialScore) -> bool:
     return answer_correct and result_correct and citation_correct
 
 
-def correction_obeyed(case: EvalCase, score: TrialScore) -> bool | None:
-    """Check current-request authority without importing unrelated gate failures."""
-
-    if not case.correction_evidence:
-        return None
-    checks = score.checks
-    required: tuple[str, ...] = (
-        "required_terms",
-        "forbidden_terms",
-        "required_numbers",
-    )
-    if case.result is not None:
-        required += (
-            "generated_result_available",
-            "golden_result_available",
-            "result_equivalent",
-        )
-    return all(name in checks and checks[name] is True for name in required)
-
-
 def duplicate_tool_call_ratio(trace: TrialTrace) -> float:
     signatures = [
         (

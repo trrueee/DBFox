@@ -1,10 +1,34 @@
-from engine.agent.completion import CompletionKind
-from engine.runtime_composition import build_default_completion_policy as CompletionPolicy
+from engine.agent.completion import (
+    CompletionKind,
+    CompletionPolicy,
+    SemanticArtifactCompletionSupport,
+    SemanticCitationConstraint,
+)
 from engine.agent.context import ContextObservation, ContextSnapshot
 from engine.agent.definition import DEFAULT_AGENT_DEFINITION
 from engine.agent.prompt import PromptAssembler
 from engine.agent.turn import ModelTurnResult, TurnAssistantMessage, TurnTermination
-from engine.tools.runtime.semantics import ToolSemanticCapability
+
+
+EVIDENCE_CAPABILITY = "verification.evidence"
+METADATA_CAPABILITY = "verification.metadata"
+
+
+def _policy() -> CompletionPolicy:
+    return CompletionPolicy(
+        constraints=(
+            SemanticCitationConstraint(
+                id="verification.citation",
+                semantic_capability=EVIDENCE_CAPABILITY,
+            ),
+        ),
+        supports=(
+            SemanticArtifactCompletionSupport(
+                id="verification.evidence",
+                semantic_capability=EVIDENCE_CAPABILITY,
+            ),
+        ),
+    )
 
 
 def _context(*, observations=None):
@@ -32,7 +56,7 @@ def _final(text: str) -> ModelTurnResult:
     )
 
 
-def test_prompt_keeps_user_and_database_context_out_of_system_role():
+def test_prompt_keeps_user_context_out_of_system_role():
     bundle = PromptAssembler().assemble(
         definition=DEFAULT_AGENT_DEFINITION,
         context=_context(),
@@ -45,10 +69,10 @@ def test_prompt_keeps_user_and_database_context_out_of_system_role():
         context=_context(),
     ).hash
     assert bundle.version == "3.6"
-    assert "metric, dimensions, filters" in bundle.system_prompt
-    assert "result_profile" in bundle.system_prompt
+    assert "requested outcome, relevant dimensions, filters" in bundle.system_prompt
+    assert "authorized Resource" in bundle.system_prompt
     assert "Prior assistant text and prior Artifact metadata are context" in bundle.system_prompt
-    assert "Reuse the prior Artifact ID" in bundle.system_prompt
+    assert "use an available capability tool to re-observe it" in bundle.system_prompt
 
 
 def test_prompt_isolates_the_only_active_request_from_prior_history():
@@ -56,8 +80,8 @@ def test_prompt_isolates_the_only_active_request_from_prior_history():
         session_id="session-1",
         run_id="run-2",
         context_epoch=0,
-        current_request="分析 AI 工具数据",
-        messages=[{"role": "user", "content": "这个数据库是什么数据库"}],
+        current_request="分析当前工作项",
+        messages=[{"role": "user", "content": "这个资源包含什么"}],
         sources=[],
         hash="context-hash",
     )
@@ -66,9 +90,9 @@ def test_prompt_isolates_the_only_active_request_from_prior_history():
         context=context,
     ).messages
 
-    assert messages[-2] == {"role": "user", "content": "这个数据库是什么数据库"}
+    assert messages[-2] == {"role": "user", "content": "这个资源包含什么"}
     assert 'scope="only_active_request"' in messages[-1]["content"]
-    assert "分析 AI 工具数据" in messages[-1]["content"]
+    assert "分析当前工作项" in messages[-1]["content"]
     assert "Earlier user messages are conversation history" in messages[-1]["content"]
 
 
@@ -100,7 +124,7 @@ def test_prompt_budget_reserves_space_for_tool_schemas():
 
 
 def test_text_answer_can_finish_without_keyword_classification():
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(),
         model_result=_final("你好，我是 DBFox。"),
         turn_count=1,
@@ -109,33 +133,33 @@ def test_text_answer_can_finish_without_keyword_classification():
     assert decision.kind is CompletionKind.SYNTHESIZE
 
 
-def test_schema_observation_can_support_an_answer_without_query_result():
+def test_metadata_observation_can_support_an_answer_without_evidence_artifact():
     metadata = ContextObservation(
         id="obs-metadata",
         tool_name="catalog_overview",
         status="succeeded",
-        summary="Observed database metadata.",
-        capabilities=(ToolSemanticCapability.SCHEMA_METADATA.value,),
+        summary="Observed resource metadata.",
+        capabilities=(METADATA_CAPABILITY,),
     )
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(observations=[metadata]),
-        model_result=_final("这个数据库包含 50 张表。"),
+        model_result=_final("这个资源包含 50 个对象。"),
         turn_count=2,
         max_turns=8,
     )
     assert decision.kind is CompletionKind.SYNTHESIZE
 
 
-def test_single_query_result_still_requires_explicit_inline_evidence():
+def test_single_evidence_artifact_still_requires_explicit_inline_evidence():
     result = ContextObservation(
         id="obs-result",
         tool_name="data_preview",
         status="succeeded",
         summary="Previewed verified rows.",
         artifact_ids=["artifact_preview"],
-        capabilities=(ToolSemanticCapability.QUERY_RESULT.value,),
+        capabilities=(EVIDENCE_CAPABILITY,),
     )
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(observations=[result]),
         model_result=_final("样例中包含 5 行。"),
         turn_count=2,
@@ -145,7 +169,7 @@ def test_single_query_result_still_requires_explicit_inline_evidence():
     assert decision.missing == ["inline_evidence"]
 
 
-def test_multiple_query_results_still_require_explicit_inline_evidence():
+def test_multiple_evidence_artifacts_still_require_explicit_inline_evidence():
     observations = [
         ContextObservation(
             id=f"obs-{index}",
@@ -153,11 +177,11 @@ def test_multiple_query_results_still_require_explicit_inline_evidence():
             status="succeeded",
             summary="Previewed verified rows.",
             artifact_ids=[f"artifact_{index}"],
-            capabilities=(ToolSemanticCapability.QUERY_RESULT.value,),
+            capabilities=(EVIDENCE_CAPABILITY,),
         )
         for index in (1, 2)
     ]
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(observations=observations),
         model_result=_final("对比结果已经整理完成。"),
         turn_count=2,
@@ -168,16 +192,16 @@ def test_multiple_query_results_still_require_explicit_inline_evidence():
     assert decision.missing == ["inline_evidence"]
 
 
-def test_query_result_can_synthesize_with_observed_inline_evidence():
+def test_evidence_artifact_can_synthesize_with_observed_inline_evidence():
     observation = ContextObservation(
         id="obs-1",
-        tool_name="sql_execute_readonly",
+        tool_name="verification_read",
         status="succeeded",
         summary="Returned 12 aggregated rows.",
         artifact_ids=["artifact_result"],
-        capabilities=(ToolSemanticCapability.QUERY_RESULT.value,),
+        capabilities=(EVIDENCE_CAPABILITY,),
     )
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(observations=[observation]),
         model_result=_final("订单呈上升趋势。{{cite:artifact_result}}"),
         turn_count=3,
@@ -186,16 +210,16 @@ def test_query_result_can_synthesize_with_observed_inline_evidence():
     assert decision.kind is CompletionKind.SYNTHESIZE
 
 
-def test_lookup_can_use_a_cited_preview_result_without_forcing_sql_execution():
+def test_lookup_can_use_a_cited_preview_without_forcing_another_tool():
     observation = ContextObservation(
         id="obs-preview",
         tool_name="data_preview",
         status="succeeded",
         summary="Previewed 5 redacted rows.",
         artifact_ids=["artifact_preview"],
-        capabilities=(ToolSemanticCapability.SAMPLE_ROWS.value,),
+        capabilities=(EVIDENCE_CAPABILITY,),
     )
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(observations=[observation]),
         model_result=_final("样例中包含 5 行。{{cite:artifact_preview}}"),
         turn_count=2,
@@ -204,30 +228,30 @@ def test_lookup_can_use_a_cited_preview_result_without_forcing_sql_execution():
     assert decision.kind is CompletionKind.SYNTHESIZE
 
 
-def test_environment_observation_can_support_an_answer_without_query_result():
+def test_resource_profile_can_support_an_answer_without_evidence_artifact():
     profile = ContextObservation(
         id="obs-profile",
         tool_name="catalog_overview",
         status="succeeded",
-        summary="MySQL creatorhub.",
-        capabilities=(ToolSemanticCapability.ENVIRONMENT_PROFILE.value,),
+        summary="Verified resource profile.",
+        capabilities=(METADATA_CAPABILITY,),
     )
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(observations=[profile]),
-        model_result=_final("这是 MySQL 数据库。"),
+        model_result=_final("这是已验证的项目资源。"),
         turn_count=1,
         max_turns=8,
     )
     assert decision.kind is CompletionKind.SYNTHESIZE
 
 
-def test_database_task_rejects_fabricated_inline_evidence():
+def test_task_rejects_fabricated_inline_evidence():
     observation = ContextObservation(
-        id="obs-1", tool_name="sql_execute_readonly", status="succeeded",
+        id="obs-1", tool_name="verification_read", status="succeeded",
         summary="Returned one row.", artifact_ids=["artifact_real"],
-        capabilities=(ToolSemanticCapability.QUERY_RESULT.value,),
+        capabilities=(EVIDENCE_CAPABILITY,),
     )
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(observations=[observation]),
         model_result=_final("共有 42 条。{{cite:artifact_fake}}"),
         turn_count=3, max_turns=8,
@@ -236,13 +260,13 @@ def test_database_task_rejects_fabricated_inline_evidence():
     assert decision.missing == ["valid_inline_evidence"]
 
 
-def test_database_task_rejects_malformed_placeholder_citation():
+def test_task_rejects_malformed_placeholder_citation():
     observation = ContextObservation(
         id="obs-1", tool_name="catalog_overview", status="succeeded",
         summary="Observed four tables.", artifact_ids=[],
-        capabilities=(ToolSemanticCapability.SCHEMA_METADATA.value,),
+        capabilities=(METADATA_CAPABILITY,),
     )
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(observations=[observation]),
         model_result=_final("共有 4 张表。{{cite:artifact_result_???}}"),
         turn_count=1, max_turns=8,
@@ -252,7 +276,7 @@ def test_database_task_rejects_malformed_placeholder_citation():
 
 
 def test_malformed_citation_fails_closed_at_turn_budget():
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(),
         model_result=_final("答案。{{cite:artifact_unfinished"),
         turn_count=8, max_turns=8,
@@ -261,13 +285,13 @@ def test_malformed_citation_fails_closed_at_turn_budget():
     assert decision.missing == ["valid_inline_evidence"]
 
 
-def test_result_answer_does_not_require_a_separate_intent_or_review_stage():
+def test_evidence_answer_does_not_require_a_separate_review_stage():
     result = ContextObservation(
-        id="obs-result", tool_name="sql_execute_readonly", status="succeeded",
+        id="obs-result", tool_name="verification_read", status="succeeded",
         summary="Returned trend data.", artifact_ids=["artifact_trend"],
-        capabilities=(ToolSemanticCapability.QUERY_RESULT.value,),
+        capabilities=(EVIDENCE_CAPABILITY,),
     )
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(observations=[result]),
         model_result=_final("订单持续增长。{{cite:artifact_trend}}"),
         turn_count=3, max_turns=8,
@@ -277,11 +301,11 @@ def test_result_answer_does_not_require_a_separate_intent_or_review_stage():
 
 def test_turn_budget_returns_partial_only_for_a_valid_answer_candidate():
     result = ContextObservation(
-        id="obs-result", tool_name="sql_execute_readonly", status="succeeded",
+        id="obs-result", tool_name="verification_read", status="succeeded",
         summary="Returned trend data.", artifact_ids=["artifact_trend"],
-        capabilities=(ToolSemanticCapability.QUERY_RESULT.value,),
+        capabilities=(EVIDENCE_CAPABILITY,),
     )
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(observations=[result]),
         model_result=_final("订单持续增长。{{cite:artifact_trend}}"),
         turn_count=8, max_turns=8,
@@ -290,7 +314,7 @@ def test_turn_budget_returns_partial_only_for_a_valid_answer_candidate():
 
 
 def test_turn_budget_fails_without_an_answer_candidate():
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(),
         model_result=ModelTurnResult(),
         turn_count=8,
@@ -300,17 +324,17 @@ def test_turn_budget_fails_without_an_answer_candidate():
     assert decision.missing == ["answer"]
 
 
-def test_bounded_partial_accepts_settled_query_result_without_answer_text():
+def test_bounded_partial_accepts_settled_evidence_without_answer_text():
     result = ContextObservation(
         id="obs-result",
-        tool_name="sql_execute_readonly",
+        tool_name="verification_read",
         status="succeeded",
         summary="Returned verified rows.",
         artifact_ids=["artifact_result"],
-        capabilities=(ToolSemanticCapability.QUERY_RESULT.value,),
+        capabilities=(EVIDENCE_CAPABILITY,),
     )
 
-    decision = CompletionPolicy().evaluate_bounded_partial(
+    decision = _policy().evaluate_bounded_partial(
         context=_context(observations=[result]),
         model_result=ModelTurnResult(),
         reason="bounded",
@@ -323,11 +347,11 @@ def test_bounded_partial_accepts_settled_query_result_without_answer_text():
 def test_bounded_partial_rejects_unfinished_text_and_non_result_artifact():
     metadata = ContextObservation(
         id="obs-metadata",
-        tool_name="schema_inspect",
+        tool_name="verification_inspect",
         status="succeeded",
         summary="Observed metadata.",
         artifact_ids=["artifact_metadata"],
-        capabilities=(ToolSemanticCapability.SCHEMA_METADATA.value,),
+        capabilities=(METADATA_CAPABILITY,),
     )
     unfinished = ModelTurnResult(messages=[TurnAssistantMessage(
         item_id="message:0",
@@ -337,7 +361,7 @@ def test_bounded_partial_rejects_unfinished_text_and_non_result_artifact():
         text="partial text",
     )])
 
-    decision = CompletionPolicy().evaluate_bounded_partial(
+    decision = _policy().evaluate_bounded_partial(
         context=_context(observations=[metadata]),
         model_result=unfinished,
         reason="bounded",
@@ -348,7 +372,7 @@ def test_bounded_partial_rejects_unfinished_text_and_non_result_artifact():
 
 
 def test_commentary_without_tools_cannot_become_the_final_answer():
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(),
         model_result=ModelTurnResult(
             messages=[TurnAssistantMessage(
@@ -369,7 +393,7 @@ def test_commentary_without_tools_cannot_become_the_final_answer():
 
 
 def test_completed_text_without_phase_is_an_answer_candidate():
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(),
         model_result=ModelTurnResult(
             messages=[TurnAssistantMessage(
@@ -390,7 +414,7 @@ def test_completed_text_without_phase_is_an_answer_candidate():
 
 
 def test_text_without_phase_and_without_normal_finish_does_not_complete():
-    decision = CompletionPolicy().evaluate(
+    decision = _policy().evaluate(
         context=_context(),
         model_result=ModelTurnResult(messages=[TurnAssistantMessage(
             item_id="message:0",

@@ -35,7 +35,6 @@ class EvidenceRepository:
                     claim_id=item.claim_id,
                     artifact_id=item.artifact_id,
                     label=item.label,
-                    query_fingerprint=item.query_fingerprint,
                     observed_at=item.observed_at,
                     locator_json=_json(item.locator.model_dump(mode="json")),
                     value_json=_json(item.value) if item.value is not None else None,

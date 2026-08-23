@@ -1,4 +1,4 @@
-"""Session-scoped scheduling, recovery and database lease fencing."""
+"""Session-scoped scheduling, recovery and durable lease fencing."""
 
 from __future__ import annotations
 
@@ -98,6 +98,15 @@ class SessionCoordinator:
             self._active[session_id] = _ActiveSession(future=future, interrupt=interrupt)
             future.add_done_callback(partial(self._finished, session_id))
             return True
+
+    def cancel_invocations(
+        self,
+        invocations: tuple[tuple[str, str], ...] | list[tuple[str, str]],
+    ) -> None:
+        """Forward cancellation to each invocation's owning Tool."""
+
+        for invocation_id, tool_name in invocations:
+            self.run_loop.tool_dispatcher.cancel_invocation(invocation_id, tool_name)
 
     def stop(self, *, wait: bool = True) -> None:
         self._stopped.set()

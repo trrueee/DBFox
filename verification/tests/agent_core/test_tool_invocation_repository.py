@@ -11,18 +11,18 @@ from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.tool import ToolInvocationStatus
 from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import AgentObservationRecord, AgentSession, AgentToolInvocation
-from engine.runtime_composition import build_product_tool_registry
 from engine.tools.materialization import materialize_tools
 from engine.tools.runtime.base import ToolRecoveryPolicy
+from verification.support.agent_tools import verification_registry
 
 
-def test_tool_intent_is_durable_before_running_and_settles_once(db_session, test_datasource) -> None:
+def test_tool_intent_is_durable_before_running_and_settles_once(db_session, test_resource) -> None:
     db_session.add(AgentSession(id="session_tool", title="Tool"))
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_tool",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version=1),),
         content="查看表",
         idempotency_key="request_tool",
         llm_credential_id="credential_1",
@@ -33,8 +33,8 @@ def test_tool_intent_is_durable_before_running_and_settles_once(db_session, test
     lease = sessions.claim(session_id="session_tool", owner="worker")
     assert lease is not None
     sessions.promote_next_input(lease=lease)
-    registry = build_product_tool_registry()
-    tools = materialize_tools(registry, allowed_groups={"catalog"}, execution_mode="user_requested_read")
+    registry = verification_registry()
+    tools = materialize_tools(registry, allowed_groups={"verification"}, execution_mode="user_requested_read")
     turn = sessions.start_turn(
         lease=lease,
         run_id=admission.run_id,
@@ -56,7 +56,7 @@ def test_tool_intent_is_durable_before_running_and_settles_once(db_session, test
         run_id=admission.run_id,
         turn_id=str(turn.id),
         provider_call_id="call_1",
-        tool_name="schema_list",
+        tool_name="verification_read",
         raw_input={},
         materialization=tools,
         policy_decision={"status": "allowed", "reason": "safe"},
@@ -82,7 +82,7 @@ def test_tool_intent_is_durable_before_running_and_settles_once(db_session, test
             {
                 "type": "function_call",
                 "call_id": "call_1",
-                "name": "schema_list",
+                "name": "verification_read",
                 "arguments": "{}",
             }
         ]
@@ -121,21 +121,21 @@ def test_tool_intent_is_durable_before_running_and_settles_once(db_session, test
 )
 def test_interrupted_recoverable_tool_is_requeued_with_the_same_invocation_id(
     db_session,
-    test_datasource,
+    test_resource,
     recovery_policy,
 ) -> None:
     db_session.add(AgentSession(id="session_recovery", title="Recovery"))
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
-        session_id="session_recovery", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        session_id="session_recovery", resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version=1),),
         content="查看表", idempotency_key="request_recovery", llm_credential_id="credential_1",
         api_base=None, model_name="model-test", request_payload={},
     )
     lease = sessions.claim(session_id="session_recovery", owner="worker")
     sessions.promote_next_input(lease=lease)
     tools = materialize_tools(
-        build_product_tool_registry(), allowed_groups={"catalog"}, execution_mode="user_requested_read"
+        verification_registry(recovery=recovery_policy), allowed_groups={"verification"}, execution_mode="user_requested_read"
     )
     turn = sessions.start_turn(
         lease=lease, run_id=admission.run_id, agent_definition_version="1", prompt_version="1",
@@ -146,7 +146,7 @@ def test_interrupted_recoverable_tool_is_requeued_with_the_same_invocation_id(
     repository = ToolInvocationRepository(db_session)
     invocation = repository.request(
         lease=lease, run_id=admission.run_id, turn_id=str(turn.id), provider_call_id="call",
-        tool_name="schema_list", raw_input={}, materialization=tools,
+        tool_name="verification_read", raw_input={}, materialization=tools,
         policy_decision={"status": "allowed"},
     )
     repository.mark_running(lease=lease, invocation_id=invocation.id)
@@ -163,25 +163,8 @@ def test_interrupted_recoverable_tool_is_requeued_with_the_same_invocation_id(
 
 def test_run_cancellation_terminalizes_a_running_tool_invocation(
     db_session,
-    test_datasource,
-    monkeypatch,
+    test_resource,
 ) -> None:
-    canceled: list[str] = []
-
-    def fake_cancel(execution_id: str) -> dict[str, object]:
-        canceled.append(execution_id)
-        return {
-            "success": True,
-            "cancelled": True,
-            "executionId": execution_id,
-            "message": "mocked",
-        }
-
-    monkeypatch.setattr(
-        "engine.agent.repositories.tool.QUERY_REGISTRY.cancel",
-        fake_cancel,
-    )
-
     db_session.add(
         AgentSession(
             id="session_cancel_tool",
@@ -192,7 +175,7 @@ def test_run_cancellation_terminalizes_a_running_tool_invocation(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_cancel_tool",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version=1),),
         content="查看表",
         idempotency_key="request_cancel_tool",
         llm_credential_id="credential_1",
@@ -204,8 +187,8 @@ def test_run_cancellation_terminalizes_a_running_tool_invocation(
     assert lease is not None
     sessions.promote_next_input(lease=lease)
     tools = materialize_tools(
-        build_product_tool_registry(),
-        allowed_groups={"catalog"},
+        verification_registry(),
+        allowed_groups={"verification"},
         execution_mode="user_requested_read",
     )
     turn = sessions.start_turn(
@@ -227,7 +210,7 @@ def test_run_cancellation_terminalizes_a_running_tool_invocation(
         run_id=admission.run_id,
         turn_id=str(turn.id),
         provider_call_id="cancel-call",
-        tool_name="schema_list",
+        tool_name="verification_read",
         raw_input={},
         materialization=tools,
         policy_decision={"status": "allowed"},
@@ -247,4 +230,3 @@ def test_run_cancellation_terminalizes_a_running_tool_invocation(
     ).one()
     assert observation.status == "cancelled"
     assert observation.error_code == "TOOL_CANCELLED"
-    assert canceled == [invocation.id]

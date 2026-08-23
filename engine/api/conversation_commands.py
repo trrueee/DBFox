@@ -164,11 +164,8 @@ def delete_conversation(
     deletion = SessionRepository(db).request_delete(session_id=conversation_id)
     active_coordinator = coordinator(request) if deletion.status == "deleting" else None
     db.commit()
-    if deletion.execution_ids:
-        from engine.query_registry import QUERY_REGISTRY
-
-        for execution_id in deletion.execution_ids:
-            QUERY_REGISTRY.cancel(execution_id)
+    if deletion.running_invocations and active_coordinator is not None:
+        active_coordinator.cancel_invocations(deletion.running_invocations)
     if active_coordinator is not None:
         active_coordinator.wake(conversation_id)
     return {"status": deletion.status}
@@ -357,21 +354,13 @@ def cancel_run(
     active_coordinator = coordinator(request)
     try:
         run = RunRepository(db).request_cancel(run_id=run_id)
-        execution_id = str(run.execution_id or "")
-        running_invocations = ToolInvocationRepository(db).running_invocation_ids_for_run(
+        running_invocations = ToolInvocationRepository(db).running_invocations_for_run(
             run_id=run_id,
         )
         db.commit()
     except Exception:
         db.rollback()
         raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND"}) from None
-    if execution_id:
-        from engine.query_registry import QUERY_REGISTRY
-
-        QUERY_REGISTRY.cancel(execution_id)
-    from engine.query_registry import QUERY_REGISTRY
-
-    for invocation_id in running_invocations:
-        QUERY_REGISTRY.cancel(invocation_id)
+    active_coordinator.cancel_invocations(running_invocations)
     active_coordinator.wake(str(run.session_id))
     return {"run_id": str(run.id), "status": str(run.status), "version": int(run.version or 0)}

@@ -17,8 +17,8 @@ const liveChartMetadata = {
   originalExecutedAt: "2026-07-20T00:00:00Z",
   viewExecutedAt: "2026-07-20T00:00:01Z",
   viewExecutionId: "view-chart",
-  datasourceGeneration: 1,
-  queryFingerprint: "query-chart",
+  resourceVersion: 1,
+  sourceFingerprint: "query-chart",
 };
 
 vi.mock("../../../../lib/api/agent", () => ({

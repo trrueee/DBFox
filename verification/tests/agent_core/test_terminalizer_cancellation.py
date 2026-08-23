@@ -31,11 +31,12 @@ from engine.models import (
 )
 from engine.runtime_composition import build_product_tool_registry
 from engine.tools.materialization import ToolMaterialization, materialize_tools
+from verification.support.agent_tools import verification_registry
 
 
 def _start_run(
     db_session,
-    test_datasource,
+    test_resource,
     *,
     session_id: str,
     materialization: ToolMaterialization | None = None,
@@ -50,7 +51,7 @@ def _start_run(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version=1),),
         content="继续分析",
         idempotency_key=f"{session_id}:start",
         llm_credential_id="credential",
@@ -89,16 +90,16 @@ def _cancel_with_terminalizer(db_session, *, sessions, admission, lease) -> None
 
 def test_cancellation_terminalizes_pending_approval_and_blocks_late_resolution(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     tools = materialize_tools(
-        build_product_tool_registry(),
-        allowed_groups={"query"},
+        verification_registry(),
+        allowed_groups={"verification"},
         execution_mode="agent_autonomous_read",
     )
     sessions, admission, lease, turn = _start_run(
         db_session,
-        test_datasource,
+        test_resource,
         session_id="session_cancel_approval",
         materialization=tools,
     )
@@ -107,7 +108,7 @@ def test_cancellation_terminalizes_pending_approval_and_blocks_late_resolution(
         run_id=admission.run_id,
         turn_id=str(turn.id),
         provider_call_id="cancel-approval-call",
-        tool_name="sql_execute_readonly",
+        tool_name="verification_read",
         raw_input={},
         materialization=tools,
         policy_decision={
@@ -150,7 +151,7 @@ def test_cancellation_terminalizes_pending_approval_and_blocks_late_resolution(
 
 def test_cancellation_terminalizes_pending_question_and_blocks_late_response(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     tools = materialize_tools(
         build_product_tool_registry(),
@@ -159,7 +160,7 @@ def test_cancellation_terminalizes_pending_question_and_blocks_late_response(
     )
     sessions, admission, lease, turn = _start_run(
         db_session,
-        test_datasource,
+        test_resource,
         session_id="session_cancel_question",
         materialization=tools,
     )
@@ -223,11 +224,11 @@ def test_cancellation_terminalizes_pending_question_and_blocks_late_response(
 
 def test_cancellation_terminalizes_the_visible_plan(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     sessions, admission, lease, turn = _start_run(
         db_session,
-        test_datasource,
+        test_resource,
         session_id="session_cancel_plan",
     )
     PlanRepository(db_session).update(
@@ -277,11 +278,11 @@ def test_cancellation_terminalizes_the_visible_plan(
 
 def test_cancellation_terminalizes_the_active_turn_and_partial_message(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     sessions, admission, lease, turn = _start_run(
         db_session,
-        test_datasource,
+        test_resource,
         session_id="session_cancel_turn",
     )
     item_id = RunRepository(db_session).persist_turn_message(
@@ -324,16 +325,16 @@ def test_cancellation_terminalizes_the_active_turn_and_partial_message(
 
 def test_failure_terminalizes_pending_children_in_one_transaction(
     db_session,
-    test_datasource,
+    test_resource,
 ) -> None:
     tools = materialize_tools(
-        build_product_tool_registry(),
-        allowed_groups={"query"},
+        verification_registry(),
+        allowed_groups={"verification"},
         execution_mode="agent_autonomous_read",
     )
     sessions, admission, lease, turn = _start_run(
         db_session,
-        test_datasource,
+        test_resource,
         session_id="session_fail_children",
         materialization=tools,
     )
@@ -350,7 +351,7 @@ def test_failure_terminalizes_pending_children_in_one_transaction(
         run_id=admission.run_id,
         turn_id=str(turn.id),
         provider_call_id="fail-approval-call",
-        tool_name="sql_execute_readonly",
+        tool_name="verification_read",
         raw_input={},
         materialization=tools,
         policy_decision={
@@ -391,11 +392,11 @@ def test_failure_terminalizes_pending_children_in_one_transaction(
 
 
 def test_failure_terminalization_preserves_a_concurrent_cancel_request(
-    db_session, test_datasource
+    db_session, test_resource
 ) -> None:
     _, admission, lease, turn = _start_run(
         db_session,
-        test_datasource,
+        test_resource,
         session_id="session_cancel_wins_failure",
     )
     RunRepository(db_session).request_cancel(run_id=admission.run_id)

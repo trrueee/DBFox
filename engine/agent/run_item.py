@@ -55,7 +55,6 @@ class EvidenceReference(BaseModel):
     claim_id: str
     artifact_id: str
     label: str
-    query_fingerprint: str
     observed_at: datetime
     locator: dict[str, Any] = Field(default_factory=dict)
     value: Any | None = None
@@ -371,7 +370,6 @@ def evidence_reference(evidence: Any) -> EvidenceReference:
         claim_id=str(evidence.claim_id),
         artifact_id=str(evidence.artifact_id),
         label=str(evidence.label),
-        query_fingerprint=str(evidence.query_fingerprint),
         observed_at=evidence.observed_at,
         locator=locator,
         value=evidence.value,

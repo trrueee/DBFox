@@ -222,7 +222,7 @@ class DataResultTableView:
             read_at=datetime.now(UTC).isoformat(),
             read_id=f"read_{uuid4().hex}",
             resource_version=stored.resource_version,
-            query_fingerprint=stored.query_fingerprint,
+            source_fingerprint=stored.query_fingerprint,
             warnings=warnings,
             notices=["Loaded from the durable Data result store without SQL reexecution."],
         )
@@ -300,5 +300,5 @@ class DataChartView:
             read_at=datetime.now(UTC).isoformat(),
             read_id=f"read_{uuid4().hex}",
             resource_version=stored.resource_version,
-            query_fingerprint=stored.query_fingerprint,
+            source_fingerprint=stored.query_fingerprint,
         )

@@ -78,7 +78,6 @@ def collect_release_contracts() -> dict[str, Any]:
                 {
                     "session_id": "release-contract",
                     "run_id": "release-contract",
-                    "environment_profile": {"env": "test"},
                     "allowed_tool_groups": ["control"],
                 },
                 "request_clarification",

@@ -9,7 +9,7 @@ import sys
 from sqlalchemy.orm import sessionmaker
 
 from engine.models import Project
-from verification.tests.system.support.metadata import create_migrated_metadata_engine
+from verification.support.metadata import create_migrated_metadata_engine
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
     ResourceScopeRef,
@@ -59,7 +59,7 @@ class _DatabaseProbeTool(BaseTool[_DatabaseProbeInput, _DatabaseProbeOutput]):
     input_model = _DatabaseProbeInput
     output_model = _DatabaseProbeOutput
     presentation = ToolPresentation(title="Database probe", category="manage")
-    execution = ToolExecutionSpec(capabilities=("database_read",))
+    execution = ToolExecutionSpec(capabilities=("network",))
 
     def __init__(self) -> None:
         self.seen_database: object | None = None

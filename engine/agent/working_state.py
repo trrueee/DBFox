@@ -25,10 +25,8 @@ class RunWorkingStateAssembler:
             "thread_id": str(run.session_id),
             "session_id": str(run.session_id),
             "run_id": str(run.id),
-            "execution_id": str(run.execution_id or ""),
             "resource_refs": resource_refs,
             "execute": True,
             "allowed_tool_groups": list(self.definition.allowed_tool_groups),
-            "environment_profile": {"env": "unknown"},
         }
         return state
