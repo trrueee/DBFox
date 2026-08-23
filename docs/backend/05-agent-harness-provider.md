@@ -381,15 +381,15 @@ Harness 需要多维预算：
 
 | 合同 | 测试 |
 | --- | --- |
-| RunLoop 多分支 | [`test_run_loop.py`](../../engine/agent/tests/test_run_loop.py) |
-| Coordinator 有界调度 | [`test_session_coordinator.py`](../../engine/agent/tests/test_session_coordinator.py) |
-| Provider Adapter/流 | [`test_openai_model_adapter.py`](../../engine/agent/tests/test_openai_model_adapter.py) |
-| Prompt/Completion | [`test_prompt_and_completion.py`](../../engine/agent/tests/test_prompt_and_completion.py) |
-| Run control/取消 | [`test_run_control.py`](../../engine/agent/tests/test_run_control.py) |
-| Progress guard | [`test_progress_guard.py`](../../engine/agent/tests/test_progress_guard.py) |
-| Terminalizer 取消 | [`test_terminalizer_cancellation.py`](../../engine/agent/tests/test_terminalizer_cancellation.py) |
-| 真实 Responses（opt-in） | [`test_real_responses_contract.py`](../../engine/agent/tests/test_real_responses_contract.py) |
-| SQLite Harness | [`harness/test_sqlite_scenarios.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
+| RunLoop 多分支 | [`test_run_loop.py`](../../verification/tests/agent_core/test_run_loop.py) |
+| Coordinator 有界调度 | [`test_session_coordinator.py`](../../verification/tests/agent_core/test_session_coordinator.py) |
+| Provider Adapter/流 | [`test_openai_model_adapter.py`](../../verification/tests/agent_core/test_openai_model_adapter.py) |
+| Prompt/Completion | [`test_prompt_and_completion.py`](../../verification/tests/agent_core/test_prompt_and_completion.py) |
+| Run control/取消 | [`test_run_control.py`](../../verification/tests/agent_core/test_run_control.py) |
+| Progress guard | [`test_progress_guard.py`](../../verification/tests/agent_core/test_progress_guard.py) |
+| Terminalizer 取消 | [`test_terminalizer_cancellation.py`](../../verification/tests/agent_core/test_terminalizer_cancellation.py) |
+| 真实 Responses（opt-in） | [`test_real_responses_contract.py`](../../verification/tests/agent_core/test_real_responses_contract.py) |
+| SQLite Harness | [`harness/test_sqlite_scenarios.py`](../../verification/tests/system/test_dbfox_data_domain_model.py) |
 
 ## 18. 修改检查表
 

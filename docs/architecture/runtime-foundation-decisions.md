@@ -171,6 +171,6 @@ Host 实现已由 [`R7 Electron Host Cutover`](../quality/2026-08-21-r7-electron
 
 - `cargo test --manifest-path desktop/src-tauri/Cargo.toml --lib`：Supervisor、crash-loop、关闭竞态、诊断 ZIP。
 - `cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets -- -D warnings`：官方插件适配和日志 target 必须无警告。
-- `python -m pytest engine/tests/test_problem_details.py engine/tests/test_build_sidecar.py engine/tests/test_runtime_manifest.py`：错误协议和产物门禁。
+- `python -m pytest verification/tests/system/test_problem_details.py verification/tests/system/test_build_sidecar.py verification/tests/system/test_runtime_manifest.py`：错误协议和产物门禁。
 - `npm test -- --run src/lib/api/__tests__/engineStartup.test.ts src/lib/diagnostics/__tests__/clientLog.test.ts src/lib/__tests__/externalNavigation.test.ts src/components/__tests__/ImageCell.test.tsx`：会话恢复、写请求不重放、循环日志和外部资源边界。
 - 正式发布使用 `python scripts/verify_release_artifact.py --output reports/release-artifact-verification.json`；任何平台没有最终安装包、manifest、匹配 hash 或 SQLite 最低版本都失败。

@@ -119,7 +119,7 @@ API Key 只能来自 OS 凭据库或 CI secret。报告只能保留 credential r
 
 ## CI 与发布使用
 
-- 普通 PR：运行 `engine/agent/tests`，包括确定性 SQLite Harness。
+- 普通 PR：运行 `verification/tests/agent_core`，包括确定性 SQLite Harness。
 - schedule/workflow_dispatch：在隔离运行目录执行真实 Responses 文本与工具闭环；配置完整时再运行版本化 regression dataset。
 - 隐藏 holdout：由受控 workflow 或人工评测环境注入，不提交答案到仓库。
 - CI 上传 JUnit、结构化 summary 和脱敏 trace；不可只上传“测试通过”一句话。
@@ -128,14 +128,14 @@ API Key 只能来自 OS 凭据库或 CI secret。报告只能保留 credential r
 ## 当前实现索引
 
 - AgentBench 实现与运行手册：`docs/quality/agentbench-implementation.md`
-- 版本化 60 场景集：`scripts/agentbench/datasets/regression-v1.json`
-- scorer 校准集：`scripts/agentbench/datasets/calibration-v1.json`
-- 稳定 CLI：`python -m scripts.agentbench`
+- 版本化 60 场景集：`verification/bench/agentbench/datasets/regression-v1.json`
+- scorer 校准集：`verification/bench/agentbench/datasets/calibration-v1.json`
+- 稳定 CLI：`python -m verification.bench.agentbench`
 - 生产 RunLoop：`engine/agent/loop.py`
 - 上下文与预算：`engine/agent/context.py`、`engine/agent/context_budget.py`
 - Prompt 与工具 schema telemetry：`engine/agent/prompt.py`
-- 确定性场景：`engine/agent/tests/harness/test_sqlite_scenarios.py`
-- 真实 Responses 合同：`engine/agent/tests/test_real_responses_contract.py`
+- 确定性场景：`verification/tests/integration/test_sqlite_scenarios.py`
+- 真实 Responses 合同：`verification/tests/agent_core/test_real_responses_contract.py`
 - PR CI：`.github/workflows/ci.yml` 的 `agent-runtime`
 - 定时/手动评测：`.github/workflows/agent-evaluation.yml`
 

@@ -32,7 +32,7 @@ from .database_selection import select_database
 from .resource_kind import DATABASE_RESOURCE_KIND
 from .sql.dialect_context import canonical_sql_dialect
 from .query_identity import query_fingerprint
-from .sql.safety_contracts import DatabaseSafetyScope
+from .sql.safety_contracts import DatabaseSafetyScope, ExecutionPolicy
 from .sql.row_serializer import serialize_rows
 from .sql.trust_gate import TrustGate
 from .sql_admission import admit_sql_execution, resolve_validated_sql_execution
@@ -87,7 +87,7 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
             schema_validator=lambda _query: [],
             dry_run_validator=lambda sql, _parameters: self._connection.explain(handle, sql),
         )
-        policy = (
+        policy: ExecutionPolicy = (
             "user_readonly"
             if context.execution_mode == "user_requested_read"
             else "agent_readonly"

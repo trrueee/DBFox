@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-22
+> 最后核验：2026-08-24
 >
 > 适用范围：当前生产实现与后续合并版本
 
@@ -89,6 +89,7 @@
 | [`architecture/backend-owner-guide.md`](architecture/backend-owner-guide.md) | 不熟悉代码时，如何从真实入口和代码符号理解后端并安全修改？ |
 | [`backend/README.md`](backend/README.md) | 如何按多卷手册逐层理解后端运行链、事务、失败路径、调试和扩展？ |
 | [`architecture/implementation-map.md`](architecture/implementation-map.md) | 一项功能具体落在哪些代码符号、表和测试中？ |
+| [`architecture/verification-system.md`](architecture/verification-system.md) | 测试与测评如何独立于产品代码并仍然执行真实生产链路？ |
 | [`architecture/frontend.md`](architecture/frontend.md) | React 工作区、Transport、状态与交互边界如何划分？ |
 | [`architecture/backend.md`](architecture/backend.md) | FastAPI、Service、Repository 与运行时怎样协作？ |
 | [`architecture/data-sql-results.md`](architecture/data-sql-results.md) | SQL 如何校验、执行、分页、持久化并形成制品？ |

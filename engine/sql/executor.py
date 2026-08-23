@@ -111,7 +111,7 @@ def _run_approved_query(
     """Execute safety-approved SQL on the target datasource and record history.
 
     This is the shared execution tail called by both ``execute_query`` (public,
-    bypass_guardrail=False) and ``engine.tests.support.executor`` (test-only,
+    bypass_guardrail=False) and ``verification.tests.system.support.executor`` (test-only,
     bypass_guardrail=True).  It assumes the caller has already resolved the
     safety decision and verified ``can_execute`` / ``safe_sql``.
     """

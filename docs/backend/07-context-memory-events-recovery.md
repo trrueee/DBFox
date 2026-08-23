@@ -348,17 +348,17 @@ Memory、Artifact、Observation 和旧 Run 都要记录 datasource id/generation
 
 | 合同 | 测试 |
 | --- | --- |
-| Context 组成 | [`test_context_assembler.py`](../../engine/agent/tests/test_context_assembler.py) |
-| Context 预算 | [`test_context_budget.py`](../../engine/agent/tests/test_context_budget.py) |
-| Memory 过滤 | [`test_context_memory.py`](../../engine/agent/tests/test_context_assembler.py) |
-| Recall service | [`test_conversation_recall.py`](../../engine/agent/tests/test_conversation_recall.py) |
-| Recall 完整 Harness | [`test_conversation_recall_harness.py`](../../engine/agent/tests/test_conversation_recall_harness.py) |
-| Conversation projection | [`test_conversation_projection.py`](../../engine/agent/tests/test_conversation_projection.py) |
-| Event 合同 | [`test_event_contracts.py`](../../engine/agent/tests/test_event_contracts.py) |
-| Live hub | [`test_live_stream_hub.py`](../../engine/agent/tests/test_live_stream_hub.py) |
-| SSE 背压 | [`test_conversation_stream_backpressure.py`](../../engine/tests/test_conversation_stream_backpressure.py) |
-| Search index | [`test_search_index_service.py`](../../engine/agent/tests/test_conversation_recall_harness.py) |
-| SQLite 恢复场景 | [`harness/test_sqlite_scenarios.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
+| Context 组成 | [`test_context_assembler.py`](../../verification/tests/agent_core/test_context_assembler.py) |
+| Context 预算 | [`test_context_budget.py`](../../verification/tests/agent_core/test_context_budget.py) |
+| Memory 过滤 | [`test_context_memory.py`](../../verification/tests/agent_core/test_context_assembler.py) |
+| Recall service | [`test_conversation_recall.py`](../../verification/tests/agent_core/test_conversation_recall.py) |
+| Recall 完整 Harness | [`test_conversation_recall_harness.py`](../../verification/tests/agent_core/test_conversation_recall_harness.py) |
+| Conversation projection | [`test_conversation_projection.py`](../../verification/tests/agent_core/test_conversation_projection.py) |
+| Event 合同 | [`test_event_contracts.py`](../../verification/tests/agent_core/test_event_contracts.py) |
+| Live hub | [`test_live_stream_hub.py`](../../verification/tests/agent_core/test_live_stream_hub.py) |
+| SSE 背压 | [`test_conversation_stream_backpressure.py`](../../verification/tests/system/test_conversation_stream_backpressure.py) |
+| Search index | [`test_search_index_service.py`](../../verification/tests/agent_core/test_conversation_recall_harness.py) |
+| SQLite 恢复场景 | [`harness/test_sqlite_scenarios.py`](../../verification/tests/system/test_dbfox_data_domain_model.py) |
 
 ## 17. 修改检查表
 

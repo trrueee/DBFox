@@ -75,6 +75,7 @@ try {
     }
   }
 
+  await verifySystemDlcsActive();
   const frozenContract = await verifyFrozenDataContract(smokeSourcePath);
   const dlcContract = await preparePackagedDlcLifecycle(dlcFixture);
   const githubDlcContract = await preparePackagedGithubDlcLifecycle(
@@ -283,7 +284,7 @@ function createSmokeSourceDatabase(databasePath) {
 function buildPackagedDlcFixture(outputDir) {
   const result = spawnSync(resolveSmokePython(), [
     "-m",
-    "scripts.build_dlc_e2e_fixture",
+    "verification.testkit.build_dlc_e2e_fixture",
     "--output-dir",
     outputDir,
   ], {
@@ -768,7 +769,7 @@ async function apiJson(path, { method = "GET", body } = {}) {
   if (!response.ok) {
     const responseBody = await response.text();
     throw new Error(
-      `${method} ${path} returned HTTP ${response.status}: ${responseBody.slice(0, 500)}`,
+      `${method} ${path} returned HTTP ${response.status}: ${responseBody.slice(0, 500)}\n${stderr}`,
     );
   }
   return response.json();
@@ -837,11 +838,12 @@ async function verifyFrozenDataContract(databasePath) {
     `/api/v1/dlcs/dbfox.data/operations/catalog.tables?project_id=${encodeURIComponent(project.id)}`,
     { method: "POST", body: { database_id: database.id, limit: 50 } },
   );
-  if (!tables.tables?.some((table) => table.name === "smoke_items")) {
-    throw new Error("Frozen schema catalog omitted smoke_items");
+  if (!tables.tables?.some((table) => table.table_name === "smoke_items")) {
+    throw new Error(
+      `Frozen schema catalog omitted smoke_items: ${JSON.stringify(tables)}`,
+    );
   }
 
-  const sessionId = `frozen-smoke-${randomBytes(12).toString("hex")}`;
   const first = await apiJson(
     `/api/v1/dlcs/dbfox.data/operations/console.execute?project_id=${encodeURIComponent(project.id)}`,
     {
@@ -850,12 +852,12 @@ async function verifyFrozenDataContract(databasePath) {
       database_id: database.id,
       sql: "SELECT id, name FROM smoke_items ORDER BY id",
       question: "Frozen result contract",
-      session_id: sessionId,
       execution_id: `smoke-query-${randomBytes(8).toString("hex")}`,
     },
   });
-  if (!first.result_artifact_id || !first.run_id) {
-    throw new Error("Frozen console query omitted its durable result artifact");
+  const sessionId = first.session_id;
+  if (!sessionId || !first.result_artifact_id || !first.run_id) {
+    throw new Error("Frozen console query omitted its durable Session/Run/Artifact chain");
   }
   const page = await apiJson(`/api/v1/artifacts/${first.result_artifact_id}/page`, {
     method: "POST",
@@ -885,6 +887,21 @@ async function verifyFrozenDataContract(databasePath) {
     throw new Error("Frozen conversation projection omitted durable multi-turn history");
   }
   return { databaseId: database.id, projectId: project.id, sessionId };
+}
+
+async function verifySystemDlcsActive() {
+  const activation = await apiJson("/api/v1/dlcs/activation");
+  const activeIds = new Set(
+    (activation.active_dlcs ?? []).map((item) => item.dlc_id),
+  );
+  const missing = ["dbfox.data", "dbfox.workspace"].filter(
+    (dlcId) => !activeIds.has(dlcId),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `Frozen System DLC activation omitted ${missing.join(", ")}: ${JSON.stringify(activation)}\n${stderr}`,
+    );
+  }
 }
 
 async function expectRejectedToken(path, rejectedToken) {

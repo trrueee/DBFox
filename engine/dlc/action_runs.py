@@ -184,6 +184,7 @@ class DlcActionRunsHostImpl:
                 provider="none",
                 model_name="none",
             )
+            turn_id = str(turn.id)
             db.commit()
 
         executor = ToolExecutor(max_workers=1)
@@ -204,7 +205,7 @@ class DlcActionRunsHostImpl:
             lease=lease,
             run_id=admission.run_id,
             session_id=normalized_session_id,
-            turn_id=str(turn.id),
+            turn_id=turn_id,
             definition=definition,
         )
 

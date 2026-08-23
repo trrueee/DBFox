@@ -293,16 +293,16 @@ HTTP 与 Agent Tool 边界都必须遵循同一可信度原则，但载体不同
 
 | 目标 | 测试 |
 | --- | --- |
-| Runtime Token 来源与 frozen 失败 | [`test_runtime_credentials.py`](../../engine/tests/test_runtime_credentials.py) |
-| 启动生命周期 | [`test_startup.py`](../../engine/tests/test_startup.py)、[`test_db_init_lifecycle.py`](../../engine/tests/test_db_init_lifecycle.py) |
-| API 鉴权合同 | [`test_api_security_contracts.py`](../../engine/tests/test_openapi_contract.py) |
-| 全局错误不泄漏 | [`test_global_error_boundary.py`](../../engine/tests/test_global_error_boundary.py) |
-| Problem Details | [`test_problem_details.py`](../../engine/tests/test_problem_details.py) |
-| 公开错误 catalog | [`test_public_errors.py`](../../engine/tests/test_public_errors.py) |
-| 请求验证 | [`test_request_validation_contract.py`](../../engine/tests/test_request_validation_contract.py) |
-| Agent 输入大小 | [`test_agent_input_request_limits.py`](../../engine/tests/test_agent_input_request_limits.py) |
-| LLM endpoint 限制 | [`test_llm_endpoint_policy.py`](../../engine/tests/test_llm_endpoint_policy.py) |
-| 诊断脱敏 | [`test_diagnostics.py`](../../engine/tests/test_diagnostics.py)、[`test_diagnostics_logs.py`](../../engine/tests/test_diagnostics_logs.py) |
+| Runtime Token 来源与 frozen 失败 | [`test_runtime_credentials.py`](../../verification/tests/system/test_runtime_credentials.py) |
+| 启动生命周期 | [`test_startup.py`](../../verification/tests/system/test_startup.py)、[`test_db_init_lifecycle.py`](../../verification/tests/system/test_db_init_lifecycle.py) |
+| API 鉴权合同 | [`test_api_security_contracts.py`](../../verification/tests/system/test_openapi_contract.py) |
+| 全局错误不泄漏 | [`test_global_error_boundary.py`](../../verification/tests/system/test_global_error_boundary.py) |
+| Problem Details | [`test_problem_details.py`](../../verification/tests/system/test_problem_details.py) |
+| 公开错误 catalog | [`test_public_errors.py`](../../verification/tests/system/test_public_errors.py) |
+| 请求验证 | [`test_request_validation_contract.py`](../../verification/tests/system/test_request_validation_contract.py) |
+| Agent 输入大小 | [`test_agent_input_request_limits.py`](../../verification/tests/system/test_agent_input_request_limits.py) |
+| LLM endpoint 限制 | [`test_llm_endpoint_policy.py`](../../verification/tests/system/test_llm_endpoint_policy.py) |
+| 诊断脱敏 | [`test_diagnostics.py`](../../verification/tests/system/test_diagnostics.py)、[`test_diagnostics_logs.py`](../../verification/tests/system/test_diagnostics_logs.py) |
 
 ## 12. 修改检查表
 

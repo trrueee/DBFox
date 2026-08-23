@@ -354,15 +354,15 @@ Sidecar 崩溃后，pending/running Invocation 根据 recovery policy 分类：
 
 | 合同 | 测试 |
 | --- | --- |
-| ToolRuntime 安全错误 | [`test_tool_runtime.py`](../../engine/tests/test_tool_runtime.py)、[`test_db_tool_error_boundary.py`](../../engine/tests/test_db_tool_error_boundary.py) |
-| 工具策略门 | [`test_policy_gate.py`](../../engine/agent/tests/test_policy_gate.py) |
-| 工具物化 | [`test_tool_materialization.py`](../../engine/agent/tests/test_tool_materialization.py) |
-| Invocation 幂等 | [`test_tool_invocation_repository.py`](../../engine/agent/tests/test_tool_invocation_repository.py) |
-| 恢复 | [`test_tool_recovery.py`](../../engine/agent/tests/test_tool_recovery.py) |
-| Approval | [`test_approval_repository.py`](../../engine/agent/tests/test_approval_repository.py) |
-| 执行权威 | [`test_execution_authority.py`](../../engine/agent/tests/test_execution_authority.py) |
-| DB tools | [`test_db_tools.py`](../../engine/tests/test_dbfox_data_domain_model.py)、[`whitebox/test_db_tools_whitebox.py`](../../engine/tests/whitebox/test_db_tools_whitebox.py) |
-| 完整 Agent 工具闭环 | [`test_run_loop.py`](../../engine/agent/tests/test_run_loop.py)、[`test_real_responses_contract.py`](../../engine/agent/tests/test_real_responses_contract.py) |
+| ToolRuntime 安全错误 | [`test_tool_runtime.py`](../../verification/tests/system/test_tool_runtime.py)、[`test_db_tool_error_boundary.py`](../../verification/tests/system/test_db_tool_error_boundary.py) |
+| 工具策略门 | [`test_policy_gate.py`](../../verification/tests/agent_core/test_policy_gate.py) |
+| 工具物化 | [`test_tool_materialization.py`](../../verification/tests/agent_core/test_tool_materialization.py) |
+| Invocation 幂等 | [`test_tool_invocation_repository.py`](../../verification/tests/agent_core/test_tool_invocation_repository.py) |
+| 恢复 | [`test_tool_recovery.py`](../../verification/tests/agent_core/test_tool_recovery.py) |
+| Approval | [`test_approval_repository.py`](../../verification/tests/agent_core/test_approval_repository.py) |
+| 执行权威 | [`test_execution_authority.py`](../../verification/tests/agent_core/test_execution_authority.py) |
+| DB tools | [`test_db_tools.py`](../../verification/tests/system/test_dbfox_data_domain_model.py)、[`whitebox/test_db_tools_whitebox.py`](../../verification/tests/system/whitebox/test_db_tools_whitebox.py) |
+| 完整 Agent 工具闭环 | [`test_run_loop.py`](../../verification/tests/agent_core/test_run_loop.py)、[`test_real_responses_contract.py`](../../verification/tests/agent_core/test_real_responses_contract.py) |
 
 ## 18. 修改检查表
 

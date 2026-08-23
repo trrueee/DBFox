@@ -30,14 +30,14 @@ Sidecar 的 `.build_venv` 完全分离。这样既能证明生产解释器可运
 
 ```powershell
 python -m pip install --require-hashes -r requirements-dev.lock
-python -m compileall -q engine build_sidecar.py conftest.py scripts
-python -m pyflakes engine build_sidecar.py conftest.py scripts
+python -m compileall -q engine build_sidecar.py scripts
+python -m pyflakes engine build_sidecar.py scripts
 python -m mypy --no-warn-unused-configs --follow-imports=skip engine build_sidecar.py --no-incremental
 python -m alembic upgrade head
 python -m alembic check
-python -m pytest engine/tests -q --tb=short -m "not e2e and not integration and not real_llm and not migration and not engineering_contract and not platform_contract"
-python -m pytest engine/tests -q --tb=short -m "migration or engineering_contract or platform_contract"
-python -m pytest engine/agent/tests -q --tb=short -m "not e2e and not integration and not real_llm"
+python -m pytest verification/tests/system -q --tb=short -m "not e2e and not integration and not real_llm and not migration and not engineering_contract and not platform_contract"
+python -m pytest verification/tests/system -q --tb=short -m "migration or engineering_contract or platform_contract"
+python -m pytest verification/tests/agent_core -q --tb=short -m "not e2e and not integration and not real_llm"
 
 cd desktop
 npm ci

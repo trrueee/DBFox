@@ -86,13 +86,13 @@ npm run lint
 npm run typecheck:test
 npm test -- --maxWorkers=1
 npm run build
-npm run test:rust
+npm run test:electron
 ```
 
 ### 工程合同
 
 ```powershell
-python -m pytest engine/tests/test_engineering_contracts.py -q
+python -m pytest verification/tests/system/test_engineering_contracts.py -q
 git diff --check
 ```
 

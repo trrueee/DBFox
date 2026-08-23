@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-12
+> 最后核验：2026-08-24
 >
 > 适用范围：Agent Harness、工具闭环、上下文与记忆、数据分析正确性、安全与稳定性
 >
@@ -27,7 +27,7 @@ Versioned Dataset
   → JSON + Markdown + JUnit
 ```
 
-AgentBench 不实现第二套 Agent、SQL executor 或 Provider mapper。测评代码位于 `scripts/agentbench/`，不会被 Sidecar 入口导入；故障工具只存在于 `engine/agent/tests/harness/`，不会进入生产注册表。
+AgentBench 不实现第二套 Agent、SQL executor 或 Provider mapper。测评代码位于 `verification/bench/agentbench/`，不会被 Sidecar 入口导入；故障工具只存在于 `verification/tests/bench/`，不会进入生产注册表。完整边界见[测试与测评系统边界](../architecture/verification-system.md)。
 
 ## 2. 调研与复用决策
 
@@ -42,7 +42,7 @@ AgentBench 不实现第二套 Agent、SQL executor 或 Provider mapper。测评�
 ## 3. 实现结构
 
 ```text
-scripts/agentbench/
+verification/bench/agentbench/
 ├── schema.py             # 版本化 Dataset/Case/Expectation 合同
 ├── scoring.py            # 结果集、轨迹、答案和安全 grader
 ├── calibration.py        # 正例/反例/等价路径校准
@@ -74,7 +74,7 @@ scripts/agentbench/
 
 隐藏集不提交仓库。发布评测用 `--dataset <external-path>` 注入同一 schema。题目一旦揭晓必须转为 regression，不能继续称作 hidden holdout。
 
-人工盲审使用 `scripts/agentbench/datasets/human-review-rubric-v1.json`：隐藏候选版本标签、随机配对顺序、每题两名评审，分歧进入 adjudication；自动安全 veto 仍优先于主观评分。
+人工盲审使用 `verification/bench/agentbench/datasets/human-review-rubric-v1.json`：隐藏候选版本标签、随机配对顺序、每题两名评审，分歧进入 adjudication；自动安全 veto 仍优先于主观评分。
 
 ## 5. 必须先校准测评器
 
@@ -148,17 +148,17 @@ Runner 崩溃、Provider 429/5xx 或配置缺失单列为 `unscored`；报告展
 ## 8. 命令
 
 ```powershell
-python -m scripts.agentbench validate
-python -m scripts.agentbench validate --dataset scripts/agentbench/datasets/continuity-v1.json
-python -m scripts.agentbench calibrate
+python -m verification.bench.agentbench validate
+python -m verification.bench.agentbench validate --dataset verification/bench/agentbench/datasets/continuity-v1.json
+python -m verification.bench.agentbench calibrate
 
 $env:DBFOX_RUN_REAL_LLM = "1"
 $env:DBFOX_REAL_LLM_CREDENTIAL_ID = "<vault reference>"
-python -m scripts.agentbench real --tag real_provider --tag nightly --repetitions 3
+python -m verification.bench.agentbench real --tag real_provider --tag nightly --repetitions 3
 
-python -m scripts.agentbench real --case sql-count-orders --repetitions 1
-python -m scripts.agentbench real --dataset scripts/agentbench/datasets/continuity-v1.json --repetitions 3
-python -m scripts.agentbench replay --trials <trials.json> --output <new-dir>
+python -m verification.bench.agentbench real --case sql-count-orders --repetitions 1
+python -m verification.bench.agentbench real --dataset verification/bench/agentbench/datasets/continuity-v1.json --repetitions 3
+python -m verification.bench.agentbench replay --trials <trials.json> --output <new-dir>
 ```
 
 每次输出 `environment.json`、`dataset-summary.json`、`trials.json`、`summary.json`、`report.md` 和 `junit.xml`。离线 replay 可以在不再次调用模型时升级 grader。
@@ -202,13 +202,13 @@ Prompt 组装器，也不保存 Prompt 正文。逐 Turn 报告区分：
 结果复用和错误恢复场景各运行一次：
 
 ```powershell
-python -m scripts.agentbench replay `
-  --dataset scripts/agentbench/datasets/continuity-v1.json `
+python -m verification.bench.agentbench replay `
+  --dataset verification/bench/agentbench/datasets/continuity-v1.json `
   --trials <existing-trials.json> `
   --output <offline-profile-dir>
 
-python -m scripts.agentbench real `
-  --dataset scripts/agentbench/datasets/continuity-v1.json `
+python -m verification.bench.agentbench real `
+  --dataset verification/bench/agentbench/datasets/continuity-v1.json `
   --case continuity-long-plan `
   --case continuity-result-followup `
   --case continuity-recover-invalid-column `

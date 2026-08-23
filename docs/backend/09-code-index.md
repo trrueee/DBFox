@@ -14,11 +14,11 @@
 
 | 能力 | 生产入口 | 关键测试 |
 | --- | --- | --- |
-| FastAPI/生命周期/鉴权 | [`engine/main.py`](../../engine/main.py) | [`test_startup.py`](../../engine/tests/test_startup.py)、[`test_api_security_contracts.py`](../../engine/tests/test_openapi_contract.py) |
-| metadata Engine/Alembic | [`engine/db.py`](../../engine/db.py) | [`test_db_init.py`](../../engine/tests/test_db_init.py)、[`test_migrations.py`](../../engine/tests/test_migrations.py) |
+| FastAPI/生命周期/鉴权 | [`engine/main.py`](../../engine/main.py) | [`test_startup.py`](../../verification/tests/system/test_startup.py)、[`test_api_security_contracts.py`](../../verification/tests/system/test_openapi_contract.py) |
+| metadata Engine/Alembic | [`engine/db.py`](../../engine/db.py) | [`test_db_init.py`](../../verification/tests/system/test_db_init.py)、[`test_migrations.py`](../../verification/tests/system/test_migrations.py) |
 | ORM | [`engine/models.py`](../../engine/models.py) | Repository/迁移测试 |
-| Runtime Token | [`engine/engine_runtime/credentials.py`](../../engine/engine_runtime/credentials.py) | [`test_runtime_credentials.py`](../../engine/tests/test_runtime_credentials.py) |
-| Public errors | [`engine/app/safe_errors.py`](../../engine/app/safe_errors.py)、[`engine/problem_details.py`](../../engine/problem_details.py) | [`test_global_error_boundary.py`](../../engine/tests/test_global_error_boundary.py) |
+| Runtime Token | [`engine/engine_runtime/credentials.py`](../../engine/engine_runtime/credentials.py) | [`test_runtime_credentials.py`](../../verification/tests/system/test_runtime_credentials.py) |
+| Public errors | [`engine/app/safe_errors.py`](../../engine/app/safe_errors.py)、[`engine/problem_details.py`](../../engine/problem_details.py) | [`test_global_error_boundary.py`](../../verification/tests/system/test_global_error_boundary.py) |
 
 ## 2. API 路由
 
@@ -203,11 +203,11 @@
 
 ## 11. 测试目录地图
 
-- [`engine/tests/`](../../engine/tests/)：API、数据库、连接、SQL、安全、发布边界；
-- [`engine/agent/tests/`](../../engine/agent/tests/)：Harness、Provider、工具、上下文、记忆、Repository；
-- [`engine/agent/tests/harness/`](../../engine/agent/tests/harness/)：确定性完整场景；
-- [`engine/tests/whitebox/`](../../engine/tests/whitebox/)：对安全细节的白盒验证；
-- [`engine/tests/fixtures/`](../../engine/tests/fixtures/)：SQL golden 等受控 fixture。
+- [`verification/tests/system/`](../../verification/tests/system/)：API、数据库、连接、SQL、安全、发布边界；
+- [`verification/tests/agent_core/`](../../verification/tests/agent_core/)：Harness、Provider、工具、上下文、记忆、Repository；
+- [`verification/tests/integration/`](../../verification/tests/integration/)：确定性完整场景；
+- [`verification/tests/system/whitebox/`](../../verification/tests/system/whitebox/)：对安全细节的白盒验证；
+- [`verification/tests/system/fixtures/`](../../verification/tests/system/fixtures/)：SQL golden 等受控 fixture。
 
 ## 12. 搜索建议
 

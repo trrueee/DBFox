@@ -73,7 +73,7 @@ WAL 允许多个 reader 与一个 writer 更好共存，但 SQLite 仍是单 wri
 5. 不存在多个 Alembic heads；
 6. ORM 与实际 schema 一致。
 
-对应入口：[`engine/tests/test_migrations.py`](../../engine/tests/test_migrations.py)、[`engine/tests/test_unique_migration.py`](../../engine/tests/test_migrations.py)、[`engine/tests/test_fts_migration_repair.py`](../../engine/tests/test_fts_migration_repair.py)。
+对应入口：[`verification/tests/system/test_migrations.py`](../../verification/tests/system/test_migrations.py)、[`verification/tests/system/test_unique_migration.py`](../../verification/tests/system/test_migrations.py)、[`verification/tests/system/test_fts_migration_repair.py`](../../verification/tests/system/test_fts_migration_repair.py)。
 
 ## 4. SQLAlchemy Session 所有权
 
@@ -319,16 +319,16 @@ floor 是协议字段，不是内部清理细节。
 
 | 合同 | 测试 |
 | --- | --- |
-| metadata 初始化和 PRAGMA | [`test_db_init.py`](../../engine/tests/test_db_init.py) |
-| 启动/迁移生命周期 | [`test_db_init_lifecycle.py`](../../engine/tests/test_db_init_lifecycle.py) |
-| Alembic 单头与升级 | [`test_migrations.py`](../../engine/tests/test_migrations.py) |
-| Session admit/claim/lease | [`test_session_repository.py`](../../engine/agent/tests/test_session_repository.py) |
-| Coordinator 接管 | [`test_session_coordinator.py`](../../engine/agent/tests/test_session_coordinator.py) |
-| 终态原子性 | [`test_terminal_transaction.py`](../../engine/agent/tests/test_terminal_transaction.py) |
-| ToolInvocation 幂等 | [`test_tool_invocation_repository.py`](../../engine/agent/tests/test_tool_invocation_repository.py) |
-| 事件合同 | [`test_event_contracts.py`](../../engine/agent/tests/test_event_contracts.py) |
-| SSE 背压/回放 | [`test_conversation_stream_backpressure.py`](../../engine/tests/test_conversation_stream_backpressure.py) |
-| 确定性 SQLite 场景 | [`harness/test_sqlite_scenarios.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
+| metadata 初始化和 PRAGMA | [`test_db_init.py`](../../verification/tests/system/test_db_init.py) |
+| 启动/迁移生命周期 | [`test_db_init_lifecycle.py`](../../verification/tests/system/test_db_init_lifecycle.py) |
+| Alembic 单头与升级 | [`test_migrations.py`](../../verification/tests/system/test_migrations.py) |
+| Session admit/claim/lease | [`test_session_repository.py`](../../verification/tests/agent_core/test_session_repository.py) |
+| Coordinator 接管 | [`test_session_coordinator.py`](../../verification/tests/agent_core/test_session_coordinator.py) |
+| 终态原子性 | [`test_terminal_transaction.py`](../../verification/tests/agent_core/test_terminal_transaction.py) |
+| ToolInvocation 幂等 | [`test_tool_invocation_repository.py`](../../verification/tests/agent_core/test_tool_invocation_repository.py) |
+| 事件合同 | [`test_event_contracts.py`](../../verification/tests/agent_core/test_event_contracts.py) |
+| SSE 背压/回放 | [`test_conversation_stream_backpressure.py`](../../verification/tests/system/test_conversation_stream_backpressure.py) |
+| 确定性 SQLite 场景 | [`harness/test_sqlite_scenarios.py`](../../verification/tests/system/test_dbfox_data_domain_model.py) |
 
 ## 14. 修改检查表
 

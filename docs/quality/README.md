@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-22
+> 最后核验：2026-08-24
 
 ## 当前整改
 
@@ -21,8 +21,8 @@
 - [R7.0 Electron Host Cutover 决策与迁移证据](./2026-08-21-r7-electron-host-cutover.md)：只替换 Desktop Host、保持 Renderer→Python HTTP/SSE、分阶段迁移 supervisor/native/DLC/release 并最终删除 Rust/Tauri。
 - [R7.1 DLC SDK / CLI / Conformance 证据](./2026-08-21-r7-dlc-sdk-cli.md)：共享 Host verifier/canonical rules、确定性 build/sign、安全 key generation、公开 Frontend types 与三平台 CLI 自举门禁。
 - [R8A Untrusted Isolation Gate 证据](./2026-08-21-r8-untrusted-isolation-gate.md)：逐平台核验 backend/frontend 权限、反证当前同进程/同 Renderer 边界，并正式记录 trusted-publisher-only 的 NO-GO 结论。
-- [P2 Memory v4 Cutover Gate 本地证据与限制](./2026-08-16-p2-memory-v4-cutover-evidence.md)：当前确定性门禁已通过；真实 Provider AgentBench 后测未执行，`DBFOX_MEMORY_V4_CONTEXT` 保持默认关闭。
-- [P2 Memory v4 DeepSeek 真实 Provider 调查与修复记录](./2026-08-17-memory-v4-projection-deepseek-investigation.md)：定位 `sha256:` content-hash tool version 与 Catalog reducer 语义版本门禁不匹配，修复 projection 无法写入的问题；v4 cutover 仍待完整回归门禁通过。
+- [P2 Memory v4 Cutover Gate 本地证据与限制](../archive/reviews/2026-08-16-p2-memory-v4-cutover-evidence.md)：已归档的旧开关式候选实现证据，不代表当前 Runtime 仍提供该开关。
+- [P2 Memory v4 DeepSeek 真实 Provider 调查与修复记录](../archive/reviews/2026-08-17-memory-v4-projection-deepseek-investigation.md)：已归档的 projection 故障调查；当前评测不得把已删除开关当作 A/B 变化轴。
 - [Agent 生产评测方法](./agent-evaluation-methodology.md)：分层 Harness、数据集角色、Grader、统计门禁与脱敏 Trace 合同。
 - [DBFox AgentBench](./agentbench-implementation.md)：60 场景数据集、评分器校准、真实 RunLoop、故障注入、CLI 和 CI。
 - [Agent Harness 设计、优化与评测复盘](./agent-harness-evolution-retrospective.md)：从真实故障、边界合同和关键提交理解当前 Harness 为什么这样设计，以及如何科学评价后续优化。
