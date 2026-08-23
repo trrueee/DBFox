@@ -142,9 +142,7 @@ async def lifespan(application: FastAPI) -> Any:
     finally:
         agent_coordinator.stop()
         application.state.agent_coordinator = None
-        from engine.connectivity.lifecycle import close_all_managed_datasource_resources
         from engine.llm.http_clients import close_llm_http_clients
-        close_all_managed_datasource_resources()
         await close_llm_http_clients()
 
 

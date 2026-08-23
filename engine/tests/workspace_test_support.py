@@ -66,9 +66,12 @@ def registry_with_legacy_workspace(*, include_write: bool = False) -> ToolRegist
             owner=product.owner_of(tool.name),
             package_digest=product.package_digest_of(tool.name),
         )
-    registry.register(_FileReadProbe(), owner="dbfox.workspace.test")
-    registry.register(_FileSearchProbe(), owner="dbfox.workspace.test")
-    if include_write:
+    existing = set(product.tool_names())
+    if "file_read" not in existing:
+        registry.register(_FileReadProbe(), owner="dbfox.workspace.test")
+    if "file_search" not in existing:
+        registry.register(_FileSearchProbe(), owner="dbfox.workspace.test")
+    if include_write and "file_write_patch" not in existing:
         registry.register(_FileWriteProbe(), owner="dbfox.workspace.test")
     return registry.freeze()
 

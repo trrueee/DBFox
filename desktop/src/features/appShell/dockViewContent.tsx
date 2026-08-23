@@ -1,11 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { EmptyState, LoadingState } from "../../components/ui";
-import { useDatasourceState } from "../datasource/useDatasourceState";
-import { useSqlConsoleStore } from "../../stores/sqlConsoleStore";
-import { useTableWorkspaceStore } from "../../stores/tableWorkspaceStore";
 import { useArtifactDockStore } from "../../stores/artifactDockStore";
-import { defaultSql } from "../workspace/defaultSql";
-import type { ConsoleEntry } from "../workspace/SqlConsoleWorkspace";
 import { useConversationViewModel } from "../conversation/workspace/useConversationViewModel";
 import { isPrimaryConversationArtifact } from "../conversation/workspace/conversationArtifactModels";
 import {
@@ -18,12 +13,6 @@ import { WorkspaceShell } from "./WorkspaceShell";
 import type { WorkspaceDockTab } from "../../types/workspace";
 import type { DockShowToast } from "../dock/types";
 
-const SqlConsoleWorkspace = lazy(() =>
-  import("../workspace/SqlConsoleWorkspace").then((module) => ({ default: module.SqlConsoleWorkspace })),
-);
-const TableWorkspace = lazy(() =>
-  import("../workspace/TableWorkspace").then((module) => ({ default: module.TableWorkspace })),
-);
 const ArtifactDock = lazy(() =>
   import("../conversation/workspace/ArtifactDock").then((module) => ({ default: module.ArtifactDock })),
 );
@@ -32,73 +21,6 @@ export type { DockShowToast };
 
 export function DockSuspense({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<LoadingState label="正在载入工作台" />}>{children}</Suspense>;
-}
-
-export function ConsoleDockContent({
-  tab,
-  activeDatasourceId,
-  showToast,
-}: {
-  tab: WorkspaceDockTab;
-  activeDatasourceId: string;
-  showToast: DockShowToast;
-}) {
-  const { datasources } = useDatasourceState();
-  const sqlConsoleState = useSqlConsoleStore((s) => s.sqlConsoleState);
-  const patchSqlConsoleState = useSqlConsoleStore((s) => s.patchSqlConsoleState);
-  const appendSqlConsoleEntries = useSqlConsoleStore((s) => s.appendSqlConsoleEntries);
-  const stateKey = tab.stateKey ?? tab.viewKey;
-  const tabState = sqlConsoleState[stateKey];
-  const state = tabState ?? {
-    datasourceId: (tab.target?.type === "resource" ? tab.target.id : "") || activeDatasourceId,
-    draftSql: defaultSql,
-    entries: [],
-    running: false,
-  };
-  const datasourceId = tabState?.datasourceId || (tab.target?.type === "resource" ? tab.target.id : "") || activeDatasourceId;
-
-  return (
-    <SqlConsoleWorkspace
-      tabId={stateKey}
-      state={state}
-      onPatchState={(id, patch) => patchSqlConsoleState(id, patch)}
-      onAppendEntries={(id, newEntries: ConsoleEntry[]) => appendSqlConsoleEntries(id, newEntries)}
-      onToast={showToast}
-      datasources={datasources}
-      activeDatasourceId={datasourceId}
-    />
-  );
-}
-
-export function TableDockContent({
-  tab,
-  showToast,
-}: {
-  tab: WorkspaceDockTab;
-  showToast: DockShowToast;
-}) {
-  const tableSubTabs = useTableWorkspaceStore((s) => s.tableSubTabs);
-  const setTableSubTabs = useTableWorkspaceStore((s) => s.setTableSubTabs);
-  const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
-  const tableState = useTableWorkspaceStore((s) => s.tableStateByTabId[tab.stateKey ?? tab.viewKey]);
-
-  const tableId = tableState?.tableName ?? tab.title;
-  const datasourceId = tableState?.datasourceId ?? (tab.target?.type === "resource" ? tab.target.id : "");
-  const datasourceDbType = tableState?.datasourceDbType;
-  const subTabKey = tab.stateKey ?? tab.viewKey;
-
-  return (
-    <TableWorkspace
-      key={tab.viewKey}
-      tableId={tableId}
-      datasourceId={datasourceId}
-      datasourceDbType={datasourceDbType}
-      currentSubTab={tableSubTabs[subTabKey] || tableSubTabs[tableId] || "preview"}
-      onSubTabChange={(subTab) => setTableSubTabs((prev) => ({ ...prev, [subTabKey]: subTab }))}
-      onOpenSqlConsole={(initialSql) => openDockConsole(datasourceId, datasourceDbType, initialSql)}
-      onToast={showToast}
-    />
-  );
 }
 
 export function ArtifactsDockContent({ conversationId }: { conversationId: string }) {
@@ -112,8 +34,6 @@ export function ArtifactsDockContent({ conversationId }: { conversationId: strin
     loadRunArtifacts,
   } = viewModel;
   const openDockArtifact = useArtifactDockStore((s) => s.openArtifact);
-  const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
-  const { activeDatasource } = useDatasourceState();
   const pendingRevealArtifactIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -183,10 +103,6 @@ export function ArtifactsDockContent({ conversationId }: { conversationId: strin
       selectedArtifactId={detail?.selected_artifact_id}
       onSelectArtifact={handleSelectArtifact}
       onOpenResultTab={(artifact) => openDockArtifact(artifact, conversationId)}
-      onOpenSqlConsole={(sql) => {
-        if (!activeDatasource) return;
-        openDockConsole(activeDatasource.id, activeDatasource.db_type, sql);
-      }}
     />
   );
 }

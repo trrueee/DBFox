@@ -28,7 +28,7 @@ def test_task_plan_is_versioned_and_replayed_as_a_public_event(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session-plan",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="分析订单增长并解释异常",
         idempotency_key="plan-request",
         llm_credential_id="credential-1",
@@ -107,7 +107,7 @@ def test_task_plan_rejects_artifacts_from_another_run_in_the_same_session(
     sessions = SessionRepository(db_session)
     active = sessions.admit(
         session_id="session-plan-scope",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="当前分析",
         idempotency_key="active",
         llm_credential_id="credential",
@@ -133,7 +133,7 @@ def test_task_plan_rejects_artifacts_from_another_run_in_the_same_session(
     )
     other = sessions.admit(
         session_id="session-plan-scope",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="下一轮分析",
         idempotency_key="queued",
         llm_credential_id="credential",
@@ -189,7 +189,7 @@ def test_task_plan_accepts_a_prior_result_observed_by_the_current_run(
     sessions = SessionRepository(db_session)
     previous = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="先生成结果",
         idempotency_key="plan-previous",
         llm_credential_id="credential",
@@ -226,7 +226,7 @@ def test_task_plan_accepts_a_prior_result_observed_by_the_current_run(
 
     current = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="继续分析已保存结果",
         idempotency_key="plan-current",
         llm_credential_id="credential",

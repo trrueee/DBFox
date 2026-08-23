@@ -24,9 +24,9 @@ describe("productResourceConnectors", () => {
     expect(result.filter((item) => item.id === DATA_CONNECTOR_ID)).toHaveLength(1);
   });
 
-  it("keeps the source-development Data connector when the DLC is unavailable", () => {
+  it("does not invent a source fallback when the signed Data DLC is unavailable", () => {
     const result = productResourceConnectors(vi.fn(), [connector("acme.notes")]);
 
-    expect(result.map((item) => item.id)).toEqual([DATA_CONNECTOR_ID, "acme.notes"]);
+    expect(result.map((item) => item.id)).toEqual(["acme.notes"]);
   });
 });

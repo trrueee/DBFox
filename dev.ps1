@@ -42,10 +42,20 @@ if (-not $PythonCmd) {
 Write-Host "[DBFox] Python: $PythonCmd" -ForegroundColor Gray
 
 function Start-Backend {
+    Initialize-SystemDlcs
     Write-Host "[DBFox] Starting backend engine on http://127.0.0.1:18625 ..." -ForegroundColor Cyan
     $pyArgs = @("-m", "engine.main")
     if ($NoReload) { $pyArgs += "--no-reload" }
     & $PythonCmd @pyArgs
+}
+
+function Initialize-SystemDlcs {
+    $Bundle = (& $PythonCmd -m scripts.prepare_dev_system_dlcs | ConvertFrom-Json)
+    if (-not $Bundle.package_dir -or -not $Bundle.manifest) {
+        throw "Failed to prepare signed development System DLCs."
+    }
+    $env:DBFOX_SYSTEM_DLC_DIR = $Bundle.package_dir
+    $env:DBFOX_SYSTEM_DLC_MANIFEST = $Bundle.manifest
 }
 
 function Start-Frontend {
@@ -92,6 +102,7 @@ switch ($Target) {
     "both" {
         Write-Host "[DBFox] Starting backend in a new window..." -ForegroundColor Cyan
         Initialize-SharedDevToken
+        Initialize-SystemDlcs
         $pyArgs = @("-m", "engine.main")
         if ($NoReload) { $pyArgs += "--no-reload" }
 

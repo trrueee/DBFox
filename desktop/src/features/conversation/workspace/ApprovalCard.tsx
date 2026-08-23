@@ -4,7 +4,7 @@ import type { ApprovalItem } from "../../../types/conversation";
 
 interface ApprovalCardProps {
   approval: ApprovalItem;
-  onOpenSqlConsole: (sql?: string) => void;
+  onOpenSqlConsole?: (sql?: string) => void;
   submitting?: boolean;
   error?: string | null;
   onResolve?: (runId: string, approvalId: string, approved: boolean) => Promise<void> | void;
@@ -59,9 +59,11 @@ export function ApprovalCard({
             <button type="button" onClick={() => void navigator.clipboard?.writeText(sql)}>
               复制 SQL
             </button>
-            <button type="button" onClick={() => onOpenSqlConsole(sql)}>
-              在 SQL 工作台查看
-            </button>
+            {onOpenSqlConsole && (
+              <button type="button" onClick={() => onOpenSqlConsole(sql)}>
+                在 SQL 工作台查看
+              </button>
+            )}
           </>
         )}
       </div>
@@ -93,9 +95,11 @@ export function ApprovalAuditCard({
           <button type="button" onClick={() => void navigator.clipboard?.writeText(sql)}>
             复制 SQL
           </button>
-          <button type="button" onClick={() => onOpenSqlConsole(sql)}>
-            在 SQL 工作台查看
-          </button>
+          {onOpenSqlConsole && (
+            <button type="button" onClick={() => onOpenSqlConsole(sql)}>
+              在 SQL 工作台查看
+            </button>
+          )}
         </div>
       )}
     </section>

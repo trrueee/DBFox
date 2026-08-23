@@ -207,7 +207,7 @@ def test_alembic_revision_commits_dlc_data_before_recording_head(
         ).fetchone()[0] == 1
         assert source.execute("SELECT version_num FROM alembic_version").fetchone()[
             0
-        ] == ("d1e2f3a4b5c7")
+        ] == ("e2f3a4b5c6d8")
     target_path = tmp_path / "dlcs" / "data" / "dbfox.github" / "state.sqlite3"
     with sqlite3.connect(target_path) as target:
         assert target.execute(

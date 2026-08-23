@@ -33,7 +33,7 @@ def _session(db_session, datasource_id: str, project_id: str | None = None) -> A
 
 def _admit(repository: SessionRepository, datasource_id: str, key: str = "request_1"):
     resource_refs = (
-        ResourceScopeRef(kind="dbfox.data.database", id=datasource_id, version=1),
+        ResourceScopeRef(kind="dbfox.data.database", id=datasource_id, version="1:1"),
     ) if datasource_id else ()
     return repository.admit(
         session_id="session_1",
@@ -72,38 +72,13 @@ def test_admit_persists_the_already_authorized_frozen_resource_set(
 ) -> None:
     """Project authorization happens before the persistence repository boundary."""
 
-    from engine.models import DataSource, Project
-
-    datasource_id = str(test_datasource.id)
-
-    # Create two projects
-    project_a = Project(id="proj-a", name="Project A")
-    project_b = Project(id="proj-b", name="Project B")
-    db_session.add_all([project_a, project_b])
-    db_session.commit()
-
-    # Assign datasource to project A
-    test_datasource.project_id = "proj-a"
-    db_session.commit()
-
-    # Create session under project A
-    _session(db_session, datasource_id, project_id="proj-a")
-
-    # Create a datasource under project B
-    ds_b = DataSource(
-        id="ds-b",
-        name="other",
-        db_type="sqlite",
-        database_name=":memory:",
-        project_id="proj-b",
-    )
-    db_session.add(ds_b)
-    db_session.commit()
+    _session(db_session, str(test_datasource.id))
 
     admission = _admit(SessionRepository(db_session), "ds-b")
     stored = db_session.get(AgentSessionInput, admission.input_id)
     assert stored is not None
     assert '"id":"ds-b"' in str(stored.resource_refs_json)
+    assert '"kind":"dbfox.data.database"' in str(stored.resource_refs_json)
     run = db_session.get(AgentRun, admission.run_id)
     assert run is not None
     assert not hasattr(run, "datasource_id")
@@ -333,7 +308,7 @@ def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(
     steered = repository.admit(
         session_id="session_1",
         resource_refs=(
-            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),
         ),
         content="只看华东区域",
         idempotency_key="request-steer",
@@ -365,7 +340,7 @@ def test_orphaned_steer_cannot_revive_a_terminal_run(
     steered = repository.admit(
         session_id="session_1",
         resource_refs=(
-            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),
         ),
         content="改成按地区统计",
         idempotency_key="request-orphan-steer",
@@ -404,7 +379,7 @@ def test_cancel_and_replace_requests_cancellation_before_admitting_one_new_run(
     replacement = repository.admit(
         session_id="session_1",
         resource_refs=(
-            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),
+            ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),
         ),
         content="改为统计退款",
         idempotency_key="request-replacement",

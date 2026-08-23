@@ -22,17 +22,7 @@ from engine.models import (
     AgentRun,
     AgentSession,
     AgentSessionMemory,
-    BackupRecord,
-    ConfirmationToken,
-    DataSource,
-    DomainTagRule,
     Project,
-    QueryHistory,
-    QueryHistorySearchDoc,
-    SchemaColumn,
-    SchemaSearchDoc,
-    SchemaTable,
-    SemanticAlias,
 )
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 from engine.security.runtime_reset import (
@@ -47,7 +37,6 @@ from engine.security.runtime_reset import (
 
 
 _PURGED_TABLES = (
-    "confirmation_tokens",
     "agent_approvals",
     "agent_artifacts",
     "agent_events",
@@ -62,24 +51,15 @@ _PURGED_TABLES = (
     "agent_session_memories",
     "agent_messages",
     "agent_sessions",
-    "schema_search_docs",
-    "schema_columns",
     "workspace_table_scopes",
-    "schema_tables",
-    "query_history_search_docs",
-    "query_history",
     "llm_logs",
     "golden_sqls",
     "reusable_sqls",
-    "semantic_aliases",
-    "domain_tag_rules",
-    "backup_records",
     "table_design_drafts",
 )
 
 _PRESERVED_TABLES = (
     "projects",
-    "data_sources",
     "database_environments",
 )
 
@@ -189,15 +169,6 @@ def _sqlite_family_bytes(path: Path) -> bytes:
 
 
 def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> dict[str, str]:
-    datasource_password_id = vault.put(
-        kind=CredentialKind.DATASOURCE_PASSWORD,
-        secret="datasource password",
-    )
-    ssh_password_id = vault.put(kind=CredentialKind.SSH_PASSWORD, secret="ssh password")
-    ssh_passphrase_id = vault.put(
-        kind=CredentialKind.SSH_KEY_PASSPHRASE,
-        secret="ssh passphrase",
-    )
     environment_password_id = vault.put(
         kind=CredentialKind.DATASOURCE_PASSWORD,
         secret="environment password",
@@ -206,98 +177,12 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
 
     engine = build_metadata_engine(metadata_url)
     try:
-        schema_doc_id: int | None = None
-        schema_doc_search_text = "customer email sensitive schema cache"
         with Session(engine) as session:
             project = Project(id="project-1", name="Reset project")
-            datasource = DataSource(
-                id="datasource-1",
-                project_id=project.id,
-                name="Warehouse endpoint",
-                db_type="postgresql",
-                host="db.example.test",
-                port=5432,
-                database_name="warehouse",
-                username="reader",
-                password_credential_id=datasource_password_id,
-                ssh_enabled=True,
-                ssh_host="bastion.example.test",
-                ssh_port=2222,
-                ssh_username="tunnel-user",
-                ssh_password_credential_id=ssh_password_id,
-                ssh_pkey_path="C:/keys/dbfox.pem",
-                ssh_key_passphrase_credential_id=ssh_passphrase_id,
-                ssl_enabled=True,
-                ssl_ca_path="C:/certs/ca.pem",
-                ssl_cert_path="C:/certs/client.pem",
-                ssl_key_path="C:/certs/client.key",
-                ssl_verify_identity=False,
-                connection_mode="ssh",
-                is_read_only=True,
-                env="production",
-                last_test_at=datetime.now(UTC),
-                last_test_status="success",
-                last_test_error="stale test error",
-                last_test_latency_ms=42,
-                last_test_readonly=True,
-                last_test_server_version="PostgreSQL 16",
-                last_test_tables_count=17,
-                last_test_warnings='["stale warning"]',
-                last_sync_at=datetime.now(UTC),
-                last_sync_status="success",
-                last_sync_error="stale sync error",
-            )
-            session.add_all((project, datasource))
+            session.add(project)
             session.flush()
 
-            schema_table = SchemaTable(
-                id="schema-table-1",
-                data_source_id=datasource.id,
-                table_schema="public",
-                table_name="orders",
-            )
-            schema_column = SchemaColumn(
-                id="schema-column-1",
-                table_id=schema_table.id,
-                column_name="customer_email",
-                data_type="text",
-            )
-            schema_doc = SchemaSearchDoc(
-                datasource_id=datasource.id,
-                entity_type="column",
-                entity_id=schema_column.id,
-                table_name="orders",
-                column_name="customer_email",
-                name="customer_email",
-                search_text=schema_doc_search_text,
-            )
-            session.add_all((schema_table, schema_column, schema_doc))
-            session.flush()
-            schema_doc_id = schema_doc.id
-
-            history = QueryHistory(
-                id="query-history-1",
-                data_source_id=datasource.id,
-                question="show customer email",
-                submitted_sql="SELECT customer_email FROM orders",
-                generated_sql="SELECT customer_email FROM orders",
-                safe_sql="SELECT customer_email FROM orders",
-                executed_sql="SELECT customer_email FROM orders",
-                guardrail_result="allowed",
-            )
-            history_doc = QueryHistorySearchDoc(
-                history_id=history.id,
-                datasource_id=datasource.id,
-                question=history.question,
-                submitted_sql=history.submitted_sql,
-                generated_sql=history.generated_sql,
-                safe_sql=history.safe_sql,
-                executed_sql=history.executed_sql,
-                search_text="customer email query history cache",
-            )
-            session.add_all((history, history_doc))
-
-            agent_session = AgentSession(id="agent-session-1")
+            agent_session = AgentSession(id="agent-session-1", project_id=project.id)
             agent_message = AgentMessage(
                 id="agent-message-1",
                 session_id=agent_session.id,
@@ -342,37 +227,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
                 )
             )
 
-            session.add_all(
-                (
-                    ConfirmationToken(
-                        token="confirmation-token-1",
-                        expires_at=9_999_999_999,
-                        datasource_id=datasource.id,
-                        action="restore_backup",
-                        details_json='{"sensitive":true}',
-                        expected_confirm_text="Warehouse endpoint",
-                    ),
-                    BackupRecord(
-                        id="backup-record-1",
-                        project_id=project.id,
-                        datasource_id=datasource.id,
-                        file_path="C:/backups/contains-sensitive-data.sql",
-                    ),
-                    SemanticAlias(
-                        id="semantic-alias-1",
-                        data_source_id=datasource.id,
-                        alias="customer",
-                        target_type="table",
-                        target="orders",
-                    ),
-                    DomainTagRule(
-                        id="domain-tag-rule-1",
-                        data_source_id=datasource.id,
-                        pattern="customer",
-                        tag="pii",
-                    ),
-                )
-            )
             now = datetime.now(UTC)
             session.execute(
                 text(
@@ -436,27 +290,16 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
             )
             session.commit()
 
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO schema_search_fts(rowid, search_text) "
-                    "VALUES (:row_id, :search_text)"
-                ),
-                {"row_id": schema_doc_id, "search_text": schema_doc_search_text},
-            )
     finally:
         engine.dispose()
 
     return {
-        "datasource_password_id": datasource_password_id,
-        "ssh_password_id": ssh_password_id,
-        "ssh_passphrase_id": ssh_passphrase_id,
         "environment_password_id": environment_password_id,
         "llm_credential_id": llm_credential_id,
     }
 
 
-def test_foundation_reset_preserves_only_non_secret_endpoint_metadata(tmp_path: Path) -> None:
+def test_foundation_reset_preserves_project_identity_and_clears_runtime_state(tmp_path: Path) -> None:
     runtime_root = tmp_path / "runtime"
     metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
     vault = InMemoryCredentialVault()
@@ -471,7 +314,6 @@ def test_foundation_reset_preserves_only_non_secret_endpoint_metadata(tmp_path: 
     assert _marker(metadata_url)[1] is not None
     for table_name in _PURGED_TABLES:
         assert _count_rows(metadata_url, table_name) == 0
-    assert _count_rows(metadata_url, "schema_search_fts") == 0
     for table_name in _PRESERVED_TABLES:
         assert _count_rows(metadata_url, table_name) == 1
     assert _count_rows(metadata_url, "credential_leases") == 1
@@ -480,66 +322,7 @@ def test_foundation_reset_preserves_only_non_secret_endpoint_metadata(tmp_path: 
     try:
         with Session(engine) as session:
             project = session.get(Project, "project-1")
-            datasource = session.get(DataSource, "datasource-1")
             assert project is not None
-            assert datasource is not None
-            assert datasource.project_id == project.id
-            assert (
-                datasource.name,
-                datasource.db_type,
-                datasource.host,
-                datasource.port,
-                datasource.database_name,
-                datasource.username,
-                datasource.ssh_enabled,
-                datasource.ssh_host,
-                datasource.ssh_port,
-                datasource.ssh_username,
-                datasource.ssl_enabled,
-                datasource.ssl_ca_path,
-                datasource.ssl_cert_path,
-                datasource.ssl_verify_identity,
-                datasource.connection_mode,
-                datasource.is_read_only,
-                datasource.env,
-            ) == (
-                "Warehouse endpoint",
-                "postgresql",
-                "db.example.test",
-                5432,
-                "warehouse",
-                "reader",
-                True,
-                "bastion.example.test",
-                2222,
-                "tunnel-user",
-                True,
-                "C:/certs/ca.pem",
-                "C:/certs/client.pem",
-                False,
-                "ssh",
-                True,
-                "production",
-            )
-            assert datasource.password_credential_id is None
-            assert datasource.ssh_password_credential_id is None
-            assert datasource.ssh_key_passphrase_credential_id is None
-            assert datasource.ssh_pkey_path is None
-            assert datasource.ssl_key_path is None
-            assert (
-                datasource.last_test_at,
-                datasource.last_test_status,
-                datasource.last_test_error,
-                datasource.last_test_latency_ms,
-                datasource.last_test_readonly,
-                datasource.last_test_server_version,
-                datasource.last_test_tables_count,
-                datasource.last_test_warnings,
-                datasource.last_sync_at,
-                datasource.last_sync_status,
-                datasource.last_sync_error,
-            ) == (None,) * 11
-            assert datasource.status == "needs_credentials"
             environment = session.execute(
                 text(
                     "SELECT project_id, password_credential_id, status, last_health_status, "
@@ -571,30 +354,7 @@ def test_foundation_reset_preserves_only_non_secret_endpoint_metadata(tmp_path: 
     finally:
         engine.dispose()
 
-    engine = build_metadata_engine(metadata_url)
-    try:
-        with engine.connect() as connection:
-            assert connection.execute(
-                text(
-                    "SELECT COUNT(*) FROM schema_search_fts "
-                    "WHERE schema_search_fts MATCH :query"
-                ),
-                {"query": "sensitive"},
-            ).scalar_one() == 0
-            assert connection.execute(
-                text(
-                    "SELECT COUNT(*) FROM query_history_fts "
-                    "WHERE query_history_fts MATCH :query"
-                ),
-                {"query": "sensitive"},
-            ).scalar_one() == 0
-    finally:
-        engine.dispose()
-
     for credential_name, expected_secret in (
-        ("datasource_password_id", "datasource password"),
-        ("ssh_password_id", "ssh password"),
-        ("ssh_passphrase_id", "ssh passphrase"),
         ("environment_password_id", "environment password"),
         ("llm_credential_id", "do not remove"),
     ):
@@ -637,9 +397,6 @@ def test_foundation_reset_never_deletes_vault_values(tmp_path: Path, monkeypatch
     reset_legacy_runtime_state(metadata_url, runtime_root)
 
     for credential_name, expected_secret in (
-        ("datasource_password_id", "datasource password"),
-        ("ssh_password_id", "ssh password"),
-        ("ssh_passphrase_id", "ssh passphrase"),
         ("environment_password_id", "environment password"),
         ("llm_credential_id", "do not remove"),
     ):
@@ -748,7 +505,7 @@ def test_unsafe_default_checkpoint_sidecar_preflight_leaves_no_marker_and_is_ret
     assert legacy_secret_key.exists()
     assert unsafe_sidecar.is_dir()
     assert _count_rows(metadata_url, "agent_runs") == 1
-    assert vault.get(credentials["datasource_password_id"]) == "datasource password"
+    assert vault.get(credentials["llm_credential_id"]) == "do not remove"
 
     unsafe_sidecar.rmdir()
     retry_result = reset_legacy_runtime_state(metadata_url, runtime_root)
@@ -938,16 +695,10 @@ def test_reset_vacuums_deleted_legacy_text_from_metadata_and_wal(tmp_path: Path)
         with engine.begin() as connection:
             connection.execute(
                 text(
-                    "INSERT INTO query_history "
-                    "(id, data_source_id, question, guardrail_result, created_at) "
-                    "VALUES (:id, :datasource_id, :question, :guardrail_result, CURRENT_TIMESTAMP)"
+                    "UPDATE agent_messages SET content = :sentinel "
+                    "WHERE id = 'agent-message-1'"
                 ),
-                {
-                    "id": "physical-sentinel-history",
-                    "datasource_id": "datasource-1",
-                    "question": sentinel,
-                    "guardrail_result": "allowed",
-                },
+                {"sentinel": sentinel},
             )
     finally:
         engine.dispose()

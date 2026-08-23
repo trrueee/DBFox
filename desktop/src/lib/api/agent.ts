@@ -1,19 +1,13 @@
 import {
   apiAgentChartDataApiV1ArtifactsArtifactIdChartDataPost,
-  apiAgentConsoleExecuteApiV1AgentConsoleExecutePost,
   apiLlmTestApiV1AgentLlmTestPost,
   apiAgentResultExportApiV1ArtifactsArtifactIdExportPost,
   apiAgentResultPageApiV1ArtifactsArtifactIdPagePost,
-  apiAgentTableResultExportApiV1AgentResultsTableExportPost,
-  apiAgentTableResultPageApiV1AgentResultsTablePagePost,
 } from "./generated/sdk.gen";
 import type {
-  ConsoleExecuteRequest,
   LlmTestResponse,
   ResultExportRequest,
   ResultPageRequest,
-  TableResultExportRequest,
-  TableResultPageRequest,
 } from "./generated/types.gen";
 
 const requireBlob = (value: unknown): Blob => {
@@ -24,14 +18,6 @@ const requireBlob = (value: unknown): Blob => {
 };
 
 export const agentApi = {
-  async executeSqlConsole(value: ConsoleExecuteRequest) {
-    const { data } = await apiAgentConsoleExecuteApiV1AgentConsoleExecutePost({
-      body: value,
-      throwOnError: true,
-    });
-    return data;
-  },
-
   async fetchArtifactPage(
     artifactId: string,
     value: ResultPageRequest,
@@ -67,24 +53,6 @@ export const agentApi = {
     return requireBlob(data);
   },
 
-  async fetchTableResultPage(value: TableResultPageRequest) {
-    const { data } = await apiAgentTableResultPageApiV1AgentResultsTablePagePost({
-      body: value,
-      throwOnError: true,
-    });
-    return data;
-  },
-
-  async exportTableResultCsv(
-    value: TableResultExportRequest,
-  ): Promise<Blob> {
-    const { data } = await apiAgentTableResultExportApiV1AgentResultsTableExportPost({
-      body: value,
-      parseAs: "blob",
-      throwOnError: true,
-    });
-    return requireBlob(data);
-  },
 };
 
 export type { LlmTestResponse };

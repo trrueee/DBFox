@@ -15,7 +15,7 @@ interface MessageListProps {
   items: ConversationRunItem[];
   runs: ConversationRun[];
   artifacts: ConversationArtifact[];
-  onOpenSqlConsole: (sql?: string) => void;
+  onOpenSqlConsole?: (sql?: string) => void;
   onSelectArtifact?: (artifactId: string) => void;
   resolvingQuestionId?: string | null;
   questionError?: string | null;

@@ -17,7 +17,6 @@ vi.mock("../../../lib/api/projects", () => ({
 const project: ProjectResponse = {
   id: "project-1",
   name: "订单分析",
-  datasource_count: 2,
   status: "active",
 };
 

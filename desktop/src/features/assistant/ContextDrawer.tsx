@@ -1,6 +1,5 @@
 import { Info, Sparkles, X } from "lucide-react";
 import type { WorkspaceDockTab } from "../../types/workspace";
-import { useDatasourceState } from "../datasource/useDatasourceState";
 import { getStoredApiConfig } from "../../lib/llmConfig";
 import "./ContextDrawer.css";
 
@@ -45,52 +44,8 @@ function AiSuggest() {
   );
 }
 
-import { useTableWorkspaceStore } from "../../stores/tableWorkspaceStore";
-
 function PropsPanel({ activeTab }: { activeTab?: WorkspaceDockTab }) {
-  const { tables, activeDatasource: activeDs } = useDatasourceState();
   const apiConfig = getStoredApiConfig();
-
-  if (activeTab?.viewType === "dbfox.data.table") {
-    const tableState = useTableWorkspaceStore.getState().tableStateByTabId[activeTab.stateKey ?? activeTab.viewKey];
-    const tableId = tableState?.tableName || activeTab.title || "";
-    const table = tables.find((t) => t.table_name === tableId);
-
-    const rows = [
-      ["物理表名:", tableId],
-      ["表类型:", table?.table_type || "BASE TABLE"],
-      ["注释描述:", table?.table_comment || "—"],
-    ];
-
-    if (table) {
-      if (table.row_count_estimate !== undefined && table.row_count_estimate !== null) {
-        rows.push(["预估行数:", `${table.row_count_estimate.toLocaleString()} 行`]);
-      }
-      rows.push(["AI 描述:", table.ai_description || "—"]);
-      rows.push(["主题域:", table.subject_area || "—"]);
-      rows.push(["业务术语:", table.business_terms || "—"]);
-      rows.push(["语义标签:", table.semantic_tags || "—"]);
-      if (table.ai_confidence !== undefined && table.ai_confidence !== null) {
-        rows.push(["AI 置信度/打分:", `${(table.ai_confidence * 100).toFixed(1)}%`]);
-      }
-    } else {
-      rows.push(["预估行数:", "—"]);
-      rows.push(["存储引擎:", "—"]);
-    }
-    return <InfoList rows={rows} />;
-  }
-  if (activeTab?.viewType === "dbfox.data.sql-console") {
-    return (
-      <InfoList
-        rows={[
-          ["连接名称:", activeDs ? activeDs.name : "—"],
-          ["激活数据库:", activeDs?.database_name || "—"],
-          ["连接主机:", activeDs?.host ? `${activeDs.host}:${activeDs.port}` : "—"],
-          ["事务模式:", "AUTO-COMMIT"],
-        ]}
-      />
-    );
-  }
   const conversationId = activeTab?.target?.type === "conversation" ? activeTab.target.id : "—";
   return (
     <InfoList

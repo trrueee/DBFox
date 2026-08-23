@@ -94,6 +94,17 @@ class SchemaListOutput(ToolOutputModel):
     catalog_revision: int = Field(ge=0)
 
 
+class CatalogTableInput(DatabaseTargetInput):
+    table: Identifier
+
+
+class CatalogTableDetail(ToolOutputModel):
+    database_id: str
+    table: JsonObject
+    columns: list[JsonObject]
+    catalog_revision: int = Field(ge=0)
+
+
 class SchemaSearchInput(DatabaseTargetInput):
     queries: list[
         Annotated[str, Field(min_length=1, max_length=MAX_SEARCH_QUERY_CHARS)]

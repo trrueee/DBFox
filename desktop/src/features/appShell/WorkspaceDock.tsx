@@ -36,7 +36,6 @@ import { clearCspFlexBasis, setCspFlexBasis } from "../../lib/cspVirtualLayout";
 import "./WorkspaceDock.css";
 
 export interface WorkspaceDockProps {
-  activeDatasourceId?: string;
   activeConversationId: string | null;
   showToast: (message: string, type?: "success" | "error" | "warning" | "info") => void;
   registry?: DockViewRegistry;
@@ -105,7 +104,6 @@ function dockTabIcon(
 }
 
 export function WorkspaceDock({
-  activeDatasourceId = "",
   activeConversationId,
   showToast,
   registry = DEFAULT_REGISTRY,
@@ -128,11 +126,10 @@ export function WorkspaceDock({
       }
       return contribution.isVisible(tab, {
         activeProjectId,
-        activeDatasourceId,
         activeConversationId,
       });
     });
-  }, [activeConversationId, activeDatasourceId, activeProjectId, dlcDockViews, dockTabs, registry]);
+  }, [activeConversationId, activeProjectId, dlcDockViews, dockTabs, registry]);
 
   const activeKey = dock.activeViewKey;
   const activeTab =
@@ -369,7 +366,6 @@ export function WorkspaceDock({
         {renderDockTab(
           activeTab,
           activeProjectId,
-          activeDatasourceId,
           activeConversationId,
           showToast,
           registry,
@@ -383,7 +379,6 @@ export function WorkspaceDock({
 function renderDockTab(
   tab: WorkspaceDockTab | null,
   activeProjectId: string,
-  activeDatasourceId: string,
   activeConversationId: string | null,
   showToast: WorkspaceDockProps["showToast"],
   registry: DockViewRegistry,
@@ -411,11 +406,8 @@ function renderDockTab(
     <div key={tab.viewKey}>
       {contribution.render(tab, {
         activeProjectId,
-        activeDatasourceId,
         activeConversationId,
         showToast,
-        onOpenQueryResult: (query) =>
-          useWorkspaceStore.getState().showSmartQueryHome(query),
       })}
     </div>
   );

@@ -6,6 +6,7 @@ from pathlib import Path
 import sqlite3
 
 import pytest
+from sqlalchemy.orm import sessionmaker
 
 from engine.dlc import BuiltinContributionSet, ContributionCompiler, DlcPackageService
 from engine.dlc.snapshot import CompletionConstraintContribution
@@ -17,11 +18,14 @@ from engine.dlc.api import (
     DlcOperationContext,
     ResourceScopeRef,
 )
+from engine.dlc.action_runs import DlcActionRunsHostImpl
 from engine.agent.artifact import Artifact, ArtifactRelation, ArtifactRelationType
-from engine.models import CredentialLeaseRecord
+from engine.agent.repositories.artifact import ArtifactRepository
+from engine.models import AgentRun, CredentialLeaseRecord, Project
 from engine.runtime_composition import (
     build_attempt_resource_resolver,
     build_product_tool_registry,
+    set_active_runtime_snapshot,
 )
 from engine.security.credential_lease import CredentialLeaseSaga, CredentialLeaseStatus
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
@@ -398,6 +402,86 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
     ]
 
 
+def test_data_console_operation_uses_durable_action_run_and_owned_tool_chain(
+    tmp_path: Path,
+    db_session,
+) -> None:
+    database_path = tmp_path / "console.sqlite3"
+    connection = sqlite3.connect(database_path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE orders (id INTEGER PRIMARY KEY, total INTEGER NOT NULL);
+            INSERT INTO orders (id, total) VALUES (1, 25), (2, 40);
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    db_session.add(Project(id="project-console", name="Console Project", status="active"))
+    db_session.commit()
+    _service, snapshot = _snapshot(tmp_path)
+    created = _invoke(
+        snapshot,
+        "profiles.create",
+        "project-console",
+        {
+            "name": "Console SQLite",
+            "provider": "sqlite",
+            "initial_database_name": str(database_path),
+        },
+    )
+    database = created.databases[0]
+    contribution = snapshot.get_operation("dbfox.data", "console.execute")
+    assert contribution is not None
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    action_runs = DlcActionRunsHostImpl(
+        dlc_id="dbfox.data",
+        project_id="project-console",
+        snapshot=snapshot,
+        session_factory=factory,
+    )
+    set_active_runtime_snapshot(snapshot)
+    try:
+        result = contribution.spec.handler(
+            contribution.spec.input_model.model_validate(
+                {
+                    "database_id": database.id,
+                    "sql": "SELECT id, total FROM orders ORDER BY id",
+                    "execution_id": "console-execution-1",
+                }
+            ),
+            DlcOperationContext(
+                dlc_id="dbfox.data",
+                operation_name="console.execute",
+                project_id="project-console",
+                action_runs=action_runs,
+            ),
+        )
+    finally:
+        set_active_runtime_snapshot(None)
+
+    output = contribution.spec.output_model.model_validate(result)
+    assert output.status == "success"
+    assert output.rows == [
+        {"id": "1", "total": "25"},
+        {"id": "2", "total": "40"},
+    ]
+    assert output.result_artifact_id
+    with factory() as db:
+        run = db.get(AgentRun, output.run_id)
+        assert run is not None
+        assert run.status == "completed"
+        artifacts = ArtifactRepository(db).list_for_run(output.run_id)
+    assert [artifact.type for artifact in artifacts] == [
+        "dbfox.data.safety",
+        "dbfox.data.sql",
+        "dbfox.data.result_view",
+    ]
+    assert all(artifact.resource_refs[0].id == database.id for artifact in artifacts)
+
+
 def test_data_sql_validate_requires_database_id_for_multi_database_authority(
     tmp_path: Path,
 ) -> None:
@@ -567,6 +651,43 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
     assert refreshed.status == "ready"
     assert refreshed.table_count == 2
     assert refreshed.catalog_revision == 1
+
+    operation_overview = _invoke(
+        snapshot,
+        "catalog.overview",
+        "project-a",
+        {"database_id": first.id},
+    )
+    assert operation_overview.catalog_status == "ready"
+    operation_tables = _invoke(
+        snapshot,
+        "catalog.tables",
+        "project-a",
+        {"database_id": first.id, "limit": 100},
+    )
+    assert [table.qualified_name for table in operation_tables.tables] == [
+        "main.customers",
+        "main.orders",
+    ]
+    operation_table = _invoke(
+        snapshot,
+        "catalog.table",
+        "project-a",
+        {"database_id": first.id, "table": "orders"},
+    )
+    assert operation_table.table["table_name"] == "orders"
+    assert [column["column_name"] for column in operation_table.columns] == [
+        "id",
+        "customer_id",
+        "total",
+    ]
+    with pytest.raises(Exception, match="unavailable in this Project"):
+        _invoke(
+            snapshot,
+            "catalog.tables",
+            "project-b",
+            {"database_id": first.id, "limit": 100},
+        )
 
     list_tool = registry.require("schema_list")
     listed = list_tool.run(
@@ -746,6 +867,14 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
     )
     assert second_overview.catalog_status == "uninitialized"
     assert second_overview.catalog_revision == 0
+    refreshed_by_operation = _invoke(
+        snapshot,
+        "catalog.refresh",
+        "project-a",
+        {"database_id": second.id},
+    )
+    assert refreshed_by_operation.table_count == 1
+    assert refreshed_by_operation.catalog_revision == 1
     with pytest.raises(Exception, match="database_id is required"):
         refresh_tool.run(
             refresh_tool.input_model.model_validate({}),

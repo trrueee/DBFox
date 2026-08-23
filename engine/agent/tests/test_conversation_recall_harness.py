@@ -171,7 +171,7 @@ def test_long_conversation_recalls_evicted_message_through_the_real_run_loop(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="本轮最早决定的发布代号是什么？",
         idempotency_key="recall-harness",
         llm_credential_id="credential",

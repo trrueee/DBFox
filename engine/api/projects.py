@@ -6,15 +6,11 @@ from engine.schemas.project import ProjectResponse
 from engine.agent.resource_refs import ProjectResourceDescriptor
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
 from engine.errors import DBFoxError
-from engine.models import (
-    DataSource,
-    Project,
-)
+from engine.models import Project
 from engine.projects.service import get_or_create_default_project
 from engine.runtime_composition import discover_project_resources
 from engine.schemas import ProjectCreateRequest
@@ -23,10 +19,8 @@ logger = logging.getLogger("dbfox.api.projects")
 router = APIRouter()
 
 
-def _project_to_dict(project: Project, datasource_count: int = 0) -> dict[str, Any]:
-    result = ProjectResponse.model_validate(project).model_dump(mode="json")
-    result["datasource_count"] = datasource_count
-    return result
+def _project_to_dict(project: Project) -> dict[str, Any]:
+    return ProjectResponse.model_validate(project).model_dump(mode="json")
 
 
 @router.get("/projects", response_model=list[ProjectResponse])
@@ -37,17 +31,7 @@ def api_list_projects(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
             db.commit()
 
         projects = db.query(Project).filter(Project.status == "active").order_by(Project.created_at.asc()).all()
-        datasource_counts = {
-            str(project_id): int(count)
-            for project_id, count in (
-                db.query(DataSource.project_id, func.count(DataSource.id))
-                .filter(DataSource.project_id.isnot(None))
-                .group_by(DataSource.project_id)
-                .all()
-            )
-        }
-
-        return [_project_to_dict(project, datasource_counts.get(str(project.id), 0)) for project in projects]
+        return [_project_to_dict(project) for project in projects]
     except Exception:
         db.rollback()
         raise
@@ -83,7 +67,7 @@ def api_create_project(req: ProjectCreateRequest, db: Session = Depends(get_db))
         db.add(project)
         db.commit()
         db.refresh(project)
-        return _project_to_dict(project, 0)
+        return _project_to_dict(project)
     except Exception:
         db.rollback()
         raise

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from dbfox_dlc_api import (
     BackendExtensionHost,
     DlcOperationContext,
     DlcOperationError,
     DlcOperationSpec,
+    RequestedResourceRef,
     SemanticArtifactCompletionSupport,
     SemanticCitationConstraint,
 )
@@ -17,6 +20,8 @@ from .contracts import (
     BackupRecord,
     BackupRestoreInput,
     CreateProfileInput,
+    ConsoleExecuteInput,
+    ConsoleExecuteOutput,
     DatabaseIdInput,
     DatabaseResource,
     DeleteOutput,
@@ -25,6 +30,7 @@ from .contracts import (
     ProfileListOutput,
     ProfileWithDatabases,
     RestoreResult,
+    TablePreviewOperationOutput,
     UpdateDatabaseInput,
     UpdateProfileInput,
 )
@@ -53,6 +59,16 @@ from .tools import SqlExecuteReadonlyTool, SqlValidateTool
 from .preview_tool import DataPreviewTool
 from .result_tool import ChartCreateTool, ResultInspectTool, ResultProfileTool
 from .result_view import DataChartView, DataResultTableView
+from .tool_contracts import (
+    CatalogOverviewOutput,
+    CatalogRefreshOutput,
+    CatalogTableDetail,
+    CatalogTableInput,
+    DataPreviewInput,
+    SchemaListInput,
+    SchemaListOutput,
+)
+from .workbench import DataCatalogWorkbench
 
 
 def _project_id(context: DlcOperationContext) -> str:
@@ -94,6 +110,7 @@ def register(host: BackendExtensionHost) -> None:
             kind=kind,
         )
     )
+    workbench = DataCatalogWorkbench(store, connection)
     host.tools.register(SqlValidateTool(connection))
     host.tools.register(SqlExecuteReadonlyTool(store, connection))
     host.tools.register(CatalogOverviewTool(store, connection))
@@ -168,6 +185,239 @@ def register(host: BackendExtensionHost) -> None:
         except ValueError as exc:
             raise _safe_error(exc) from exc
 
+    def catalog_overview(
+        input: DatabaseIdInput,
+        context: DlcOperationContext,
+    ) -> CatalogOverviewOutput:
+        try:
+            handle = workbench.require_project_database(
+                _project_id(context), input.database_id
+            )
+            return workbench.overview(handle)
+        except KeyError as exc:
+            raise _safe_error(exc, not_found=True) from exc
+
+    def catalog_tables(
+        input: SchemaListInput,
+        context: DlcOperationContext,
+    ) -> SchemaListOutput:
+        if not input.database_id:
+            raise DlcOperationError(
+                code="DATA_DATABASE_REQUIRED",
+                message="Database resource is required",
+                status_code=400,
+            )
+        try:
+            handle = workbench.require_project_database(
+                _project_id(context), input.database_id
+            )
+            return workbench.list_tables(handle, input)
+        except KeyError as exc:
+            raise _safe_error(exc, not_found=True) from exc
+
+    def catalog_table(
+        input: CatalogTableInput,
+        context: DlcOperationContext,
+    ) -> CatalogTableDetail:
+        if not input.database_id:
+            raise DlcOperationError(
+                code="DATA_DATABASE_REQUIRED",
+                message="Database resource is required",
+                status_code=400,
+            )
+        try:
+            handle = workbench.require_project_database(
+                _project_id(context), input.database_id
+            )
+            return workbench.table(handle, input.table)
+        except KeyError as exc:
+            raise _safe_error(exc, not_found=True) from exc
+        except ValueError as exc:
+            raise _safe_error(exc) from exc
+
+    def catalog_refresh(
+        input: DatabaseIdInput,
+        context: DlcOperationContext,
+    ) -> CatalogRefreshOutput:
+        try:
+            handle = workbench.require_project_database(
+                _project_id(context), input.database_id
+            )
+            return workbench.refresh(
+                handle,
+                invocation_id=f"workbench_catalog_{uuid4().hex}",
+            )
+        except KeyError as exc:
+            raise _safe_error(exc, not_found=True) from exc
+        except Exception as exc:
+            raise DlcOperationError(
+                code="DATA_CATALOG_REFRESH_FAILED",
+                message="The database catalog could not be refreshed.",
+                status_code=409,
+            ) from exc
+
+    def console_execute(
+        input: ConsoleExecuteInput,
+        context: DlcOperationContext,
+    ) -> ConsoleExecuteOutput:
+        action_runs = context.require_action_runs()
+        requested = (
+            RequestedResourceRef(
+                kind=DATABASE_RESOURCE_KIND,
+                id=input.database_id,
+            ),
+        )
+        with action_runs.start(
+            title="SQL Console",
+            question=input.question or "SQL Console",
+            requested_resources=requested,
+            session_id=input.session_id,
+            idempotency_key=(
+                f"data-console:{input.execution_id}"
+                if input.execution_id
+                else None
+            ),
+        ) as action:
+            validation = action.invoke(
+                "sql_validate",
+                {"database_id": input.database_id, "sql": input.sql},
+            )
+            if validation.status != "success":
+                raise DlcOperationError(
+                    code="DATA_SQL_VALIDATION_FAILED",
+                    message="The SQL could not be validated.",
+                    status_code=409,
+                )
+            sql_artifact = next(
+                (item for item in validation.artifacts if item.type == SQL_ARTIFACT_TYPE),
+                None,
+            )
+            safety_artifact = next(
+                (item for item in validation.artifacts if item.type == SAFETY_ARTIFACT_TYPE),
+                None,
+            )
+            if sql_artifact is None or safety_artifact is None:
+                raise DlcOperationError(
+                    code="DATA_SQL_ARTIFACT_MISSING",
+                    message="SQL validation did not produce its durable Artifact chain.",
+                    status_code=409,
+                )
+            messages = [str(value) for value in validation.output.get("messages") or []]
+            if not bool(validation.output.get("can_execute")):
+                completed = action.complete(summary="SQL validation blocked execution.")
+                return ConsoleExecuteOutput(
+                    status="blocked",
+                    run_id=completed.run_id,
+                    session_id=completed.session_id,
+                    sql_artifact_id=sql_artifact.id,
+                    safety_artifact_id=safety_artifact.id,
+                    messages=messages,
+                )
+
+            execution = action.invoke(
+                "sql_execute_readonly",
+                {
+                    "database_id": input.database_id,
+                    "validation_artifact_id": sql_artifact.id,
+                },
+            )
+            if execution.status != "success":
+                raise DlcOperationError(
+                    code="DATA_SQL_EXECUTION_FAILED",
+                    message="The validated read-only query could not be executed.",
+                    status_code=409,
+                )
+            result_artifact = next(
+                (
+                    item
+                    for item in execution.artifacts
+                    if item.type == RESULT_VIEW_ARTIFACT_TYPE
+                ),
+                None,
+            )
+            if result_artifact is None:
+                raise DlcOperationError(
+                    code="DATA_RESULT_ARTIFACT_MISSING",
+                    message="Query execution did not produce a durable Result Artifact.",
+                    status_code=409,
+                )
+            completed = action.complete(
+                summary="SQL Console execution completed.",
+                selected_artifact_id=result_artifact.id,
+            )
+            return ConsoleExecuteOutput(
+                status="success",
+                run_id=completed.run_id,
+                session_id=completed.session_id,
+                sql_artifact_id=sql_artifact.id,
+                safety_artifact_id=safety_artifact.id,
+                result_artifact_id=result_artifact.id,
+                columns=[str(value) for value in execution.output.get("columns") or []],
+                rows=list(execution.output.get("rows") or []),
+                row_count=int(execution.output.get("row_count") or 0),
+                returned_rows=int(execution.output.get("returned_rows") or 0),
+                truncated=bool(execution.output.get("truncated")),
+                warnings=[str(value) for value in execution.output.get("warnings") or []],
+                messages=messages,
+            )
+
+    def table_preview(
+        input: DataPreviewInput,
+        context: DlcOperationContext,
+    ) -> TablePreviewOperationOutput:
+        if not input.database_id:
+            raise DlcOperationError(
+                code="DATA_DATABASE_REQUIRED",
+                message="Database resource is required",
+                status_code=400,
+            )
+        with context.require_action_runs().start(
+            title="Table Preview",
+            question=f"Preview {input.table}",
+            requested_resources=(
+                RequestedResourceRef(
+                    kind=DATABASE_RESOURCE_KIND,
+                    id=input.database_id,
+                ),
+            ),
+        ) as action:
+            preview = action.invoke("data_preview", input.model_dump(mode="json"))
+            if preview.status != "success":
+                raise DlcOperationError(
+                    code="DATA_PREVIEW_FAILED",
+                    message="The table preview could not be loaded.",
+                    status_code=409,
+                )
+            result_artifact = next(
+                (
+                    item
+                    for item in preview.artifacts
+                    if item.type == RESULT_VIEW_ARTIFACT_TYPE
+                ),
+                None,
+            )
+            if result_artifact is None:
+                raise DlcOperationError(
+                    code="DATA_RESULT_ARTIFACT_MISSING",
+                    message="Table preview did not produce a durable Result Artifact.",
+                    status_code=409,
+                )
+            completed = action.complete(
+                summary="Table preview completed.",
+                selected_artifact_id=result_artifact.id,
+            )
+            return TablePreviewOperationOutput(
+                run_id=completed.run_id,
+                session_id=completed.session_id,
+                result_artifact_id=result_artifact.id,
+                table=str(preview.output.get("table") or input.table),
+                columns=[str(value) for value in preview.output.get("columns") or []],
+                rows=list(preview.output.get("rows") or []),
+                returned_rows=int(preview.output.get("returned_rows") or 0),
+                truncated=bool(preview.output.get("truncated")),
+                warnings=[str(value) for value in preview.output.get("warnings") or []],
+            )
+
     def list_backups(input: BackupListInput, context: DlcOperationContext) -> BackupListOutput:
         return BackupListOutput(
             backups=backups.list(
@@ -235,6 +485,33 @@ def register(host: BackendExtensionHost) -> None:
         DlcOperationSpec(name="databases.add", input_model=AddDatabaseInput, output_model=DatabaseResource, handler=add_database, scope="project"),
         DlcOperationSpec(name="databases.update", input_model=UpdateDatabaseInput, output_model=DatabaseResource, handler=update_database, scope="project"),
         DlcOperationSpec(name="databases.delete", input_model=DatabaseIdInput, output_model=DeleteOutput, handler=delete_database, scope="project"),
+        DlcOperationSpec(name="catalog.overview", input_model=DatabaseIdInput, output_model=CatalogOverviewOutput, handler=catalog_overview, scope="project"),
+        DlcOperationSpec(name="catalog.tables", input_model=SchemaListInput, output_model=SchemaListOutput, handler=catalog_tables, scope="project"),
+        DlcOperationSpec(name="catalog.table", input_model=CatalogTableInput, output_model=CatalogTableDetail, handler=catalog_table, scope="project"),
+        DlcOperationSpec(
+            name="console.execute",
+            input_model=ConsoleExecuteInput,
+            output_model=ConsoleExecuteOutput,
+            handler=console_execute,
+            scope="project",
+            capabilities=("network", "filesystem_read"),
+        ),
+        DlcOperationSpec(
+            name="table.preview",
+            input_model=DataPreviewInput,
+            output_model=TablePreviewOperationOutput,
+            handler=table_preview,
+            scope="project",
+            capabilities=("network", "filesystem_read"),
+        ),
+        DlcOperationSpec(
+            name="catalog.refresh",
+            input_model=DatabaseIdInput,
+            output_model=CatalogRefreshOutput,
+            handler=catalog_refresh,
+            scope="project",
+            capabilities=("network", "filesystem_read"),
+        ),
         DlcOperationSpec(
             name="backups.list",
             input_model=BackupListInput,

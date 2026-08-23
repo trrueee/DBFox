@@ -1,9 +1,7 @@
 import { lazy, Suspense, useCallback, useState } from "react";
 import { Plus } from "lucide-react";
 import { useConversationStore } from "../../stores/conversationStore";
-import { useDatasourceState } from "../datasource/useDatasourceState";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { useSqlConsoleStore } from "../../stores/sqlConsoleStore";
 import { getUserErrorMessage } from "../../lib/api/client";
 import { SmartQueryHome } from "../workspace/SmartQueryHome";
 import { Button, EmptyState, LoadingState } from "../../components/ui";
@@ -30,10 +28,8 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
   const pendingAsk = useWorkspaceStore((s) => s.pendingAsk);
   const clearPendingAsk = useWorkspaceStore((s) => s.clearPendingAsk);
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
-  const openDockConsole = useSqlConsoleStore((s) => s.openConsole);
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
-  const { activeDatasource } = useDatasourceState();
   const [askInputValue, setAskInputValue] = useState("");
   const draftResourceIntents = useConversationContextStore(
     (s) => activeProjectId
@@ -89,13 +85,7 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
     return (
       <section className="conversation-center" aria-label="对话">
         <Suspense fallback={<LoadingState label="正在载入对话" />}>
-          <ConversationWorkspace
-            conversationId={activeConversationId}
-            onOpenSqlConsole={(sql) => {
-              if (!activeDatasource) return;
-              openDockConsole(activeDatasource.id, activeDatasource.db_type, sql);
-            }}
-          />
+          <ConversationWorkspace conversationId={activeConversationId} />
         </Suspense>
       </section>
     );

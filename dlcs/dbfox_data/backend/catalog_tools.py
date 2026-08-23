@@ -16,25 +16,22 @@ from dbfox_dlc_api import (
     ToolSemanticSpec,
 )
 
-from .catalog_reflection import DataCatalogReflector
 from .connection import DataConnectionBoundary
 from .database_selection import select_database
 from .resource_kind import DATABASE_RESOURCE_KIND
 from .store import DataStateStore
+from .workbench import DataCatalogWorkbench
 from .tool_contracts import (
     CatalogOverviewOutput,
     CatalogRefreshOutput,
     DatabaseTargetInput,
     SchemaInspectInput,
     SchemaInspectOutput,
-    SchemaInspection,
-    SchemaListCursor,
     SchemaListInput,
     SchemaListOutput,
     SchemaSearchInput,
     SchemaSearchOutput,
     SearchResultSet,
-    TableSummary,
 )
 
 
@@ -56,7 +53,7 @@ class _CatalogTool:
     ) -> None:
         self._store = store
         self._connection = connection
-        self._reflector = DataCatalogReflector(connection)
+        self._workbench = DataCatalogWorkbench(store, connection)
 
     def cancel(self, invocation_id: str) -> None:
         self._connection.cancel(invocation_id)
@@ -93,29 +90,7 @@ class CatalogOverviewTool(
         context: ExtensionToolRunContext,
     ) -> CatalogOverviewOutput:
         _ref, handle = select_database(context, tool_input.database_id)
-        state = self._store.catalog_state(handle.database.id)
-        initialized = state["refreshed_at"] is not None
-        return CatalogOverviewOutput(
-            database_id=handle.database.id,
-            database_name=handle.database.display_name,
-            dialect=handle.profile.provider,
-            catalog_status="ready" if initialized else "uninitialized",
-            last_sync_at=(
-                str(state["refreshed_at"])
-                if state["refreshed_at"] is not None
-                else None
-            ),
-            table_count=int(state["table_count"]),
-            mode="summary",
-            catalog_revision=int(state["catalog_revision"]),
-            schemas=list(state["schemas"]),
-            domains=[],
-            next_action_hint=(
-                None
-                if initialized
-                else "Call catalog_refresh once before catalog search or browsing."
-            ),
-        )
+        return self._workbench.overview(handle)
 
     def project_observation(self, *, status, output, artifacts):
         if status != "success":
@@ -171,31 +146,15 @@ class CatalogRefreshTool(
         if context.is_cancelled():
             raise ToolInputError("Catalog refresh was cancelled.")
         try:
-            inventory = self._reflector.inspect_catalog(
+            return self._workbench.refresh(
                 handle,
                 invocation_id=context.invocation_id,
                 cancellation_probe=context.is_cancelled,
             )
-            result = self._store.replace_catalog(inventory)
-            state = self._store.catalog_state(handle.database.id)
         except ToolInputError:
             raise
         except Exception as exc:
             raise ToolInputError("Database catalog refresh failed.") from exc
-        return CatalogRefreshOutput(
-            database_id=handle.database.id,
-            status="ready",
-            refreshed_at=str(state["refreshed_at"]),
-            table_count=int(state["table_count"]),
-            schema_count=int(state["schema_count"]),
-            catalog_revision=int(result.catalog_revision or 0),
-            tables_created=result.tables_created,
-            tables_updated=result.tables_updated,
-            tables_removed=result.tables_removed,
-            columns_created=result.columns_created,
-            columns_updated=result.columns_updated,
-            columns_removed=result.columns_removed,
-        )
 
     def project_observation(self, *, status, output, artifacts):
         if status != "success":
@@ -241,57 +200,7 @@ class SchemaListTool(
         context: ExtensionToolRunContext,
     ) -> SchemaListOutput:
         _ref, handle = select_database(context, tool_input.database_id)
-        state = self._store.catalog_state(handle.database.id)
-        cursor = tool_input.cursor
-        rows, has_more = self._store.list_catalog_tables(
-            handle.database.id,
-            after=(
-                (cursor.schema_name, cursor.table_name, cursor.table_id)
-                if cursor is not None
-                else None
-            ),
-            limit=tool_input.limit,
-            name_filter=tool_input.name_filter,
-        )
-        tables = [
-            TableSummary(
-                table_id=str(row["id"]),
-                schema_name=str(row["schema_name"]),
-                table_name=str(row["table_name"]),
-                qualified_name=".".join(
-                    part
-                    for part in (str(row["schema_name"]), str(row["table_name"]))
-                    if part
-                ),
-                columns_count=int(row["columns_count"]),
-                row_count_estimate=(
-                    int(row["row_count_estimate"])
-                    if row["row_count_estimate"] is not None
-                    else None
-                ),
-                table_type=str(row["object_type"]),
-                comment=str(row["comment"]) if row["comment"] is not None else None,
-            )
-            for row in rows
-        ]
-        return SchemaListOutput(
-            tables=tables,
-            next_cursor=(
-                SchemaListCursor(
-                    schema_name=tables[-1].schema_name,
-                    table_name=tables[-1].table_name,
-                    table_id=tables[-1].table_id,
-                )
-                if has_more and tables
-                else None
-            ),
-            returned_count=len(tables),
-            has_more=has_more,
-            catalog_status=(
-                "ready" if state["refreshed_at"] is not None else "uninitialized"
-            ),
-            catalog_revision=int(state["catalog_revision"]),
-        )
+        return self._workbench.list_tables(handle, tool_input)
 
     def project_observation(self, *, status, output, artifacts):
         if status != "success":
@@ -431,9 +340,9 @@ class SchemaInspectTool(
     ) -> SchemaInspectOutput:
         _ref, handle = select_database(context, tool_input.database_id)
         try:
-            details = self._reflector.inspect_objects(
+            return self._workbench.inspect(
                 handle,
-                tool_input.targets,
+                tool_input,
                 invocation_id=context.invocation_id,
                 cancellation_probe=context.is_cancelled,
             )
@@ -441,14 +350,6 @@ class SchemaInspectTool(
             raise
         except Exception as exc:
             raise ToolInputError("Database object inspection failed.") from exc
-        state = self._store.catalog_state(handle.database.id)
-        return SchemaInspectOutput(
-            inspections=[
-                SchemaInspection(target=target, details=detail)
-                for target, detail in zip(tool_input.targets, details, strict=True)
-            ],
-            catalog_revision=int(state["catalog_revision"]),
-        )
 
     def project_observation(self, *, status, output, artifacts):
         if status != "success":

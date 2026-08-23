@@ -14,7 +14,7 @@
 
 | 能力 | 生产入口 | 关键测试 |
 | --- | --- | --- |
-| FastAPI/生命周期/鉴权 | [`engine/main.py`](../../engine/main.py) | [`test_startup.py`](../../engine/tests/test_startup.py)、[`test_api_security_contracts.py`](../../engine/tests/test_api_security_contracts.py) |
+| FastAPI/生命周期/鉴权 | [`engine/main.py`](../../engine/main.py) | [`test_startup.py`](../../engine/tests/test_startup.py)、[`test_api_security_contracts.py`](../../engine/tests/test_openapi_contract.py) |
 | metadata Engine/Alembic | [`engine/db.py`](../../engine/db.py) | [`test_db_init.py`](../../engine/tests/test_db_init.py)、[`test_migrations.py`](../../engine/tests/test_migrations.py) |
 | ORM | [`engine/models.py`](../../engine/models.py) | Repository/迁移测试 |
 | Runtime Token | [`engine/engine_runtime/credentials.py`](../../engine/engine_runtime/credentials.py) | [`test_runtime_credentials.py`](../../engine/tests/test_runtime_credentials.py) |

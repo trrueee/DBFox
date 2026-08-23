@@ -5,6 +5,9 @@ import { join, resolve } from "node:path";
 import electronPath from "electron";
 
 const rendererUrl = "http://127.0.0.1:5173";
+const repositoryRoot = resolve(process.cwd(), "..");
+const pythonCommand = process.env.DBFOX_ELECTRON_ENGINE_COMMAND ?? "python";
+const preparedSystemDlcs = prepareDevelopmentSystemDlcs(pythonCommand, repositoryRoot);
 const smokeRuntimeRoot = process.env.DBFOX_ELECTRON_SMOKE === "1"
   ? await mkdtemp(join(process.cwd(), ".electron-host-smoke-"))
   : null;
@@ -29,6 +32,8 @@ try {
     env: {
       ...process.env,
       DBFOX_ELECTRON_RENDERER_URL: rendererUrl,
+      DBFOX_SYSTEM_DLC_DIR: preparedSystemDlcs.package_dir,
+      DBFOX_SYSTEM_DLC_MANIFEST: preparedSystemDlcs.manifest,
       ...(smokeRuntimeRoot === null ? {} : { DBFOX_RUNTIME_DIR: smokeRuntimeRoot }),
     },
     stdio: "inherit",
@@ -41,6 +46,22 @@ try {
   if (smokeRuntimeRoot !== null) {
     await rm(smokeRuntimeRoot, { recursive: true, force: true });
   }
+}
+
+function prepareDevelopmentSystemDlcs(python, repository) {
+  const result = spawnSync(python, ["-m", "scripts.prepare_dev_system_dlcs"], {
+    cwd: repository,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (result.status !== 0) {
+    throw new Error(`Failed to prepare signed development System DLCs: ${result.stderr || result.stdout}`);
+  }
+  const value = JSON.parse(result.stdout.trim());
+  if (typeof value.package_dir !== "string" || typeof value.manifest !== "string") {
+    throw new Error("Development System DLC preparation returned an invalid result");
+  }
+  return value;
 }
 
 async function waitForRenderer(url, processHandle) {

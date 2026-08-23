@@ -1,4 +1,4 @@
-import type { ResultFilter, ResultSort } from "../../../lib/api/types";
+import type { ArtifactViewFilter, ArtifactViewSort } from "../../../lib/api/types";
 
 export type SqlBackedLoadingMode = "idle" | "initial" | "refresh" | "page" | "filter" | "export";
 
@@ -20,16 +20,16 @@ export interface SqlBackedPageRequest {
   source: SqlBackedDataViewSource;
   page: number;
   pageSize: number;
-  sort?: ResultSort[];
-  filters?: ResultFilter[];
+  sort?: ArtifactViewSort[];
+  filters?: ArtifactViewFilter[];
   search?: string;
   countMode?: "none" | "exact" | "estimate";
 }
 
 export interface SqlBackedExportRequest {
   source: SqlBackedDataViewSource;
-  sort?: ResultSort[];
-  filters?: ResultFilter[];
+  sort?: ArtifactViewSort[];
+  filters?: ArtifactViewFilter[];
   search?: string;
 }
 

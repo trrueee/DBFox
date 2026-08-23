@@ -12,7 +12,7 @@ export function ConversationWorkspace({
   onOpenSqlConsole,
 }: {
   conversationId: string;
-  onOpenSqlConsole: (sql?: string) => void;
+  onOpenSqlConsole?: (sql?: string) => void;
 }) {
   const {
     detail,

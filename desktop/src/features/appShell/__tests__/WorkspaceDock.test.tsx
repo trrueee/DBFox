@@ -1,44 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
-import { useSqlConsoleStore } from "../../../stores/sqlConsoleStore";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import { useDlcStore } from "../../dlc/extensionStore";
 import { planDockTabWindow, WorkspaceDock } from "../WorkspaceDock";
 
-vi.mock("../../datasource/useDatasourceState", () => ({
-  useDatasourceState: () => ({
-    datasources: [{
-      id: "ds-1",
-      name: "creatorhub",
-      db_type: "mysql",
-      status: "active",
-      database_name: "creatorhub",
-      connection_generation: 1,
-    }],
-    activeDatasourceId: "ds-1",
-    activeDatasource: {
-      id: "ds-1",
-      name: "creatorhub",
-      db_type: "mysql",
-      status: "active",
-      database_name: "creatorhub",
-      connection_generation: 1,
-    },
-  }),
-}));
-
-vi.mock("../../workspace/SqlConsoleWorkspace", () => ({
-  SqlConsoleWorkspace: (props: Record<string, unknown>) => (
-    <div data-testid="sql-console" data-tab-id={String(props.tabId)} />
-  ),
-}));
-vi.mock("../../workspace/TableWorkspace", () => ({
-  TableWorkspace: () => <div data-testid="table-workspace" />,
-}));
-vi.mock("../../workspace/MultiTableWorkspace", () => ({
-  MultiTableWorkspace: () => <div data-testid="multi-table-workspace" />,
-}));
 vi.mock("../../conversation/ConversationHistoryPanel", () => ({
   ConversationHistoryPanel: () => <div data-testid="conversation-history" />,
 }));
@@ -53,7 +19,6 @@ function renderDock() {
   return render(
     <TooltipProvider>
       <WorkspaceDock
-        activeDatasourceId="ds-1"
         activeConversationId={null}
         showToast={vi.fn()}
       />
@@ -65,6 +30,17 @@ describe("WorkspaceDock", () => {
   beforeEach(() => {
     cleanup();
     useDlcStore.getState().reset();
+    useDlcStore.getState().setProjectionResult("snap-data", {}, {
+      connectors: [],
+      dockViews: [{
+        viewType: "dbfox.data.sql-console",
+        icon: () => null,
+        resolveTitle: () => "SQL 控制台",
+        isVisible: () => true,
+        render: (view) => <div data-testid="sql-console" data-tab-id={view.stateKey} />,
+      }],
+      artifactRenderers: [],
+    });
     useWorkspaceStore.setState({
       centerMode: "home",
       pendingAsk: null,
@@ -78,17 +54,6 @@ describe("WorkspaceDock", () => {
         target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
       }],
       settingsOpen: false,
-    });
-    useSqlConsoleStore.setState({
-      sqlConsoleState: {
-        "sql-ds-1": {
-          datasourceId: "ds-1",
-          datasourceDbType: "mysql",
-          draftSql: "SELECT 1",
-          entries: [],
-          running: false,
-        },
-      },
     });
   });
 
@@ -135,7 +100,6 @@ describe("WorkspaceDock", () => {
     const view = render(
       <TooltipProvider>
         <WorkspaceDock
-          activeDatasourceId="ds-1"
           activeConversationId="conv-1"
           showToast={vi.fn()}
         />

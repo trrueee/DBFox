@@ -108,7 +108,7 @@ def _admit(db_session, test_datasource, case_id: str):
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content=f"fault scenario {case_id}",
         idempotency_key=case_id,
         llm_credential_id="deterministic-fixture",
@@ -138,7 +138,7 @@ class _TimeoutTool(BaseTool[_EmptyInput, _EmptyOutput]):
     input_model = _EmptyInput
     output_model = _EmptyOutput
     presentation = ToolPresentation(title="Timeout fixture", category="query")
-    execution = ToolExecutionSpec(timeout_seconds=1, capabilities=("database_read",))
+    execution = ToolExecutionSpec(timeout_seconds=1)
     semantics = ToolSemanticSpec(contributes_progress=True)
 
     def run(self, tool_input, context):
@@ -154,7 +154,7 @@ class _NoProgressTool(BaseTool[_EmptyInput, _EmptyOutput]):
     input_model = _EmptyInput
     output_model = _EmptyOutput
     presentation = ToolPresentation(title="No progress fixture", category="query")
-    execution = ToolExecutionSpec(capabilities=("database_read",))
+    execution = ToolExecutionSpec()
     semantics = ToolSemanticSpec(contributes_progress=True)
 
     def run(self, tool_input, context):

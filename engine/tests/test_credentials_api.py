@@ -17,9 +17,6 @@ from engine.models import CredentialLeaseRecord
 from engine.schemas.credentials import CredentialEnrollmentBatchRequest, CredentialEnrollmentRequest
 from engine.security.credential_lease import CredentialLeaseSaga, CredentialLeaseStatus
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
-from engine.tools.builtin.data_capability import (
-    legacy_data_credential_reference_probe,
-)
 
 
 def test_enrollment_returns_only_an_opaque_credential_reference(monkeypatch) -> None:
@@ -130,38 +127,6 @@ def test_release_endpoint_deletes_only_its_server_issued_lease_credentials(
     assert vault.get(persistent_id) == "saved-secret"
     lease = db_session.get(CredentialLeaseRecord, lease_id)
     assert lease is not None and lease.status == CredentialLeaseStatus.RELEASED.value
-
-
-def test_reconcile_commits_claimed_lease_when_datasource_owns_reference(
-    db_session,
-    test_datasource,
-) -> None:
-    vault = InMemoryCredentialVault()
-    credential_id = vault.put(
-        kind=CredentialKind.DATASOURCE_PASSWORD,
-        secret="database-secret",
-    )
-    saga = CredentialLeaseSaga(
-        db_session,
-        vault,
-        reference_probes={"dbfox.data": legacy_data_credential_reference_probe},
-    )
-    lease_id = saga.issue({credential_id})
-    db_session.commit()
-    saga.claim(
-        lease_id,
-        {credential_id},
-        owner_id="dbfox.data",
-        owner_operation="test.recovery",
-    )
-    test_datasource.password_credential_id = credential_id
-    db_session.commit()
-
-    saga.reconcile()
-
-    lease = db_session.get(CredentialLeaseRecord, lease_id)
-    assert lease is not None and lease.status == CredentialLeaseStatus.COMMITTED.value
-    assert vault.get(credential_id) == "database-secret"
 
 
 def test_reconcile_releases_unowned_claim_after_interrupted_operation(db_session) -> None:

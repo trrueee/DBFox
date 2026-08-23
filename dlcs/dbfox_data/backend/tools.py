@@ -87,10 +87,15 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
             schema_validator=lambda _query: [],
             dry_run_validator=lambda sql, _parameters: self._connection.explain(handle, sql),
         )
+        policy = (
+            "user_readonly"
+            if context.execution_mode == "user_requested_read"
+            else "agent_readonly"
+        )
         decision = gate.execution_decision(
             scope,
             tool_input.sql,
-            policy="agent_readonly",
+            policy=policy,
         )
         decision_payload = decision.model_dump(mode="json")
         safe_sql = str(decision.safe_sql or "")

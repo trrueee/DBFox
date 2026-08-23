@@ -1,29 +1,19 @@
 import type {
+  ArtifactViewFilter,
+  ArtifactViewSort,
   ChartDataResponse,
-  ConsoleExecuteRequest,
-  ConsoleExecuteResponse,
-  GuardrailResponse,
   ResultExportRequest,
-  ResultFilter,
   ResultPageRequest,
   ResultPageResponse,
-  ResultSort,
-  TableResultExportRequest,
-  TableResultPageRequest,
 } from "../generated/types.gen";
 
 export type {
+  ArtifactViewFilter,
+  ArtifactViewSort,
   ChartDataResponse,
-  ConsoleExecuteRequest,
-  ConsoleExecuteResponse,
   ResultExportRequest,
-  ResultFilter,
   ResultPageRequest,
   ResultPageResponse,
-  ResultSort,
-  TableResultExportRequest,
-  TableResultPageRequest,
 };
 
-export type GuardrailCheckResult = GuardrailResponse;
-export type ResultFilterOperator = ResultFilter["operator"];
+export type ArtifactViewFilterOperator = ArtifactViewFilter["operator"];

@@ -14,18 +14,6 @@ import type { DockViewContribution } from "../../dock/types";
 import { ProjectResourceSidebar } from "../../resources/ProjectResourceSidebar";
 import { WorkspaceDock } from "../WorkspaceDock";
 
-vi.mock("../../datasource/useDatasourceState", () => ({
-  useDatasourceState: () => ({
-    datasources: [],
-    activeDatasourceId: "",
-    activeDatasource: null,
-    setActiveDatasourceId: vi.fn(),
-    tables: [],
-    loadingSchema: false,
-    schemaError: "",
-  }),
-}));
-
 vi.mock("../../projects/useProjectState", () => ({
   useProjectState: () => ({
     projects: [{ id: "project-1", name: "订单分析", status: "active" }],
@@ -155,7 +143,6 @@ describe("DLC visual conformance (spec §20/§34)", () => {
     render(
       <TooltipProvider>
         <WorkspaceDock
-          activeDatasourceId=""
           activeConversationId={null}
           showToast={vi.fn()}
         />
@@ -194,7 +181,6 @@ describe("DLC visual conformance (spec §20/§34)", () => {
     render(
       <TooltipProvider>
         <WorkspaceDock
-          activeDatasourceId=""
           activeConversationId={null}
           showToast={vi.fn()}
         />
@@ -235,7 +221,6 @@ describe("DLC visual conformance (spec §20/§34)", () => {
     render(
       <TooltipProvider>
         <WorkspaceDock
-          activeDatasourceId=""
           activeConversationId={null}
           showToast={vi.fn()}
         />

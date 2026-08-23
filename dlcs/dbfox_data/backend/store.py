@@ -388,6 +388,28 @@ class DataStateStore:
             ).fetchone()
         return self._database(row) if row is not None else None
 
+    def resolve_project_database(
+        self,
+        project_id: str,
+        database_id: str,
+    ) -> DatabaseHandle:
+        """Resolve one DatabaseResource only when it belongs to the Project."""
+
+        database = self.get_database(database_id)
+        if database is None:
+            raise KeyError("Database resource is unavailable")
+        profile = self.get_profile(database.connection_profile_id)
+        if profile is None or profile.project_id != project_id:
+            raise KeyError("Database resource is unavailable in this Project")
+        return DatabaseHandle(
+            profile=profile,
+            database=database,
+            scope_version=_scope_version(
+                profile.connection_generation,
+                database.resource_generation,
+            ),
+        )
+
     @staticmethod
     def _catalog_table_id(
         database_resource_id: str,

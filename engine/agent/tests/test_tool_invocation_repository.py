@@ -22,7 +22,7 @@ def test_tool_intent_is_durable_before_running_and_settles_once(db_session, test
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_tool",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="查看表",
         idempotency_key="request_tool",
         llm_credential_id="credential_1",
@@ -128,7 +128,7 @@ def test_interrupted_recoverable_tool_is_requeued_with_the_same_invocation_id(
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
-        session_id="session_recovery", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        session_id="session_recovery", resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="查看表", idempotency_key="request_recovery", llm_credential_id="credential_1",
         api_base=None, model_name="model-test", request_payload={},
     )
@@ -192,7 +192,7 @@ def test_run_cancellation_terminalizes_a_running_tool_invocation(
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id="session_cancel_tool",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="查看表",
         idempotency_key="request_cancel_tool",
         llm_credential_id="credential_1",

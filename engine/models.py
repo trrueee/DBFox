@@ -977,3 +977,24 @@ class DomainTagRule(Base):  # type: ignore[misc,valid-type]
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+# These declarations are retained only so immutable historical migrations and
+# their fixtures can deserialize pre-cutover rows. They are deliberately not
+# part of the current Core metadata contract; dbfox.data owns the live schema.
+for _retired_data_table in (
+    "confirmation_tokens",
+    "restore_operations",
+    "backup_records",
+    "schema_columns",
+    "schema_search_docs",
+    "query_history_search_docs",
+    "query_history",
+    "semantic_aliases",
+    "domain_tag_rules",
+    "schema_tables",
+    "data_sources",
+):
+    _table = Base.metadata.tables.get(_retired_data_table)
+    if _table is not None:
+        Base.metadata.remove(_table)

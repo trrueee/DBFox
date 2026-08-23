@@ -27,7 +27,7 @@ def test_next_run_reads_durable_history_and_selected_artifact(
     repository = SessionRepository(db_session)
     first = repository.admit(
         session_id="session_context",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="统计订单数量",
         idempotency_key="first",
         llm_credential_id="credential",
@@ -68,7 +68,7 @@ def test_next_run_reads_durable_history_and_selected_artifact(
 
     second = repository.admit(
         session_id="session_context",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="按地区拆分刚才结果",
         idempotency_key="second",
         llm_credential_id="credential",
@@ -121,7 +121,7 @@ def test_context_never_resolves_artifact_from_another_session(
     repository = SessionRepository(db_session)
     foreign = repository.admit(
         session_id="session_b",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="foreign",
         idempotency_key="foreign",
         llm_credential_id="credential",
@@ -147,7 +147,7 @@ def test_context_never_resolves_artifact_from_another_session(
     )
     local = repository.admit(
         session_id="session_a",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="local",
         idempotency_key="local",
         llm_credential_id="credential",
@@ -173,7 +173,7 @@ def test_context_includes_consumed_steer_without_leaking_queued_input(
     repository = SessionRepository(db_session)
     active = repository.admit(
         session_id="session_steer_context",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="分析所有地区的退款率",
         idempotency_key="active",
         llm_credential_id="credential",
@@ -186,7 +186,7 @@ def test_context_includes_consumed_steer_without_leaking_queued_input(
     repository.promote_next_input(lease=lease)
     repository.admit(
         session_id="session_steer_context",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="下一项任务：分析客单价",
         idempotency_key="queued",
         llm_credential_id="credential",
@@ -197,7 +197,7 @@ def test_context_includes_consumed_steer_without_leaking_queued_input(
     )
     repository.admit(
         session_id="session_steer_context",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="补充：只看华东区",
         idempotency_key="steer",
         llm_credential_id="credential",
@@ -230,7 +230,7 @@ def test_next_run_receives_failed_outcome_without_failed_assistant_draft(
     repository = SessionRepository(db_session)
     first = repository.admit(
         session_id="session_failed_context",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="分析数据库",
         idempotency_key="failed-first",
         llm_credential_id="credential",
@@ -249,7 +249,7 @@ def test_next_run_receives_failed_outcome_without_failed_assistant_draft(
 
     second = repository.admit(
         session_id="session_failed_context",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="为什么会失败？",
         idempotency_key="failed-second",
         llm_credential_id="credential",
@@ -283,7 +283,7 @@ def test_next_run_receives_bounded_partial_plan_and_artifact_index(
     repository = SessionRepository(db_session)
     first = repository.admit(
         session_id="session_partial_context",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="完整分析订单收入与留存",
         idempotency_key="partial-first",
         llm_credential_id="credential",
@@ -380,7 +380,7 @@ def test_next_run_receives_bounded_partial_plan_and_artifact_index(
 
     second = repository.admit(
         session_id="session_partial_context",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="继续完成剩余分析",
         idempotency_key="partial-second",
         llm_credential_id="credential",
@@ -434,7 +434,7 @@ def test_next_run_indexes_result_artifacts_from_a_completed_previous_run(
     repository = SessionRepository(db_session)
     first = repository.admit(
         session_id="session_completed_result_context",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="查询订单状态分布",
         idempotency_key="completed-result-first",
         llm_credential_id="credential",
@@ -475,7 +475,7 @@ def test_next_run_indexes_result_artifacts_from_a_completed_previous_run(
 
     second = repository.admit(
         session_id="session_completed_result_context",
-        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version=1),),
+        resource_refs=(ResourceScopeRef(kind="dbfox.data.database", id=str(test_datasource.id), version="1:1"),),
         content="继续，告诉我最大的类别",
         idempotency_key="completed-result-second",
         llm_credential_id="credential",

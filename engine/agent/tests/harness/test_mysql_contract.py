@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from engine.agent.events import LiveStreamHub
 from engine.agent.loop import RunLoop
 from engine.agent.repositories.session import SessionRepository
-from engine.agent.tests.harness.test_sqlite_scenarios import _final_turn, _tool_turn
+from engine.agent.tests.harness.stream_fixtures import final_turn, tool_turn
 from engine.environment.schema_catalog_sync import ensure_catalog
 from engine.json_codec import load_object
 from engine.models import (
@@ -85,7 +85,7 @@ class _MySQLContractProvider:
         del tools, timeout_seconds, cancellation_probe
         qualified_table = f"{self.database}.orders"
         if self.turn == 1:
-            yield from _tool_turn(
+            yield from tool_turn(
                 "inspect-orders",
                 "schema_inspect",
                 {"targets": [qualified_table]},
@@ -94,7 +94,7 @@ class _MySQLContractProvider:
         serialized = json.dumps(messages, ensure_ascii=False)
         if self.turn == 2:
             assert "inspect-orders" in serialized
-            yield from _tool_turn(
+            yield from tool_turn(
                 "preview-orders",
                 "data_preview",
                 {
@@ -117,7 +117,7 @@ class _MySQLContractProvider:
         )
         observation = json.loads(str(preview_output["output"]))
         assert observation["status"] == "succeeded", observation
-        yield from _final_turn("MySQL 订单结构检查和数据预览已经完成。")
+        yield from final_turn("MySQL 订单结构检查和数据预览已经完成。")
 
 
 @pytest.mark.integration

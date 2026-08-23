@@ -91,6 +91,15 @@ class ExtensionToolRunContext(Protocol):
 
     invocation_id: str
 
+    @property
+    def execution_mode(self) -> str:
+        """Return the Host-owned execution mode for this invocation."""
+        ...
+
+    def is_cancelled(self) -> bool:
+        """Return whether the Host cancelled or timed out this invocation."""
+        ...
+
     def resource(self, ref: ResourceScopeRef | ResourceKey) -> Any:
         """Return one authorized resource selected by its full identity."""
         ...
@@ -149,6 +158,68 @@ class DlcOperationError(Exception):
 
 
 @dataclass(frozen=True)
+class DlcActionToolResult:
+    """Structured outcome returned after one durably settled action Tool call."""
+
+    status: Literal["success", "failed"]
+    output: dict[str, Any]
+    artifacts: tuple[Artifact, ...] = ()
+    error_code: str | None = None
+
+
+@dataclass(frozen=True)
+class DlcActionRunResult:
+    """Durable identifiers and Artifacts produced by a completed action Run."""
+
+    run_id: str
+    session_id: str
+    artifacts: tuple[Artifact, ...]
+
+
+class DlcActionRun(Protocol):
+    """One Host-owned durable Run driven by an explicit DLC Workbench action."""
+
+    @property
+    def run_id(self) -> str: ...
+
+    @property
+    def session_id(self) -> str: ...
+
+    def invoke(self, tool_name: str, raw_input: dict[str, Any]) -> DlcActionToolResult:
+        """Invoke and durably settle one Tool owned by the calling DLC."""
+        ...
+
+    def complete(
+        self,
+        *,
+        summary: str,
+        selected_artifact_id: str | None = None,
+    ) -> DlcActionRunResult:
+        """Atomically terminalize this action Run."""
+        ...
+
+    def __enter__(self) -> "DlcActionRun": ...
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> Literal[False]: ...
+
+
+class DlcActionRunsHost(Protocol):
+    """Kernel lifecycle service exposed to project-scoped DLC operations."""
+
+    def start(
+        self,
+        *,
+        title: str,
+        question: str,
+        requested_resources: tuple[RequestedResourceRef, ...],
+        session_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> DlcActionRun:
+        """Create one frozen-authority action Run for the calling DLC."""
+        ...
+
+
+@dataclass(frozen=True)
 class DlcRuntimeInfo:
     """Minimal immutable host-owned runtime identity for the DLC."""
 
@@ -165,6 +236,12 @@ class DlcOperationContext:
     dlc_id: str
     operation_name: str
     project_id: str | None = None
+    action_runs: DlcActionRunsHost | None = None
+
+    def require_action_runs(self) -> DlcActionRunsHost:
+        if self.action_runs is None:
+            raise RuntimeError("This operation has no project action Run host")
+        return self.action_runs
 
 
 @dataclass(frozen=True)
@@ -388,6 +465,10 @@ __all__ = [
     # Operation contracts
     "DlcOperationSpec",
     "DlcOperationContext",
+    "DlcActionRun",
+    "DlcActionRunResult",
+    "DlcActionRunsHost",
+    "DlcActionToolResult",
     # Pydantic primitives
     "BaseModel",
     "Field",

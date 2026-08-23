@@ -41,13 +41,11 @@ export type DockShowToast = (
 
 export interface DockViewContext {
   activeProjectId: string;
-  activeDatasourceId: string;
   activeConversationId: string | null;
 }
 
 export interface DockRenderContext extends DockViewContext {
   showToast: DockShowToast;
-  onOpenQueryResult: (queryText: string) => void;
 }
 
 export interface DockViewContribution {

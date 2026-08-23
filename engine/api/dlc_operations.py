@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool
 
 from engine.db import SessionLocal
 from engine.dlc.api import DlcOperationContext, DlcOperationError
+from engine.dlc.action_runs import DlcActionRunsHostImpl
 from engine.models import Project
 from engine.runtime_composition import get_active_runtime_snapshot
 from engine.security.credential_lease import CredentialLeaseSaga
@@ -225,6 +226,16 @@ async def invoke_dlc_operation(
         dlc_id=dlc_id,
         operation_name=operation_name,
         project_id=project_id,
+        action_runs=(
+            DlcActionRunsHostImpl(
+                dlc_id=dlc_id,
+                project_id=project_id,
+                snapshot=snapshot,
+                session_factory=SessionLocal,
+            )
+            if project_id is not None
+            else None
+        ),
     )
 
     try:

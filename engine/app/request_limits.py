@@ -68,7 +68,7 @@ class AgentInputRequestBodyLimitMiddleware:
             len(parts) == 5
             and parts[:3] == ["api", "v1", "conversations"]
             and parts[4] == "inputs"
-        ) or parts == ["api", "v1", "agent", "console", "execute"]
+        )
 
     @staticmethod
     def _content_length(scope: Scope) -> int | None:

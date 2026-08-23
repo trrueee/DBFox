@@ -73,7 +73,7 @@ WAL 允许多个 reader 与一个 writer 更好共存，但 SQLite 仍是单 wri
 5. 不存在多个 Alembic heads；
 6. ORM 与实际 schema 一致。
 
-对应入口：[`engine/tests/test_migrations.py`](../../engine/tests/test_migrations.py)、[`engine/tests/test_unique_migration.py`](../../engine/tests/test_unique_migration.py)、[`engine/tests/test_fts_migration_repair.py`](../../engine/tests/test_fts_migration_repair.py)。
+对应入口：[`engine/tests/test_migrations.py`](../../engine/tests/test_migrations.py)、[`engine/tests/test_unique_migration.py`](../../engine/tests/test_migrations.py)、[`engine/tests/test_fts_migration_repair.py`](../../engine/tests/test_fts_migration_repair.py)。
 
 ## 4. SQLAlchemy Session 所有权
 
@@ -328,7 +328,7 @@ floor 是协议字段，不是内部清理细节。
 | ToolInvocation 幂等 | [`test_tool_invocation_repository.py`](../../engine/agent/tests/test_tool_invocation_repository.py) |
 | 事件合同 | [`test_event_contracts.py`](../../engine/agent/tests/test_event_contracts.py) |
 | SSE 背压/回放 | [`test_conversation_stream_backpressure.py`](../../engine/tests/test_conversation_stream_backpressure.py) |
-| 确定性 SQLite 场景 | [`harness/test_sqlite_scenarios.py`](../../engine/agent/tests/harness/test_sqlite_scenarios.py) |
+| 确定性 SQLite 场景 | [`harness/test_sqlite_scenarios.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
 
 ## 14. 修改检查表
 

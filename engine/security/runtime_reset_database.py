@@ -58,30 +58,31 @@ def clear_database_runtime_state(
         if inspector.has_table(table_name):
             connection.execute(text(f"DELETE FROM {table_name}"))
 
-    connection.execute(
-        text(
-            """
-            UPDATE data_sources
-            SET password_credential_id = NULL,
-                ssh_password_credential_id = NULL,
-                ssh_key_passphrase_credential_id = NULL,
-                ssh_pkey_path = NULL,
-                ssl_key_path = NULL,
-                last_test_at = NULL,
-                last_test_status = NULL,
-                last_test_error = NULL,
-                last_test_latency_ms = NULL,
-                last_test_readonly = NULL,
-                last_test_server_version = NULL,
-                last_test_tables_count = NULL,
-                last_test_warnings = NULL,
-                last_sync_at = NULL,
-                last_sync_status = NULL,
-                last_sync_error = NULL,
-                status = 'needs_credentials'
-            """
+    if inspector.has_table("data_sources"):
+        connection.execute(
+            text(
+                """
+                UPDATE data_sources
+                SET password_credential_id = NULL,
+                    ssh_password_credential_id = NULL,
+                    ssh_key_passphrase_credential_id = NULL,
+                    ssh_pkey_path = NULL,
+                    ssl_key_path = NULL,
+                    last_test_at = NULL,
+                    last_test_status = NULL,
+                    last_test_error = NULL,
+                    last_test_latency_ms = NULL,
+                    last_test_readonly = NULL,
+                    last_test_server_version = NULL,
+                    last_test_tables_count = NULL,
+                    last_test_warnings = NULL,
+                    last_sync_at = NULL,
+                    last_sync_status = NULL,
+                    last_sync_error = NULL,
+                    status = 'needs_credentials'
+                """
+            )
         )
-    )
     # Old installations may still carry the retired environment table. Keep
     # clearing its credential metadata during the one-way legacy reset.
     if inspector.has_table("database_environments"):
@@ -97,8 +98,10 @@ def clear_database_runtime_state(
                 """
             )
         )
-    connection.execute(text("INSERT INTO schema_search_fts(schema_search_fts) VALUES ('rebuild')"))
-    connection.execute(text("INSERT INTO query_history_fts(query_history_fts) VALUES ('rebuild')"))
+    if inspector.has_table("schema_search_fts"):
+        connection.execute(text("INSERT INTO schema_search_fts(schema_search_fts) VALUES ('rebuild')"))
+    if inspector.has_table("query_history_fts"):
+        connection.execute(text("INSERT INTO query_history_fts(query_history_fts) VALUES ('rebuild')"))
 
 
 def write_pending_marker(connection: Connection, *, runtime_version: str) -> None:

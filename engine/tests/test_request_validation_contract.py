@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from engine.schemas.backup import BackupCreateRequest
 from engine.schemas.datasource import DataSourceCreateRequest, DataSourceTestRequest, DataSourceUpdateRequest
-from engine.api.agent import ConsoleExecuteRequest
 from engine.api.datasources import ColumnMetadataUpdateRequest, TableMetadataUpdateRequest
 
 
@@ -74,22 +73,6 @@ def test_datasource_request_rejects_plaintext_secret_fields(
         request_cls(**payload)
 
     assert any(error["loc"][-1] == plaintext_field for error in exc_info.value.errors())
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"datasourceId": "", "sql": "SELECT 1"},
-        {"datasourceId": "ds-1", "sql": ""},
-        {"datasourceId": "ds-1", "sql": "   "},
-        {"datasourceId": "d" * 129, "sql": "SELECT 1"},
-        {"datasourceId": "ds-1", "sql": "SELECT 1", "sessionId": "x" * 129},
-        {"datasourceId": "ds-1", "sql": "SELECT 1", "executionId": "x" * 129},
-    ],
-)
-def test_console_execute_request_rejects_invalid_core_fields(payload: dict[str, object]) -> None:
-    with pytest.raises(ValidationError):
-        ConsoleExecuteRequest(**payload)
 
 
 @pytest.mark.parametrize(

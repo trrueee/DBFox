@@ -1,8 +1,6 @@
 import type { WorkspaceDockTab } from "../../types/workspace";
 import { coreDockViews } from "./coreDockViews";
-import { dataDockViews } from "./dataDockViews";
 import type { DockViewContribution } from "./types";
-import { workspaceDockViews } from "./workspaceDockViews";
 import { useDlcStore } from "../dlc/extensionStore";
 
 export interface DockViewRegistry {
@@ -29,11 +27,7 @@ export function createDockViewRegistry(
 }
 
 export function productDockViews(): readonly DockViewContribution[] {
-  return [
-    ...coreDockViews,
-    ...dataDockViews,
-    ...workspaceDockViews,
-  ];
+  return coreDockViews;
 }
 
 export const DEFAULT_REGISTRY = createDockViewRegistry(productDockViews());

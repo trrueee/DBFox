@@ -35,13 +35,8 @@ from engine.dlc.system_bundle import (
     load_system_dlc_bundle_manifest,
 )
 from engine.dlc.snapshot import (
-    BuiltinContributionSet,
-    CompletionConstraintContribution,
-    CompletionSupportContribution,
-    CredentialReferenceProbeContribution,
     ResourceResolverContribution,
     RuntimeContributionSnapshot,
-    ToolContribution,
 )
 from engine.dlc.trust import DlcTrustStore
 from engine.resource import ResourceScopeRef
@@ -55,70 +50,6 @@ if TYPE_CHECKING:
     from engine.agent.loop import RunLoop
 
 _ACTIVE_RUNTIME_SNAPSHOT: RuntimeContributionSnapshot | None = None
-
-
-def _source_development_product_builtins() -> BuiltinContributionSet:
-    """Compose the in-tree Data capability for source-only development.
-
-    Frozen releases always supply the signed System DLC bundle. This fallback
-    keeps ``python -m engine.main`` useful from a source checkout without
-    weakening package verification or teaching the generic compiler about Data.
-    Delete it when the development launcher bootstraps signed local packages.
-    """
-
-    from engine.tools.builtin.data_capability import (
-        legacy_data_completion_constraints,
-        legacy_data_completion_supports,
-        legacy_data_credential_reference_probe,
-        legacy_data_resource_providers,
-        legacy_data_resource_resolvers,
-    )
-    from engine.tools.builtin.registry import register_data_extension
-
-    platform = platform_builtin_contributions()
-    registry = ToolRegistry(
-        available_backends=frozenset({"in_process", "isolated_process"})
-    )
-    register_data_extension(registry)
-    data_tools = tuple(
-        ToolContribution(
-            tool=registry.require(name),  # type: ignore[arg-type]
-            owner_id=registry.owner_of(name) or "dbfox.data",
-        )
-        for name in registry.tool_names()
-    )
-    return BuiltinContributionSet(
-        identifiers=(*platform.identifiers, "legacy.dbfox.data"),
-        tools=(*platform.tools, *data_tools),
-        resource_providers=legacy_data_resource_providers(),
-        resource_resolvers=tuple(
-            ResourceResolverContribution(
-                kind=kind,
-                resolver=resolver,
-                owner_id="dbfox.data",
-                binding=binding,
-            )
-            for kind, resolver, binding in legacy_data_resource_resolvers()
-        ),
-        completion_constraints=tuple(
-            CompletionConstraintContribution(
-                constraint=constraint,
-                owner_id="dbfox.data",
-            )
-            for constraint in legacy_data_completion_constraints()
-        ),
-        completion_supports=tuple(
-            CompletionSupportContribution(support=support, owner_id="dbfox.data")
-            for support in legacy_data_completion_supports()
-        ),
-        credential_reference_probes=(
-            CredentialReferenceProbeContribution(
-                probe=legacy_data_credential_reference_probe,
-                owner_id="dbfox.data",
-            ),
-        ),
-    )
-
 
 def active_runtime_snapshot() -> RuntimeContributionSnapshot | None:
     """Return the installed snapshot without triggering runtime initialization."""
@@ -174,8 +105,12 @@ def initialize_runtime_snapshot(
         if configured_system_dlc_dir:
             resolved_system_dlc_dir = Path(configured_system_dlc_dir)
 
+    if system_dlc_manifest is None:
+        configured_manifest = os.environ.get("DBFOX_SYSTEM_DLC_MANIFEST", "").strip()
+        if configured_manifest:
+            system_dlc_manifest = Path(configured_manifest)
+
     compiler_trust_store = trust_store
-    system_data_enabled = False
     if resolved_system_dlc_dir is not None:
         manifest_path = system_dlc_manifest or embedded_system_dlc_manifest_path()
         bootstrap_result = bootstrap_system_dlcs(
@@ -192,27 +127,17 @@ def initialize_runtime_snapshot(
             trusted_keys=trusted_keys,
             storage_root=resolved_storage,
         )
-        from engine.dlc.registry import InstalledDlcRegistry
-
-        data_record = InstalledDlcRegistry(resolved_storage).get_installed_dlc(
-            "dbfox.data"
-        )
-        system_data_enabled = bool(data_record and data_record.desired_enabled)
-
     compiler = ContributionCompiler(
         resolved_storage,
         trust_store=compiler_trust_store,
         developer_mode=developer_mode,
     )
-    if system_data_enabled:
-        built_ins = platform_builtin_contributions()
-    else:
+    if resolved_system_dlc_dir is None:
         logger.warning(
-            "Signed System Data DLC is unavailable or disabled; using the "
-            "source-development Data composition"
+            "System DLC bundle is unavailable; starting with the capability-neutral "
+            "Kernel only"
         )
-        built_ins = _source_development_product_builtins()
-    snapshot = compiler.compile(built_ins=built_ins)
+    snapshot = compiler.compile(built_ins=platform_builtin_contributions())
     set_active_runtime_snapshot(snapshot)
     return snapshot
 

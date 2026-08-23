@@ -24,8 +24,18 @@ fi
 echo "[DBFox] Python: $PYTHON"
 
 start_backend() {
+    initialize_system_dlcs
     echo "[DBFox] Starting backend engine on http://127.0.0.1:18625 ..."
     exec "$PYTHON" -m engine.main "$@"
+}
+
+initialize_system_dlcs() {
+    local bundle
+    bundle="$($PYTHON -m scripts.prepare_dev_system_dlcs)"
+    export DBFOX_SYSTEM_DLC_DIR
+    export DBFOX_SYSTEM_DLC_MANIFEST
+    DBFOX_SYSTEM_DLC_DIR="$($PYTHON -c 'import json,sys; print(json.load(sys.stdin)["package_dir"])' <<<"$bundle")"
+    DBFOX_SYSTEM_DLC_MANIFEST="$($PYTHON -c 'import json,sys; print(json.load(sys.stdin)["manifest"])' <<<"$bundle")"
 }
 
 start_frontend() {
@@ -68,6 +78,7 @@ case "$TARGET" in
         ;;
     both)
         initialize_shared_dev_token
+        initialize_system_dlcs
         echo "[DBFox] Starting backend in background..."
         "$PYTHON" -m engine.main &
         BACKEND_PID=$!

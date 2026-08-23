@@ -42,6 +42,10 @@ class ToolRunContext(BaseModel):
         tuple[Artifact, ...],
     ] | None = Field(default=None, exclude=True)
 
+    @property
+    def execution_mode(self) -> str:
+        return str(getattr(self.request, "execution_mode", "") or "")
+
     def is_cancelled(self) -> bool:
         return bool(self.cancellation_probe and self.cancellation_probe())
 

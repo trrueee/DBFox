@@ -285,12 +285,7 @@ def verify_metadata_database(database_url: str) -> None:
                     )
                 }
                 required_objects = {
-                    "schema_search_fts",
-                    "query_history_fts",
                     "agent_message_fts",
-                    "query_history_search_docs_ai",
-                    "query_history_search_docs_ad",
-                    "query_history_search_docs_au",
                     "agent_message_search_docs_ai",
                     "agent_message_search_docs_ad",
                     "agent_message_search_docs_au",

@@ -329,16 +329,16 @@ Artifact 应尽量是“引用 + 可验证来源”，而不是复制所有结�
 | 合同 | 测试 |
 | --- | --- |
 | 参数绑定 | [`test_bound_parameters.py`](../../engine/tests/test_bound_parameters.py) |
-| SQL safety | [`test_sql_safety_service.py`](../../engine/tests/test_sql_safety_service.py) |
+| SQL safety | [`test_sql_safety_service.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
 | Guardrail | [`test_guardrail.py`](../../engine/tests/test_guardrail.py)、[`test_guardrail_bypass.py`](../../engine/tests/test_guardrail_bypass.py) |
-| Native readonly | [`test_native_readonly_execution.py`](../../engine/tests/test_native_readonly_execution.py) |
-| 只读查询合同 | [`test_readonly_query_contract.py`](../../engine/tests/test_readonly_query_contract.py) |
-| 执行器 | [`test_executor.py`](../../engine/tests/test_executor.py) |
-| 结果边界 | [`test_sql_result_boundaries.py`](../../engine/tests/test_sql_result_boundaries.py) |
-| ResultView | [`test_result_view_service.py`](../../engine/tests/test_result_view_service.py) |
+| Native readonly | [`test_native_readonly_execution.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
+| 只读查询合同 | [`test_readonly_query_contract.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
+| 执行器 | [`test_executor.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
+| 结果边界 | [`test_sql_result_boundaries.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
+| ResultView | [`test_result_view_service.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
 | 安全 preview | [`test_safe_preview.py`](../../engine/tests/test_safe_preview.py) |
 | CSV/流式 deadline | [`test_csv_export.py`](../../engine/tests/test_csv_export.py)、[`test_streaming_export_deadline.py`](../../engine/tests/test_streaming_export_deadline.py) |
-| DB tools | [`test_db_tools.py`](../../engine/tests/test_db_tools.py) |
+| DB tools | [`test_db_tools.py`](../../engine/tests/test_dbfox_data_domain_model.py) |
 
 ## 14. 修改检查表
 

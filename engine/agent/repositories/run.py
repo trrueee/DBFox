@@ -1,8 +1,6 @@
 """Run/Turn state transitions and atomic terminal response persistence."""
 
 from __future__ import annotations
-from dlcs.dbfox_data.backend.resource_kind import DATABASE_RESOURCE_KIND
-
 import logging
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -14,7 +12,6 @@ from engine.agent.events import RuntimeEventType
 from engine.agent.repositories.evidence import EvidenceRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
-from engine.agent.resource_refs import single_run_resource_ref
 from engine.agent.response import ComposedResponse
 from engine.agent.run import RunStatus, SessionLeaseConflict, TERMINAL_RUN_STATUSES
 from engine.agent.run_item import (
@@ -149,10 +146,6 @@ class RunRepository:
                         "item": dump_run_item(final_answer_item(assistant, run=run))
                     },
                 )
-        self._project_memory_v4_shadow(
-            session_id=str(run.session_id),
-            through_session_sequence=int(run.session_sequence or 0),
-        )
         self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_CANCELLED,
@@ -626,10 +619,6 @@ class RunRepository:
         if response.selection_suggestion and not aggregate.selected_artifact_id:
             aggregate.selected_artifact_id = response.selection_suggestion.artifact_id
         self._write_memory(aggregate, run, response, memory_delta or {})
-        self._project_memory_v4_shadow(
-            session_id=str(run.session_id),
-            through_session_sequence=int(run.session_sequence or 0),
-        )
         self.session.flush()
         terminal_item: MessageItem | None = None
         if terminal_output_index is not None and terminal_turn_id:
@@ -727,58 +716,11 @@ class RunRepository:
                 turn_id=str(run.current_turn_id) if run.current_turn_id else None,
                 payload={"item": dump_run_item(final_answer_item(assistant, run=run))},
             )
-        self._project_memory_v4_shadow(
-            session_id=str(run.session_id),
-            through_session_sequence=int(run.session_sequence or 0),
-        )
         self.sessions.events.append(
             lease=lease,
             event_type=RuntimeEventType.RUN_FAILED,
             run_id=run_id,
             payload={"run": project_run(run)},
-        )
-
-    def _project_memory_v4_shadow(
-        self,
-        *,
-        session_id: str,
-        through_session_sequence: int,
-    ) -> None:
-        """Fold terminal Runs into shadow Memory v4 without blocking terminalization.
-
-        Only derived-projection contract errors are fail-soft. SQLite/ORM
-        failures still propagate and roll back the canonical transaction.
-        """
-
-        from engine.agent.memory_projection import (
-            MemoryProjectionError,
-            project_session_memory,
-        )
-        from engine.app.safe_errors import (
-            SafeLogOperation,
-            log_unexpected_exception,
-        )
-
-        try:
-            outcome = project_session_memory(
-                self.session,
-                session_id,
-                through_session_sequence,
-            )
-        except MemoryProjectionError as exc:
-            log_unexpected_exception(
-                logger,
-                operation=SafeLogOperation.AGENT_MEMORY_SAVE_PROJECTION,
-                exc=exc,
-                level="warning",
-            )
-            return
-        logger.info(
-            "agent_memory_projection session=%s watermark=%d lag=%d state_hash=%s",
-            session_id,
-            outcome.projected_through_session_sequence,
-            outcome.projection_lag,
-            outcome.state_hash,
         )
 
     def _write_memory(
@@ -788,12 +730,6 @@ class RunRepository:
         response: ComposedResponse,
         delta: dict[str, Any],
     ) -> None:
-        database_ref = single_run_resource_ref(self.session, run, DATABASE_RESOURCE_KIND)
-        if database_ref is None:
-            aggregate.context_epoch = int(aggregate.context_epoch or 0) + 1
-            self.session.flush()
-            return
-
         row = self.session.execute(
             select(AgentSessionMemory).where(
                 AgentSessionMemory.session_id == aggregate.id
@@ -806,32 +742,18 @@ class RunRepository:
                 previous = loaded if isinstance(loaded, dict) else {}
             except JsonCodecError:
                 previous = {}
-        current_datasource_id = database_ref.id
-        current_generation = database_ref.version or 0
-        same_generation = (
-            previous.get("datasource_id") == current_datasource_id
-            and previous.get("datasource_generation") == current_generation
-        )
-        previous_stable = (
-            dict(previous.get("stable_context") or {}) if same_generation else {}
-        )
+        previous_stable = dict(previous.get("stable_context") or {})
         previous_evidence = [
             item
             for item in list(previous_stable.pop("evidence_references", []))
             if isinstance(item, dict)
             and item.get("artifact_id")
-            and item.get("datasource_id") == current_datasource_id
-            and item.get("datasource_generation") == current_generation
         ]
         # Legacy model-authored verified_claims remain inert in old records.
         # Citation establishes provenance, not the truth of the model's prose.
         previous_stable.pop("verified_claims", None)
         incoming_evidence = [
-            {
-                **item,
-                "datasource_id": current_datasource_id,
-                "datasource_generation": current_generation,
-            }
+            dict(item)
             for item in list(delta.get("evidence_references") or [])
             if isinstance(item, dict) and item.get("artifact_id")
         ]
@@ -848,11 +770,8 @@ class RunRepository:
             if key not in {"verified_claims", "evidence_references"}
         }
         memory = {
-            "version": 3,
-            "datasource_id": current_datasource_id,
+            "version": 1,
             "working_set": {
-                "datasource_id": current_datasource_id,
-                "datasource_generation": current_generation,
                 "selected_artifact_id": (
                     response.selection_suggestion.artifact_id
                     if response.selection_suggestion
@@ -866,7 +785,6 @@ class RunRepository:
                 **stable_delta,
                 "evidence_references": list(evidence_by_key.values())[-32:],
             },
-            "datasource_generation": current_generation,
         }
         if row is None:
             self.session.add(
@@ -879,9 +797,6 @@ class RunRepository:
             row.memory_json = _json(memory)
             row.updated_at = _utcnow()
         aggregate.context_epoch = int(aggregate.context_epoch or 0) + 1
-        # Production sessions run with autoflush=False. Flush the v3 row now
-        # so the immediately following v4 shadow projection observes it via
-        # the database query instead of adding a second unique session row.
         self.session.flush()
 
     @staticmethod

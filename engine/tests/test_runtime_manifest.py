@@ -31,11 +31,16 @@ def test_runtime_manifest_reports_loaded_sqlite_library() -> None:
     assert manifest["engine_source_sha256"] is None
 
 
-def test_release_contracts_apply_schema_list_canonical_defaults() -> None:
+def test_release_contracts_apply_kernel_tool_canonical_defaults() -> None:
     assert collect_release_contracts() == {
         "schema_version": 1,
-        "schema_list_empty_arguments": {
+        "request_clarification_defaults": {
             "status": "allowed",
-            "safe_args": {"limit": 20},
+            "safe_args": {
+                "question": "Select a target",
+                "reason": "A target is required.",
+                "options": [],
+                "allow_free_text": True,
+            },
         },
     }

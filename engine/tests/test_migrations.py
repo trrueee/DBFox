@@ -33,7 +33,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "d1e2f3a4b5c7"
+FOUNDATION_HEAD_REVISION = "e2f3a4b5c6d8"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -183,18 +183,6 @@ def _assert_final_contract(engine) -> None:
         for check in inspector.get_check_constraints("foundation_runtime_state")
     )
 
-    assert _column_names(engine, "confirmation_tokens") == {
-        "token",
-        "expires_at",
-        "datasource_id",
-        "action",
-        "details_json",
-        "expected_confirm_text",
-    }
-    assert {
-        "ix_confirmation_tokens_expires_at",
-    }.issubset({index["name"] for index in inspector.get_indexes("confirmation_tokens")})
-
     assert _column_names(engine, "credential_leases") == {
         "id",
         "credential_ids_json",
@@ -211,24 +199,6 @@ def _assert_final_contract(engine) -> None:
         "released_at",
     }
 
-    data_source_columns = _column_names(engine, "data_sources")
-    assert "connection_generation" in data_source_columns
-    assert "catalog_revision" in data_source_columns
-    assert "environment_id" not in data_source_columns
-    assert {
-        "password_credential_id",
-        "ssh_password_credential_id",
-        "ssh_key_passphrase_credential_id",
-    } == {
-        column
-        for column in data_source_columns
-        if "credential_id" in column
-        or "ciphertext" in column
-        or "nonce" in column
-        or "key_version" in column
-    }
-
-    assert "environment_id" not in _column_names(engine, "backup_records")
     assert "memory_v4_json" in _column_names(engine, "agent_session_memories")
     assert "datasource_id" not in _column_names(engine, "agent_session_memories")
     assert "schema_version" in _column_names(engine, "agent_artifacts")
@@ -314,26 +284,25 @@ def _assert_final_contract(engine) -> None:
 
     assert {
         "database_environments",
+        "data_sources",
+        "confirmation_tokens",
+        "backup_records",
+        "restore_operations",
+        "schema_tables",
+        "schema_columns",
+        "schema_search_docs",
+        "schema_search_fts",
+        "query_history",
+        "query_history_search_docs",
+        "query_history_fts",
+        "semantic_aliases",
+        "domain_tag_rules",
         "llm_logs",
         "golden_sqls",
         "reusable_sqls",
         "workspace_table_scopes",
         "table_design_drafts",
     }.isdisjoint(tables)
-
-    schema_column_fks = inspector.get_foreign_keys("schema_columns")
-    assert any(
-        fk["constrained_columns"] == ["table_id"]
-        and fk["referred_table"] == "schema_tables"
-        and fk["options"].get("ondelete") == "CASCADE"
-        for fk in schema_column_fks
-    )
-    assert any(
-        fk["constrained_columns"] == ["foreign_table_id"]
-        and fk["referred_table"] == "schema_tables"
-        and fk["options"].get("ondelete") == "SET NULL"
-        for fk in schema_column_fks
-    )
 
     assert any(
         fk["constrained_columns"] == ["session_id"]
@@ -347,14 +316,7 @@ def _assert_final_contract(engine) -> None:
         and fk["options"].get("ondelete") == "CASCADE"
         for fk in inspector.get_foreign_keys("agent_question_requests")
     )
-    assert any(
-        fk["constrained_columns"] == ["foreign_column_id"]
-        and fk["referred_table"] == "schema_columns"
-        and fk["options"].get("ondelete") == "SET NULL"
-        for fk in schema_column_fks
-    )
-
-    assert {"schema_search_fts", "query_history_fts", "agent_message_fts"}.issubset(tables)
+    assert "agent_message_fts" in tables
     assert "agent_message_search_docs" in tables
 
 
@@ -827,7 +789,9 @@ def test_agent_message_recall_migration_backfills_and_downgrade_keeps_transcript
         session.close()
         engine.dispose()
 
-    _upgrade(monkeypatch, database_url)
+    # Stop before the intentionally irreversible Data DLC cutover; this test
+    # exercises the older recall migration's reversible boundary.
+    _upgrade(monkeypatch, database_url, "d1e2f3a4b5c7")
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
@@ -1030,7 +994,9 @@ def test_legacy_metadata_retirement_queues_unowned_environment_credentials(
     finally:
         engine.dispose()
 
-    _upgrade(monkeypatch, database_url)
+    # Exercise the historical retirement downgrade before the irreversible
+    # Data DLC state cutover.
+    _upgrade(monkeypatch, database_url, "d1e2f3a4b5c7")
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
@@ -1237,18 +1203,17 @@ def test_confirmation_token_migration_adopts_legacy_runtime_table(monkeypatch, t
     finally:
         engine.dispose()
 
-    _upgrade(monkeypatch, database_url)
+    _upgrade(monkeypatch, database_url, "d1e2f3a4b5c7")
 
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-                FOUNDATION_HEAD_REVISION
+                "d1e2f3a4b5c7"
             )
             assert connection.execute(
                 text("SELECT token, expires_at, datasource_id, action FROM confirmation_tokens")
             ).one() == ("legacy-token", 9999999999.0, "source-1", "delete_datasource")
-        _assert_final_contract(engine)
     finally:
         engine.dispose()
 
@@ -1480,7 +1445,7 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
     finally:
         engine.dispose()
 
-    _upgrade(monkeypatch, database_url)
+    _upgrade(monkeypatch, database_url, "d1e2f3a4b5c7")
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
@@ -1536,7 +1501,6 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
                 "foreign_column_id": "column-1",
             }
             assert connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall() == []
-        _assert_final_contract(engine)
     finally:
         engine.dispose()
 
@@ -1838,19 +1802,9 @@ def test_real_historical_create_all_then_stamp_2b_restores_fts_contract(
                     text("SELECT name FROM sqlite_master WHERE type = 'trigger'")
                 )
             }
-            assert _QUERY_HISTORY_FTS_TRIGGERS <= trigger_names
+            assert not _QUERY_HISTORY_FTS_TRIGGERS & trigger_names
             assert _AGENT_MESSAGE_RECALL_TRIGGERS <= trigger_names
-            connection.execute(text("SELECT search_text FROM schema_search_fts LIMIT 0"))
-            connection.execute(text("SELECT search_text FROM query_history_fts LIMIT 0"))
             connection.execute(text("SELECT search_text FROM agent_message_fts LIMIT 0"))
-            assert connection.execute(
-                text(
-                    """
-                    SELECT COUNT(*) FROM query_history_fts
-                        WHERE query_history_fts MATCH 'historicalftsrebuildtoken'
-                    """
-                )
-            ).scalar_one() == 1
     finally:
         engine.dispose()
 
@@ -2388,7 +2342,7 @@ def test_p4_downgrade_succeeds_for_data_backed_rows(
 ) -> None:
     """A. P4 DB containing only Data-backed Session/Run/Memory -> downgrade succeeds."""
     database_url = _sqlite_url(tmp_path / "p4-downgrade-data-backed.db")
-    _upgrade(monkeypatch, database_url)
+    _upgrade(monkeypatch, database_url, "d1e2f3a4b5c7")
     # Re-enter the historical P4 schema under test. The current head has
     # physically removed Conversation.datasource_id.
     _downgrade(monkeypatch, database_url, "a8b9c0d1e2f4")
@@ -2456,7 +2410,7 @@ def test_p4_downgrade_fails_explicitly_for_workspace_only_or_null_datasource(
 ) -> None:
     """B, C, D. P4 DB containing null datasource -> downgrade explicitly fails before destructive mutation."""
     database_url = _sqlite_url(tmp_path / "p4-downgrade-null-ds.db")
-    _upgrade(monkeypatch, database_url)
+    _upgrade(monkeypatch, database_url, "d1e2f3a4b5c7")
     _downgrade(monkeypatch, database_url, "a8b9c0d1e2f4")
 
     engine = create_engine(database_url)

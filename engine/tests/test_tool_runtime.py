@@ -308,28 +308,17 @@ def test_runtime_rejects_non_json_tool_output() -> None:
     assert result.error == "Output contract failed."
 
 
-def test_product_registry_contains_the_analysis_toolset():
+def test_product_registry_contains_only_kernel_tools_without_system_dlcs():
     from engine.runtime_composition import build_product_tool_registry
 
     names = {tool.name for tool in build_product_tool_registry().list_tools()}
     assert names == {
-        "catalog_overview",
-        "catalog_refresh",
-        "chart_create",
         "conversation_read",
         "conversation_search",
-        "data_preview",
         "remote_job_cancel",
         "remote_job_status",
         "remote_job_submit",
         "request_clarification",
-        "result_inspect",
-        "result_profile",
-        "schema_inspect",
-        "schema_list",
-        "schema_search",
-        "sql_execute_readonly",
-        "sql_validate",
         "update_plan",
     }
 

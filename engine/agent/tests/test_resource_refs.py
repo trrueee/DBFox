@@ -14,7 +14,7 @@ from engine.tools.runtime.attempt import ResourceScopeRef
 
 def test_dump_and_load_roundtrip() -> None:
     refs = (
-        ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version=1),
+        ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version="1:1"),
         ResourceScopeRef(kind="workspace", id="proj-1", version="v1"),
     )
     raw = dump_resource_refs(refs)
@@ -24,7 +24,7 @@ def test_dump_and_load_roundtrip() -> None:
 
 def test_dump_at_max_limit_succeeds() -> None:
     refs = tuple(
-        ResourceScopeRef(kind="dbfox.data.database", id=f"ds-{i}", version=1)
+        ResourceScopeRef(kind="dbfox.data.database", id=f"ds-{i}", version="1:1")
         for i in range(MAX_INPUT_RESOURCE_REFS)
     )
     raw = dump_resource_refs(refs)
@@ -35,7 +35,7 @@ def test_dump_at_max_limit_succeeds() -> None:
 
 def test_dump_exceeding_max_limit_rejected() -> None:
     refs = tuple(
-        ResourceScopeRef(kind="dbfox.data.database", id=f"ds-{i}", version=1)
+        ResourceScopeRef(kind="dbfox.data.database", id=f"ds-{i}", version="1:1")
         for i in range(MAX_INPUT_RESOURCE_REFS + 1)
     )
     with pytest.raises(ValueError, match="exceeds maximum"):
@@ -44,7 +44,7 @@ def test_dump_exceeding_max_limit_rejected() -> None:
 
 def test_dump_duplicate_canonical_key_rejected() -> None:
     refs = (
-        ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version=1),
+        ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version="1:1"),
         ResourceScopeRef(kind="dbfox.data.database", id="ds-1", version=2),
     )
     with pytest.raises(ValueError, match="duplicate resource ref"):

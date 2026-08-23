@@ -19,7 +19,6 @@ import {
 } from "../../components/ui";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useConversationStore } from "../../stores/conversationStore";
-import { useDatasourceState } from "../datasource/useDatasourceState";
 import { useProjectState } from "../projects/useProjectState";
 import { getUserErrorMessage } from "../../lib/api/client";
 import type { ResourceConnectorContribution } from "../resources/types";
@@ -46,8 +45,6 @@ export function ProjectResourceSidebar({
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
 
   const { projects, loadingProjects } = useProjectState(activeProjectId);
-
-  const { datasources, setActiveDatasourceId } = useDatasourceState(activeProjectId);
 
   const summaries = useConversationStore((s) => s.summaries);
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
@@ -106,14 +103,10 @@ export function ProjectResourceSidebar({
 
   const handleSelectProject = (projectId: string) => {
     setActiveProject(projectId);
-    const firstDatasource = datasources.find((item) => item.project_id === projectId);
-    if (firstDatasource) setActiveDatasourceId(firstDatasource.id);
   };
 
   const handleNewProjectConversation = (projectId: string) => {
     setActiveProject(projectId);
-    const firstDatasource = datasources.find((item) => item.project_id === projectId);
-    if (firstDatasource) setActiveDatasourceId(firstDatasource.id);
     showSmartQueryHome();
   };
 
