@@ -223,7 +223,8 @@ def build_system_dlc_release_bundle(
     resolved_key = private_key_path.expanduser().resolve(strict=True)
     command = [
         python_exe,
-        str(ROOT / "scripts" / "build_system_dlc_bundle.py"),
+        "-m",
+        "scripts.build_system_dlc_bundle",
         "--output-dir",
         str(SYSTEM_DLCS_DIR),
         "--private-key",

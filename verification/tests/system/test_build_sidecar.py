@@ -596,6 +596,27 @@ def test_staged_engine_contains_build_provenance(tmp_path) -> None:
     )
 
 
+def test_system_dlc_release_builder_runs_as_repository_module(monkeypatch, tmp_path) -> None:
+    output_dir = tmp_path / "system-dlcs"
+    private_key = tmp_path / "signing-key.pem"
+    private_key.write_text("private", encoding="utf-8")
+    monkeypatch.setattr(build_sidecar, "SYSTEM_DLCS_DIR", output_dir)
+
+    def fake_run(command, **kwargs):
+        assert command[:3] == ["python", "-m", "scripts.build_system_dlc_bundle"]
+        assert kwargs["cwd"] == str(build_sidecar.ROOT)
+        output_dir.mkdir(parents=True)
+        (output_dir / "system-dlcs.json").write_text("{}", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert build_sidecar.build_system_dlc_release_bundle(
+        "python",
+        private_key,
+    ) == output_dir / "system-dlcs.json"
+
+
 def test_release_build_never_writes_frontend_dev_token(monkeypatch, tmp_path) -> None:
     binary = tmp_path / "dbfox-engine"
     binary.write_bytes(b"sidecar")
