@@ -57,7 +57,7 @@ verification/
 
 目录按“主要被测对象”归类，而不是按使用了什么 fixture 归类。一个 Agent Core 状态机测试可以使用合成 ResourceRef；只有当判断目标是 `dbfox.data` 的发现、解析或 SQL 语义时，才属于 capability/system 或 integration。
 
-各 suite 自己拥有数据库生命周期和 fixture 组合，不从另一个 suite 的 `conftest.py` 导入隐式环境。可复用代码只允许放在 `verification/support/`，且必须是无状态的 metadata/迁移辅助；这避免 Agent Core、System、Integration 因 fixture 继承形成隐藏耦合。
+各 suite 自己拥有数据库生命周期和 fixture 组合，不从另一个 suite 的 `conftest.py` 导入隐式环境。`verification/support/` 保存无状态 metadata/迁移辅助；`verification/testkit/` 保存 Scripted Provider、synthetic resource 和基于正式 package builder 的隔离 DLC fixture。二者都只能控制被测系统的外部边界，避免 Agent Core、System、Integration 因 fixture 继承形成隐藏耦合。
 
 ## 3. 三类验证对象
 
@@ -90,6 +90,8 @@ Bench 是产品外部的测量仪器，按 Subject Under Test 分为：
 - 确定性 scorer、统计、脱敏报告和 JUnit。
 
 Framework 只理解 suite identity、subject、metric、statistics、report 和 comparison，不理解 SQL、File、GitHub 或 Memory 领域语义。各 suite 自己拥有 dataset、runner 和 scorer，但不拥有 Session 状态机、SQL executor、Resource authority、Context projection 或 Tool retry。真实评测 runner 必须使用 production RunLoop；历史接口失配直接失败，不用 compatibility adapter 继续跑分。
+
+当前确定性测量覆盖 Core Loop、Context、Authority、Data direct operations，以及 Data + Workspace 的双资源组合。每个 manifest 还声明 provider mode 与 repetition 上限；Provider 是执行矩阵维度，不形成第四类 Bench，也不拥有另一套 Runner。
 
 ## 4. 允许替换与禁止替换
 
@@ -135,5 +137,9 @@ python -m pytest verification/tests/bench -q --tb=short
 python -m pytest verification/tests/integration -q --tb=short
 python -m verification.bench validate
 python -m verification.bench run core.loop.scripted
+python -m verification.bench run core.context.scripted
+python -m verification.bench run core.authority.scripted
+python -m verification.bench run capability.dbfox_data.direct
+python -m verification.bench run composition.data_workspace.scripted
 python -m verification.bench calibrate capability.dbfox_data.agent
 ```

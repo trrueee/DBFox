@@ -8,6 +8,7 @@
     "components": ["dbfox.data"],
     "supporting_fixtures": ["agent-core", "sqlite-seed-v1"]
   },
+  "execution": {"provider_modes": ["real_provider"], "default_repetitions": 1, "max_repetitions": 5},
   "dataset": "datasets/regression-v1.json",
   "metrics": [
     {"name": "task.success_rate", "direction": "higher_is_better", "unit": "ratio", "description": "Fraction of scored trials that satisfy the Data task contract."},

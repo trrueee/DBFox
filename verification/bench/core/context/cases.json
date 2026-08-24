@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "case_id": "current-request-priority",
+      "scenario": "current_request_priority",
+      "prompt": "只回答当前请求：当前发布状态是什么？",
+      "history_count": 12,
+      "fact": "当前发布状态是 ready。",
+      "sensitive_term": "OLD_INSTRUCTION_SENTINEL",
+      "required_answer_terms": ["ready"],
+      "max_turns": 1,
+      "max_tool_calls": 0
+    },
+    {
+      "case_id": "evicted-history-recall",
+      "scenario": "long_recall",
+      "prompt": "本次会话最早决定的发布代号是什么？",
+      "history_count": 40,
+      "fact": "最早决策：发布代号是苍穹协议，预算为内部机密。",
+      "sensitive_term": "预算为内部机密",
+      "required_answer_terms": ["苍穹协议"],
+      "max_turns": 3,
+      "max_tool_calls": 2
+    }
+  ]
+}

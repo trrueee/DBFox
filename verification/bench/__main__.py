@@ -12,29 +12,12 @@ from verification.bench.capabilities.dbfox_data.agent import cli as data_agent_c
 from verification.bench.capabilities.dbfox_data.agent.comparison import (
     compare_summaries as compare_data_summaries,
 )
-from verification.bench.capabilities.dbfox_data.agent.schema import (
-    load_manifest as load_data_manifest,
-)
-from verification.bench.core.loop.runtime import run_core_loop_bench
-from verification.bench.core.loop.schema import load_cases
+from verification.bench.catalog import SUITES
 from verification.bench.framework.comparison import compare_summaries, load_summary
 from verification.bench.framework.schema import load_suite_manifest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CORE_LOOP = Path(__file__).resolve().parent / "core" / "loop"
-DATA_AGENT = (
-    Path(__file__).resolve().parent
-    / "capabilities"
-    / "dbfox_data"
-    / "agent"
-)
-SUITES = {
-    "core.loop.scripted": CORE_LOOP / "suite.json",
-    "capability.dbfox_data.agent": DATA_AGENT / "suite.json",
-}
-
-
 def _stamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
@@ -74,13 +57,11 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
 
 
 def _validate_suite(suite_id: str) -> dict[str, object]:
-    path = SUITES[suite_id]
+    registration = SUITES[suite_id]
+    path = registration.manifest_path
     manifest = load_suite_manifest(path)
     dataset_path = path.parent / manifest.dataset
-    if suite_id == "core.loop.scripted":
-        case_count = len(load_cases(dataset_path).cases)
-    else:
-        case_count = len(load_data_manifest(dataset_path).cases)
+    case_count = registration.case_count(dataset_path)
     return {**manifest.public_summary(), "case_count": case_count}
 
 
@@ -132,12 +113,18 @@ def main(argv: list[str] | None = None) -> int:
         return _run_data_cli("calibrate", args)
     if args.command == "replay":
         return _run_data_cli("replay", args)
-    if args.suite == "capability.dbfox_data.agent":
+    registration = SUITES[args.suite]
+    if registration.delegated_cli == "data-agent":
         if args.output is None:
             args.output = ROOT / "output" / "agent-evaluation" / f"data-agent-{_stamp()}"
         return _run_data_cli("real", args)
-    output = args.output or ROOT / "output" / "agent-evaluation" / f"core-loop-{_stamp()}"
-    summary = run_core_loop_bench(
+    if registration.runner is None:
+        raise RuntimeError(f"Suite {args.suite} has no executable runner")
+    if args.dataset is not None or args.tag:
+        raise ValueError("--dataset and --tag are only supported by the Data Agent suite")
+    slug = args.suite.replace(".", "-")
+    output = args.output or ROOT / "output" / "agent-evaluation" / f"{slug}-{_stamp()}"
+    summary = registration.runner(
         output_dir=output,
         repetitions=args.repetitions,
         case_ids=frozenset(args.case),

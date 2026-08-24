@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "case_id": "workspace-target-data-catalog",
+      "prompt": "读取工作区中的分析目标，再查看数据库目录，并说明应该分析哪张表。",
+      "workspace_file": "analysis-target.txt",
+      "workspace_content": "分析目标：核对订单收入。",
+      "required_answer_terms": ["订单收入", "orders"],
+      "required_tools": ["file_read", "schema_list"],
+      "max_turns": 3,
+      "max_tool_calls": 2
+    }
+  ]
+}

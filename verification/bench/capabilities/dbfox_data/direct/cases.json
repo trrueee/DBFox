@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {"case_id": "connection-database-resource", "scenario": "resource_discovery", "expected_tables": ["customers", "orders"]},
+    {"case_id": "catalog-refresh", "scenario": "catalog_refresh", "expected_tables": ["customers", "orders"]},
+    {"case_id": "catalog-browse", "scenario": "catalog_browse", "expected_tables": ["customers", "orders"]}
+  ]
+}

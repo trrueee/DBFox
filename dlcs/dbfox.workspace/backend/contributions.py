@@ -14,6 +14,7 @@ from dbfox_dlc_api import (
     ToolExecutionSpec,
     ToolInputError,
     ToolOutcome,
+    ToolObservationProjection,
     ToolPolicy,
     ToolPresentation,
     ToolReconciliation,
@@ -104,6 +105,29 @@ class WorkspaceFileSearchTool(BaseTool[FileSearchInput, FileSearchOutput]):
             truncated=len(all_matches) > len(matches),
         )
 
+    def project_observation(self, *, status, output, artifacts):
+        if status != "success":
+            return ToolObservationProjection(summary="项目文件搜索失败。")
+        matches = list(output.get("matches") or [])
+        provider_matches = matches[:20]
+        return ToolObservationProjection(
+            summary=f"已找到 {int(output.get('returned_count') or 0)} 个项目文件。",
+            facts={
+                "query": output.get("query"),
+                "path_prefix": output.get("path_prefix"),
+                "returned_count": output.get("returned_count"),
+                "truncated": output.get("truncated"),
+            },
+            provider_payload={
+                **output,
+                "matches": provider_matches,
+                "truncated": (
+                    bool(output.get("truncated"))
+                    or len(matches) > len(provider_matches)
+                ),
+            },
+        )
+
 
 class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
     name = "file_read"
@@ -160,6 +184,20 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
                 semantic_key=f"file_read:{snapshot.sha256}",
                 resource_refs=(workspace_ref,),
             ),),
+        )
+
+    def project_observation(self, *, status, output, artifacts):
+        if status != "success":
+            return ToolObservationProjection(summary="项目文件读取失败。")
+        return ToolObservationProjection(
+            summary=f"已读取项目文件 {str(output.get('path') or '')}。",
+            facts={
+                "path": output.get("path"),
+                "content_truncated": output.get("content_truncated"),
+                "size_bytes": output.get("size_bytes"),
+                "sha256": output.get("sha256"),
+            },
+            provider_payload=output,
         )
 
 
