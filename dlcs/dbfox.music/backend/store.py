@@ -429,7 +429,10 @@ class MusicStore:
                 (revision, now, input.audio_source_id),
             )
             connection.commit()
-        return self.get_transcription(project_id, input.audio_source_id, revision)
+        committed = self.get_transcription(project_id, input.audio_source_id, revision)
+        if committed is None:
+            raise RuntimeError("committed audio transcription is unavailable")
+        return committed
 
     def get_transcription(
         self,

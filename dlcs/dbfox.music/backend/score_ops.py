@@ -114,7 +114,7 @@ def analyze(score_id: str, revision: int, document: ScoreDocument) -> ScoreAnaly
     )
     maximum_polyphony = max(simultaneous.values(), default=0)
     event_density = len(document.notes) / max(document.measure_count, 1)
-    leaps = []
+    leaps: list[int] = []
     for hand in ("left", "right"):
         ordered = sorted((note for note in document.notes if note.hand == hand), key=_note_order)
         leaps.extend(abs(current.pitch - previous.pitch) for previous, current in zip(ordered, ordered[1:]))
