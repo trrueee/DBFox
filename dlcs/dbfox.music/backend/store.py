@@ -70,7 +70,8 @@ class MusicStore:
                     head_revision INTEGER NOT NULL,
                     status TEXT NOT NULL CHECK(status IN ('active', 'deleted')),
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    creation_invocation_id TEXT
                 );
                 CREATE INDEX IF NOT EXISTS ix_music_scores_project
                     ON scores(project_id, status, updated_at);
@@ -119,8 +120,20 @@ class MusicStore:
                     PRIMARY KEY(audio_source_id, revision),
                     FOREIGN KEY(audio_source_id) REFERENCES audio_sources(id)
                 );
-                PRAGMA user_version = 2;
             """)
+            score_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(scores)").fetchall()
+            }
+            if "creation_invocation_id" not in score_columns:
+                connection.execute(
+                    "ALTER TABLE scores ADD COLUMN creation_invocation_id TEXT"
+                )
+            connection.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_music_scores_creation_invocation "
+                "ON scores(creation_invocation_id) WHERE creation_invocation_id IS NOT NULL"
+            )
+            connection.execute("PRAGMA user_version = 3")
 
     @staticmethod
     def _revision(row: sqlite3.Row) -> ScoreRevision:
@@ -142,21 +155,58 @@ class MusicStore:
             "JOIN scores s ON s.id = r.score_id "
         )
 
-    def create_score(self, project_id: str, document: ScoreDocument, summary: str) -> ScoreRevision:
+    def create_score(
+        self,
+        project_id: str,
+        document: ScoreDocument,
+        summary: str,
+        *,
+        creation_invocation_id: str | None = None,
+    ) -> ScoreRevision:
         score_id = f"score_{uuid4().hex}"
         now = datetime.now(UTC).isoformat()
         encoded = _canonical_document(document)
         digest = _content_hash(encoded)
-        with self._connect() as connection, connection:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            if creation_invocation_id:
+                existing = connection.execute(
+                    "SELECT id, head_revision FROM scores "
+                    "WHERE project_id = ? AND creation_invocation_id = ?",
+                    (project_id, creation_invocation_id),
+                ).fetchone()
+                if existing is not None:
+                    connection.rollback()
+                    return self.get_revision(
+                        project_id,
+                        str(existing["id"]),
+                        int(existing["head_revision"]),
+                    )
             connection.execute(
-                "INSERT INTO scores (id, project_id, title, head_revision, status, created_at, updated_at) VALUES (?, ?, ?, 1, 'active', ?, ?)",
-                (score_id, project_id, document.title, now, now),
+                "INSERT INTO scores (id, project_id, title, head_revision, status, created_at, updated_at, creation_invocation_id) "
+                "VALUES (?, ?, ?, 1, 'active', ?, ?, ?)",
+                (score_id, project_id, document.title, now, now, creation_invocation_id),
             )
             connection.execute(
                 "INSERT INTO score_revisions (score_id, revision, parent_revision, content_hash, document_json, summary, created_at) VALUES (?, 1, NULL, ?, ?, ?, ?)",
                 (score_id, digest, encoded, summary, now),
             )
+            connection.commit()
         return self.get_revision(project_id, score_id, 1)
+
+    def get_score_by_creation_invocation(
+        self,
+        project_id: str,
+        invocation_id: str,
+    ) -> ScoreRevision | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                self._revision_query()
+                + "WHERE s.project_id = ? AND s.creation_invocation_id = ? "
+                "AND r.revision = s.head_revision",
+                (project_id, invocation_id),
+            ).fetchone()
+        return self._revision(row) if row is not None else None
 
     def commit_revision(
         self,

@@ -1,7 +1,7 @@
 {
   "manifestSchemaVersion": 2,
   "id": "dbfox.music",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "displayName": "Piano Studio",
   "publisher": "dbfox",
   "description": "AI piano composition, immutable score revisions, notation, and offline playback for DBFox.",

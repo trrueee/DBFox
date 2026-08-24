@@ -298,6 +298,7 @@ class ToolRuntime:
                 status="success",
                 input=dict(raw_input),
                 output=output,
+                artifact_drafts=list(reconciliation.artifacts),
                 latency_ms=elapsed,
             )
         if reconciliation.status == "not_applied":

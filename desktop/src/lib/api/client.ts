@@ -31,6 +31,7 @@ export interface EngineStartupStatus {
   stage?: string | null;
   generation?: number;
   restartCount?: number;
+  failure?: { code: string; fingerprint: string } | null;
 }
 
 type EngineServerInfo = {
@@ -183,11 +184,15 @@ export async function waitForEngineConfig(options: EngineConfigWaitOptions = {})
         return;
       }
       if (status.state === "failed" || status.state === "stopped") {
-        throw new ApiError(
-          status.error || "Local engine is unavailable.",
-          503,
-          status.state === "failed" ? "ENGINE_STARTUP_FAILED" : "ENGINE_STOPPED",
-        );
+          throw new ApiError(
+            status.error || "Local engine is unavailable.",
+            503,
+            status.state === "failed"
+              ? status.failure?.code || "ENGINE_STARTUP_FAILED"
+              : "ENGINE_STOPPED",
+            [],
+            status.failure ? { ...status.failure, stage: status.stage ?? null } : undefined,
+          );
       }
     } catch (error) {
       if (options.signal?.aborted) throw error;

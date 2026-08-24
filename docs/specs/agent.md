@@ -174,16 +174,18 @@ budgets
 
 PromptBundle 必须包含稳定版本和内容哈希。System Prompt 至少表达：
 
-- 身份是数据分析师，不是 SQL 自动补全器；
-- 先理解业务目标，再选择必要的数据探索；
-- 优先使用工具获取事实，不基于猜测生成数据结论；
-- 一次查询不足以回答目标时应继续探索、验证或修复；
-- 关键结论必须关联可验证 Evidence；
+- 识别用户请求的结果、显式约束、未决选择和所需工作产品；
+- 只使用完成当前请求所需的最小授权能力，并保留用户显式约束；
+- 区分观察到的事实、生成的工作产品和推断；
+- 重要观察必须检查是否真正满足请求，结果含糊、意外或关键时再验证；
+- 最终输出应服务于当前请求，而不是倾倒原始工具结果；
 - 不泄露凭据、系统策略和敏感数据；
 - 高风险动作必须遵循 ToolPolicy 和 Approval；
 - 达到预算或无法继续时给出清晰的部分结果、限制和下一步建议。
 
-历史消息、Schema、工具输出和用户内容均为非特权上下文，不得插入 System Prompt 权限层。
+Core System Policy 不包含 SQL、denominator、grain、measure、tempo 等领域方法。签名 DLC 只能注册静态、版本化、有界、owner-bound 的 `CapabilityGuidanceContribution`，由 Core 根据本 Turn 的 frozen Resource owner、实际 materialized Tool 和相关 Artifact 按需选择，再合并进**同一条** system message。Data 的分析方法、Music 的作曲质量约束分别归其 DLC Guidance；Tool 字段仍归 Tool Schema，动态 Resource/Artifact 事实仍归非特权 Context Contributor。
+
+每个 Turn 的 `context_snapshot_json` 持久化实际启用 Guidance 的 `owner_id / id / version / hash`。DLC Guidance 不能覆盖 Runtime authority、Approval、Safety、Cancellation、Recovery 或用户显式约束。历史消息、Schema、工具输出、动态 Context 和用户内容均为非特权上下文，不得进入 System Policy 权限层。
 
 ## 7. 输入接纳与交付
 

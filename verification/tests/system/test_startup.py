@@ -73,6 +73,25 @@ def test_optional_startup_stage_cannot_crash_engine(monkeypatch) -> None:
     main_module._emit_startup_stage("migrating")
 
 
+def test_startup_fatal_emits_only_safe_structured_diagnostics(capsys) -> None:
+    main_module._emit_startup_fatal(
+        "migrating",
+        RuntimeError(
+            "DBFOX_ALEMBIC_SQLITE_FOREIGN_KEY_VIOLATIONS: "
+            "secret-local-database-shape"
+        ),
+    )
+
+    line = capsys.readouterr().out.strip()
+    marker = "DBFOX_ENGINE_FATAL "
+    assert line.startswith(marker)
+    payload = json.loads(line[len(marker):])
+    assert payload["stage"] == "migrating"
+    assert payload["code"] == "DBFOX_METADATA_FOREIGN_KEY_VIOLATION"
+    assert len(payload["fingerprint"]) == 24
+    assert "secret-local-database-shape" not in line
+
+
 def test_frozen_engine_allows_only_known_desktop_origins(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "is_frozen", True)
 

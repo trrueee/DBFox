@@ -73,6 +73,9 @@ def test_music_package_owns_complete_capability_contributions(tmp_path: Path) ->
     assert [(item.owner_id, item.support.id) for item in snapshot.completion_supports] == [
         ("dbfox.music", "dbfox.music.score_revision")
     ]
+    assert [(item.owner_id, item.spec.id, item.spec.version) for item in snapshot.capability_guidance] == [
+        ("dbfox.music", "piano_composition", "1")
+    ]
     active = next(item for item in snapshot.active_dlcs if item.dlc_id == "dbfox.music")
     assert active.frontend_entrypoint == "frontend/index.js"
 
@@ -110,22 +113,23 @@ def test_transpose_tool_is_deterministic_and_preserves_old_revision(tmp_path: Pa
     library_ref = ResourceScopeRef(kind="dbfox.music.library", id="project-compose", version="1")
     library = library_resolver(library_ref)
     compose = next(item.tool for item in snapshot.tools if item.tool.name == "music_compose_piano")
-    draft = {
-        "title": "First Light",
-        "tempo": 80,
-        "meter": {"beats": 4, "beat_unit": 4},
-        "key": {"tonic": "C", "mode": "major"},
-        "measure_count": 1,
-        "notes": [
-            {"id": "n1", "measure": 1, "beat": 0, "duration": 1, "pitch": 60, "velocity": .7, "hand": "right"},
-            {"id": "n2", "measure": 1, "beat": 0, "duration": 1, "pitch": 48, "velocity": .6, "hand": "left"},
-        ],
+    composition = {
+        "measures": [{
+            "measure": 1,
+            "chord": "Cmaj7/E",
+            "chord_pitches": [48, 55, 60],
+            "melody": [{"beat": 0, "duration": 1, "pitch": 60, "velocity": .7}],
+            "accompaniment": "broken_quarters",
+            "accompaniment_velocity": .6,
+        }],
     }
     composed = compose.run(compose.input_model.model_validate({
         "title": "First Light", "intent": "quiet", "tempo": 80,
-        "meter": draft["meter"], "key": draft["key"], "measure_count": 1, "score_draft": draft,
+        "meter": {"beats": 4, "beat_unit": 4},
+        "key": {"tonic": "C", "mode": "major"},
+        "measure_count": 1, "composition": composition,
     }), ToolRunContext.for_invocation(
-        request=None, idempotency_key="compose-1", scope_refs=(library_ref,),
+        request=None, invocation_id="compose-invocation-1", idempotency_key="compose-1", scope_refs=(library_ref,),
         resources={library_ref.canonical(): library},
     ))
     score_id = composed.output.score_id
@@ -140,8 +144,62 @@ def test_transpose_tool_is_deterministic_and_preserves_old_revision(tmp_path: Pa
     assert outcome.output.revision == 2
     first = _invoke(snapshot, "scores.get", "project-compose", {"score_id": score_id, "revision": 1})
     second = _invoke(snapshot, "scores.get", "project-compose", {"score_id": score_id, "revision": 2})
-    assert [note.pitch for note in first.revision.document.notes] == [60, 48]
-    assert [note.pitch for note in second.revision.document.notes] == [62, 50]
+    first_pitches = [note.pitch for note in first.revision.document.notes]
+    assert any(note.hand == "right" for note in first.revision.document.notes)
+    assert any(note.hand == "left" for note in first.revision.document.notes)
+    assert [event.symbol for event in first.revision.document.harmony] == ["Cmaj7/E"]
+    assert [event.symbol for event in second.revision.document.harmony] == ["Dmaj7/F#"]
+    assert [note.pitch for note in second.revision.document.notes] == [pitch + 2 for pitch in first_pitches]
+
+
+def test_compose_reuses_invocation_and_reconciles_the_artifact(tmp_path: Path) -> None:
+    _service, snapshot = _snapshot(tmp_path)
+    library_ref = ResourceScopeRef(kind="dbfox.music.library", id="project-recovery", version="1")
+    library_resolver = next(item.resolver for item in snapshot.resource_resolvers if item.kind == library_ref.kind)
+    library = library_resolver(library_ref)
+    compose = next(item.tool for item in snapshot.tools if item.tool.name == "music_compose_piano")
+    payload = compose.input_model.model_validate({
+        "title": "Recoverable Light",
+        "intent": "quiet one measure recovery fixture",
+        "tempo": 80,
+        "meter": {"beats": 4, "beat_unit": 4},
+        "key": {"tonic": "C", "mode": "major"},
+        "measure_count": 1,
+        "composition": {
+            "measures": [{
+                "measure": 1,
+                "chord": "Cmaj7/E",
+                "chord_pitches": [40, 48, 52, 59],
+                "melody": [{"beat": 1, "duration": 2, "pitch": 67}],
+            }],
+        },
+    })
+    context = ToolRunContext.for_invocation(
+        request=None,
+        invocation_id="music-compose-stable-invocation",
+        idempotency_key="music-compose-stable-idempotency",
+        scope_refs=(library_ref,),
+        resources={library_ref.canonical(): library},
+    )
+    first = compose.run(payload, context)
+    repeated = compose.run(payload, context)
+    reconciled = compose.reconcile(payload, context)
+
+    assert repeated.output.score_id == first.output.score_id
+    assert repeated.output.revision == 1
+    assert reconciled.status == "succeeded"
+    assert reconciled.output is not None
+    assert reconciled.output["score_id"] == first.output.score_id
+    assert len(reconciled.artifacts) == 1
+    assert reconciled.artifacts[0].type == "dbfox.music.score_revision"
+
+    resolved = _invoke(snapshot, "scores.get", "project-recovery", {
+        "score_id": first.output.score_id,
+        "revision": 1,
+    })
+    assert [event.symbol for event in resolved.revision.document.harmony] == ["Cmaj7/E"]
+    assert resolved.revision.document.notes[0].beat == 0
+    assert any(note.hand == "right" and note.beat == 1 for note in resolved.revision.document.notes)
 
 
 def test_audio_transcription_is_durable_versioned_and_normalizes_to_score(tmp_path: Path) -> None:

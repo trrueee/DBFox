@@ -77,6 +77,30 @@ function openStudio(projectId, kind, value) {
   });
 }
 
+function promoteEmptyStudio(projectId, value) {
+  if (!projectId) return false;
+  for (const [key, state] of studioState.entries()) {
+    if (state.projectId !== projectId || state.kind !== "empty") continue;
+    studioState.set(key, { projectId, kind: "score", value });
+    host.dockViews.open({
+      viewKey: `music-studio:${key}`,
+      viewType: STUDIO_VIEW,
+      title: value.title || "Piano Studio",
+      closeable: true,
+      projectId,
+      stateKey: key,
+      target: {
+        type: "resource",
+        kind: SCORE_KIND,
+        id: value.scoreId,
+        version: value.revision,
+      },
+    });
+    return true;
+  }
+  return false;
+}
+
 async function toggleContext(ref) {
   if (host.contextSelection.isSelected(ref)) await host.contextSelection.remove(ref);
   else await host.contextSelection.add(ref);
@@ -432,11 +456,15 @@ function parseScoreArtifact(value) {
 
 function ScoreArtifactCard({ artifact }) {
   const payload = parseScoreArtifact(artifact.payload);
+  const libraryRef = artifact.resource_refs?.find((ref) => ref.kind === LIBRARY_KIND);
+  const projectId = payload.projectId || libraryRef?.id || artifact.provenance?.project_id || "";
+  React.useEffect(() => {
+    promoteEmptyStudio(projectId, payload);
+  }, [artifact.id, projectId]);
   return h("article", { className: "dbfox-music-artifact" },
     h("span", { className: "dbfox-music-artifact__icon", "aria-hidden": true }, "♪"),
     h("div", null, h("strong", null, payload.title), h("small", null, `${payload.measureCount} measures · ${payload.key} · ♩${payload.tempo} · Revision ${payload.revision}`)),
     h("button", { type: "button", onClick: () => {
-      const projectId = artifact.provenance?.project_id || "";
       openStudio(projectId, "score", payload);
     } }, "Open in Piano Studio →"));
 }
@@ -457,8 +485,8 @@ export function register(extensionHost) {
     title: "Music",
     icon: h("span", { "aria-hidden": true }, "♪"),
     addLabel: "New score",
-    onAdd: ({ projectId }) => {
-      void host.contextSelection.add({ kind: LIBRARY_KIND, id: projectId, version: "1" });
+    onAdd: async ({ projectId }) => {
+      await host.composerContext.add({ kind: LIBRARY_KIND, id: projectId, version: "1" });
       openStudio(projectId, "empty", { title: "Piano Studio" });
     },
     render: ({ projectId }) => h(MusicConnector, { projectId }),

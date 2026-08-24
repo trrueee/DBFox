@@ -2110,6 +2110,11 @@ export type RunError = {
 export type RunItemStatus = 'pending' | 'in_progress' | 'waiting' | 'completed' | 'failed' | 'cancelled';
 
 /**
+ * RunPhase
+ */
+export type RunPhase = 'waiting_model' | 'streaming_answer' | 'preparing_tool_call' | 'executing_tool' | 'waiting_approval' | 'finalizing';
+
+/**
  * RunProjection
  *
  * Canonical public Run state shared by snapshots and lifecycle events.
@@ -2132,6 +2137,7 @@ export type RunProjection = {
      * Input Id
      */
     input_id: string;
+    phase?: RunPhase | null;
     /**
      * Question
      */

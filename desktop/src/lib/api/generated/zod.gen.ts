@@ -1009,6 +1009,18 @@ export const zQuestionItem = z.object({
 });
 
 /**
+ * RunPhase
+ */
+export const zRunPhase = z.enum([
+    'waiting_model',
+    'streaming_answer',
+    'preparing_tool_call',
+    'executing_tool',
+    'waiting_approval',
+    'finalizing'
+]);
+
+/**
  * RunStatus
  */
 export const zRunStatus = z.enum([
@@ -1034,6 +1046,7 @@ export const zRunProjection = z.object({
     error: zRunError.nullish(),
     id: z.string(),
     input_id: z.string(),
+    phase: zRunPhase.nullish(),
     question: z.string(),
     result: z.record(z.string(), z.unknown()).optional(),
     session_id: z.string(),

@@ -40,20 +40,28 @@ def _output(messages: list[dict[str, Any]], call_id: str) -> dict[str, Any]:
 
 
 def _draft(case: CoreMusicCase) -> dict[str, Any]:
-    notes = []
+    measures = []
+    chords = (
+        ("C", [48, 55, 60]),
+        ("Am", [45, 52, 57]),
+        ("F", [41, 48, 53]),
+        ("G", [43, 50, 55]),
+    )
     for measure in range(1, case.measure_count + 1):
-        degree = (measure - 1) % 4
-        notes.extend([
-            {"id": f"right-{measure}", "measure": measure, "beat": 0, "duration": 1, "pitch": 64 + degree, "velocity": .68, "hand": "right"},
-            {"id": f"left-{measure}", "measure": measure, "beat": 0, "duration": 2, "pitch": 48 + degree, "velocity": .55, "hand": "left"},
-        ])
+        chord, chord_pitches = chords[(measure - 1) % len(chords)]
+        measures.append({
+            "measure": measure,
+            "chord": chord,
+            "chord_pitches": chord_pitches,
+            "melody": [{
+                "beat": 0, "duration": 1,
+                "pitch": 64 + ((measure - 1) % 4), "velocity": .68,
+            }],
+            "accompaniment": "broken_quarters",
+        })
     return {
-        "title": case.title, "tempo": 72,
-        "meter": {"beats": 4, "beat_unit": 4},
-        "key": {"tonic": "C", "mode": "major"},
-        "measure_count": case.measure_count,
         "sections": [{"id": "section-a", "label": "A", "start_measure": 1, "end_measure": case.measure_count}],
-        "notes": notes,
+        "measures": measures,
     }
 
 
@@ -72,10 +80,10 @@ class _MusicProvider:
                 "title": self.case.title,
                 "intent": "quiet piano music after rain",
                 "tempo": 72,
-                "meter": draft["meter"],
-                "key": draft["key"],
+                "meter": {"beats": 4, "beat_unit": 4},
+                "key": {"tonic": "C", "mode": "major"},
                 "measure_count": self.case.measure_count,
-                "score_draft": draft,
+                "composition": draft,
             })
             return
         output = _output(messages, "compose-score")
@@ -90,7 +98,7 @@ def _run_case(factory: sessionmaker[Session], snapshot: Any, suite_id: str, case
     from engine.agent.repositories.session import SessionRepository
     from engine.agent.resource_refs import RequestedResourceRef
     from engine.models import AgentArtifactRecord, AgentMessage, AgentRun, AgentToolInvocation, AgentTurn, Project
-    from engine.runtime_composition import authorize_project_resources, build_attempt_resource_resolver, build_default_completion_policy, build_product_tool_registry, default_context_contributors
+    from engine.runtime_composition import authorize_project_resources, build_attempt_resource_resolver, build_default_completion_policy, build_product_tool_registry, default_capability_guidance, default_context_contributors
 
     project_id = f"core-music-{case.case_id}-{repetition}-{uuid4().hex[:8]}"
     with factory() as db:
@@ -121,6 +129,7 @@ def _run_case(factory: sessionmaker[Session], snapshot: Any, suite_id: str, case
         session_factory=factory, model_factory=model_factory,
         registry=product_registry,
         context_contributors=default_context_contributors(snapshot),
+        capability_guidance=default_capability_guidance(snapshot),
         completion=CompletionGate(build_default_completion_policy(snapshot)),
         live_stream=LiveStreamHub(),
         resource_resolver=build_attempt_resource_resolver(snapshot=snapshot),
@@ -132,13 +141,25 @@ def _run_case(factory: sessionmaker[Session], snapshot: Any, suite_id: str, case
     with factory() as db:
         run = db.get(AgentRun, admission.run_id)
         answer = db.get(AgentMessage, admission.assistant_message_id)
-        turns = db.query(AgentTurn).filter_by(run_id=admission.run_id).count()
+        turn_records = db.query(AgentTurn).filter_by(run_id=admission.run_id).all()
+        turns = len(turn_records)
         invocations = db.query(AgentToolInvocation).filter_by(run_id=admission.run_id).all()
         artifacts = db.query(AgentArtifactRecord).filter_by(run_id=admission.run_id).all()
         score_artifacts = [item for item in artifacts if str(item.type) == "dbfox.music.score_revision"]
         payload = json.loads(score_artifacts[0].payload_json) if score_artifacts else {}
         artifact_ok = bool(score_artifacts and payload.get("measureCount") == case.measure_count and payload.get("scoreId"))
         authority_ok = len(refs) == 1 and refs[0].kind == "dbfox.music.library" and all(project_id in str(item.resource_refs_json) for item in score_artifacts)
+        guidance_materializations = [
+            item
+            for turn in turn_records
+            for item in json.loads(str(turn.context_snapshot_json or "{}")).get("capability_guidance", [])
+        ]
+        guidance_ok = bool(
+            guidance_materializations
+            and all(item.get("owner_id") == "dbfox.music" for item in guidance_materializations)
+            and all(item.get("id") == "piano_composition" for item in guidance_materializations)
+            and all(str(item.get("hash") or "").startswith("sha256:") for item in guidance_materializations)
+        )
         checks = {
             "completed": run is not None and str(run.status) == "completed",
             "answer": answer is not None and case.title in str(answer.content),
@@ -152,6 +173,7 @@ def _run_case(factory: sessionmaker[Session], snapshot: Any, suite_id: str, case
             ] == ["music_compose_piano"],
             "artifact": artifact_ok,
             "authority": authority_ok,
+            "guidance": guidance_ok,
             "turn_budget": turns <= case.max_turns,
             "tool_budget": len(invocations) <= case.max_tool_calls,
         }
@@ -166,7 +188,7 @@ def _run_case(factory: sessionmaker[Session], snapshot: Any, suite_id: str, case
                 "runtime.turns": float(turns), "runtime.tool_calls": float(len(invocations)),
             },
             failed_checks=failed,
-            evidence={"run_status": str(run.status) if run else "missing", "resource_refs": tuple((ref.kind, ref.id, ref.version) for ref in refs), "artifact_types": tuple(item.type for item in artifacts)},
+            evidence={"run_status": str(run.status) if run else "missing", "resource_refs": tuple((ref.kind, ref.id, ref.version) for ref in refs), "artifact_types": tuple(item.type for item in artifacts), "capability_guidance": guidance_materializations},
         )
 
 

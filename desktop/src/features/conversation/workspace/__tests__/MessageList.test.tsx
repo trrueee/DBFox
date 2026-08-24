@@ -102,6 +102,22 @@ describe("MessageList", () => {
       />,
     );
     expect(screen.getByText("问题 1")).toBeTruthy();
-    expect(screen.getByText("正在理解问题")).toBeTruthy();
+    expect(screen.getByText("正在等待模型响应")).toBeTruthy();
+  });
+
+  it("shows the provider-neutral phase while structured tool arguments are prepared", () => {
+    const active = run("run-preparing", 1);
+    active.status = "running";
+    active.phase = "preparing_tool_call";
+    render(
+      <MessageList
+        runs={[active]}
+        items={[user("run-preparing", 1)]}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("正在准备工具调用")).toBeTruthy();
+    expect(screen.getByText("模型正在生成结构化参数")).toBeTruthy();
   });
 });

@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel
 from engine.agent.completion import CompletionConstraint, CompletionSupport
+from engine.agent.guidance import CapabilityGuidanceSpec
 from engine.agent.artifact_view import ArtifactChartViewProvider, ArtifactTableViewProvider
 from engine.dlc.api import (
     BackendExtensionHost as IBackendExtensionHost,
@@ -18,6 +19,7 @@ from engine.dlc.api import (
     ExtensionContextContributor,
     ExtensionContextContributorFactory,
     ExtensionContextHost as IExtensionContextHost,
+    ExtensionAgentGuidanceHost as IExtensionAgentGuidanceHost,
     ExtensionCompletionHost as IExtensionCompletionHost,
     ExtensionCredentialsHost as IExtensionCredentialsHost,
     ExtensionOperationsHost as IExtensionOperationsHost,
@@ -51,6 +53,7 @@ class StagedDlcContributions:
         | ExtensionContextContributorFactory
         | type[ExtensionContextContributor]
     ] = field(default_factory=list)
+    agent_guidance: list[CapabilityGuidanceSpec] = field(default_factory=list)
     artifact_contracts: list[tuple[str, int, type[BaseModel]]] = field(default_factory=list)
     artifact_table_views: list[tuple[str, ArtifactTableViewProvider]] = field(
         default_factory=list
@@ -166,6 +169,28 @@ class _StagedContextHost:
                 f"DLC '{self._staging.dlc_id}' registered invalid context contributor: {contributor!r}",
             )
         self._staging.context_contributors.append(contributor)
+
+
+class _StagedAgentGuidanceHost:
+    def __init__(self, staging: StagedDlcContributions) -> None:
+        self._staging = staging
+
+    def register(self, guidance: CapabilityGuidanceSpec) -> None:
+        if not isinstance(guidance, CapabilityGuidanceSpec):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered invalid capability guidance",
+            )
+        try:
+            guidance.validate()
+        except ValueError as exc:
+            raise DlcError(DlcErrorCode.REGISTRATION_CONFLICT, str(exc)) from exc
+        if any(existing.id == guidance.id for existing in self._staging.agent_guidance):
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered duplicate capability guidance '{guidance.id}'",
+            )
+        self._staging.agent_guidance.append(guidance)
 
 
 class _StagedArtifactsHost:
@@ -423,6 +448,7 @@ class DefaultBackendExtensionHost(IBackendExtensionHost):
         self._tools_host = _StagedToolsHost(staging)
         self._resources_host = _StagedResourcesHost(staging)
         self._context_host = _StagedContextHost(staging)
+        self._agent_guidance_host = _StagedAgentGuidanceHost(staging)
         self._artifacts_host = _StagedArtifactsHost(staging)
         self._completion_host = _StagedCompletionHost(staging)
         self._operations_host = _StagedOperationsHost(staging)
@@ -443,6 +469,10 @@ class DefaultBackendExtensionHost(IBackendExtensionHost):
     @property
     def context(self) -> IExtensionContextHost:
         return self._context_host
+
+    @property
+    def agent_guidance(self) -> IExtensionAgentGuidanceHost:
+        return self._agent_guidance_host
 
     @property
     def artifacts(self) -> IExtensionArtifactsHost:

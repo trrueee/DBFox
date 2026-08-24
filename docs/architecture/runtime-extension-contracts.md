@@ -327,6 +327,14 @@ Semantic capability 表达成功 Observation 能证明什么，不授予执行�
 
 这样避免仅为命名统一触发全部 Tool materialization hash 变化。
 
+### 9.1 Capability Guidance
+
+领域工作方法不进入 Core System Policy，也不借用 `ContextContributor`。DLC 通过 `CapabilityGuidanceSpec` 注册静态、版本化、有界的 trusted guidance；Compiler 验证 Resource kind、Artifact type 和 `ToolKey` 都属于 contribution owner，并随 package activation 原子 promote。
+
+每个 Turn 只从真实 Runtime facts 激活 Guidance：frozen Resource kind、实际 materialized Tool、相关 selected Artifact type。普通聊天不会加载所有已安装 DLC。`ToolKey(owner_id, local_name)` 由 Core 在 Prompt render 时解析为该 Turn 的 provider wire name，因此 Guidance 不编码 provider 名称。
+
+Core 仍然组装唯一 system message，并在 Turn snapshot 中冻结每条 Guidance 的 `owner_id / id / version / hash`。动态 Resource/Artifact 内容继续走非特权 Context；authority、Approval、安全、取消、恢复和 Completion 都由 Runtime contract 强制，Guidance 无权覆盖。
+
 ## 10. Completion composition
 
 Completion Core 保持：

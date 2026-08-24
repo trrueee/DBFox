@@ -93,6 +93,10 @@ def test_data_package_owns_query_result_completion_semantics(tmp_path: Path) -> 
         (item.owner_id, item.support.id)
         for item in snapshot.completion_supports
     ] == [("dbfox.data", "dbfox.data.query_result")]
+    assert [
+        (item.owner_id, item.spec.id, item.spec.version)
+        for item in snapshot.capability_guidance
+    ] == [("dbfox.data", "analytical_work", "1")]
 
 
 def test_data_package_owns_namespaced_artifact_payload_contracts(tmp_path: Path) -> None:
@@ -1392,6 +1396,7 @@ def test_disabling_data_removes_capabilities_without_deleting_domain_state(
     assert disabled.operations == ()
     assert disabled.completion_constraints == ()
     assert disabled.completion_supports == ()
+    assert disabled.capability_guidance == ()
     assert disabled.credential_reference_probes == ()
 
     service.set_desired_enabled("dbfox.data", True)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -35,6 +36,7 @@ from openai.types.responses import (
 )
 
 from engine.agent.turn import (
+    ModelStreamTimeouts,
     TurnStreamCancelled,
     TurnStreamItem,
     TurnStreamKind,
@@ -118,6 +120,12 @@ def _normalize_chat_completion_usage(usage: Any) -> dict[str, int] | None:
 
 class ResponsesProtocolError(RuntimeError):
     """Raised when a typed Responses stream violates its documented lifecycle."""
+
+
+class ProviderWatchdogTimeout(TimeoutError):
+    def __init__(self, code: FixedErrorCode) -> None:
+        super().__init__(fixed_error_detail(code)["message"])
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -831,8 +839,17 @@ class OpenAIModelAdapter:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         timeout_seconds: float | None = None,
+        stream_timeouts: ModelStreamTimeouts | None = None,
         cancellation_probe: Callable[[], bool] | None = None,
     ) -> Iterator[TurnStreamItem]:
+        if stream_timeouts is None:
+            turn_seconds = max(0.01, timeout_seconds) if timeout_seconds is not None else 180.0
+            stream_timeouts = ModelStreamTimeouts(
+                turn_seconds=turn_seconds,
+                first_event_seconds=min(30.0, turn_seconds),
+                idle_seconds=min(60.0, turn_seconds),
+                request_seconds=min(60.0, turn_seconds),
+            )
         request: dict[str, Any] = {
             "model": self.model_name,
             "input": messages,
@@ -845,19 +862,26 @@ class OpenAIModelAdapter:
             request["tool_choice"] = "auto"
             # Approval and question interrupts require one durable call at a time.
             request["parallel_tool_calls"] = False
-        if timeout_seconds is not None:
-            request["timeout"] = max(0.01, timeout_seconds)
+        request["timeout"] = max(0.01, stream_timeouts.turn_seconds)
 
         translator: _ResponsesEventTranslator | _ChatCompletionEventTranslator = (
             _ResponsesEventTranslator()
         )
         runner = asyncio.Runner()
         events: AsyncIterator[Any] | None = None
+        turn_deadline = time.monotonic() + stream_timeouts.turn_seconds
         try:
             try:
                 events = cast(
                     AsyncIterator[Any],
-                    runner.run(self.client.responses.create(**request)),
+                    runner.run(_await_provider_request(
+                        self.client.responses.create(**request),
+                        cancellation_probe,
+                        timeout_seconds=min(
+                            stream_timeouts.request_seconds,
+                            max(0.01, turn_deadline - time.monotonic()),
+                        ),
+                    )),
                 )
             except APIStatusError as exc:
                 if not _responses_not_found_falls_back_to_chat(exc):
@@ -868,13 +892,43 @@ class OpenAIModelAdapter:
                 chat_request.pop("store", None)
                 events = cast(
                     AsyncIterator[Any],
-                    runner.run(self.client.chat.completions.create(**chat_request)),
+                    runner.run(_await_provider_request(
+                        self.client.chat.completions.create(**chat_request),
+                        cancellation_probe,
+                        timeout_seconds=min(
+                            stream_timeouts.request_seconds,
+                            max(0.01, turn_deadline - time.monotonic()),
+                        ),
+                    )),
                 )
                 translator = _ChatCompletionEventTranslator()
             iterator = events.__aiter__()
+            first_event = True
             while True:
                 try:
-                    event = runner.run(_next_event_or_cancel(iterator, cancellation_probe))
+                    remaining = turn_deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise ProviderWatchdogTimeout(
+                            FixedErrorCode.MODEL_PROVIDER_TURN_TIMEOUT
+                        )
+                    phase_timeout = (
+                        stream_timeouts.first_event_seconds
+                        if first_event
+                        else stream_timeouts.idle_seconds
+                    )
+                    event = runner.run(
+                        _next_event_or_cancel(
+                            iterator,
+                            cancellation_probe,
+                            timeout_seconds=min(phase_timeout, remaining),
+                            timeout_code=(
+                                FixedErrorCode.MODEL_PROVIDER_FIRST_EVENT_TIMEOUT
+                                if first_event
+                                else FixedErrorCode.MODEL_PROVIDER_STREAM_IDLE_TIMEOUT
+                            ),
+                        )
+                    )
+                    first_event = False
                 except StopAsyncIteration:
                     break
                 yield from translator.translate(event)
@@ -898,11 +952,47 @@ class OpenAIModelAdapter:
             runner.close()
 
 
+async def _await_provider_request(
+    request: Any,
+    cancellation_probe: Callable[[], bool] | None,
+    *,
+    timeout_seconds: float,
+) -> Any:
+    """Await request admission/response headers with cancellation and a deadline."""
+
+    task: asyncio.Future[Any] = asyncio.ensure_future(request)
+    deadline = asyncio.get_running_loop().time() + max(0.01, timeout_seconds)
+    try:
+        while True:
+            if cancellation_probe and cancellation_probe():
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+                raise TurnStreamCancelled("Model provider request was cancelled")
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise ProviderWatchdogTimeout(
+                    FixedErrorCode.MODEL_PROVIDER_REQUEST_TIMEOUT
+                )
+            done, _pending = await asyncio.wait({task}, timeout=min(0.05, remaining))
+            if done:
+                return task.result()
+    finally:
+        if not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+
 async def _next_event_or_cancel(
     events: AsyncIterator[Any],
     cancellation_probe: Callable[[], bool] | None,
+    *,
+    timeout_seconds: float,
+    timeout_code: FixedErrorCode,
 ) -> Any:
     task: asyncio.Future[Any] = asyncio.ensure_future(anext(events))
+    deadline = asyncio.get_running_loop().time() + max(0.01, timeout_seconds)
     try:
         while True:
             if cancellation_probe and cancellation_probe():
@@ -910,7 +1000,10 @@ async def _next_event_or_cancel(
                 with suppress(asyncio.CancelledError):
                     await task
                 raise TurnStreamCancelled("Model provider stream was cancelled")
-            done, _pending = await asyncio.wait({task}, timeout=0.05)
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise ProviderWatchdogTimeout(timeout_code)
+            done, _pending = await asyncio.wait({task}, timeout=min(0.05, remaining))
             if done:
                 return task.result()
     finally:
@@ -930,6 +1023,8 @@ async def _close_async_resource(resource: object) -> None:
 
 
 def _classify_provider_failure(exc: Exception) -> _ProviderFailure:
+    if isinstance(exc, ProviderWatchdogTimeout):
+        return _provider_failure(exc.code, True)
     if isinstance(exc, APITimeoutError):
         return _provider_failure(FixedErrorCode.MODEL_PROVIDER_TIMEOUT, True)
     if isinstance(exc, APIConnectionError):

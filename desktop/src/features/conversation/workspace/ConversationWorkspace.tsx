@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApprovalItem } from "../../../types/conversation";
+import {
+  EMPTY_COMPOSER_CONTEXT,
+  useComposerContextStore,
+} from "../../../stores/composerContextStore";
 import { Composer } from "./Composer";
 import { ApprovalCard } from "./ApprovalCard";
 import { ConversationHeader } from "./ConversationHeader";
@@ -14,6 +18,11 @@ export function ConversationWorkspace({
   conversationId: string;
   onOpenSqlConsole?: (sql?: string) => void;
 }) {
+  const requestedResources = useComposerContextStore(
+    (state) => state.byConversation[conversationId] ?? EMPTY_COMPOSER_CONTEXT,
+  );
+  const replaceRequestedResources = useComposerContextStore((state) => state.replace);
+  const clearRequestedResources = useComposerContextStore((state) => state.clear);
   const {
     detail,
     items,
@@ -125,13 +134,18 @@ export function ConversationWorkspace({
         submitting={sending}
         cancelling={cancelling}
         error={sendError || streamError}
-        onSend={(text, mode) => sendMessage(conversationId, text, mode)}
+        onSend={async (text, mode, resources) => {
+          await sendMessage(conversationId, text, mode, resources);
+          clearRequestedResources(conversationId);
+        }}
         onCancel={() => runningRun ? cancelRun(runningRun.id) : Promise.resolve()}
         projectId={detail.project_id || ""}
         resourceIntents={detail.resource_intents}
         onResourceIntentsChange={setResourceIntents}
         updatingResourceIntents={updatingResourceIntents}
         resourceIntentError={resourceIntentError}
+        requestedResources={requestedResources}
+        onRequestedResourcesChange={(next) => replaceRequestedResources(conversationId, next)}
       />
     </section>
   );

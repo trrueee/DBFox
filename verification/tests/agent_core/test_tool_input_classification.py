@@ -101,7 +101,7 @@ class _InvalidThenRecoverProvider:
     def __init__(self, turn: int) -> None:
         self.turn = turn
 
-    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+    def stream(self, *, messages, tools, timeout_seconds=None, stream_timeouts=None, cancellation_probe=None):
         del tools, timeout_seconds, cancellation_probe
         if self.turn == 1:
             yield from _tool_turn("empty-plan", "update_plan", {})
@@ -125,7 +125,7 @@ class _UnavailablePlanArtifactThenRecoverProvider:
     def __init__(self, turn: int) -> None:
         self.turn = turn
 
-    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+    def stream(self, *, messages, tools, timeout_seconds=None, stream_timeouts=None, cancellation_probe=None):
         del tools, timeout_seconds, cancellation_probe
         if self.turn == 1:
             yield from _tool_turn(

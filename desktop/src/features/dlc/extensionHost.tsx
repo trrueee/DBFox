@@ -26,8 +26,11 @@ import type {
   CredentialEnrollmentInput,
 } from "../../../../sdk/frontend/index";
 import {
+  addCurrentComposerContextResource,
   addCurrentConversationContextResource,
+  getCurrentComposerContextSelection,
   getCurrentConversationContextSelection,
+  removeCurrentComposerContextResource,
   removeCurrentConversationContextResource,
 } from "../conversation/conversationContextSelection";
 
@@ -188,11 +191,12 @@ export function createStagedExtensionHost(
             );
           },
           onAdd: contribution.onAdd
-            ? (context: ConnectorContext) => {
+            ? async (context: ConnectorContext) => {
               try {
-                contribution.onAdd?.(context);
+                await contribution.onAdd?.(context);
               } catch (error) {
                 reportCallbackFailure(dlcId, `connector:${contribution.id}:onAdd`, error);
+                throw error;
               }
             }
             : undefined,
@@ -207,6 +211,14 @@ export function createStagedExtensionHost(
       list: () => getCurrentConversationContextSelection(),
       add: (ref) => addCurrentConversationContextResource(ref),
       remove: (ref) => removeCurrentConversationContextResource(ref),
+    },
+    composerContext: {
+      isSelected: (ref) => getCurrentComposerContextSelection().some(
+        (candidate) => candidate.kind === ref.kind && candidate.id === ref.id,
+      ),
+      list: () => getCurrentComposerContextSelection(),
+      add: (ref) => addCurrentComposerContextResource(ref),
+      remove: (ref) => removeCurrentComposerContextResource(ref),
     },
     nativeDialogs: {
       pickFolder: () => (services.pickFolder ?? pickDesktopProjectFolder)(),

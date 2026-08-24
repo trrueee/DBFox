@@ -19,6 +19,15 @@ class RunStatus(StrEnum):
     FAILED = "failed"
 
 
+class RunPhase(StrEnum):
+    WAITING_MODEL = "waiting_model"
+    STREAMING_ANSWER = "streaming_answer"
+    PREPARING_TOOL_CALL = "preparing_tool_call"
+    EXECUTING_TOOL = "executing_tool"
+    WAITING_APPROVAL = "waiting_approval"
+    FINALIZING = "finalizing"
+
+
 TERMINAL_RUN_STATUSES = frozenset(
     {RunStatus.CANCELLED, RunStatus.COMPLETED, RunStatus.FAILED}
 )
@@ -35,6 +44,10 @@ class RunLimits(BaseModel):
     finalization_turn_reserve: int = Field(default=3, ge=0, le=20)
     finalization_tool_reserve: int = Field(default=6, ge=0, le=40)
     timeout_seconds: int = Field(default=900, ge=10, le=7200)
+    model_turn_timeout_seconds: int = Field(default=180, ge=10, le=900)
+    model_request_timeout_seconds: int = Field(default=60, ge=1, le=300)
+    model_first_event_timeout_seconds: int = Field(default=30, ge=1, le=300)
+    model_stream_idle_timeout_seconds: int = Field(default=60, ge=1, le=300)
     max_prompt_tokens: int = Field(default=32_768, ge=1_024, le=1_000_000)
     token_budget: int | None = Field(default=None, ge=1)
     cost_budget_usd: float | None = Field(default=None, gt=0)

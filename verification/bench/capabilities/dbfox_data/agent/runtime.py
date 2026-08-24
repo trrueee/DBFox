@@ -310,6 +310,7 @@ def run_real_provider(
         authorize_project_resources,
         build_default_completion_policy,
         build_product_tool_registry,
+        default_capability_guidance,
         default_context_contributors,
         initialize_runtime_snapshot,
     )
@@ -761,6 +762,7 @@ def run_real_provider(
         model_factory=lambda _settings: OpenAIModelAdapter.from_config(config),
         registry=build_product_tool_registry(snapshot),
         context_contributors=default_context_contributors(snapshot),
+        capability_guidance=default_capability_guidance(snapshot),
         completion=CompletionGate(build_default_completion_policy(snapshot)),
         live_stream=LiveStreamHub(),
     )

@@ -12,7 +12,7 @@ export interface ResourceConnectorContribution {
   icon: ReactNode;
   render(context: ConnectorContext): ReactNode;
   addLabel?: string;
-  onAdd?: (context: ConnectorContext) => void;
+  onAdd?: (context: ConnectorContext) => void | Promise<void>;
 }
 
 export interface RequestedResourceRef {
@@ -64,6 +64,7 @@ export interface ArtifactEnvelope<TPayload = Record<string, unknown>> {
   summary?: string | null;
   payload?: TPayload | null;
   payload_ref?: string | null;
+  resource_refs?: readonly RequestedResourceRef[];
   provenance?: Record<string, unknown>;
   relations?: Array<{ relation: string; artifact_id: string }>;
   status?: string;
@@ -123,6 +124,13 @@ export interface FrontendExtensionHost {
     register(contribution: ResourceConnectorContribution): void;
   };
   readonly contextSelection: {
+    isSelected(ref: RequestedResourceRef): boolean;
+    list(): readonly RequestedResourceRef[];
+    add(ref: RequestedResourceRef): Promise<void>;
+    remove(ref: RequestedResourceRef): Promise<void>;
+  };
+  /** One-shot resources submitted atomically with the next composer message. */
+  readonly composerContext: {
     isSelected(ref: RequestedResourceRef): boolean;
     list(): readonly RequestedResourceRef[];
     add(ref: RequestedResourceRef): Promise<void>;

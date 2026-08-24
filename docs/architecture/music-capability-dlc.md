@@ -4,9 +4,9 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-24
+> 最后核验：2026-08-25
 >
-> 版本：0.1
+> 版本：0.2
 
 ## 目标与边界
 
@@ -31,6 +31,10 @@ Project
 
 Score 写入采用 compare-and-swap：只有授权的 frozen head revision 仍是当前 head 才能产生下一个 revision。同一 creative edit Tool 只提交一个 revision；Run 内不会偷偷更新 authority。
 
+新建乐谱以 Core `ToolInvocation.id` 作为 `creation_invocation_id`。`scores` 对该值建立唯一约束，`music_compose_piano` 使用 `reconcile` 恢复策略：若 DLC 已提交而 Core 尚未结算，恢复只查询同一 invocation 并返回原 ScoreRevision 与 Artifact，不重放创作写入。
+
+模型创作输入不是完整 `ScoreDocument.notes[]`，而是每小节一个紧凑的 `PianoMeasurePlan`：旋律事件、和弦符号、和弦音与有限伴奏型。Music Tool 确定性展开左手伴奏并生成 canonical `ScoreDocument`。这样仍只有 Core Agent 的一次模型调用，没有隐藏 Music LLM，也不会让 16 小节双手逐音 JSON 长时间占据 Provider Turn。
+
 ## 音频转录
 
 ```text
@@ -51,7 +55,8 @@ Basic Pitch 的音符候选是音频事实层；Agent 只能通过 Music Tool �
 
 ## 前端实现
 
-- 乐谱：`ScoreDocument → VexFlow notation model → SVG`，无 MusicXML 镜像模型。
+- 乐谱：`ScoreDocument → VexFlow notation model → SVG`，无 MusicXML 镜像模型。`HarmonyEvent` 是一等领域事件并渲染为和弦符号；每个声部按 beat gap 和小节尾确定性补 rest，避免顺序排版抹掉节奏位置。
+- Conversation 的通用 namespaced Artifact 接缝调用 DLC Renderer；Score Revision 显示轻量卡片。若同项目的空 Piano Studio 正在等待刚提交的创作，Music Renderer 将该空视图提升为新 Score；Core 不判断 Artifact 是否为乐谱。
 - 播放：原生 WebAudio deterministic timeline；播放状态仅在前端内存。
 - 音色：Salamander Grand Piano V3 velocity-8 的 30 个关键音 MP3，以播放速率插值覆盖 88 键，按样本懒解码并完全离线。
 - 键盘：默认围绕作品音域展示约五个八度；Full 88 横向滚动。
@@ -74,11 +79,11 @@ Basic Pitch 的音符候选是音频事实层；Agent 只能通过 Music Tool �
 
 新增依赖只用于构建 DLC 自包含前端产物，不进入 Core UI bundle。`npm run build:music-vendor` 会固定版本、复制模型/音色、保留许可证并生成离线文件。退出路径是替换 `frontend/vendor-src` 的单一实现并重建 vendor；ScoreDocument 与 backend contract 不依赖这些供应商 API。
 
-没有新增兼容层、双写、Music router、Core migration 或领域 mapper。唯一边界转换是 Basic Pitch note events 单向归一化为 ScoreDocument，以及 ScoreDocument 单向转换为 VexFlow tickables/WebAudio events。
+没有新增兼容层、双写、Music router 或领域镜像模型。边界转换只有 Basic Pitch note events 单向归一化为 ScoreDocument、紧凑 composition 单向展开为 ScoreDocument，以及 ScoreDocument 单向转换为 VexFlow tickables/WebAudio events。Core migration 仅退休已知历史 Agent Eval 表，不解释 Music 数据。
 
 ## 验证
 
-- `verification/tests/system/test_dbfox_music_dlc_package.py`：签名包激活、公共 API、Resource、不可变 revision、移调、audio transcription。
+- `verification/tests/system/test_dbfox_music_dlc_package.py`：签名包激活、公共 API、Resource、不可变 revision、紧凑创作展开、和弦移调、invocation reconciliation、audio transcription。
 - `verification/bench/capabilities/dbfox_music/direct/`：schema、revision、transpose、edit locality。
 - `verification/bench/capabilities/dbfox_music/transcription/`：pitch/onset/duration deterministic scorer。
 - `verification/bench/capabilities/dbfox_music/agent/`：真实 provider 数据集与独立 human rubric。

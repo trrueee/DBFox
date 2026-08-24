@@ -27,6 +27,7 @@ describe("desktopHost engine boundary", () => {
       stage: null,
       generation: 3,
       restartCount: 0,
+      failure: null,
     };
     const unsubscribe = vi.fn();
     const bridge: DbfoxDesktopBridge = {

@@ -31,8 +31,11 @@ class NodeEngineChild implements EngineChild {
 
   onExit(listener: (exit: EngineExit) => void): () => void {
     const handler = (code: number | null, signal: NodeJS.Signals | null) => listener({ code, signal });
-    this.#child.once("exit", handler);
-    return () => this.#child.off("exit", handler);
+    // Node's `close` event is emitted only after the child's stdio streams have
+    // closed. Waiting for it preserves a final DBFOX_ENGINE_FATAL line instead
+    // of racing the process exit against stdout parsing.
+    this.#child.once("close", handler);
+    return () => this.#child.off("close", handler);
   }
 
   async stop(): Promise<void> {
@@ -75,7 +78,7 @@ class NodeEngineChild implements EngineChild {
 
 export function createDevelopmentEngineLauncher(
   rendererOrigin: string,
-  onStderr: (byteCount: number) => void = () => undefined,
+  onStderr: (chunk: Buffer) => void = () => undefined,
 ): EngineLauncher {
   const repositoryRoot = resolve(process.cwd(), "..");
   return {
@@ -100,7 +103,7 @@ export function createDevelopmentEngineLauncher(
 export function createPackagedEngineLauncher(
   rendererOrigin: string,
   resourcesPath: string,
-  onStderr: (byteCount: number) => void = () => undefined,
+  onStderr: (chunk: Buffer) => void = () => undefined,
 ): EngineLauncher {
   const sidecarDirectory = join(resourcesPath, "sidecar");
   const executable = join(sidecarDirectory, process.platform === "win32" ? "dbfox-engine.exe" : "dbfox-engine");
@@ -148,7 +151,7 @@ async function spawnEngine(
   args: readonly string[],
   cwd: string,
   env: NodeJS.ProcessEnv,
-  onStderr: (byteCount: number) => void,
+  onStderr: (chunk: Buffer) => void,
 ): Promise<EngineChild> {
   const child = spawn(command, args, {
     cwd,
@@ -157,7 +160,7 @@ async function spawnEngine(
     detached: process.platform !== "win32",
     windowsHide: true,
   });
-  child.stderr.on("data", (chunk: Buffer) => onStderr(chunk.byteLength));
+  child.stderr.on("data", (chunk: Buffer) => onStderr(chunk));
   await new Promise<void>((resolveSpawn, reject) => {
     const onSpawn = () => {
       child.removeListener("error", onError);

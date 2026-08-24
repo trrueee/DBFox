@@ -1,6 +1,7 @@
 import type { RequestedResourceRef } from "../../lib/api/generated/types.gen";
 import { useConversationContextStore } from "../../stores/conversationContextStore";
 import { useConversationStore } from "../../stores/conversationStore";
+import { useComposerContextStore } from "../../stores/composerContextStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 
 export function getCurrentConversationContextSelection(): RequestedResourceRef[] {
@@ -47,6 +48,56 @@ export async function removeCurrentConversationContextResource(
   const key = resourceKey(ref);
   await replaceCurrentConversationContextSelection(
     getCurrentConversationContextSelection().filter((candidate) => resourceKey(candidate) !== key),
+  );
+}
+
+export function getCurrentComposerContextSelection(): RequestedResourceRef[] {
+  const projectId = useWorkspaceStore.getState().activeProjectId;
+  if (!projectId) return [];
+  const surface = useWorkspaceStore.getState().mainSurfaceByProject[projectId];
+  const conversationState = useConversationStore.getState();
+  const conversationId = conversationState.activeConversationId;
+  const detail = conversationId ? conversationState.detailById[conversationId] : undefined;
+  if (surface?.kind === "conversation" && conversationId && detail?.project_id === projectId) {
+    return [...(useComposerContextStore.getState().byConversation[conversationId] ?? [])];
+  }
+  return [...(useConversationContextStore.getState().byProject[projectId] ?? [])];
+}
+
+export async function addCurrentComposerContextResource(
+  ref: RequestedResourceRef,
+): Promise<void> {
+  const projectId = useWorkspaceStore.getState().activeProjectId;
+  if (!projectId) throw new Error("Please select a project first.");
+  const surface = useWorkspaceStore.getState().mainSurfaceByProject[projectId];
+  const conversationState = useConversationStore.getState();
+  const conversationId = conversationState.activeConversationId;
+  const detail = conversationId ? conversationState.detailById[conversationId] : undefined;
+  if (surface?.kind === "conversation" && conversationId && detail?.project_id === projectId) {
+    useComposerContextStore.getState().add(conversationId, ref);
+    return;
+  }
+  const selected = useConversationContextStore.getState().byProject[projectId] ?? [];
+  useConversationContextStore.getState().replace(projectId, [...selected, ref]);
+}
+
+export async function removeCurrentComposerContextResource(
+  ref: RequestedResourceRef,
+): Promise<void> {
+  const projectId = useWorkspaceStore.getState().activeProjectId;
+  if (!projectId) throw new Error("Please select a project first.");
+  const surface = useWorkspaceStore.getState().mainSurfaceByProject[projectId];
+  const conversationState = useConversationStore.getState();
+  const conversationId = conversationState.activeConversationId;
+  const detail = conversationId ? conversationState.detailById[conversationId] : undefined;
+  if (surface?.kind === "conversation" && conversationId && detail?.project_id === projectId) {
+    useComposerContextStore.getState().remove(conversationId, ref);
+    return;
+  }
+  const selected = useConversationContextStore.getState().byProject[projectId] ?? [];
+  useConversationContextStore.getState().replace(
+    projectId,
+    selected.filter((candidate) => resourceKey(candidate) !== resourceKey(ref)),
   );
 }
 

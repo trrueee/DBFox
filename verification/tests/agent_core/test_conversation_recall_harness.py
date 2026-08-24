@@ -61,7 +61,7 @@ class RecallHarnessModel:
     def __init__(self, call_number: int):
         self.call_number = call_number
 
-    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+    def stream(self, *, messages, tools, timeout_seconds=None, stream_timeouts=None, cancellation_probe=None):
         serialized = json.dumps(messages, ensure_ascii=False)
         tool_names = {tool["name"] for tool in tools}
         assert {"conversation_search", "conversation_read"} <= tool_names

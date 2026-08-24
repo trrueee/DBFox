@@ -52,6 +52,7 @@ from engine.agent.completion import (
     SemanticArtifactCompletionSupport,
     SemanticCitationConstraint,
 )
+from engine.agent.guidance import CapabilityGuidanceSpec
 from engine.errors import ToolInputError
 from engine.app.safe_errors import log_extension_diagnostic, log_extension_exception
 from engine.json_codec import dumps as json_dumps
@@ -60,6 +61,7 @@ from engine.agent.resource_refs import (
     RequestedResourceRef,
 )
 from engine.tools.runtime.attempt import ResourceKey, ResourceScopeRef, ScopedResourceResolver
+from engine.tools.runtime.registry import ToolKey
 from engine.tools.runtime.base import (
     BaseTool,
     ToolCapability,
@@ -295,6 +297,13 @@ class ExtensionContextHost(Protocol):
         ...
 
 
+class ExtensionAgentGuidanceHost(Protocol):
+    """Registration surface for static trusted capability instructions."""
+
+    def register(self, guidance: CapabilityGuidanceSpec) -> None:
+        ...
+
+
 class ExtensionArtifactsHost(Protocol):
     """Registration surface for DLC Artifact payload contracts."""
 
@@ -380,6 +389,9 @@ class BackendExtensionHost(Protocol):
     def context(self) -> ExtensionContextHost: ...
 
     @property
+    def agent_guidance(self) -> ExtensionAgentGuidanceHost: ...
+
+    @property
     def artifacts(self) -> ExtensionArtifactsHost: ...
 
     @property
@@ -399,6 +411,8 @@ __all__ = [
     "ExtensionToolsHost",
     "ExtensionResourcesHost",
     "ExtensionContextHost",
+    "ExtensionAgentGuidanceHost",
+    "CapabilityGuidanceSpec",
     "ExtensionArtifactsHost",
     "ExtensionCompletionHost",
     "ExtensionOperationsHost",
@@ -421,6 +435,7 @@ __all__ = [
     "ToolAdmissionDecision",
     "ToolObservationProjection",
     "ToolInputError",
+    "ToolKey",
     "log_extension_diagnostic",
     "log_extension_exception",
     "json_dumps",

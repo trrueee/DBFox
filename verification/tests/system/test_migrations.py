@@ -36,7 +36,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "f4a5b6c7d8ea"
+FOUNDATION_HEAD_REVISION = "f5a6b7c8d9eb"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -2188,6 +2188,73 @@ def test_v2_orphan_repair_converges_for_long_chains_and_mixed_composite_keys(
                 text("SELECT key_a, key_b FROM legacy_composite_child WHERE id = 1")
             ).one() == (7, None)
             assert connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        engine.dispose()
+
+
+def test_head_retires_legacy_agent_eval_tables_with_removed_data_source_fks(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "retired-agent-eval-tables.db")
+    _upgrade(monkeypatch, database_url, "f4a5b6c7d8ea")
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.execute(text("""
+                CREATE TABLE agent_golden_tasks (
+                    id VARCHAR PRIMARY KEY,
+                    datasource_id VARCHAR NOT NULL,
+                    FOREIGN KEY (datasource_id) REFERENCES data_sources(id)
+                )
+            """))
+            connection.execute(text("""
+                CREATE TABLE agent_eval_runs (
+                    id VARCHAR PRIMARY KEY,
+                    datasource_id VARCHAR NOT NULL,
+                    FOREIGN KEY (datasource_id) REFERENCES data_sources(id)
+                )
+            """))
+            connection.execute(text("""
+                CREATE TABLE agent_eval_case_results (
+                    id VARCHAR PRIMARY KEY,
+                    run_id VARCHAR NOT NULL,
+                    task_id VARCHAR NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES agent_eval_runs(id),
+                    FOREIGN KEY (task_id) REFERENCES agent_golden_tasks(id)
+                )
+            """))
+            connection.execute(text(
+                "INSERT INTO agent_golden_tasks (id, datasource_id) "
+                "VALUES ('task-1', 'removed-source')"
+            ))
+            connection.execute(text(
+                "INSERT INTO agent_eval_runs (id, datasource_id) "
+                "VALUES ('run-1', 'removed-source')"
+            ))
+            connection.execute(text(
+                "INSERT INTO agent_eval_case_results (id, run_id, task_id) "
+                "VALUES ('case-1', 'run-1', 'task-1')"
+            ))
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            tables = set(inspect(connection).get_table_names())
+            assert not {
+                "agent_eval_case_results",
+                "agent_eval_runs",
+                "agent_golden_tasks",
+            } & tables
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall() == []
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
+                FOUNDATION_HEAD_REVISION
+            )
     finally:
         engine.dispose()
 

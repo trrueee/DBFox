@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+import re
 
 from .contracts import (
     AudioTranscription,
     KeySignature,
+    ComposePianoInput,
+    HarmonyEvent,
     ScoreAnalysisOutput,
     ScoreDocument,
     ScoreNote,
@@ -17,6 +20,110 @@ _PITCH_CLASS = {
     "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11,
 }
 _SHARP_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+_HARMONY_ROOT = re.compile(r"^(?P<root>[A-G](?:#|b)?)(?P<body>.*)$")
+_HARMONY_SLASH_BASS = re.compile(r"^(?P<body>.*)/(?P<bass>[A-G](?:#|b)?)$")
+
+
+def _transpose_pitch_name(name: str, semitones: int) -> str:
+    return _SHARP_NAMES[(_PITCH_CLASS[name] + semitones) % 12]
+
+
+def _transpose_harmony_symbol(symbol: str, semitones: int) -> str:
+    match = _HARMONY_ROOT.fullmatch(symbol)
+    if match is None:
+        return symbol
+    root = _transpose_pitch_name(match.group("root"), semitones)
+    body = match.group("body")
+    slash = _HARMONY_SLASH_BASS.fullmatch(body)
+    bass = slash.group("bass") if slash else None
+    body = slash.group("body") if slash else body
+    suffix = f"/{_transpose_pitch_name(bass, semitones)}" if bass else ""
+    return f"{root}{body}{suffix}"
+
+
+def expand_piano_composition(input: ComposePianoInput) -> ScoreDocument:
+    """Deterministically expand a compact creative plan into canonical notes."""
+
+    notes: list[ScoreNote] = []
+    harmony: list[HarmonyEvent] = []
+    note_sequence = 0
+
+    def append_note(*, measure: int, beat: float, duration: float, pitch: int, velocity: float, hand: str) -> None:
+        nonlocal note_sequence
+        note_sequence += 1
+        notes.append(ScoreNote(
+            id=f"compose_{note_sequence:05d}",
+            measure=measure,
+            beat=round(beat, 6),
+            duration=round(duration, 6),
+            pitch=pitch,
+            velocity=velocity,
+            hand=hand,
+        ))
+
+    for plan in input.composition.measures:
+        harmony.append(HarmonyEvent(measure=plan.measure, beat=0, symbol=plan.chord))
+        for melody_note in plan.melody:
+            append_note(
+                measure=plan.measure,
+                beat=melody_note.beat,
+                duration=melody_note.duration,
+                pitch=melody_note.pitch,
+                velocity=melody_note.velocity,
+                hand="right",
+            )
+        pitches = plan.chord_pitches
+        if plan.accompaniment == "arpeggio_eighths":
+            duration = 0.5
+            beats = [index * duration for index in range(int(input.meter.beats / duration))]
+            sequence = [pitches[index % len(pitches)] for index in range(len(beats))]
+        elif plan.accompaniment == "broken_quarters":
+            duration = 1.0
+            beats = [float(index) for index in range(input.meter.beats)]
+            sequence = [pitches[index % len(pitches)] for index in range(len(beats))]
+        elif plan.accompaniment == "root_fifth_half_notes":
+            duration = 2.0
+            beats = [float(index) for index in range(0, input.meter.beats, 2)]
+            support = pitches[-1] if len(pitches) == 2 else pitches[1]
+            sequence = [pitches[0] if index % 2 == 0 else support for index in range(len(beats))]
+        else:
+            duration = 2.0
+            beats = [float(index) for index in range(0, input.meter.beats, 2)]
+            sequence = []
+        if plan.accompaniment == "block_half_notes":
+            for beat in beats:
+                for pitch in pitches:
+                    append_note(
+                        measure=plan.measure,
+                        beat=beat,
+                        duration=min(duration, input.meter.beats - beat),
+                        pitch=pitch,
+                        velocity=plan.accompaniment_velocity,
+                        hand="left",
+                    )
+        else:
+            for beat, pitch in zip(beats, sequence):
+                append_note(
+                    measure=plan.measure,
+                    beat=beat,
+                    duration=min(duration, input.meter.beats - beat),
+                    pitch=pitch,
+                    velocity=plan.accompaniment_velocity,
+                    hand="left",
+                )
+    return ScoreDocument(
+        title=input.title,
+        tempo=input.tempo,
+        meter=input.meter,
+        key=input.key,
+        measure_count=input.measure_count,
+        sections=input.composition.sections,
+        notes=tuple(sorted(notes, key=_note_order)),
+        pedal=input.composition.pedal,
+        dynamics=input.composition.dynamics,
+        harmony=tuple(harmony),
+        annotations=input.composition.annotations,
+    )
 
 
 def replace_phrase(
@@ -58,11 +165,17 @@ def transpose(document: ScoreDocument, semitones: int) -> ScoreDocument:
     ]
     if any(note.pitch < 21 or note.pitch > 108 for note in notes):
         raise ValueError("transposition would move notes outside the 88-key piano range")
-    tonic = _SHARP_NAMES[(_PITCH_CLASS[document.key.tonic] + semitones) % 12]
+    tonic = _transpose_pitch_name(document.key.tonic, semitones)
     return ScoreDocument.model_validate({
         **document.model_dump(mode="json"),
         "key": KeySignature(tonic=tonic, mode=document.key.mode).model_dump(mode="json"),
         "notes": [note.model_dump(mode="json") for note in notes],
+        "harmony": [
+            event.model_copy(
+                update={"symbol": _transpose_harmony_symbol(event.symbol, semitones)}
+            ).model_dump(mode="json")
+            for event in document.harmony
+        ],
     })
 
 

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell, type IpcMainInvokeEvent } from "electron";
-import { mkdir, open, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,8 +37,8 @@ if (smokeRuntimeRoot !== null) {
 const preloadPath = fileURLToPath(new URL("../preload/index.cjs", import.meta.url));
 const supervisor = new EngineSupervisor(
   app.isPackaged
-    ? createPackagedEngineLauncher(rendererOrigin, process.resourcesPath)
-    : createDevelopmentEngineLauncher(rendererOrigin),
+    ? createPackagedEngineLauncher(rendererOrigin, process.resourcesPath, recordEngineStderr)
+    : createDevelopmentEngineLauncher(rendererOrigin, recordEngineStderr),
   createEngineHealthProbe(rendererOrigin),
 );
 const dlcAssetAuthority = new DlcAssetAuthority();
@@ -52,12 +52,29 @@ let mainWindow: BrowserWindow | null = null;
 let projectFolders: ProjectFolderAccess | null = null;
 let crashRecovery: CrashRecoveryMarker | null = null;
 let logDirectory: string | null = null;
+let engineStderrLogPath: string | null = null;
+let engineStderrBytes = 0;
+let engineStderrWrite: Promise<void> = Promise.resolve();
 let appUpdates: AppUpdateService | null = null;
 let shutdownStarted = false;
 let shutdownComplete = false;
 let updateInstallPrepared = false;
 const pickedFiles = new Map<string, { sizeBytes: number; modifiedAtUnix: number; maxBytes: number }>();
 const MAX_PICKED_FILE_BYTES = 128 * 1024 * 1024;
+const MAX_ENGINE_STDERR_BYTES = 2 * 1024 * 1024;
+
+function recordEngineStderr(chunk: Buffer): void {
+  const path = engineStderrLogPath;
+  const remaining = MAX_ENGINE_STDERR_BYTES - engineStderrBytes;
+  if (path === null || remaining <= 0 || chunk.byteLength === 0) return;
+  const bounded = chunk.subarray(0, remaining);
+  engineStderrBytes += bounded.byteLength;
+  engineStderrWrite = engineStderrWrite
+    .then(() => appendFile(path, bounded, { mode: 0o600 }))
+    .catch((error: unknown) => {
+      console.error("[Electron Host] Failed to persist private engine stderr", error);
+    });
+}
 
 function validateSender(event: IpcMainInvokeEvent): void {
   const frameUrl = event.senderFrame?.url;
@@ -285,6 +302,7 @@ if (!app.requestSingleInstanceLock()) {
     app.setAppUserModelId("com.dbfox.app");
     logDirectory = app.getPath("logs");
     await mkdir(logDirectory, { recursive: true, mode: 0o700 });
+    engineStderrLogPath = join(logDirectory, `engine-stderr-${process.pid}.log`);
     projectFolders = new ProjectFolderAccess(join(app.getPath("userData"), "project_folder_access.json"));
     crashRecovery = await CrashRecoveryMarker.initialize(join(app.getPath("userData"), "session-active-v1"));
     appUpdates = createAppUpdateService({

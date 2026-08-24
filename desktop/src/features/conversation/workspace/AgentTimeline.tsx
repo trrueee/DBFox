@@ -28,6 +28,11 @@ import type {
 import { getUserErrorMessage } from "../../../lib/api/client";
 import { completionLimitationLabel } from "../../../lib/presentation";
 import { MarkdownContent } from "../../workspace/queryResult/MarkdownContent";
+import {
+  getArtifactRenderer,
+  renderArtifact,
+} from "../../workspace/artifacts/artifactRendererRegistry";
+import type { ArtifactEnvelope } from "../../workspace/artifacts/types";
 import { ApprovalAuditCard } from "./ApprovalCard";
 import {
   isPrimaryConversationArtifact,
@@ -82,6 +87,11 @@ export function AgentTimeline({
   }, [items]);
 
   const primaryArtifacts = artifacts.filter(isPrimaryConversationArtifact);
+  const capabilityArtifacts = primaryArtifacts.filter((artifact) => (
+    artifact.status === "completed"
+    && artifact.type.includes(".")
+    && getArtifactRenderer(artifact.type, artifact.schema_version ?? 1) !== null
+  ));
   const preservedResults = primaryArtifacts.filter(
     (artifact) => artifact.status === "completed" && isSqlBackedResultViewArtifact(artifact),
   );
@@ -105,6 +115,7 @@ export function AgentTimeline({
   );
 
   const renderableItems = useMemo(() => groupTimelineItems(items), [items]);
+  const workingStatus = runWorkingStatus(run.phase ?? null, items.length);
 
   return (
     <section className="conv-agent-timeline" aria-label="Agent 时间线">
@@ -193,8 +204,8 @@ export function AgentTimeline({
         <div className="conv-agent-working" role="status" aria-live="polite">
           <span className="conv-agent-working-dot" aria-hidden="true" />
           <span className="conv-agent-working-copy">
-            <strong>{items.length === 1 ? "正在理解问题" : "正在组织下一步分析"}</strong>
-            <span>根据已有证据决定继续调用工具或给出结论</span>
+            <strong>{workingStatus.title}</strong>
+            <span>{workingStatus.detail}</span>
           </span>
         </div>
       )}
@@ -203,6 +214,19 @@ export function AgentTimeline({
           artifacts={evidenceArtifacts}
           onSelectArtifact={onSelectArtifact}
         />
+      )}
+      {capabilityArtifacts.length > 0 && (
+        <div className="conv-agent-capability-artifacts">
+          {capabilityArtifacts.map((artifact) => (
+            <div key={artifact.id}>
+              {renderArtifact(toArtifactEnvelope(artifact), {
+                onToast: () => undefined,
+                compact: true,
+                mode: "inline",
+              })}
+            </div>
+          ))}
+        </div>
       )}
       {evidenceArtifacts.length === 0 && preservedResults.length > 0 && (
         <DataReferencePanel
@@ -213,6 +237,48 @@ export function AgentTimeline({
       )}
     </section>
   );
+}
+
+function toArtifactEnvelope(artifact: ConversationArtifact): ArtifactEnvelope {
+  return {
+    id: artifact.id,
+    type: artifact.type,
+    schema_version: artifact.schema_version ?? 1,
+    title: artifact.title,
+    summary: artifact.summary,
+    payload: artifact.payload as Record<string, unknown>,
+    payload_ref: artifact.payload_ref,
+    resource_refs: artifact.resource_refs,
+    provenance: artifact.provenance,
+    relations: artifact.relations,
+    status: artifact.status,
+    visibility: artifact.visibility,
+    version: artifact.version,
+  };
+}
+
+function runWorkingStatus(
+  phase: ConversationRun["phase"],
+  itemCount: number,
+): { title: string; detail: string } {
+  switch (phase) {
+    case "streaming_answer":
+      return { title: "正在生成回复", detail: "内容会在生成后持续显示" };
+    case "preparing_tool_call":
+      return { title: "正在准备工具调用", detail: "模型正在生成结构化参数" };
+    case "executing_tool":
+      return { title: "正在执行工具", detail: "正在等待能力返回可验证结果" };
+    case "waiting_approval":
+      return { title: "等待确认", detail: "请处理上方的操作确认" };
+    case "finalizing":
+      return { title: "正在整理结果", detail: "正在生成最终可交付回复" };
+    case "waiting_model":
+    default:
+      return {
+        title: itemCount === 1 ? "正在等待模型响应" : "正在准备下一步",
+        detail: "模型可能正在生成回答或准备结构化工具调用",
+      };
+  }
 }
 
 function UserMessage({ item }: { item: UserMessageItem }) {

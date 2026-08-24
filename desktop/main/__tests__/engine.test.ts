@@ -45,6 +45,15 @@ class FakeEngineChild implements EngineChild {
     })}\n`);
   }
 
+  fatal(overrides: Record<string, unknown> = {}): void {
+    this.stdout.write(`DBFOX_ENGINE_FATAL ${JSON.stringify({
+      stage: "migrating",
+      code: "DBFOX_METADATA_FOREIGN_KEY_VIOLATION",
+      fingerprint: "0123456789abcdef01234567",
+      ...overrides,
+    })}\n`);
+  }
+
   exit(code = 1): void {
     const listeners = [...this.#exitListeners];
     this.#exitListeners.clear();
@@ -140,6 +149,31 @@ describe("Electron EngineSupervisor", () => {
     expect(probe.calls).toEqual([]);
     expect(launcher.launched[0].stopped).toBe(true);
     expect(() => host.config()).toThrow("unavailable");
+  });
+
+  it("preserves safe structured startup diagnostics without exposing stderr", async () => {
+    const launcher: EngineLauncher = {
+      async launch() {
+        const child = new FakeEngineChild(91);
+        setTimeout(() => child.fatal(), 0);
+        return child;
+      },
+    };
+    const probe = new FakeHealthProbe();
+    const host = new EngineSupervisor(launcher, probe, { startupTimeoutMs: 500 });
+
+    await host.start();
+
+    expect(host.status()).toMatchObject({
+      state: "failed",
+      stage: "migrating",
+      error: "Python engine startup failed",
+      failure: {
+        code: "DBFOX_METADATA_FOREIGN_KEY_VIOLATION",
+        fingerprint: "0123456789abcdef01234567",
+      },
+    });
+    expect(probe.calls).toEqual([]);
   });
 
   it("manual restart stops the old process and rotates token and generation", async () => {

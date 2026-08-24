@@ -35,6 +35,7 @@ from engine.dlc.system_bundle import (
     load_system_dlc_bundle_manifest,
 )
 from engine.dlc.snapshot import (
+    CapabilityGuidanceContribution,
     ResourceResolverContribution,
     RuntimeContributionSnapshot,
 )
@@ -169,6 +170,12 @@ def default_project_resource_providers(
     return snap.resource_providers
 
 
+def default_capability_guidance(
+    snapshot: RuntimeContributionSnapshot | None = None,
+) -> tuple[CapabilityGuidanceContribution, ...]:
+    return (snapshot or get_active_runtime_snapshot()).capability_guidance
+
+
 def discover_project_resources(
     db: Session,
     project_id: str,
@@ -298,5 +305,6 @@ def build_product_run_loop(
         session_factory=session_factory,
         registry=build_product_tool_registry(snap),
         context_contributors=default_context_contributors(snap),
+        capability_guidance=default_capability_guidance(snap),
         completion=CompletionGate(build_default_completion_policy(snap)),
     )

@@ -548,9 +548,10 @@ dbfox.github/state.sqlite3
 ```text
 single click resource/object → UI focus；必要时打开 Dock
 double click / Enter         → inspect/open
-Add to conversation         → Conversation Resource Intent
-@resource / + Context       → 显式加入下一次请求/对话
-remove Composer chip        → 从后续 Run intent 移除
+Pin to conversation         → 显式写入 durable Conversation Resource Intent
+@resource / + Context       → 加入当前 Composer draft 的 one-shot requested_resources
+remove Composer chip        → 只从当前待发送消息移除
+Send                        → message + one-shot resource identity 原子提交并由服务器授权/冻结
 ```
 
 左侧结构：

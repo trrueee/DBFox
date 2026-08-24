@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from dbfox_dlc_api import (
     BackendExtensionHost,
+    CapabilityGuidanceSpec,
     DlcOperationContext,
     DlcOperationError,
     DlcOperationSpec,
@@ -122,6 +123,24 @@ def register(host: BackendExtensionHost) -> None:
     host.tools.register(ResultInspectTool(store))
     host.tools.register(ResultProfileTool(store))
     host.tools.register(ChartCreateTool(store))
+    host.agent_guidance.register(CapabilityGuidanceSpec(
+        id="analytical_work",
+        version="1",
+        instructions=(
+            "For analytical calculations, establish the relevant grain, time basis, filters, denominator, "
+            "and comparison baseline when they can change the answer.\n"
+            "Treat samples as samples rather than proof of a population-level claim. For rates, shares, "
+            "averages, and growth, make the denominator, missing-value treatment, and baseline explicit.\n"
+            "Verify schema semantics before decision-critical computation, and distinguish observed "
+            "association from causation."
+        ),
+        applies_to_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        applies_to_artifact_types=(
+            SQL_ARTIFACT_TYPE,
+            RESULT_VIEW_ARTIFACT_TYPE,
+            CHART_ARTIFACT_TYPE,
+        ),
+    ))
 
     for artifact_type, validator in (
         (SQL_ARTIFACT_TYPE, SqlArtifactPayload),

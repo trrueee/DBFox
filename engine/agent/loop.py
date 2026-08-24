@@ -24,6 +24,10 @@ from engine.agent.control import (
 )
 from engine.agent.context import ContextAssembler, ContextSnapshot
 from engine.agent.context_fragment import ContextContributor
+from engine.agent.guidance import (
+    CapabilityGuidanceContribution,
+    materialize_capability_guidance,
+)
 from engine.agent.definition import AgentDefinition, DEFAULT_AGENT_DEFINITION
 from engine.agent.events import LiveStreamHub
 from engine.agent.progress_guard import ProgressGuard
@@ -36,6 +40,7 @@ from engine.agent.response import CompletionDisposition, CompletionLimitationCod
 from engine.agent.session import SessionLease
 from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
 from engine.agent.run_item import RunItemDelta, RunItemStatus, RunItemType
+from engine.agent.run import RunPhase
 from engine.agent.turn import (
     ModelTurnResult,
     TurnStreamAssembler,
@@ -43,6 +48,7 @@ from engine.agent.turn import (
     TurnStreamError,
     TurnStreamItem,
     TurnStreamKind,
+    ModelStreamTimeouts,
 )
 from engine.app.safe_errors import fixed_error_detail
 from engine.llm.config import (
@@ -70,6 +76,7 @@ class ModelAdapter(Protocol):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         timeout_seconds: float | None = None,
+        stream_timeouts: ModelStreamTimeouts | None = None,
         cancellation_probe: Callable[[], bool] | None = None,
     ) -> Iterable[TurnStreamItem]: ...
 
@@ -171,6 +178,7 @@ class RunLoop:
         ] = _default_model_factory,
         registry: ToolRegistry | None = None,
         context_contributors: tuple[Callable[[Session], ContextContributor], ...] | None = None,
+        capability_guidance: tuple[CapabilityGuidanceContribution, ...] | None = None,
         completion: CompletionGate | None = None,
         definition: AgentDefinition = DEFAULT_AGENT_DEFINITION,
         live_stream: LiveStreamHub = LIVE_STREAM_HUB,
@@ -189,6 +197,7 @@ class RunLoop:
                 build_default_completion_policy,
                 build_product_tool_registry,
                 default_context_contributors,
+                default_capability_guidance,
             )
 
             if registry is None:
@@ -197,6 +206,8 @@ class RunLoop:
                 context_contributors = default_context_contributors()
             if completion is None:
                 completion = CompletionGate(build_default_completion_policy())
+            if capability_guidance is None:
+                capability_guidance = default_capability_guidance()
         self.registry = registry
         if not self.registry.frozen:
             self.registry.freeze()
@@ -207,6 +218,7 @@ class RunLoop:
         self.pricing_resolver = pricing_resolver or (lambda _settings: None)
         self.prompts = PromptAssembler()
         self.context_contributors = context_contributors
+        self.capability_guidance = capability_guidance or ()
         self.completion = completion
         self.tool_dispatcher = ToolDispatcher(
             session_factory=self.session_factory,
@@ -458,7 +470,7 @@ class RunLoop:
                     items=adapter.stream(
                         messages=prepared.messages,
                         tools=prepared.tools.provider_schemas(),
-                        timeout_seconds=state.control.remaining_seconds(),
+                        stream_timeouts=self._model_stream_timeouts(state),
                         cancellation_probe=state.control.is_cancel_requested,
                     ),
                 )
@@ -519,6 +531,27 @@ class RunLoop:
         return result
 
     @staticmethod
+    def _model_stream_timeouts(state: _ExecutionState) -> ModelStreamTimeouts:
+        limits = state.control.limits
+        remaining = state.control.remaining_seconds()
+        turn_seconds = min(float(limits.model_turn_timeout_seconds), remaining)
+        return ModelStreamTimeouts(
+            turn_seconds=turn_seconds,
+            request_seconds=min(
+                float(limits.model_request_timeout_seconds),
+                turn_seconds,
+            ),
+            first_event_seconds=min(
+                float(limits.model_first_event_timeout_seconds),
+                turn_seconds,
+            ),
+            idle_seconds=min(
+                float(limits.model_stream_idle_timeout_seconds),
+                turn_seconds,
+            ),
+        )
+
+    @staticmethod
     def _fallback_usage_charge(
         result: ModelTurnResult,
         pricing: ModelPricing | None,
@@ -570,6 +603,8 @@ class RunLoop:
         result: ModelTurnResult,
         state: _ExecutionState,
     ) -> bool:
+        if result.tool_calls:
+            self._set_run_phase(lease, run_id, RunPhase.EXECUTING_TOOL)
         planned_calls: list[_PlannedToolCall] = []
         next_tool_count = state.tool_count
         next_stopper: ToolDispatchOutcome | None = None
@@ -804,11 +839,22 @@ class RunLoop:
                 available_resource_kinds=available_resource_kinds,
             )
             tool_schemas = tools.provider_schemas()
+            artifact_types = frozenset(
+                artifact.type for artifact in context.selected_artifacts
+            )
+            active_guidance = materialize_capability_guidance(
+                self.capability_guidance,
+                resource_kinds=available_resource_kinds,
+                artifact_types=artifact_types,
+                tools=tools,
+                registry=self.registry,
+            )
             prompt = self.prompts.assemble(
                 definition=self.definition,
                 context=context,
                 tool_schemas=tool_schemas,
                 tool_output_overrides=tool_output_overrides,
+                guidance=active_guidance,
             )
             turn = SessionRepository(db).start_turn(
                 lease=lease,
@@ -819,12 +865,14 @@ class RunLoop:
                 context_snapshot={
                     **context.model_dump(mode="json"),
                     "prompt_budget": prompt.budget,
+                    "capability_guidance": prompt.guidance_materialization,
                 },
                 context_hash=context.hash,
                 tool_materialization=tools.model_dump(mode="json"),
                 tool_materialization_hash=tools.hash,
                 provider="openai-responses",
                 model_name=str(run.model_name or ""),
+                phase=(RunPhase.FINALIZING if finalizing else RunPhase.WAITING_MODEL),
             )
             settings = ProviderSettings(
                 credential_id=str(run.llm_credential_id),
@@ -855,6 +903,7 @@ class RunLoop:
             for item in items:
                 control.checkpoint()
                 if item.kind is TurnStreamKind.ANSWER_START:
+                    self._set_run_phase(lease, run_id, RunPhase.STREAMING_ANSWER)
                     if item.output_index is None:
                         raise TurnStreamError(
                             "Answer stream item is missing its output index"
@@ -872,6 +921,8 @@ class RunLoop:
                         state=state,
                         status=RunItemStatus.IN_PROGRESS,
                     )
+                elif item.kind is TurnStreamKind.TOOL_CALL_START:
+                    self._set_run_phase(lease, run_id, RunPhase.PREPARING_TOOL_CALL)
                 elif item.kind is TurnStreamKind.ANSWER_DELTA:
                     delta_state = messages.get(item.item_id)
                     if delta_state is None or delta_state.ended:
@@ -953,6 +1004,16 @@ class RunLoop:
                         state=state,
                         status=RunItemStatus.CANCELLED,
                     )
+
+    def _set_run_phase(
+        self,
+        lease: SessionLease,
+        run_id: str,
+        phase: RunPhase,
+    ) -> None:
+        with self.session_factory() as db:
+            RunRepository(db).set_phase(lease=lease, run_id=run_id, phase=phase)
+            db.commit()
 
     def _persist_turn_message(
         self,

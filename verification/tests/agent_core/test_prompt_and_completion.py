@@ -68,8 +68,9 @@ def test_prompt_keeps_user_context_out_of_system_role():
         definition=DEFAULT_AGENT_DEFINITION,
         context=_context(),
     ).hash
-    assert bundle.version == "3.6"
-    assert "requested outcome, relevant dimensions, filters" in bundle.system_prompt
+    assert bundle.version == "4.0"
+    assert "requested outcome, explicit constraints" in bundle.system_prompt
+    assert "denominator" not in bundle.system_prompt
     assert "authorized Resource" in bundle.system_prompt
     assert "Prior assistant text and prior Artifact metadata are context" in bundle.system_prompt
     assert "use an available capability tool to re-observe it" in bundle.system_prompt

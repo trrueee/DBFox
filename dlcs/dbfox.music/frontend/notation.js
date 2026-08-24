@@ -14,14 +14,33 @@ function durationName(duration) {
   return "16";
 }
 
-function tickables(notes, clef) {
+function restTickables(duration, clef) {
+  const result = [];
+  let remaining = Math.max(0, duration);
+  for (const value of [4, 2, 1, 0.5, 0.25]) {
+    while (remaining + 1e-6 >= value) {
+      result.push(new StaveNote({
+        clef,
+        keys: [clef === "bass" ? "d/3" : "b/4"],
+        duration: `${durationName(value)}r`,
+      }));
+      remaining -= value;
+    }
+  }
+  return result;
+}
+
+function tickables(notes, clef, beatsPerMeasure) {
   const groups = new Map();
   for (const note of notes) {
     const key = `${note.beat.toFixed(4)}:${note.duration.toFixed(4)}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(note);
   }
-  return [...groups.values()].sort((a, b) => a[0].beat - b[0].beat).map((group) => {
+  const result = [];
+  let cursor = 0;
+  for (const group of [...groups.values()].sort((a, b) => a[0].beat - b[0].beat)) {
+    if (group[0].beat > cursor + 1e-6) result.push(...restTickables(group[0].beat - cursor, clef));
     const staveNote = new StaveNote({
       clef,
       keys: group.map((note) => pitchKey(note.pitch)),
@@ -30,18 +49,21 @@ function tickables(notes, clef) {
     group.forEach((note, index) => {
       if ([1, 3, 6, 8, 10].includes(note.pitch % 12)) staveNote.addModifier(new Accidental(NAMES[note.pitch % 12].slice(1)), index);
     });
-    return staveNote;
-  });
+    result.push(staveNote);
+    cursor = Math.max(cursor, group[0].beat + group[0].duration);
+  }
+  if (cursor < beatsPerMeasure - 1e-6) result.push(...restTickables(beatsPerMeasure - cursor, clef));
+  return result;
 }
 
 export function renderMeasure(container, document, measure) {
   container.replaceChildren();
   const width = Math.max(250, container.clientWidth || 300);
   const renderer = new Renderer(container, Renderer.Backends.SVG);
-  renderer.resize(width, 184);
+  renderer.resize(width, 204);
   const context = renderer.getContext();
-  const treble = new Stave(8, 8, width - 16);
-  const bass = new Stave(8, 88, width - 16);
+  const treble = new Stave(8, 28, width - 16);
+  const bass = new Stave(8, 108, width - 16);
   if (measure === 1) {
     treble.addClef("treble").addKeySignature(document.key.tonic + (document.key.mode === "minor" ? "m" : ""));
     bass.addClef("bass").addKeySignature(document.key.tonic + (document.key.mode === "minor" ? "m" : ""));
@@ -50,8 +72,24 @@ export function renderMeasure(container, document, measure) {
   }
   treble.setContext(context).draw();
   bass.setContext(context).draw();
+  const harmony = (document.harmony || []).filter((event) => event.measure === measure);
+  if (harmony.length) {
+    context.save();
+    context.setFont("Inter, system-ui, sans-serif", 12, "500");
+    context.setFillStyle("currentColor");
+    for (const event of harmony) {
+      const left = measure === 1 ? 82 : 28;
+      const usable = width - left - 24;
+      context.fillText(event.symbol, left + usable * (event.beat / document.meter.beats), 20);
+    }
+    context.restore();
+  }
   for (const [hand, stave, clef] of [["right", treble, "treble"], ["left", bass, "bass"]]) {
-    const notes = tickables(document.notes.filter((note) => note.measure === measure && note.hand === hand), clef);
+    const notes = tickables(
+      document.notes.filter((note) => note.measure === measure && note.hand === hand),
+      clef,
+      document.meter.beats,
+    );
     if (!notes.length) continue;
     const voice = new Voice({ numBeats: document.meter.beats, beatValue: document.meter.beat_unit }).setMode(Voice.Mode.SOFT);
     voice.addTickables(notes);

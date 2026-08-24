@@ -6,6 +6,7 @@ from typing import Callable
 from dbfox_dlc_api import (
     ArtifactDraft,
     BackendExtensionHost,
+    CapabilityGuidanceSpec,
     BaseTool,
     ContextContributionInput,
     ContextFragment,
@@ -19,9 +20,11 @@ from dbfox_dlc_api import (
     ToolInputError,
     ToolObservationProjection,
     ToolOutcome,
+    ToolReconciliation,
     ToolPolicy,
     ToolPresentation,
     ToolSemanticSpec,
+    ToolKey,
 )
 
 from .contracts import (
@@ -65,7 +68,14 @@ from .contracts import (
     TranscriptionOutput,
     UpdateMetadataInput,
 )
-from .score_ops import analyze, replace_phrase, score_from_transcription, simplify, transpose
+from .score_ops import (
+    analyze,
+    expand_piano_composition,
+    replace_phrase,
+    score_from_transcription,
+    simplify,
+    transpose,
+)
 from .store import AUDIO_KIND, LIBRARY_KIND, SCORE_KIND, MusicStore
 
 
@@ -140,6 +150,7 @@ def _revision_artifact(revision: ScoreRevision, scope: ResourceScopeRef) -> Arti
         title=document.title,
         payload={
             "scoreId": revision.score_id,
+            "projectId": revision.project_id,
             "revision": revision.revision,
             "parentRevision": revision.parent_revision,
             "contentHash": revision.content_hash,
@@ -162,13 +173,13 @@ def _revision_artifact(revision: ScoreRevision, scope: ResourceScopeRef) -> Arti
 class ComposePianoTool(BaseTool[ComposePianoInput, ScoreRevisionOutput]):
     name = "music_compose_piano"
     group = "music"
-    description = "Commit a validated structured piano score draft as a new immutable score revision."
+    description = "Expand a compact per-measure piano composition plan and commit it as a new immutable score revision."
     input_model = ComposePianoInput
     output_model = ScoreRevisionOutput
-    version = "1"
+    version = "2"
     policy = ToolPolicy(risk_level="warning", requires_approval=False)
     execution = ToolExecutionSpec(
-        recovery="never_retry",
+        recovery="reconcile",
         retryable=False,
         concurrency="sequential",
         required_resource_kinds=(LIBRARY_KIND,),
@@ -180,21 +191,37 @@ class ComposePianoTool(BaseTool[ComposePianoInput, ScoreRevisionOutput]):
         self._store = store
 
     def run(self, input: ComposePianoInput, context: ExtensionToolRunContext) -> ToolOutcome[ScoreRevisionOutput]:
-        draft = input.score_draft
-        if (
-            draft.title != input.title
-            or draft.tempo != input.tempo
-            or draft.meter != input.meter
-            or draft.key != input.key
-            or draft.measure_count != input.measure_count
-        ):
-            raise ToolInputError("The score draft metadata must match the requested composition contract.")
+        draft = expand_piano_composition(input)
         if not draft.notes:
             raise ToolInputError("A composed score must contain at least one note.")
         library = _library(context)
-        revision = self._store.create_score(library.project_id, draft, f"Composed: {input.intent[:240]}")
+        revision = self._store.create_score(
+            library.project_id,
+            draft,
+            f"Composed: {input.intent[:240]}",
+            creation_invocation_id=context.invocation_id,
+        )
         scope = _scope(context, LIBRARY_KIND)
         return ToolOutcome(output=_revision_output(revision), artifacts=(_revision_artifact(revision, scope),))
+
+    def reconcile(
+        self,
+        input: ComposePianoInput,
+        context: ExtensionToolRunContext,
+    ) -> ToolReconciliation:
+        library = _library(context)
+        revision = self._store.get_score_by_creation_invocation(
+            library.project_id,
+            context.invocation_id,
+        )
+        if revision is None:
+            return ToolReconciliation(status="not_applied")
+        scope = _scope(context, LIBRARY_KIND)
+        return ToolReconciliation(
+            status="succeeded",
+            output=_revision_output(revision).model_dump(mode="json"),
+            artifacts=(_revision_artifact(revision, scope),),
+        )
 
     def project_observation(self, *, status, output, artifacts):
         if status != "success":
@@ -791,6 +818,32 @@ def register(host: BackendExtensionHost) -> None:
         AlignScoreToAudioTool(),
     ):
         host.tools.register(tool)
+    host.agent_guidance.register(CapabilityGuidanceSpec(
+        id="piano_composition",
+        version="1",
+        instructions=(
+            "When the active request asks to create a score and an authorized Music Library is available, "
+            "produce a durable piano score instead of only describing what it could sound like.\n"
+            "Preserve explicit musical constraints, including measure count, key, meter, tempo, formal "
+            "sections, hand roles, register, playability, chord labels, and stylistic direction.\n"
+            "Translate form boundaries exactly. Keep the piano writing playable for the requested difficulty, "
+            "and use the requested roles for right and left hand rather than mechanically duplicating material.\n"
+            "For an existing authorized score, prefer a focused revision over replacing unrelated measures.\n"
+            "Do not claim that a score was created or revised until a successful score-revision observation returns."
+        ),
+        applies_to_resource_kinds=(LIBRARY_KIND, SCORE_KIND, AUDIO_KIND),
+        applies_to_artifact_types=(SCORE_REVISION_ARTIFACT, TRANSCRIPTION_ARTIFACT),
+        tool_refs=tuple(
+            ToolKey(owner_id="dbfox.music", local_name=name)
+            for name in (
+                "music_compose_piano",
+                "music_revise_phrase",
+                "music_reharmonize",
+                "music_simplify",
+                "music_transpose",
+            )
+        ),
+    ))
     host.resources.register_provider(store.list_resources)
     host.resources.register_resolver(LIBRARY_KIND, store.resolve_library)
     host.resources.register_resolver(SCORE_KIND, store.resolve_score)
