@@ -67,7 +67,7 @@ flowchart TB
 | Event/Live | replay、notification、前端归并 | domain change/token | event/live item | Event Log；live 无持久权威 | 用 live 代替提交 |
 | Security Audit | 结构化安全动作、保留和导出 | approval/cancel/export | redacted records | SecurityAuditRecord | secret/result rows |
 | Capability Backup/Restore | 由资源 owner 执行备份、校验、隔离恢复和 generation fence | ResourceRef + operation input | owner-specific state/artifact | DLC state + private files | 让 Core 解析业务 dump |
-| Verification System | 独立 tests/testkit/AgentBench、契约与构建门禁 | 生产公开边界 + fixtures | score/build evidence | `verification/` + test artifacts | 被产品导入、复制 RunLoop、把 smoke 当完整验收 |
+| Verification System | 独立 tests/testkit 与 Core/Capability/Composition Bench | 生产公开边界 + fixtures | score/build evidence | `verification/` + test artifacts | 被产品导入、复制 RunLoop、万能 scorer、把 smoke 当完整验收 |
 
 ## 4. 模块详细设计
 

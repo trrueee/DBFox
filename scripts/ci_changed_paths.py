@@ -92,8 +92,8 @@ AGENT_RUNTIME_PATTERNS = (
     "verification/tests/agent_core/**/*",
     "verification/tests/bench/*",
     "verification/tests/bench/**/*",
-    "verification/bench/agentbench/*",
-    "verification/bench/agentbench/**/*",
+    "verification/bench/*",
+    "verification/bench/**/*",
     "requirements.lock",
     "requirements-dev.lock",
 )

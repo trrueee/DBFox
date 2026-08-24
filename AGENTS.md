@@ -62,7 +62,9 @@ npm run build           # tsc -b + 构建脚本 + 生产 Token 与 bundle 预算
 | `engine/migrations/` | DBFox 本地元数据库的 Alembic 迁移 |
 | `desktop/src/` | React 工作区（TanStack Query/Table/Virtual、Zustand、Radix UI） |
 | `desktop/main/`、`desktop/preload/` | Electron Host 与窄化 IPC；Sidecar 生命周期由 `desktop/main/engine.ts` 的 `EngineSupervisor` 管理（TypeScript，非 Rust） |
-| `verification/bench/agentbench/` | AgentBench 评测脚本与评分合同 |
+| `verification/bench/framework/` | Bench manifest、统计、报告与比较；不含领域 scorer |
+| `verification/bench/core/` | Data-free Agent Kernel/Harness 测评，走生产 RunLoop |
+| `verification/bench/capabilities/` | 单 DLC 的 direct/agent 能力测评与 suite-owned scorer |
 | `verification/tests/` | 与产品物理分离的 Core、System、Integration 与 Bench 测试 |
 | `verification/testkit/` | 只供验证系统使用的 fixture 构建与外部边界控制 |
 

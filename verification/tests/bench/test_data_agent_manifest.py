@@ -3,11 +3,23 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
-from verification.bench.agentbench.schema import DatasetRole, load_manifest
+from verification.bench.capabilities.dbfox_data.agent.schema import (
+    DatasetRole,
+    load_manifest,
+)
 
 
 ROOT = Path(__file__).resolve().parents[3]
-MANIFEST = ROOT / "verification" / "bench" / "agentbench" / "datasets" / "regression-v1.json"
+MANIFEST = (
+    ROOT
+    / "verification"
+    / "bench"
+    / "capabilities"
+    / "dbfox_data"
+    / "agent"
+    / "datasets"
+    / "regression-v1.json"
+)
 
 
 def test_regression_manifest_has_the_versioned_sixty_case_matrix() -> None:

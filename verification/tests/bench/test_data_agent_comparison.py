@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from verification.bench.agentbench.comparison import compare_summaries
+from verification.bench.capabilities.dbfox_data.agent.comparison import compare_summaries
 
 
 def _summary(
@@ -15,6 +15,10 @@ def _summary(
     case_passed: bool = True,
 ):
     return {
+        "suite": {
+            "suite_id": "capability.dbfox_data.agent",
+            "suite_version": "1.0.0",
+        },
         "dataset": {
             "dataset_id": "dbfox-agent-regression",
             "dataset_version": "1.0.0",

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "core.loop.scripted",
+  "suite_version": "1.0.0",
+  "description": "Capability-neutral production RunLoop completion and tool-efficiency scenarios.",
+  "subject": {
+    "kind": "core",
+    "components": ["run-loop", "tool-runtime", "completion"],
+    "supporting_fixtures": ["scripted-provider", "verification-read-tool"]
+  },
+  "dataset": "cases.json",
+  "metrics": [
+    {"name": "task.success_rate", "direction": "higher_is_better", "unit": "ratio", "description": "Fraction of deterministic Core scenarios completed correctly."},
+    {"name": "runtime.turns", "direction": "lower_is_better", "unit": "count", "description": "Production Agent Turns used by a scenario."},
+    {"name": "runtime.tool_calls", "direction": "lower_is_better", "unit": "count", "description": "Production tool invocations used by a scenario."},
+    {"name": "runtime.duplicate_tool_calls", "direction": "zero_is_best", "unit": "count", "description": "Repeated identical production tool invocations."}
+  ]
+}

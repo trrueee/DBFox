@@ -1,4 +1,4 @@
-"""Versioned, provider-neutral AgentBench dataset contracts."""
+"""Versioned, provider-neutral dbfox.data agent dataset contracts."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class ResultExpectation(BaseModel):
     def validate_read_only_sql(self) -> "ResultExpectation":
         value = self.golden_sql.strip().lower()
         if not (value.startswith("select") or value.startswith("with")):
-            raise ValueError("AgentBench golden_sql must be a read-only SELECT/CTE")
+            raise ValueError("dbfox.data golden_sql must be a read-only SELECT/CTE")
         return self
 
 
@@ -140,7 +140,7 @@ class EvalCase(BaseModel):
     @model_validator(mode="after")
     def validate_prompts(self) -> "EvalCase":
         if any(not prompt.strip() for prompt in self.prompts):
-            raise ValueError("AgentBench prompts cannot be blank")
+            raise ValueError("dbfox.data benchmark prompts cannot be blank")
         return self
 
 
@@ -159,7 +159,7 @@ class DatasetManifest(BaseModel):
     def validate_case_ids(self) -> "DatasetManifest":
         ids = [case.case_id for case in self.cases]
         if len(ids) != len(set(ids)):
-            raise ValueError("AgentBench case_id values must be unique")
+            raise ValueError("dbfox.data benchmark case_id values must be unique")
         if self.role is DatasetRole.HIDDEN_HOLDOUT:
             for case in self.cases:
                 if "revealed" in case.tags:

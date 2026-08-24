@@ -6,7 +6,7 @@
 >
 > 最后核验：2026-08-24
 >
-> 适用范围：Python 自动化测试、Agent Core 测评、Capability DLC 合同、AgentBench 与 CI
+> 适用范围：Python 自动化测试、Core/Capability/Composition Bench、Capability DLC 合同与 CI
 
 ## 1. 结论
 
@@ -49,7 +49,10 @@ verification/
 │   ├── integration/            # 真实数据库、真实 Provider、跨进程和平台边界
 │   └── bench/                  # dataset/scorer/reporting 与确定性故障场景合同
 └── bench/
-    └── agentbench/             # 可执行评测器、版本化数据集、评分和报告
+    ├── framework/              # 通用 manifest、统计、报告和比较
+    ├── core/                   # Agent Kernel/Harness 测量
+    ├── capabilities/           # 单个 DLC 的 direct/agent 测量
+    └── composition/            # 真实跨能力 suite；不创建空占位实现
 ```
 
 目录按“主要被测对象”归类，而不是按使用了什么 fixture 归类。一个 Agent Core 状态机测试可以使用合成 ResourceRef；只有当判断目标是 `dbfox.data` 的发现、解析或 SQL 语义时，才属于 capability/system 或 integration。
@@ -70,9 +73,15 @@ DLC 合同分别验证 package/manifest、公开 Extension API、contribution co
 
 跨 Core 与 DLC 的产品场景必须显式建立 Project、调用真实 DLC contribution 创建资源、通过 `authorize_project_resources()` 取得 canonical version，再把 frozen refs 交给 `SessionRepository.admit()`。禁止重新写入 Core `DataSource` 或伪造 datasource compatibility 字段。
 
-### 3.3 AgentBench
+### 3.3 CoreBench、CapabilityBench 与 CompositionBench
 
-AgentBench 是产品外部的测量仪器，只拥有：
+Bench 是产品外部的测量仪器，按 Subject Under Test 分为：
+
+- CoreBench：测量 provider-neutral Agent Kernel/Harness；
+- CapabilityBench：测量一个 DLC 的领域能力；
+- CompositionBench：测量 Core 与一个或多个 DLC 组合后的用户任务。
+
+它们共同只拥有：
 
 - 版本化任务与受控 seed；
 - 隔离 runtime 和外部服务准备；
@@ -80,7 +89,7 @@ AgentBench 是产品外部的测量仪器，只拥有：
 - 从耐久事实读取 trace；
 - 确定性 scorer、统计、脱敏报告和 JUnit。
 
-AgentBench 不拥有 Session 状态机、SQL executor、Resource authority、Context projection 或 Tool retry。真实评测 runner 必须使用当前生产 DLC snapshot 和 production RunLoop；历史接口失配应直接失败，不得用 compatibility adapter 继续跑出分数。已删除的 Memory v4 projection 不再作为评测变化轴，也不保留 evaluator adapter。
+Framework 只理解 suite identity、subject、metric、statistics、report 和 comparison，不理解 SQL、File、GitHub 或 Memory 领域语义。各 suite 自己拥有 dataset、runner 和 scorer，但不拥有 Session 状态机、SQL executor、Resource authority、Context projection 或 Tool retry。真实评测 runner 必须使用 production RunLoop；历史接口失配直接失败，不用 compatibility adapter 继续跑分。
 
 ## 4. 允许替换与禁止替换
 
@@ -104,11 +113,12 @@ AgentBench 不拥有 Session 状态机、SQL executor、Resource authority、Con
 3. pytest 唯一发现根为 `verification/tests`；
 4. Frozen Sidecar 构建不包含 verification；
 5. CI 分开运行 Agent Core、System、Integration 和 Bench gates；
-6. 旧 `scripts.agentbench` 入口不存在，不提供兼容转发。
+6. 旧 `scripts.agentbench` 与 `verification.bench.agentbench` 入口都不存在，不提供兼容转发；
+7. CoreBench manifest 不能把 Capability DLC 声明为被测主体。
 
 ## 6. 调研与复用决策
 
-调查范围包括仓库现有 pytest fixtures、AgentBench、CI marker、production composition、DLC operation/resource seams，以及 pytest 官方 test layout/import mode 建议。最终复用现有 pytest、SessionRepository、RunLoop、RuntimeContributionSnapshot、DLC operations 和 authority admission；没有新增测试框架或运行时依赖。
+调查范围包括仓库现有 pytest fixtures、旧 AgentBench、CI marker、production composition、DLC operation/resource seams，以及 pytest 官方 test layout/import mode 建议。最终复用现有 pytest、SessionRepository、RunLoop、RuntimeContributionSnapshot、DLC operations 和 authority admission；没有新增测试框架或运行时依赖。
 
 未引入 Inspect AI 等完整 eval framework：DBFox 已有耐久 Run/Turn/Tool/Artifact 事实和 scorer/reporting 合同，替换 runner 会形成第二套 solver。保留外部框架的 Dataset/Scorer/Report 分层思想，但用最小现有代码实现。
 
@@ -123,6 +133,7 @@ python -m pytest verification/tests/system -q --tb=short `
   -m "not e2e and not integration and not real_llm and not migration and not engineering_contract and not platform_contract"
 python -m pytest verification/tests/bench -q --tb=short
 python -m pytest verification/tests/integration -q --tb=short
-python -m verification.bench.agentbench validate
-python -m verification.bench.agentbench calibrate
+python -m verification.bench validate
+python -m verification.bench run core.loop.scripted
+python -m verification.bench calibrate capability.dbfox_data.agent
 ```

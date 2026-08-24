@@ -46,11 +46,15 @@ jobs:
         run: |
           python -m pip install --require-hashes -r requirements-dev.lock
           python -m pip check
-      - name: Validate the versioned sixty-case dataset
-        run: python -m verification.bench.agentbench validate
-      - name: Calibrate deterministic graders
+      - name: Validate all versioned benchmark suites
+        run: python -m verification.bench validate
+      - name: Run the Data-free production Core Loop benchmark
         run: >-
-          python -m verification.bench.agentbench calibrate
+          python -m verification.bench run core.loop.scripted
+          --output output/agent-evaluation/core-loop
+      - name: Calibrate the dbfox.data deterministic graders
+        run: >-
+          python -m verification.bench calibrate capability.dbfox_data.agent
           --output output/agent-evaluation/calibration
       - name: Run deterministic SQLite, memory and fault-injection scenarios
         run: >-
@@ -62,7 +66,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: agentbench-contract-${{ github.run_id }}
+          name: benchmark-contract-${{ github.run_id }}
           path: output/agent-evaluation/
           if-no-files-found: error
           retention-days: 30
@@ -75,10 +79,10 @@ jobs:
       mysql:
         image: mysql:8.4@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
         env:
-          MYSQL_DATABASE: agentbench
-          MYSQL_USER: agentbench
-          MYSQL_PASSWORD: agentbench-contract-password
-          MYSQL_ROOT_PASSWORD: agentbench-root-password
+          MYSQL_DATABASE: dbfox_bench
+          MYSQL_USER: dbfox_bench
+          MYSQL_PASSWORD: dbfox-bench-contract-password
+          MYSQL_ROOT_PASSWORD: dbfox-bench-root-password
         ports:
           - 3306:3306
         options: >-
@@ -88,11 +92,11 @@ jobs:
           --health-retries=12
     env:
       DBFOX_RUN_MYSQL_CONTRACT: "1"
-      DBFOX_AGENTBENCH_MYSQL_HOST: 127.0.0.1
-      DBFOX_AGENTBENCH_MYSQL_PORT: "3306"
-      DBFOX_AGENTBENCH_MYSQL_USER: agentbench
-      DBFOX_AGENTBENCH_MYSQL_PASSWORD: agentbench-contract-password
-      DBFOX_AGENTBENCH_MYSQL_DATABASE: agentbench
+      DBFOX_BENCH_MYSQL_HOST: 127.0.0.1
+      DBFOX_BENCH_MYSQL_PORT: "3306"
+      DBFOX_BENCH_MYSQL_USER: dbfox_bench
+      DBFOX_BENCH_MYSQL_PASSWORD: dbfox-bench-contract-password
+      DBFOX_BENCH_MYSQL_DATABASE: dbfox_bench
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -117,7 +121,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: agentbench-mysql-${{ github.run_id }}
+          name: benchmark-mysql-${{ github.run_id }}
           path: output/agent-evaluation/
           if-no-files-found: error
           retention-days: 30
@@ -180,12 +184,12 @@ jobs:
         run: |
           args=(--tag real_provider --repetitions "$REPETITIONS" --output output/agent-evaluation/real-provider)
           if [[ "$PROFILE" == "nightly" ]]; then args+=(--tag nightly); fi
-          python -m verification.bench.agentbench real "${args[@]}"
+          python -m verification.bench run capability.dbfox_data.agent "${args[@]}"
       - name: Upload real-provider evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: agentbench-real-${{ github.run_id }}
+          name: data-capability-bench-real-${{ github.run_id }}
           path: output/agent-evaluation/
           if-no-files-found: error
           retention-days: 30

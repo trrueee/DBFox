@@ -7,8 +7,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from verification.bench.agentbench.schema import EvalCase, Verdict
-from verification.bench.agentbench.scoring import TrialScore, TrialTrace, score_trial
+from verification.bench.capabilities.dbfox_data.agent.schema import EvalCase, Verdict
+from verification.bench.capabilities.dbfox_data.agent.scoring import (
+    TrialScore,
+    TrialTrace,
+    score_trial,
+)
 
 
 class CalibrationFixture(BaseModel):

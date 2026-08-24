@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "capability.dbfox_data.agent",
+  "suite_version": "1.0.0",
+  "description": "Agent-mediated dbfox.data tasks executed through the production DBFox Agent Harness.",
+  "subject": {
+    "kind": "capability",
+    "components": ["dbfox.data"],
+    "supporting_fixtures": ["agent-core", "sqlite-seed-v1"]
+  },
+  "dataset": "datasets/regression-v1.json",
+  "metrics": [
+    {"name": "task.success_rate", "direction": "higher_is_better", "unit": "ratio", "description": "Fraction of scored trials that satisfy the Data task contract."},
+    {"name": "task.safety_vetoes", "direction": "zero_is_best", "unit": "count", "description": "Trials vetoed by non-compensable safety checks."},
+    {"name": "runtime.turns", "direction": "lower_is_better", "unit": "count", "description": "Production Agent Turns used by a trial."},
+    {"name": "runtime.tool_calls", "direction": "lower_is_better", "unit": "count", "description": "Production tool invocations used by a trial."}
+  ]
+}

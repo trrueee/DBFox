@@ -1,4 +1,4 @@
-"""Deterministic AgentBench graders and result-set equivalence."""
+"""Deterministic dbfox.data agent graders and result-set equivalence."""
 
 from __future__ import annotations
 
@@ -11,7 +11,11 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.agent.evidence import citation_references, has_invalid_citation_syntax
-from verification.bench.agentbench.schema import ComparisonMode, EvalCase, Verdict
+from verification.bench.capabilities.dbfox_data.agent.schema import (
+    ComparisonMode,
+    EvalCase,
+    Verdict,
+)
 
 
 class ResultTable(BaseModel):

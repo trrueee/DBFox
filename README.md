@@ -94,7 +94,7 @@ DBFox 目前处于持续开发阶段。Windows x64、macOS arm64 与 Ubuntu x64 
 | 后端 | Python 3.12、FastAPI、Pydantic、SQLAlchemy、Alembic |
 | Agent | OpenAI Responses API typed events、显式 Turn/Completion/Tool Runtime |
 | 数据与 SQL | SQLite、MySQL、PostgreSQL、DuckDB、sqlglot |
-| 测试与评测 | pytest、Vitest、Electron packaged smoke、AgentBench、GitHub Actions |
+| 测试与评测 | pytest、Vitest、Electron packaged smoke、Core/Capability/Composition Bench、GitHub Actions |
 
 ## 快速开始
 
@@ -174,7 +174,7 @@ Agent 质量不只通过单元测试判断。仓库同时维护确定性场景�
 | `dlcs/dbfox.workspace/` | Workspace System DLC：项目目录绑定与文件能力 |
 | `engine/migrations/` | DBFox 本地元数据库的 Alembic 迁移 |
 | `verification/tests/` | 与产品物理分离的 Agent Core、System、Integration 与 Bench 验证 |
-| `verification/bench/agentbench/` | AgentBench 评测脚本、确定性数据集与评分合同 |
+| `verification/bench/` | 与产品分离的 Core/Capability/Composition Bench、通用测量合同与 suite-owned scorer |
 | `docs/` | 当前架构、实现指南、规范、质量文档和历史档案 |
 | `.github/workflows/` | 持续集成、Agent 评测和发布候选工作流 |
 
