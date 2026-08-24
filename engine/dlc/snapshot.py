@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from engine.agent.context_fragment import ContextContributor
 from engine.agent.completion import CompletionConstraint, CompletionSupport
+from engine.agent.guidance import CapabilityGuidanceContribution
 from engine.agent.artifact_view import ArtifactChartViewProvider, ArtifactTableViewProvider
 from engine.agent.resource_refs import ProjectResourceProvider
 from engine.dlc.api import DlcOperationSpec
@@ -138,6 +139,7 @@ class BuiltinContributionSet:
     context_contributors: tuple[Callable[[Session], ContextContributor], ...] = ()
     completion_constraints: tuple[CompletionConstraintContribution, ...] = ()
     completion_supports: tuple[CompletionSupportContribution, ...] = ()
+    capability_guidance: tuple[CapabilityGuidanceContribution, ...] = ()
     credential_reference_probes: tuple[CredentialReferenceProbeContribution, ...] = ()
 
 
@@ -167,6 +169,7 @@ class RuntimeContributionSnapshot:
     completion_supports: tuple[CompletionSupportContribution, ...]
     artifact_contracts: tuple[ArtifactContractContribution, ...]
     operations: tuple[DlcOperationContribution, ...]
+    capability_guidance: tuple[CapabilityGuidanceContribution, ...] = ()
     artifact_table_views: tuple[ArtifactTableViewContribution, ...] = ()
     artifact_chart_views: tuple[ArtifactChartViewContribution, ...] = ()
     credential_reference_probes: tuple[CredentialReferenceProbeContribution, ...] = ()

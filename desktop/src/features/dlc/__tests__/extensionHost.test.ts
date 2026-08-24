@@ -91,7 +91,7 @@ describe("FrontendExtensionHost", () => {
     consoleError.mockRestore();
   });
 
-  it("contains connector onAdd callback failures", () => {
+  it("surfaces connector onAdd callback failures", async () => {
     const staged = createStagedExtensionHost("acme.throwing_dlc");
     staged.host.connectors.register({
       id: "acme.throwing_add",
@@ -104,7 +104,9 @@ describe("FrontendExtensionHost", () => {
     });
 
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    expect(() => staged.getContributions().connectors[0].onAdd?.({ projectId: "project-1" })).not.toThrow();
+    await expect(
+      staged.getContributions().connectors[0].onAdd?.({ projectId: "project-1" }),
+    ).rejects.toThrow("add exploded");
     consoleError.mockRestore();
   });
 

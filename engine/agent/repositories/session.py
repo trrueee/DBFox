@@ -16,7 +16,7 @@ from engine.agent.events import (
     RuntimeEventType,
 )
 from engine.agent.repositories.events import EventRepository
-from engine.agent.run import RunStatus, SessionLeaseConflict, TERMINAL_RUN_STATUSES
+from engine.agent.run import RunPhase, RunStatus, SessionLeaseConflict, TERMINAL_RUN_STATUSES
 from engine.agent.run_item import (
     dump_run_item,
     project_run,
@@ -485,6 +485,7 @@ class SessionRepository:
         tool_materialization_hash: str,
         provider: str,
         model_name: str,
+        phase: RunPhase = RunPhase.WAITING_MODEL,
     ) -> AgentTurn:
         aggregate = self._session_for_update(lease.session_id)
         self._require_lease(aggregate, lease)
@@ -519,9 +520,18 @@ class SessionRepository:
         )
         self.session.add(turn)
         run.current_turn_id = turn.id
+        run.current_step_name = phase.value
         run.version = int(run.version) + 1
         run.updated_at = now
         self.session.flush()
+        self.events.append_locked(
+            aggregate,
+            RuntimeEventType.RUN_UPDATED,
+            run_id=run_id,
+            turn_id=turn.id,
+            payload={"run": project_run(run)},
+            now=now,
+        )
         self.session.flush()
         return turn
 

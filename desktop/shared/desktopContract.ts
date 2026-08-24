@@ -32,6 +32,10 @@ export interface EngineStartupStatus {
   stage: string | null;
   generation: number;
   restartCount: number;
+  failure: {
+    code: string;
+    fingerprint: string;
+  } | null;
 }
 
 export interface EngineConfig {

@@ -79,6 +79,7 @@ export interface ConversationActions {
     content: string,
     mode: ConversationDeliveryMode,
     idempotencyKey: string,
+    requestedResources?: readonly RequestedResourceRef[],
   ) => Promise<void>;
   cancelRun: (runId: string) => Promise<void>;
   resolveApproval: (runId: string, approvalId: string, approved: boolean) => Promise<void>;
@@ -219,7 +220,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }
   },
 
-  sendMessage: async (conversationId, content, mode, idempotencyKey) => {
+  sendMessage: async (conversationId, content, mode, idempotencyKey, requestedResources = []) => {
     const llmPayload = requireConversationLlmPayload();
     const detail = get().detailById[conversationId]
       || await get().openConversation(conversationId);
@@ -227,6 +228,12 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       content,
       idempotency_key: idempotencyKey,
       delivery_mode: mode,
+      ...(requestedResources.length > 0 ? {
+        requested_resources: requestedResources.map((ref) => ({
+          kind: ref.kind,
+          id: ref.id,
+        })),
+      } : {}),
       selected_artifact_ids: detail.selected_artifact_id ? [detail.selected_artifact_id] : [],
       llm_credential_id: llmPayload.llm_credential_id,
       api_base: llmPayload.api_base,

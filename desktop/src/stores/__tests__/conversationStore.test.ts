@@ -199,6 +199,35 @@ describe("conversationStore admission projection", () => {
       .toEqual(updated.resource_intents);
   });
 
+  it("submits one-shot requested resources atomically with the message", async () => {
+    mocks.admit.mockResolvedValue({
+      run_id: "run-1",
+      event_cursor: 12,
+      projection: {
+        ...initialDetail,
+        cursor: 12,
+        items: [],
+        runs: [],
+      },
+    });
+
+    await useConversationStore.getState().sendMessage(
+      initialDetail.id,
+      "写一首钢琴曲",
+      "queue",
+      "intent-music-1",
+      [{ kind: "dbfox.music.library", id: "project-1" }],
+    );
+
+    expect(mocks.admit).toHaveBeenCalledWith(
+      initialDetail.id,
+      expect.objectContaining({
+        content: "写一首钢琴曲",
+        requested_resources: [{ kind: "dbfox.music.library", id: "project-1" }],
+      }),
+    );
+  });
+
   it("keeps loaded history and in-flight text when reconciling an authoritative snapshot", () => {
     const run = {
       id: "run-1",

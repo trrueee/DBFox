@@ -13,7 +13,7 @@ from engine.agent.repositories.evidence import EvidenceRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.response import ComposedResponse
-from engine.agent.run import RunStatus, SessionLeaseConflict, TERMINAL_RUN_STATUSES
+from engine.agent.run import RunPhase, RunStatus, SessionLeaseConflict, TERMINAL_RUN_STATUSES
 from engine.agent.run_item import (
     ArtifactReference,
     MessageItem,
@@ -65,6 +65,33 @@ class RunRepository:
             RunStatus.CANCELLING.value,
             RunStatus.CANCELLED.value,
         }
+
+    def set_phase(
+        self,
+        *,
+        lease: SessionLease,
+        run_id: str,
+        phase: RunPhase,
+    ) -> None:
+        begin_agent_write(self.session)
+        run = self.session.execute(
+            select(AgentRun).where(AgentRun.id == run_id).with_for_update()
+        ).scalar_one()
+        self._require_lease(run, lease)
+        if str(run.current_step_name or "") == phase.value:
+            return
+        now = _utcnow()
+        run.current_step_name = phase.value
+        run.version = int(run.version or 0) + 1
+        run.updated_at = now
+        self.sessions.events.append(
+            lease=lease,
+            event_type=RuntimeEventType.RUN_UPDATED,
+            run_id=run_id,
+            turn_id=str(run.current_turn_id) if run.current_turn_id else None,
+            payload={"run": project_run(run)},
+        )
+        self.session.flush()
 
     def has_pending_steering_inputs(self, *, lease: SessionLease, run_id: str) -> bool:
         """Check the successful-terminalization barrier under the Run lock."""

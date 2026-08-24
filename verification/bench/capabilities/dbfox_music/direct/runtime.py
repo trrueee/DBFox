@@ -39,24 +39,28 @@ def _resolver(snapshot: Any, kind: str) -> Any:
 
 
 def _draft() -> dict[str, Any]:
-    notes = []
+    measures = []
     for measure in range(1, 5):
-        notes.extend([
-            {"id": f"r-{measure}", "measure": measure, "beat": 0, "duration": 1, "pitch": 60 + measure, "velocity": .72, "hand": "right"},
-            {"id": f"l-{measure}", "measure": measure, "beat": 0, "duration": 2, "pitch": 47 + measure, "velocity": .62, "hand": "left"},
-        ])
+        measures.append({
+            "measure": measure,
+            "chord": ("C", "Am", "F", "G")[measure - 1],
+            "chord_pitches": ([48, 55, 60], [45, 52, 57], [41, 48, 53], [43, 50, 55])[measure - 1],
+            "melody": [{"beat": 0, "duration": 1, "pitch": 60 + measure, "velocity": .72}],
+            "accompaniment": "broken_quarters",
+            "accompaniment_velocity": .62,
+        })
     return {
-        "title": "Quiet Rain", "tempo": 76,
-        "meter": {"beats": 4, "beat_unit": 4},
-        "key": {"tonic": "C", "mode": "major"},
-        "measure_count": 4, "notes": notes,
+        "sections": [{"id": "a", "label": "A", "start_measure": 1, "end_measure": 4}],
+        "measures": measures,
     }
 
 
 def _run_tool(snapshot: Any, tool_name: str, payload: dict[str, Any], ref: ResourceScopeRef, resource: Any) -> Any:
     tool = _tool(snapshot, tool_name)
+    invocation_id = f"bench-invocation-{uuid4().hex}"
     return tool.run(tool.input_model.model_validate(payload), ToolRunContext.for_invocation(
         request=None,
+        invocation_id=invocation_id,
         idempotency_key=f"bench-{uuid4().hex}",
         scope_refs=(ref,),
         resources={ref.canonical(): resource},
@@ -69,7 +73,7 @@ def _execute_case(snapshot: Any, suite_id: str, case: MusicDirectCase, repetitio
     composed = _run_tool(snapshot, "music_compose_piano", {
         "title": "Quiet Rain", "intent": "calm four-measure piano fixture", "tempo": 76,
         "meter": {"beats": 4, "beat_unit": 4}, "key": {"tonic": "C", "mode": "major"},
-        "measure_count": 4, "score_draft": _draft(),
+        "measure_count": 4, "composition": _draft(),
     }, library_ref, _resolver(snapshot, "dbfox.music.library")(library_ref))
     score_id = composed.output.score_id
     first = _invoke(snapshot, project_id, "scores.get", {"score_id": score_id, "revision": 1})

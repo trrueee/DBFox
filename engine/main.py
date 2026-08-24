@@ -41,7 +41,11 @@ from engine.runtime_composition import (
     get_active_runtime_snapshot,
 )
 from engine.app.request_limits import AgentInputRequestBodyLimitMiddleware
-from engine.app.safe_errors import FixedErrorCode, fixed_error_detail
+from engine.app.safe_errors import (
+    FixedErrorCode,
+    diagnostic_fingerprint,
+    fixed_error_detail,
+)
 from engine.diagnostics.logs import configure_diagnostic_logging
 from engine.errors import DBFoxError, NotFoundError
 from engine.engine_runtime.credentials import RuntimeCredentialPolicy
@@ -62,6 +66,30 @@ def _emit_startup_stage(stage: str) -> None:
         )
     except OSError:
         logger.warning("Unable to publish engine startup stage=%s", stage)
+
+
+def _startup_failure_code(exc: Exception) -> str:
+    if isinstance(exc, DBFoxError):
+        return exc.code
+    message = str(exc)
+    if message.startswith("DBFOX_ALEMBIC_SQLITE_FOREIGN_KEY_VIOLATIONS"):
+        return "DBFOX_METADATA_FOREIGN_KEY_VIOLATION"
+    if message.startswith("DBFOX_ALEMBIC_"):
+        return "DBFOX_METADATA_MIGRATION_FAILED"
+    return "ENGINE_STARTUP_FAILED"
+
+
+def _emit_startup_fatal(stage: str, exc: Exception) -> None:
+    """Publish only cataloged startup diagnostics; full details stay private."""
+    payload = {
+        "stage": stage,
+        "code": _startup_failure_code(exc),
+        "fingerprint": diagnostic_fingerprint(exc),
+    }
+    try:
+        print(f"DBFOX_ENGINE_FATAL {dumps(payload)}", flush=True)
+    except OSError:
+        logger.warning("Unable to publish engine startup fatal stage=%s", stage)
 
 
 DIAGNOSTIC_LOG_FILE = configure_diagnostic_logging()
@@ -127,8 +155,9 @@ async def lifespan(application: FastAPI) -> Any:
 
         _emit_startup_stage("ready")
 
-    except Exception:
+    except Exception as exc:
         logger.exception("Engine startup failed during stage=%s", startup_stage)
+        _emit_startup_fatal(startup_stage, exc)
         if agent_coordinator is not None:
             agent_coordinator.stop()
         application.state.agent_coordinator = None

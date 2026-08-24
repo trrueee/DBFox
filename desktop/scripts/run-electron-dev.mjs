@@ -37,7 +37,7 @@ try {
       ...(smokeRuntimeRoot === null ? {} : { DBFOX_RUNTIME_DIR: smokeRuntimeRoot }),
     },
     stdio: "inherit",
-    windowsHide: true,
+    windowsHide: false,
   });
   const code = await exitCode(electron);
   if (!stopping && code !== 0) process.exitCode = code ?? 1;

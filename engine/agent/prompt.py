@@ -14,11 +14,12 @@ from engine.agent.context_budget import (
     estimate_tool_schema_tokens,
 )
 from engine.agent.definition import AgentDefinition
+from engine.agent.guidance import MaterializedCapabilityGuidance
 from engine.agent.model.system_prompt import build_system_prompt
 from engine.json_codec import canonical_dumps
 
 
-PROMPT_VERSION = "3.6"
+PROMPT_VERSION = "4.0"
 MAX_EVIDENCE_LEDGER_OBSERVATIONS = 8
 MAX_EVIDENCE_LEDGER_FACT_CHARS = 512
 
@@ -30,6 +31,7 @@ class PromptBundle(BaseModel):
     system_prompt: str
     messages: list[dict]
     budget: dict[str, int]
+    guidance_materialization: list[dict[str, str]]
     hash: str
 
 
@@ -43,8 +45,13 @@ class PromptAssembler:
         context: ContextSnapshot,
         tool_schemas: list[dict] | None = None,
         tool_output_overrides: Mapping[str, str] | None = None,
+        guidance: tuple[MaterializedCapabilityGuidance, ...] = (),
     ) -> PromptBundle:
         system = build_system_prompt()
+        if guidance:
+            system += "\n\n# Active capability guidance\n\n" + "\n\n".join(
+                item.prompt_section() for item in guidance
+            )
         system += (
             "\n\n## Runtime identity\n"
             f"Agent definition: {definition.name}@{definition.version}.\n"
@@ -157,7 +164,9 @@ class PromptAssembler:
                     len(str(item.get("output") or "").encode("utf-8"))
                     for item in used_transient_outputs
                 ),
+                "capability_guidance_count": len(guidance),
             },
+            guidance_materialization=[item.identity() for item in guidance],
             hash=digest,
         )
 

@@ -44,6 +44,7 @@ export interface ConversationRun {
   status: AgentRunStatus;
   version: number;
   current_turn_id?: string | null;
+  phase?: RunProjection["phase"];
   cancel_requested: boolean;
   result: Record<string, unknown>;
   error: { code: string; message: string } | null;
@@ -171,14 +172,8 @@ export type ConversationRunItem =
   | ApprovalItem
   | QuestionItem;
 
-export type ConversationArtifactType =
-  | "analysis_plan"
-  | "sql"
-  | "result_view"
-  | "chart"
-  | "markdown"
-  | "safety"
-  | "error";
+/** Core and registered namespaced DLC Artifact types share one envelope. */
+export type ConversationArtifactType = string;
 export type ConversationArtifactVisibility = "primary" | "supporting" | "internal";
 
 export interface ArtifactRelation {
@@ -194,12 +189,14 @@ export interface ConversationArtifact {
   semantic_key?: string | null;
   version: number;
   type: ConversationArtifactType;
+  schema_version?: number;
   title: string;
   status: "creating" | "completed" | "failed" | "stale";
   visibility: ConversationArtifactVisibility;
   summary?: string | null;
   payload: AgentArtifactPayload;
   payload_ref?: string | null;
+  resource_refs?: RequestedResourceRef[];
   provenance: Record<string, unknown>;
   relations: ArtifactRelation[];
 }

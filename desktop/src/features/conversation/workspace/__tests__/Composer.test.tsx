@@ -33,7 +33,7 @@ describe("Composer", () => {
     fireEvent.change(input, { target: { value: "  分析订单趋势  " } });
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(onSend).toHaveBeenCalledWith("分析订单趋势", "queue");
+    expect(onSend).toHaveBeenCalledWith("分析订单趋势", "queue", []);
     await waitFor(() => expect(input.value).toBe(""));
   });
 
@@ -47,6 +47,35 @@ describe("Composer", () => {
 
     await waitFor(() => expect(onSend).toHaveBeenCalledOnce());
     expect(input.value).toBe("保留这段问题");
+  });
+
+  it("submits visible one-shot resources atomically with the message", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const onRequestedResourcesChange = vi.fn();
+    const requestedResources = [{
+      kind: "dbfox.music.library",
+      id: "project-music",
+      version: "1",
+    }];
+    render(
+      <Composer
+        running={false}
+        onSend={onSend}
+        onCancel={vi.fn()}
+        requestedResources={requestedResources}
+        onRequestedResourcesChange={onRequestedResourcesChange}
+      />,
+    );
+
+    expect(screen.getByText("Music Library")).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "继续提问" }), {
+      target: { value: "写一首钢琴曲" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(onSend).toHaveBeenCalledWith("写一首钢琴曲", "queue", requestedResources);
+    fireEvent.click(screen.getByRole("button", { name: "从本次消息移除 project-music" }));
+    expect(onRequestedResourcesChange).toHaveBeenCalledWith([]);
   });
 
   it("shows a pause control while running", () => {

@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.json_codec import JsonCodecError, loads
+
+
+@dataclass(frozen=True)
+class ModelStreamTimeouts:
+    """Provider-neutral watchdog budget for one model Turn stream."""
+
+    turn_seconds: float
+    first_event_seconds: float
+    idle_seconds: float
+    request_seconds: float = 60.0
 
 
 class TurnStreamKind(StrEnum):

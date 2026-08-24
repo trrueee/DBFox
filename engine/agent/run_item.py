@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from engine.agent.plan import PlanStep
 from engine.agent.response import CompletionDisposition, CompletionLimitationCode
-from engine.agent.run import RunStatus
+from engine.agent.run import RunPhase, RunStatus
 from engine.json_codec import load_array, load_object
 from engine.tools.runtime.base import RiskLevel, ToolPresentation
 
@@ -221,6 +221,7 @@ class RunProjection(BaseModel):
     status: RunStatus
     version: int = Field(ge=0)
     current_turn_id: str | None = None
+    phase: RunPhase | None = None
     cancel_requested: bool
     result: dict[str, Any] = Field(default_factory=dict)
     error: RunError | None = None
@@ -262,6 +263,7 @@ def project_run(run: Any) -> dict[str, Any]:
         "question": str(run.question),
         "user_message_id": str(run.user_message_id),
         "current_turn_id": str(run.current_turn_id) if run.current_turn_id else None,
+        "phase": str(run.current_step_name) if run.current_step_name else None,
         "cancel_requested": bool(run.cancel_requested),
         "result": load_object(str(run.result_json or "{}")),
         "error": (

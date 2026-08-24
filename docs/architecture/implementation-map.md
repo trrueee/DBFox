@@ -54,7 +54,7 @@ flowchart TB
 
 | 模块 | 主要职责 | 主要输入 | 主要输出 | 权威状态 | 禁止承担 |
 |---|---|---|---|---|---|
-| Electron Host | sidecar 生命周期、端口/token、窗口与外部导航 | 安装资源、运行参数 | Engine status/config | 进程状态 | Agent 业务状态 |
+| Electron Host | sidecar 生命周期、端口/token、窗口与外部导航；解析安全的 `DBFOX_ENGINE_FATAL` 启动诊断 | 安装资源、运行参数 | Engine status/config/failure fingerprint | 进程状态 | Agent 业务状态、向 UI 暴露原始 stderr |
 | App Shell | `activeProjectId`/per-project `projectShell`、Workspace 路由、Dock view presentation/visibility/render registry（`dockViewRegistry`）、主题、命令与全局错误边界；真实 Project list/create 经 `projectsApi`/`useProjectState` | UI command | tab/workspace | UI Store + Project API 投影 | 推断后端终态 |
 | Conversation Product | Message、Activity、Approval、Question、Artifact Dock | snapshot/events/live | 用户可理解过程 | 后端投影的前端缓存 | 原始调试 trace、结果历史 |
 | Typed API Client | token、错误映射、AbortSignal、SSE | request DTO | response/event DTO | 无 | 静默 fallback、业务重试 |
@@ -84,7 +84,7 @@ flowchart TB
 - React 在 ready 前不发送业务请求；
 - Web 开发模式不伪造 Electron 生命周期，只连接开发引擎。
 
-主要失败：端口占用、sidecar 缺失、metadata migration 失败、凭据库不可用、旧进程锁定安装文件。失败必须保留诊断路径，不只返回错误码。
+主要失败：端口占用、sidecar 缺失、metadata migration 失败、凭据库不可用、旧进程锁定安装文件。Python 启动失败以 `DBFOX_ENGINE_FATAL {stage, code, fingerprint}` 输出不含异常原文的安全结构；Electron 将完整 stderr 留在 private diagnostics，只向 UI 投影稳定 code/stage/fingerprint。
 
 ### 4.2 App Shell 与 Workspace
 
@@ -144,15 +144,15 @@ Core Artifact API 只接受 Artifact ID 与 page/pageSize/sort/filter/search 等
 
 ### 4.9 Session Core 与 Coordinator
 
-Input admission 在单一短事务中创建 SessionInput、用户/助手 Message、Run 和初始 event，并用 idempotency key 防止重复接纳。Coordinator 按 Session 竞争 lease，promote 一个输入并执行 Run。
+Input admission 在单一短事务中创建 SessionInput、用户/助手 Message、Run 和初始 event，并用 idempotency key 防止重复接纳。Composer 的 one-shot `requested_resources` 与消息在同一 request 提交、由服务器 canonicalize 并冻结；浏览或打开 Dock 不暗改 Conversation Intent。Coordinator 按 Session 竞争 lease，promote 一个输入并执行 Run。
 
 同一 Session 未来 queue 输入不进入当前 Context；Session 间可以并行。lease 过期后旧 worker 的任何提交都会因 token 不匹配被拒绝。
 
 ### 4.10 ReAct Harness
 
-RunLoop 每轮：检查控制面 → 构建不可变 Turn → 流式调用模型 → 结算 Turn → 处理 tool calls → CompletionPolicy → 继续/修复/回答/部分回答/失败。
+RunLoop 每轮：检查控制面 → 构建不可变 Turn → 流式调用模型 → 结算 Turn → 处理 tool calls → CompletionPolicy → 继续/修复/回答/部分回答/失败。模型等待受 Run deadline、per-Turn、request/connect、first-event 与 stream-idle 五层 watchdog 约束；SDK 尚未返回 stream 对象的等待同样可取消且有界。`waiting_model / streaming_answer / preparing_tool_call / executing_tool / waiting_approval / finalizing` 是 provider-neutral 耐久阶段投影。
 
-Prompt 和 Context 在 Turn 创建时保存 hash；工具 schema 也物化并冻结。模型 finish reason 不能直接决定 Run 完成，Runtime 必须检查工具结算、证据、Artifact、覆盖和预算。
+Prompt 和 Context 在 Turn 创建时保存 hash；工具 schema 也物化并冻结。Core System Policy 保持 capability-neutral；DLC 的静态 `CapabilityGuidanceContribution` 只按 frozen Resource、实际 Tool 和相关 Artifact 激活，Core 合成为单一 system message 并持久化 guidance identity/hash。模型 finish reason 不能直接决定 Run 完成，Runtime 必须检查工具结算、证据、Artifact、覆盖和预算。
 
 ### 4.11 Tool Runtime、Policy 与 Approval
 

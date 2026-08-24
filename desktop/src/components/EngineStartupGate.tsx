@@ -20,6 +20,8 @@ type StartupStage = "starting" | "health-check" | "failed" | "ready";
 type StartupFailure = {
   code: string | null;
   summary: string;
+  fingerprint?: string | null;
+  engineStage?: string | null;
 };
 
 function startupMessage(stage: StartupStage, enginePhase: string | null): string {
@@ -44,7 +46,26 @@ function startupMessage(stage: StartupStage, enginePhase: string | null): string
 
 function startupFailure(error: unknown): StartupFailure {
   const code = error instanceof ApiError ? error.code ?? null : null;
+  const detail = error instanceof ApiError && isStartupFailureDetail(error.detail)
+    ? error.detail
+    : null;
+  const diagnostics = {
+    fingerprint: detail?.fingerprint ?? null,
+    engineStage: detail?.stage ?? null,
+  };
   switch (code) {
+    case "DBFOX_METADATA_FOREIGN_KEY_VIOLATION":
+      return {
+        code,
+        summary: "本地数据库完整性检查失败，请查看诊断日志。",
+        ...diagnostics,
+      };
+    case "DBFOX_METADATA_MIGRATION_FAILED":
+      return {
+        code,
+        summary: "本地数据库升级失败，请查看诊断日志。",
+        ...diagnostics,
+      };
     case "ENGINE_STARTUP_TIMEOUT":
       return { code, summary: "加载时间较长，请重试。" };
     case "ENGINE_HEALTH_UNAVAILABLE":
@@ -52,12 +73,21 @@ function startupFailure(error: unknown): StartupFailure {
     case "ENGINE_STOPPED":
       return { code, summary: "DBFox 已停止运行，请尝试重新启动。" };
     case "ENGINE_STARTUP_FAILED":
-      return { code, summary: "DBFox 启动失败，请重试或查看诊断日志。" };
+      return { code, summary: "DBFox 启动失败，请重试或查看诊断日志。", ...diagnostics };
     case "ENGINE_RESTART_FAILED":
       return { code, summary: "DBFox 重新启动失败，请查看诊断日志。" };
     default:
       return { code, summary: "DBFox 暂时无法完成启动，请重试或查看诊断日志。" };
   }
+}
+
+function isStartupFailureDetail(
+  value: unknown,
+): value is { fingerprint: string; stage: string | null } {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.fingerprint === "string"
+    && (typeof candidate.stage === "string" || candidate.stage === null);
 }
 
 export function EngineStartupGate({ children }: { children: ReactNode }) {
@@ -116,7 +146,9 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
         setFailure(startupFailure(new ApiError(
           status.error || "Engine restart failed",
           503,
-          "ENGINE_RESTART_FAILED",
+          status.failure?.code || "ENGINE_RESTART_FAILED",
+          [],
+          status.failure ? { ...status.failure, stage: status.stage ?? null } : undefined,
         )));
         setStage("failed");
         return;
@@ -218,7 +250,11 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
           {failure?.code && (
             <details className="engine-startup-gate__details">
               <summary>技术信息</summary>
-              <code className="engine-startup-gate__code">{failure.code}</code>
+              <code className="engine-startup-gate__code">
+                {failure.code}
+                {failure.engineStage ? ` · ${failure.engineStage}` : ""}
+                {failure.fingerprint ? ` · ${failure.fingerprint}` : ""}
+              </code>
             </details>
           )}
         </>

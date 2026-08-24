@@ -39,6 +39,7 @@ from engine.dlc.snapshot import (
     BuiltinContributionSet,
     CompletionConstraintContribution,
     CompletionSupportContribution,
+    CapabilityGuidanceContribution,
     CredentialReferenceProbeContribution,
     DlcActivationFailure,
     DlcOperationContribution,
@@ -231,6 +232,10 @@ class ContributionCompiler:
         all_context_contributors: list[Callable[[Session], ContextContributor]] = list(seed.context_contributors)
         all_completion_constraints = list(seed.completion_constraints)
         all_completion_supports = list(seed.completion_supports)
+        all_capability_guidance = list(seed.capability_guidance)
+        known_guidance_keys = {
+            (item.owner_id, item.spec.id) for item in all_capability_guidance
+        }
         all_credential_reference_probes = list(seed.credential_reference_probes)
         known_credential_probe_owner_ids = {
             item.owner_id for item in all_credential_reference_probes
@@ -400,6 +405,47 @@ class ContributionCompiler:
                             return lambda _session: c()
                         return lambda _session: c
                     candidate_context.append(_make_adapted_context(contributor))
+
+                candidate_guidance: list[CapabilityGuidanceContribution] = []
+                candidate_guidance_keys: set[tuple[str, str]] = set()
+                for guidance in staging.agent_guidance:
+                    guidance_key = (dlc_id, guidance.id)
+                    if guidance_key in known_guidance_keys or guidance_key in candidate_guidance_keys:
+                        raise DlcError(
+                            DlcErrorCode.REGISTRATION_CONFLICT,
+                            f"Capability guidance '{guidance.id}' from DLC '{dlc_id}' conflicts with an existing contribution",
+                        )
+                    foreign_resources = tuple(
+                        kind
+                        for kind in guidance.applies_to_resource_kinds
+                        if not _owned_resource_kind(dlc_id, kind)
+                    )
+                    foreign_artifacts = tuple(
+                        artifact_type
+                        for artifact_type in guidance.applies_to_artifact_types
+                        if not _owned_resource_kind(dlc_id, artifact_type)
+                    )
+                    foreign_tools = tuple(
+                        ref
+                        for ref in guidance.tool_refs
+                        if ref.owner_id != dlc_id
+                    )
+                    missing_tools = tuple(
+                        ref
+                        for ref in guidance.tool_refs
+                        if candidate_tool_registry.get_by_key(ref) is None
+                    )
+                    if foreign_resources or foreign_artifacts or foreign_tools or missing_tools:
+                        raise DlcError(
+                            DlcErrorCode.PERMISSION_VIOLATION,
+                            f"Capability guidance '{guidance.id}' from DLC '{dlc_id}' references foreign or unavailable capability contracts",
+                        )
+                    candidate_guidance_keys.add(guidance_key)
+                    candidate_guidance.append(CapabilityGuidanceContribution(
+                        spec=guidance,
+                        owner_id=dlc_id,
+                        package_digest=selected_digest,
+                    ))
 
                 # 5. Validate candidate artifact contracts
                 candidate_artifacts: list[ArtifactContractContribution] = []
@@ -571,6 +617,8 @@ class ContributionCompiler:
 
                 # Promote context
                 all_context_contributors.extend(candidate_context)
+                known_guidance_keys.update(candidate_guidance_keys)
+                all_capability_guidance.extend(candidate_guidance)
 
                 known_completion_constraint_ids.update(candidate_constraint_ids)
                 known_completion_support_ids.update(candidate_support_ids)
@@ -648,6 +696,7 @@ class ContributionCompiler:
             context_contributors=tuple(all_context_contributors),
             completion_constraints=tuple(all_completion_constraints),
             completion_supports=tuple(all_completion_supports),
+            capability_guidance=tuple(all_capability_guidance),
             artifact_contracts=tuple(all_artifact_contracts),
             artifact_table_views=tuple(all_artifact_table_views),
             artifact_chart_views=tuple(all_artifact_chart_views),

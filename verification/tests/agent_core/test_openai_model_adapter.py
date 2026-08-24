@@ -15,6 +15,7 @@ from engine.runtime_composition import build_default_completion_policy as Comple
 from engine.agent.context import ContextSnapshot
 from engine.agent.providers.openai import OpenAIModelAdapter
 from engine.agent.turn import (
+    ModelStreamTimeouts,
     TurnStreamAssembler,
     TurnStreamCancelled,
     TurnStreamError,
@@ -354,6 +355,7 @@ def test_responses_adapter_preserves_phase_calls_outputs_and_usage() -> None:
         "tools": tools,
         "tool_choice": "auto",
         "parallel_tool_calls": False,
+        "timeout": 180.0,
     }
     assert client.responses.stream is not None
     assert client.responses.stream.closed
@@ -901,6 +903,85 @@ def test_responses_stream_honors_cancellation_and_closes_sdk_stream() -> None:
             )
         )
 
+    assert client.responses.stream is not None
+    assert client.responses.stream.closed
+
+
+def test_responses_request_watchdog_bounds_stream_creation() -> None:
+    class _BlockingResponses:
+        async def create(self, **_request: object) -> object:
+            await asyncio.Event().wait()
+            raise AssertionError("unreachable")
+
+    client = SimpleNamespace(responses=_BlockingResponses())
+    items = list(OpenAIModelAdapter(
+        client=client,  # type: ignore[arg-type]
+        model_name="gpt-5",
+    ).stream(
+        messages=[],
+        tools=[],
+        stream_timeouts=ModelStreamTimeouts(
+            turn_seconds=0.2,
+            request_seconds=0.03,
+            first_event_seconds=0.03,
+            idle_seconds=0.03,
+        ),
+    ))
+
+    assert items[-1].kind == TurnStreamKind.ERROR
+    assert items[-1].error_code == "MODEL_PROVIDER_REQUEST_TIMEOUT"
+    assert items[-1].error_retryable is True
+
+
+@pytest.mark.parametrize(
+    ("events", "expected_code"),
+    [
+        ([], "MODEL_PROVIDER_FIRST_EVENT_TIMEOUT"),
+        ([
+            _event({
+                "type": "response.output_item.added",
+                "output_index": 0,
+                "sequence_number": 0,
+                "item": _message("msg_1", phase="commentary", status="in_progress"),
+            })
+        ], "MODEL_PROVIDER_STREAM_IDLE_TIMEOUT"),
+    ],
+)
+def test_responses_stream_watchdog_distinguishes_first_event_and_idle_timeout(
+    events: list[ResponseStreamEvent],
+    expected_code: str,
+) -> None:
+    class _DelayedStream(_EventStream):
+        async def __anext__(self) -> ResponseStreamEvent:
+            try:
+                return next(self._events)
+            except StopIteration:
+                await asyncio.Event().wait()
+                raise StopAsyncIteration
+
+    class _DelayedResponses(_Responses):
+        async def create(self, **request: object) -> _EventStream:
+            self.request = request
+            self.stream = _DelayedStream(self.events)
+            return self.stream
+
+    client = SimpleNamespace(responses=_DelayedResponses(events))
+    items = list(OpenAIModelAdapter(
+        client=client,  # type: ignore[arg-type]
+        model_name="gpt-5",
+    ).stream(
+        messages=[],
+        tools=[],
+        stream_timeouts=ModelStreamTimeouts(
+            turn_seconds=0.2,
+            first_event_seconds=0.03,
+            idle_seconds=0.03,
+        ),
+    ))
+
+    assert items[-1].kind == TurnStreamKind.ERROR
+    assert items[-1].error_code == expected_code
+    assert items[-1].error_retryable is True
     assert client.responses.stream is not None
     assert client.responses.stream.closed
 

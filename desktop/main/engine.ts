@@ -42,6 +42,22 @@ interface EngineReadyPayload {
   capabilities: string[];
 }
 
+interface EngineFatalPayload {
+  stage: string;
+  code: string;
+  fingerprint: string;
+}
+
+class EngineFatalError extends Error {
+  readonly fatal: EngineFatalPayload;
+
+  constructor(fatal: EngineFatalPayload) {
+    super("Python engine reported a safe startup failure");
+    this.name = "EngineFatalError";
+    this.fatal = fatal;
+  }
+}
+
 interface EngineSupervisorOptions {
   startupTimeoutMs?: number;
   restartLimit?: number;
@@ -71,6 +87,7 @@ export class EngineSupervisor {
     stage: null,
     generation: 0,
     restartCount: 0,
+    failure: null,
   };
   #config: EngineConfig | null = null;
   #child: EngineChild | null = null;
@@ -134,7 +151,7 @@ export class EngineSupervisor {
     const child = this.#detachChild();
     this.#config = null;
     this.#restartHistory.length = 0;
-    this.#setStatus({ state: "starting", error: null, stage: "starting", restartCount: 0 });
+    this.#setStatus({ state: "starting", error: null, stage: "starting", restartCount: 0, failure: null });
     try {
       if (child !== null) await child.stop();
       if (activeAttempt !== null) await activeAttempt;
@@ -163,7 +180,7 @@ export class EngineSupervisor {
       this.#setStatus({ state: "failed", error: message, stage: "shutdown_failed" });
       throw error;
     }
-    this.#setStatus({ state: "stopped", error: null, stage: null });
+    this.#setStatus({ state: "stopped", error: null, stage: null, failure: null });
   }
 
   async #runStartAttempt(state: "starting" | "restarting"): Promise<void> {
@@ -184,7 +201,7 @@ export class EngineSupervisor {
     const abort = new AbortController();
     this.#startupAbort = abort;
     this.#config = null;
-    this.#setStatus({ state, error: null, stage: "launching" });
+    this.#setStatus({ state, error: null, stage: "launching", failure: null });
     const token = this.#tokenFactory();
     let child: EngineChild | null = null;
     try {
@@ -225,7 +242,7 @@ export class EngineSupervisor {
         capabilities: [...ready.capabilities],
       };
       this.#startupAbort = null;
-      this.#setStatus({ state: "ready", error: null, stage: null, generation });
+      this.#setStatus({ state: "ready", error: null, stage: null, generation, failure: null });
     } catch (error) {
       if (!this.#isCurrent(epoch, abort)) return;
       this.#startupAbort = null;
@@ -245,8 +262,16 @@ export class EngineSupervisor {
       this.#config = null;
       this.#setStatus({
         state: "failed",
-        error: error instanceof Error ? error.message : "Python engine startup failed",
-        stage: "failed",
+        error: error instanceof EngineFatalError
+          ? "Python engine startup failed"
+          : error instanceof Error ? error.message : "Python engine startup failed",
+        stage: error instanceof EngineFatalError ? error.fatal.stage : "failed",
+        failure: error instanceof EngineFatalError
+          ? {
+            code: error.fatal.code,
+            fingerprint: error.fatal.fingerprint,
+          }
+          : null,
       });
     }
   }
@@ -348,6 +373,11 @@ function waitForEngineReady(
     const onLine = (line: string) => {
       const stage = parsePrefixedJson<{ stage?: unknown }>(line, "DBFOX_ENGINE_STAGE");
       if (typeof stage?.stage === "string" && stage.stage.trim()) onStage(stage.stage);
+      const fatal = parsePrefixedJson<EngineFatalPayload>(line, "DBFOX_ENGINE_FATAL");
+      if (isEngineFatalPayload(fatal)) {
+        finish(new EngineFatalError(fatal));
+        return;
+      }
       const ready = parsePrefixedJson<EngineReadyPayload>(line, "DBFOX_ENGINE_READY");
       if (ready !== null) finish(null, ready);
     };
@@ -362,6 +392,16 @@ function waitForEngineReady(
     signal.addEventListener("abort", onAbort, { once: true });
     lines.on("line", onLine);
   });
+}
+
+function isEngineFatalPayload(value: EngineFatalPayload | null): value is EngineFatalPayload {
+  return value !== null
+    && typeof value.stage === "string"
+    && /^[a-z][a-z0-9_-]{0,63}$/.test(value.stage)
+    && typeof value.code === "string"
+    && /^[A-Z][A-Z0-9_]{2,95}$/.test(value.code)
+    && typeof value.fingerprint === "string"
+    && /^[a-f0-9]{24}$/.test(value.fingerprint);
 }
 
 function parsePrefixedJson<T>(line: string, prefix: string): T | null {

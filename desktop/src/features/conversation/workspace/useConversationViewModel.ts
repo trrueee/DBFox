@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { getUserErrorMessage } from "../../../lib/api/client";
+import type { RequestedResourceRef } from "../../../lib/api/generated/types.gen";
 import { useConversationStore } from "../../../stores/conversationStore";
 import { isTerminalRun } from "../conversationState";
 import type {
@@ -16,6 +17,7 @@ export function useConversationViewModel(conversationId: string) {
     content: string;
     mode: ConversationDeliveryMode;
     idempotencyKey: string;
+    requestedResources: readonly RequestedResourceRef[];
   } | null>(null);
   const detail = useConversationStore((state) => state.detailById[conversationId]);
   const artifactsById = useConversationStore((state) => state.artifactsById);
@@ -37,12 +39,20 @@ export function useConversationViewModel(conversationId: string) {
       content,
       mode,
       idempotencyKey,
+      requestedResources,
     }: {
       targetConversationId: string;
       content: string;
       mode: ConversationDeliveryMode;
       idempotencyKey: string;
-    }) => sendMessageAction(targetConversationId, content, mode, idempotencyKey),
+      requestedResources: readonly RequestedResourceRef[];
+    }) => sendMessageAction(
+      targetConversationId,
+      content,
+      mode,
+      idempotencyKey,
+      requestedResources,
+    ),
   });
   const cancelMutation = useMutation({
     mutationFn: cancelRunAction,
@@ -113,6 +123,7 @@ export function useConversationViewModel(conversationId: string) {
       targetConversationId: string,
       content: string,
       mode: ConversationDeliveryMode,
+      requestedResources: readonly RequestedResourceRef[] = [],
     ) => {
       let intent = pendingSendIntent.current;
       if (
@@ -120,12 +131,14 @@ export function useConversationViewModel(conversationId: string) {
         || intent.conversationId !== targetConversationId
         || intent.content !== content
         || intent.mode !== mode
+        || !sameRequestedResources(intent.requestedResources, requestedResources)
       ) {
         intent = {
           conversationId: targetConversationId,
           content,
           mode,
           idempotencyKey: globalThis.crypto.randomUUID(),
+          requestedResources: [...requestedResources],
         };
         pendingSendIntent.current = intent;
       }
@@ -134,6 +147,7 @@ export function useConversationViewModel(conversationId: string) {
         content,
         mode,
         idempotencyKey: intent.idempotencyKey,
+        requestedResources: intent.requestedResources,
       });
       if (pendingSendIntent.current === intent) pendingSendIntent.current = null;
     },
@@ -171,4 +185,14 @@ export function useConversationViewModel(conversationId: string) {
     selectArtifact,
     loadRunArtifacts,
   };
+}
+
+function sameRequestedResources(
+  left: readonly RequestedResourceRef[],
+  right: readonly RequestedResourceRef[],
+): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((ref, index) => (
+    ref.kind === right[index]?.kind && ref.id === right[index]?.id
+  ));
 }

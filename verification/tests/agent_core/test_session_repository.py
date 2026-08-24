@@ -279,7 +279,11 @@ def test_turn_snapshot_is_frozen_under_the_session_lease(db_session, test_resour
     assert stored.sequence == 1
     assert stored.context_hash == "context-hash"
     assert stored.tool_materialization_hash == "tools-hash"
-    assert repository.events.list("session_1") == events_before_turn
+    events_after_turn = repository.events.list("session_1")
+    assert events_after_turn[:-1] == events_before_turn
+    assert events_after_turn[-1].event_type is RuntimeEventType.RUN_UPDATED
+    assert events_after_turn[-1].payload.run is not None
+    assert events_after_turn[-1].payload.run.phase == "waiting_model"
 
 
 def test_admit_rejects_a_soft_deleted_session_at_the_domain_boundary(

@@ -17,19 +17,27 @@ export function Composer({
   onResourceIntentsChange,
   updatingResourceIntents = false,
   resourceIntentError,
+  requestedResources = [],
+  onRequestedResourcesChange,
 }: {
   disabled?: string | null;
   running: boolean;
   submitting?: boolean;
   cancelling?: boolean;
   error?: string | null;
-  onSend: (text: string, mode: ConversationDeliveryMode) => Promise<void>;
+  onSend: (
+    text: string,
+    mode: ConversationDeliveryMode,
+    requestedResources: readonly RequestedResourceRef[],
+  ) => Promise<void>;
   onCancel: () => Promise<void>;
   projectId?: string;
   resourceIntents?: readonly RequestedResourceRef[];
   onResourceIntentsChange?: (next: RequestedResourceRef[]) => Promise<void>;
   updatingResourceIntents?: boolean;
   resourceIntentError?: string | null;
+  requestedResources?: readonly RequestedResourceRef[];
+  onRequestedResourcesChange?: (next: RequestedResourceRef[]) => void;
 }) {
   const [value, setValue] = useState("");
   const [deliveryMode, setDeliveryMode] = useState<ConversationDeliveryMode>("queue");
@@ -37,7 +45,7 @@ export function Composer({
     const text = value.trim();
     if (!text || disabled || submitting) return;
     try {
-      await onSend(text, running ? deliveryMode : "queue");
+      await onSend(text, running ? deliveryMode : "queue", requestedResources);
       setValue("");
     } catch {
       // The mutation exposes a user-facing error; preserve the draft for retry.
@@ -68,6 +76,27 @@ export function Composer({
             rows={2}
           />
           <div className="conv-composer-toolbar">
+            {requestedResources.length > 0 && (
+              <div className="resource-context-picker__chips" aria-label="本次消息上下文">
+                {requestedResources.map((ref) => (
+                  <span className="resource-context-chip" key={`${ref.kind}:${ref.id}`}>
+                    <span aria-hidden="true">♪</span>
+                    <span>{ref.kind === "dbfox.music.library" ? "Music Library" : ref.id}</span>
+                    <button
+                      type="button"
+                      onClick={() => onRequestedResourcesChange?.(
+                        requestedResources.filter(
+                          (candidate) => candidate.kind !== ref.kind || candidate.id !== ref.id,
+                        ),
+                      )}
+                      aria-label={`从本次消息移除 ${ref.id}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             {projectId && onResourceIntentsChange && (
               <ResourceContextPicker
                 projectId={projectId}

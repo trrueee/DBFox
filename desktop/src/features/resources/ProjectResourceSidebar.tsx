@@ -52,6 +52,8 @@ export function ProjectResourceSidebar({
 
   const restoredConversationProjectRef = useRef("");
   const [conversationError, setConversationError] = useState("");
+  const [connectorAddError, setConnectorAddError] = useState("");
+  const [addingConnectorId, setAddingConnectorId] = useState<string | null>(null);
   const [expandedConnectors, setExpandedConnectors] = useState<Record<string, boolean>>({});
 
   // Host owns section chrome (expand/collapse); DLC only contributes content.
@@ -108,6 +110,19 @@ export function ProjectResourceSidebar({
   const handleNewProjectConversation = (projectId: string) => {
     setActiveProject(projectId);
     showSmartQueryHome();
+  };
+
+  const handleAddConnector = async (connector: ResourceConnectorContribution) => {
+    if (!activeProjectId || !connector.onAdd || addingConnectorId) return;
+    setConnectorAddError("");
+    setAddingConnectorId(connector.id);
+    try {
+      await connector.onAdd({ projectId: activeProjectId });
+    } catch (error) {
+      setConnectorAddError(getUserErrorMessage(error, "资源操作失败，请重试。"));
+    } finally {
+      setAddingConnectorId(null);
+    }
   };
 
   const addableConnectors = useMemo(
@@ -302,9 +317,10 @@ export function ProjectResourceSidebar({
                       {addableConnectors.map((connector) => (
                         <DropdownMenuItem
                           key={connector.id}
-                          onClick={() => connector.onAdd?.({ projectId: activeProjectId })}
+                          onClick={() => void handleAddConnector(connector)}
+                          disabled={addingConnectorId !== null}
                         >
-                          {connector.addLabel}
+                          {addingConnectorId === connector.id ? "正在准备…" : connector.addLabel}
                         </DropdownMenuItem>
                       ))}
                     </DropdownMenuContent>
@@ -313,6 +329,9 @@ export function ProjectResourceSidebar({
               </div>
 
               <div className="ds-connector-sections">
+                {connectorAddError ? (
+                  <p className="ds-resource-error" role="alert">{connectorAddError}</p>
+                ) : null}
                 {connectors.map((connector, index) => {
                   const isExpanded = expandedConnectors[connector.id] ?? index === 0;
                   return (

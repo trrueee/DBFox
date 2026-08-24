@@ -58,6 +58,7 @@ export const parseConversationRun = (value: unknown): ConversationRun => {
   return {
     ...run,
     current_turn_id: run.current_turn_id ?? null,
+    phase: run.phase ?? null,
     result: run.result ?? {},
     error: run.error ?? null,
   };
@@ -122,9 +123,11 @@ export const parseConversationArtifact = (value: unknown): ConversationArtifact 
     ...artifact,
     turn_id: artifact.turn_id ?? null,
     semantic_key: artifact.semantic_key ?? null,
+    schema_version: artifact.schema_version ?? 1,
     summary: artifact.summary ?? null,
     payload: artifact.payload ?? {},
     payload_ref: artifact.payload_ref ?? null,
+    resource_refs: artifact.resource_refs ?? [],
     provenance: artifact.provenance ?? {},
     relations: artifact.relations ?? [],
   } as ConversationArtifact;

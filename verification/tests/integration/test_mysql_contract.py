@@ -91,7 +91,7 @@ class _MySQLContractProvider:
         self.database = database
         self.database_id = database_id
 
-    def stream(self, *, messages, tools, timeout_seconds=None, cancellation_probe=None):
+    def stream(self, *, messages, tools, timeout_seconds=None, stream_timeouts=None, cancellation_probe=None):
         del tools, timeout_seconds, cancellation_probe
         qualified_table = f"{self.database}.orders"
         if self.turn == 1:

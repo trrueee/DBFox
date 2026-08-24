@@ -84,6 +84,12 @@ class ScoreAnnotation(Contract):
     text: str = Field(min_length=1, max_length=240)
 
 
+class HarmonyEvent(Contract):
+    measure: int = Field(ge=1, le=MAX_MEASURES)
+    beat: float = Field(default=0, ge=0)
+    symbol: str = Field(min_length=1, max_length=32, pattern=r"^[A-G][#b]?(?:[a-zA-Z0-9()+/#-]{0,29})$")
+
+
 class ScoreDocument(Contract):
     schema_version: Literal[1] = 1
     title: str = Field(min_length=1, max_length=160)
@@ -95,6 +101,7 @@ class ScoreDocument(Contract):
     notes: tuple[ScoreNote, ...] = Field(default=(), max_length=MAX_NOTES)
     pedal: tuple[PedalEvent, ...] = ()
     dynamics: tuple[DynamicEvent, ...] = ()
+    harmony: tuple[HarmonyEvent, ...] = ()
     annotations: tuple[ScoreAnnotation, ...] = ()
 
     @model_validator(mode="after")
@@ -108,7 +115,7 @@ class ScoreDocument(Contract):
         for section in self.sections:
             if section.end_measure > self.measure_count:
                 raise ValueError("section range exceeds measure_count")
-        for event in (*self.notes, *self.pedal, *self.dynamics, *self.annotations):
+        for event in (*self.notes, *self.pedal, *self.dynamics, *self.harmony, *self.annotations):
             if event.measure > self.measure_count:
                 raise ValueError("score event exceeds measure_count")
             if not math.isfinite(event.beat) or event.beat >= self.meter.beats:
@@ -154,6 +161,7 @@ class ScoreRevisionArtifactPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
     score_id: str = Field(alias="scoreId")
+    project_id: str | None = Field(default=None, alias="projectId")
     revision: int = Field(ge=1)
     parent_revision: int | None = Field(default=None, alias="parentRevision", ge=1)
     content_hash: str = Field(alias="contentHash", pattern=r"^sha256:[0-9a-f]{64}$")
@@ -179,6 +187,62 @@ class ScoreAnalysisArtifactPayload(BaseModel):
     harmonic_summary: str = Field(alias="harmonicSummary")
 
 
+class MeasureMelodyNote(Contract):
+    beat: float = Field(ge=0)
+    duration: float = Field(gt=0, le=64)
+    pitch: int = Field(ge=PIANO_LOW, le=PIANO_HIGH)
+    velocity: float = Field(default=0.72, ge=0.01, le=1)
+
+
+class PianoMeasurePlan(Contract):
+    measure: int = Field(ge=1, le=MAX_MEASURES)
+    chord: str = Field(
+        min_length=1,
+        max_length=32,
+        description="Chord symbol shown above this measure, for example Cmaj7, Am7, or G/B.",
+    )
+    chord_pitches: tuple[int, ...] = Field(
+        min_length=2,
+        max_length=5,
+        description=(
+            "Unique MIDI pitches forming the left-hand accompaniment voicing. "
+            "Choose a playable low register; the Music tool expands the selected pattern."
+        ),
+    )
+    melody: tuple[MeasureMelodyNote, ...] = Field(
+        default=(),
+        max_length=24,
+        description="Right-hand melody events within this measure.",
+    )
+    accompaniment: Literal[
+        "arpeggio_eighths",
+        "broken_quarters",
+        "root_fifth_half_notes",
+        "block_half_notes",
+    ] = "arpeggio_eighths"
+    accompaniment_velocity: float = Field(default=0.54, ge=0.01, le=1)
+
+    @model_validator(mode="after")
+    def validate_measure_plan(self) -> "PianoMeasurePlan":
+        if len(set(self.chord_pitches)) != len(self.chord_pitches):
+            raise ValueError("chord_pitches must be unique")
+        if any(not PIANO_LOW <= pitch <= PIANO_HIGH for pitch in self.chord_pitches):
+            raise ValueError("chord_pitches fall outside the piano range")
+        return self
+
+
+class PianoCompositionDraft(Contract):
+    sections: tuple[ScoreSection, ...] = ()
+    measures: tuple[PianoMeasurePlan, ...] = Field(
+        min_length=1,
+        max_length=MAX_MEASURES,
+        description="Exactly one ordered compact plan for every requested measure.",
+    )
+    dynamics: tuple[DynamicEvent, ...] = ()
+    pedal: tuple[PedalEvent, ...] = ()
+    annotations: tuple[ScoreAnnotation, ...] = ()
+
+
 class ComposePianoInput(ToolInputModel):
     title: str = Field(min_length=1, max_length=160)
     intent: str = Field(min_length=1, max_length=2000)
@@ -186,7 +250,23 @@ class ComposePianoInput(ToolInputModel):
     meter: Meter
     key: KeySignature
     measure_count: int = Field(ge=1, le=MAX_MEASURES)
-    score_draft: ScoreDocument
+    composition: PianoCompositionDraft = Field(
+        description=(
+            "Compact musical plan. Describe melody, harmony, and accompaniment shape; "
+            "do not enumerate the expanded left-hand ScoreDocument notes."
+        )
+    )
+
+    @model_validator(mode="after")
+    def validate_composition(self) -> "ComposePianoInput":
+        measures = [measure.measure for measure in self.composition.measures]
+        if measures != list(range(1, self.measure_count + 1)):
+            raise ValueError("composition must contain exactly one ordered plan for every measure")
+        for plan in self.composition.measures:
+            for note in plan.melody:
+                if note.beat >= self.meter.beats or note.beat + note.duration > self.meter.beats + 1e-9:
+                    raise ValueError("melody note timing falls outside its measure")
+        return self
 
 
 class ScoreTargetInput(ToolInputModel):

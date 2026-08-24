@@ -10,6 +10,7 @@ import type {
   UserMessageItem,
 } from "../../../../types/conversation";
 import { AgentTimeline } from "../AgentTimeline";
+import { useDlcStore } from "../../../dlc/extensionStore";
 
 const base = {
   session_id: "session-1",
@@ -20,7 +21,10 @@ const base = {
 } as const;
 
 describe("AgentTimeline", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    useDlcStore.getState().reset();
+  });
   it("keeps messages, calls, outputs, and the final answer in canonical sequence", () => {
     const items: ConversationRunItem[] = [
       user("检查订单", 1),
@@ -176,6 +180,38 @@ describe("AgentTimeline", () => {
     expect(screen.getByText("读取订单结构")).toBeTruthy();
     expect(screen.getByText("(3)")).toBeTruthy();
     expect(screen.queryByText("(2)")).toBeNull();
+  });
+
+  it("renders a registered namespaced capability artifact in the conversation", () => {
+    useDlcStore.getState().setProjectionResult("snapshot-1", {}, {
+      connectors: [],
+      dockViews: [],
+      artifactRenderers: [{
+        type: "dbfox.music.score_revision",
+        supportedSchemaVersions: [1],
+        parsePayload: (value) => value,
+        render: (artifact) => <p>乐谱工件：{artifact.title}</p>,
+      }],
+    });
+    const artifact: ConversationArtifact = {
+      id: "score-artifact-1",
+      session_id: "session-1",
+      run_id: "run-1",
+      version: 1,
+      schema_version: 1,
+      type: "dbfox.music.score_revision",
+      title: "Warm Light",
+      status: "completed",
+      visibility: "primary",
+      payload: { message: "score" },
+      resource_refs: [],
+      provenance: {},
+      relations: [],
+    };
+
+    renderTimeline([], {}, [artifact]);
+
+    expect(screen.getByText("乐谱工件：Warm Light")).toBeTruthy();
   });
 });
 

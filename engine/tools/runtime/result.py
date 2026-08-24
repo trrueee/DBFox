@@ -42,6 +42,7 @@ class ToolReconciliation(BaseModel):
 
     status: Literal["succeeded", "not_applied", "failed", "unknown"]
     output: dict[str, Any] | None = None
+    artifacts: tuple[ArtifactDraft, ...] = ()
     error: str | None = None
     error_code: str | None = None
 
@@ -51,6 +52,8 @@ class ToolReconciliation(BaseModel):
             raise ValueError("A succeeded reconciliation must include output")
         if self.status != "succeeded" and self.output is not None:
             raise ValueError("Only a succeeded reconciliation may include output")
+        if self.status != "succeeded" and self.artifacts:
+            raise ValueError("Only a succeeded reconciliation may include Artifacts")
         if self.status != "failed" and self.error_code is not None:
             raise ValueError("Only a failed reconciliation may include an error_code")
         return self
