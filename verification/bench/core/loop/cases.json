@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "case_id": "direct-completion",
+      "prompt": "Complete the bounded Core task without a tool.",
+      "steps": [{"kind": "answer", "content": "core task complete"}],
+      "required_answer_terms": ["complete"],
+      "required_tools": [],
+      "max_turns": 1,
+      "max_tool_calls": 0
+    },
+    {
+      "case_id": "single-tool-completion",
+      "prompt": "Use the capability-neutral verification tool once, then complete.",
+      "steps": [
+        {"kind": "tool", "tool_name": "verification_read", "arguments": {"value": "bounded"}},
+        {"kind": "answer", "content": "verification complete"}
+      ],
+      "required_answer_terms": ["verification", "complete"],
+      "required_tools": ["verification_read"],
+      "max_turns": 2,
+      "max_tool_calls": 1
+    },
+    {
+      "case_id": "two-step-tool-completion",
+      "prompt": "Use the verification tool for two distinct bounded observations, then complete.",
+      "steps": [
+        {"kind": "tool", "tool_name": "verification_read", "arguments": {"value": "first"}},
+        {"kind": "tool", "tool_name": "verification_read", "arguments": {"value": "second"}},
+        {"kind": "answer", "content": "two observations complete"}
+      ],
+      "required_answer_terms": ["two", "complete"],
+      "required_tools": ["verification_read", "verification_read"],
+      "max_turns": 3,
+      "max_tool_calls": 2
+    }
+  ]
+}

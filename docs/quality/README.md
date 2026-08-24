@@ -24,7 +24,7 @@
 - [P2 Memory v4 Cutover Gate 本地证据与限制](../archive/reviews/2026-08-16-p2-memory-v4-cutover-evidence.md)：已归档的旧开关式候选实现证据，不代表当前 Runtime 仍提供该开关。
 - [P2 Memory v4 DeepSeek 真实 Provider 调查与修复记录](../archive/reviews/2026-08-17-memory-v4-projection-deepseek-investigation.md)：已归档的 projection 故障调查；当前评测不得把已删除开关当作 A/B 变化轴。
 - [Agent 生产评测方法](./agent-evaluation-methodology.md)：分层 Harness、数据集角色、Grader、统计门禁与脱敏 Trace 合同。
-- [DBFox AgentBench](./agentbench-implementation.md)：60 场景数据集、评分器校准、真实 RunLoop、故障注入、CLI 和 CI。
+- [DBFox Benchmark System](./benchmark-system.md)：Core/Capability/Composition 分层、60 场景 Data suite、真实 RunLoop、评分器校准、CLI 和 CI。
 - [Agent Harness 设计、优化与评测复盘](../archive/reviews/agent-harness-evolution-retrospective.md)：历史演进背景；当前合同以架构文档和 verification system 为准。
 - [供应链安全](./supply-chain-security.md)：锁文件、依赖审计、提交签名和正式产物来源证明。
 - [发布验证矩阵](./release-validation-matrix.md)：平台、Runner、产物和人工验收的证据要求。

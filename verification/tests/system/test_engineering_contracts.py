@@ -74,9 +74,15 @@ def test_verification_is_a_one_way_repository_boundary() -> None:
     ]
 
 
-def test_agentbench_uses_current_project_resource_authority() -> None:
+def test_data_capability_bench_uses_current_project_resource_authority() -> None:
     runner = (
-        ROOT / "verification" / "bench" / "agentbench" / "runtime.py"
+        ROOT
+        / "verification"
+        / "bench"
+        / "capabilities"
+        / "dbfox_data"
+        / "agent"
+        / "runtime.py"
     ).read_text(encoding="utf-8")
 
     assert "initialize_runtime_snapshot(" in runner
@@ -87,6 +93,14 @@ def test_agentbench_uses_current_project_resource_authority() -> None:
     assert "DataSource(" not in runner
     assert "datasource_id=datasource_id" not in runner
     assert "datasource_generation=" not in runner
+
+
+def test_bench_architecture_has_no_legacy_monolith_or_product_back_dependency() -> None:
+    bench_root = ROOT / "verification" / "bench"
+    assert not any((bench_root / "agentbench").glob("*.py"))
+    assert (bench_root / "framework").is_dir()
+    assert (bench_root / "core").is_dir()
+    assert (bench_root / "capabilities").is_dir()
 
 
 def _normalise_package_name(name: str) -> str:

@@ -1,8 +1,8 @@
-# DBFox AgentBench：实现、运行与判定
+# DBFox AgentBench：实现、运行与判定（历史）
 
 > 文档类型：质量工具
 >
-> 状态：当前
+> 状态：历史；已由 `docs/quality/benchmark-system.md` 替代
 >
 > 最后核验：2026-08-24
 >

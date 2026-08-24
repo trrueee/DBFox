@@ -1,4 +1,4 @@
-"""Opt-in real-provider runner over the production DBFox Agent Harness."""
+"""Opt-in dbfox.data suite runner over the production DBFox Agent Harness."""
 
 from __future__ import annotations
 
@@ -11,9 +11,12 @@ import sqlite3
 import time
 from typing import Any
 
-from verification.bench.agentbench.reporting import TrialRecord
-from verification.bench.agentbench.schema import DatasetManifest, EvalCase
-from verification.bench.agentbench.scoring import (
+from verification.bench.capabilities.dbfox_data.agent.reporting import TrialRecord
+from verification.bench.capabilities.dbfox_data.agent.schema import (
+    DatasetManifest,
+    EvalCase,
+)
+from verification.bench.capabilities.dbfox_data.agent.scoring import (
     PlanTrace,
     ResultTable,
     RunTrace,
@@ -67,14 +70,14 @@ def _query_table(
 ) -> ResultTable:
     value = sql.strip()
     if not (value.lower().startswith("select") or value.lower().startswith("with")):
-        raise ValueError("AgentBench only executes read-only result queries")
+        raise ValueError("Data CapabilityBench only executes read-only result queries")
     connection = sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True)
     try:
         cursor = connection.execute(value, parameters or {})
         columns = tuple(str(item[0]) for item in (cursor.description or ()))
         rows = tuple(tuple(row) for row in cursor.fetchmany(max_rows + 1))
         if len(rows) > max_rows:
-            raise ValueError("AgentBench result exceeded the bounded scorer row limit")
+            raise ValueError("Data CapabilityBench result exceeded the bounded scorer row limit")
         return ResultTable(columns=columns, rows=rows)
     finally:
         connection.close()
@@ -233,7 +236,7 @@ def _resolve_provider_config():
             api_key=api_key,
             api_base=normalize_llm_api_base(api_base or DEFAULT_LLM_API_BASE),
             model_name=(model_name or DEFAULT_LLM_MODEL_NAME).strip(),
-            source="agentbench-ci",
+            source="data-capability-bench-ci",
         )
         return config, RealProviderIdentity(
             model=config.model_name,
@@ -288,7 +291,7 @@ def run_real_provider(
         raise ValueError("repetitions must be between 1 and 5")
 
     metadata_path = configure_isolated_runtime(work_dir / "runtime")
-    datasource_path = work_dir / "agentbench.sqlite"
+    datasource_path = work_dir / "data-capability-bench.sqlite"
     seed_sqlite_database(
         datasource_path,
         Path(__file__).resolve().parent / "datasets" / "sqlite-seed-v1.sql",
@@ -334,7 +337,7 @@ def run_real_provider(
 
     configured_metadata = Path(str(DATABASE_URL).replace("sqlite:///", "")).resolve()
     if configured_metadata != metadata_path.resolve():
-        raise RuntimeError("AgentBench did not bind the isolated metadata database")
+        raise RuntimeError("Data CapabilityBench did not bind the isolated metadata database")
     run_alembic_upgrade(DATABASE_URL)
     verify_metadata_database(DATABASE_URL)
 
@@ -343,9 +346,9 @@ def run_real_provider(
         system_dlc_dir=system_dlc_dir,
         system_dlc_manifest=system_dlc_manifest,
     )
-    project_id = f"agentbench-{manifest.seed_version}"
+    project_id = f"data-capability-bench-{manifest.seed_version}"
     with SessionLocal() as db:
-        db.add(Project(id=project_id, name=f"AgentBench {manifest.seed_version}"))
+        db.add(Project(id=project_id, name=f"Data CapabilityBench {manifest.seed_version}"))
         db.commit()
 
     def invoke_data_operation(name: str, payload: dict[str, Any]) -> Any:
@@ -366,12 +369,12 @@ def run_real_provider(
     created_profile = invoke_data_operation(
         "profiles.create",
         {
-            "name": "DBFox AgentBench Synthetic",
+            "name": "DBFox Data CapabilityBench Synthetic",
             "provider": "sqlite",
             "is_read_only": True,
             "environment": "test",
             "initial_database_name": str(datasource_path.resolve()),
-            "initial_database_display_name": "AgentBench",
+            "initial_database_display_name": "Data CapabilityBench",
         },
     )
     database_id = str(created_profile.databases[0].id)
@@ -385,7 +388,7 @@ def run_real_provider(
             snapshot=snapshot,
         )
     if len(resource_refs) != 1:
-        raise RuntimeError("AgentBench database authority was not frozen exactly once")
+        raise RuntimeError("Data CapabilityBench database authority was not frozen exactly once")
     session_factory = SessionLocal
     secret = str(getattr(config, "api_key", "") or "")
 
@@ -393,7 +396,7 @@ def run_real_provider(
         with session_factory() as db:
             aggregate = SessionRepository(db).create(
                 project_id=project_id,
-                title=f"[AgentBench] {case.case_id} r{repetition}",
+                title=f"[Data CapabilityBench] {case.case_id} r{repetition}",
             )
             if case.history:
                 aggregate.message_sequence = len(case.history)
@@ -424,10 +427,10 @@ def run_real_provider(
                 resource_refs=resource_refs,
                 content=case.prompts[prompt_index],
                 idempotency_key=(
-                    f"agentbench-{manifest.dataset_version}-{case.case_id}-"
+                    f"data-bench-{manifest.dataset_version}-{case.case_id}-"
                     f"{repetition}-{prompt_index}"
                 ),
-                llm_credential_id="agentbench-configured-provider",
+                llm_credential_id="data-bench-configured-provider",
                 api_base=identity.api_base,
                 model_name=identity.model,
                 request_payload={
@@ -437,11 +440,11 @@ def run_real_provider(
             )
             lease = sessions.claim(
                 session_id=session_id,
-                owner="agentbench",
+                owner="data-capability-bench",
                 ttl_seconds=900,
             )
             if lease is None:
-                raise RuntimeError("AgentBench could not claim the Session lease")
+                raise RuntimeError("Data CapabilityBench could not claim the Session lease")
             sessions.promote_next_input(lease=lease)
             db.commit()
 

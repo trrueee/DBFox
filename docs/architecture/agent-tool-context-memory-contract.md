@@ -435,7 +435,7 @@ Evidence 只通过 `artifact_id` 指向不可变来源；freshness 由 Artifact 
 - Provider input/output/total tokens；
 - completion disposition 和 limitation codes。
 
-AgentBench 使用生产 Trace 评估：
+对应的 Core/Capability Bench 使用生产 Trace 评估：
 
 - 当前请求保持率；
 - Artifact 复用率；

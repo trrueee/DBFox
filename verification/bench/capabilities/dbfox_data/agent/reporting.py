@@ -1,28 +1,29 @@
-"""Reproducible JSON, Markdown and JUnit reports for AgentBench."""
+"""Reproducible reports for the agent-mediated dbfox.data capability suite."""
 
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import UTC, datetime
-import hashlib
 import json
-import os
 from pathlib import Path
-import platform
-import subprocess
 from typing import Any
 from xml.etree import ElementTree
 
 from pydantic import BaseModel, ConfigDict
 
-from verification.bench.agentbench.schema import DatasetManifest, Verdict, public_manifest_summary
-from verification.bench.agentbench.scoring import (
+from verification.bench.capabilities.dbfox_data.agent.schema import (
+    DatasetManifest,
+    Verdict,
+    public_manifest_summary,
+)
+from verification.bench.capabilities.dbfox_data.agent.scoring import (
     TrialScore,
     TrialTrace,
     duplicate_tool_call_ratio,
     failed_tool_call_ratio,
 )
-from verification.bench.agentbench.statistics import distribution, wilson_interval
+from verification.bench.framework.statistics import distribution, wilson_interval
+from verification.bench.framework.reporting import environment_evidence as base_environment_evidence
+from verification.bench.framework.schema import load_suite_manifest
 
 
 class TrialRecord(BaseModel):
@@ -36,31 +37,11 @@ class TrialRecord(BaseModel):
     score: TrialScore
 
 
-def _git(command: str) -> str:
-    completed = subprocess.run(
-        ["git", *command.split()],
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    return completed.stdout.strip() if completed.returncode == 0 else "unavailable"
-
-
 def environment_evidence(*, model: str | None, api_base: str | None) -> dict[str, Any]:
     return {
-        "captured_at": datetime.now(UTC).isoformat(),
-        "git_commit": _git("rev-parse HEAD"),
-        "git_branch": _git("branch --show-current"),
-        "git_status_sha256": hashlib.sha256(
-            _git("status --short").encode("utf-8")
-        ).hexdigest(),
-        "os": platform.platform(),
-        "architecture": platform.machine(),
-        "python": platform.python_version(),
+        **base_environment_evidence(),
         "model_alias": model,
         "api_base": api_base,
-        "ci": bool(os.getenv("CI")),
     }
 
 
@@ -197,7 +178,9 @@ def summarize(
             "tool_calls": distribution(len(item.trace.tools) for item in items),
         }
 
+    suite = load_suite_manifest(Path(__file__).resolve().parent / "suite.json")
     return {
+        "suite": suite.public_summary(),
         "dataset": public_manifest_summary(manifest),
         "trials": len(records),
         "scored_trials": len(scored),
@@ -280,7 +263,7 @@ def write_reports(
     _json_write(output_dir / "summary.json", summary)
 
     lines = [
-        "# DBFox AgentBench report",
+        "# DBFox dbfox.data CapabilityBench report",
         "",
         f"- Dataset: `{manifest.dataset_id}` v{manifest.dataset_version} ({manifest.role.value})",
         f"- Commit: `{environment.get('git_commit')}`",
@@ -359,7 +342,7 @@ def write_reports(
         test_case = ElementTree.SubElement(
             suite,
             "testcase",
-            classname=f"agentbench.{record.category}",
+            classname=f"capability.dbfox_data.agent.{record.category}",
             name=f"{record.case_id}[{record.repetition}]",
             time=f"{record.trace.latency_ms / 1000:.6f}",
         )

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 
-from verification.bench.agentbench.reporting import TrialRecord, write_reports
-from verification.bench.agentbench.schema import DatasetManifest
-from verification.bench.agentbench.scoring import (
+from verification.bench.capabilities.dbfox_data.agent.reporting import (
+    TrialRecord,
+    write_reports,
+)
+from verification.bench.capabilities.dbfox_data.agent.schema import DatasetManifest
+from verification.bench.capabilities.dbfox_data.agent.scoring import (
     PlanTrace,
     ToolTrace,
     TrialTrace,

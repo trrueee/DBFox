@@ -1,4 +1,4 @@
-"""Command-line entry point for DBFox AgentBench."""
+"""CLI implementation for the dbfox.data agent capability suite."""
 
 from __future__ import annotations
 
@@ -9,22 +9,31 @@ from pathlib import Path
 import shutil
 import sys
 
-from verification.bench.agentbench.calibration import load_calibration, run_calibration
-from verification.bench.agentbench.comparison import compare_summaries, load_summary
-from verification.bench.agentbench.reporting import (
+from verification.bench.capabilities.dbfox_data.agent.calibration import (
+    load_calibration,
+    run_calibration,
+)
+from verification.bench.capabilities.dbfox_data.agent.comparison import (
+    compare_summaries,
+    load_summary,
+)
+from verification.bench.capabilities.dbfox_data.agent.reporting import (
     TrialRecord,
     environment_evidence,
     write_reports,
 )
-from verification.bench.agentbench.runtime import (
+from verification.bench.capabilities.dbfox_data.agent.runtime import (
     EvaluationConfigurationError,
     run_real_provider,
 )
-from verification.bench.agentbench.schema import load_manifest, public_manifest_summary
-from verification.bench.agentbench.scoring import score_trial
+from verification.bench.capabilities.dbfox_data.agent.schema import (
+    load_manifest,
+    public_manifest_summary,
+)
+from verification.bench.capabilities.dbfox_data.agent.scoring import score_trial
 
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[5]
 DATASETS = Path(__file__).resolve().parent / "datasets"
 DEFAULT_DATASET = DATASETS / "regression-v1.json"
 DEFAULT_CALIBRATION = (
@@ -37,7 +46,7 @@ def _stamp() -> str:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m verification.bench.agentbench")
+    parser = argparse.ArgumentParser(prog="python -m verification.bench data-agent")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     validate = subparsers.add_parser("validate", help="strictly validate a dataset")
@@ -61,7 +70,7 @@ def _parser() -> argparse.ArgumentParser:
     real.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "output" / "agent-evaluation" / f"agentbench-{_stamp()}",
+        default=ROOT / "output" / "agent-evaluation" / f"data-agent-{_stamp()}",
     )
 
     replay = subparsers.add_parser("replay", help="offline re-score stored trials")
@@ -86,7 +95,7 @@ def _write_calibration(path: Path, suite_path: Path) -> int:
     )
     failed = [result.fixture_id for result in results if not result.calibrated]
     (path / "report.md").write_text(
-        "# AgentBench scorer calibration\n\n"
+        "# dbfox.data CapabilityBench scorer calibration\n\n"
         f"- Calibrated: {len(results) - len(failed)}/{len(results)}\n"
         f"- Failed fixtures: {', '.join(failed) if failed else '-'}\n",
         encoding="utf-8",
@@ -146,7 +155,7 @@ def main(argv: list[str] | None = None) -> int:
         case_ids=frozenset(args.case),
     )
     if not cases:
-        raise SystemExit("No AgentBench cases matched the requested filters")
+        raise SystemExit("No dbfox.data benchmark cases matched the requested filters")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     work_dir = args.output.parent / f".{args.output.name}-work"
     try:

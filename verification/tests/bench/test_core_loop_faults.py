@@ -95,7 +95,7 @@ def _tool_turn(call_id: str, name: str):
 
 
 def _admit(db_session, case_id: str):
-    session_id = f"agentbench-fault-{case_id}"
+    session_id = f"core-bench-fault-{case_id}"
     db_session.add(
         AgentSession(
             id=session_id,
@@ -113,9 +113,9 @@ def _admit(db_session, case_id: str):
         llm_credential_id="deterministic-fixture",
         api_base=None,
         model_name="scripted",
-        request_payload={"agentbench": True},
+        request_payload={"benchmark_suite": "core.loop.faults"},
     )
-    lease = sessions.claim(session_id=session_id, owner="agentbench", ttl_seconds=120)
+    lease = sessions.claim(session_id=session_id, owner="core-bench", ttl_seconds=120)
     assert lease is not None
     sessions.promote_next_input(lease=lease)
     db_session.commit()
@@ -131,9 +131,9 @@ class _EmptyOutput(ToolOutputModel):
 
 
 class _TimeoutTool(BaseTool[_EmptyInput, _EmptyOutput]):
-    name = "agentbench_timeout"
+    name = "verification_timeout"
     group = "query"
-    description = "AgentBench-only deterministic timeout fixture."
+    description = "CoreBench-only deterministic timeout fixture."
     input_model = _EmptyInput
     output_model = _EmptyOutput
     presentation = ToolPresentation(title="Timeout fixture", category="query")
@@ -147,9 +147,9 @@ class _TimeoutTool(BaseTool[_EmptyInput, _EmptyOutput]):
 
 
 class _NoProgressTool(BaseTool[_EmptyInput, _EmptyOutput]):
-    name = "agentbench_no_progress"
+    name = "verification_no_progress"
     group = "query"
-    description = "AgentBench-only repeated empty observation fixture."
+    description = "CoreBench-only repeated empty observation fixture."
     input_model = _EmptyInput
     output_model = _EmptyOutput
     presentation = ToolPresentation(title="No progress fixture", category="query")
@@ -271,7 +271,7 @@ def test_tool_timeout_is_visible_to_the_next_model_turn_and_never_late_commits(
         def stream(self, *, messages, **_kwargs):
             calls["count"] += 1
             if calls["count"] == 1:
-                yield from _tool_turn("timeout-call", "agentbench_timeout")
+                yield from _tool_turn("timeout-call", "verification_timeout")
                 return
             payload = json.dumps(messages, ensure_ascii=False)
             assert "TOOL_TIMEOUT" in payload
@@ -306,7 +306,7 @@ def test_repeated_identical_empty_observations_stop_within_the_tool_budget(
             calls["count"] += 1
             yield from _tool_turn(
                 f"no-progress-{calls['count']}",
-                "agentbench_no_progress",
+                "verification_no_progress",
             )
 
     registry = ToolRegistry().register(_NoProgressTool())

@@ -1,4 +1,4 @@
-"""Small dependency-free statistical summaries for AgentBench."""
+"""Small dependency-free statistical summaries shared by benchmark suites."""
 
 from __future__ import annotations
 

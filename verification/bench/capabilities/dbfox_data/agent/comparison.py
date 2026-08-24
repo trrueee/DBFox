@@ -1,4 +1,4 @@
-"""Paired regression gates for two AgentBench summary files."""
+"""dbfox.data-specific paired gates over result, safety and trace quality."""
 
 from __future__ import annotations
 
@@ -42,6 +42,8 @@ def compare_summaries(
 ) -> ComparisonResult:
     baseline_dataset = baseline.get("dataset") or {}
     candidate_dataset = candidate.get("dataset") or {}
+    baseline_suite = baseline.get("suite") or {}
+    candidate_suite = candidate.get("suite") or {}
     baseline_rate = float(baseline.get("success_rate") or 0)
     candidate_rate = float(candidate.get("success_rate") or 0)
     token_change = _relative_change(
@@ -72,6 +74,11 @@ def compare_summaries(
         if isinstance(item, dict) and item.get("all_repetitions_passed") is True
     }
     checks = {
+        "same_suite": (
+            baseline_suite.get("suite_id") == candidate_suite.get("suite_id")
+            and baseline_suite.get("suite_version")
+            == candidate_suite.get("suite_version")
+        ),
         "same_dataset": (
             baseline_dataset.get("dataset_id") == candidate_dataset.get("dataset_id")
             and baseline_dataset.get("dataset_version")
@@ -124,5 +131,5 @@ def compare_summaries(
 def load_summary(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
-        raise ValueError("AgentBench summary must contain a JSON object")
+        raise ValueError("Benchmark summary must contain a JSON object")
     return value

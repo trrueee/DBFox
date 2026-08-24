@@ -7,9 +7,15 @@ from types import SimpleNamespace
 import pytest
 
 from engine.agent.evidence import citation_references
-from verification.bench.agentbench.calibration import load_calibration, run_calibration
-from verification.bench.agentbench.schema import ComparisonMode, DatasetManifest
-from verification.bench.agentbench.scoring import (
+from verification.bench.capabilities.dbfox_data.agent.calibration import (
+    load_calibration,
+    run_calibration,
+)
+from verification.bench.capabilities.dbfox_data.agent.schema import (
+    ComparisonMode,
+    DatasetManifest,
+)
+from verification.bench.capabilities.dbfox_data.agent.scoring import (
     PlanTrace,
     ResultTable,
     RunTrace,
@@ -20,16 +26,26 @@ from verification.bench.agentbench.scoring import (
     result_sets_equivalent,
     score_trial,
 )
-from verification.bench.agentbench.statistics import distribution, wilson_interval
-from verification.bench.agentbench.runtime import _infrastructure_reason, _select_generated_query
+from verification.bench.capabilities.dbfox_data.agent.runtime import (
+    _infrastructure_reason,
+    _select_generated_query,
+)
+from verification.bench.framework.statistics import distribution, wilson_interval
 
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_agentbench_scorer_calibration_is_perfect() -> None:
+def test_data_agent_scorer_calibration_is_perfect() -> None:
     suite = load_calibration(
-        ROOT / "verification" / "bench" / "agentbench" / "datasets" / "calibration-v1.json"
+        ROOT
+        / "verification"
+        / "bench"
+        / "capabilities"
+        / "dbfox_data"
+        / "agent"
+        / "datasets"
+        / "calibration-v1.json"
     )
     results = run_calibration(suite)
     assert len(results) >= 7

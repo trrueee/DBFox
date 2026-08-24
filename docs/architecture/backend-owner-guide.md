@@ -106,7 +106,7 @@ DLC durable state 放在自己的 state store，只引用 Core `project_id` iden
 
 产品代码位于 `engine/`、`dlcs/`、`desktop/`；测试与测评位于 `verification/`。依赖只能从 verification 指向 product。Agent Core、System、Integration 各自拥有 fixture 生命周期，只共享 `verification/support/` 中的无状态辅助。
 
-AgentBench 是外部测量仪器：它准备数据和 Provider 边界、调用 production RunLoop、读取耐久 trace、在运行后评分；它不复制 Session 状态机、Tool retry、Resource authority 或 capability executor。完整命令和 marker 规则见 [`verification-system.md`](./verification-system.md) 与仓库 `AGENTS.md`。
+Bench 是外部测量仪器：CoreBench 测 Kernel/Harness，CapabilityBench 测单 DLC，CompositionBench 测真实组合；它们准备数据和 Provider 边界、调用 production RunLoop、读取耐久 trace、在运行后评分，不复制 Session 状态机、Tool retry、Resource authority 或 capability executor。完整命令和 marker 规则见 [`verification-system.md`](./verification-system.md) 与仓库 `AGENTS.md`。
 
 ## 9. 历史代码边界
 

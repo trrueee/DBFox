@@ -39,15 +39,15 @@ from scripts.prepare_dev_system_dlcs import prepare_dev_system_dlcs
 def _mysql_settings() -> dict[str, object]:
     if os.getenv("DBFOX_RUN_MYSQL_CONTRACT") != "1":
         pytest.skip("set DBFOX_RUN_MYSQL_CONTRACT=1 for the isolated MySQL contract")
-    password = os.getenv("DBFOX_AGENTBENCH_MYSQL_PASSWORD", "")
+    password = os.getenv("DBFOX_BENCH_MYSQL_PASSWORD", "")
     if not password:
-        pytest.fail("DBFOX_AGENTBENCH_MYSQL_PASSWORD is required")
+        pytest.fail("DBFOX_BENCH_MYSQL_PASSWORD is required")
     return {
-        "host": os.getenv("DBFOX_AGENTBENCH_MYSQL_HOST", "127.0.0.1"),
-        "port": int(os.getenv("DBFOX_AGENTBENCH_MYSQL_PORT", "3306")),
-        "user": os.getenv("DBFOX_AGENTBENCH_MYSQL_USER", "agentbench"),
+        "host": os.getenv("DBFOX_BENCH_MYSQL_HOST", "127.0.0.1"),
+        "port": int(os.getenv("DBFOX_BENCH_MYSQL_PORT", "3306")),
+        "user": os.getenv("DBFOX_BENCH_MYSQL_USER", "dbfox_bench"),
         "password": password,
-        "database": os.getenv("DBFOX_AGENTBENCH_MYSQL_DATABASE", "agentbench"),
+        "database": os.getenv("DBFOX_BENCH_MYSQL_DATABASE", "dbfox_bench"),
         "charset": "utf8mb4",
     }
 
@@ -146,8 +146,8 @@ def test_mysql_harness_uses_production_tool_and_connection_contract(
     )
     monkeypatch.setattr(credential_vault, "_application_vault", vault)
 
-    project_id = "agentbench-mysql-project"
-    db_session.add(Project(id=project_id, name="AgentBench MySQL"))
+    project_id = "benchmark-mysql-project"
+    db_session.add(Project(id=project_id, name="Benchmark MySQL"))
     db_session.commit()
 
     package_dir, manifest_path = prepare_dev_system_dlcs()
@@ -172,7 +172,7 @@ def test_mysql_harness_uses_production_tool_and_connection_contract(
     created = invoke(
         "profiles.create",
         {
-            "name": "AgentBench MySQL",
+            "name": "Benchmark MySQL",
             "provider": "mysql",
             "host": str(settings["host"]),
             "port": int(settings["port"]),
@@ -181,7 +181,7 @@ def test_mysql_harness_uses_production_tool_and_connection_contract(
             "is_read_only": True,
             "environment": "test",
             "initial_database_name": str(settings["database"]),
-            "initial_database_display_name": "AgentBench",
+            "initial_database_display_name": "Benchmark",
         },
     )
     database_id = str(created.databases[0].id)

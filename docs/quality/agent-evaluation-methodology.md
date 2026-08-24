@@ -127,10 +127,10 @@ API Key 只能来自 OS 凭据库或 CI secret。报告只能保留 credential r
 
 ## 当前实现索引
 
-- AgentBench 实现与运行手册：`docs/quality/agentbench-implementation.md`
-- 版本化 60 场景集：`verification/bench/agentbench/datasets/regression-v1.json`
-- scorer 校准集：`verification/bench/agentbench/datasets/calibration-v1.json`
-- 稳定 CLI：`python -m verification.bench.agentbench`
+- Bench 架构与运行手册：`docs/quality/benchmark-system.md`
+- 版本化 60 场景 Data suite：`verification/bench/capabilities/dbfox_data/agent/datasets/regression-v1.json`
+- Data scorer 校准集：`verification/bench/capabilities/dbfox_data/agent/datasets/calibration-v1.json`
+- 稳定 CLI：`python -m verification.bench`
 - 生产 RunLoop：`engine/agent/loop.py`
 - 上下文与预算：`engine/agent/context.py`、`engine/agent/context_budget.py`
 - Prompt 与工具 schema telemetry：`engine/agent/prompt.py`

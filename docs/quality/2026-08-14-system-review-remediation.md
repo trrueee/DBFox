@@ -208,7 +208,7 @@ Durable item revision 与 ephemeral delta revision 是两个不同计数器，�
 
 | 候选项 | 最终状态 | 证据与处理 |
 | --- | --- | --- |
-| provider retry 三重记账 | 否定 | `test_agentbench_faults` 的一次可重试失败最终耐久计数为 1；内存控制器与数据库计数是同一失败在不同生命周期的镜像，不存在三次累加。 |
+| provider retry 三重记账 | 否定 | `test_core_loop_faults` 的一次可重试失败最终耐久计数为 1；内存控制器与数据库计数是同一失败在不同生命周期的镜像，不存在三次累加。 |
 | lease 丢失被 finally 掩盖 | 否定 | `RunLeaseLost` 在 loop 顶层独立捕获，`finally` 仅释放瞬态 tool scope/live hub，不执行耐久终态写入。 |
 | interrupted Turn 不进 transcript | 保持设计 | 中断文本不能作为可信 assistant message 注入下一轮；恢复只保留失败 Turn 和固定说明，继续 fail-closed。 |
 | ToolInputError 无长度上限 | 已修复 | ToolRuntime 在唯一公开边界截断到 1024 字符并不再记录完整 message；普通内部异常合同不变。 |

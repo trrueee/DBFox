@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "suite_id": "dbfox-agentbench-scorer-calibration-v1",
+  "suite_id": "dbfox-data-capability-scorer-calibration-v1",
   "fixtures": [
     {
       "fixture_id": "golden-exact-result",
