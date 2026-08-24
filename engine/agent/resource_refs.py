@@ -10,7 +10,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.json_codec import canonical_dumps as _json, loads as _loads
-from engine.resource import ResourceScopeRef
+from engine.resource import RESOURCE_KIND_PATTERN, ResourceScopeRef
 
 MAX_INPUT_RESOURCE_REFS = 16
 
@@ -20,7 +20,7 @@ class RequestedResourceRef(BaseModel):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    kind: str = Field(min_length=1, max_length=64)
+    kind: str = Field(min_length=3, max_length=64, pattern=RESOURCE_KIND_PATTERN)
     id: str = Field(min_length=1, max_length=256)
 
 
@@ -29,7 +29,7 @@ class ProjectResourceDescriptor(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    kind: str
+    kind: str = Field(min_length=3, max_length=64, pattern=RESOURCE_KIND_PATTERN)
     id: str
     version: int | str
     name: str

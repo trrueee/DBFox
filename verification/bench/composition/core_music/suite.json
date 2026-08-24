@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "composition.core_music.scripted",
+  "suite_version": "1.0.0",
+  "description": "Conversation intent through production Core authority, RunLoop, dbfox.music tool, Artifact, and Completion.",
+  "subject": {"kind": "composition", "components": ["core", "dbfox.music"], "supporting_fixtures": ["scripted-provider", "score-document-v1"]},
+  "execution": {"provider_modes": ["scripted"], "default_repetitions": 1, "max_repetitions": 20},
+  "dataset": "cases.json",
+  "metrics": [
+    {"name": "task.success_rate", "direction": "higher_is_better", "unit": "ratio", "description": "Fraction of complete Core + Music tasks."},
+    {"name": "composition.artifact_accuracy", "direction": "higher_is_better", "unit": "ratio", "description": "Whether a Dock-consumable score_revision Artifact was persisted."},
+    {"name": "composition.authority_accuracy", "direction": "higher_is_better", "unit": "ratio", "description": "Whether the Run used only the frozen Music Library authority."},
+    {"name": "runtime.turns", "direction": "lower_is_better", "unit": "count", "description": "Production Agent Turns used."},
+    {"name": "runtime.tool_calls", "direction": "lower_is_better", "unit": "count", "description": "Production tool invocations used."}
+  ]
+}

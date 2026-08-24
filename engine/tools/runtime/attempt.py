@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from engine.tools.runtime.result import ToolResult
 from engine.resource import ResourceKey, ResourceScopeRef
+from engine.resource import is_namespaced_resource_kind
 
 
 class ToolInvocationContext(BaseModel):
@@ -102,8 +103,8 @@ class CompositeResourceResolver:
     ) -> "CompositeResourceResolver":
         if self._frozen:
             raise RuntimeError("Resource resolver registry is frozen.")
-        if not kind.strip():
-            raise ValueError("Resource scope kind must not be empty")
+        if not is_namespaced_resource_kind(kind):
+            raise ValueError("Resource scope kind must be namespaced")
         if kind in self._resolvers:
             raise ValueError(f"Resource scope kind is already registered: {kind}")
         self._resolvers[kind] = resolver

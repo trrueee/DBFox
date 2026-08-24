@@ -7,7 +7,9 @@ import {
   getDesktopEngineStatus,
   isEngineDesktopHost,
   openDesktopDiagnosticLogs,
+  pickDesktopFile,
   pickDesktopProjectFolder,
+  readDesktopPickedFile,
   restartDesktopEngine,
   subscribeDesktopEngineState,
 } from "../desktopHost";
@@ -49,7 +51,8 @@ describe("desktopHost engine boundary", () => {
         isMaximized: vi.fn(), minimize: vi.fn(), toggleMaximize: vi.fn(), close: vi.fn(), subscribe: vi.fn(),
       },
       files: {
-        pickProjectFolder: vi.fn(), listProjectFolder: vi.fn(), readProjectFile: vi.fn(),
+        pickProjectFolder: vi.fn(), pickFile: vi.fn(), readPickedFile: vi.fn(),
+        listProjectFolder: vi.fn(), readProjectFile: vi.fn(),
         pickDlcPackage: vi.fn(), saveExternalImage: vi.fn(),
       },
       shell: { openExternalHttps: vi.fn(), openDiagnosticLogs: vi.fn() },
@@ -61,10 +64,19 @@ describe("desktopHost engine boundary", () => {
 
     expect(isEngineDesktopHost()).toBe(true);
     vi.mocked(bridge.files.pickProjectFolder).mockResolvedValue("C:\\project");
+    vi.mocked(bridge.files.pickFile).mockResolvedValue({
+      path: "C:\\audio\\take.wav",
+      name: "take.wav",
+      sizeBytes: 32,
+      modifiedAtUnix: 123,
+    });
+    vi.mocked(bridge.files.readPickedFile).mockResolvedValue(new Uint8Array([1, 2, 3]));
     vi.mocked(bridge.lifecycle.getRecoveryStatus).mockResolvedValue({ previousUncleanExit: false });
     expect((await getDesktopEngineConfig()).generation).toBe(3);
     expect(await getDesktopEngineStatus()).toEqual(status);
     expect(await pickDesktopProjectFolder()).toBe("C:\\project");
+    expect(await pickDesktopFile({ filters: [{ name: "Audio", extensions: ["wav"] }] })).toMatchObject({ name: "take.wav" });
+    expect(await readDesktopPickedFile("C:\\audio\\take.wav")).toEqual(new Uint8Array([1, 2, 3]));
     await openDesktopDiagnosticLogs();
     expect(await getDesktopLaunchRecoveryStatus()).toEqual({ previousUncleanExit: false });
     await restartDesktopEngine();

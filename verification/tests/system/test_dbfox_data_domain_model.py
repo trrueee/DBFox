@@ -28,9 +28,13 @@ from engine.runtime_composition import (
 )
 from engine.security.credential_lease import CredentialLeaseSaga, CredentialLeaseStatus
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
-from engine.tools.runtime import ToolRunContext
+from engine.tools.runtime import ToolKey, ToolRunContext
 from engine.tools.runtime.admission import ToolAdmissionContext
 from scripts.build_dbfox_data_dlc_fixture import SOURCE_ROOT, build_dbfox_data_dlc_fixture
+
+
+def _data_tool(registry, local_name: str):
+    return registry.require_key(ToolKey(owner_id="dbfox.data", local_name=local_name))
 
 
 def _invoke(snapshot, name: str, project_id: str, payload: dict):
@@ -144,8 +148,8 @@ def test_data_sql_validate_uses_authorized_database_handle_and_emits_fenced_arti
         resources=resolved,
     )
     registry = build_product_tool_registry(snapshot)
-    assert registry.owner_of("sql_validate") == "dbfox.data"
-    tool = registry.require("sql_validate")
+    tool = _data_tool(registry, "sql_validate")
+    assert registry.owner_of_tool(tool) == "dbfox.data"
 
     outcome = tool.run(
         tool.input_model.model_validate(
@@ -207,7 +211,7 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
     ref = snapshot.resource_providers[0](None, "project-a")[0].to_scope_ref()
     resolved = build_attempt_resource_resolver(snapshot=snapshot).resolve((ref,))
     registry = build_product_tool_registry(snapshot)
-    validate_tool = registry.require("sql_validate")
+    validate_tool = _data_tool(registry, "sql_validate")
     validation = validate_tool.run(
         validate_tool.input_model.model_validate(
             {
@@ -249,7 +253,7 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
         ],
     )
     artifacts = {safety.id: safety, sql_artifact.id: sql_artifact}
-    execute_tool = registry.require("sql_execute_readonly")
+    execute_tool = _data_tool(registry, "sql_execute_readonly")
     execute_input = execute_tool.input_model.model_validate(
         {
             "database_id": database.id,
@@ -346,7 +350,7 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
             ),
         )
 
-    profile_tool = registry.require("result_profile")
+    profile_tool = _data_tool(registry, "result_profile")
     profiled = profile_tool.run(
         profile_tool.input_model.model_validate(
             {
@@ -360,7 +364,7 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
     assert profiled.profiles[0]["kind"] == "number"
     assert profiled.profiles[0]["numeric"]["mean"] == 32.5
 
-    chart_tool = registry.require("chart_create")
+    chart_tool = _data_tool(registry, "chart_create")
     charted = chart_tool.run(
         chart_tool.input_model.model_validate(
             {
@@ -522,7 +526,7 @@ def test_data_sql_validate_requires_database_id_for_multi_database_authority(
         scope_refs=refs,
         resources=resolved,
     )
-    tool = build_product_tool_registry(snapshot).require("sql_validate")
+    tool = _data_tool(build_product_tool_registry(snapshot), "sql_validate")
 
     with pytest.raises(Exception, match="database_id is required"):
         tool.run(
@@ -606,7 +610,7 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
     resolved = build_attempt_resource_resolver(snapshot=snapshot).resolve(refs)
     registry = build_product_tool_registry(snapshot)
     assert {
-        name: registry.owner_of(name)
+        name: registry.owner_of_tool(_data_tool(registry, name))
         for name in (
             "catalog_overview",
             "catalog_refresh",
@@ -634,7 +638,7 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
             resources=resolved,
         )
 
-    overview_tool = registry.require("catalog_overview")
+    overview_tool = _data_tool(registry, "catalog_overview")
     before = overview_tool.run(
         overview_tool.input_model.model_validate({"database_id": first.id}),
         context("catalog_overview", "catalog-overview-before"),
@@ -642,7 +646,7 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
     assert before.catalog_status == "uninitialized"
     assert before.table_count == 0
 
-    refresh_tool = registry.require("catalog_refresh")
+    refresh_tool = _data_tool(registry, "catalog_refresh")
     refreshed = refresh_tool.run(
         refresh_tool.input_model.model_validate({"database_id": first.id}),
         context("catalog_refresh", "catalog-refresh-first"),
@@ -688,7 +692,7 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
             {"database_id": first.id, "limit": 100},
         )
 
-    list_tool = registry.require("schema_list")
+    list_tool = _data_tool(registry, "schema_list")
     listed = list_tool.run(
         list_tool.input_model.model_validate(
             {"database_id": first.id, "limit": 1}
@@ -710,7 +714,7 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
     )
     assert [table.table_name for table in next_page.tables] == ["orders"]
 
-    search_tool = registry.require("schema_search")
+    search_tool = _data_tool(registry, "schema_search")
     searched = search_tool.run(
         search_tool.input_model.model_validate(
             {"database_id": first.id, "queries": ["customer"]}
@@ -722,7 +726,7 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
         "orders",
     }
 
-    inspect_tool = registry.require("schema_inspect")
+    inspect_tool = _data_tool(registry, "schema_inspect")
     inspected = inspect_tool.run(
         inspect_tool.input_model.model_validate(
             {"database_id": first.id, "targets": ["orders"]}
@@ -735,7 +739,7 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
     assert details.foreign_keys_out[0].references.table == "customers"
     assert details.indexes[0].name == "ix_orders_customer"
 
-    preview_tool = registry.require("data_preview")
+    preview_tool = _data_tool(registry, "data_preview")
     previewed = preview_tool.run(
         preview_tool.input_model.model_validate(
             {
@@ -779,7 +783,7 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
         payload_ref=result_draft.payload_ref,
         resource_refs=result_draft.resource_refs,
     )
-    inspect_result_tool = registry.require("result_inspect")
+    inspect_result_tool = _data_tool(registry, "result_inspect")
 
     def result_context(artifact: Artifact, invocation_id: str) -> ToolRunContext:
         return ToolRunContext.for_invocation(

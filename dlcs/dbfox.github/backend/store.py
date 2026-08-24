@@ -14,6 +14,9 @@ from dbfox_dlc_api import ProjectResourceDescriptor, ResourceScopeRef
 from .contracts import GithubBinding
 
 
+GITHUB_REPOSITORY_KIND = "dbfox.github.repository"
+
+
 class GithubBindingStore:
     def __init__(self, data_path: Path) -> None:
         data_path.mkdir(parents=True, exist_ok=True)
@@ -183,7 +186,7 @@ class GithubBindingStore:
     def list_resources(self, project_id: str) -> tuple[ProjectResourceDescriptor, ...]:
         return tuple(
             ProjectResourceDescriptor(
-                kind="github.repository",
+                kind=GITHUB_REPOSITORY_KIND,
                 id=binding.id,
                 version=binding.resolved_revision,
                 name=f"{binding.owner}/{binding.repository}",
@@ -192,7 +195,7 @@ class GithubBindingStore:
         )
 
     def resolve(self, ref: ResourceScopeRef) -> GithubBinding:
-        if ref.kind != "github.repository":
+        if ref.kind != GITHUB_REPOSITORY_KIND:
             raise KeyError(f"Unexpected resource kind: {ref.kind}")
         binding = self.get_binding(str(ref.id))
         if binding is None:

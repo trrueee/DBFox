@@ -1,0 +1,17 @@
+{
+  "manifestSchemaVersion": 2,
+  "id": "dbfox.music",
+  "version": "0.1.0",
+  "displayName": "Piano Studio",
+  "publisher": "dbfox",
+  "description": "AI piano composition, immutable score revisions, notation, and offline playback for DBFox.",
+  "extensionApiVersion": "2",
+  "requiresDbfox": ">=1.0.0",
+  "entrypoints": {
+    "backend": "backend/entry.py",
+    "frontend": "frontend/index.js"
+  },
+  "permissions": [
+    "filesystem_read"
+  ]
+}

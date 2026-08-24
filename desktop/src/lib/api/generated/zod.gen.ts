@@ -662,7 +662,7 @@ export const zProjectCreateRequest = z.object({
 export const zProjectResourceDescriptor = z.object({
     id: z.string(),
     is_default: z.boolean().optional().default(false),
-    kind: z.string(),
+    kind: z.string().min(3).max(64).regex(/^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/),
     name: z.string(),
     version: z.union([
         z.int(),
@@ -756,7 +756,7 @@ export const zQuestionRequest = z.object({
  */
 export const zRequestedResourceRef = z.object({
     id: z.string().min(1).max(256),
-    kind: z.string().min(1).max(64)
+    kind: z.string().min(3).max(64).regex(/^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/)
 });
 
 /**
@@ -811,7 +811,7 @@ export const zConversationSessionResponse = z.object({
  */
 export const zResourceScopeRef = z.object({
     id: z.string().min(1).max(256),
-    kind: z.string().min(1).max(64),
+    kind: z.string().min(3).max(64).regex(/^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/),
     version: z.union([
         z.string(),
         z.int()

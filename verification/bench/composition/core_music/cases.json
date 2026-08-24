@@ -1,0 +1,6 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {"case_id": "conversation-compose-score", "prompt": "写一段 16 小节、安静、像雨停之后的钢琴曲。", "title": "After the Rain", "measure_count": 16, "max_turns": 2, "max_tool_calls": 1}
+  ]
+}

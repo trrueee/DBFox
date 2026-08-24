@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-23
+> 最后核验：2026-08-24
 >
 > 适用范围：启动、Agent Core、Capability DLC、Workbench、工具、事件、取消和恢复链路
 >
@@ -42,6 +42,7 @@ flowchart TB
     AGENT --> REPO["Agent Repositories"]
     DLC --> DATA["dbfox.data"]
     DLC --> WORKSPACE["dbfox.workspace"]
+    DLC --> MUSIC["dbfox.music"]
     DLC --> GITHUB["dbfox.github"]
     TOOL --> DLC
     REPO --> META[("SQLite Metadata")]
@@ -59,10 +60,11 @@ flowchart TB
 | Typed API Client | token、错误映射、AbortSignal、SSE | request DTO | response/event DTO | 无 | 静默 fallback、业务重试 |
 | API Middleware | loopback 安全、输入限制、错误边界 | HTTP | 安全 response | 无 | 返回秘密/异常原文 |
 | Data System DLC | ConnectionProfile/DatabaseResource、Catalog、SQL safety/execution、Result view、Backup | typed operation + frozen ResourceRef | Data resources/artifacts/views | `dbfox.data/state.sqlite3` + vault refs | 向 Core 泄露 SQL/连接领域状态 |
-| Workspace System DLC | workspace binding、路径 containment、file/patch tools | Project binding + frozen ResourceRef | file artifacts/dock views | `dbfox.workspace/state.sqlite3` | 把 workspace root 写回 Project |
+| Workspace System DLC | workspace binding、路径 containment、file read/search tools | Project binding + frozen `dbfox.workspace.root` | file artifacts/dock views | `dbfox.workspace/state.sqlite3` | 把 workspace root 写回 Project |
+| Music System DLC | Score/Audio Resource、不可变 Revision、作曲/转录 Tools、Piano Studio | Project + frozen Music ResourceRef | score/audio artifacts、notation/playback | `dbfox.music/state.sqlite3` + private audio | 向 Core 泄露 Note/Score/Piano 概念 |
 | Session Core | input admission、sequence、lease、event | user command | stable IDs/snapshot | canonical tables | 内存 queue 作为事实源 |
 | ReAct Harness | Turn、model、tool、completion、response | admitted Run | answer/artifacts/evidence | Run/Turn records | 固定 graph、第二 checkpoint |
-| Tool Runtime | 注册、物化、授权、有界执行、结算 | tool call | transient result/observation | Invocation/Observation | 任意函数反射调用 |
+| Tool Runtime | owner-aware `ToolKey` 注册、provider wire 物化、授权、有界执行、结算 | tool call | transient result/observation | Invocation/Observation | 任意函数反射调用、跨 DLC 私有 Resource handle |
 | Artifact/Evidence | 工件关系、来源、citation；open string type + `schema_version` | tool/response | reference-only products | canonical records | 结果集副本 |
 | Event/Live | replay、notification、前端归并 | domain change/token | event/live item | Event Log；live 无持久权威 | 用 live 代替提交 |
 | Security Audit | 结构化安全动作、保留和导出 | approval/cancel/export | redacted records | SecurityAuditRecord | secret/result rows |
@@ -154,7 +156,9 @@ Prompt 和 Context 在 Turn 创建时保存 hash；工具 schema 也物化并冻
 
 ### 4.11 Tool Runtime、Policy 与 Approval
 
-Registry 注册工具定义、input/output schema、版本、capability、execution spec、状态消费和 Artifact spec。Turn 将可用工具物化为稳定快照。
+Registry 以 `ToolKey(owner_id, local_name)` 注册工具定义、input/output schema、版本、capability、execution spec、状态消费和 Artifact spec。Turn 在 provider 边界确定性生成唯一 wire name 并物化为稳定快照；同 local name 的不同 DLC 不冲突。Platform built-in 显式保留原 wire name。
+
+Resource kind 必须 namespaced；DLC provider/resolver 和 Tool 只能直接使用 `owner_id.*`。跨 capability 由 Agent 编排 Artifact/用户意图，不能把另一个 DLC 的私有 resolver 对象作为隐式 service locator。Installable in-process Tool 只接受 `network`/`filesystem_read`；`filesystem_write` 继续要求尚未开放给 DLC Tool 的 isolated backend。
 
 Policy 对规范化工具名和 canonical input 判定。Approval 与具体 Invocation/version/generation 绑定。ToolExecutor 执行 timeout、retry、concurrency、output bytes 和 cancel；未注册 isolated backend 的高权限 capability 会在注册阶段失败。
 

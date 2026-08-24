@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "dimensions": [
+    {"name": "coherence", "scale": [1, 5]},
+    {"name": "musicality", "scale": [1, 5]},
+    {"name": "phrase_shape", "scale": [1, 5]},
+    {"name": "harmonic_interest", "scale": [1, 5]},
+    {"name": "playability", "scale": [1, 5]}
+  ],
+  "note": "Human-only rubric. It is never mixed into deterministic structural pass/fail scoring."
+}

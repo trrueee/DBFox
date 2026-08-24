@@ -98,7 +98,7 @@ def _create_test_dlc_tree(
 
         "\n"
         "def run_probe() -> dict:\n"
-        "    ref = ResourceScopeRef(kind='test_proof', id='proof_1', version=42)\n"
+        "    ref = ResourceScopeRef(kind='acme.feasibility_proof.resource', id='proof_1', version=42)\n"
         f"    greeting = format_greeting({greeting_target!r})\n"
         "    total = compute_total(4, 2)\n"
         "    transformed = vendored_transform('data')\n"
@@ -183,7 +183,7 @@ def test_runtime_dlc_dynamic_loading_mechanics(tmp_path: Path) -> None:
     assert result["greeting"] == "Hello DBFox from DLC helper"
     assert result["total"] == 42
     assert result["transformed"] == "vendored:v1:DATA"
-    assert result["scope_ref_kind"] == "test_proof"
+    assert result["scope_ref_kind"] == "acme.feasibility_proof.resource"
     assert result["scope_ref_id"] == "proof_1"
     assert result["scope_ref_version"] == 42
 

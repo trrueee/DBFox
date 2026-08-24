@@ -138,7 +138,7 @@ def test_authorize_project_resources_attaches_canonical_versions(db_session, tmp
         authorize_project_resources(
             db_session,
             project_id,
-            [RequestedResourceRef(kind="workspace", id=project_id)],
+            [RequestedResourceRef(kind="dbfox.workspace.root", id=project_id)],
             snapshot=snapshot,
         )
 
@@ -208,7 +208,7 @@ def test_in_process_execution_uses_composite_resolver(db_session, tmp_path) -> N
     )
     db_session.commit()
 
-    ws_ref = ResourceScopeRef(kind="workspace", id=project_id, version="root-v1")
+    ws_ref = ResourceScopeRef(kind="synthetic.workspace", id=project_id, version="root-v1")
 
     class DummyWorkspaceTool(BaseTool[DummyInput, DummyOutput]):
         name = "dummy_ws"
@@ -218,7 +218,7 @@ def test_in_process_execution_uses_composite_resolver(db_session, tmp_path) -> N
         output_model = DummyOutput
         presentation = "code"
         execution = ToolExecutionSpec(
-            required_resource_kinds=("workspace",),
+            required_resource_kinds=("synthetic.workspace",),
             backend="in_process",
         )
 
@@ -230,7 +230,7 @@ def test_in_process_execution_uses_composite_resolver(db_session, tmp_path) -> N
 
     resolver = (
         CompositeResourceResolver()
-        .register("workspace", lambda _ref: workspace_root.resolve())
+        .register("synthetic.workspace", lambda _ref: workspace_root.resolve())
         .freeze()
     )
     scope_refs, resources = build_tool_scope_context(

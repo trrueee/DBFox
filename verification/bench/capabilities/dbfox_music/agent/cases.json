@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {"case_id": "compose-16-quiet", "prompt": "写一首 16 小节、安静、雨停之后感觉的钢琴曲。", "required_tool": "music_compose_piano", "measure_count": 16, "requires_both_hands": true},
+    {"case_id": "revise-local-bright", "prompt": "只把 9–12 小节改得更明亮，旋律不要太跳。", "required_tool": "music_revise_phrase", "measure_start": 9, "measure_end": 12},
+    {"case_id": "transpose-whole-tone", "prompt": "整首升一个全音，结构和节奏保持。", "required_tool": "music_transpose", "semitones": 2}
+  ]
+}

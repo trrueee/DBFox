@@ -9,6 +9,8 @@ export const DESKTOP_CHANNELS = Object.freeze({
   windowClose: "dbfox:window:close",
   windowState: "dbfox:window-state",
   pickProjectFolder: "dbfox:files:pick-project-folder",
+  pickFile: "dbfox:files:pick-file",
+  readPickedFile: "dbfox:files:read-picked-file",
   listProjectFolder: "dbfox:files:list-project-folder",
   readProjectFile: "dbfox:files:read-project-file",
   pickDlcPackage: "dbfox:files:pick-dlc-package",
@@ -66,6 +68,24 @@ export interface ProjectFileContent {
   error: string | null;
 }
 
+export interface NativeFileFilter {
+  name: string;
+  extensions: string[];
+}
+
+export interface PickFileOptions {
+  title?: string;
+  filters?: NativeFileFilter[];
+  maxBytes?: number;
+}
+
+export interface NativeFileSelection {
+  path: string;
+  name: string;
+  sizeBytes: number;
+  modifiedAtUnix: number;
+}
+
 export interface SaveExternalImageResult {
   status: "saved" | "cancelled";
   fileName: string | null;
@@ -119,6 +139,8 @@ export interface DbfoxDesktopBridge {
   };
   readonly files: {
     pickProjectFolder(): Promise<string | null>;
+    pickFile(options?: PickFileOptions): Promise<NativeFileSelection | null>;
+    readPickedFile(path: string): Promise<Uint8Array>;
     listProjectFolder(path: string): Promise<ProjectFolderListing>;
     readProjectFile(path: string): Promise<ProjectFileContent>;
     pickDlcPackage(): Promise<string | null>;

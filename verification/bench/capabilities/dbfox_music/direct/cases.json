@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {"case_id": "score-schema-validity", "scenario": "score_validity"},
+    {"case_id": "revision-immutability", "scenario": "revision_immutability"},
+    {"case_id": "transpose-plus-two", "scenario": "transpose"},
+    {"case_id": "phrase-edit-locality", "scenario": "edit_locality"}
+  ]
+}

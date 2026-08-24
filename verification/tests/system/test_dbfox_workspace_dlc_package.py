@@ -68,7 +68,7 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     )
     assert snapshot.activation_failures == ()
     assert {item.tool.name for item in snapshot.tools} == {"file_search", "file_read"}
-    assert [item.kind for item in snapshot.resource_resolvers] == ["workspace"]
+    assert [item.kind for item in snapshot.resource_resolvers] == ["dbfox.workspace.root"]
     assert {item.artifact_type for item in snapshot.artifact_contracts} == {
         "dbfox.workspace.file_snapshot",
         "dbfox.workspace.code_patch",
@@ -97,10 +97,10 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     ))
     resources = snapshot.resource_providers[0](None, "project-a")
     assert [(item.kind, item.id, item.version) for item in resources] == [
-        ("workspace", "project-a", binding.root_digest)
+        ("dbfox.workspace.root", "project-a", binding.root_digest)
     ]
     resolved = snapshot.resource_resolvers[0].resolver(ResourceScopeRef(
-        kind="workspace",
+        kind="dbfox.workspace.root",
         id="project-a",
         version=binding.root_digest,
     ))
@@ -121,7 +121,7 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     ]
 
     scope = ResourceScopeRef(
-        kind="workspace",
+        kind="dbfox.workspace.root",
         id="project-a",
         version=binding.root_digest,
     )

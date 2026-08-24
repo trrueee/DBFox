@@ -87,7 +87,7 @@ def test_signed_github_dlc_package_activates_complete_contribution_set(
         "github_read_file",
     }
     assert all(item.owner_id == "dbfox.github" for item in snapshot.tools)
-    assert [item.kind for item in snapshot.resource_resolvers] == ["github.repository"]
+    assert [item.kind for item in snapshot.resource_resolvers] == ["dbfox.github.repository"]
     assert [item.owner_id for item in snapshot.artifact_contracts] == ["dbfox.github"]
     assert {item.spec.name for item in snapshot.operations} == {
         "bindings.list",
@@ -145,11 +145,11 @@ def test_signed_github_dlc_package_activates_complete_contribution_set(
     )
     resources = snapshot.resource_providers[0](None, "project-a")
     assert [(item.kind, item.id, item.version) for item in resources] == [
-        ("github.repository", binding.id, "a" * 40)
+        ("dbfox.github.repository", binding.id, "a" * 40)
     ]
     resolved = snapshot.resource_resolvers[0].resolver(
         ResourceScopeRef(
-            kind="github.repository",
+            kind="dbfox.github.repository",
             id=binding.id,
             version="a" * 40,
         )
@@ -158,7 +158,7 @@ def test_signed_github_dlc_package_activates_complete_contribution_set(
     with pytest.raises(ValueError):
         snapshot.resource_resolvers[0].resolver(
             ResourceScopeRef(
-                kind="github.repository",
+                kind="dbfox.github.repository",
                 id=binding.id,
                 version="b" * 40,
             )
@@ -217,7 +217,7 @@ def _record_github_tool_history(db_session, snapshot, package_digest: str) -> st
             run_id=admission.run_id,
             turn_id=str(turn.id),
             provider_call_id="r5-github-provider-call",
-            tool_name=contribution.tool.name,
+            tool_name=contribution.provider_name or contribution.tool.name,
             declared_version=contribution.tool.version,
             contract_hash=current_tool_contract_hash(contribution.tool),
             owner_id=contribution.owner_id,
@@ -252,7 +252,7 @@ def test_github_dlc_full_lifecycle_preserves_owned_data_and_attempt_identity(
 
     absent = compiler.compile()
     assert not any(item.owner_id == "dbfox.github" for item in absent.tools)
-    assert not any(item.kind == "github.repository" for item in absent.resource_resolvers)
+    assert not any(item.kind == "dbfox.github.repository" for item in absent.resource_resolvers)
     assert absent.get_operation("dbfox.github", "bindings.list") is None
     assert not any(item.dlc_id == "dbfox.github" for item in absent.active_dlcs)
 

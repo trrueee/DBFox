@@ -133,14 +133,14 @@ function resourceKey(ref: Pick<RequestedResourceRef, "kind" | "id">): string {
 
 function kindLabel(kind: string): string {
   if (kind === "dbfox.data.database") return "数据库";
-  if (kind === "workspace" || kind.endsWith(".workspace")) return "工作区";
+  if (kind.startsWith("dbfox.workspace.")) return "工作区";
   if (kind.includes("github") || kind.endsWith(".repository")) return "GitHub 仓库";
   return "资源";
 }
 
 function resourceIcon(kind: string): LucideIcon {
   if (kind === "dbfox.data.database") return Database;
-  if (kind === "workspace" || kind.endsWith(".workspace")) return Folder;
+  if (kind.startsWith("dbfox.workspace.")) return Folder;
   if (kind.includes("github") || kind.endsWith(".repository")) return GitFork;
   return Boxes;
 }

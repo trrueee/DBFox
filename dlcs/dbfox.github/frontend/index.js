@@ -74,7 +74,7 @@ function openFile(projectId, binding, path) {
     closeable: true,
     projectId,
     stateKey,
-    target: { type: "resource", kind: "github.repository", id: binding.id, version: binding.resolved_revision },
+    target: { type: "resource", kind: "dbfox.github.repository", id: binding.id, version: binding.resolved_revision },
   });
 }
 

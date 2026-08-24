@@ -12,6 +12,8 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from engine.tools.runtime import provider_tool_name
+
 from verification.bench.composition.data_workspace.schema import (
     DataWorkspaceCase,
     load_cases,
@@ -28,6 +30,8 @@ from verification.testkit.system_dlc_fixture import build_isolated_system_dlc_bu
 
 
 HERE = Path(__file__).resolve().parent
+FILE_READ_TOOL = provider_tool_name("dbfox.workspace", "file_read")
+SCHEMA_LIST_TOOL = provider_tool_name("dbfox.data", "schema_list")
 
 
 def _function_output(messages: list[dict[str, Any]], call_id: str) -> dict[str, Any]:
@@ -60,13 +64,13 @@ class _CompositionProvider:
     def stream(self, *, messages, tools, **_kwargs):
         tool_names = {str(tool.get("name") or "") for tool in tools}
         self.evidence["both_tools_materialized"] = {
-            "file_read",
-            "schema_list",
+            FILE_READ_TOOL,
+            SCHEMA_LIST_TOOL,
         } <= tool_names
         if self.call_number == 1:
             yield from tool_call_events(
                 call_id="read-analysis-target",
-                tool_name="file_read",
+                tool_name=FILE_READ_TOOL,
                 arguments={"path": self.case.workspace_file},
             )
             return
@@ -77,7 +81,7 @@ class _CompositionProvider:
             )
             yield from tool_call_events(
                 call_id="list-data-schema",
-                tool_name="schema_list",
+                tool_name=SCHEMA_LIST_TOOL,
                 arguments={"database_id": self.database_id, "limit": 20},
             )
             return
@@ -224,7 +228,7 @@ def _run_case(
             project_id,
             (
                 RequestedResourceRef(kind="dbfox.data.database", id=database_id),
-                RequestedResourceRef(kind="workspace", id=project_id),
+                RequestedResourceRef(kind="dbfox.workspace.root", id=project_id),
             ),
             snapshot=snapshot,
         )
@@ -266,10 +270,11 @@ def _run_case(
             provider_evidence,
         )
 
+    product_registry = build_product_tool_registry(snapshot)
     loop = RunLoop(
         session_factory=session_factory,
         model_factory=model_factory,
-        registry=build_product_tool_registry(snapshot),
+        registry=product_registry,
         context_contributors=default_context_contributors(snapshot),
         completion=CompletionGate(build_default_completion_policy(snapshot)),
         live_stream=LiveStreamHub(),
@@ -294,7 +299,10 @@ def _run_case(
         )
         artifacts = db.query(AgentArtifactRecord).filter_by(run_id=admission.run_id).all()
         text = str(answer.content or "") if answer is not None else ""
-        tool_names = tuple(str(item.tool_name) for item in invocations)
+        tool_names = tuple(
+            product_registry.key_of(product_registry.require(str(item.tool_name))).local_name
+            for item in invocations
+        )
         workspace_artifacts = tuple(
             item for item in artifacts if str(item.type) == "dbfox.workspace.file_snapshot"
         )
@@ -317,7 +325,7 @@ def _run_case(
                 str(item.status) == "succeeded" for item in invocations
             ),
             "frozen_authority": {ref.kind for ref in refs}
-            == {"dbfox.data.database", "workspace"},
+            == {"dbfox.data.database", "dbfox.workspace.root"},
             "artifact_lineage": lineage_ok,
             "source_database_unchanged": source_before == source_after,
             "workspace_unchanged": workspace_before == workspace_after,

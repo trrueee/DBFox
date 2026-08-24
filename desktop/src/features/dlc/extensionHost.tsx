@@ -14,7 +14,11 @@ import type {
 import { DlcErrorBoundary } from "./DlcErrorBoundary";
 import type { WorkspaceDockTab } from "../../types/workspace";
 import { fetchEnginePath } from "../../lib/api/client";
-import { pickDesktopProjectFolder } from "../../lib/desktopHost";
+import {
+  pickDesktopFile,
+  pickDesktopProjectFolder,
+  readDesktopPickedFile,
+} from "../../lib/desktopHost";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import type { DlcOperationInvokeOptions } from "./types";
 import type {
@@ -54,6 +58,10 @@ interface ExtensionHostServices {
   ): Promise<TOutput>;
   openDockTab(view: WorkspaceDockTab, activate?: boolean): void;
   pickFolder?(): Promise<string | null>;
+  pickFile?(options?: { title?: string; accept?: readonly string[]; maxBytes?: number }): Promise<{
+    path: string; name: string; sizeBytes: number; modifiedAtUnix: number;
+  } | null>;
+  readPickedFile?(path: string): Promise<Uint8Array>;
   enrollCredentials?(
     dlcId: string,
     credentials: readonly CredentialEnrollmentInput[],
@@ -129,6 +137,14 @@ const DEFAULT_EXTENSION_HOST_SERVICES: ExtensionHostServices = {
     useWorkspaceStore.getState().openDockTab(view, activate);
   },
   pickFolder: pickDesktopProjectFolder,
+  pickFile: (options) => pickDesktopFile({
+    title: options?.title,
+    filters: options?.accept?.length
+      ? [{ name: "Allowed files", extensions: [...options.accept] }]
+      : undefined,
+    maxBytes: options?.maxBytes,
+  }),
+  readPickedFile: readDesktopPickedFile,
   enrollCredentials: enrollBoundDlcCredentials,
 };
 
@@ -194,6 +210,12 @@ export function createStagedExtensionHost(
     },
     nativeDialogs: {
       pickFolder: () => (services.pickFolder ?? pickDesktopProjectFolder)(),
+      pickFile: (options) => (services.pickFile ?? DEFAULT_EXTENSION_HOST_SERVICES.pickFile!)(options),
+    },
+    nativeFiles: {
+      readPickedFile: (path) => (
+        services.readPickedFile ?? readDesktopPickedFile
+      )(path),
     },
     credentials: {
       enrollBatch(credentials, options) {

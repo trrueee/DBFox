@@ -17,11 +17,13 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SYSTEM_DLC_SOURCES = (
     REPOSITORY_ROOT / "dlcs" / "dbfox_data",
     REPOSITORY_ROOT / "dlcs" / "dbfox.workspace",
+    REPOSITORY_ROOT / "dlcs" / "dbfox.music",
 )
 SYSTEM_DLC_BUNDLE_INDEX = "system-dlcs.json"
 SYSTEM_DLC_DEFAULT_ENABLED = {
     "dbfox.data": True,
     "dbfox.workspace": True,
+    "dbfox.music": True,
 }
 
 
@@ -76,7 +78,7 @@ def build_system_dlc_bundle(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build signed dbfox.data and dbfox.workspace System DLCs"
+        description="Build signed dbfox.data, dbfox.workspace, and dbfox.music System DLCs"
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--private-key", type=Path, required=True)

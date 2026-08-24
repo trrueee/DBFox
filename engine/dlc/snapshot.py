@@ -41,6 +41,7 @@ class ToolContribution:
     tool: BaseTool[Any, Any]
     owner_id: str
     package_digest: str | None = None
+    provider_name: str | None = None
 
 
 @dataclass(frozen=True)
