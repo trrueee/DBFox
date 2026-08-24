@@ -4,7 +4,7 @@
 >
 > 状态：已接受
 >
-> 最后核验：2026-08-23
+> 最后核验：2026-08-24
 >
 > 适用范围：Project、Conversation、Run authority、Resource Runtime、Capability DLC、Workbench resource/context composition
 >
@@ -130,6 +130,25 @@ context.require_one(kind)
   必须确定性拒绝，不能取第一个。
 - Kernel 不解释跨数据库 join。provider 可以在安全合同允许时实现该领域能力。
 - wire uniqueness、resolver identity、context lookup、prompt summary 和 audit log 全部使用 `(kind,id)`。
+- 所有 Resource kind 必须是 namespaced identifier；当前 canonical 值包括
+  `dbfox.data.database`、`dbfox.workspace.root` 与 `dbfox.github.repository`。裸
+  `workspace` 及旧 `github.repository` 由 Alembic `f4a5b6c7d8ea` 一次性改写，Runtime 不保留
+  alias、mapper 或 dual-read。
+- 一个 DLC 只能注册和直接 resolve `owner_id.*` Resource kind；其 Tool 的
+  `required_resource_kinds` 也只能引用本 owner namespace。普通跨 capability 工作由 Agent
+  composition 完成；真正需要联合私有资源的实现必须成为显式 Composition DLC，并在未来先冻结
+  dependency contract，不能依赖 `Any` duck typing 偷读另一个 DLC 的 handle。
+
+Tool 的 canonical identity 是 `ToolKey(owner_id, local_name)`，不是全局 `tool.name` 字符串。
+DLC 内部合同、Workbench Action 与领域测试使用 local name；Core materialization 在 provider 边界
+确定性生成不超过 64 字符的 provider-safe wire name，并把该 name 与 owner/package digest 一起冻结。
+因此两个 DLC 可以同时注册相同 local name，而模型、Dispatcher、Policy、Approval、恢复与结算仍只接受
+唯一 wire identity。Platform built-in Tool 保留其既有 wire name；这项特权由 composition root 显式声明，
+不在 Tool Runtime 中增加 owner 特判。
+
+没有 `required_resource_kinds` 的 Tool 当前仍按既有语义全局 materialize。显式
+`global / project_bound / resource_bound / explicit_only` availability 属于后续协议演进；在真实需求和
+迁移方案冻结前不提前增加枚举或兼容层。
 
 ## 7. Conversation Intent 与 authority
 
@@ -402,8 +421,9 @@ PostgreSQL 应复用官方 [pg_dump/pg_restore](https://www.postgresql.org/docs/
 官方 [MySQL Shell dump/load utilities](https://dev.mysql.com/doc/mysql-shell/8.0/en/mysql-shell-utilities-dump-instance-schema.html)。
 Frozen Sidecar 尚未固定、签名并随包提供这些 native clients，因此 MySQL/PostgreSQL backup 当前明确 fail
 closed；后续只有在工具版本、checksum、credential handoff、进程取消和 restore code-execution 风险合同
-冻结后才启用，不增加私有 dump format 或不受控 PATH fallback。新增 `filesystem_write` manifest permission
-只覆盖该 Data 私有 payload 边界；它不是 OS sandbox，目录约束仍由不可注入的 Host data path 与生成式文件名保证。
+冻结后才启用，不增加私有 dump format 或不受控 PATH fallback。Data typed Operation 声明的
+`filesystem_write` manifest permission 只覆盖该私有 payload 边界，不授权 model Tool；它不是 OS
+sandbox，目录约束仍由不可注入的 Host data path 与生成式文件名保证。
 
 该拆分参考 Kubernetes 将 authorization 与 admission controller 分开的官方边界，以及 VS Code
 Workspace Trust 对 capability enablement 的 Host-owned 决策：Kernel 决定“调用是否拥有执行能力”，
@@ -462,8 +482,11 @@ contributor 优先按该通用绑定校验 frozen Workspace authority。payload 
 读取迁移前历史 Artifact，不再是新 authority 的事实源。
 
 Extension API v2 当前只允许 installable DLC Tool 使用 in-process backend，而 Tool Runtime 又要求
-`filesystem_write` 使用 isolated process。为保持安全不变量，System DLC 当前正式注册 file read/search，
-不注册 file write；写入服务与 CAS 设计不视为可发布能力。删除该限制的条件是 isolated worker 能按
+`filesystem_write` 使用 isolated process。Compiler 因此明确只接受 DLC Tool 的 `network` 与
+`filesystem_read` capability；即使 manifest 声明 write permission，模型 Tool 注册仍会 fail closed。
+System Workspace DLC 当前正式注册 file read/search，不注册 file write；已删除未注册的 write Tool 与
+私有 patch service，避免源码/API 暗示一条不存在的执行链。typed Workbench Operation 的 manifest
+permission 是另一条 Host operation 边界，不会使模型 Tool 获得 write。删除该限制的条件是 isolated worker 能按
 冻结的 package digest 装载签名 DLC Tool，并通过 frozen Sidecar 与 package mismatch 回归。
 
 Native file/folder picker 与 Credential Broker 属于 Electron/Core OS boundary；DLC 通过窄 Host service 使用，不能获得 application container、任意 Session 或全局 credential vault。
@@ -548,7 +571,7 @@ Host 拥有 section chrome、overflow、focus、keyboard 与 selection visual co
 
 ### 11.1 最终切换状态（2026-08-23）
 
-- `dbfox.data` 与 `dbfox.workspace` 均以签名 System DLC 默认启用；Kernel-only 启动仅是包不可用时的明确 fail-closed 状态，不会注册 legacy Data/Workspace fallback。
+- `dbfox.data`、`dbfox.workspace` 与 `dbfox.music` 均以签名 System DLC 默认启用；Kernel-only 启动仅是包不可用时的明确 fail-closed 状态，不会注册领域 fallback。
 - Core HTTP 不再注册 DataSource、Schema、Query、Backup 业务路由；Data Workbench 通过 typed DLC operations 和 Artifact views 工作。
 - Alembic `e2f3a4b5c6d8` 将历史 Connection/DataSource identity 与 opaque credential refs 幂等导入 `dbfox.data/state.sqlite3`，验证后删除 Core Data 表和 Data FTS；当前 head `f3a4b5c6d7e9` 又移除最后的 Run/Data compatibility columns。Catalog、history 与 result rows 是 capability-owned 领域状态，不在 Core 保留镜像。
 - Project 当前模型只保留 identity/metadata；Conversation 只保留 Project 归属和 generic resource intent；Run 只从 frozen refs 获得权限。

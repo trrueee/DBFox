@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from engine.resource import is_namespaced_resource_kind
 from engine.tools.runtime.semantics import ToolSemanticSpec
 from engine.tools.runtime.observation import (
     ToolObservationProjection,
@@ -95,8 +96,8 @@ class ToolExecutionSpec(BaseModel):
         if len(set(self.required_resource_kinds)) != len(self.required_resource_kinds):
             raise ValueError("Tool required_resource_kinds must not contain duplicates")
         for kind in self.required_resource_kinds:
-            if not isinstance(kind, str) or not kind.strip():
-                raise ValueError("Resource kind must be a non-empty string")
+            if not isinstance(kind, str) or not is_namespaced_resource_kind(kind):
+                raise ValueError("Resource kind must be a namespaced identifier such as 'dbfox.data.database'")
             if len(kind) > 64:
                 raise ValueError("Resource kind cannot exceed 64 characters")
         return self

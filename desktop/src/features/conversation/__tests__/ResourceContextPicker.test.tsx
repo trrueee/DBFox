@@ -38,7 +38,7 @@ describe("ResourceContextPicker", () => {
   it("adds a discovered resource only after an explicit user choice", async () => {
     listProjectResources.mockResolvedValueOnce([
       { kind: "dbfox.data.database", id: "db-1", name: "billing", version: 4, is_default: true },
-      { kind: "workspace", id: "project-1", name: "workspace", version: 2, is_default: false },
+      { kind: "dbfox.workspace.root", id: "project-1", name: "workspace", version: 2, is_default: false },
     ]);
     const onChange = vi.fn();
 

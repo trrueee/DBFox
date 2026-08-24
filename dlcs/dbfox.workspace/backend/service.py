@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -113,88 +112,3 @@ class WorkspaceService:
             sha256=hashlib.sha256(data).hexdigest(),
             truncated=size > MAX_WORKSPACE_FILE_BYTES,
         )
-
-
-@dataclass(frozen=True, slots=True)
-class WorkspacePatch:
-    relative_path: str
-    old_sha256: str | None
-    new_sha256: str
-    size_bytes: int
-    created: bool
-
-
-class WorkspacePatchConflict(WorkspaceError):
-    pass
-
-
-def apply_patch(
-    workspace: WorkspaceService,
-    relative_path: str,
-    content: str,
-    expected_sha256: str | None,
-) -> WorkspacePatch:
-    normalized = workspace.normalize(relative_path)
-    if normalized == ".":
-        raise WorkspaceError("Workspace patch path must identify a file")
-    path = workspace.resolve(normalized)
-    if path.exists() and path.is_dir():
-        raise WorkspaceError("Workspace patch target is a directory")
-    data = content.encode("utf-8")
-    if len(data) > MAX_WORKSPACE_FILE_BYTES:
-        raise WorkspaceError("Workspace patch exceeds the byte limit")
-    old_sha256 = hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
-    expected = str(expected_sha256 or "").strip().lower()
-    if (expected and old_sha256 != expected) or (not expected and old_sha256 is not None):
-        raise WorkspacePatchConflict("Workspace file changed before patch")
-    if not path.parent.is_dir():
-        raise WorkspaceError("Workspace patch directory does not exist")
-    descriptor, temp_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".dbfox-tmp", dir=path.parent
-    )
-    try:
-        with os.fdopen(descriptor, "wb") as temp_file:
-            temp_file.write(data)
-            temp_file.flush()
-            os.fsync(temp_file.fileno())
-        os.replace(temp_name, path)
-    except BaseException:
-        try:
-            os.unlink(temp_name)
-        except OSError:
-            pass
-        raise
-    return WorkspacePatch(
-        relative_path=normalized,
-        old_sha256=old_sha256,
-        new_sha256=hashlib.sha256(data).hexdigest(),
-        size_bytes=len(data),
-        created=old_sha256 is None,
-    )
-
-
-def reconcile_patch(
-    workspace: WorkspaceService,
-    relative_path: str,
-    content: str,
-    expected_sha256: str | None,
-) -> tuple[str, WorkspacePatch | None]:
-    normalized = workspace.normalize(relative_path)
-    path = workspace.resolve(normalized)
-    data = content.encode("utf-8")
-    new_sha256 = hashlib.sha256(data).hexdigest()
-    if path.exists() and path.is_file():
-        current = hashlib.sha256(path.read_bytes()).hexdigest()
-        if current == new_sha256:
-            return "succeeded", WorkspacePatch(
-                normalized,
-                str(expected_sha256 or "").strip().lower() or None,
-                new_sha256,
-                len(data),
-                False,
-            )
-        expected = str(expected_sha256 or "").strip().lower()
-        if expected and current == expected:
-            return "not_applied", None
-        return "unknown", None
-    return "not_applied", None

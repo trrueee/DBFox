@@ -103,7 +103,7 @@ gh attestation verify .\DBFox_1.0.3_x64_en-US.msi --repo trrueee/DBFox
 
 ## 官方 System DLC 信任根
 
-`dbfox.data` 与 `dbfox.workspace` 使用同一条 `.dbfox-dlc` verifier/registry/snapshot 生命周期，
+`dbfox.data`、`dbfox.workspace` 与 `dbfox.music` 使用同一条 `.dbfox-dlc` verifier/registry/snapshot 生命周期，
 不从源码目录直载。正式构建的 Ed25519 私钥只以文件路径进入隔离构建进程；构建器生成确定性
 包，并把 publisher 公钥及每个包的 exact digest 烘焙进 Frozen Sidecar。Electron Resources
 中的相邻 JSON 或包名不能扩大信任：启动只接受 Sidecar 内嵌的 ID、版本、文件名和 SHA-256，

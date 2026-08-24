@@ -104,6 +104,19 @@ export interface CredentialEnrollmentBatchResult {
   readonly lease_id: string;
 }
 
+export interface NativeFileSelection {
+  readonly path: string;
+  readonly name: string;
+  readonly sizeBytes: number;
+  readonly modifiedAtUnix: number;
+}
+
+export interface PickFileOptions {
+  readonly title?: string;
+  readonly accept?: readonly string[];
+  readonly maxBytes?: number;
+}
+
 export interface FrontendExtensionHost {
   readonly dlcId: string;
   readonly connectors: {
@@ -118,6 +131,12 @@ export interface FrontendExtensionHost {
   readonly nativeDialogs: {
     /** Opens the Electron-owned folder picker. Returns null when cancelled. */
     pickFolder(): Promise<string | null>;
+    /** Opens a bounded Electron-owned file picker. Extensions omit the leading dot. */
+    pickFile(options?: PickFileOptions): Promise<NativeFileSelection | null>;
+  };
+  readonly nativeFiles: {
+    /** Reads an unchanged file returned by pickFile once during this app process. */
+    readPickedFile(path: string): Promise<Uint8Array>;
   };
   readonly credentials: {
     /** Enrolls transient secrets under this DLC's signed manifest permissions. */

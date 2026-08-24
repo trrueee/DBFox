@@ -56,7 +56,7 @@ def test_product_registry_is_frozen_and_keeps_owner_and_backend_contracts() -> N
 def test_default_attempt_resolver_does_not_reintroduce_workspace_domain() -> None:
     resolver = build_attempt_resource_resolver()
     workspace_ref = ResourceScopeRef(
-        kind="workspace",
+        kind="dbfox.workspace.root",
         id="workspace-1",
         version="workspace-digest",
     )
@@ -64,9 +64,9 @@ def test_default_attempt_resolver_does_not_reintroduce_workspace_domain() -> Non
         resolver.resolve((workspace_ref,))
 
     with pytest.raises(RuntimeError, match="frozen"):
-        resolver.register("test", lambda _ref: None)
+        resolver.register("synthetic.test", lambda _ref: None)
     with pytest.raises(KeyError, match="No resolver"):
-        resolver.resolve((ResourceScopeRef(kind="unknown", id="unknown"),))
+        resolver.resolve((ResourceScopeRef(kind="synthetic.unknown", id="unknown"),))
 
 
 def test_run_loop_accepts_explicit_product_composition() -> None:

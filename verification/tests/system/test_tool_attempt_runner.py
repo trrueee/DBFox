@@ -84,7 +84,7 @@ class _FileProbeTool(BaseTool[_FileProbeInput, _FileProbeOutput]):
     input_model = _FileProbeInput
     output_model = _FileProbeOutput
     presentation = ToolPresentation(title="File probe", category="explore")
-    execution = ToolExecutionSpec(required_resource_kinds=("workspace",))
+    execution = ToolExecutionSpec(required_resource_kinds=("synthetic.workspace",))
 
     def run(self, _input, _context):
         return _FileProbeOutput()
@@ -93,7 +93,7 @@ class _FileProbeTool(BaseTool[_FileProbeInput, _FileProbeOutput]):
 def _request(workspace, version="1", registry=None):
     del workspace
     scope = ResourceScopeRef(
-        kind="workspace",
+        kind="synthetic.workspace",
         id="project-1",
         version="root-v1",
     )
@@ -132,7 +132,7 @@ def test_shared_handler_runs_a_workspace_attempt(tmp_path) -> None:
     registry.register(_FileProbeTool())
     registry.freeze()
     resolver = CompositeResourceResolver()
-    resolver.register("workspace", lambda _ref: root)
+    resolver.register("synthetic.workspace", lambda _ref: root)
     handler = ToolAttemptHandler(registry=registry, resolver=resolver)
 
     result = handler.run(_request(None, registry=registry))
@@ -191,7 +191,7 @@ def test_in_process_runner_suppresses_late_success_after_cancel(tmp_path) -> Non
     registry.register(_FileProbeTool())
     registry.freeze()
     resolver = CompositeResourceResolver()
-    resolver.register("workspace", lambda _ref: root)
+    resolver.register("synthetic.workspace", lambda _ref: root)
     runner = InProcessAttemptRunner(
         ToolAttemptHandler(registry=registry, resolver=resolver)
     )
@@ -227,7 +227,7 @@ def test_isolated_worker_does_not_rehydrate_retired_core_workspace(tmp_path, mon
                     update={
                         "scope_refs": (
                             ResourceScopeRef(
-                                kind="workspace",
+                                kind="synthetic.workspace",
                                 id="project-1",
                                 version="root-v1",
                             ),

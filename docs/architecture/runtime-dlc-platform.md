@@ -5,9 +5,9 @@
 > 状态：当前
 
 >
-> 最后核验：2026-08-22
+> 最后核验：2026-08-24
 >
-> 基线：`main@2625ac366113c031149fd226075932ddca0739b2` + R8A work package
+> 基线：`main@44c1d118` + owner-aware Tool/Resource namespace 收口
 >
 > 上位 Issue：[#59](https://github.com/trrueee/DBFox/issues/59)
 >
@@ -230,6 +230,12 @@ frame-ancestors 'none';
    - Scoped strings declared in `manifest.json`: e.g. `network:api.github.com`, `credentials:github`, `filesystem_read:project_workspace`.
 
 ### Deterministic Coverage Mapping
+Core Tool protocol continues to define the full capability vocabulary. Installable Extension API v2
+Tools are a narrower trusted in-process profile: the compiler accepts only `network` and
+`filesystem_read`. In particular, `filesystem_write` is rejected even when the manifest declares it,
+because write remains an isolated-process capability. Manifest write permissions may still cover a
+typed Host Operation; they do not upgrade an in-process model Tool.
+
 When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
 - `ToolCapability.network` $\implies$ Requires package permission `network` or matching `network:<domain>`.
 - `ToolCapability.filesystem_read` $\implies$ Requires package permission `filesystem_read` or `filesystem_read:<scope>`.
@@ -241,6 +247,18 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
 - `ToolCapability.metadata_write` $\implies$ Requires package permission `metadata_write`.
 
 *Note: The package permission grants the authority to register tools requiring the generic ToolCapability. Hostname/domain/path scope metadata (e.g. `api.github.com`) remains package policy metadata for disclosure and future mediated enforcement.*
+
+### Tool and Resource Identity
+
+- Canonical Tool identity is `ToolKey(owner_id, local_name)`. Equal local names from different DLCs
+  are composable; Core deterministically flattens each key into one provider-safe wire name at
+  materialization and freezes that name with owner/package digest.
+- Every Resource kind is namespaced (`owner_id.*`). A DLC provider/resolver and its Tool
+  `required_resource_kinds` may expose or consume only its own namespace.
+- Cross-capability work is an Agent composition concern. No DLC receives another DLC's private
+  resolved handle through `Any`; a future Composition DLC requires an explicit dependency contract.
+- Runtime aliases are not supported. Existing Workspace/GitHub durable identities are migrated once
+  to `dbfox.workspace.root` and `dbfox.github.repository`.
 
 ---
 

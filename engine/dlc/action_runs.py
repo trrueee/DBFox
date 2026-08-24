@@ -75,19 +75,19 @@ class DlcActionRunsHostImpl:
         )
 
         registry = build_product_tool_registry(self._snapshot)
-        owner_tool_names = {
-            name
+        owner_tools = {
+            registry.key_of(registry.require(name)).local_name: name
             for name in registry.tool_names()
             if registry.owner_of(name) == self._dlc_id
         }
-        if not owner_tool_names:
+        if not owner_tools:
             raise DlcOperationError(
                 code="ACTION_TOOL_UNAVAILABLE",
                 message="This capability has no active Workbench action Tools.",
                 status_code=503,
             )
         owner_groups = tuple(
-            sorted({registry.require(name).group for name in owner_tool_names})
+            sorted({registry.require(name).group for name in owner_tools.values()})
         )
         definition = AgentDefinition(
             name=f"{self._dlc_id}.workbench_action",
@@ -98,7 +98,7 @@ class DlcActionRunsHostImpl:
         )
         materialization = materialize_tools(
             registry,
-            allowed_names=owner_tool_names,
+            allowed_names=set(owner_tools.values()),
             execution_mode=definition.execution_mode,
             available_resource_kinds={item.kind for item in requested_resources},
         )
@@ -197,7 +197,7 @@ class DlcActionRunsHostImpl:
         )
         return _DlcActionRunImpl(
             dlc_id=self._dlc_id,
-            owner_tool_names=owner_tool_names,
+            owner_tools=owner_tools,
             session_factory=self._session_factory,
             dispatcher=dispatcher,
             executor=executor,
@@ -215,7 +215,7 @@ class _DlcActionRunImpl:
         self,
         *,
         dlc_id: str,
-        owner_tool_names: set[str],
+        owner_tools: dict[str, str],
         session_factory: SessionFactory,
         dispatcher: ToolDispatcher,
         executor: ToolExecutor,
@@ -227,7 +227,7 @@ class _DlcActionRunImpl:
         definition: AgentDefinition,
     ) -> None:
         self._dlc_id = dlc_id
-        self._owner_tool_names = owner_tool_names
+        self._owner_tools = owner_tools
         self._session_factory = session_factory
         self._dispatcher = dispatcher
         self._executor = executor
@@ -251,7 +251,8 @@ class _DlcActionRunImpl:
     def invoke(self, tool_name: str, raw_input: dict[str, Any]) -> DlcActionToolResult:
         if self._completed:
             raise RuntimeError("The action Run is already terminal")
-        if tool_name not in self._owner_tool_names:
+        provider_name = self._owner_tools.get(tool_name)
+        if provider_name is None:
             raise DlcOperationError(
                 code="ACTION_TOOL_FORBIDDEN",
                 message="A capability may invoke only its own action Tools.",
@@ -259,7 +260,7 @@ class _DlcActionRunImpl:
         self._call_sequence += 1
         call = ModelToolCall(
             id=f"action_call_{self._call_sequence}_{uuid4().hex}",
-            name=tool_name,
+            name=provider_name,
             arguments=dict(raw_input),
         )
         control = self._control()

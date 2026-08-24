@@ -156,6 +156,7 @@ def build_product_tool_registry(
             tool_contrib.tool,
             owner=tool_contrib.owner_id,
             package_digest=tool_contrib.package_digest,
+            provider_name=tool_contrib.provider_name,
         )
     return registry.freeze()
 

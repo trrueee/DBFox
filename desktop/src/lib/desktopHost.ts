@@ -7,6 +7,8 @@ import type {
   LaunchRecoveryStatus,
   ProjectFileContent,
   ProjectFolderListing,
+  NativeFileSelection,
+  PickFileOptions,
   SaveExternalImageResult,
   UpdateCheckResult,
   UpdateConfiguration,
@@ -68,6 +70,14 @@ export async function openDesktopDiagnosticLogs(): Promise<void> {
 
 export async function pickDesktopProjectFolder(): Promise<string | null> {
   return requireElectronBridge().files.pickProjectFolder();
+}
+
+export async function pickDesktopFile(options?: PickFileOptions): Promise<NativeFileSelection | null> {
+  return requireElectronBridge().files.pickFile(options);
+}
+
+export async function readDesktopPickedFile(path: string): Promise<Uint8Array> {
+  return requireElectronBridge().files.readPickedFile(path);
 }
 
 export function listDesktopProjectFolder(path: string): Promise<ProjectFolderListing> {

@@ -17,7 +17,6 @@ from dbfox_dlc_api import (
     ToolObservationProjection,
     ToolPolicy,
     ToolPresentation,
-    ToolReconciliation,
     ToolSemanticSpec,
 )
 
@@ -32,8 +31,6 @@ from .contracts import (
     FileReadOutput,
     FileSearchInput,
     FileSearchOutput,
-    FileWritePatchInput,
-    FileWritePatchOutput,
     PathInput,
     WorkspaceBinding,
     WorkspaceCodePatchPayload,
@@ -41,12 +38,9 @@ from .contracts import (
 )
 from .service import (
     WorkspaceError,
-    WorkspacePatchConflict,
     WorkspaceService,
-    apply_patch,
-    reconcile_patch,
 )
-from .store import WorkspaceBindingStore
+from .store import WORKSPACE_RESOURCE_KIND, WorkspaceBindingStore
 
 FILE_SNAPSHOT = "dbfox.workspace.file_snapshot"
 CODE_PATCH = "dbfox.workspace.code_patch"
@@ -54,14 +48,14 @@ MAX_CONTEXT_CHARS = 3_600
 
 
 def _workspace(context: ExtensionToolRunContext) -> WorkspaceService:
-    resource = context.require_one("workspace")
+    resource = context.require_one(WORKSPACE_RESOURCE_KIND)
     if not isinstance(resource, WorkspaceService):
         raise RuntimeError("workspace did not resolve to WorkspaceService")
     return resource
 
 
 def _scope(context: ExtensionToolRunContext) -> ResourceScopeRef:
-    refs = context.scopes("workspace")
+    refs = context.scopes(WORKSPACE_RESOURCE_KIND)
     if len(refs) != 1:
         raise RuntimeError("Workspace tool requires exactly one workspace scope")
     return refs[0]
@@ -81,7 +75,7 @@ class WorkspaceFileSearchTool(BaseTool[FileSearchInput, FileSearchOutput]):
         max_retries=1,
         concurrency="parallel_safe",
         capabilities=("filesystem_read",),
-        required_resource_kinds=("workspace",),
+        required_resource_kinds=(WORKSPACE_RESOURCE_KIND,),
     )
     semantics = ToolSemanticSpec(produces=("dbfox.workspace.file_search",))
     presentation = ToolPresentation(title="搜索项目文件", category="explore")
@@ -144,7 +138,7 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
         concurrency="parallel_safe",
         max_output_bytes=1_000_000,
         capabilities=("filesystem_read",),
-        required_resource_kinds=("workspace",),
+        required_resource_kinds=(WORKSPACE_RESOURCE_KIND,),
     )
     semantics = ToolSemanticSpec(produces=(FILE_SNAPSHOT,))
     presentation = ToolPresentation(title="读取项目文件", category="explore")
@@ -201,91 +195,6 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
         )
 
 
-class WorkspaceFileWritePatchTool(BaseTool[FileWritePatchInput, FileWritePatchOutput]):
-    name = "file_write_patch"
-    group = "workspace"
-    description = "Atomically replace one authorized workspace file using SHA-256 CAS."
-    input_model = FileWritePatchInput
-    output_model = FileWritePatchOutput
-    version = "1"
-    policy = ToolPolicy(risk_level="danger", requires_approval=True)
-    execution = ToolExecutionSpec(
-        recovery="reconcile",
-        retryable=False,
-        max_retries=0,
-        concurrency="sequential",
-        # Dynamic DLC v1 executes through the in-process host boundary. The
-        # write remains approval-gated, capability-scoped, path-contained and
-        # compare-and-swap protected by WorkspaceService.
-        backend="in_process",
-        capabilities=("filesystem_write",),
-        required_resource_kinds=("workspace",),
-    )
-    semantics = ToolSemanticSpec(produces=(CODE_PATCH,))
-    presentation = ToolPresentation(title="修改项目文件", category="manage")
-
-    def run(self, input: FileWritePatchInput, context: ExtensionToolRunContext) -> ToolOutcome[FileWritePatchOutput]:
-        try:
-            result = apply_patch(
-                _workspace(context), input.path, input.content, input.expected_sha256
-            )
-        except WorkspacePatchConflict as exc:
-            raise ToolInputError("工作区文件已发生变化，无法安全写入。") from exc
-        except WorkspaceError as exc:
-            raise ToolInputError("无法写入该项目文件。") from exc
-        workspace_ref = _scope(context)
-        workspace_id = str(workspace_ref.id)
-        workspace_version = str(workspace_ref.version or "")
-        output = FileWritePatchOutput(
-            path=result.relative_path,
-            old_sha256=result.old_sha256,
-            new_sha256=result.new_sha256,
-            size_bytes=result.size_bytes,
-            created=result.created,
-        )
-        return ToolOutcome(
-            output=output,
-            artifacts=(ArtifactDraft(
-                key="patch",
-                type=CODE_PATCH,
-                schema_version=1,
-                title=result.relative_path,
-                payload={
-                    "relativePath": result.relative_path,
-                    "oldSha256": result.old_sha256,
-                    "newSha256": result.new_sha256,
-                    "sizeBytes": result.size_bytes,
-                    "created": result.created,
-                    "workspaceId": workspace_id,
-                    "workspaceVersion": workspace_version,
-                },
-                summary=f"Replaced {result.size_bytes} bytes in {result.relative_path}",
-                semantic_key=f"file_write_patch:{result.new_sha256}",
-                resource_refs=(workspace_ref,),
-            ),),
-        )
-
-    def reconcile(self, input: FileWritePatchInput, context: ExtensionToolRunContext) -> ToolReconciliation:
-        try:
-            status, result = reconcile_patch(
-                _workspace(context), input.path, input.content, input.expected_sha256
-            )
-        except WorkspaceError:
-            return ToolReconciliation(status="unknown")
-        if status == "succeeded" and result is not None:
-            return ToolReconciliation(
-                status="succeeded",
-                output=FileWritePatchOutput(
-                    path=result.relative_path,
-                    old_sha256=result.old_sha256,
-                    new_sha256=result.new_sha256,
-                    size_bytes=result.size_bytes,
-                    created=result.created,
-                ).model_dump(mode="json"),
-            )
-        return ToolReconciliation(status=status)
-
-
 class WorkspaceContextContributor:
     id = "dbfox.workspace"
 
@@ -296,7 +205,7 @@ class WorkspaceContextContributor:
         authorized = {
             (str(ref.id), str(ref.version or ""))
             for ref in input.resource_refs
-            if ref.kind == "workspace"
+            if ref.kind == WORKSPACE_RESOURCE_KIND
         }
         fragments: list[ContextFragment] = []
         for observation in input.recent_artifacts:
@@ -304,7 +213,7 @@ class WorkspaceContextContributor:
                 continue
             payload = observation.payload
             artifact_workspace_refs = tuple(
-                ref for ref in observation.resource_refs if ref.kind == "workspace"
+                ref for ref in observation.resource_refs if ref.kind == WORKSPACE_RESOURCE_KIND
             )
             identity = (
                 (
@@ -322,7 +231,7 @@ class WorkspaceContextContributor:
             try:
                 workspace = self._store.resolve(next(
                     ref for ref in input.resource_refs
-                    if ref.kind == "workspace" and (str(ref.id), str(ref.version or "")) == identity
+                    if ref.kind == WORKSPACE_RESOURCE_KIND and (str(ref.id), str(ref.version or "")) == identity
                 ))
                 snapshot = workspace.read_text_file(str(payload.get("relativePath") or ""))
             except (WorkspaceError, ValueError, StopIteration):
@@ -419,7 +328,7 @@ def register(host: BackendExtensionHost) -> None:
     host.tools.register(WorkspaceFileSearchTool())
     host.tools.register(WorkspaceFileReadTool())
     host.resources.register_provider(store.list_resources)
-    host.resources.register_resolver("workspace", store.resolve)
+    host.resources.register_resolver(WORKSPACE_RESOURCE_KIND, store.resolve)
     host.context.register(WorkspaceContextContributor(store))
     host.artifacts.register(FILE_SNAPSHOT, 1, WorkspaceFileSnapshotPayload)
     host.artifacts.register(CODE_PATCH, 1, WorkspaceCodePatchPayload)

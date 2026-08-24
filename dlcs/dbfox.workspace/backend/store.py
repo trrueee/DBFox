@@ -11,6 +11,8 @@ from dbfox_dlc_api import ProjectResourceDescriptor, ResourceScopeRef
 from .contracts import WorkspaceBinding
 from .service import WorkspaceService
 
+WORKSPACE_RESOURCE_KIND = "dbfox.workspace.root"
+
 
 class WorkspaceBindingStore:
     def __init__(self, data_path: Path) -> None:
@@ -89,7 +91,7 @@ class WorkspaceBindingStore:
             return ()
         return (
             ProjectResourceDescriptor(
-                kind="workspace",
+                kind=WORKSPACE_RESOURCE_KIND,
                 id=binding.id,
                 version=binding.root_digest,
                 name=Path(binding.root_path).name or "Workspace",
@@ -97,7 +99,7 @@ class WorkspaceBindingStore:
         )
 
     def resolve(self, ref: ResourceScopeRef) -> WorkspaceService:
-        if ref.kind != "workspace":
+        if ref.kind != WORKSPACE_RESOURCE_KIND:
             raise KeyError(ref.kind)
         binding = self.get_project_binding(str(ref.id))
         if binding is None:

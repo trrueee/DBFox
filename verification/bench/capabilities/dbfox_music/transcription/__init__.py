@@ -1,0 +1,1 @@
+"""Music transcription structural scoring."""

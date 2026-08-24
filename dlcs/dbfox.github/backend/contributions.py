@@ -54,7 +54,7 @@ from .service import (
     normalize_github_repository,
     resolve_public_repository_revision,
 )
-from .store import GithubBindingStore
+from .store import GITHUB_REPOSITORY_KIND, GithubBindingStore
 
 MAX_GITHUB_CONTEXT_FILES = 4
 MAX_CHARS_PER_FILE = 4_000
@@ -117,7 +117,7 @@ class GithubRepoOverviewTool(BaseTool[GithubRepoOverviewInput, GithubRepoOvervie
         max_retries=1,
         concurrency="parallel_safe",
         capabilities=("network",),
-        required_resource_kinds=("github.repository",),
+        required_resource_kinds=(GITHUB_REPOSITORY_KIND,),
     )
     semantics = ToolSemanticSpec(produces=("dbfox.github.repo_overview",))
     presentation = ToolPresentation(
@@ -133,9 +133,9 @@ class GithubRepoOverviewTool(BaseTool[GithubRepoOverviewInput, GithubRepoOvervie
         context: ExtensionToolRunContext,
     ) -> GithubRepoOverviewOutput:
         del tool_input
-        service = context.require_one("github.repository")
+        service = context.require_one(GITHUB_REPOSITORY_KIND)
         if not isinstance(service, GithubReadService):
-            raise RuntimeError("github.repository did not resolve to GithubReadService")
+            raise RuntimeError(f"{GITHUB_REPOSITORY_KIND} did not resolve to GithubReadService")
         try:
             return service.get_repo_overview()
         except GithubServiceError as exc:
@@ -155,7 +155,7 @@ class GithubListFilesTool(BaseTool[GithubListFilesInput, GithubListFilesOutput])
         max_retries=1,
         concurrency="parallel_safe",
         capabilities=("network",),
-        required_resource_kinds=("github.repository",),
+        required_resource_kinds=(GITHUB_REPOSITORY_KIND,),
     )
     semantics = ToolSemanticSpec(produces=("dbfox.github.file_list",))
     presentation = ToolPresentation(
@@ -170,9 +170,9 @@ class GithubListFilesTool(BaseTool[GithubListFilesInput, GithubListFilesOutput])
         tool_input: GithubListFilesInput,
         context: ExtensionToolRunContext,
     ) -> GithubListFilesOutput:
-        service = context.require_one("github.repository")
+        service = context.require_one(GITHUB_REPOSITORY_KIND)
         if not isinstance(service, GithubReadService):
-            raise RuntimeError("github.repository did not resolve to GithubReadService")
+            raise RuntimeError(f"{GITHUB_REPOSITORY_KIND} did not resolve to GithubReadService")
         try:
             entries, truncated = service.list_files(tool_input.path, tool_input.limit)
         except GithubServiceError as exc:
@@ -199,7 +199,7 @@ class GithubReadFileTool(BaseTool[GithubReadFileInput, GithubReadFileOutput]):
         concurrency="parallel_safe",
         max_output_bytes=200_000,
         capabilities=("network",),
-        required_resource_kinds=("github.repository",),
+        required_resource_kinds=(GITHUB_REPOSITORY_KIND,),
     )
     semantics = ToolSemanticSpec(produces=(GITHUB_FILE_SNAPSHOT_ARTIFACT_TYPE,))
     presentation = ToolPresentation(
@@ -214,9 +214,9 @@ class GithubReadFileTool(BaseTool[GithubReadFileInput, GithubReadFileOutput]):
         tool_input: GithubReadFileInput,
         context: ExtensionToolRunContext,
     ) -> ToolOutcome[GithubReadFileOutput]:
-        service = context.require_one("github.repository")
+        service = context.require_one(GITHUB_REPOSITORY_KIND)
         if not isinstance(service, GithubReadService):
-            raise RuntimeError("github.repository did not resolve to GithubReadService")
+            raise RuntimeError(f"{GITHUB_REPOSITORY_KIND} did not resolve to GithubReadService")
         try:
             path, revision, size, digest, content, truncated, blob_sha = service.read_file(
                 tool_input.path
@@ -268,7 +268,7 @@ class GithubContextContributor:
         authorized = {
             str(ref.id): str(ref.version or "")
             for ref in input.resource_refs
-            if ref.kind == "github.repository"
+            if ref.kind == GITHUB_REPOSITORY_KIND
         }
         if not authorized:
             return ()
@@ -293,7 +293,7 @@ class GithubContextContributor:
                 service = _read_service(
                     self._store,
                     ResourceScopeRef(
-                        kind="github.repository",
+                        kind=GITHUB_REPOSITORY_KIND,
                         id=binding_id,
                         version=revision,
                     ),
@@ -528,7 +528,7 @@ def register(host: BackendExtensionHost) -> None:
     host.tools.register(GithubReadFileTool())
     host.resources.register_provider(store.list_resources)
     host.resources.register_resolver(
-        "github.repository",
+        GITHUB_REPOSITORY_KIND,
         lambda ref: _read_service(store, ref),
     )
     host.context.register(GithubContextContributor(store))

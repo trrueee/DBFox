@@ -83,11 +83,12 @@ def materialize_tools(
     materialized: list[MaterializedTool] = []
     for tool in registry.list_tools():
         spec = tool.spec
+        wire_name = registry.provider_name_of(tool)
         if not spec.policy.visible_to_model:
             continue
         if allowed_groups is not None and spec.group not in allowed_groups:
             continue
-        if allowed_names is not None and spec.name not in allowed_names:
+        if allowed_names is not None and wire_name not in allowed_names:
             continue
         allowed_modes = set(spec.policy.allowed_execution_modes)
         if allowed_modes and execution_mode not in allowed_modes:
@@ -217,17 +218,17 @@ def _materialize_tool(
         "kind": spec.kind,
     }
     resolved_owner = (
-        registry.owner_of(spec.name)
+        registry.owner_of_tool(tool)
         if registry is not None
         else owner_id
     )
     resolved_digest = (
-        registry.package_digest_of(spec.name)
+        registry.package_digest_of_tool(tool)
         if registry is not None
         else package_digest
     )
     return MaterializedTool(
-        name=spec.name,
+        name=(registry.provider_name_of(tool) if registry is not None else spec.name),
         declared_version=str(spec.version),
         contract_hash=f"sha256:{_canonical_digest(contract_payload)}",
         owner_id=resolved_owner,

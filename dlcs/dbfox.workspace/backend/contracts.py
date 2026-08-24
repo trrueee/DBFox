@@ -74,23 +74,6 @@ class FileSearchOutput(Contract):
     truncated: bool
 
 
-class FileWritePatchInput(Contract):
-    path: str = Field(min_length=1, max_length=1024)
-    content: str = Field(max_length=1_048_576)
-    expected_sha256: str | None = Field(
-        default=None,
-        pattern=r"^[0-9a-fA-F]{64}$|^$",
-    )
-
-
-class FileWritePatchOutput(Contract):
-    path: str
-    old_sha256: str | None = None
-    new_sha256: str = Field(min_length=64, max_length=64)
-    size_bytes: int = Field(ge=0)
-    created: bool
-
-
 class WorkspaceFileSnapshotPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 

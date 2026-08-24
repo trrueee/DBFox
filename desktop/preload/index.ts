@@ -6,6 +6,8 @@ import {
   type EngineConfig,
   type EngineStartupStatus,
   type DiagnosticBundlePayload,
+  type PickFileOptions,
+  type NativeFileSelection,
 } from "../shared/desktopContract";
 
 const bridge: DbfoxDesktopBridge = Object.freeze({
@@ -33,6 +35,14 @@ const bridge: DbfoxDesktopBridge = Object.freeze({
   }),
   files: Object.freeze({
     pickProjectFolder: () => ipcRenderer.invoke(DESKTOP_CHANNELS.pickProjectFolder) as Promise<string | null>,
+    pickFile: (options?: PickFileOptions) => ipcRenderer.invoke(
+      DESKTOP_CHANNELS.pickFile,
+      options,
+    ) as Promise<NativeFileSelection | null>,
+    readPickedFile: (path: string) => ipcRenderer.invoke(
+      DESKTOP_CHANNELS.readPickedFile,
+      path,
+    ) as Promise<Uint8Array>,
     listProjectFolder: (path: string) => ipcRenderer.invoke(DESKTOP_CHANNELS.listProjectFolder, path),
     readProjectFile: (path: string) => ipcRenderer.invoke(DESKTOP_CHANNELS.readProjectFile, path),
     pickDlcPackage: () => ipcRenderer.invoke(DESKTOP_CHANNELS.pickDlcPackage) as Promise<string | null>,

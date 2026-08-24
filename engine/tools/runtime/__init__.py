@@ -22,7 +22,7 @@ from engine.tools.runtime.executor import (
     ToolExecutionTask,
     ToolExecutor,
 )
-from engine.tools.runtime.registry import ToolRegistry
+from engine.tools.runtime.registry import ToolKey, ToolRegistry, provider_tool_name
 from engine.tools.runtime.result import ToolOutcome, ToolReconciliation, ToolResult
 from engine.tools.runtime.observation import ToolObservationProjection
 from engine.tools.runtime.runtime import ToolRuntime
@@ -54,6 +54,8 @@ __all__ = [
     "ResourceKey",
     "ResourceScopeRef",
     "ToolRegistry",
+    "ToolKey",
+    "provider_tool_name",
     "ToolResult",
     "ToolRuntime",
     "ToolSemanticSpec",

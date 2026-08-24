@@ -1,9 +1,14 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell, type IpcMainInvokeEvent } from "electron";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, open, stat, writeFile } from "node:fs/promises";
+import { basename, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DESKTOP_CHANNELS, type DiagnosticBundlePayload } from "../shared/desktopContract";
+import {
+  DESKTOP_CHANNELS,
+  type DiagnosticBundlePayload,
+  type NativeFileFilter,
+  type PickFileOptions,
+} from "../shared/desktopContract";
 import { hasPackagedRendererOrigin, PACKAGED_RENDERER_URL, registerAppProtocol } from "./appProtocol";
 import { AppUpdateService, createAppUpdateService } from "./appUpdater";
 import { CrashRecoveryMarker } from "./crashRecovery";
@@ -51,6 +56,8 @@ let appUpdates: AppUpdateService | null = null;
 let shutdownStarted = false;
 let shutdownComplete = false;
 let updateInstallPrepared = false;
+const pickedFiles = new Map<string, { sizeBytes: number; modifiedAtUnix: number; maxBytes: number }>();
+const MAX_PICKED_FILE_BYTES = 128 * 1024 * 1024;
 
 function validateSender(event: IpcMainInvokeEvent): void {
   const frameUrl = event.senderFrame?.url;
@@ -114,6 +121,59 @@ function registerNativeIpc(): void {
     });
     if (selection.canceled || !selection.filePaths[0]) return null;
     return access.approve(selection.filePaths[0]);
+  });
+  handle(DESKTOP_CHANNELS.pickFile, async (_event, rawOptions?: PickFileOptions) => {
+    const options = validatePickFileOptions(rawOptions);
+    const selection = await dialog.showOpenDialog(requireWindow(), {
+      title: options.title,
+      properties: ["openFile"],
+      filters: options.filters,
+    });
+    if (selection.canceled || !selection.filePaths[0]) return null;
+    const path = resolve(selection.filePaths[0]);
+    const info = await stat(path);
+    if (!info.isFile() || info.size > options.maxBytes) {
+      throw new Error("所选文件超过允许大小或不是普通文件");
+    }
+    const suffix = extname(path).slice(1).toLowerCase();
+    if (options.allowedExtensions.size > 0 && !options.allowedExtensions.has(suffix)) {
+      throw new Error("所选文件类型不在允许范围内");
+    }
+    const modifiedAtUnix = Math.floor(info.mtimeMs);
+    pickedFiles.set(path, { sizeBytes: info.size, modifiedAtUnix, maxBytes: options.maxBytes });
+    return { path, name: basename(path), sizeBytes: info.size, modifiedAtUnix };
+  });
+  handle(DESKTOP_CHANNELS.readPickedFile, async (_event, rawPath: string) => {
+    if (typeof rawPath !== "string" || rawPath !== resolve(rawPath)) {
+      throw new Error("文件授权无效");
+    }
+    const approval = pickedFiles.get(rawPath);
+    if (!approval) throw new Error("该文件尚未由用户选择授权");
+    const file = await open(rawPath, "r");
+    try {
+      const before = await file.stat();
+      if (
+        !before.isFile()
+        || before.size !== approval.sizeBytes
+        || Math.floor(before.mtimeMs) !== approval.modifiedAtUnix
+        || before.size > approval.maxBytes
+      ) {
+        throw new Error("所选文件已发生变化，请重新选择");
+      }
+      const bytes = await file.readFile();
+      const after = await file.stat();
+      if (
+        bytes.byteLength !== approval.sizeBytes
+        || after.size !== before.size
+        || Math.floor(after.mtimeMs) !== Math.floor(before.mtimeMs)
+      ) {
+        throw new Error("读取期间文件发生变化，请重新选择");
+      }
+      return new Uint8Array(bytes);
+    } finally {
+      pickedFiles.delete(rawPath);
+      await file.close();
+    }
   });
   handle(DESKTOP_CHANNELS.listProjectFolder, (_event, path: string) => {
     if (projectFolders === null) throw new Error("项目文件夹授权服务不可用");
@@ -338,4 +398,43 @@ function validateExternalHttps(rawUrl: string): URL {
     throw new Error("Only credential-free HTTPS URLs may be opened");
   }
   return url;
+}
+
+function validatePickFileOptions(raw?: PickFileOptions): {
+  title: string;
+  filters: NativeFileFilter[];
+  allowedExtensions: Set<string>;
+  maxBytes: number;
+} {
+  if (raw !== undefined && (raw === null || typeof raw !== "object" || Array.isArray(raw))) {
+    throw new Error("文件选择参数无效");
+  }
+  const title = raw?.title ?? "选择文件";
+  if (typeof title !== "string" || title.length < 1 || title.length > 80) {
+    throw new Error("文件选择标题无效");
+  }
+  const maxBytes = raw?.maxBytes ?? MAX_PICKED_FILE_BYTES;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_PICKED_FILE_BYTES) {
+    throw new Error("文件大小上限无效");
+  }
+  const filters = raw?.filters ?? [];
+  if (!Array.isArray(filters) || filters.length > 8) throw new Error("文件筛选条件无效");
+  const normalized = filters.map((filter) => {
+    if (!filter || typeof filter.name !== "string" || filter.name.length < 1 || filter.name.length > 40
+      || !Array.isArray(filter.extensions) || filter.extensions.length < 1 || filter.extensions.length > 16) {
+      throw new Error("文件筛选条件无效");
+    }
+    const extensions = filter.extensions.map((extension) => {
+      const value = String(extension).toLowerCase();
+      if (!/^[a-z0-9]{1,10}$/.test(value)) throw new Error("文件扩展名无效");
+      return value;
+    });
+    return { name: filter.name, extensions };
+  });
+  return {
+    title,
+    filters: normalized,
+    allowedExtensions: new Set(normalized.flatMap((filter) => filter.extensions)),
+    maxBytes,
+  };
 }

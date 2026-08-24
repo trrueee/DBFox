@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "capability.dbfox_music.direct",
+  "suite_version": "1.0.0",
+  "description": "Direct production dbfox.music schema, immutable revision, deterministic transpose, and local edit scenarios.",
+  "subject": {"kind": "capability", "components": ["dbfox.music"], "supporting_fixtures": ["system-dlc-host", "score-document-v1"]},
+  "execution": {"provider_modes": ["none"], "default_repetitions": 1, "max_repetitions": 20},
+  "dataset": "cases.json",
+  "metrics": [
+    {"name": "task.success_rate", "direction": "higher_is_better", "unit": "ratio", "description": "Fraction of deterministic Music scenarios completed correctly."},
+    {"name": "capability.score_validity", "direction": "higher_is_better", "unit": "ratio", "description": "Whether the committed ScoreDocument satisfies its canonical schema."},
+    {"name": "capability.revision_immutability", "direction": "higher_is_better", "unit": "ratio", "description": "Whether previous revisions remain byte-semantically unchanged."},
+    {"name": "capability.edit_locality", "direction": "higher_is_better", "unit": "ratio", "description": "Whether a phrase edit leaves every out-of-range note unchanged."}
+  ]
+}

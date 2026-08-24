@@ -55,10 +55,10 @@ def test_tool_invocation_context_requires_unique_scope_identity() -> None:
         invocation_id="invocation-1",
         idempotency_key="idem-1",
         deadline_at=datetime.now(UTC),
-        scope_refs=(_scope(), _scope(kind="workspace", version="v1")),
+        scope_refs=(_scope(), _scope(kind="synthetic.workspace", version="v1")),
     )
     assert context.scope("dbfox.data.database") == _scope()
-    assert context.scope("workspace").version == "v1"
+    assert context.scope("synthetic.workspace").version == "v1"
 
     with pytest.raises(ValueError, match="unique"):
         ToolInvocationContext(
@@ -85,7 +85,7 @@ def test_attempt_request_is_serializable_and_excludes_live_objects() -> None:
             idempotency_key="idem-1",
             scope_refs=(
                 _scope(),
-                _scope(kind="workspace", version="workspace-root-v1"),
+                _scope(kind="synthetic.workspace", version="workspace-root-v1"),
             ),
         ),
         authorized_input={"queries": ["orders"]},
@@ -95,8 +95,8 @@ def test_attempt_request_is_serializable_and_excludes_live_objects() -> None:
     assert payload["mode"] == "execute"
     assert payload["invocation"]["scope_refs"][0]["kind"] == "dbfox.data.database"
     assert payload["invocation"]["scope_refs"][1] == {
-        "kind": "workspace",
-        "id": "workspace-1",
+        "kind": "synthetic.workspace",
+        "id": "synthetic.workspace-1",
         "version": "workspace-root-v1",
     }
     assert "location" not in str(payload)
@@ -116,28 +116,28 @@ def test_attempt_request_is_serializable_and_excludes_live_objects() -> None:
 def test_composite_resolver_registers_capability_resolvers_and_freezes() -> None:
     resolver = CompositeResourceResolver()
     resolver.register("dbfox.data.database", lambda ref: {"id": ref.id, "version": ref.version})
-    resolver.register("workspace", lambda ref: object())
+    resolver.register("synthetic.workspace", lambda ref: object())
 
-    resolved = resolver.resolve((_scope(), _scope(kind="workspace", version=1)))
+    resolved = resolver.resolve((_scope(), _scope(kind="synthetic.workspace", version=1)))
     assert resolved[_scope().canonical()]["id"] == "dbfox.data.database-1"
-    assert isinstance(resolved[_scope(kind="workspace", version=1).canonical()], object)
+    assert isinstance(resolved[_scope(kind="synthetic.workspace", version=1).canonical()], object)
 
     with pytest.raises(KeyError, match="No resolver"):
-        resolver.resolve((_scope(kind="network"),))
+        resolver.resolve((_scope(kind="synthetic.network"),))
 
     resolver.freeze()
     with pytest.raises(RuntimeError, match="frozen"):
-        resolver.register("network", lambda ref: None)
+        resolver.register("synthetic.network", lambda ref: None)
 
 
 def test_tool_run_context_exposes_only_authorized_resources() -> None:
     context = ToolRunContext.for_invocation(
         request=None,
         idempotency_key="idem-1",
-        scope_refs=(_scope(kind="workspace", version=1),),
-        resources={_scope(kind="workspace", version=1).canonical(): {"root": "C:/demo"}},
+        scope_refs=(_scope(kind="synthetic.workspace", version=1),),
+        resources={_scope(kind="synthetic.workspace", version=1).canonical(): {"root": "C:/demo"}},
     )
-    assert context.require_one("workspace") == {"root": "C:/demo"}
+    assert context.require_one("synthetic.workspace") == {"root": "C:/demo"}
     with pytest.raises(RuntimeError, match="resource"):
         context.require_one("dbfox.data.database")
 
@@ -177,16 +177,16 @@ def test_tool_run_context_keeps_multiple_same_kind_resources_distinct() -> None:
 
 
 def test_resource_scope_ref_is_identity_only_and_rejects_transport_location() -> None:
-    workspace = ResourceScopeRef(kind="workspace", id="project-1", version="root-v1")
+    workspace = ResourceScopeRef(kind="synthetic.workspace", id="project-1", version="root-v1")
 
     assert workspace.model_dump(mode="json") == {
-        "kind": "workspace",
+        "kind": "synthetic.workspace",
         "id": "project-1",
         "version": "root-v1",
     }
     with pytest.raises(Exception):
         ResourceScopeRef(
-            kind="workspace",
+            kind="synthetic.workspace",
             id="project-1",
             version="root-v1",
             location="C:/must-not-cross-wire",

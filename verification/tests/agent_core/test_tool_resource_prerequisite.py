@@ -150,7 +150,7 @@ def test_required_resource_kind_is_part_of_frozen_tool_contract():
 
 
 def test_required_resource_kind_validation():
-    with pytest.raises(ValueError, match="non-empty string"):
+    with pytest.raises(ValueError, match="namespaced identifier"):
         ToolExecutionSpec(required_resource_kinds=("",))
     with pytest.raises(ValueError, match="duplicates"):
         ToolExecutionSpec(required_resource_kinds=("verification.alpha", "verification.alpha"))

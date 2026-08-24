@@ -19,8 +19,10 @@ def register_core_functions(registry: ToolRegistry) -> None:
         UpdatePlanCommand,
     )
 
-    registry.register(RequestClarificationCommand(), owner=CORE_OWNER)
-    registry.register(UpdatePlanCommand(), owner=CORE_OWNER)
+    clarification = RequestClarificationCommand()
+    update_plan = UpdatePlanCommand()
+    registry.register(clarification, owner=CORE_OWNER, provider_name=clarification.name)
+    registry.register(update_plan, owner=CORE_OWNER, provider_name=update_plan.name)
 
 
 def register_conversation_functions(registry: ToolRegistry) -> None:
@@ -31,8 +33,10 @@ def register_conversation_functions(registry: ToolRegistry) -> None:
         ConversationSearchTool,
     )
 
-    registry.register(ConversationSearchTool(), owner=CONVERSATION_OWNER)
-    registry.register(ConversationReadTool(), owner=CONVERSATION_OWNER)
+    search = ConversationSearchTool()
+    read = ConversationReadTool()
+    registry.register(search, owner=CONVERSATION_OWNER, provider_name=search.name)
+    registry.register(read, owner=CONVERSATION_OWNER, provider_name=read.name)
 
 
 def register_remote_job_extension(registry: ToolRegistry) -> None:
@@ -44,6 +48,9 @@ def register_remote_job_extension(registry: ToolRegistry) -> None:
         RemoteJobSubmitTool,
     )
 
-    registry.register(RemoteJobSubmitTool(), owner=REMOTE_JOB_OWNER)
-    registry.register(RemoteJobStatusTool(), owner=REMOTE_JOB_OWNER)
-    registry.register(RemoteJobCancelTool(), owner=REMOTE_JOB_OWNER)
+    submit = RemoteJobSubmitTool()
+    status = RemoteJobStatusTool()
+    cancel = RemoteJobCancelTool()
+    registry.register(submit, owner=REMOTE_JOB_OWNER, provider_name=submit.name)
+    registry.register(status, owner=REMOTE_JOB_OWNER, provider_name=status.name)
+    registry.register(cancel, owner=REMOTE_JOB_OWNER, provider_name=cancel.name)

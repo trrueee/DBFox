@@ -10,7 +10,7 @@ import pytest
 
 from engine.runtime_composition import build_product_tool_registry
 from engine.tools.materialization import materialize_tools
-from engine.tools.runtime import ToolRegistry
+from engine.tools.runtime import ToolKey, ToolRegistry
 from engine.tools.runtime.base import (
     BaseTool,
     ToolExecutionSpec,
@@ -110,6 +110,23 @@ def test_duplicate_contribution_is_rejected() -> None:
     registry.register(_EchoTool(), owner="dbfox.tests")
     with pytest.raises(ValueError, match="already registered"):
         registry.register(_EchoTool(), owner="dbfox.tests")
+
+
+def test_same_local_name_from_distinct_owners_is_composable() -> None:
+    first = _EchoTool()
+    second = _EchoTool()
+    registry = (
+        ToolRegistry()
+        .register(first, owner="acme.files")
+        .register(second, owner="other.workspace")
+    )
+
+    first_key = ToolKey("acme.files", "tests_echo")
+    second_key = ToolKey("other.workspace", "tests_echo")
+    assert registry.require_key(first_key) is first
+    assert registry.require_key(second_key) is second
+    assert registry.provider_name_for_key(first_key) != registry.provider_name_for_key(second_key)
+    assert len(registry.tool_names()) == 2
 
 
 def test_invalid_owner_id_is_rejected() -> None:

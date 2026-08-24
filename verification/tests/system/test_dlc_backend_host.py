@@ -55,6 +55,7 @@ from engine.tools.runtime.attempt import (
     ToolInvocationContext,
 )
 from engine.tools.runtime.handler import ToolAttemptHandler
+from engine.tools.runtime import provider_tool_name
 
 
 
@@ -138,12 +139,12 @@ def test_snapshot_id_changes_with_package_digest():
 # ---------------------------------------------------------------------------
 
 
-def test_multi_dlc_vendored_namespace_isolation(
+def test_multi_dlc_vendored_and_tool_identity_isolation(
     tmp_path: Path,
     dlc_service: DlcPackageService,
     test_keypair,
 ):
-    """Prove DLC A and DLC B can each vendor their own version of 'commonlib' without collision."""
+    """Prove vendored modules and equal local Tool names remain owner-isolated."""
     priv_key, pub_b64 = test_keypair
 
     # DLC A vendors commonlib returning "version_A"
@@ -174,7 +175,7 @@ def test_multi_dlc_vendored_namespace_isolation(
                 "    val: str\n"
                 "\n"
                 "class ToolA(api.BaseTool[ToolAInput, ToolAOutput]):\n"
-                "    name = 'tool_a'\n"
+                "    name = 'shared_read'\n"
                 "    version = '1.0.0'\n"
                 "    group = 'custom'\n"
                 "    description = 'Tool A'\n"
@@ -222,7 +223,7 @@ def test_multi_dlc_vendored_namespace_isolation(
                 "    val: str\n"
                 "\n"
                 "class ToolB(api.BaseTool[ToolBInput, ToolBOutput]):\n"
-                "    name = 'tool_b'\n"
+                "    name = 'shared_read'\n"
                 "    version = '1.0.0'\n"
                 "    group = 'custom'\n"
                 "    description = 'Tool B'\n"
@@ -263,10 +264,13 @@ def test_multi_dlc_vendored_namespace_isolation(
     assert {d.dlc_id for d in snapshot.active_dlcs} == {"acme.dlc_a", "acme.dlc_b"}
 
     tool_registry = build_product_tool_registry(snapshot)
-    assert "tool_a" in tool_registry
-    assert "tool_b" in tool_registry
-    assert tool_registry.owner_of("tool_a") == "acme.dlc_a"
-    assert tool_registry.owner_of("tool_b") == "acme.dlc_b"
+    tool_a = provider_tool_name("acme.dlc_a", "shared_read")
+    tool_b = provider_tool_name("acme.dlc_b", "shared_read")
+    assert tool_a != tool_b
+    assert tool_a in tool_registry
+    assert tool_b in tool_registry
+    assert tool_registry.owner_of(tool_a) == "acme.dlc_a"
+    assert tool_registry.owner_of(tool_b) == "acme.dlc_b"
 
 
 # ---------------------------------------------------------------------------
@@ -434,13 +438,14 @@ def test_dynamic_tool_execution_and_permission_scope(
     resolver = build_attempt_resource_resolver(snapshot=snapshot)
     handler = ToolAttemptHandler(registry=tool_registry, resolver=resolver)
 
-    tool = tool_registry.require("acme_add")
+    wire_name = provider_tool_name("acme.calculator", "acme_add")
+    tool = tool_registry.require(wire_name)
     contract_hash = current_tool_contract_hash(tool)
 
 
     request = ToolAttemptRequest(
         mode="execute",
-        tool_name="acme_add",
+        tool_name=wire_name,
         frozen_tool_declared_version="1.0.0",
         frozen_tool_contract_hash=contract_hash,
         invocation=ToolInvocationContext(
@@ -452,7 +457,7 @@ def test_dynamic_tool_execution_and_permission_scope(
         ),
         authorized_input={"a": 10, "b": 32},
         attempt_timeout_ms=5000,
-        implementation=tool_registry.implementation_identity_of("acme_add"),
+        implementation=tool_registry.implementation_identity_of(wire_name),
     )
 
     result = handler.run(request)
@@ -526,6 +531,87 @@ def test_permission_violation_rejected(
     assert "acme.unauthorized_network" not in [d.dlc_id for d in snapshot.active_dlcs]
 
 
+@pytest.mark.parametrize(
+    ("dlc_id", "permissions", "execution"),
+    [
+        (
+            "acme.resource_intruder",
+            [],
+            "api.ToolExecutionSpec(required_resource_kinds=('dbfox.data.database',))",
+        ),
+        (
+            "acme.write_tool",
+            ["filesystem_write:workspace"],
+            "api.ToolExecutionSpec(backend='in_process', capabilities=('filesystem_write',))",
+        ),
+    ],
+)
+def test_dynamic_tool_rejects_foreign_resources_and_in_process_filesystem_write(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+    dlc_id: str,
+    permissions: list[str],
+    execution: str,
+) -> None:
+    """DLC Tools cannot consume another owner or claim write from in-process code."""
+
+    priv_key, pub_b64 = test_keypair
+    archive = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": dlc_id,
+            "version": "1.0.0",
+            "displayName": "Boundary Probe",
+            "publisher": "acme",
+            "extensionApiVersion": "2",
+            "requiresDbfox": ">=1.0.0",
+            "permissions": permissions,
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "class ProbeInput(api.ToolInputModel):\n"
+                "    pass\n"
+                "class ProbeOutput(api.ToolOutputModel):\n"
+                "    pass\n"
+                "class ProbeTool(api.BaseTool[ProbeInput, ProbeOutput]):\n"
+                "    name = 'probe'\n"
+                "    group = 'custom'\n"
+                "    description = 'Boundary probe'\n"
+                "    input_model = ProbeInput\n"
+                "    output_model = ProbeOutput\n"
+                "    policy = api.ToolPolicy()\n"
+                f"    execution = {execution}\n"
+                "    presentation = api.ToolPresentation(title='Probe', category='explore')\n"
+                "    def run(self, input_data, context):\n"
+                "        return ProbeOutput()\n"
+                "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    host.tools.register(ProbeTool())\n"
+            ),
+        },
+        private_key=priv_key,
+    )
+    archive_path = tmp_path / f"{dlc_id}.dbfox-dlc"
+    archive_path.write_bytes(archive)
+    installed = dlc_service.install_from_file(
+        archive_path,
+        publisher_key_base64=pub_b64,
+    )
+    dlc_service.registry.set_desired_enabled(installed.dlc_id, True)
+
+    snapshot = ContributionCompiler(
+        dlc_service.storage_root,
+        trust_store=dlc_service.trust_store,
+    ).compile()
+
+    failure = next(item for item in snapshot.activation_failures if item.dlc_id == dlc_id)
+    assert failure.error_code == "permission_violation"
+    assert all(item.dlc_id != dlc_id for item in snapshot.active_dlcs)
+
+
 # ---------------------------------------------------------------------------
 # 5. Dynamic Resources, Context, Artifacts, and Operations
 # ---------------------------------------------------------------------------
@@ -569,7 +655,7 @@ def test_full_dlc_contribution_suite(
                 "    return PingOutput(reply=f'pong: {input_data.message} from {ctx.dlc_id}')\n"
                 "\n"
                 "def list_analytics_resources(project_id: str):\n"
-                "    return (api.ProjectResourceDescriptor(kind='acme.report', id='rep_1', version='1', name='Main Report'),)\n"
+                "    return (api.ProjectResourceDescriptor(kind='acme.analytics.report', id='rep_1', version='1', name='Main Report'),)\n"
                 "\n"
                 "def resolve_analytics_resource(ref):\n"
                 "    return {'report_data': 'metrics_123'}\n"
@@ -584,7 +670,7 @@ def test_full_dlc_contribution_suite(
                 "    assert host.runtime_info.package_version == '1.0.0'\n"
                 "    assert host.runtime_info.data_path.is_dir()\n"
                 "    host.resources.register_provider(list_analytics_resources)\n"
-                "    host.resources.register_resolver('acme.report', resolve_analytics_resource)\n"
+                "    host.resources.register_resolver('acme.analytics.report', resolve_analytics_resource)\n"
                 "    host.context.register(AnalyticsContextContributor)\n"
                 "    host.artifacts.register('acme.report', 1, ReportPayload)\n"
                 "    host.operations.register(api.DlcOperationSpec(name='ping', input_model=PingInput, output_model=PingOutput, handler=ping_handler))\n"
@@ -607,16 +693,16 @@ def test_full_dlc_contribution_suite(
 
     # 1. Test Resource Discovery & Authorization
     descriptors = discover_project_resources(None, "p1", snapshot=snapshot)
-    assert any(d.kind == "acme.report" and d.id == "rep_1" for d in descriptors)
+    assert any(d.kind == "acme.analytics.report" and d.id == "rep_1" for d in descriptors)
 
     authorized = authorize_project_resources(
         None,
         "p1",
-        requested=[RequestedResourceRef(kind="acme.report", id="rep_1")],
+        requested=[RequestedResourceRef(kind="acme.analytics.report", id="rep_1")],
         snapshot=snapshot,
     )
     assert len(authorized) == 1
-    assert authorized[0].kind == "acme.report"
+    assert authorized[0].kind == "acme.analytics.report"
 
     # 2. Test Resource Resolver
     resolver = build_attempt_resource_resolver(snapshot=snapshot)
@@ -713,14 +799,15 @@ def test_isolated_worker_implementation_mismatch_rejection(
     resolver = build_attempt_resource_resolver(snapshot=snapshot)
     handler = ToolAttemptHandler(registry=tool_registry, resolver=resolver)
 
-    tool = tool_registry.require("acme_dummy")
+    wire_name = provider_tool_name("acme.worker_test", "acme_dummy")
+    tool = tool_registry.require(wire_name)
     contract_hash = current_tool_contract_hash(tool)
 
 
     # Construct request with WRONG package digest
     request_bad_digest = ToolAttemptRequest(
         mode="execute",
-        tool_name="acme_dummy",
+        tool_name=wire_name,
         frozen_tool_declared_version="1.0.0",
         frozen_tool_contract_hash=contract_hash,
         invocation=ToolInvocationContext(
@@ -1135,7 +1222,7 @@ def test_tool_invocation_durable_identity_persistence(tmp_path: Path):
             run_id=admission.run_id,
             turn_id=str(turn.id),
             provider_call_id="call_1",
-            tool_name="acme_durable_tool",
+            tool_name=mat_tools.tools[0].name,
             raw_input={"param": "value"},
             materialization=mat_tools,
             policy_decision={"mode": "auto", "safe_args": {"param": "value"}},
@@ -1260,7 +1347,7 @@ def test_tool_dispatcher_a_to_b_recovery_mismatch_fails_closed(
             run_id=admission.run_id,
             turn_id=str(turn.id),
             provider_call_id="call_1",
-            tool_name="shared_migrated_tool",
+            tool_name=mat_tools_a.tools[0].name,
             raw_input={"val": "test"},
             materialization=mat_tools_a,
             policy_decision={"mode": "auto", "safe_args": {"val": "test"}},
@@ -1772,8 +1859,9 @@ def test_failed_dlc_cannot_poison_later_dlc(
 
     # 3. Tool registry contains the tool from Good DLC
     reg = build_product_tool_registry(snapshot)
-    assert "shared_poison_test_tool" in reg.tool_names()
-    assert reg.owner_of("shared_poison_test_tool") == "acme.good_second_dlc"
+    wire_name = provider_tool_name("acme.good_second_dlc", "shared_poison_test_tool")
+    assert wire_name in reg.tool_names()
+    assert reg.owner_of(wire_name) == "acme.good_second_dlc"
 
 
 # ---------------------------------------------------------------------------
@@ -2029,7 +2117,7 @@ def test_dlc_resolver_never_receives_core_session(
                 "    return {'arg_type': type(ref).__name__, 'is_scope_ref': isinstance(ref, api.ResourceScopeRef), 'ref_id': ref.id}\n"
                 "\n"
                 "def register(host: api.BackendExtensionHost) -> None:\n"
-                "    host.resources.register_resolver('acme.safe_doc', safe_resolve)\n"
+                "    host.resources.register_resolver('acme.safe_resolver.doc', safe_resolve)\n"
             ),
         },
         private_key=priv_key,
@@ -2044,14 +2132,14 @@ def test_dlc_resolver_never_receives_core_session(
     snapshot = compiler.compile()
 
     assert any(d.dlc_id == "acme.safe_resolver" for d in snapshot.active_dlcs)
-    contrib = next(r for r in snapshot.resource_resolvers if r.kind == "acme.safe_doc")
+    contrib = next(r for r in snapshot.resource_resolvers if r.kind == "acme.safe_resolver.doc")
     assert contrib.binding == "scope_only"
 
     # Pass an explicit mock metadata Session
     mock_session = MagicMock(spec=Session)
     composite = build_attempt_resource_resolver(metadata_session=mock_session, snapshot=snapshot)
 
-    ref = ResourceScopeRef(kind="acme.safe_doc", id="doc_999", version="1")
+    ref = ResourceScopeRef(kind="acme.safe_resolver.doc", id="doc_999", version="1")
     resolved = composite.resolve([ref])
 
     assert ref.canonical() in resolved

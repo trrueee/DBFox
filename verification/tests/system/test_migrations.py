@@ -21,6 +21,9 @@ from engine.migrations.sqlite_mutex import SQLITE_MIGRATION_LOCKED, sqlite_migra
 from engine.migrations.versions.d1e2f3a4b5c7_namespace_data_database_resource_kind import (
     _rewrite_resource_kind,
 )
+from engine.migrations.versions.f4a5b6c7d8ea_namespace_workspace_github_resources import (
+    _rewrite_resource_kinds,
+)
 from engine.models import (
     AgentMessage,
     FoundationRuntimeState,
@@ -33,7 +36,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "f3a4b5c6d7e9"
+FOUNDATION_HEAD_REVISION = "f4a5b6c7d8ea"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -643,6 +646,116 @@ def test_data_resource_kind_migration_rewrites_only_resource_kind_fields() -> No
             "selection": {"kind": "dbfox.data.database", "id": "db-2"}
         },
     }
+
+
+def test_workspace_github_resource_kind_migration_rewrites_only_kind_fields() -> None:
+    payload = {
+        "workspace": "display-only",
+        "resource_refs": [
+            {"kind": "workspace", "id": "project-1", "version": "root-v1"},
+            {"kind": "github.repository", "id": "repo-1", "version": "abc"},
+            {"kind": "dbfox.data.database", "id": "db-1", "version": 3},
+        ],
+    }
+
+    rewritten, changed = _rewrite_resource_kinds(
+        payload,
+        renames={
+            "workspace": "dbfox.workspace.root",
+            "github.repository": "dbfox.github.repository",
+        },
+    )
+
+    assert changed is True
+    assert rewritten == {
+        "workspace": "display-only",
+        "resource_refs": [
+            {"kind": "dbfox.workspace.root", "id": "project-1", "version": "root-v1"},
+            {"kind": "dbfox.github.repository", "id": "repo-1", "version": "abc"},
+            {"kind": "dbfox.data.database", "id": "db-1", "version": 3},
+        ],
+    }
+
+
+def test_workspace_github_resource_kind_migration_converges_durable_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "workspace-github-resource-kind.db")
+    _upgrade(monkeypatch, database_url, "f3a4b5c6d7e9")
+    old_refs = [
+        {"kind": "workspace", "id": "project-1", "version": "root-v1"},
+        {"kind": "github.repository", "id": "repo-1", "version": "abc"},
+    ]
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("""
+                INSERT INTO projects (id, name, description, status, created_at, updated_at)
+                VALUES ('project-1', 'Project 1', '', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """))
+            connection.execute(text("""
+                INSERT INTO agent_sessions (
+                    id, project_id, title, input_sequence, event_sequence,
+                    event_floor_sequence, lease_token, message_sequence,
+                    context_epoch, created_at, updated_at
+                ) VALUES (
+                    'resource-namespace-session', 'project-1', 'Resource namespace',
+                    1, 0, 0, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+            """))
+            connection.execute(
+                text("""
+                    INSERT INTO agent_session_inputs (
+                        id, session_id, sequence, idempotency_key, content,
+                        delivery_mode, selected_artifact_ids_json,
+                        workspace_context_json, resource_refs_json, status,
+                        admitted_at
+                    ) VALUES (
+                        'resource-namespace-input', 'resource-namespace-session', 1,
+                        'resource-namespace-key', 'inspect resources', 'queue', '[]', '{}',
+                        :resource_refs, 'admitted', CURRENT_TIMESTAMP
+                    )
+                """),
+                {"resource_refs": json.dumps(old_refs)},
+            )
+            connection.execute(text("""
+                INSERT INTO conversation_resource_intents (
+                    id, conversation_id, kind, resource_id, position, created_at
+                ) VALUES
+                    ('legacy-workspace', 'resource-namespace-session', 'workspace',
+                     'project-1', 0, CURRENT_TIMESTAMP),
+                    ('canonical-workspace', 'resource-namespace-session',
+                     'dbfox.workspace.root', 'project-1', 1, CURRENT_TIMESTAMP),
+                    ('legacy-github', 'resource-namespace-session', 'github.repository',
+                     'repo-1', 2, CURRENT_TIMESTAMP)
+            """))
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url, "f4a5b6c7d8ea")
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            input_refs = json.loads(connection.execute(text(
+                "SELECT resource_refs_json FROM agent_session_inputs "
+                "WHERE id = 'resource-namespace-input'"
+            )).scalar_one())
+            intents = connection.execute(text(
+                "SELECT kind, resource_id FROM conversation_resource_intents "
+                "WHERE conversation_id = 'resource-namespace-session' ORDER BY position"
+            )).all()
+        assert input_refs == [
+            {"kind": "dbfox.workspace.root", "id": "project-1", "version": "root-v1"},
+            {"kind": "dbfox.github.repository", "id": "repo-1", "version": "abc"},
+        ]
+        assert intents == [
+            ("dbfox.workspace.root", "project-1"),
+            ("dbfox.github.repository", "repo-1"),
+        ]
+    finally:
+        engine.dispose()
 
 
 def test_data_resource_kind_migration_converges_durable_authority(

@@ -144,7 +144,7 @@ def test_host_trust_roots_extend_persisted_user_publishers(tmp_path: Path) -> No
     assert len(combined.load()) == 2
 
 
-def test_release_builder_emits_exact_data_and_workspace_package_pins(
+def test_release_builder_emits_exact_first_party_capability_package_pins(
     tmp_path: Path,
 ) -> None:
     private_key = ed25519.Ed25519PrivateKey.generate()
@@ -166,8 +166,9 @@ def test_release_builder_emits_exact_data_and_workspace_package_pins(
     assert [item.dlc_id for item in manifest.packages] == [
         "dbfox.data",
         "dbfox.workspace",
+        "dbfox.music",
     ]
-    assert [item.default_enabled for item in manifest.packages] == [True, True]
+    assert [item.default_enabled for item in manifest.packages] == [True, True, True]
     assert all((output_dir / item.filename).is_file() for item in manifest.packages)
 
     storage_root = tmp_path / "installed-release-bundle"
@@ -186,10 +187,13 @@ def test_release_builder_emits_exact_data_and_workspace_package_pins(
     }
     assert installed["dbfox.data"].desired_enabled is True
     assert installed["dbfox.workspace"].desired_enabled is True
+    assert installed["dbfox.music"].desired_enabled is True
     assert [item.dlc_id for item in snapshot.active_dlcs] == [
         "dbfox.data",
+        "dbfox.music",
         "dbfox.workspace",
     ]
     assert snapshot.activation_failures == ()
     assert "sql_validate" in {item.tool.name for item in snapshot.tools}
     assert "file_read" in {item.tool.name for item in snapshot.tools}
+    assert "music_compose_piano" in {item.tool.name for item in snapshot.tools}

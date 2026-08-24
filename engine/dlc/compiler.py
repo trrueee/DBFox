@@ -15,7 +15,7 @@ from engine.agent.artifact import (
     artifact_payload_contracts,
 )
 from engine.agent.context_fragment import ContextContributor
-from engine.agent.resource_refs import ProjectResourceProvider
+from engine.agent.resource_refs import ProjectResourceDescriptor, ProjectResourceProvider
 from engine.dlc.api import (
     DlcOperationSpec,
     DlcRuntimeInfo,
@@ -58,9 +58,27 @@ SUPPORTED_DLC_CAPABILITIES: frozenset[ToolCapability] = frozenset(
     {
         "network",
         "filesystem_read",
-        "filesystem_write",
     }
 )
+
+
+def _owned_resource_kind(owner_id: str, kind: str) -> bool:
+    return kind.startswith(f"{owner_id}.")
+
+
+def _check_tool_resource_ownership(manifest: DlcManifest, tool: BaseTool[Any, Any]) -> None:
+    foreign = tuple(
+        kind
+        for kind in tool.execution.required_resource_kinds
+        if not _owned_resource_kind(manifest.id, kind)
+    )
+    if foreign:
+        raise DlcError(
+            DlcErrorCode.PERMISSION_VIOLATION,
+            f"Tool '{tool.name}' from DLC '{manifest.id}' requires foreign Resource kinds {foreign!r}. "
+            "Extension API v2 permits direct resolution only for Resource kinds owned by the same DLC; "
+            "cross-capability work must use Agent composition.",
+        )
 
 
 def _check_tool_permissions(manifest: DlcManifest, tool: BaseTool[Any, Any]) -> None:
@@ -71,7 +89,7 @@ def _check_tool_permissions(manifest: DlcManifest, tool: BaseTool[Any, Any]) -> 
             raise DlcError(
                 DlcErrorCode.PERMISSION_VIOLATION,
                 f"Tool '{tool.name}' requested unsupported capability '{cap}' for DLC '{manifest.id}'. "
-                "Installable DLCs in v1 may only request 'network', 'filesystem_read', or 'filesystem_write'.",
+                "Installable DLCs in v1 may only request 'network' or 'filesystem_read'.",
             )
         # Check that manifest declares covering permission
         has_permission = False
@@ -124,6 +142,7 @@ def platform_builtin_contributions() -> BuiltinContributionSet:
             ToolContribution(
                 tool=registry.require(name),  # type: ignore[arg-type]
                 owner_id=registry.owner_of(name) or "dbfox.core",
+                provider_name=name,
             )
             for name in registry.tool_names()
         ),
@@ -186,7 +205,12 @@ class ContributionCompiler:
         # 4. Accepted global state initialized with built-in contributions
         accepted_tool_registry = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
         for tc in seed.tools:
-            accepted_tool_registry.register(tc.tool, owner=tc.owner_id, package_digest=tc.package_digest)
+            accepted_tool_registry.register(
+                tc.tool,
+                owner=tc.owner_id,
+                package_digest=tc.package_digest,
+                provider_name=tc.provider_name,
+            )
 
         known_resolver_kinds: set[str] = {rc.kind for rc in seed.resource_resolvers}
         known_artifact_types: set[str] = set(_KNOWN_ARTIFACT_TYPES) | {
@@ -225,6 +249,7 @@ class ContributionCompiler:
                     base.require(name),
                     owner=base.owner_of(name),
                     package_digest=base.package_digest_of(name),
+                    provider_name=name,
                 )
             return cloned
 
@@ -304,6 +329,7 @@ class ContributionCompiler:
                             "Dynamic DLC tools in v1 must use 'in_process' execution backend.",
                         )
                     _check_tool_permissions(manifest, tool)
+                    _check_tool_resource_ownership(manifest, tool)
                     # Authoritative ToolRegistry validation on candidate clone
                     candidate_tool_registry.register(
                         tool,
@@ -311,13 +337,23 @@ class ContributionCompiler:
                         package_digest=selected_digest,
                     )
                     candidate_tools.append(
-                        ToolContribution(tool=tool, owner_id=dlc_id, package_digest=selected_digest)
+                        ToolContribution(
+                            tool=tool,
+                            owner_id=dlc_id,
+                            package_digest=selected_digest,
+                            provider_name=candidate_tool_registry.provider_name_of(tool),
+                        )
                     )
 
                 # 2. Validate candidate resource resolvers
                 candidate_resolvers: list[ResourceResolverContribution] = []
                 candidate_resolver_kinds: set[str] = set()
                 for kind, resolver in staging.resource_resolvers:
+                    if not _owned_resource_kind(dlc_id, kind):
+                        raise DlcError(
+                            DlcErrorCode.REGISTRATION_CONFLICT,
+                            f"Resource resolver kind '{kind}' must be namespaced under its owner '{dlc_id}.'.",
+                        )
                     if kind in known_resolver_kinds or kind in candidate_resolver_kinds:
                         raise DlcError(
                             DlcErrorCode.REGISTRATION_CONFLICT,
@@ -331,8 +367,27 @@ class ContributionCompiler:
                 # 3. Validate candidate resource providers
                 candidate_providers: list[ProjectResourceProvider] = []
                 for provider in staging.resource_providers:
-                    def _make_adapted_provider(p: ExtensionProjectResourceProvider) -> ProjectResourceProvider:
-                        return lambda _db, project_id: tuple(p(project_id))
+                    def _make_adapted_provider(
+                        p: ExtensionProjectResourceProvider,
+                        owner_id: str = dlc_id,
+                    ) -> ProjectResourceProvider:
+                        def _adapted(
+                            db: Session,
+                            project_id: str,
+                        ) -> tuple[ProjectResourceDescriptor, ...]:
+                            del db
+                            descriptors = tuple(p(project_id))
+                            foreign = tuple(
+                                descriptor.kind
+                                for descriptor in descriptors
+                                if not _owned_resource_kind(owner_id, descriptor.kind)
+                            )
+                            if foreign:
+                                raise ValueError(
+                                    f"DLC '{owner_id}' discovered foreign Resource kinds {foreign!r}"
+                                )
+                            return descriptors
+                        return _adapted
                     candidate_providers.append(_make_adapted_provider(provider))
 
                 # 4. Validate candidate context contributors

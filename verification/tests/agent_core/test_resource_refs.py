@@ -15,11 +15,16 @@ from engine.tools.runtime.attempt import ResourceScopeRef
 def test_dump_and_load_roundtrip() -> None:
     refs = (
         ResourceScopeRef(kind="verification.resource", id="ds-1", version="1:1"),
-        ResourceScopeRef(kind="workspace", id="proj-1", version="v1"),
+        ResourceScopeRef(kind="dbfox.workspace.root", id="proj-1", version="v1"),
     )
     raw = dump_resource_refs(refs)
     loaded = load_resource_refs(raw)
     assert loaded == refs
+
+
+def test_resource_kind_requires_a_capability_namespace() -> None:
+    with pytest.raises(ValueError, match="pattern"):
+        ResourceScopeRef(kind="workspace", id="project-1", version="v1")
 
 
 def test_dump_at_max_limit_succeeds() -> None:
