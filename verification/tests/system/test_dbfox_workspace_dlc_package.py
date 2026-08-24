@@ -157,6 +157,35 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     )
     contributor = snapshot.context_contributors[0](None)
     assert len(contributor.build(contribution_input)) == 1
+
+    tools = {item.tool.name: item.tool for item in snapshot.tools}
+    read_projection = tools["file_read"].project_observation(
+        status="success",
+        output={
+            "path": "notes.txt",
+            "content": "hello workspace",
+            "content_truncated": False,
+            "size_bytes": 15,
+            "sha256": "a" * 64,
+        },
+        artifacts=[],
+    )
+    assert "content" not in read_projection.facts
+    assert read_projection.provider_payload["content"] == "hello workspace"
+    search_projection = tools["file_search"].project_observation(
+        status="success",
+        output={
+            "query": "notes",
+            "path_prefix": "",
+            "matches": [{"name": "notes.txt", "path": "notes.txt", "is_dir": False}],
+            "returned_count": 1,
+            "truncated": False,
+        },
+        artifacts=[],
+    )
+    assert "matches" not in search_projection.facts
+    assert search_projection.provider_payload["matches"][0]["name"] == "notes.txt"
+
     (workspace / "notes.txt").write_text("changed", encoding="utf-8")
     assert contributor.build(contribution_input) == ()
 

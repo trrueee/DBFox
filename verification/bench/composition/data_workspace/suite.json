@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "composition.data_workspace.scripted",
+  "suite_version": "1.0.0",
+  "description": "Production Core, dbfox.data and dbfox.workspace cross-capability read-and-synthesize scenarios.",
+  "subject": {
+    "kind": "composition",
+    "components": ["core", "dbfox.data", "dbfox.workspace"],
+    "supporting_fixtures": ["scripted-provider", "sqlite-fixture", "workspace-fixture"]
+  },
+  "execution": {"provider_modes": ["scripted"], "default_repetitions": 1, "max_repetitions": 20},
+  "dataset": "cases.json",
+  "metrics": [
+    {"name": "task.success_rate", "direction": "higher_is_better", "unit": "ratio", "description": "Fraction of cross-capability user tasks completed correctly."},
+    {"name": "composition.handoff_accuracy", "direction": "higher_is_better", "unit": "ratio", "description": "Whether both capability observations were incorporated into the final answer."},
+    {"name": "composition.authorized_resource_count", "direction": "informational", "unit": "count", "description": "Canonical resources frozen for the production Run."},
+    {"name": "composition.artifact_lineage_accuracy", "direction": "higher_is_better", "unit": "ratio", "description": "Whether the Workspace read emitted its resource-fenced Artifact."},
+    {"name": "runtime.turns", "direction": "lower_is_better", "unit": "count", "description": "Production Agent Turns used by the cross-capability task."},
+    {"name": "runtime.tool_calls", "direction": "lower_is_better", "unit": "count", "description": "Production tool invocations used by the cross-capability task."}
+  ]
+}

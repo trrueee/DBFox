@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "core.authority.scripted",
+  "suite_version": "1.0.0",
+  "description": "Capability-neutral frozen resource authority scenarios through production materialization and ToolDispatcher.",
+  "subject": {
+    "kind": "core",
+    "components": ["resource-authority", "tool-materialization", "tool-dispatcher", "resource-resolver"],
+    "supporting_fixtures": ["scripted-provider", "verification-resource", "verification-resource-probe"]
+  },
+  "execution": {"provider_modes": ["scripted"], "default_repetitions": 1, "max_repetitions": 20},
+  "dataset": "cases.json",
+  "metrics": [
+    {"name": "task.success_rate", "direction": "higher_is_better", "unit": "ratio", "description": "Fraction of authority scenarios satisfying every declared check."},
+    {"name": "authority.selection_accuracy", "direction": "higher_is_better", "unit": "ratio", "description": "Accuracy of selecting the requested resource by full kind and id."},
+    {"name": "authority.violation_count", "direction": "zero_is_best", "unit": "count", "description": "Unauthorized resource accesses observed by the synthetic resource boundary."},
+    {"name": "runtime.tool_calls", "direction": "lower_is_better", "unit": "count", "description": "Production tool invocations used by the authority scenario."}
+  ]
+}

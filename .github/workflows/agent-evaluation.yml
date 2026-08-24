@@ -48,10 +48,19 @@ jobs:
           python -m pip check
       - name: Validate all versioned benchmark suites
         run: python -m verification.bench validate
-      - name: Run the Data-free production Core Loop benchmark
-        run: >-
-          python -m verification.bench run core.loop.scripted
-          --output output/agent-evaluation/core-loop
+      - name: Run deterministic Core, Capability and Composition benchmarks
+        shell: bash
+        run: |
+          python -m verification.bench run core.loop.scripted \
+            --output output/agent-evaluation/core-loop
+          python -m verification.bench run core.context.scripted \
+            --output output/agent-evaluation/core-context
+          python -m verification.bench run core.authority.scripted \
+            --output output/agent-evaluation/core-authority
+          python -m verification.bench run capability.dbfox_data.direct \
+            --output output/agent-evaluation/data-direct
+          python -m verification.bench run composition.data_workspace.scripted \
+            --output output/agent-evaluation/data-workspace
       - name: Calibrate the dbfox.data deterministic graders
         run: >-
           python -m verification.bench calibrate capability.dbfox_data.agent

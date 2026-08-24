@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {"case_id": "single-authorized-resource", "authorized_ids": ["alpha"], "requested_id": "alpha", "expect_access": true},
+    {"case_id": "same-kind-explicit-selection", "authorized_ids": ["alpha", "beta"], "requested_id": "beta", "expect_access": true},
+    {"case_id": "unauthorized-id-fails-closed", "authorized_ids": ["alpha"], "requested_id": "beta", "expect_access": false}
+  ]
+}

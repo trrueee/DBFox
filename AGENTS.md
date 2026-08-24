@@ -65,6 +65,7 @@ npm run build           # tsc -b + 构建脚本 + 生产 Token 与 bundle 预算
 | `verification/bench/framework/` | Bench manifest、统计、报告与比较；不含领域 scorer |
 | `verification/bench/core/` | Data-free Agent Kernel/Harness 测评，走生产 RunLoop |
 | `verification/bench/capabilities/` | 单 DLC 的 direct/agent 能力测评与 suite-owned scorer |
+| `verification/bench/composition/` | Core 与多个 DLC 的真实资源组合和用户任务测评 |
 | `verification/tests/` | 与产品物理分离的 Core、System、Integration 与 Bench 测试 |
 | `verification/testkit/` | 只供验证系统使用的 fixture 构建与外部边界控制 |
 

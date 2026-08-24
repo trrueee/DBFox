@@ -53,6 +53,24 @@ class MetricSpec(BaseModel):
     description: str = Field(min_length=1, max_length=240)
 
 
+class ExecutionMatrix(BaseModel):
+    """Declares provider and repetition dimensions without owning execution."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider_modes: tuple[str, ...] = Field(min_length=1)
+    default_repetitions: int = Field(default=1, ge=1, le=100)
+    max_repetitions: int = Field(ge=1, le=100)
+
+    @model_validator(mode="after")
+    def validate_repetitions(self) -> "ExecutionMatrix":
+        if self.default_repetitions > self.max_repetitions:
+            raise ValueError("default_repetitions cannot exceed max_repetitions")
+        if len(self.provider_modes) != len(set(self.provider_modes)):
+            raise ValueError("provider_modes must be unique")
+        return self
+
+
 class SuiteManifest(BaseModel):
     """Versioned suite identity; domain case schemas remain suite-owned."""
 
@@ -63,6 +81,7 @@ class SuiteManifest(BaseModel):
     suite_version: str = Field(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")
     description: str = Field(min_length=1, max_length=500)
     subject: SubjectUnderTest
+    execution: ExecutionMatrix
     dataset: str = Field(min_length=1, max_length=240)
     metrics: tuple[MetricSpec, ...] = Field(min_length=1)
 
@@ -81,6 +100,7 @@ class SuiteManifest(BaseModel):
             "suite_id": self.suite_id,
             "suite_version": self.suite_version,
             "subject": self.subject.model_dump(mode="json"),
+            "execution": self.execution.model_dump(mode="json"),
             "dataset": self.dataset,
             "metrics": [metric.model_dump(mode="json") for metric in self.metrics],
         }
