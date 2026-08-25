@@ -130,12 +130,11 @@ export function ConversationWorkspace({
         error={sendError || streamError}
         reference={reference}
         onClearReference={() => setWorkbenchReference(null)}
-        onSend={async (text, mode, requestedResources, references) => {
+        onSend={async (text, mode, references) => {
           await sendMessage(
             conversationId,
             text,
             mode,
-            requestedResources,
             references,
           );
         }}

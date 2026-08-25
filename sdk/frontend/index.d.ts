@@ -18,7 +18,6 @@ export interface ResourceConnectorContribution {
 export interface RequestedResourceRef {
   kind: string;
   id: string;
-  version?: string | number | null;
 }
 
 export interface ReferencedObject {
@@ -142,19 +141,6 @@ export interface FrontendExtensionHost {
   readonly dlcId: string;
   readonly connectors: {
     register(contribution: ResourceConnectorContribution): void;
-  };
-  readonly contextSelection: {
-    isSelected(ref: RequestedResourceRef): boolean;
-    list(): readonly RequestedResourceRef[];
-    add(ref: RequestedResourceRef): Promise<void>;
-    remove(ref: RequestedResourceRef): Promise<void>;
-  };
-  /** One-shot resources submitted atomically with the next composer message. */
-  readonly composerContext: {
-    isSelected(ref: RequestedResourceRef): boolean;
-    list(): readonly RequestedResourceRef[];
-    add(ref: RequestedResourceRef): Promise<void>;
-    remove(ref: RequestedResourceRef): Promise<void>;
   };
   readonly nativeDialogs: {
     /** Opens the Electron-owned folder picker. Returns null when cancelled. */

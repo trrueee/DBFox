@@ -60,7 +60,7 @@ Workspace and GitHub are package-owned capabilities. Data is shipped as a verifi
 | **Artifact Contract** | Backend (`engine/agent/artifact.py`) | Core/Data/Workspace contracts | `host.artifacts.register(...)` |
 | **Operations / API** | Backend (`engine/api/`) | Static Core product routers | `POST /api/v1/dlcs/{dlc_id}/operations/{op}` |
 | **Resource Connector** | Frontend (`desktop/src/features/resources/`) | `productResourceConnectors()` | `host.connectors.register(...)` |
-| **Conversation Context Selection** | Frontend Host | `ConversationResourceIntent` + Project draft selection | `host.contextSelection.isSelected/list/add/remove(...)`（只响应显式用户动作） |
+| **Workbench Reference** | Frontend Host | `authority + object + locator + artifact` | `DockRenderContext.onAsk(...)`；Backend 从 authority 派生并校验本条 Input 的 initial explicit authority |
 | **Dock Views** | Frontend (`desktop/src/features/dock/`) | `productDockViews()` | `host.dockViews.register(...)` |
 | **Artifact Renderers** | Frontend (`desktop/src/features/workspace/artifacts/`) | `productArtifactRenderers` | `host.artifactRenderers.register(...)` |
 

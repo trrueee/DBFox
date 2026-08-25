@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   getRunArtifacts: vi.fn(),
   follow: vi.fn(),
-  patch: vi.fn(),
 }));
 
 vi.mock("../../features/conversation/conversationRepository", () => ({
@@ -18,7 +17,6 @@ vi.mock("../../features/conversation/conversationRepository", () => ({
   getConversationHistory: vi.fn(),
   getConversationRunArtifacts: mocks.getRunArtifacts,
   listConversations: vi.fn(),
-  patchConversation: mocks.patch,
   resolveConversationApproval: vi.fn(),
   resolveConversationQuestion: vi.fn(),
   selectConversationArtifact: vi.fn(),
@@ -67,7 +65,6 @@ describe("conversationStore admission projection", () => {
     mocks.create.mockReset();
     mocks.getRunArtifacts.mockReset();
     mocks.follow.mockReset().mockResolvedValue(undefined);
-    mocks.patch.mockReset();
     useConversationStore.setState({
       summaries: [],
       activeConversationId: initialDetail.id,
@@ -177,29 +174,7 @@ describe("conversationStore admission projection", () => {
     );
   });
 
-  it("persists explicit Conversation resource intent through the canonical patch endpoint", async () => {
-    const updated = {
-      ...initialDetail,
-      resource_intents: [
-        { kind: "dbfox.data.database", id: "datasource-1" },
-        { kind: "dbfox.data.database", id: "datasource-2" },
-      ],
-    };
-    mocks.patch.mockResolvedValue(updated);
-
-    await useConversationStore.getState().setResourceIntents(
-      initialDetail.id,
-      updated.resource_intents,
-    );
-
-    expect(mocks.patch).toHaveBeenCalledWith(initialDetail.id, {
-      resource_intents: updated.resource_intents,
-    });
-    expect(useConversationStore.getState().detailById[initialDetail.id].resource_intents)
-      .toEqual(updated.resource_intents);
-  });
-
-  it("submits one-shot requested resources atomically with the message", async () => {
+  it("submits a Workbench reference without duplicating its authority", async () => {
     mocks.admit.mockResolvedValue({
       run_id: "run-1",
       event_cursor: 12,
@@ -216,16 +191,26 @@ describe("conversationStore admission projection", () => {
       "写一首钢琴曲",
       "queue",
       "intent-music-1",
-      [{ kind: "dbfox.music.library", id: "project-1" }],
+      [{
+        label: "Piano Studio",
+        authority: { kind: "dbfox.music.library", id: "project-1" },
+      }],
     );
 
     expect(mocks.admit).toHaveBeenCalledWith(
       initialDetail.id,
       expect.objectContaining({
         content: "写一首钢琴曲",
-        requested_resources: [{ kind: "dbfox.music.library", id: "project-1" }],
+        references: [{
+          label: "Piano Studio",
+          authority: { kind: "dbfox.music.library", id: "project-1" },
+          object: null,
+          locator: null,
+          artifact_id: null,
+        }],
       }),
     );
+    expect(mocks.admit.mock.calls[0]?.[1]).not.toHaveProperty("requested_resources");
   });
 
   it("keeps loaded history and in-flight text when reconciling an authoritative snapshot", () => {

@@ -66,22 +66,22 @@ def bind_tool_invocation_resources(
             if selected_descriptor is not None:
                 bound.append(selected_descriptor.to_scope_ref())
                 continue
-            explicit_ref = next((ref for ref in explicit if ref.id == selected_id), None)
-            if explicit_ref is not None:
-                bound.append(explicit_ref)
-                continue
             raise ToolInputError(
                 f"Project resource {requirement.kind}:{selected_id} is unavailable."
             )
 
-        # An explicitly attached resource remains the preferred identity when
-        # the Tool schema permits omission and it is unambiguous.
+        # Explicit Input authority may disambiguate identity, but it can never
+        # substitute for current Project membership or its canonical version.
         if len(explicit) == 1:
             current = next(
                 (candidate for candidate in candidates if candidate.id == explicit[0].id),
                 None,
             )
-            bound.append(current.to_scope_ref() if current is not None else explicit[0])
+            if current is None:
+                raise ToolInputError(
+                    f"Project resource {requirement.kind}:{explicit[0].id} is unavailable."
+                )
+            bound.append(current.to_scope_ref())
             continue
         if len(candidates) == 1:
             bound.append(candidates[0].to_scope_ref())

@@ -508,8 +508,7 @@ export function register(extensionHost) {
     title: "Music",
     icon: h("span", { "aria-hidden": true }, "♪"),
     addLabel: "New score",
-    onAdd: async ({ projectId }) => {
-      await host.composerContext.add({ kind: LIBRARY_KIND, id: projectId, version: "1" });
+    onAdd: ({ projectId }) => {
       openStudio(projectId, "empty", { title: "Piano Studio" });
     },
     render: ({ projectId }) => h(MusicConnector, { projectId }),

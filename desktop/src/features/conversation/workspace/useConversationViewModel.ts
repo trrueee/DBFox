@@ -1,7 +1,6 @@
 import { useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { getUserErrorMessage } from "../../../lib/api/client";
-import type { RequestedResourceRef } from "../../../lib/api/generated/types.gen";
 import type { WorkbenchReference } from "../../../../../sdk/frontend/index";
 import { useConversationStore } from "../../../stores/conversationStore";
 import { isTerminalRun } from "../conversationState";
@@ -18,7 +17,6 @@ export function useConversationViewModel(conversationId: string) {
     content: string;
     mode: ConversationDeliveryMode;
     idempotencyKey: string;
-    requestedResources: readonly RequestedResourceRef[];
     references: readonly WorkbenchReference[];
   } | null>(null);
   const detail = useConversationStore((state) => state.detailById[conversationId]);
@@ -26,7 +24,6 @@ export function useConversationViewModel(conversationId: string) {
   const streamError = useConversationStore((state) => state.streamErrorById[conversationId]);
   const openConversationAction = useConversationStore((state) => state.openConversation);
   const sendMessageAction = useConversationStore((state) => state.sendMessage);
-  const setResourceIntentsAction = useConversationStore((state) => state.setResourceIntents);
   const cancelRunAction = useConversationStore((state) => state.cancelRun);
   const resolveApprovalAction = useConversationStore((state) => state.resolveApproval);
   const resolveQuestionAction = useConversationStore((state) => state.resolveQuestion);
@@ -41,35 +38,23 @@ export function useConversationViewModel(conversationId: string) {
       content,
       mode,
       idempotencyKey,
-      requestedResources,
       references,
     }: {
       targetConversationId: string;
       content: string;
       mode: ConversationDeliveryMode;
       idempotencyKey: string;
-      requestedResources: readonly RequestedResourceRef[];
       references: readonly WorkbenchReference[];
     }) => sendMessageAction(
       targetConversationId,
       content,
       mode,
       idempotencyKey,
-      requestedResources,
       references,
     ),
   });
   const cancelMutation = useMutation({
     mutationFn: cancelRunAction,
-  });
-  const resourceIntentsMutation = useMutation({
-    mutationFn: ({
-      targetConversationId,
-      resourceIntents,
-    }: {
-      targetConversationId: string;
-      resourceIntents: Parameters<typeof setResourceIntentsAction>[1];
-    }) => setResourceIntentsAction(targetConversationId, resourceIntents),
   });
   const approvalMutation = useMutation({
     mutationFn: ({
@@ -128,7 +113,6 @@ export function useConversationViewModel(conversationId: string) {
       targetConversationId: string,
       content: string,
       mode: ConversationDeliveryMode,
-      requestedResources: readonly RequestedResourceRef[] = [],
       references: readonly WorkbenchReference[] = [],
     ) => {
       let intent = pendingSendIntent.current;
@@ -137,7 +121,6 @@ export function useConversationViewModel(conversationId: string) {
         || intent.conversationId !== targetConversationId
         || intent.content !== content
         || intent.mode !== mode
-        || !sameRequestedResources(intent.requestedResources, requestedResources)
         || JSON.stringify(intent.references) !== JSON.stringify(references)
       ) {
         intent = {
@@ -145,7 +128,6 @@ export function useConversationViewModel(conversationId: string) {
           content,
           mode,
           idempotencyKey: globalThis.crypto.randomUUID(),
-          requestedResources: [...requestedResources],
           references: [...references],
         };
         pendingSendIntent.current = intent;
@@ -155,7 +137,6 @@ export function useConversationViewModel(conversationId: string) {
         content,
         mode,
         idempotencyKey: intent.idempotencyKey,
-        requestedResources: intent.requestedResources,
         references: intent.references,
       });
       if (pendingSendIntent.current === intent) pendingSendIntent.current = null;
@@ -163,12 +144,6 @@ export function useConversationViewModel(conversationId: string) {
     sending: sendMutation.isPending,
     sendError: sendMutation.error
       ? getUserErrorMessage(sendMutation.error, "消息发送失败，请重试。")
-      : null,
-    setResourceIntents: (resourceIntents: Parameters<typeof setResourceIntentsAction>[1]) =>
-      resourceIntentsMutation.mutateAsync({ targetConversationId: conversationId, resourceIntents }),
-    updatingResourceIntents: resourceIntentsMutation.isPending,
-    resourceIntentError: resourceIntentsMutation.error
-      ? getUserErrorMessage(resourceIntentsMutation.error, "对话上下文更新失败，请重试。")
       : null,
     cancelRun: (runId: string) => cancelMutation.mutateAsync(runId),
     cancelling: cancelMutation.isPending,
@@ -194,14 +169,4 @@ export function useConversationViewModel(conversationId: string) {
     selectArtifact,
     loadRunArtifacts,
   };
-}
-
-function sameRequestedResources(
-  left: readonly RequestedResourceRef[],
-  right: readonly RequestedResourceRef[],
-): boolean {
-  if (left.length !== right.length) return false;
-  return left.every((ref, index) => (
-    ref.kind === right[index]?.kind && ref.id === right[index]?.id
-  ));
 }

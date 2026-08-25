@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from engine.agent.approval import Approval, ApprovalConflict
+from engine.agent.references import ConversationInputReference
 from engine.agent.projection import conversation_snapshot
 from engine.agent.question import (
     QuestionAnswer,
@@ -64,6 +65,18 @@ def _merge_requested_resource_identities(
         seen.add(key)
         merged.append(ref)
     return tuple(merged)
+
+
+def _reference_resource_identities(
+    references: tuple[ConversationInputReference, ...],
+) -> tuple[RequestedResourceRef, ...]:
+    """Derive requested authority from typed references at the server boundary."""
+
+    return tuple(
+        reference.authority
+        for reference in references
+        if reference.authority is not None
+    )
 
 
 @router.post("/conversations", response_model=ConversationSnapshotResponse)
@@ -194,7 +207,10 @@ def admit_conversation_input(
         intent_refs = ConversationResourceIntentRepository(db).list(conversation_id)
         requested_identities = _merge_requested_resource_identities(
             intent_refs,
-            tuple(payload.requested_resources or ()),
+            _merge_requested_resource_identities(
+                tuple(payload.requested_resources or ()),
+                _reference_resource_identities(tuple(payload.references)),
+            ),
         )
         resource_refs = authorize_project_resources(
             db,

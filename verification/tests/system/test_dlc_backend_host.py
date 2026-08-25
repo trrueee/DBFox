@@ -612,6 +612,72 @@ def test_dynamic_tool_rejects_foreign_resources_and_in_process_filesystem_write(
     assert all(item.dlc_id != dlc_id for item in snapshot.active_dlcs)
 
 
+def test_compiler_rejects_resource_selector_missing_from_tool_input(
+    tmp_path: Path,
+    dlc_service: DlcPackageService,
+    test_keypair,
+) -> None:
+    priv_key, pub_b64 = test_keypair
+    archive = build_test_dlc_archive(
+        manifest_data={
+            "manifestSchemaVersion": 1,
+            "id": "acme.bad_selector",
+            "version": "1.0.0",
+            "displayName": "Bad Selector",
+            "publisher": "acme",
+            "extensionApiVersion": "2",
+            "requiresDbfox": ">=1.0.0",
+            "permissions": [],
+            "entrypoints": {"backend": "backend/entry.py"},
+        },
+        payload_files={
+            "backend/__init__.py": "",
+            "backend/entry.py": (
+                "import dbfox_dlc_api as api\n"
+                "class ProbeInput(api.ToolInputModel):\n"
+                "    resource_id: str\n"
+                "class ProbeOutput(api.ToolOutputModel):\n"
+                "    ok: bool = True\n"
+                "class ProbeTool(api.BaseTool[ProbeInput, ProbeOutput]):\n"
+                "    name = 'probe'\n"
+                "    group = 'custom'\n"
+                "    description = 'Bad selector probe'\n"
+                "    input_model = ProbeInput\n"
+                "    output_model = ProbeOutput\n"
+                "    execution = api.ToolExecutionSpec(required_resources=(\n"
+                "        api.ToolResourceRequirement(kind='acme.bad_selector.resource', selector_field='resorce_id'),\n"
+                "    ))\n"
+                "    presentation = api.ToolPresentation(title='Probe', category='explore')\n"
+                "    def run(self, input_data, context):\n"
+                "        return ProbeOutput()\n"
+                "def register(host: api.BackendExtensionHost) -> None:\n"
+                "    host.tools.register(ProbeTool())\n"
+            ),
+        },
+        private_key=priv_key,
+    )
+    archive_path = tmp_path / "bad-selector.dbfox-dlc"
+    archive_path.write_bytes(archive)
+    installed = dlc_service.install_from_file(
+        archive_path,
+        publisher_key_base64=pub_b64,
+    )
+    dlc_service.registry.set_desired_enabled(installed.dlc_id, True)
+
+    snapshot = ContributionCompiler(
+        dlc_service.storage_root,
+        trust_store=dlc_service.trust_store,
+    ).compile()
+
+    failure = next(
+        item for item in snapshot.activation_failures
+        if item.dlc_id == "acme.bad_selector"
+    )
+    assert failure.error_code == "backend_import_failed"
+    assert "resorce_id" in failure.message
+    assert all(item.dlc_id != "acme.bad_selector" for item in snapshot.active_dlcs)
+
+
 # ---------------------------------------------------------------------------
 # 5. Dynamic Resources, Context, Artifacts, and Operations
 # ---------------------------------------------------------------------------

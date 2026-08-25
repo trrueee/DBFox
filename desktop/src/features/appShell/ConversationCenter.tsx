@@ -41,10 +41,7 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
     const text = displayAsk.trim();
     if (!text) return;
     try {
-      const detail = await useConversationStore.getState().createAndOpenConversation(
-        text,
-        [],
-      );
+      const detail = await useConversationStore.getState().createAndOpenConversation(text);
       setProjectActiveConversation(activeProjectId, detail.id);
       openConversationCenter(detail.id);
       await useConversationStore
@@ -54,7 +51,6 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
           text,
           "queue",
           globalThis.crypto.randomUUID(),
-          reference?.authority ? [reference.authority] : [],
           reference ? [reference] : [],
         );
       clearPendingAsk();

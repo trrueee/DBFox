@@ -1,6 +1,5 @@
 import { ArrowUp, Square } from "lucide-react";
 import { useState } from "react";
-import type { RequestedResourceRef } from "../../../lib/api/generated/types.gen";
 import type { WorkbenchReference } from "../../../../../sdk/frontend/index";
 import type { ConversationDeliveryMode } from "../../../types/conversation";
 
@@ -23,34 +22,21 @@ export function Composer({
   onSend: (
     text: string,
     mode: ConversationDeliveryMode,
-    requestedResources: readonly RequestedResourceRef[],
     references: readonly WorkbenchReference[],
   ) => Promise<void>;
   onCancel: () => Promise<void>;
   reference?: WorkbenchReference | null;
   onClearReference?: () => void;
-  projectId?: string;
-  resourceIntents?: readonly RequestedResourceRef[];
-  onResourceIntentsChange?: (next: RequestedResourceRef[]) => Promise<void>;
-  updatingResourceIntents?: boolean;
-  resourceIntentError?: string | null;
-  requestedResources?: readonly RequestedResourceRef[];
-  onRequestedResourcesChange?: (next: RequestedResourceRef[]) => void;
 }) {
   const [value, setValue] = useState("");
   const [deliveryMode, setDeliveryMode] = useState<ConversationDeliveryMode>("queue");
   const submit = async () => {
     const text = value.trim();
     if (!text || disabled || submitting) return;
-    const resourcesToSend: RequestedResourceRef[] = [];
-    if (reference?.authority) {
-      resourcesToSend.push(reference.authority);
-    }
     try {
       await onSend(
         text,
         running ? deliveryMode : "queue",
-        resourcesToSend,
         reference ? [reference] : [],
       );
       setValue("");

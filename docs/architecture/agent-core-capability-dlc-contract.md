@@ -28,19 +28,34 @@ Project
   ├─ Capability-owned resource world
   └─ Artifacts
 
-Conversation Resource Intent
-  + current message attachments
+Project Resource Discovery
           ↓
-server project discovery + authorization + canonical version fence
+capability / Tool discoverability only
+
+legacy durable Conversation intent
+  + current message Reference authority
+          ↓
+server project discovery + canonical version fence
           ↓
 AgentSessionInput.resource_refs_json
           ↓
-immutable Run authority
+immutable initial explicit authority
+
+validated domain Tool call
+          ↓
+current Project membership + canonical version
+          ↓
+ToolInvocation.resource_refs_json
+          ↓
+exact execution authority
 ```
 
-唯一执行权威是：
+领域 Tool 的直接执行权威是：
 
-> **Run Authority = server-authorized, version-fenced `AgentSessionInput.resource_refs_json`.**
+> **Invocation Authority = server-authorized, version-fenced `ToolInvocation.resource_refs_json`.**
+
+`AgentSessionInput.resource_refs_json` 只是不可变 admission fact；它可以帮助 Invocation 选择 identity，
+但不能替代调用当时的 Project membership，也不能提供过期 canonical version。
 
 以下等号均禁止：
 
@@ -186,42 +201,31 @@ Core 持久化通用 `ConversationResourceIntent`，内容只允许无 version �
 ]
 ```
 
-它是用户可选的 durable UX intent，不是自动资源发现机制。每次输入只把 durable intent 与本条消息
-显式 attachment 重新校验、附加 canonical version 后冻结到 SessionInput；没有显式 attachment 时允许
-保持空数组。Agent 仍可依据当前 Project resource directory 直接调用实际领域 Tool，精确 authority
-只在 ToolInvocation admission 时绑定。
-
-Frontend Host 提供 `ConversationContextHost`：
-
-```ts
-isSelected(ref)
-add(ref)
-remove(ref)
-list()
-```
-
-DLC UI 可以为明确的 pin/attachment 操作调用这些方法；DLC 不得注册“自动把资源加入下一次 Run”的
-contributor。左栏 click 只改变 UI focus/open Dock；普通 Agent 工作不要求用户先维护 Context picker。
+它只服务于历史 durable intent/API 数据兼容，不再是当前产品的用户交互或 Frontend Extension seam。
+每次输入会把仍存在的历史 intent 与本条消息 Reference authority 统一重新校验、附加 canonical
+version 后冻结到 SessionInput；没有显式 authority 时允许保持空数组。Agent 依据当前 Project resource
+directory 直接调用实际领域 Tool，精确执行 authority 只在 ToolInvocation admission 时绑定。
 
 Workbench 的“询问 DBFox”发送 typed reference，而不是把 Object 伪装成 Resource：
 
 ```text
-authority  = parent Resource identity（可选 one-shot requested_resource）
+authority  = parent Resource identity（可选）
 object     = table / file / measure 等具体对象，不产生 authority
 locator    = rows / line range / measures 等选择
 artifact   = 可选 immutable Artifact identity
 ```
 
 该 envelope 与消息原子 admission 并写入 `AgentSessionInput.references_json`。它是不可变输入事实；
-Context 明确把 label/locator 作为 untrusted data。只有 `authority` 可以进入 requested resources。
+Context 明确把 label/locator 作为 untrusted data。Backend 从 Reference 提取 `authority`，与 legacy
+durable intent 一次性 server-authorize；Frontend 不再双写 `requested_resources`。
 
 **实施状态（2026-08-22）：阶段 B 已完成。** Core 已持久化 identity-only
 `ConversationResourceIntent`；创建与 PATCH 都经过 Project resource discovery 校验；input
-admission 只合并 durable intent 与本条消息显式 attachment，再由服务端附加 canonical
-version；Project discovery 只影响 Tool discoverability，不扩大 Input。Frontend 已删除 product requested-resource composition，`activeDatasourceId` 不再参与
-Conversation 创建或发送。`host.contextSelection.isSelected/list/add/remove` 已作为用户动作入口开放；
-Frontend SDK、Host、loader 和官方 GitHub package 已物理删除 `host.requestedResources` seam，
-DLC 不再存在注册隐式 authority contributor 的入口。`DockRenderContext.onAsk` 是 Host 正式合同，
+admission 合并 legacy durable intent 与本条消息 Reference authority，再由服务端附加 canonical
+version；Project discovery 只影响 Tool discoverability，不扩大 Input。Frontend 已删除 product
+requested-resource composition、`contextSelection`、`composerContext` 及其 stores/helper，
+`activeDatasourceId` 不再参与 Conversation 创建或发送。DLC 不再存在手工选择或隐式 authority
+contributor 的入口。`DockRenderContext.onAsk` 是 Host 正式合同，
 以 `authority + object + locator + artifact` 把 Workbench 选择交给 Composer。
 
 ## 8. Data System DLC
@@ -296,8 +300,9 @@ DatabaseResource 会贡献 `dbfox.data.database` authority。Profile generation 
 与 opaque password credential ref；SQLite profile 禁止混入网络、SSH、TLS 或 credential 配置。
 历史 `DataSource.id` 在单向、可重放 import 中原样成为 DatabaseResource id，Core 与 DLC 不双写。
 Data System DLC frontend 已贡献 hosted Resource Connector：第一层只展示 ConnectionProfile，第二层
-展示可授权 DatabaseResource；展开/聚焦只改变 UI browse state，只有数据库行上的显式 `+ / ✓`
-通过 `host.contextSelection` 改变 Conversation intent，也不会因为展开连接而扩大下一次 Run authority。
+展示 DatabaseResource；展开/聚焦只改变 UI browse state，不会改变下一次 Input 或 Invocation authority。
+用户从 Table Workbench 发起“询问 DBFox”时，Reference 携带 parent Database identity、Table object 与
+locator，由 Backend 在消息 admission 时校验。
 
 执行迁移的第一条垂直链已经完成：Catalog、Preview、SQL validate/execute 的输入使用显式
 `database_id` 选择 frozen `(kind,id)`；SQL validation Artifact 与审批能力都绑定完整
@@ -518,7 +523,7 @@ Workspace DLC 自有 Project workspace binding、Resource Provider/Resolver、fi
 `dbfox.workspace/state.sqlite3`；最终 Alembic cutover 会再次幂等导入初次迁移后由旧版本写入的目录，验证后删除 `projects.workspace_root`。默认 Core snapshot 不再注册 Workspace Tool、Provider、Resolver
 或 Context contributor；`engine.workspace`、Core Workspace builtin、Core Workspace Context contributor
 与专属旧测试文件已删除；混合回归文件中的历史用例标记为 retired，Runtime 有效测试改用不含领域逻辑的 Resource probe。官方签名包的启用/禁用、路径 containment、二进制拒绝、Artifact freshness 与状态保留已有 conformance proof。前端 Connector
-通过 generic `nativeDialogs.pickFolder` 与 `contextSelection` Host seam 工作。
+通过 generic `nativeDialogs.pickFolder` 工作，Workbench 引用通过正式 `DockRenderContext.onAsk` 合同进入 Composer。
 Workspace 新写入的 File/Patch Artifact 同样使用 Core Artifact envelope 的 `resource_refs`；Context
 contributor 优先按该通用绑定校验 frozen Workspace authority。payload 内旧 workspace identity 只用于
 读取迁移前历史 Artifact，不再是新 authority 的事实源。

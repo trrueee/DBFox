@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from engine.agent.resource_refs import ProjectResourceDescriptor
 from engine.agent.tool_dispatcher import ToolRequest
 from engine.errors import ToolInputError
 from engine.resource import ResourceScopeRef
@@ -20,6 +21,7 @@ from engine.tools.runtime import (
 )
 from engine.tools.runtime.attempt import CompositeResourceResolver
 from engine.tools.runtime.resource_context import build_tool_scope_context
+from engine.tools.runtime.resource_authority import bind_tool_invocation_resources
 
 
 class ProbeInput(ToolInputModel):
@@ -28,6 +30,10 @@ class ProbeInput(ToolInputModel):
 
 class ProbeOutput(ToolOutputModel):
     value: str = ""
+
+
+class SelectorInput(ToolInputModel):
+    resource_id: str
 
 
 class FreeProbe(BaseTool[ProbeInput, ProbeOutput]):
@@ -51,6 +57,27 @@ class AlphaProbe(FreeProbe):
 class BetaProbe(FreeProbe):
     name = "verification_beta"
     execution = ToolExecutionSpec(required_resources=(ToolResourceRequirement(kind="verification.beta"),))
+
+
+class SelectorProbe(BaseTool[SelectorInput, ProbeOutput]):
+    name = "verification_selector"
+    group = "verification"
+    description = "Probe exact invocation resource selection."
+    input_model = SelectorInput
+    output_model = ProbeOutput
+    presentation = ToolPresentation(title="Selector probe", category="explore")
+    execution = ToolExecutionSpec(
+        required_resources=(
+            ToolResourceRequirement(
+                kind="verification.alpha",
+                selector_field="resource_id",
+            ),
+        )
+    )
+
+    def run(self, tool_input: SelectorInput, context: ToolRunContext) -> ProbeOutput:
+        del context
+        return ProbeOutput(value=tool_input.resource_id)
 
 
 def _registry() -> ToolRegistry:
@@ -158,3 +185,43 @@ def test_required_resource_kind_validation():
             ToolResourceRequirement(kind="verification.alpha"),
             ToolResourceRequirement(kind="verification.alpha"),
         ))
+
+
+def test_explicit_input_ref_cannot_replace_current_project_membership():
+    old = ResourceScopeRef(kind="verification.alpha", id="one", version=1)
+    with pytest.raises(ToolInputError, match="unavailable"):
+        bind_tool_invocation_resources(
+            SelectorProbe(),
+            {"resource_id": "one"},
+            discovered=(),
+            explicit_authority=(old,),
+        )
+    with pytest.raises(ToolInputError, match="unavailable"):
+        bind_tool_invocation_resources(
+            AlphaProbe(),
+            {},
+            discovered=(),
+            explicit_authority=(old,),
+        )
+
+
+def test_explicit_input_ref_only_selects_current_canonical_descriptor():
+    old = ResourceScopeRef(kind="verification.alpha", id="one", version=1)
+    current = ProjectResourceDescriptor(
+        kind="verification.alpha",
+        id="one",
+        version=2,
+        name="Current",
+    )
+    assert bind_tool_invocation_resources(
+        SelectorProbe(),
+        {"resource_id": "one"},
+        discovered=(current,),
+        explicit_authority=(old,),
+    ) == (current.to_scope_ref(),)
+    assert bind_tool_invocation_resources(
+        AlphaProbe(),
+        {},
+        discovered=(current,),
+        explicit_authority=(old,),
+    ) == (current.to_scope_ref(),)

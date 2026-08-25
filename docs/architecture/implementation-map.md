@@ -144,7 +144,7 @@ Core Artifact API 只接受 Artifact ID 与 page/pageSize/sort/filter/search 等
 
 ### 4.9 Session Core 与 Coordinator
 
-Input admission 在单一短事务中创建 SessionInput、用户/助手 Message、Run 和初始 event，并用 idempotency key 防止重复接纳。Composer 的 one-shot `requested_resources` 与消息在同一 request 提交、由服务器 canonicalize 并冻结；浏览或打开 Dock 不暗改 Conversation Intent。Coordinator 按 Session 竞争 lease，promote 一个输入并执行 Run。
+Input admission 在单一短事务中创建 SessionInput、用户/助手 Message、Run 和初始 event，并用 idempotency key 防止重复接纳。Composer 的 typed Workbench Reference 与消息在同一 request 提交；Backend 从 `reference.authority` 派生 initial explicit authority、与 legacy durable intent 一次性 canonicalize 并冻结，Frontend 不双写 `requested_resources`。浏览或打开 Dock 不暗改 Conversation Intent。Coordinator 按 Session 竞争 lease，promote 一个输入并执行 Run。
 
 同一 Session 未来 queue 输入不进入当前 Context；Session 间可以并行。lease 过期后旧 worker 的任何提交都会因 token 不匹配被拒绝。
 

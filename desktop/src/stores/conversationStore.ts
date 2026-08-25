@@ -8,7 +8,6 @@ import {
   getConversationHistory,
   getConversationRunArtifacts,
   listConversations,
-  patchConversation,
   resolveConversationApproval,
   resolveConversationQuestion,
   selectConversationArtifact,
@@ -38,7 +37,6 @@ import type {
   ConversationSummary,
   QuestionItem,
 } from "../types/conversation";
-import type { RequestedResourceRef } from "../lib/api/generated/types.gen";
 import type { WorkbenchReference } from "../../../sdk/frontend/index";
 import {
   reduceStreamEvent,
@@ -60,14 +58,7 @@ export interface ConversationActions {
   initConversations: () => Promise<void>;
   openConversation: (conversationId: string) => Promise<ConversationDetail>;
   loadOlderHistory: (conversationId: string) => Promise<boolean>;
-  createAndOpenConversation: (
-    question: string,
-    resourceIntents?: readonly RequestedResourceRef[],
-  ) => Promise<ConversationDetail>;
-  setResourceIntents: (
-    conversationId: string,
-    resourceIntents: readonly RequestedResourceRef[],
-  ) => Promise<void>;
+  createAndOpenConversation: (question: string) => Promise<ConversationDetail>;
   deleteConversationById: (conversationId: string) => Promise<void>;
   loadConversation: (detail: ConversationDetail) => void;
   loadRunArtifacts: (
@@ -80,7 +71,6 @@ export interface ConversationActions {
     content: string,
     mode: ConversationDeliveryMode,
     idempotencyKey: string,
-    requestedResources?: readonly RequestedResourceRef[],
     references?: readonly WorkbenchReference[],
   ) => Promise<void>;
   cancelRun: (runId: string) => Promise<void>;
@@ -139,7 +129,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     return Boolean(page.pagination?.items.has_more || page.pagination?.runs.has_more);
   },
 
-  createAndOpenConversation: async (question, resourceIntents = []) => {
+  createAndOpenConversation: async (question) => {
     requireConversationLlmPayload();
     const { useWorkspaceStore } = await import("../stores/workspaceStore");
     const projectId = useWorkspaceStore.getState().activeProjectId;
@@ -147,7 +137,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     const detail = await createConversation({
       project_id: projectId,
       title: question.slice(0, 80),
-      resource_intents: [...resourceIntents],
+      resource_intents: [],
     });
     const summary: ConversationSummary = {
       id: detail.id,
@@ -160,13 +150,6 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }));
     get().loadConversation(detail);
     return detail;
-  },
-
-  setResourceIntents: async (conversationId, resourceIntents) => {
-    const detail = await patchConversation(conversationId, {
-      resource_intents: [...resourceIntents],
-    });
-    get().loadConversation(detail);
   },
 
   deleteConversationById: async (conversationId) => {
@@ -227,7 +210,6 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     content,
     mode,
     idempotencyKey,
-    requestedResources = [],
     references = [],
   ) => {
     const llmPayload = requireConversationLlmPayload();
@@ -237,12 +219,6 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       content,
       idempotency_key: idempotencyKey,
       delivery_mode: mode,
-      ...(requestedResources.length > 0 ? {
-        requested_resources: requestedResources.map((ref) => ({
-          kind: ref.kind,
-          id: ref.id,
-        })),
-      } : {}),
       ...(references.length > 0 ? {
         references: references.map((reference) => ({
           label: reference.label,

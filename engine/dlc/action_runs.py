@@ -194,6 +194,7 @@ class DlcActionRunsHostImpl:
             definition=definition,
             executor=executor,
             resource_resolver=build_attempt_resource_resolver(snapshot=self._snapshot),
+            resource_providers=self._snapshot.resource_providers,
         )
         return _DlcActionRunImpl(
             dlc_id=self._dlc_id,

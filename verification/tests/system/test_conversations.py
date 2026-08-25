@@ -215,7 +215,6 @@ def test_conversation_resource_intent_is_durable_and_message_attachments_are_add
             "content": "对比两个数据库",
             "idempotency_key": "resource-intent-additive-1",
             "delivery_mode": "queue",
-            "requested_resources": [{"kind": "dbfox.data.database", "id": "db-2"}],
             "references": [
                 {
                     "label": "orders rows 20-30",
@@ -248,6 +247,52 @@ def test_conversation_resource_intent_is_durable_and_message_attachments_are_add
     assert stored_run is not None
     assert not hasattr(stored_run, "datasource_id")
     assert not hasattr(stored_run, "datasource_generation")
+
+
+def test_reference_authority_must_be_currently_available_in_project(
+    client,
+    db_session,
+    monkeypatch,
+):
+    created = client.post(
+        "/api/v1/conversations",
+        json={"project_id": "proj-test", "title": "Invalid reference authority"},
+        headers=_headers(),
+    )
+    conversation_id = created.json()["session"]["id"]
+
+    class Coordinator:
+        available = True
+
+        def wake(self, _session_id: str) -> None:
+            raise AssertionError("Rejected reference must not wake the worker")
+
+    monkeypatch.setattr(app.state, "agent_coordinator", Coordinator(), raising=False)
+    before = db_session.query(AgentRun).count()
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/inputs",
+        json={
+            "content": "查看外部表",
+            "idempotency_key": "invalid-reference-authority-1",
+            "delivery_mode": "queue",
+            "references": [
+                {
+                    "label": "outside",
+                    "authority": {
+                        "kind": "dbfox.data.database",
+                        "id": "outside-project",
+                    },
+                    "object": {"kind": "dbfox.data.table", "id": "orders"},
+                }
+            ],
+            "llm_credential_id": "credential-1",
+        },
+        headers=_headers(),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "INVALID_RESOURCE_REQUEST"
+    assert db_session.query(AgentRun).count() == before
 
 
 def test_empty_conversation_intent_does_not_inherit_project_workspace(

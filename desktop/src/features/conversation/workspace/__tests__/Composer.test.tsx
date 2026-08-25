@@ -33,7 +33,7 @@ describe("Composer", () => {
     fireEvent.change(input, { target: { value: "  分析订单趋势  " } });
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(onSend).toHaveBeenCalledWith("分析订单趋势", "queue", [], []);
+    expect(onSend).toHaveBeenCalledWith("分析订单趋势", "queue", []);
     await waitFor(() => expect(input.value).toBe(""));
   });
 
@@ -79,7 +79,6 @@ describe("Composer", () => {
     expect(onSend).toHaveBeenCalledWith(
       "统计总金额",
       "queue",
-      [{ kind: "dbfox.data.database", id: "creatorhub" }],
       [reference],
     );
     await waitFor(() => expect(onClearReference).toHaveBeenCalledOnce());
