@@ -83,7 +83,6 @@ function WorkspaceConnector({ projectId }) {
     setLoading(true);
     try {
       await invoke("binding.delete", {}, projectId);
-      await host.contextSelection.remove({ kind: "dbfox.workspace.root", id: binding.id });
       await loadBinding(projectId);
     } finally {
       setLoading(false);
@@ -95,17 +94,9 @@ function WorkspaceConnector({ projectId }) {
     React.createElement("button", { type: "button", onClick: () => void chooseFolder() }, "选择文件夹"),
     error ? React.createElement("p", { role: "alert" }, error) : null,
   );
-  const selected = host.contextSelection.isSelected({ kind: "dbfox.workspace.root", id: binding.id });
   return React.createElement("section", { className: "dbfox-workspace" },
     React.createElement("header", null,
       React.createElement("span", { title: binding.root_path }, binding.root_path),
-      React.createElement("button", {
-        type: "button",
-        className: selected ? "is-selected" : "",
-        onClick: () => void (selected
-          ? host.contextSelection.remove({ kind: "dbfox.workspace.root", id: binding.id })
-          : host.contextSelection.add({ kind: "dbfox.workspace.root", id: binding.id })),
-      }, selected ? "✓ 已加入" : "+ 对话"),
       React.createElement("button", { type: "button", onClick: () => void removeFolder(), title: "移除工作区" }, "×"),
     ),
     React.createElement(FileBrowser, { projectId, binding, path: "" }),

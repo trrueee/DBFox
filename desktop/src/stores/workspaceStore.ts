@@ -10,10 +10,17 @@ export interface ProjectShellState {
   activeConversationId?: string;
 }
 
+export interface ConversationWorkbenchState {
+  open: boolean;
+  activeViewKey: string | null;
+  tabs: WorkspaceDockTab[];
+}
+
 interface WorkspaceState {
   activeProjectId: string;
   projectShell: Record<string, ProjectShellState>;
   mainSurfaceByProject: Record<string, MainSurfaceRef>;
+  workbenchByConversation: Record<string, ConversationWorkbenchState>;
   centerMode: WorkspaceCenterMode;
   centerReturnMode: WorkspaceCenterMode;
   pendingAsk: string | null;
@@ -49,10 +56,24 @@ interface WorkspaceActions {
 
 export type WorkspaceStore = WorkspaceState & WorkspaceActions;
 
+function getActiveConversationKey(state: WorkspaceState, conversationIdOverride?: string): string {
+  if (conversationIdOverride) return conversationIdOverride;
+  const projectId = state.activeProjectId;
+  if (!projectId) return "__default__";
+  const convId = state.projectShell[projectId]?.activeConversationId;
+  if (convId) return convId;
+  const surface = state.mainSurfaceByProject[projectId];
+  if (surface && surface.kind === "conversation" && surface.conversationId) {
+    return surface.conversationId;
+  }
+  return `project:${projectId}`;
+}
+
 export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   activeProjectId: "",
   projectShell: {},
   mainSurfaceByProject: {},
+  workbenchByConversation: {},
   centerMode: "home",
   centerReturnMode: "home",
   pendingAsk: null,
@@ -62,18 +83,44 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   settingsSection: "appearance",
   projectCreateOpen: false,
 
-  setActiveProject: (projectId) => set({ activeProjectId: projectId }),
+  setActiveProject: (projectId) =>
+    set((state) => {
+      const storedConvId = state.projectShell[projectId]?.activeConversationId;
+      const targetKey = storedConvId || (projectId ? `project:${projectId}` : "__default__");
+      const currentWorkbench = state.workbenchByConversation[targetKey];
+      return {
+        activeProjectId: projectId,
+        dock: currentWorkbench ? { open: currentWorkbench.open, activeViewKey: currentWorkbench.activeViewKey } : { open: false, activeViewKey: null },
+        dockTabs: currentWorkbench ? currentWorkbench.tabs : [],
+      };
+    }),
 
   setProjectActiveConversation: (projectId, conversationId) =>
-    set((state) => ({
-      projectShell: {
+    set((state) => {
+      const nextProjectShell = {
         ...state.projectShell,
         [projectId]: {
           ...(state.projectShell[projectId] ?? {}),
           activeConversationId: conversationId,
         },
-      },
-    })),
+      };
+      const isCurrentProject = state.activeProjectId === projectId;
+      const currentWorkbench = isCurrentProject && conversationId
+        ? state.workbenchByConversation[conversationId]
+        : undefined;
+
+      return {
+        projectShell: nextProjectShell,
+        ...(isCurrentProject
+          ? {
+              dock: currentWorkbench
+                ? { open: currentWorkbench.open, activeViewKey: currentWorkbench.activeViewKey }
+                : { open: false, activeViewKey: null },
+              dockTabs: currentWorkbench ? currentWorkbench.tabs : [],
+            }
+          : {}),
+      };
+    }),
 
   setProjectMainSurface: (projectId, surface) =>
     set((state) => ({
@@ -90,16 +137,54 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
 
   setSettingsSection: (settingsSection) => set({ settingsSection }),
 
-  setDockOpen: (open) => set((state) => ({ dock: { ...state.dock, open } })),
+  setDockOpen: (open) =>
+    set((state) => {
+      const key = getActiveConversationKey(state);
+      const prevWorkbench = state.workbenchByConversation[key] ?? {
+        open: state.dock.open,
+        activeViewKey: state.dock.activeViewKey,
+        tabs: state.dockTabs,
+      };
+      const updatedWorkbench: ConversationWorkbenchState = {
+        ...prevWorkbench,
+        open,
+      };
+      return {
+        dock: { ...state.dock, open },
+        workbenchByConversation: {
+          ...state.workbenchByConversation,
+          [key]: updatedWorkbench,
+        },
+      };
+    }),
 
   setDockActiveTab: (viewKey) =>
-    set((state) => ({
-      dock: { ...state.dock, open: true, activeViewKey: viewKey },
-      settingsOpen: false,
-    })),
+    set((state) => {
+      const key = getActiveConversationKey(state);
+      const prevWorkbench = state.workbenchByConversation[key] ?? {
+        open: state.dock.open,
+        activeViewKey: state.dock.activeViewKey,
+        tabs: state.dockTabs,
+      };
+      const updatedWorkbench: ConversationWorkbenchState = {
+        ...prevWorkbench,
+        open: true,
+        activeViewKey: viewKey,
+      };
+      return {
+        dock: { ...state.dock, open: true, activeViewKey: viewKey },
+        workbenchByConversation: {
+          ...state.workbenchByConversation,
+          [key]: updatedWorkbench,
+        },
+        settingsOpen: false,
+      };
+    }),
 
   closeDockTab: (viewKey) => {
-    const { dock, dockTabs } = get();
+    const state = get();
+    const key = getActiveConversationKey(state);
+    const { dock, dockTabs } = state;
     const nextTabs = dockTabs.filter((tab) => tab.viewKey !== viewKey);
     const currentActiveKey = dock.activeViewKey;
     const activeIndex = dockTabs.findIndex((tab) => tab.viewKey === currentActiveKey);
@@ -107,9 +192,18 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
       activeIndex >= 0 && dockTabs[activeIndex]?.viewKey === viewKey
         ? (nextTabs[Math.min(activeIndex, nextTabs.length - 1)]?.viewKey ?? null)
         : currentActiveKey;
+    const updatedWorkbench: ConversationWorkbenchState = {
+      open: dock.open,
+      activeViewKey: nextActiveKey,
+      tabs: nextTabs,
+    };
     set({
       dockTabs: nextTabs,
-      dock: { ...dock, activeViewKey: nextActiveKey },
+      dock: { open: dock.open, activeViewKey: nextActiveKey },
+      workbenchByConversation: {
+        ...state.workbenchByConversation,
+        [key]: updatedWorkbench,
+      },
     });
   },
 
@@ -122,16 +216,29 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
         );
       }
       const nextActiveKey = activate ? tab.viewKey : state.dock.activeViewKey;
+      const nextTabs = existing
+        ? state.dockTabs.map((item) =>
+            item.viewKey === tab.viewKey ? { ...item, ...tab } : item,
+          )
+        : [...state.dockTabs, tab];
+      const nextDock = {
+        open: activate ? true : state.dock.open,
+        activeViewKey: nextActiveKey,
+      };
+      const key = getActiveConversationKey(state);
+      const updatedWorkbench: ConversationWorkbenchState = {
+        open: nextDock.open,
+        activeViewKey: nextDock.activeViewKey,
+        tabs: nextTabs,
+      };
+
       return {
-        dock: {
-          open: activate ? true : state.dock.open,
-          activeViewKey: nextActiveKey,
+        dock: nextDock,
+        dockTabs: nextTabs,
+        workbenchByConversation: {
+          ...state.workbenchByConversation,
+          [key]: updatedWorkbench,
         },
-        dockTabs: existing
-          ? state.dockTabs.map((item) =>
-              item.viewKey === tab.viewKey ? { ...item, ...tab } : item,
-            )
-          : [...state.dockTabs, tab],
         settingsOpen: false,
       };
     }),
@@ -141,42 +248,81 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
       const safePatch = { ...patch };
       delete (safePatch as Record<string, unknown>).viewKey;
       delete (safePatch as Record<string, unknown>).viewType;
+      const nextTabs = state.dockTabs.map((tab) =>
+        tab.viewKey === viewKey ? { ...tab, ...safePatch } : tab,
+      );
+      const key = getActiveConversationKey(state);
+      const prevWorkbench = state.workbenchByConversation[key] ?? {
+        open: state.dock.open,
+        activeViewKey: state.dock.activeViewKey,
+        tabs: state.dockTabs,
+      };
       return {
-        dockTabs: state.dockTabs.map((tab) =>
-          tab.viewKey === viewKey ? { ...tab, ...safePatch } : tab,
-        ),
+        dockTabs: nextTabs,
+        workbenchByConversation: {
+          ...state.workbenchByConversation,
+          [key]: {
+            ...prevWorkbench,
+            tabs: nextTabs,
+          },
+        },
       };
     }),
 
   showSmartQueryHome: (initialAsk) =>
-    set((state) => ({
-      centerMode: "home",
-      centerReturnMode: "home",
-      pendingAsk: initialAsk ?? null,
-      settingsOpen: false,
-      mainSurfaceByProject: state.activeProjectId
-        ? {
-            ...state.mainSurfaceByProject,
-            [state.activeProjectId]: { kind: "new-conversation" },
-          }
-        : state.mainSurfaceByProject,
-    })),
+    set((state) => {
+      const projectId = state.activeProjectId;
+      const homeKey = projectId ? `project:${projectId}` : "__default__";
+      const homeWorkbench = state.workbenchByConversation[homeKey];
+      return {
+        centerMode: "home",
+        centerReturnMode: "home",
+        pendingAsk: initialAsk ?? null,
+        settingsOpen: false,
+        dock: homeWorkbench ? { open: homeWorkbench.open, activeViewKey: homeWorkbench.activeViewKey } : { open: false, activeViewKey: null },
+        dockTabs: homeWorkbench ? homeWorkbench.tabs : [],
+        mainSurfaceByProject: projectId
+          ? {
+              ...state.mainSurfaceByProject,
+              [projectId]: { kind: "new-conversation" },
+            }
+          : state.mainSurfaceByProject,
+      };
+    }),
 
   openConversationCenter: (conversationId) =>
-    set((state) => ({
-      centerMode: "conversation",
-      centerReturnMode: "conversation",
-      settingsOpen: false,
-      mainSurfaceByProject: state.activeProjectId
-        ? {
-            ...state.mainSurfaceByProject,
-            [state.activeProjectId]: {
-              kind: "conversation",
-              conversationId: conversationId || undefined,
-            },
-          }
-        : state.mainSurfaceByProject,
-    })),
+    set((state) => {
+      const projectId = state.activeProjectId;
+      const targetConvId = conversationId || (projectId ? state.projectShell[projectId]?.activeConversationId : undefined);
+      const targetKey = targetConvId || (projectId ? `project:${projectId}` : "__default__");
+      const targetWorkbench = state.workbenchByConversation[targetKey];
+
+      return {
+        centerMode: "conversation",
+        centerReturnMode: "conversation",
+        settingsOpen: false,
+        dock: targetWorkbench ? { open: targetWorkbench.open, activeViewKey: targetWorkbench.activeViewKey } : { open: false, activeViewKey: null },
+        dockTabs: targetWorkbench ? targetWorkbench.tabs : [],
+        mainSurfaceByProject: projectId
+          ? {
+              ...state.mainSurfaceByProject,
+              [projectId]: {
+                kind: "conversation",
+                conversationId: conversationId || undefined,
+              },
+            }
+          : state.mainSurfaceByProject,
+        projectShell: projectId && conversationId
+          ? {
+              ...state.projectShell,
+              [projectId]: {
+                ...(state.projectShell[projectId] ?? {}),
+                activeConversationId: conversationId,
+              },
+            }
+          : state.projectShell,
+      };
+    }),
 
   openProjectCreate: () =>
     set({

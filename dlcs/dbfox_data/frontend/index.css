@@ -113,7 +113,7 @@
 
 .dbfox-data__database-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px 24px 26px;
+  grid-template-columns: minmax(0, 1fr) 26px 26px;
   align-items: center;
   min-width: 0;
   border-radius: 6px;
@@ -148,7 +148,6 @@
 
 .dbfox-data__refresh:hover,
 .dbfox-data__sql:hover,
-.dbfox-data__context:hover,
 .dbfox-data__table-row:hover {
   background: var(--surface-hover);
 }
@@ -225,30 +224,6 @@
 .dbfox-data__database-icon {
   color: var(--text-muted);
   font-size: 8px;
-}
-
-.dbfox-data__context {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0.62;
-}
-
-.dbfox-data__database-row:hover .dbfox-data__context,
-.dbfox-data__context:focus-visible,
-.dbfox-data__context.is-selected {
-  opacity: 1;
-}
-
-.dbfox-data__context.is-selected {
-  color: var(--accent-fg);
 }
 
 .dbfox-data__status,
@@ -389,141 +364,366 @@
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-muted);
-  font-size: 11px;
-}
-
+/* Unified Continuous SQL Whiteboard Console */
 .dbfox-data-console {
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
+  width: 100%;
+  background: var(--surface-primary);
   color: var(--text-primary);
-}
-
-.dbfox-data-console__header,
-.dbfox-data-console__result-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  overflow: hidden;
 }
 
 .dbfox-data-console__header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.dbfox-data-console__header div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.dbfox-data-console__header small,
-.dbfox-data-console__header > span,
-.dbfox-data-console__actions span,
-.dbfox-data-console__result-meta span {
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.dbfox-data-console__editor {
-  display: grid;
-  gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.dbfox-data-console__editor textarea {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 116px;
-  resize: vertical;
-  padding: 10px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 7px;
-  outline: none;
-  background: var(--surface-panel);
-  color: var(--text-primary);
-  font: 12px/1.6 var(--font-mono);
-  tab-size: 2;
-}
-
-.dbfox-data-console__editor textarea:focus {
-  border-color: var(--accent-fg);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-fg) 14%, transparent);
-}
-
-.dbfox-data-console__actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.dbfox-data-console__actions button {
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--accent-fg);
-  border-radius: 7px;
-  background: var(--accent-fg);
-  color: white;
-  cursor: pointer;
-  font: inherit;
-}
-
-.dbfox-data-console__actions button:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.dbfox-data-console__error {
-  margin: 0;
-  padding: 8px 16px;
+  justify-content: space-between;
+  gap: 12px;
+  height: 40px;
+  padding: 0 14px;
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-muted);
+}
+
+.dbfox-data-console__identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dbfox-data-console__badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-fg);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent-fg) 12%, transparent);
+}
+
+.dbfox-data-console__identity strong {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dbfox-data-console__identity small {
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dbfox-data-console__mode-badge {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.dbfox-data-console__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dbfox-data-console__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.dbfox-data-console__btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+}
+
+.dbfox-data-console__btn.is-primary {
+  background: var(--accent-fg);
+  border-color: var(--accent-fg);
+  color: white;
+}
+
+.dbfox-data-console__btn.is-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+/* Whiteboard Canvas */
+.dbfox-data-console__canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scrollbar-gutter: stable;
+}
+
+/* Execution Block on the Whiteboard */
+.dbfox-data-block {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-panel);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+  overflow: hidden;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.dbfox-data-block:focus-within {
+  border-color: color-mix(in srgb, var(--accent-fg) 50%, var(--border-subtle));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-fg) 10%, transparent);
+}
+
+.dbfox-data-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dbfox-data-block__badge-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dbfox-data-block__badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-fg);
+}
+
+.dbfox-data-block__hint-text {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.dbfox-data-block__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dbfox-data-block__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.dbfox-data-block__btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.dbfox-data-block__btn.is-primary {
+  background: var(--accent-fg);
+  border-color: var(--accent-fg);
+  color: white;
+}
+
+.dbfox-data-block__btn.is-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.dbfox-data-block__btn.is-danger {
+  color: var(--danger-fg);
+}
+
+.dbfox-data-block__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Editor row with gutter */
+.dbfox-data-block__editor-row {
+  display: flex;
+  min-height: 52px;
+  position: relative;
+  background: var(--surface-panel);
+}
+
+.dbfox-data-block__gutter {
+  display: flex;
+  flex-direction: column;
+  width: 32px;
+  padding: 7px 6px 7px 0;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-muted) 50%, transparent);
+  border-right: 1px solid var(--border-subtle);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.dbfox-data-block__editor-row textarea {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+  tab-size: 2;
+  white-space: pre;
+}
+
+/* Block Status and Output */
+.dbfox-data-block__running {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--accent-fg) 4%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.dbfox-data-block__spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--accent-fg);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: dbfox-spin 600ms linear infinite;
+}
+
+@keyframes dbfox-spin {
+  to { transform: rotate(360deg); }
+}
+
+.dbfox-data-block__error {
+  padding: 8px 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--danger-bg, color-mix(in srgb, red 8%, transparent));
   color: var(--danger-fg);
   font-size: 12px;
 }
 
-.dbfox-data-console__result {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
+.dbfox-data-block__result {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-subtle);
+  max-height: 480px;
 }
 
-.dbfox-data-console__result-meta {
-  padding: 9px 16px;
+.dbfox-data-block__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 12px;
+  background: var(--surface-muted);
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 12px;
+  font-size: 11px;
+  flex-shrink: 0;
 }
 
-.dbfox-data-console__placeholder {
-  display: grid;
-  place-content: center;
-  gap: 5px;
-  min-height: 0;
-  padding: 24px;
+.dbfox-data-block__meta-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dbfox-data-block__meta-left strong {
+  font-weight: 600;
+}
+
+.dbfox-data-block__meta-left span {
   color: var(--text-muted);
-  text-align: center;
-  font-size: 12px;
 }
 
-.dbfox-data-console__placeholder strong {
-  color: var(--text-secondary);
-  font-weight: 560;
+.dbfox-data-block__artifact-badge {
+  color: var(--text-muted);
+  font-size: 10px;
 }
 
-.dbfox-data-console__messages {
+.dbfox-data-block__messages {
   margin: 0;
-  padding: 14px 36px;
+  padding: 10px 18px;
   overflow: auto;
   color: var(--text-secondary);
   font-size: 12px;
 }
 
-.dbfox-data-result__scroll {
-  min-height: 0;
-  overflow: auto;
+.dbfox-data-block__empty-hint {
+  padding: 6px 12px;
+  border-top: 1px dashed var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.dbfox-data-console__footer-action {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 16px;
+}
+
+.dbfox-data-console__add-card-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 16px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.dbfox-data-console__add-card-btn:hover {
+  border-color: var(--accent-fg);
+  color: var(--accent-fg);
+  background: color-mix(in srgb, var(--accent-fg) 6%, transparent);
 }
 
 .dbfox-data-result__scroll table {
@@ -535,9 +735,56 @@
 
 .dbfox-data-result__scroll th,
 .dbfox-data-result__scroll td {
-  max-width: 360px;
-  padding: 7px 11px;
+  max-width: 400px;
+  padding: 6px 10px;
   overflow: hidden;
+  border-bottom: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dbfox-data-result__scroll th {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dbfox-data-result__scroll th:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.dbfox-data-result__scroll th.is-sorted {
+  color: var(--accent-fg);
+}
+
+.dbfox-data-result__row-num {
+  width: 38px;
+  text-align: center !important;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: color-mix(in srgb, var(--surface-muted) 60%, transparent);
+}
+
+.dbfox-data-result__scroll td.is-selected {
+  outline: 2px solid var(--accent-fg);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent-fg) 10%, transparent);
+}
+
+.dbfox-data-result__scroll td.is-null {
+  color: var(--text-muted);
+  font-style: italic;
+}
   border-bottom: 1px solid var(--border-subtle);
   text-align: left;
   text-overflow: ellipsis;

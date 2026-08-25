@@ -101,28 +101,8 @@ function promoteEmptyStudio(projectId, value) {
   return false;
 }
 
-async function toggleContext(ref) {
-  if (host.contextSelection.isSelected(ref)) await host.contextSelection.remove(ref);
-  else await host.contextSelection.add(ref);
-  emit();
-}
-
-function ContextButton({ ref }) {
-  useVersion();
-  const selected = host.contextSelection.isSelected(ref);
-  return h("button", {
-    type: "button",
-    className: `dbfox-music__context${selected ? " is-selected" : ""}`,
-    title: selected ? "从对话上下文移除" : "加入对话上下文",
-    "aria-label": selected ? "从对话上下文移除" : "加入对话上下文",
-    onClick: (event) => { event.stopPropagation(); void toggleContext(ref); },
-  }, selected ? "✓" : "+");
-}
-
 function ResourceRow({ projectId, kind, item }) {
   const isScore = kind === "score";
-  const version = isScore ? item.head_revision : `${item.fingerprint}:${item.analysis_revision}`;
-  const ref = { kind: isScore ? SCORE_KIND : AUDIO_KIND, id: item.id, version };
   return h("div", { className: "dbfox-music__resource" },
     h("button", {
       type: "button",
@@ -131,8 +111,7 @@ function ResourceRow({ projectId, kind, item }) {
     },
     h("span", { className: "dbfox-music__resource-icon", "aria-hidden": true }, isScore ? "♪" : "≈"),
     h("span", { className: "dbfox-music__resource-label" }, item.title || item.name),
-    h("small", null, isScore ? `R${item.head_revision}` : (item.analysis_revision ? "已转录" : "待转录"))),
-    h(ContextButton, { ref }));
+    h("small", null, isScore ? `R${item.head_revision}` : (item.analysis_revision ? "已转录" : "待转录"))));
 }
 
 async function decodeSelection(selection) {
@@ -200,19 +179,22 @@ function MusicConnector({ projectId }) {
     error ? h("p", { className: "dbfox-music__error", role: "alert" }, error) : null);
 }
 
-function ScoreMeasure({ document, measure, active, uncertain }) {
+function ScoreMeasure({ document, measure, active, uncertain, selected, onSelect }) {
   const ref = React.useRef(null);
   React.useEffect(() => {
     if (!ref.current) return;
     renderMeasure(ref.current, document, measure);
   }, [document, measure]);
   return h("section", {
-    className: `dbfox-music-measure${active ? " is-active" : ""}${uncertain ? " is-uncertain" : ""}`,
+    className: `dbfox-music-measure${active ? " is-active" : ""}${uncertain ? " is-uncertain" : ""}${selected ? " is-selected" : ""}`,
     "aria-label": `第 ${measure} 小节${uncertain ? "，低置信度" : ""}`,
+    onClick: () => onSelect?.(measure),
+    tabIndex: 0,
+    role: "button",
   }, h("span", { className: "dbfox-music-measure__number" }, measure), h("div", { ref }));
 }
 
-function ScoreView({ document, currentMeasure, uncertainMeasures = new Set() }) {
+function ScoreView({ document, currentMeasure, uncertainMeasures = new Set(), selectedMeasure, onSelectMeasure }) {
   return h("div", { className: "dbfox-music-score", role: "region", "aria-label": "乐谱" },
     Array.from({ length: document.measure_count }, (_, index) => h(ScoreMeasure, {
       key: index + 1,
@@ -220,6 +202,8 @@ function ScoreView({ document, currentMeasure, uncertainMeasures = new Set() }) 
       measure: index + 1,
       active: currentMeasure === index + 1,
       uncertain: uncertainMeasures.has(index + 1),
+      selected: selectedMeasure === index + 1,
+      onSelect: onSelectMeasure,
     })));
 }
 
@@ -252,12 +236,18 @@ function PianoKeyboard({ document, activeNotes, full, onFull }) {
         })))));
 }
 
-function Transport({ playing, loop, onPlay, onStop, onLoop, position, duration }) {
+function Transport({ playing, loop, onPlay, onStop, onLoop, position, duration, selectedMeasure, onAskMeasure }) {
   return h("div", { className: "dbfox-music-transport", role: "group", "aria-label": "播放控制" },
     h("button", { type: "button", onClick: onPlay, className: playing ? "is-active" : "", "aria-label": playing ? "暂停" : "播放" }, playing ? "Ⅱ" : "▶"),
     h("button", { type: "button", onClick: onStop, "aria-label": "停止" }, "■"),
     h("button", { type: "button", onClick: onLoop, className: loop ? "is-active" : "", "aria-pressed": loop }, "Loop"),
-    h("span", null, `${formatTime(position)} / ${formatTime(duration)}`));
+    h("span", null, `${formatTime(position)} / ${formatTime(duration)}`),
+    selectedMeasure ? h("button", {
+      type: "button",
+      className: "dbfox-music-transport__ask",
+      onClick: () => onAskMeasure?.(selectedMeasure),
+      title: `就第 ${selectedMeasure} 小节向 DBFox 提问`,
+    }, `💬 小节 ${selectedMeasure}`) : null);
 }
 
 function formatTime(value) {
@@ -273,6 +263,7 @@ function ScoreStudio({ projectId, source }) {
   const [position, setPosition] = React.useState(0);
   const [activeNotes, setActiveNotes] = React.useState([]);
   const [full, setFull] = React.useState(false);
+  const [selectedMeasure, setSelectedMeasure] = React.useState(null);
   const controller = React.useRef(null);
   const loopRef = React.useRef(false);
   React.useEffect(() => {
@@ -322,8 +313,14 @@ function ScoreStudio({ projectId, source }) {
       }),
       position,
       duration,
+      selectedMeasure,
     }),
-    h(ScoreView, { document, currentMeasure }),
+    h(ScoreView, {
+      document,
+      currentMeasure,
+      selectedMeasure,
+      onSelectMeasure: (m) => setSelectedMeasure((prev) => prev === m ? null : m),
+    }),
     h(PianoKeyboard, { document, activeNotes, full, onFull: () => setFull((value) => !value) }));
 }
 
@@ -371,8 +368,7 @@ function AudioStudio({ projectId, source, showToast }) {
       setResult(committed);
       setStatus("ready");
       await loadProject(projectId);
-      await toggleContext({ kind: AUDIO_KIND, id: source.id, version: `${committed.source.fingerprint}:${committed.source.analysis_revision}` });
-      showToast("转录候选已保存，并已加入对话上下文。", "success");
+      showToast("转录候选已保存为新乐谱。", "success");
     } catch (reason) {
       setStatus("error");
       setError(reason instanceof Error ? reason.message : "转录失败。");

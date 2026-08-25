@@ -170,4 +170,51 @@ describe("workspaceStore — Dock shell", () => {
     expect(state.dockTabs.map((tab) => tab.viewKey)).toEqual(["dbfox.data.table:ds-1:users"]);
     expect(state.dock.activeViewKey).toBe("dbfox.data.table:ds-1:users");
   });
+
+  it("isolates Workbench tabs per Conversation and restores them on switch", () => {
+    useWorkspaceStore.getState().setActiveProject("project-1");
+
+    // In Conversation A: open orders and SQL tabs
+    useWorkspaceStore.getState().openConversationCenter("conv-A");
+    useWorkspaceStore.getState().openDockTab({
+      viewKey: "dbfox.data.table:ds-1:orders",
+      viewType: "dbfox.data.table",
+      title: "orders",
+      closeable: true,
+    });
+    useWorkspaceStore.getState().openDockTab({
+      viewKey: "dbfox.data.sql:ds-1",
+      viewType: "dbfox.data.sql-console",
+      title: "SQL Console",
+      closeable: true,
+    });
+    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(2);
+    expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("dbfox.data.sql:ds-1");
+
+    // Switch to Conversation B: starts empty
+    useWorkspaceStore.getState().openConversationCenter("conv-B");
+    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(0);
+    expect(useWorkspaceStore.getState().dock.open).toBe(false);
+
+    // In Conversation B: open Piano Studio tab
+    useWorkspaceStore.getState().openDockTab({
+      viewKey: "dbfox.music:warm-light",
+      viewType: "dbfox.music.piano-studio",
+      title: "Warm Light",
+      closeable: true,
+    });
+    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
+    expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("dbfox.music:warm-light");
+
+    // Switch back to Conversation A: restores orders and SQL tabs with active tab
+    useWorkspaceStore.getState().openConversationCenter("conv-A");
+    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(2);
+    expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("dbfox.data.sql:ds-1");
+    expect(useWorkspaceStore.getState().dock.open).toBe(true);
+
+    // Switch back to Conversation B: restores Warm Light tab
+    useWorkspaceStore.getState().openConversationCenter("conv-B");
+    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
+    expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("dbfox.music:warm-light");
+  });
 });

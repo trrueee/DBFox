@@ -247,24 +247,26 @@ function ConnectionDialog({ projectId }) {
   );
 }
 
+function formatSql(raw) {
+  if (!raw || !raw.trim()) return raw;
+  const keywords = ["SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "LIMIT", "LEFT JOIN", "RIGHT JOIN", "INNER JOIN", "JOIN", "UNION", "VALUES", "SET", "INSERT INTO", "UPDATE", "DELETE FROM"];
+  let formatted = raw.trim();
+  for (const kw of keywords) {
+    const regex = new RegExp(`\\b${kw}\\b`, "gi");
+    formatted = formatted.replace(regex, (match) => `\n${match.toUpperCase()}`);
+  }
+  return formatted.split("\n").map((line) => line.trim()).filter(Boolean).join("\n  ").replace(/^  /, "");
+}
+
 function DatabaseRow({ projectId, database }) {
   useVersion();
   const key = databaseKey(projectId, database.id);
-  const ref = { kind: "dbfox.data.database", id: database.id };
-  const selected = host.contextSelection.isSelected(ref);
   const focused = focusedDatabaseByProject.get(projectId) === database.id;
   const expanded = expandedDatabases.has(key);
   const catalog = catalogByDatabase.get(key);
   const tables = Array.isArray(catalog?.tables) ? catalog.tables : [];
   const loading = catalogLoading.has(key);
   const error = catalogErrors.get(key);
-
-  async function toggleContext(event) {
-    event.stopPropagation();
-    if (selected) await host.contextSelection.remove(ref);
-    else await host.contextSelection.add(ref);
-    emit();
-  }
 
   async function toggleDatabase() {
     focusedDatabaseByProject.set(projectId, database.id);
@@ -315,14 +317,7 @@ function DatabaseRow({ projectId, database }) {
         disabled: loading,
         title: "刷新数据库目录",
         "aria-label": `刷新数据库目录：${database.display_name}`,
-      }, "↻"),
-      React.createElement("button", {
-        type: "button",
-        className: `dbfox-data__context ${selected ? "is-selected" : ""}`,
-        onClick: (event) => void toggleContext(event),
-        title: selected ? "移出对话上下文" : "加入对话上下文",
-        "aria-label": `${selected ? "移出" : "加入"}对话上下文：${database.display_name}`,
-      }, selected ? "✓" : "+")),
+      }, "↻")),
     expanded ? React.createElement("div", { className: "dbfox-data__tables", role: "group" },
       loading ? React.createElement("p", { className: "dbfox-data__status" }, "正在读取目录…") : null,
       error ? React.createElement("p", { className: "dbfox-data__catalog-error", role: "alert" }, "数据库目录暂时不可用。") : null,
@@ -357,32 +352,236 @@ function DatabaseRow({ projectId, database }) {
     ) : null);
 }
 
-function ResultGrid({ columns, rows, emptyLabel = "没有返回数据。" }) {
+function ResultGrid({ columns, rows, emptyLabel = "没有返回数据。", onCellSelect }) {
+  const [selectedCell, setSelectedCell] = React.useState(null);
+  const [sortColumn, setSortColumn] = React.useState(null);
+  const [sortAsc, setSortAsc] = React.useState(true);
+
   if (!Array.isArray(rows) || rows.length === 0) {
     return React.createElement("p", { className: "dbfox-data-result__empty" }, emptyLabel);
   }
+
+  const sortedRows = React.useMemo(() => {
+    if (!sortColumn) return rows;
+    return [...rows].sort((a, b) => {
+      const valA = a?.[sortColumn];
+      const valB = b?.[sortColumn];
+      if (valA === valB) return 0;
+      if (valA == null) return 1;
+      if (valB == null) return -1;
+      const comp = valA < valB ? -1 : 1;
+      return sortAsc ? comp : -comp;
+    });
+  }, [rows, sortColumn, sortAsc]);
+
+  function handleHeaderClick(col) {
+    if (sortColumn === col) {
+      setSortAsc((prev) => !prev);
+    } else {
+      setSortColumn(col);
+      setSortAsc(true);
+    }
+  }
+
   return React.createElement("div", { className: "dbfox-data-result__scroll" },
     React.createElement("table", null,
       React.createElement("thead", null, React.createElement("tr", null,
-        columns.map((column) => React.createElement("th", { key: column }, column)))),
-      React.createElement("tbody", null, rows.map((row, index) => React.createElement("tr", { key: index },
-        columns.map((column) => React.createElement("td", { key: column }, String(row?.[column] ?? ""))))))));
+        React.createElement("th", { className: "dbfox-data-result__row-num" }, "#"),
+        columns.map((column) => React.createElement("th", {
+          key: column,
+          onClick: () => handleHeaderClick(column),
+          className: sortColumn === column ? "is-sorted" : "",
+          title: `按 ${column} ${sortColumn === column && sortAsc ? "降序" : "升序"} 排列`,
+        }, column, sortColumn === column ? (sortAsc ? " ↑" : " ↓") : "")))),
+      React.createElement("tbody", null, sortedRows.map((row, index) => React.createElement("tr", { key: index },
+        React.createElement("td", { className: "dbfox-data-result__row-num" }, index + 1),
+        columns.map((column) => {
+          const isSelected = selectedCell?.row === index && selectedCell?.col === column;
+          const val = row?.[column];
+          const displayVal = val === null ? "NULL" : String(val ?? "");
+          return React.createElement("td", {
+            key: column,
+            className: `${isSelected ? "is-selected" : ""} ${val === null ? "is-null" : ""}`,
+            onClick: () => {
+              setSelectedCell({ row: index, col: column, value: val });
+              onCellSelect?.({ column, value: val, row });
+            },
+          }, displayVal);
+        }))))));
+}
+
+function SqlBlock({
+  block,
+  index,
+  total,
+  projectId,
+  database,
+  sessionId,
+  onUpdate,
+  onExecute,
+  onDelete,
+}) {
+  const textareaRef = React.useRef(null);
+  const lines = (block.sql || "").split("\n");
+  const lineCount = Math.max(lines.length, 1);
+
+  function handleFormat() {
+    const formatted = formatSql(block.sql);
+    onUpdate({ ...block, sql: formatted });
+  }
+
+  function handleExplain() {
+    const statement = (block.sql || "").trim();
+    if (!statement) return;
+    const explainSql = statement.toUpperCase().startsWith("EXPLAIN") ? statement : `EXPLAIN ${statement}`;
+    onUpdate({ ...block, sql: explainSql });
+    onExecute(block.id, explainSql);
+  }
+
+  const columns = Array.isArray(block.result?.columns) ? block.result.columns : [];
+  const rows = Array.isArray(block.result?.rows) ? block.result.rows : [];
+
+  return React.createElement("div", { className: "dbfox-data-block", key: block.id },
+    React.createElement("div", { className: "dbfox-data-block__header" },
+      React.createElement("div", { className: "dbfox-data-block__badge-group" },
+        React.createElement("span", { className: "dbfox-data-block__badge" }, `#${index + 1}`),
+        React.createElement("span", { className: "dbfox-data-block__hint-text" }, "SELECT 查询")),
+      React.createElement("div", { className: "dbfox-data-block__toolbar" },
+        React.createElement("button", {
+          type: "button",
+          className: "dbfox-data-block__btn is-primary",
+          disabled: block.running || !(block.sql || "").trim(),
+          onClick: () => onExecute(block.id),
+          title: "运行此语句 (Ctrl/⌘ + Enter)",
+        }, block.running ? "执行中…" : "▶ 运行"),
+        React.createElement("button", {
+          type: "button",
+          className: "dbfox-data-block__btn",
+          disabled: block.running || !(block.sql || "").trim(),
+          onClick: handleFormat,
+          title: "格式化 SQL",
+        }, "格式化"),
+        React.createElement("button", {
+          type: "button",
+          className: "dbfox-data-block__btn",
+          disabled: block.running || !(block.sql || "").trim(),
+          onClick: handleExplain,
+          title: "分析执行计划",
+        }, "Explain"),
+        total > 1 ? React.createElement("button", {
+          type: "button",
+          className: "dbfox-data-block__btn is-danger",
+          onClick: () => onDelete(block.id),
+          title: "删除此查询块",
+        }, "✕") : null)),
+
+    React.createElement("div", { className: "dbfox-data-block__editor-row" },
+      React.createElement("div", { className: "dbfox-data-block__gutter", "aria-hidden": true },
+        Array.from({ length: lineCount }, (_, i) => React.createElement("span", { key: i + 1 }, i + 1))),
+      React.createElement("textarea", {
+        ref: textareaRef,
+        value: block.sql,
+        rows: Math.max(Math.min(lineCount, 16), 2),
+        spellCheck: false,
+        autoCapitalize: "off",
+        placeholder: "输入只读 SELECT 查询，按 Ctrl/⌘ + Enter 执行…",
+        "aria-label": `查询语句 #${index + 1}`,
+        onChange: (event) => onUpdate({ ...block, sql: event.target.value }),
+        onKeyDown: (event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            event.preventDefault();
+            onExecute(block.id);
+          }
+        },
+      })),
+
+    block.running ? React.createElement("div", { className: "dbfox-data-block__running" },
+      React.createElement("span", { className: "dbfox-data-block__spinner" }),
+      React.createElement("span", null, "正在执行查询…")) : null,
+
+    block.error ? React.createElement("div", { className: "dbfox-data-block__error", role: "alert" },
+      React.createElement("strong", null, "执行失败："),
+      React.createElement("span", null, block.error)) : null,
+
+    block.result ? React.createElement("div", { className: "dbfox-data-block__result" },
+      React.createElement("div", { className: "dbfox-data-block__meta" },
+        React.createElement("div", { className: "dbfox-data-block__meta-left" },
+          React.createElement("strong", null, block.result.status === "blocked" ? "安全拦截" : "查询结果"),
+          block.result.status !== "blocked" && React.createElement("span", null, `${block.result.returned_rows ?? rows.length} / ${block.result.row_count ?? rows.length} 行${block.result.truncated ? " · 已截断" : ""}`),
+          block.execDurationMs !== null && React.createElement("span", null, `耗时 ${block.execDurationMs} ms`)),
+        React.createElement("div", { className: "dbfox-data-block__meta-right" },
+          React.createElement("span", { className: "dbfox-data-block__artifact-badge" }, "已持久化 Artifact"))),
+      block.result.status === "blocked"
+        ? React.createElement("ul", { className: "dbfox-data-block__messages" },
+            (block.result.messages || []).map((message) => React.createElement("li", { key: message }, message)))
+        : React.createElement(ResultGrid, { columns, rows })) : null,
+
+    !block.result && !block.running && !block.error ? React.createElement("div", { className: "dbfox-data-block__empty-hint" },
+      React.createElement("span", null, "按 Ctrl/⌘ + Enter 或点击上方 ▶ 运行，结果将直接展现在下方。")) : null);
 }
 
 function SqlConsoleDock({ view }) {
   const state = sqlStateByKey.get(view.stateKey || "");
-  const [sql, setSql] = React.useState(state?.sql || "");
-  const [result, setResult] = React.useState(state?.result || null);
-  const [running, setRunning] = React.useState(false);
-  const [error, setError] = React.useState("");
+  useVersion();
+
   if (!state) return React.createElement("p", { className: "dbfox-data-table__status" }, "SQL Console 状态不可用。");
 
-  async function execute() {
-    const statement = sql.trim();
-    if (!statement || running) return;
-    state.sql = sql;
-    setRunning(true);
-    setError("");
+  if (!Array.isArray(state.blocks) || state.blocks.length === 0) {
+    state.blocks = [{
+      id: `b-${Date.now()}`,
+      sql: state.sql || "",
+      result: state.result || null,
+      error: "",
+      running: false,
+      execDurationMs: null,
+    }];
+  }
+
+  const [blocks, setBlocks] = React.useState(state.blocks);
+
+  React.useEffect(() => {
+    state.blocks = blocks;
+  }, [blocks, state]);
+
+  function updateBlock(updated) {
+    setBlocks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+  }
+
+  function addBlock() {
+    const newBlock = {
+      id: `b-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      sql: "",
+      result: null,
+      error: "",
+      running: false,
+      execDurationMs: null,
+    };
+    setBlocks((prev) => [...prev, newBlock]);
+  }
+
+  function deleteBlock(id) {
+    setBlocks((prev) => prev.filter((b) => b.id !== id));
+  }
+
+  function clearWhiteboard() {
+    setBlocks([{
+      id: `b-${Date.now()}`,
+      sql: "",
+      result: null,
+      error: "",
+      running: false,
+      execDurationMs: null,
+    }]);
+  }
+
+  async function executeBlock(blockId, targetSql) {
+    const block = blocks.find((b) => b.id === blockId);
+    if (!block) return;
+    const statement = (targetSql || block.sql).trim();
+    if (!statement || block.running) return;
+
+    updateBlock({ ...block, running: true, error: "" });
+    const startTime = Date.now();
     try {
       const value = await host.operations.invoke("console.execute", {
         database_id: state.database.id,
@@ -392,62 +591,79 @@ function SqlConsoleDock({ view }) {
         execution_id: globalThis.crypto?.randomUUID?.() || `console-${Date.now()}`,
       }, { projectId: state.projectId });
       state.sessionId = value.session_id;
-      state.result = value;
-      setResult(value);
+      updateBlock({
+        ...block,
+        sql: targetSql || block.sql,
+        running: false,
+        error: "",
+        result: value,
+        execDurationMs: Date.now() - startTime,
+      });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "SQL 执行失败。");
-    } finally {
-      setRunning(false);
+      updateBlock({
+        ...block,
+        running: false,
+        error: reason instanceof Error ? reason.message : "SQL 执行失败。",
+        result: null,
+        execDurationMs: null,
+      });
     }
   }
 
-  const columns = Array.isArray(result?.columns) ? result.columns : [];
-  const rows = Array.isArray(result?.rows) ? result.rows : [];
+  async function executeAll() {
+    for (const block of blocks) {
+      if ((block.sql || "").trim()) {
+        await executeBlock(block.id);
+      }
+    }
+  }
+
   return React.createElement("section", { className: "dbfox-data-console" },
     React.createElement("header", { className: "dbfox-data-console__header" },
-      React.createElement("div", null,
+      React.createElement("div", { className: "dbfox-data-console__identity" },
+        React.createElement("span", { className: "dbfox-data-console__badge" }, ">_"),
         React.createElement("strong", null, state.database.display_name),
-        React.createElement("small", null, state.database.database_name)),
-      React.createElement("span", null, "只读")),
-    React.createElement("div", { className: "dbfox-data-console__editor" },
-      React.createElement("textarea", {
-        value: sql,
-        spellCheck: false,
-        autoCapitalize: "off",
-        placeholder: "输入只读 SELECT 查询…",
-        "aria-label": "SQL 查询",
-        onChange: (event) => {
-          setSql(event.target.value);
-          state.sql = event.target.value;
-        },
-        onKeyDown: (event) => {
-          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-            event.preventDefault();
-            void execute();
-          }
-        },
-      }),
-      React.createElement("div", { className: "dbfox-data-console__actions" },
-        React.createElement("span", null, "Ctrl/⌘ + Enter"),
+        React.createElement("small", null, state.database.database_name),
+        React.createElement("span", { className: "dbfox-data-console__mode-badge" }, "只读白板")),
+      React.createElement("div", { className: "dbfox-data-console__toolbar" },
         React.createElement("button", {
           type: "button",
-          disabled: running || !sql.trim(),
-          onClick: () => void execute(),
-        }, running ? "正在执行…" : "运行查询"))),
-    error ? React.createElement("p", { className: "dbfox-data-console__error", role: "alert" }, error) : null,
-    result ? React.createElement("div", { className: "dbfox-data-console__result" },
-      React.createElement("div", { className: "dbfox-data-console__result-meta" },
-        React.createElement("strong", null, result.status === "blocked" ? "查询未执行" : "查询结果"),
-        React.createElement("span", null, result.status === "blocked"
-          ? "安全检查未通过"
-          : `${result.returned_rows} / ${result.row_count} 行${result.truncated ? " · 已截断" : ""}`)),
-      result.status === "blocked"
-        ? React.createElement("ul", { className: "dbfox-data-console__messages" },
-            (result.messages || []).map((message) => React.createElement("li", { key: message }, message)))
-        : React.createElement(ResultGrid, { columns, rows }))
-      : React.createElement("div", { className: "dbfox-data-console__placeholder" },
-          React.createElement("strong", null, "运行一个查询"),
-          React.createElement("span", null, "结果会作为耐久 Artifact 保存，并保持当前 Database authority。")));
+          className: "dbfox-data-console__btn is-primary",
+          onClick: addBlock,
+          title: "添加新的查询块到白板",
+        }, "+ 新建查询块"),
+        React.createElement("button", {
+          type: "button",
+          className: "dbfox-data-console__btn",
+          onClick: () => void executeAll(),
+          title: "顺序执行白板上的所有查询",
+        }, "▶ 全部执行"),
+        React.createElement("button", {
+          type: "button",
+          className: "dbfox-data-console__btn",
+          onClick: clearWhiteboard,
+          title: "清空白板",
+        }, "清空白板"))),
+
+    React.createElement("div", { className: "dbfox-data-console__canvas" },
+      blocks.map((block, idx) => React.createElement(SqlBlock, {
+        key: block.id,
+        block,
+        index: idx,
+        total: blocks.length,
+        projectId: state.projectId,
+        database: state.database,
+        sessionId: state.sessionId,
+        onUpdate: updateBlock,
+        onExecute: executeBlock,
+        onDelete: deleteBlock,
+      })),
+      React.createElement("div", { className: "dbfox-data-console__footer-action" },
+        React.createElement("button", {
+          type: "button",
+          className: "dbfox-data-console__add-card-btn",
+          onClick: addBlock,
+        }, "+ 添加新查询块"))));
 }
 
 function CatalogTableDock({ view }) {

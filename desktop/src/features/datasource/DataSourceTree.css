@@ -501,31 +501,6 @@
   min-width: 0;
 }
 
-.ds-tree-context-toggle {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-muted);
-  opacity: 0;
-  cursor: pointer;
-}
-
-.ds-tree-datasource-entry:hover .ds-tree-context-toggle,
-.ds-tree-context-toggle:focus-visible,
-.ds-tree-context-toggle.is-selected {
-  opacity: 1;
-}
-
-.ds-tree-context-toggle:hover,
-.ds-tree-context-toggle.is-selected {
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-  color: var(--color-primary);
-}
 
 .ds-group-chevron {
   margin-right: 4px;

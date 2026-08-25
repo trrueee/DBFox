@@ -2,7 +2,11 @@ import { ArrowUp, Square } from "lucide-react";
 import { useState } from "react";
 import type { RequestedResourceRef } from "../../../lib/api/generated/types.gen";
 import type { ConversationDeliveryMode } from "../../../types/conversation";
-import { ResourceContextPicker } from "../ResourceContextPicker";
+
+export interface ComposerReference {
+  label: string;
+  kind?: string;
+}
 
 export function Composer({
   disabled,
@@ -12,13 +16,8 @@ export function Composer({
   error,
   onSend,
   onCancel,
-  projectId = "",
-  resourceIntents = [],
-  onResourceIntentsChange,
-  updatingResourceIntents = false,
-  resourceIntentError,
-  requestedResources = [],
-  onRequestedResourcesChange,
+  reference,
+  onClearReference,
 }: {
   disabled?: string | null;
   running: boolean;
@@ -31,6 +30,8 @@ export function Composer({
     requestedResources: readonly RequestedResourceRef[],
   ) => Promise<void>;
   onCancel: () => Promise<void>;
+  reference?: ComposerReference | null;
+  onClearReference?: () => void;
   projectId?: string;
   resourceIntents?: readonly RequestedResourceRef[];
   onResourceIntentsChange?: (next: RequestedResourceRef[]) => Promise<void>;
@@ -45,8 +46,9 @@ export function Composer({
     const text = value.trim();
     if (!text || disabled || submitting) return;
     try {
-      await onSend(text, running ? deliveryMode : "queue", requestedResources);
+      await onSend(text, running ? deliveryMode : "queue", []);
       setValue("");
+      onClearReference?.();
     } catch {
       // The mutation exposes a user-facing error; preserve the draft for retry.
     }
@@ -61,6 +63,22 @@ export function Composer({
         }}
       >
         <div className="conv-composer-card">
+          {reference && (
+            <div className="conv-composer-reference" aria-label="当前引用语境">
+              <span className="conv-composer-reference__badge">{reference.kind || "引用"}</span>
+              <span className="conv-composer-reference__label">{reference.label}</span>
+              {onClearReference && (
+                <button
+                  type="button"
+                  className="conv-composer-reference__clear"
+                  onClick={onClearReference}
+                  aria-label="清除引用"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
           <textarea
             aria-label="继续提问"
             value={value}
@@ -76,36 +94,6 @@ export function Composer({
             rows={2}
           />
           <div className="conv-composer-toolbar">
-            {requestedResources.length > 0 && (
-              <div className="resource-context-picker__chips" aria-label="本次消息上下文">
-                {requestedResources.map((ref) => (
-                  <span className="resource-context-chip" key={`${ref.kind}:${ref.id}`}>
-                    <span aria-hidden="true">♪</span>
-                    <span>{ref.kind === "dbfox.music.library" ? "Music Library" : ref.id}</span>
-                    <button
-                      type="button"
-                      onClick={() => onRequestedResourcesChange?.(
-                        requestedResources.filter(
-                          (candidate) => candidate.kind !== ref.kind || candidate.id !== ref.id,
-                        ),
-                      )}
-                      aria-label={`从本次消息移除 ${ref.id}`}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            {projectId && onResourceIntentsChange && (
-              <ResourceContextPicker
-                projectId={projectId}
-                selected={resourceIntents}
-                onChange={onResourceIntentsChange}
-                disabled={updatingResourceIntents}
-                error={resourceIntentError}
-              />
-            )}
             <span className="conv-composer-spacer" aria-hidden="true" />
             {running ? (
               <label className="conv-delivery-control">

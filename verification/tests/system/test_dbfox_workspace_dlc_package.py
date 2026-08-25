@@ -46,7 +46,7 @@ def test_workspace_dlc_source_uses_only_public_extension_boundaries() -> None:
     assert "../../" not in frontend
     assert "fetch(" not in frontend
     assert "host.nativeDialogs.pickFolder" in frontend
-    assert "host.contextSelection.add" in frontend
+    assert "host.dockViews.open" in frontend
     assert "requestedResources" not in frontend
 
 
