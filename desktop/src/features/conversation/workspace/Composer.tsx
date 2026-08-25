@@ -6,6 +6,10 @@ import type { ConversationDeliveryMode } from "../../../types/conversation";
 export interface ComposerReference {
   label: string;
   kind?: string;
+  id?: string;
+  locator?: string;
+  version?: string | number;
+  resourceRef?: RequestedResourceRef;
 }
 
 export function Composer({
@@ -45,8 +49,14 @@ export function Composer({
   const submit = async () => {
     const text = value.trim();
     if (!text || disabled || submitting) return;
+    const resourcesToSend: RequestedResourceRef[] = [];
+    if (reference?.resourceRef) {
+      resourcesToSend.push(reference.resourceRef);
+    } else if (reference?.kind && reference?.id) {
+      resourcesToSend.push({ kind: reference.kind, id: reference.id });
+    }
     try {
-      await onSend(text, running ? deliveryMode : "queue", []);
+      await onSend(text, running ? deliveryMode : "queue", resourcesToSend);
       setValue("");
       onClearReference?.();
     } catch {

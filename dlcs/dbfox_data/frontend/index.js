@@ -357,11 +357,8 @@ function ResultGrid({ columns, rows, emptyLabel = "没有返回数据。", onCel
   const [sortColumn, setSortColumn] = React.useState(null);
   const [sortAsc, setSortAsc] = React.useState(true);
 
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return React.createElement("p", { className: "dbfox-data-result__empty" }, emptyLabel);
-  }
-
   const sortedRows = React.useMemo(() => {
+    if (!Array.isArray(rows) || rows.length === 0) return [];
     if (!sortColumn) return rows;
     return [...rows].sort((a, b) => {
       const valA = a?.[sortColumn];
@@ -373,6 +370,10 @@ function ResultGrid({ columns, rows, emptyLabel = "没有返回数据。", onCel
       return sortAsc ? comp : -comp;
     });
   }, [rows, sortColumn, sortAsc]);
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return React.createElement("p", { className: "dbfox-data-result__empty" }, emptyLabel);
+  }
 
   function handleHeaderClick(col) {
     if (sortColumn === col) {
@@ -425,11 +426,6 @@ function SqlBlock({
   const lines = (block.sql || "").split("\n");
   const lineCount = Math.max(lines.length, 1);
 
-  function handleFormat() {
-    const formatted = formatSql(block.sql);
-    onUpdate({ ...block, sql: formatted });
-  }
-
   function handleExplain() {
     const statement = (block.sql || "").trim();
     if (!statement) return;
@@ -444,8 +440,8 @@ function SqlBlock({
   return React.createElement("div", { className: "dbfox-data-block", key: block.id },
     React.createElement("div", { className: "dbfox-data-block__header" },
       React.createElement("div", { className: "dbfox-data-block__badge-group" },
-        React.createElement("span", { className: "dbfox-data-block__badge" }, `#${index + 1}`),
-        React.createElement("span", { className: "dbfox-data-block__hint-text" }, "SELECT 查询")),
+        React.createElement("span", { className: "dbfox-data-block__badge" }, `SQL #${index + 1}`),
+        React.createElement("span", { className: "dbfox-data-block__hint-text" }, "查询语句")),
       React.createElement("div", { className: "dbfox-data-block__toolbar" },
         React.createElement("button", {
           type: "button",
@@ -458,21 +454,14 @@ function SqlBlock({
           type: "button",
           className: "dbfox-data-block__btn",
           disabled: block.running || !(block.sql || "").trim(),
-          onClick: handleFormat,
-          title: "格式化 SQL",
-        }, "格式化"),
-        React.createElement("button", {
-          type: "button",
-          className: "dbfox-data-block__btn",
-          disabled: block.running || !(block.sql || "").trim(),
           onClick: handleExplain,
-          title: "分析执行计划",
+          title: "分析执行计划 (EXPLAIN)",
         }, "Explain"),
         total > 1 ? React.createElement("button", {
           type: "button",
           className: "dbfox-data-block__btn is-danger",
           onClick: () => onDelete(block.id),
-          title: "删除此查询块",
+          title: "移除此查询",
         }, "✕") : null)),
 
     React.createElement("div", { className: "dbfox-data-block__editor-row" },
@@ -484,7 +473,7 @@ function SqlBlock({
         rows: Math.max(Math.min(lineCount, 16), 2),
         spellCheck: false,
         autoCapitalize: "off",
-        placeholder: "输入只读 SELECT 查询，按 Ctrl/⌘ + Enter 执行…",
+        placeholder: "输入只读 SELECT 查询，按 Ctrl/⌘ + Enter 运行…",
         "aria-label": `查询语句 #${index + 1}`,
         onChange: (event) => onUpdate({ ...block, sql: event.target.value }),
         onKeyDown: (event) => {
@@ -517,14 +506,14 @@ function SqlBlock({
         : React.createElement(ResultGrid, { columns, rows })) : null,
 
     !block.result && !block.running && !block.error ? React.createElement("div", { className: "dbfox-data-block__empty-hint" },
-      React.createElement("span", null, "按 Ctrl/⌘ + Enter 或点击上方 ▶ 运行，结果将直接展现在下方。")) : null);
+      React.createElement("span", null, "按 Ctrl/⌘ + Enter 或点击上方 ▶ 运行，查询结果将直接呈现在下方。")) : null);
 }
 
 function SqlConsoleDock({ view }) {
   const state = sqlStateByKey.get(view.stateKey || "");
   useVersion();
 
-  if (!state) return React.createElement("p", { className: "dbfox-data-table__status" }, "SQL Console 状态不可用。");
+  if (!state) return React.createElement("p", { className: "dbfox-data-table__status" }, "SQL 控制台状态不可用。");
 
   if (!Array.isArray(state.blocks) || state.blocks.length === 0) {
     state.blocks = [{
@@ -563,7 +552,7 @@ function SqlConsoleDock({ view }) {
     setBlocks((prev) => prev.filter((b) => b.id !== id));
   }
 
-  function clearWhiteboard() {
+  function clearConsole() {
     setBlocks([{
       id: `b-${Date.now()}`,
       sql: "",
@@ -624,26 +613,26 @@ function SqlConsoleDock({ view }) {
         React.createElement("span", { className: "dbfox-data-console__badge" }, ">_"),
         React.createElement("strong", null, state.database.display_name),
         React.createElement("small", null, state.database.database_name),
-        React.createElement("span", { className: "dbfox-data-console__mode-badge" }, "只读白板")),
+        React.createElement("span", { className: "dbfox-data-console__mode-badge" }, "SQL 控制台")),
       React.createElement("div", { className: "dbfox-data-console__toolbar" },
         React.createElement("button", {
           type: "button",
           className: "dbfox-data-console__btn is-primary",
           onClick: addBlock,
-          title: "添加新的查询块到白板",
-        }, "+ 新建查询块"),
+          title: "新建查询 (Append Query Entry)",
+        }, "+ 新建查询"),
         React.createElement("button", {
           type: "button",
           className: "dbfox-data-console__btn",
           onClick: () => void executeAll(),
-          title: "顺序执行白板上的所有查询",
-        }, "▶ 全部执行"),
+          title: "顺序执行控制台中的所有查询",
+        }, "▶ 全部运行"),
         React.createElement("button", {
           type: "button",
           className: "dbfox-data-console__btn",
-          onClick: clearWhiteboard,
-          title: "清空白板",
-        }, "清空白板"))),
+          onClick: clearConsole,
+          title: "清空控制台记录",
+        }, "清空控制台"))),
 
     React.createElement("div", { className: "dbfox-data-console__canvas" },
       blocks.map((block, idx) => React.createElement(SqlBlock, {
@@ -663,7 +652,7 @@ function SqlConsoleDock({ view }) {
           type: "button",
           className: "dbfox-data-console__add-card-btn",
           onClick: addBlock,
-        }, "+ 添加新查询块"))));
+        }, "+ 添加新查询"))));
 }
 
 function CatalogTableDock({ view }) {

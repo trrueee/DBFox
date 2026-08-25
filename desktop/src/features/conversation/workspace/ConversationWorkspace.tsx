@@ -122,8 +122,8 @@ export function ConversationWorkspace({
         submitting={sending}
         cancelling={cancelling}
         error={sendError || streamError}
-        onSend={async (text, mode) => {
-          await sendMessage(conversationId, text, mode, []);
+        onSend={async (text, mode, requestedResources) => {
+          await sendMessage(conversationId, text, mode, requestedResources);
         }}
         onCancel={() => runningRun ? cancelRun(runningRun.id) : Promise.resolve()}
       />

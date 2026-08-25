@@ -34,7 +34,10 @@ from engine.errors import DBFoxError
 from engine.json_codec import loads as json_loads
 from engine.llm.config import LlmConfigurationError, normalize_product_llm_preferences
 from engine.models import AgentRun, AgentRunItemRecord, AgentSession, Project
-from engine.runtime_composition import authorize_project_resources
+from engine.runtime_composition import (
+    authorize_project_resources,
+    discover_project_resources,
+)
 from engine.schemas.api_responses import (
     ArtifactSelectionResponse,
     ConversationDeleteResponse,

@@ -59,14 +59,14 @@ export type WorkspaceStore = WorkspaceState & WorkspaceActions;
 function getActiveConversationKey(state: WorkspaceState, conversationIdOverride?: string): string {
   if (conversationIdOverride) return conversationIdOverride;
   const projectId = state.activeProjectId;
-  if (!projectId) return "__default__";
+  if (!projectId) return "draft:default";
   const convId = state.projectShell[projectId]?.activeConversationId;
   if (convId) return convId;
   const surface = state.mainSurfaceByProject[projectId];
   if (surface && surface.kind === "conversation" && surface.conversationId) {
     return surface.conversationId;
   }
-  return `project:${projectId}`;
+  return `draft:${projectId}`;
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
@@ -86,7 +86,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   setActiveProject: (projectId) =>
     set((state) => {
       const storedConvId = state.projectShell[projectId]?.activeConversationId;
-      const targetKey = storedConvId || (projectId ? `project:${projectId}` : "__default__");
+      const targetKey = storedConvId || (projectId ? `draft:${projectId}` : "draft:default");
       const currentWorkbench = state.workbenchByConversation[targetKey];
       return {
         activeProjectId: projectId,
@@ -104,13 +104,22 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
           activeConversationId: conversationId,
         },
       };
+      const draftKey = `draft:${projectId}`;
+      const draftWorkbench = state.workbenchByConversation[draftKey];
+      const existingWorkbench = state.workbenchByConversation[conversationId];
+      const currentWorkbench = existingWorkbench ?? draftWorkbench;
+
+      const nextWorkbenchByConversation = { ...state.workbenchByConversation };
+      if (!existingWorkbench && draftWorkbench) {
+        nextWorkbenchByConversation[conversationId] = draftWorkbench;
+        delete nextWorkbenchByConversation[draftKey];
+      }
+
       const isCurrentProject = state.activeProjectId === projectId;
-      const currentWorkbench = isCurrentProject && conversationId
-        ? state.workbenchByConversation[conversationId]
-        : undefined;
 
       return {
         projectShell: nextProjectShell,
+        workbenchByConversation: nextWorkbenchByConversation,
         ...(isCurrentProject
           ? {
               dock: currentWorkbench

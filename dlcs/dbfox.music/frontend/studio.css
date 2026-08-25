@@ -103,11 +103,15 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
   background: var(--surface-primary);
+  container-type: inline-size;
 }
 
 .dbfox-music-studio__header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -129,6 +133,9 @@
 }
 
 .dbfox-music-transport {
+  position: sticky;
+  top: 38px;
+  z-index: 9;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -137,6 +144,7 @@
   padding: 4px 12px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-primary);
 }
 
 .dbfox-music-transport button,
@@ -180,16 +188,15 @@
 }
 
 .dbfox-music-score {
-  flex: 1 1 auto;
+  flex: none;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 8px;
   min-width: 0;
-  min-height: 120px;
+  min-height: min-content;
   padding: 12px;
-  overflow-y: auto;
+  overflow: visible;
   background: color-mix(in srgb, var(--surface-primary) 92%, var(--warning-soft));
-  scrollbar-gutter: stable;
 }
 
 .dbfox-music-measure {
@@ -474,8 +481,8 @@
   background: var(--accent-soft);
 }
 
-@media (max-width: 720px) {
-  .dbfox-music-score { grid-template-columns: minmax(250px, 1fr); }
+@container (max-width: 520px) {
+  .dbfox-music-score { grid-template-columns: minmax(200px, 1fr); }
   .dbfox-music-studio__header { align-items: flex-start; flex-direction: column; gap: 2px; }
   .dbfox-music-artifact { grid-template-columns: 30px minmax(0, 1fr); }
   .dbfox-music-artifact button { grid-column: 2; justify-self: start; }

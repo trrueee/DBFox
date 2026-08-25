@@ -217,4 +217,27 @@ describe("workspaceStore — Dock shell", () => {
     expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
     expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("dbfox.music:warm-light");
   });
+
+  it("migrates draft workbench tabs to the new conversation upon creation", () => {
+    useWorkspaceStore.getState().setActiveProject("project-1");
+    useWorkspaceStore.getState().showSmartQueryHome("New draft");
+
+    // Open a tab while on draft screen
+    useWorkspaceStore.getState().openDockTab({
+      viewKey: "dbfox.data.sql:ds-draft",
+      viewType: "dbfox.data.sql-console",
+      title: "SQL Console Draft",
+      closeable: true,
+    });
+    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
+
+    // New conversation is created
+    useWorkspaceStore.getState().setProjectActiveConversation("project-1", "conv-new");
+    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
+    expect(useWorkspaceStore.getState().dockTabs[0].viewKey).toBe("dbfox.data.sql:ds-draft");
+
+    // And workbenchByConversation for draft is transferred to conv-new
+    expect(useWorkspaceStore.getState().workbenchByConversation["conv-new"]?.tabs).toHaveLength(1);
+    expect(useWorkspaceStore.getState().workbenchByConversation["draft:project-1"]).toBeUndefined();
+  });
 });

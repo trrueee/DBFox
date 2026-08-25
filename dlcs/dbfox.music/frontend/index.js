@@ -255,7 +255,7 @@ function formatTime(value) {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
-function ScoreStudio({ projectId, source }) {
+function ScoreStudio({ projectId, source, context }) {
   const [result, setResult] = React.useState(null);
   const [error, setError] = React.useState("");
   const [playing, setPlaying] = React.useState(false);
@@ -298,6 +298,18 @@ function ScoreStudio({ projectId, source }) {
     } while (loopRef.current);
     if (!control.signal.aborted) stop();
   }
+
+  function handleAskMeasure(m) {
+    if (!m) return;
+    context?.onAsk?.({
+      label: `${document.title || "乐谱"} · 第 ${m} 小节`,
+      kind: "dbfox.music.score",
+      id: result.revision.score_id,
+      locator: `measure:${m}`,
+      resourceRef: { kind: SCORE_KIND, id: result.revision.score_id },
+    });
+  }
+
   return h("article", { className: "dbfox-music-studio" },
     h("header", { className: "dbfox-music-studio__header" },
       h("strong", null, document.title),
@@ -314,6 +326,7 @@ function ScoreStudio({ projectId, source }) {
       position,
       duration,
       selectedMeasure,
+      onAskMeasure: handleAskMeasure,
     }),
     h(ScoreView, {
       document,
@@ -429,19 +442,24 @@ function AudioStudio({ projectId, source, showToast }) {
 }
 
 function EmptyStudio({ projectId }) {
-  return h("div", { className: "dbfox-music-start" }, h("span", { "aria-hidden": true }, "♪"), h("h2", null, "Start with an idea"), h("p", null, "在 Conversation 输入："), h("blockquote", null, "“写一段安静、缓慢、带夜晚感的钢琴曲”"), h("button", { type: "button", onClick: () => void toggleContext({ kind: LIBRARY_KIND, id: projectId, version: "1" }) }, "将 Music Library 加入对话"));
+  return h("div", { className: "dbfox-music-start" },
+    h("span", { "aria-hidden": true }, "♪"),
+    h("h2", null, "Start with an idea"),
+    h("p", null, "在对话中直接告诉 Agent 创作意图："),
+    h("blockquote", null, "“写一段安静、缓慢、带夜晚感的钢琴曲”"),
+    h("p", { className: "dbfox-music-start__hint" }, "Agent 将自动调用 Music 能力创作新乐谱并在当前工作区打开。"));
 }
 
 function PianoStudioDock({ view, context }) {
   const state = studioState.get(view.stateKey || "");
   const projectId = view.projectId || context.activeProjectId;
   if (!state) {
-    if (view.target?.kind === SCORE_KIND) return h(ScoreStudio, { projectId, source: { id: view.target.id, revision: view.target.version } });
-    if (view.target?.kind === AUDIO_KIND) return h(AudioStudio, { projectId, source: { id: view.target.id, name: view.title, duration_seconds: 1 }, showToast: context.showToast });
+    if (view.target?.kind === SCORE_KIND) return h(ScoreStudio, { projectId, source: { id: view.target.id, revision: view.target.version }, context });
+    if (view.target?.kind === AUDIO_KIND) return h(AudioStudio, { projectId, source: { id: view.target.id, name: view.title, duration_seconds: 1 }, showToast: context.showToast, context });
     return h(EmptyStudio, { projectId });
   }
-  if (state.kind === "score") return h(ScoreStudio, { projectId, source: state.value });
-  if (state.kind === "audio") return h(AudioStudio, { projectId, source: state.value, showToast: context.showToast });
+  if (state.kind === "score") return h(ScoreStudio, { projectId, source: state.value, context });
+  if (state.kind === "audio") return h(AudioStudio, { projectId, source: state.value, showToast: context.showToast, context });
   return h(EmptyStudio, { projectId });
 }
 
