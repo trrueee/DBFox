@@ -5,6 +5,10 @@ import { ApprovalCard } from "./ApprovalCard";
 import { ConversationHeader } from "./ConversationHeader";
 import { MessageList } from "./MessageList";
 import { useConversationViewModel } from "./useConversationViewModel";
+import {
+  selectActiveWorkbenchReference,
+  useWorkspaceStore,
+} from "../../../stores/workspaceStore";
 import "./conversationWorkspace.css";
 
 export function ConversationWorkspace({
@@ -38,6 +42,8 @@ export function ConversationWorkspace({
     loadRunArtifacts,
   } = useConversationViewModel(conversationId);
   const [contentScrolled, setContentScrolled] = useState(false);
+  const reference = useWorkspaceStore(selectActiveWorkbenchReference);
+  const setWorkbenchReference = useWorkspaceStore((state) => state.setWorkbenchReference);
 
   useEffect(() => {
     if (!detail && conversationId) void openConversation(conversationId);
@@ -122,8 +128,16 @@ export function ConversationWorkspace({
         submitting={sending}
         cancelling={cancelling}
         error={sendError || streamError}
-        onSend={async (text, mode, requestedResources) => {
-          await sendMessage(conversationId, text, mode, requestedResources);
+        reference={reference}
+        onClearReference={() => setWorkbenchReference(null)}
+        onSend={async (text, mode, requestedResources, references) => {
+          await sendMessage(
+            conversationId,
+            text,
+            mode,
+            requestedResources,
+            references,
+          );
         }}
         onCancel={() => runningRun ? cancelRun(runningRun.id) : Promise.resolve()}
       />

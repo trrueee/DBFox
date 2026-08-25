@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { WorkbenchReference } from "../../../sdk/frontend/index";
 import type {
   MainSurfaceRef,
   WorkspaceCenterMode,
@@ -11,9 +12,11 @@ export interface ProjectShellState {
 }
 
 export interface ConversationWorkbenchState {
+  scopeId: string;
   open: boolean;
   activeViewKey: string | null;
   tabs: WorkspaceDockTab[];
+  reference: WorkbenchReference | null;
 }
 
 interface WorkspaceState {
@@ -24,8 +27,6 @@ interface WorkspaceState {
   centerMode: WorkspaceCenterMode;
   centerReturnMode: WorkspaceCenterMode;
   pendingAsk: string | null;
-  dock: { open: boolean; activeViewKey: string | null };
-  dockTabs: WorkspaceDockTab[];
   settingsOpen: boolean;
   settingsSection: AppSettingsSection;
   projectCreateOpen: boolean;
@@ -52,21 +53,82 @@ interface WorkspaceActions {
     viewKey: string,
     patch: Partial<Omit<WorkspaceDockTab, "viewKey" | "viewType">>,
   ) => void;
+  setWorkbenchReference: (reference: WorkbenchReference | null) => void;
+  ensureActiveWorkbenchScope: () => string;
 }
 
 export type WorkspaceStore = WorkspaceState & WorkspaceActions;
 
-function getActiveConversationKey(state: WorkspaceState, conversationIdOverride?: string): string {
+let workbenchScopeSequence = 0;
+
+function createWorkbenchScopeId(): string {
+  const randomUuid = globalThis.crypto?.randomUUID;
+  if (typeof randomUuid === "function") return randomUuid.call(globalThis.crypto);
+  workbenchScopeSequence += 1;
+  return `workbench-${workbenchScopeSequence}`;
+}
+
+function createWorkbench(): ConversationWorkbenchState {
+  return {
+    scopeId: createWorkbenchScopeId(),
+    open: false,
+    activeViewKey: null,
+    tabs: [],
+    reference: null,
+  };
+}
+
+const EMPTY_WORKBENCH: ConversationWorkbenchState = Object.freeze({
+  scopeId: "workbench-empty",
+  open: false,
+  activeViewKey: null,
+  tabs: Object.freeze([]) as unknown as WorkspaceDockTab[],
+  reference: null,
+});
+
+export function getActiveWorkbenchKey(
+  state: Pick<WorkspaceState, "activeProjectId" | "projectShell" | "mainSurfaceByProject">,
+  conversationIdOverride?: string,
+): string {
   if (conversationIdOverride) return conversationIdOverride;
   const projectId = state.activeProjectId;
   if (!projectId) return "draft:default";
-  const convId = state.projectShell[projectId]?.activeConversationId;
-  if (convId) return convId;
   const surface = state.mainSurfaceByProject[projectId];
-  if (surface && surface.kind === "conversation" && surface.conversationId) {
+  if (surface?.kind === "new-conversation") return `draft:${projectId}`;
+  if (surface?.kind === "conversation" && surface.conversationId) {
     return surface.conversationId;
   }
-  return `draft:${projectId}`;
+  return state.projectShell[projectId]?.activeConversationId ?? `draft:${projectId}`;
+}
+
+export function selectActiveWorkbench(state: WorkspaceStore): ConversationWorkbenchState {
+  return state.workbenchByConversation[getActiveWorkbenchKey(state)] ?? EMPTY_WORKBENCH;
+}
+
+export const selectActiveDockOpen = (state: WorkspaceStore): boolean =>
+  selectActiveWorkbench(state).open;
+export const selectActiveDockViewKey = (state: WorkspaceStore): string | null =>
+  selectActiveWorkbench(state).activeViewKey;
+export const selectActiveDockTabs = (state: WorkspaceStore): WorkspaceDockTab[] =>
+  selectActiveWorkbench(state).tabs;
+export const selectActiveWorkbenchScopeId = (state: WorkspaceStore): string =>
+  selectActiveWorkbench(state).scopeId;
+export const selectActiveWorkbenchReference = (
+  state: WorkspaceStore,
+): WorkbenchReference | null => selectActiveWorkbench(state).reference;
+
+function updateActiveWorkbench(
+  state: WorkspaceState,
+  update: (workbench: ConversationWorkbenchState) => ConversationWorkbenchState,
+): Pick<WorkspaceState, "workbenchByConversation"> {
+  const key = getActiveWorkbenchKey(state);
+  const current = state.workbenchByConversation[key] ?? createWorkbench();
+  return {
+    workbenchByConversation: {
+      ...state.workbenchByConversation,
+      [key]: update(current),
+    },
+  };
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
@@ -77,219 +139,142 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   centerMode: "home",
   centerReturnMode: "home",
   pendingAsk: null,
-  dock: { open: false, activeViewKey: null },
-  dockTabs: [],
   settingsOpen: false,
   settingsSection: "appearance",
   projectCreateOpen: false,
 
-  setActiveProject: (projectId) =>
-    set((state) => {
-      const storedConvId = state.projectShell[projectId]?.activeConversationId;
-      const targetKey = storedConvId || (projectId ? `draft:${projectId}` : "draft:default");
-      const currentWorkbench = state.workbenchByConversation[targetKey];
-      return {
-        activeProjectId: projectId,
-        dock: currentWorkbench ? { open: currentWorkbench.open, activeViewKey: currentWorkbench.activeViewKey } : { open: false, activeViewKey: null },
-        dockTabs: currentWorkbench ? currentWorkbench.tabs : [],
-      };
-    }),
+  setActiveProject: (activeProjectId) => set({ activeProjectId }),
 
   setProjectActiveConversation: (projectId, conversationId) =>
     set((state) => {
-      const nextProjectShell = {
-        ...state.projectShell,
-        [projectId]: {
-          ...(state.projectShell[projectId] ?? {}),
-          activeConversationId: conversationId,
-        },
-      };
       const draftKey = `draft:${projectId}`;
-      const draftWorkbench = state.workbenchByConversation[draftKey];
-      const existingWorkbench = state.workbenchByConversation[conversationId];
-      const currentWorkbench = existingWorkbench ?? draftWorkbench;
-
-      const nextWorkbenchByConversation = { ...state.workbenchByConversation };
-      if (!existingWorkbench && draftWorkbench) {
-        nextWorkbenchByConversation[conversationId] = draftWorkbench;
-        delete nextWorkbenchByConversation[draftKey];
+      const nextWorkbenches = { ...state.workbenchByConversation };
+      if (!nextWorkbenches[conversationId] && nextWorkbenches[draftKey]) {
+        // The stable scope ID lets capability-owned state follow the draft
+        // into the durable Conversation without copying domain state.
+        nextWorkbenches[conversationId] = nextWorkbenches[draftKey];
+        delete nextWorkbenches[draftKey];
       }
-
-      const isCurrentProject = state.activeProjectId === projectId;
-
       return {
-        projectShell: nextProjectShell,
-        workbenchByConversation: nextWorkbenchByConversation,
-        ...(isCurrentProject
-          ? {
-              dock: currentWorkbench
-                ? { open: currentWorkbench.open, activeViewKey: currentWorkbench.activeViewKey }
-                : { open: false, activeViewKey: null },
-              dockTabs: currentWorkbench ? currentWorkbench.tabs : [],
-            }
-          : {}),
+        projectShell: {
+          ...state.projectShell,
+          [projectId]: {
+            ...(state.projectShell[projectId] ?? {}),
+            activeConversationId: conversationId,
+          },
+        },
+        workbenchByConversation: nextWorkbenches,
       };
     }),
 
   setProjectMainSurface: (projectId, surface) =>
     set((state) => ({
-      mainSurfaceByProject: {
-        ...state.mainSurfaceByProject,
-        [projectId]: surface,
-      },
+      mainSurfaceByProject: { ...state.mainSurfaceByProject, [projectId]: surface },
     })),
 
-  openSettings: (section = "appearance") =>
-    set({ settingsOpen: true, settingsSection: section }),
-
+  openSettings: (settingsSection = "appearance") =>
+    set({ settingsOpen: true, settingsSection }),
   closeSettings: () => set({ settingsOpen: false }),
-
   setSettingsSection: (settingsSection) => set({ settingsSection }),
 
   setDockOpen: (open) =>
-    set((state) => {
-      const key = getActiveConversationKey(state);
-      const prevWorkbench = state.workbenchByConversation[key] ?? {
-        open: state.dock.open,
-        activeViewKey: state.dock.activeViewKey,
-        tabs: state.dockTabs,
-      };
-      const updatedWorkbench: ConversationWorkbenchState = {
-        ...prevWorkbench,
-        open,
-      };
-      return {
-        dock: { ...state.dock, open },
-        workbenchByConversation: {
-          ...state.workbenchByConversation,
-          [key]: updatedWorkbench,
-        },
-      };
-    }),
+    set((state) => updateActiveWorkbench(state, (workbench) => ({ ...workbench, open }))),
 
-  setDockActiveTab: (viewKey) =>
-    set((state) => {
-      const key = getActiveConversationKey(state);
-      const prevWorkbench = state.workbenchByConversation[key] ?? {
-        open: state.dock.open,
-        activeViewKey: state.dock.activeViewKey,
-        tabs: state.dockTabs,
-      };
-      const updatedWorkbench: ConversationWorkbenchState = {
-        ...prevWorkbench,
+  setDockActiveTab: (activeViewKey) =>
+    set((state) => ({
+      ...updateActiveWorkbench(state, (workbench) => ({
+        ...workbench,
         open: true,
-        activeViewKey: viewKey,
-      };
-      return {
-        dock: { ...state.dock, open: true, activeViewKey: viewKey },
-        workbenchByConversation: {
-          ...state.workbenchByConversation,
-          [key]: updatedWorkbench,
-        },
-        settingsOpen: false,
-      };
-    }),
+        activeViewKey,
+      })),
+      settingsOpen: false,
+    })),
 
-  closeDockTab: (viewKey) => {
-    const state = get();
-    const key = getActiveConversationKey(state);
-    const { dock, dockTabs } = state;
-    const nextTabs = dockTabs.filter((tab) => tab.viewKey !== viewKey);
-    const currentActiveKey = dock.activeViewKey;
-    const activeIndex = dockTabs.findIndex((tab) => tab.viewKey === currentActiveKey);
-    const nextActiveKey =
-      activeIndex >= 0 && dockTabs[activeIndex]?.viewKey === viewKey
-        ? (nextTabs[Math.min(activeIndex, nextTabs.length - 1)]?.viewKey ?? null)
-        : currentActiveKey;
-    const updatedWorkbench: ConversationWorkbenchState = {
-      open: dock.open,
-      activeViewKey: nextActiveKey,
-      tabs: nextTabs,
-    };
-    set({
-      dockTabs: nextTabs,
-      dock: { open: dock.open, activeViewKey: nextActiveKey },
-      workbenchByConversation: {
-        ...state.workbenchByConversation,
-        [key]: updatedWorkbench,
-      },
-    });
-  },
+  closeDockTab: (viewKey) =>
+    set((state) => updateActiveWorkbench(state, (workbench) => {
+      const tabs = workbench.tabs.filter((tab) => tab.viewKey !== viewKey);
+      const activeIndex = workbench.tabs.findIndex(
+        (tab) => tab.viewKey === workbench.activeViewKey,
+      );
+      const activeViewKey = workbench.activeViewKey === viewKey
+        ? (tabs[Math.min(Math.max(activeIndex, 0), tabs.length - 1)]?.viewKey ?? null)
+        : workbench.activeViewKey;
+      return { ...workbench, tabs, activeViewKey };
+    })),
 
   openDockTab: (tab, activate = true) =>
-    set((state) => {
-      const existing = state.dockTabs.find((item) => item.viewKey === tab.viewKey);
-      if (existing && existing.viewType !== tab.viewType) {
-        throw new Error(
-          `Cannot open tab with viewKey "${tab.viewKey}" and viewType "${tab.viewType}": already registered with viewType "${existing.viewType}".`,
-        );
-      }
-      const nextActiveKey = activate ? tab.viewKey : state.dock.activeViewKey;
-      const nextTabs = existing
-        ? state.dockTabs.map((item) =>
-            item.viewKey === tab.viewKey ? { ...item, ...tab } : item,
-          )
-        : [...state.dockTabs, tab];
-      const nextDock = {
-        open: activate ? true : state.dock.open,
-        activeViewKey: nextActiveKey,
-      };
-      const key = getActiveConversationKey(state);
-      const updatedWorkbench: ConversationWorkbenchState = {
-        open: nextDock.open,
-        activeViewKey: nextDock.activeViewKey,
-        tabs: nextTabs,
-      };
-
-      return {
-        dock: nextDock,
-        dockTabs: nextTabs,
-        workbenchByConversation: {
-          ...state.workbenchByConversation,
-          [key]: updatedWorkbench,
-        },
-        settingsOpen: false,
-      };
-    }),
+    set((state) => ({
+      ...updateActiveWorkbench(state, (workbench) => {
+        const existing = workbench.tabs.find((item) => item.viewKey === tab.viewKey);
+        if (existing && existing.viewType !== tab.viewType) {
+          throw new Error(
+            `Cannot open tab with viewKey "${tab.viewKey}" and viewType "${tab.viewType}": already registered with viewType "${existing.viewType}".`,
+          );
+        }
+        const tabs = existing
+          ? workbench.tabs.map((item) => item.viewKey === tab.viewKey ? { ...item, ...tab } : item)
+          : [...workbench.tabs, tab];
+        return {
+          ...workbench,
+          tabs,
+          open: activate ? true : workbench.open,
+          activeViewKey: activate ? tab.viewKey : workbench.activeViewKey,
+        };
+      }),
+      settingsOpen: false,
+    })),
 
   updateDockTab: (viewKey, patch) =>
-    set((state) => {
+    set((state) => updateActiveWorkbench(state, (workbench) => {
       const safePatch = { ...patch };
       delete (safePatch as Record<string, unknown>).viewKey;
       delete (safePatch as Record<string, unknown>).viewType;
-      const nextTabs = state.dockTabs.map((tab) =>
-        tab.viewKey === viewKey ? { ...tab, ...safePatch } : tab,
-      );
-      const key = getActiveConversationKey(state);
-      const prevWorkbench = state.workbenchByConversation[key] ?? {
-        open: state.dock.open,
-        activeViewKey: state.dock.activeViewKey,
-        tabs: state.dockTabs,
-      };
       return {
-        dockTabs: nextTabs,
-        workbenchByConversation: {
-          ...state.workbenchByConversation,
-          [key]: {
-            ...prevWorkbench,
-            tabs: nextTabs,
-          },
-        },
+        ...workbench,
+        tabs: workbench.tabs.map((tab) =>
+          tab.viewKey === viewKey ? { ...tab, ...safePatch } : tab,
+        ),
       };
-    }),
+    })),
+
+  setWorkbenchReference: (reference) =>
+    set((state) => updateActiveWorkbench(state, (workbench) => ({
+      ...workbench,
+      reference,
+    }))),
+
+  ensureActiveWorkbenchScope: () => {
+    const state = get();
+    const key = getActiveWorkbenchKey(state);
+    const existing = state.workbenchByConversation[key];
+    if (existing) return existing.scopeId;
+    const created = createWorkbench();
+    set({
+      workbenchByConversation: {
+        ...state.workbenchByConversation,
+        [key]: created,
+      },
+    });
+    return created.scopeId;
+  },
 
   showSmartQueryHome: (initialAsk) =>
     set((state) => {
       const projectId = state.activeProjectId;
-      const homeKey = projectId ? `project:${projectId}` : "__default__";
-      const homeWorkbench = state.workbenchByConversation[homeKey];
       return {
         centerMode: "home",
         centerReturnMode: "home",
         pendingAsk: initialAsk ?? null,
         settingsOpen: false,
-        dock: homeWorkbench ? { open: homeWorkbench.open, activeViewKey: homeWorkbench.activeViewKey } : { open: false, activeViewKey: null },
-        dockTabs: homeWorkbench ? homeWorkbench.tabs : [],
+        projectShell: projectId
+          ? {
+              ...state.projectShell,
+              [projectId]: {
+                ...(state.projectShell[projectId] ?? {}),
+                activeConversationId: undefined,
+              },
+            }
+          : state.projectShell,
         mainSurfaceByProject: projectId
           ? {
               ...state.mainSurfaceByProject,
@@ -302,50 +287,38 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   openConversationCenter: (conversationId) =>
     set((state) => {
       const projectId = state.activeProjectId;
-      const targetConvId = conversationId || (projectId ? state.projectShell[projectId]?.activeConversationId : undefined);
-      const targetKey = targetConvId || (projectId ? `project:${projectId}` : "__default__");
-      const targetWorkbench = state.workbenchByConversation[targetKey];
-
+      const targetConversationId = conversationId
+        ?? (projectId ? state.projectShell[projectId]?.activeConversationId : undefined);
       return {
         centerMode: "conversation",
         centerReturnMode: "conversation",
         settingsOpen: false,
-        dock: targetWorkbench ? { open: targetWorkbench.open, activeViewKey: targetWorkbench.activeViewKey } : { open: false, activeViewKey: null },
-        dockTabs: targetWorkbench ? targetWorkbench.tabs : [],
         mainSurfaceByProject: projectId
           ? {
               ...state.mainSurfaceByProject,
-              [projectId]: {
-                kind: "conversation",
-                conversationId: conversationId || undefined,
-              },
+              [projectId]: targetConversationId
+                ? { kind: "conversation", conversationId: targetConversationId }
+                : { kind: "new-conversation" },
             }
           : state.mainSurfaceByProject,
-        projectShell: projectId && conversationId
+        projectShell: projectId && targetConversationId
           ? {
               ...state.projectShell,
               [projectId]: {
                 ...(state.projectShell[projectId] ?? {}),
-                activeConversationId: conversationId,
+                activeConversationId: targetConversationId,
               },
             }
           : state.projectShell,
       };
     }),
 
-  openProjectCreate: () =>
-    set({
-      projectCreateOpen: true,
-      settingsOpen: false,
-    }),
-
+  openProjectCreate: () => set({ projectCreateOpen: true, settingsOpen: false }),
   closeProjectCreate: () => set({ projectCreateOpen: false }),
-
   setProjectCreateOpen: (projectCreateOpen) =>
     set((state) => ({
       projectCreateOpen,
       settingsOpen: projectCreateOpen ? false : state.settingsOpen,
     })),
-
   clearPendingAsk: () => set({ pendingAsk: null }),
 }));

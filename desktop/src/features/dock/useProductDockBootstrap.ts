@@ -1,5 +1,8 @@
 import { useEffect } from "react";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
+import {
+  selectActiveDockTabs,
+  useWorkspaceStore,
+} from "../../stores/workspaceStore";
 import { useArtifactDockStore } from "../../stores/artifactDockStore";
 
 /**
@@ -8,7 +11,7 @@ import { useArtifactDockStore } from "../../stores/artifactDockStore";
  * Capability Workbench views are opened explicitly by their DLC connectors.
  */
 export function useProductDockBootstrap(activeConversationId: string | null) {
-  const dockTabs = useWorkspaceStore((s) => s.dockTabs);
+  const dockTabs = useWorkspaceStore(selectActiveDockTabs);
   const openDockArtifacts = useArtifactDockStore((s) => s.openArtifacts);
 
   // 当前对话保证有「✦ 工件」Tab，但不抢走用户当前打开的 Tab。

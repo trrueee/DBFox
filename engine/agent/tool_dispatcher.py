@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -30,14 +30,18 @@ from engine.agent.repositories.artifact import (
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
-from engine.agent.resource_refs import resource_refs_for_run
+from engine.agent.resource_refs import (
+    ProjectResourceProvider,
+    discover_resources_from_providers,
+    resource_refs_for_run,
+)
 from engine.agent.session import SessionLease
 from engine.agent.tool import ToolInvocation
 from engine.agent.turn import ModelToolCall
 from engine.agent.working_state import RunWorkingStateAssembler
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.errors import ToolInputError
-from engine.models import AgentApproval, AgentRun, AgentToolInvocation, AgentTurn
+from engine.models import AgentApproval, AgentRun, AgentSession, AgentToolInvocation, AgentTurn
 from engine.policy.authority import ExecutionAuthority
 from engine.policy.gate import PolicyGate
 from engine.tools.materialization import (
@@ -57,6 +61,7 @@ from engine.tools.runtime.attempt import (
 from engine.tools.runtime.attempt_runner import IsolatedProcessAttemptRunner
 from engine.tools.runtime.handler import ToolAttemptHandler
 from engine.tools.runtime.resource_context import build_tool_scope_context
+from engine.tools.runtime.resource_authority import bind_tool_invocation_resources
 from engine.tools.runtime.base import (
     BaseTool,
     ControlCommand,
@@ -151,12 +156,14 @@ class ToolDispatcher:
         executor: ToolExecutor,
         isolated_worker_command: tuple[str, ...] | None = None,
         resource_resolver: CompositeResourceResolver | None = None,
+        resource_providers: tuple[ProjectResourceProvider, ...] = (),
     ) -> None:
         self.session_factory = session_factory
         self.registry = registry
         self.definition = definition
         self.executor = executor
         self.resource_resolver = resource_resolver
+        self.resource_providers = resource_providers
         self.isolated_runner = IsolatedProcessAttemptRunner(isolated_worker_command)
         self.attempt_handler = ToolAttemptHandler(
             registry=registry,
@@ -243,13 +250,75 @@ class ToolDispatcher:
                 db,
                 self.definition,
             ).build(run)
-            policy_decision = PolicyGate(self.registry, db).check(
-                state,
-                call.name,
-                call.arguments,
-                self.definition.execution_mode,
-            )
-            decision = policy_decision.model_dump(mode="json")
+            invocation_resource_refs: tuple[ResourceScopeRef, ...] = ()
+            normalized_input: dict[str, Any] | None = None
+            try:
+                normalized_input = registered_function.input_model.model_validate(
+                    call.arguments
+                ).model_dump(mode="json", exclude_none=True)
+            except ValidationError:
+                # PolicyGate owns the stable, non-reflective input error contract.
+                pass
+            resource_error: ToolInputError | None = None
+            if normalized_input is not None and isinstance(registered_function, BaseTool):
+                aggregate = db.get(AgentSession, str(run.session_id))
+                project_id = str(aggregate.project_id or "") if aggregate is not None else ""
+                try:
+                    artifact_authority: dict[
+                        str,
+                        tuple[ResourceScopeRef, ...],
+                    ] = {}
+                    for requirement in registered_function.execution.required_resources:
+                        field = requirement.artifact_selector_field
+                        if field is None:
+                            continue
+                        artifact_id = str(normalized_input.get(field) or "").strip()
+                        artifact = (
+                            ArtifactRepository(db).get_for_run(
+                                session_id=str(run.session_id),
+                                run_id=str(run.id),
+                                artifact_id=artifact_id,
+                            )
+                            if artifact_id
+                            else None
+                        )
+                        if artifact is None:
+                            raise ToolInputError(
+                                f"The Artifact selected by {field} is unavailable in this Run."
+                            )
+                        artifact_authority[field] = artifact.resource_refs
+                    discovered = discover_resources_from_providers(
+                        db,
+                        project_id,
+                        self.resource_providers,
+                    )
+                    invocation_resource_refs = bind_tool_invocation_resources(
+                        registered_function,
+                        normalized_input,
+                        discovered=discovered,
+                        explicit_authority=resource_refs_for_run(db, run),
+                        artifact_authority=artifact_authority,
+                    )
+                    state = {**state, "resource_refs": invocation_resource_refs}
+                except ToolInputError as exc:
+                    resource_error = exc
+            if resource_error is not None:
+                decision = {
+                    "status": "blocked",
+                    "reason": resource_error.message,
+                    "risk_level": "danger",
+                    "safe_args": normalized_input or {},
+                    "error_code": "TOOL_RESOURCE_UNAVAILABLE",
+                }
+                policy_decision = None
+            else:
+                policy_decision = PolicyGate(self.registry, db).check(
+                    state,
+                    call.name,
+                    call.arguments,
+                    self.definition.execution_mode,
+                )
+                decision = policy_decision.model_dump(mode="json")
             invocations = ToolInvocationRepository(db)
             invocation = invocations.request(
                 lease=lease,
@@ -260,6 +329,7 @@ class ToolDispatcher:
                 raw_input=call.arguments,
                 materialization=materialization,
                 policy_decision=decision,
+                resource_refs=invocation_resource_refs,
             )
             if invocation.status.value == "waiting_approval":
                 approvals = ApprovalRepository(db)
@@ -299,7 +369,9 @@ class ToolDispatcher:
                     model_visible_summary=str(
                         decision.get("reason") or "Tool request rejected."
                     ),
-                    error_code=(policy_decision.error_code or "TOOL_POLICY_REJECTED"),
+                    error_code=(
+                        str(decision.get("error_code") or "TOOL_POLICY_REJECTED")
+                    ),
                     error_message="Tool request rejected.",
                 )
                 db.commit()
@@ -489,7 +561,7 @@ class ToolDispatcher:
                 db,
                 self.definition,
             ).build(run)
-            request = self._tool_request(run, db)
+            request = self._tool_request(run, invocation.resource_refs)
             materialization = self._turn_materialization(db, invocation.turn_id)
             needs_reconciliation = (
                 invocation.recovery_policy == ToolRecoveryPolicy.RECONCILE
@@ -946,6 +1018,7 @@ class ToolDispatcher:
     ) -> tuple[bool, ExecutionAuthority | None]:
         """Revalidate authority immediately before a side-effecting attempt."""
 
+        state = {**state, "resource_refs": invocation.resource_refs}
         decision = PolicyGate(self.registry, db).check(
             state,
             invocation.tool_name,
@@ -1070,12 +1143,15 @@ class ToolDispatcher:
             str(turn.tool_materialization_json)
         )
 
-    def _tool_request(self, run: AgentRun, db: Session) -> ToolRequest:
-        frozen_refs = resource_refs_for_run(db, run)
+    def _tool_request(
+        self,
+        run: AgentRun,
+        resource_refs: tuple[ResourceScopeRef, ...],
+    ) -> ToolRequest:
         return ToolRequest(
             question=str(run.question),
             session_id=str(run.session_id),
             run_id=str(run.id),
             execution_mode=self.definition.execution_mode,
-            frozen_resource_refs=frozen_refs,
+            frozen_resource_refs=resource_refs,
         )

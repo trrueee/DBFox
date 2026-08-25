@@ -133,3 +133,18 @@
   background: var(--color-primary-strong);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 34%, transparent);
 }
+.ask-input__reference {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 0;
+  color: var(--text-secondary);
+  font-size: var(--ui-font-label);
+}
+
+.ask-input__reference button {
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}

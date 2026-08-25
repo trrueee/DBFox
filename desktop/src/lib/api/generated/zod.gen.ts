@@ -750,6 +750,20 @@ export const zQuestionRequest = z.object({
 });
 
 /**
+ * ReferencedObject
+ *
+ * Capability-owned object identity; never execution authority by itself.
+ */
+export const zReferencedObject = z.object({
+    id: z.string().min(1).max(512),
+    kind: z.string().min(3).max(64).regex(/^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/),
+    version: z.union([
+        z.string(),
+        z.int()
+    ]).nullish()
+});
+
+/**
  * RequestedResourceRef
  *
  * Wire representation of client resource intent. Excludes version.
@@ -769,6 +783,19 @@ export const zConversationCreateRequest = z.object({
 });
 
 /**
+ * ConversationInputReference
+ *
+ * One bounded user-visible selection attached to a Conversation Input.
+ */
+export const zConversationInputReference = z.object({
+    artifact_id: z.string().min(1).max(256).nullish(),
+    authority: zRequestedResourceRef.nullish(),
+    label: z.string().min(1).max(500),
+    locator: z.string().max(1000).nullish(),
+    object: zReferencedObject.nullish()
+});
+
+/**
  * ConversationInputRequest
  */
 export const zConversationInputRequest = z.object({
@@ -778,6 +805,7 @@ export const zConversationInputRequest = z.object({
     idempotency_key: z.string().min(8).max(256),
     llm_credential_id: z.string().min(1).max(256),
     model_name: z.string().max(256).nullish(),
+    references: z.array(zConversationInputReference).max(12).optional(),
     requested_resources: z.array(zRequestedResourceRef).max(16).nullish(),
     selected_artifact_ids: z.array(z.string()).max(20).optional(),
     workspace_context: z.record(z.string(), z.unknown()).optional()

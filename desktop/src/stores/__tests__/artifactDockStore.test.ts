@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useArtifactDockStore } from "../artifactDockStore";
-import { useWorkspaceStore } from "../workspaceStore";
+import { selectActiveDockTabs, useWorkspaceStore } from "../workspaceStore";
 
 describe("artifactDockStore", () => {
   beforeEach(() => {
     useWorkspaceStore.setState({
       activeProjectId: "",
-      dock: { open: false, activeViewKey: null },
-      dockTabs: [],
+      projectShell: {},
+      mainSurfaceByProject: {},
+      workbenchByConversation: {},
       settingsOpen: false,
     });
     useArtifactDockStore.setState({ artifactById: {}, conversationIdByArtifactId: {} });
@@ -17,7 +18,7 @@ describe("artifactDockStore", () => {
   it("deduplicates Core artifact views by canonical identity", () => {
     useArtifactDockStore.getState().openArtifacts("conv-1");
     useArtifactDockStore.getState().openArtifacts("conv-1");
-    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(1);
 
     const artifact = {
       id: "artifact-1",
@@ -29,7 +30,7 @@ describe("artifactDockStore", () => {
     };
     useArtifactDockStore.getState().openArtifact(artifact, "conv-1");
     useArtifactDockStore.getState().openArtifact(artifact, "conv-1");
-    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(2);
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(2);
     expect(useArtifactDockStore.getState().artifactById["artifact-1"]).toBe(artifact);
   });
 });

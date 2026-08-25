@@ -94,7 +94,10 @@ def materialize_tools(
         if allowed_modes and execution_mode not in allowed_modes:
             continue
         if available_resource_kinds is not None:
-            required = set(spec.execution.required_resource_kinds)
+            required = {
+                requirement.kind
+                for requirement in spec.execution.required_resources
+            }
             if not required.issubset(available_resource_kinds):
                 continue
         materialized.append(_materialize_tool(tool, registry=registry))

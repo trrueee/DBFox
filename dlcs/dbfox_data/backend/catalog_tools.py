@@ -9,6 +9,7 @@ from dbfox_dlc_api import (
     BaseTool,
     ExtensionToolRunContext,
     ToolExecutionSpec,
+    ToolResourceRequirement,
     ToolInputError,
     ToolObservationProjection,
     ToolPolicy,
@@ -76,7 +77,7 @@ class CatalogOverviewTool(
     execution = ToolExecutionSpec(
         recovery="retry_safe",
         capabilities=("filesystem_read",),
-        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=DATABASE_RESOURCE_KIND, selector_field="database_id"),),
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(
@@ -126,7 +127,7 @@ class CatalogRefreshTool(
         timeout_seconds=120,
         recovery="retry_safe",
         capabilities=("network", "filesystem_read"),
-        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=DATABASE_RESOURCE_KIND, selector_field="database_id"),),
     )
     semantics = ToolSemanticSpec(
         produces=("dbfox.data.environment_profile", "dbfox.data.schema_metadata")
@@ -188,7 +189,7 @@ class SchemaListTool(
     execution = ToolExecutionSpec(
         recovery="retry_safe",
         capabilities=("filesystem_read",),
-        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=DATABASE_RESOURCE_KIND, selector_field="database_id"),),
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(produces=("dbfox.data.schema_metadata",))
@@ -233,7 +234,7 @@ class SchemaSearchTool(
     execution = ToolExecutionSpec(
         recovery="retry_safe",
         capabilities=("filesystem_read",),
-        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=DATABASE_RESOURCE_KIND, selector_field="database_id"),),
         concurrency="parallel_safe",
     )
     semantics = ToolSemanticSpec(produces=("dbfox.data.schema_metadata",))
@@ -328,7 +329,7 @@ class SchemaInspectTool(
     execution = ToolExecutionSpec(
         recovery="retry_safe",
         capabilities=("network", "filesystem_read"),
-        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=DATABASE_RESOURCE_KIND, selector_field="database_id"),),
     )
     semantics = ToolSemanticSpec(produces=("dbfox.data.schema_metadata",))
     presentation = ToolPresentation(title="检查数据库对象", category="explore")

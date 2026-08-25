@@ -26,6 +26,7 @@ from engine.agent.resource_refs import (
     ProjectResourceDescriptor,
     ProjectResourceProvider,
     RequestedResourceRef,
+    discover_resources_from_providers,
 )
 from engine.db import SessionLocal
 from engine.dlc.compiler import ContributionCompiler, platform_builtin_contributions
@@ -159,6 +160,14 @@ def build_product_tool_registry(
             package_digest=tool_contrib.package_digest,
             provider_name=tool_contrib.provider_name,
         )
+    from engine.tools.builtin.project_resources import ProjectResourceSearchTool
+
+    resource_search = ProjectResourceSearchTool(snap.resource_providers)
+    registry.register(
+        resource_search,
+        owner="dbfox.core",
+        provider_name=resource_search.name,
+    )
     return registry.freeze()
 
 
@@ -183,16 +192,7 @@ def discover_project_resources(
 ) -> tuple[ProjectResourceDescriptor, ...]:
     """Discover all available resources across all registered providers for a project."""
     snap = snapshot or get_active_runtime_snapshot()
-    descriptors: list[ProjectResourceDescriptor] = []
-    seen: set[tuple[str, str]] = set()
-    for provider in snap.resource_providers:
-        for d in provider(db, project_id):
-            key = (d.kind, d.id)
-            if key in seen:
-                raise ValueError(f"Duplicate resource discovery identity (kind={d.kind!r}, id={d.id!r})")
-            seen.add(key)
-            descriptors.append(d)
-    return tuple(descriptors)
+    return discover_resources_from_providers(db, project_id, snap.resource_providers)
 
 
 def authorize_project_resources(
@@ -306,5 +306,6 @@ def build_product_run_loop(
         registry=build_product_tool_registry(snap),
         context_contributors=default_context_contributors(snap),
         capability_guidance=default_capability_guidance(snap),
+        resource_providers=snap.resource_providers,
         completion=CompletionGate(build_default_completion_policy(snap)),
     )

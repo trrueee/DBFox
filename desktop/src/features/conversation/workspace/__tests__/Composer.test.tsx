@@ -33,7 +33,7 @@ describe("Composer", () => {
     fireEvent.change(input, { target: { value: "  分析订单趋势  " } });
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(onSend).toHaveBeenCalledWith("分析订单趋势", "queue", []);
+    expect(onSend).toHaveBeenCalledWith("分析订单趋势", "queue", [], []);
     await waitFor(() => expect(input.value).toBe(""));
   });
 
@@ -54,9 +54,9 @@ describe("Composer", () => {
     const onClearReference = vi.fn();
     const reference = {
       label: "orders (table)",
-      kind: "dbfox.data.table",
-      id: "orders",
-      resourceRef: { kind: "dbfox.data.table", id: "orders" },
+      authority: { kind: "dbfox.data.database", id: "creatorhub" },
+      object: { kind: "dbfox.data.table", id: "orders" },
+      locator: "table:orders",
     };
     render(
       <Composer
@@ -76,7 +76,12 @@ describe("Composer", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(onSend).toHaveBeenCalledWith("统计总金额", "queue", [{ kind: "dbfox.data.table", id: "orders" }]);
+    expect(onSend).toHaveBeenCalledWith(
+      "统计总金额",
+      "queue",
+      [{ kind: "dbfox.data.database", id: "creatorhub" }],
+      [reference],
+    );
     await waitFor(() => expect(onClearReference).toHaveBeenCalledOnce());
   });
 

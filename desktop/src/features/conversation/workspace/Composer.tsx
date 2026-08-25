@@ -1,16 +1,8 @@
 import { ArrowUp, Square } from "lucide-react";
 import { useState } from "react";
 import type { RequestedResourceRef } from "../../../lib/api/generated/types.gen";
+import type { WorkbenchReference } from "../../../../../sdk/frontend/index";
 import type { ConversationDeliveryMode } from "../../../types/conversation";
-
-export interface ComposerReference {
-  label: string;
-  kind?: string;
-  id?: string;
-  locator?: string;
-  version?: string | number;
-  resourceRef?: RequestedResourceRef;
-}
 
 export function Composer({
   disabled,
@@ -32,9 +24,10 @@ export function Composer({
     text: string,
     mode: ConversationDeliveryMode,
     requestedResources: readonly RequestedResourceRef[],
+    references: readonly WorkbenchReference[],
   ) => Promise<void>;
   onCancel: () => Promise<void>;
-  reference?: ComposerReference | null;
+  reference?: WorkbenchReference | null;
   onClearReference?: () => void;
   projectId?: string;
   resourceIntents?: readonly RequestedResourceRef[];
@@ -50,13 +43,16 @@ export function Composer({
     const text = value.trim();
     if (!text || disabled || submitting) return;
     const resourcesToSend: RequestedResourceRef[] = [];
-    if (reference?.resourceRef) {
-      resourcesToSend.push(reference.resourceRef);
-    } else if (reference?.kind && reference?.id) {
-      resourcesToSend.push({ kind: reference.kind, id: reference.id });
+    if (reference?.authority) {
+      resourcesToSend.push(reference.authority);
     }
     try {
-      await onSend(text, running ? deliveryMode : "queue", resourcesToSend);
+      await onSend(
+        text,
+        running ? deliveryMode : "queue",
+        resourcesToSend,
+        reference ? [reference] : [],
+      );
       setValue("");
       onClearReference?.();
     } catch {
@@ -75,7 +71,9 @@ export function Composer({
         <div className="conv-composer-card">
           {reference && (
             <div className="conv-composer-reference" aria-label="当前引用语境">
-              <span className="conv-composer-reference__badge">{reference.kind || "引用"}</span>
+              <span className="conv-composer-reference__badge">
+                {reference.object?.kind || reference.authority?.kind || "引用"}
+              </span>
               <span className="conv-composer-reference__label">{reference.label}</span>
               {onClearReference && (
                 <button

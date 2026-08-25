@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-24
+> 最后核验：2026-08-25
 >
 > 适用范围：启动、Agent Core、Capability DLC、Workbench、工具、事件、取消和恢复链路
 >
@@ -88,7 +88,7 @@ flowchart TB
 
 ### 4.2 App Shell 与 Workspace
 
-App Shell 组织 Project/Conversation、Host-owned resource connector slot、固定 Main Surface、Dock registry、命令面板和设置。Resource tree、SQL/Table Dock 与连接 Dialog 由已激活 DLC 贡献；Shell 只保存 focus/layout/tab identity，不复制领域状态。Dock 折叠态是独立 rail layout，Composer 与消息内容列共用版心。左侧资源 focus 只导航；只有 Composer context chip 会改变 durable Conversation Resource Intent。
+App Shell 组织 Project/Conversation、Host-owned resource connector slot、固定 Main Surface、Dock registry、命令面板和设置。Resource tree、SQL/Table Dock 与连接 Dialog 由已激活 DLC 贡献；Shell 只保存 focus/layout/tab identity，不复制领域状态。Workbench 以 Conversation（或 new-conversation draft）的稳定 scope 为唯一事实源，Tabs 与 DLC view state 同 scope 隔离。Dock 折叠态是独立 rail layout，Composer 与消息内容列共用版心。左侧资源 focus 只导航；Workbench `Ask DBFox` 通过 Host typed reference 把 parent authority、object 与 locator 原子交给 Composer，不把 table/file/measure 伪装成 Resource。
 
 本地项目文件链路由 `dbfox.workspace` 使用 Host 的 native picker/credential 等窄 OS boundary 并保持有界：
 
@@ -152,13 +152,15 @@ Input admission 在单一短事务中创建 SessionInput、用户/助手 Message
 
 RunLoop 每轮：检查控制面 → 构建不可变 Turn → 流式调用模型 → 结算 Turn → 处理 tool calls → CompletionPolicy → 继续/修复/回答/部分回答/失败。模型等待受 Run deadline、per-Turn、request/connect、first-event 与 stream-idle 五层 watchdog 约束；SDK 尚未返回 stream 对象的等待同样可取消且有界。`waiting_model / streaming_answer / preparing_tool_call / executing_tool / waiting_approval / finalizing` 是 provider-neutral 耐久阶段投影。
 
-Prompt 和 Context 在 Turn 创建时保存 hash；工具 schema 也物化并冻结。Core System Policy 保持 capability-neutral；DLC 的静态 `CapabilityGuidanceContribution` 只按 frozen Resource、实际 Tool 和相关 Artifact 激活，Core 合成为单一 system message 并持久化 guidance identity/hash。模型 finish reason 不能直接决定 Run 完成，Runtime 必须检查工具结算、证据、Artifact、覆盖和预算。
+Prompt 和 Context 在 Turn 创建时保存 hash；工具 schema 也物化并冻结。Core System Policy 保持 capability-neutral；DLC 的静态 `CapabilityGuidanceContribution` 只按当前 Project resource kind、实际 Tool 和相关 Artifact 激活，Core 合成为单一 system message 并持久化 guidance identity/hash。Project resource directory 在 Turn snapshot 中只保留 32 条摘要、kind counts 与 truncated 标记，完整目录通过只读分页 Tool 查询，不复制到 Input。模型 finish reason 不能直接决定 Run 完成，Runtime 必须检查工具结算、证据、Artifact、覆盖和预算。
 
 ### 4.11 Tool Runtime、Policy 与 Approval
 
 Registry 以 `ToolKey(owner_id, local_name)` 注册工具定义、input/output schema、版本、capability、execution spec、状态消费和 Artifact spec。Turn 在 provider 边界确定性生成唯一 wire name 并物化为稳定快照；同 local name 的不同 DLC 不冲突。Platform built-in 显式保留原 wire name。
 
 Resource kind 必须 namespaced；DLC provider/resolver 和 Tool 只能直接使用 `owner_id.*`。跨 capability 由 Agent 编排 Artifact/用户意图，不能把另一个 DLC 的私有 resolver 对象作为隐式 service locator。Installable in-process Tool 只接受 `network`/`filesystem_read`；`filesystem_write` 继续要求尚未开放给 DLC Tool 的 isolated backend。
+
+Project discovery kind 只决定 Tool discoverability，不授予整个 Project。模型直接调用真实领域 Tool；Dispatcher 从 validated selector 或同一 Run Artifact 绑定精确 `(kind,id,version)`，写入 `agent_tool_invocations.resource_refs_json`，随后 Policy、Approval、resolver、retry 与 recovery 都只消费该 Invocation authority。已接纳 Input 不在 Run 中修改，也没有用户可见的 `select_project_resources` 控制步骤。
 
 Policy 对规范化工具名和 canonical input 判定。Approval 与具体 Invocation/version/generation 绑定。ToolExecutor 执行 timeout、retry、concurrency、output bytes 和 cancel；未注册 isolated backend 的高权限 capability 会在注册阶段失败。
 

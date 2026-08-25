@@ -30,10 +30,11 @@ def build_tool_scope_context(
 
     frozen_refs = tuple(getattr(request, "frozen_resource_refs", None) or ())
 
-    # Frozen input refs are the sole execution-authority source. Missing and
-    # explicit-empty refs are intentionally equivalent and never derive access
-    # from domain compatibility fields or UI focus.
-    for kind in tool.execution.required_resource_kinds:
+    # ToolRequest carries the exact refs frozen on this Invocation. Missing and
+    # explicit-empty refs are equivalent; resolution never expands from Project
+    # discovery metadata, domain compatibility fields, or UI focus.
+    for requirement in tool.execution.required_resources:
+        kind = requirement.kind
         refs_for_kind = tuple(r for r in frozen_refs if r.kind == kind)
         if not refs_for_kind:
             raise ToolInputError(f"此工具需要 {kind} 资源，但请求中未授权。")

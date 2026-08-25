@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from engine.agent.plan import PlanStep, PlanStepStatus
+from engine.agent.resource_refs import ProjectResourceDescriptor
 from engine.tools.runtime import ToolInputModel, ToolOutputModel
 
 
@@ -14,6 +15,38 @@ class EmptyInput(ToolInputModel):
 
 class AcknowledgementOutput(ToolOutputModel):
     acknowledged: bool = True
+
+
+class ProjectResourceSearchInput(ToolInputModel):
+    query: str | None = Field(
+        default=None,
+        max_length=256,
+        description="Optional case-insensitive text matched against resource kind, id, and name.",
+    )
+    kinds: list[str] = Field(default_factory=list, max_length=8)
+    cursor: str | None = Field(default=None, max_length=32)
+    limit: int = Field(default=20, ge=1, le=50)
+
+    @model_validator(mode="after")
+    def normalize_filters(self) -> "ProjectResourceSearchInput":
+        query = (self.query or "").strip() or None
+        kinds = [kind.strip() for kind in self.kinds if kind.strip()]
+        if len(set(kinds)) != len(kinds):
+            raise ValueError("Project resource kinds must be unique")
+        cursor = (self.cursor or "").strip() or None
+        if cursor is not None and (not cursor.isdecimal() or int(cursor) < 0):
+            raise ValueError("Project resource cursor is invalid")
+        object.__setattr__(self, "query", query)
+        object.__setattr__(self, "kinds", kinds)
+        object.__setattr__(self, "cursor", cursor)
+        return self
+
+
+class ProjectResourceSearchOutput(ToolOutputModel):
+    resources: list[ProjectResourceDescriptor]
+    returned_count: int = Field(ge=0)
+    has_more: bool
+    next_cursor: str | None = None
 
 
 ConversationRole = Literal["user", "assistant"]

@@ -4,6 +4,28 @@ import { TooltipProvider } from "../../../components/ui";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import { useDlcStore } from "../../dlc/extensionStore";
 import { planDockTabWindow, WorkspaceDock } from "../WorkspaceDock";
+import type { WorkspaceDockTab } from "../../../types/workspace";
+
+function setWorkbench(
+  open: boolean,
+  activeViewKey: string | null,
+  tabs: WorkspaceDockTab[],
+) {
+  useWorkspaceStore.setState({
+    activeProjectId: "",
+    mainSurfaceByProject: {},
+    projectShell: {},
+    workbenchByConversation: {
+      "draft:default": {
+        scopeId: "test-scope",
+        open,
+        activeViewKey,
+        tabs,
+        reference: null,
+      },
+    },
+  });
+}
 
 vi.mock("../../conversation/ConversationHistoryPanel", () => ({
   ConversationHistoryPanel: () => <div data-testid="conversation-history" />,
@@ -41,18 +63,17 @@ describe("WorkspaceDock", () => {
       }],
       artifactRenderers: [],
     });
+    setWorkbench(true, "dbfox.data.sql-console:ds-1", [{
+      viewKey: "dbfox.data.sql-console:ds-1",
+      viewType: "dbfox.data.sql-console",
+      title: "SQL 控制台",
+      closeable: false,
+      stateKey: "sql-ds-1",
+      target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
+    }]);
     useWorkspaceStore.setState({
       centerMode: "home",
       pendingAsk: null,
-      dock: { open: true, activeViewKey: "dbfox.data.sql-console:ds-1" },
-      dockTabs: [{
-        viewKey: "dbfox.data.sql-console:ds-1",
-        viewType: "dbfox.data.sql-console",
-        title: "SQL 控制台",
-        closeable: false,
-        stateKey: "sql-ds-1",
-        target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
-      }],
       settingsOpen: false,
     });
   });
@@ -74,9 +95,7 @@ describe("WorkspaceDock", () => {
   });
 
   it("renders a collapsed rail when the dock is closed", async () => {
-    useWorkspaceStore.setState({
-      dock: { open: false, activeViewKey: "dbfox.data.sql-console:ds-1" },
-    });
+    useWorkspaceStore.getState().setDockOpen(false);
     renderDock();
 
     expect(screen.getByRole("button", { name: "展开工作台 Dock" })).toBeTruthy();
@@ -84,10 +103,8 @@ describe("WorkspaceDock", () => {
   });
 
   it("opens the selected rail tool instead of an unrelated fallback tab", async () => {
-    useWorkspaceStore.setState({
-      dock: { open: false, activeViewKey: null },
-      dockTabs: [
-        ...useWorkspaceStore.getState().dockTabs,
+    setWorkbench(false, null, [
+        ...useWorkspaceStore.getState().workbenchByConversation["draft:default"].tabs,
         {
           viewKey: "core.artifacts:conv-1",
           viewType: "core.artifacts",
@@ -95,8 +112,7 @@ describe("WorkspaceDock", () => {
           closeable: false,
           target: { type: "conversation", id: "conv-1" },
         },
-      ],
-    });
+      ]);
     const view = render(
       <TooltipProvider>
         <WorkspaceDock
@@ -113,15 +129,12 @@ describe("WorkspaceDock", () => {
   });
 
   it("renders active DLC Dock views through the production WorkspaceDock", async () => {
-    useWorkspaceStore.setState({
-      dock: { open: true, activeViewKey: "acme.runtime.view:1" },
-      dockTabs: [{
+    setWorkbench(true, "acme.runtime.view:1", [{
         viewKey: "acme.runtime.view:1",
         viewType: "acme.runtime.view",
         title: "Runtime DLC",
         closeable: true,
-      }],
-    });
+      }]);
     useDlcStore.getState().setProjectionResult("snap-dlc", {}, {
       connectors: [],
       dockViews: [{
@@ -129,13 +142,34 @@ describe("WorkspaceDock", () => {
         icon: () => null,
         resolveTitle: () => "Runtime DLC",
         isVisible: () => true,
-        render: () => <div data-testid="dlc-dock-view">DLC Dock</div>,
+        render: (_view, context) => (
+          <button
+            type="button"
+            data-testid="dlc-dock-view"
+            onClick={() => context.onAsk({
+              label: context.workbenchScopeId,
+              authority: { kind: "acme.runtime.resource", id: "resource-1" },
+              object: { kind: "acme.runtime.object", id: "object-1" },
+              locator: "item:1",
+            })}
+          >
+            DLC Dock
+          </button>
+        ),
       }],
       artifactRenderers: [],
     });
 
     renderDock();
-    expect(await screen.findByTestId("dlc-dock-view")).toBeTruthy();
+    fireEvent.click(await screen.findByTestId("dlc-dock-view"));
+    expect(
+      useWorkspaceStore.getState().workbenchByConversation["draft:default"].reference,
+    ).toEqual({
+      label: "test-scope",
+      authority: { kind: "acme.runtime.resource", id: "resource-1" },
+      object: { kind: "acme.runtime.object", id: "object-1" },
+      locator: "item:1",
+    });
   });
 
   it("hides the overflow trigger when every tab fits", () => {

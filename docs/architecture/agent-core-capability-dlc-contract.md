@@ -107,10 +107,11 @@ Project
 
 Project resource 应保持粗粒度。Database 是 Resource；Schema/Table/Column 是 Data DLC object。Workspace root 是 Resource；File 是 Workspace object。用户对象选择可以影响 Context，但不能隐式创造新的 Resource authority。
 
-## 6. Resource Runtime v2
+## 6. Resource Runtime v3
 
-> 实施状态：已完成。Runtime、Tool context、resolver 与 prompt summary 均使用
-> `(kind,id)` identity，不再保留单值 datasource 执行通道。
+> 实施状态：当前。Tool discoverability 与 ToolInvocation execution authority 已分离；
+> Runtime、Tool context、resolver 与 audit 均使用 `(kind,id)` identity，不保留单值 datasource
+> 执行通道，也不通过资源选择 Control Tool 扩大 Run authority。
 
 ```python
 ResourceKey = (kind, id)
@@ -123,10 +124,12 @@ context.scopes(kind)
 context.require_one(kind)
 ```
 
-- 同一 Run 可以包含多个相同 kind、不同 id 的资源。
+- 同一 Project 可以包含多个相同 kind、不同 id 的资源。
 - `require_one(kind)` 仅服务于明确的单资源工具；0 个或多个都必须给出确定性错误。
-- 多资源工具输入必须携带 resource id；Tool Runtime 再验证 id 属于 frozen authorized set。
-- Data 工具的 `database_id` 可以只在恰好一个数据库被授权时省略；多个同 kind 数据库时省略
+- 多资源工具输入必须携带 resource id；Tool Runtime 在 Invocation admission 时验证该 identity
+  属于当前 Project discovery ceiling、附加 server-canonical version，并只把这个精确 ref 冻结到
+  `ToolInvocation.resource_refs_json`。
+- Data 工具的 `database_id` 可以只在 Project 恰好发现一个数据库时省略；多个同 kind 数据库时省略
   必须确定性拒绝，不能取第一个。
 - Kernel 不解释跨数据库 join。provider 可以在安全合同允许时实现该领域能力。
 - wire uniqueness、resolver identity、context lookup、prompt summary 和 audit log 全部使用 `(kind,id)`。
@@ -135,7 +138,8 @@ context.require_one(kind)
   `workspace` 及旧 `github.repository` 由 Alembic `f4a5b6c7d8ea` 一次性改写，Runtime 不保留
   alias、mapper 或 dual-read。
 - 一个 DLC 只能注册和直接 resolve `owner_id.*` Resource kind；其 Tool 的
-  `required_resource_kinds` 也只能引用本 owner namespace。普通跨 capability 工作由 Agent
+  `required_resources` 也只能引用本 owner namespace。每个 requirement 显式声明
+  `selector_field`，或声明从同一 Run 的不可变 Artifact resource refs 派生。普通跨 capability 工作由 Agent
   composition 完成；真正需要联合私有资源的实现必须成为显式 Composition DLC，并在未来先冻结
   dependency contract，不能依赖 `Any` duck typing 偷读另一个 DLC 的 handle。
 
@@ -146,7 +150,28 @@ DLC 内部合同、Workbench Action 与领域测试使用 local name；Core mate
 唯一 wire identity。Platform built-in Tool 保留其既有 wire name；这项特权由 composition root 显式声明，
 不在 Tool Runtime 中增加 owner 特判。
 
-没有 `required_resource_kinds` 的 Tool 当前仍按既有语义全局 materialize。显式
+Tool availability 与 execution authority 是两个合同：
+
+```text
+Project discovery kinds
+        → 决定本 Turn 可以向模型展示哪些 capability Tools
+
+实际 domain Tool call + validated selector / Artifact
+        → Dispatcher 绑定一个最小、精确、server-canonical 的 Invocation authority
+        → Policy / Approval / resolver / retry / recovery 全部只消费该 Invocation refs
+```
+
+`AgentSessionInput.resource_refs_json` 仍是 immutable admission fact，只保存用户明确附加或 durable
+Conversation intent 产生的初始 authority；Run 中途不得修改。自动资源使用不创建 mutable
+`RunAuthority`，也不调用 `select_project_resources`。ToolInvocation 是执行权限第一次真正需要被
+耐久冻结的边界。
+
+每个 Turn 只保存最多 32 条排序后的 Project resource directory 摘要、完整 kind count 与
+`truncated` 标记。超过摘要的资源通过只读、分页、可筛选的 `project_resource_search` 查询；该 Tool
+不选择、不授权、不写 Input/Run，也以 developer visibility 隐藏实现噪音。Project 资源数量不会导致
+Input admission 失败。
+
+没有 `required_resources` 的 Tool 当前仍按既有语义全局 materialize。显式
 `global / project_bound / resource_bound / explicit_only` availability 属于后续协议演进；在真实需求和
 迁移方案冻结前不提前增加枚举或兼容层。
 
@@ -161,7 +186,10 @@ Core 持久化通用 `ConversationResourceIntent`，内容只允许无 version �
 ]
 ```
 
-它是 durable UX intent，不是执行授权。每次输入由后端重新发现 Project resource universe、校验 membership、附加 canonical version，然后冻结到 SessionInput。
+它是用户可选的 durable UX intent，不是自动资源发现机制。每次输入只把 durable intent 与本条消息
+显式 attachment 重新校验、附加 canonical version 后冻结到 SessionInput；没有显式 attachment 时允许
+保持空数组。Agent 仍可依据当前 Project resource directory 直接调用实际领域 Tool，精确 authority
+只在 ToolInvocation admission 时绑定。
 
 Frontend Host 提供 `ConversationContextHost`：
 
@@ -172,15 +200,29 @@ remove(ref)
 list()
 ```
 
-DLC UI 可以响应用户操作调用这些方法；DLC 不得注册“自动把资源加入下一次 Run”的 contributor。左栏 click 只改变 UI focus/open Dock，Composer chip 才表达 Conversation intent。
+DLC UI 可以为明确的 pin/attachment 操作调用这些方法；DLC 不得注册“自动把资源加入下一次 Run”的
+contributor。左栏 click 只改变 UI focus/open Dock；普通 Agent 工作不要求用户先维护 Context picker。
+
+Workbench 的“询问 DBFox”发送 typed reference，而不是把 Object 伪装成 Resource：
+
+```text
+authority  = parent Resource identity（可选 one-shot requested_resource）
+object     = table / file / measure 等具体对象，不产生 authority
+locator    = rows / line range / measures 等选择
+artifact   = 可选 immutable Artifact identity
+```
+
+该 envelope 与消息原子 admission 并写入 `AgentSessionInput.references_json`。它是不可变输入事实；
+Context 明确把 label/locator 作为 untrusted data。只有 `authority` 可以进入 requested resources。
 
 **实施状态（2026-08-22）：阶段 B 已完成。** Core 已持久化 identity-only
 `ConversationResourceIntent`；创建与 PATCH 都经过 Project resource discovery 校验；input
 admission 只合并 durable intent 与本条消息显式 attachment，再由服务端附加 canonical
-version。Frontend 已删除 product requested-resource composition，`activeDatasourceId` 不再参与
+version；Project discovery 只影响 Tool discoverability，不扩大 Input。Frontend 已删除 product requested-resource composition，`activeDatasourceId` 不再参与
 Conversation 创建或发送。`host.contextSelection.isSelected/list/add/remove` 已作为用户动作入口开放；
 Frontend SDK、Host、loader 和官方 GitHub package 已物理删除 `host.requestedResources` seam，
-DLC 不再存在注册隐式 authority contributor 的入口。
+DLC 不再存在注册隐式 authority contributor 的入口。`DockRenderContext.onAsk` 是 Host 正式合同，
+以 `authority + object + locator + artifact` 把 Workbench 选择交给 Composer。
 
 ## 8. Data System DLC
 
@@ -548,10 +590,10 @@ dbfox.github/state.sqlite3
 ```text
 single click resource/object → UI focus；必要时打开 Dock
 double click / Enter         → inspect/open
-Pin to conversation         → 显式写入 durable Conversation Resource Intent
-@resource / + Context       → 加入当前 Composer draft 的 one-shot requested_resources
-remove Composer chip        → 只从当前待发送消息移除
-Send                        → message + one-shot resource identity 原子提交并由服务器授权/冻结
+Ask DBFox                    → 写入当前 Conversation-scoped composer reference
+Pin / explicit attachment   → 可选写入 durable intent 或 one-shot requested_resource
+remove reference chip       → 只从当前待发送消息移除
+Send                        → message + typed reference + optional authority 原子提交
 ```
 
 左侧结构：
@@ -568,7 +610,12 @@ Project
    └─ GitHub
 ```
 
-Host 拥有 section chrome、overflow、focus、keyboard 与 selection visual contract；DLC 提供 typed tree data/action，不直接控制 Sidebar 外层布局。实现遵循 WAI-ARIA Tree View 中 focus 与 selection 分离的语义，并参考 VS Code contribution points 的 Host-owned Workbench 原则，但不引入完整 IDE framework。
+Host 拥有 section chrome、overflow、focus、keyboard、Conversation workbench scope 与 selection visual
+contract；DLC 提供 typed tree data/action，不直接控制 Sidebar 外层布局。每个 Conversation（以及尚未
+创建 Conversation 的 Project draft）只有一份 `workbenchByConversation` 事实源；Tabs 和 DLC view
+state 都使用同一个稳定 `workbenchScopeId`，draft 创建 Conversation 时整体迁移，不双写第二份 dock
+state。实现遵循 WAI-ARIA Tree View 中 focus 与 selection 分离的语义，并参考 VS Code contribution
+points 的 Host-owned Workbench 原则，但不引入完整 IDE framework。
 
 ### 11.1 最终切换状态（2026-08-23）
 

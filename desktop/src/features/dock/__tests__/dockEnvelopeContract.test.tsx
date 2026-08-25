@@ -2,7 +2,12 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
 import type { WorkspaceDockTab } from "../../../types/workspace";
-import { useWorkspaceStore } from "../../../stores/workspaceStore";
+import {
+  selectActiveDockTabs,
+  selectActiveDockViewKey,
+  selectActiveWorkbench,
+  useWorkspaceStore,
+} from "../../../stores/workspaceStore";
 import { useArtifactDockStore } from "../../../stores/artifactDockStore";
 import {
   createDockViewRegistry,
@@ -14,8 +19,17 @@ import { WorkspaceDock } from "../../appShell/WorkspaceDock";
 function resetAll() {
   useWorkspaceStore.setState({
     activeProjectId: "project-1",
-    dock: { open: true, activeViewKey: null },
-    dockTabs: [],
+    projectShell: {},
+    mainSurfaceByProject: {},
+    workbenchByConversation: {
+      "draft:project-1": {
+        scopeId: "dock-envelope-scope",
+        open: true,
+        activeViewKey: null,
+        tabs: [],
+        reference: null,
+      },
+    },
     settingsOpen: false,
   });
   useArtifactDockStore.setState({ artifactById: {}, conversationIdByArtifactId: {} });
@@ -73,9 +87,9 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
     });
 
     it("verifies dock store state contains only activeViewKey and no activeTabId", () => {
-      const dock = useWorkspaceStore.getState().dock;
+      const dock = selectActiveWorkbench(useWorkspaceStore.getState());
       expect("activeViewKey" in dock).toBe(true);
-      expect("activeTabId" in (dock as Record<string, unknown>)).toBe(false);
+      expect("activeTabId" in (dock as unknown as Record<string, unknown>)).toBe(false);
     });
   });
 
@@ -94,17 +108,17 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         closeable: true,
       });
 
-      expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("custom:2");
+      expect(selectActiveDockViewKey(useWorkspaceStore.getState())).toBe("custom:2");
 
       useWorkspaceStore.getState().setDockActiveTab("custom:1");
-      expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("custom:1");
+      expect(selectActiveDockViewKey(useWorkspaceStore.getState())).toBe("custom:1");
 
       useWorkspaceStore.getState().updateDockTab("custom:1", { title: "Custom 1 Renamed" });
-      expect(useWorkspaceStore.getState().dockTabs[0].title).toBe("Custom 1 Renamed");
+      expect(selectActiveDockTabs(useWorkspaceStore.getState())[0].title).toBe("Custom 1 Renamed");
 
       useWorkspaceStore.getState().closeDockTab("custom:1");
-      expect(useWorkspaceStore.getState().dockTabs.map((t) => t.viewKey)).toEqual(["custom:2"]);
-      expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("custom:2");
+      expect(selectActiveDockTabs(useWorkspaceStore.getState()).map((t) => t.viewKey)).toEqual(["custom:2"]);
+      expect(selectActiveDockViewKey(useWorkspaceStore.getState())).toBe("custom:2");
     });
 
     it("prevents updateDockTab from mutating canonical viewKey or viewType", () => {
@@ -121,7 +135,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         { viewKey: "hacked:key", viewType: "hacked.type", title: "Legitimate Title" },
       );
 
-      const tab = useWorkspaceStore.getState().dockTabs[0];
+      const tab = selectActiveDockTabs(useWorkspaceStore.getState())[0];
       expect(tab.viewKey).toBe("custom:immutable");
       expect(tab.viewType).toBe("test.view");
       expect(tab.title).toBe("Legitimate Title");
@@ -159,7 +173,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
 
       useArtifactDockStore.getState().openArtifact(artifact, "conv-88");
 
-      const tab = useWorkspaceStore.getState().dockTabs[0];
+      const tab = selectActiveDockTabs(useWorkspaceStore.getState())[0];
       expect(tab.viewKey).toBe("core.artifact:art-100");
       expect(tab.viewType).toBe("core.artifact");
       expect(tab.target).toEqual({ type: "artifact", id: "art-100" });
@@ -199,15 +213,14 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
 
   describe("G. Unknown ViewType Fallback & Generic Empty State", () => {
     it("renders graceful unknown fallback state without crashing", async () => {
-      useWorkspaceStore.setState({
-        dock: { open: true, activeViewKey: "future:99" },
-        dockTabs: [{
+      useWorkspaceStore.setState({ workbenchByConversation: { "draft:project-1": {
+        scopeId: "future-scope", open: true, activeViewKey: "future:99", reference: null, tabs: [{
           viewKey: "future:99",
           viewType: "future.third-party.extension",
           title: "Future View",
           closeable: true,
         }],
-      });
+      } } });
 
       render(
         <TooltipProvider>
@@ -224,10 +237,9 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
     });
 
     it("renders capability-neutral empty state when no tabs are open", () => {
-      useWorkspaceStore.setState({
-        dock: { open: true, activeViewKey: null },
-        dockTabs: [],
-      });
+      useWorkspaceStore.setState({ workbenchByConversation: { "draft:project-1": {
+        scopeId: "empty-scope", open: true, activeViewKey: null, tabs: [], reference: null,
+      } } });
 
       render(
         <TooltipProvider>
@@ -267,18 +279,14 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       expect(customRegistry.get("test.example.custom-panel")).toBe(customView);
 
       // Open tab in WorkspaceStore
-      useWorkspaceStore.setState({
-        dock: {
-          open: true,
-          activeViewKey: "custom:my-tool",
-        },
-        dockTabs: [{
+      useWorkspaceStore.setState({ workbenchByConversation: { "draft:project-1": {
+        scopeId: "custom-scope", open: true, activeViewKey: "custom:my-tool", reference: null, tabs: [{
           viewKey: "custom:my-tool",
           viewType: "test.example.custom-panel",
           title: "My Extension",
           closeable: true,
         }],
-      });
+      } } });
 
       // Render standard unmodified WorkspaceDock with customRegistry passed in
       render(
@@ -307,7 +315,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       const closeButton = screen.getByRole("button", { name: "关闭 My Extension" });
       fireEvent.click(closeButton);
 
-      expect(useWorkspaceStore.getState().dockTabs).toHaveLength(0);
+      expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(0);
       expect(screen.queryByTestId("custom-rendered-view")).toBeNull();
       expect(screen.getByText("没有打开的标签")).toBeTruthy();
     });

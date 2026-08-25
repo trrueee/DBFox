@@ -1,7 +1,10 @@
 import { lazy, Suspense, useCallback, useState } from "react";
 import { Plus } from "lucide-react";
 import { useConversationStore } from "../../stores/conversationStore";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
+import {
+  selectActiveWorkbenchReference,
+  useWorkspaceStore,
+} from "../../stores/workspaceStore";
 import { getUserErrorMessage } from "../../lib/api/client";
 import { SmartQueryHome } from "../workspace/SmartQueryHome";
 import { Button, EmptyState, LoadingState } from "../../components/ui";
@@ -26,6 +29,11 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
+  const reference = useWorkspaceStore(selectActiveWorkbenchReference);
+  const setProjectActiveConversation = useWorkspaceStore(
+    (state) => state.setProjectActiveConversation,
+  );
+  const setWorkbenchReference = useWorkspaceStore((state) => state.setWorkbenchReference);
   const [askInputValue, setAskInputValue] = useState("");
   const displayAsk = pendingAsk ?? askInputValue;
 
@@ -37,16 +45,34 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
         text,
         [],
       );
+      setProjectActiveConversation(activeProjectId, detail.id);
+      openConversationCenter(detail.id);
       await useConversationStore
         .getState()
-        .sendMessage(detail.id, text, "queue", globalThis.crypto.randomUUID());
+        .sendMessage(
+          detail.id,
+          text,
+          "queue",
+          globalThis.crypto.randomUUID(),
+          reference?.authority ? [reference.authority] : [],
+          reference ? [reference] : [],
+        );
       clearPendingAsk();
-      openConversationCenter(detail.id);
+      setWorkbenchReference(null);
       setAskInputValue("");
     } catch (error) {
       showToast(getUserErrorMessage(error, "创建智能分析失败，请重试。"), "error");
     }
-  }, [clearPendingAsk, displayAsk, openConversationCenter, showToast]);
+  }, [
+    activeProjectId,
+    clearPendingAsk,
+    displayAsk,
+    openConversationCenter,
+    reference,
+    setProjectActiveConversation,
+    setWorkbenchReference,
+    showToast,
+  ]);
 
   if (!activeProjectId) {
     return (
@@ -89,6 +115,8 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
         }}
         onSubmitAsk={() => void handleSubmitAsk()}
         projectId={activeProjectId}
+        reference={reference}
+        onClearReference={() => setWorkbenchReference(null)}
       />
     </section>
   );

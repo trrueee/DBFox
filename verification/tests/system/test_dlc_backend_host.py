@@ -537,7 +537,7 @@ def test_permission_violation_rejected(
         (
             "acme.resource_intruder",
             [],
-            "api.ToolExecutionSpec(required_resource_kinds=('dbfox.data.database',))",
+            "api.ToolExecutionSpec(required_resources=(api.ToolResourceRequirement(kind='dbfox.data.database'),))",
         ),
         (
             "acme.write_tool",

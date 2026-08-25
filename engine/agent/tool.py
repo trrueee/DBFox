@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.tools.runtime.base import ToolRecoveryPolicy
+from engine.resource import ResourceScopeRef
 
 
 class ToolInvocationStatus(StrEnum):
@@ -37,6 +38,7 @@ class ToolInvocation(BaseModel):
     package_digest: str | None = None
     authorized_input: dict[str, Any]
     authorized_input_hash: str
+    resource_refs: tuple[ResourceScopeRef, ...] = ()
     idempotency_key: str
     status: ToolInvocationStatus
     policy: dict[str, Any] = Field(default_factory=dict)

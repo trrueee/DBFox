@@ -9,6 +9,7 @@ from engine.tools.runtime import (
     ToolInputModel,
     ToolOutputModel,
     ToolPresentation,
+    ToolResourceRequirement,
     ToolRunContext,
 )
 
@@ -32,7 +33,9 @@ class ResourceProbeTool(BaseTool[ResourceProbeInput, ResourceProbeOutput]):
     input_model = ResourceProbeInput
     output_model = ResourceProbeOutput
     presentation = ToolPresentation(title="Resource probe", category="explore")
-    execution = ToolExecutionSpec(required_resource_kinds=(SYNTHETIC_RESOURCE_KIND,))
+    execution = ToolExecutionSpec(required_resources=(
+        ToolResourceRequirement(kind=SYNTHETIC_RESOURCE_KIND, selector_field="resource_id"),
+    ))
 
     def __init__(self, access_log: list[str]) -> None:
         self._access_log = access_log

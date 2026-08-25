@@ -8,6 +8,7 @@ from engine.runtime_composition import build_product_tool_registry
 PARENT_TOOL_NAMES = (
     "conversation_read",
     "conversation_search",
+    "project_resource_search",
     "remote_job_cancel",
     "remote_job_status",
     "remote_job_submit",

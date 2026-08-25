@@ -48,6 +48,8 @@ class ContextSegmentKind(StrEnum):
     RUN_FOCUS = "run_focus"
     PREVIOUS_RUN_OUTCOME = "previous_run_outcome"
     SELECTED_ARTIFACT = "selected_artifact"
+    RESOURCE_DIRECTORY = "resource_directory"
+    INPUT_REFERENCES = "input_references"
     WORKSPACE_CONTEXT = "workspace_context"
     SESSION_MEMORY = "session_memory"
     CONVERSATION_ARCHIVE = "conversation_archive"
@@ -64,6 +66,8 @@ class ContextPriority(IntEnum):
     RUN_FOCUS = 875
     PREVIOUS_RUN_OUTCOME = 865
     SELECTED_ARTIFACT = 850
+    RESOURCE_DIRECTORY = 846
+    INPUT_REFERENCES = 844
     WORKSPACE_CONTEXT = 840
     WORKING_STATE_FRAGMENT = 820
     RESOURCE_FRAGMENT = 815

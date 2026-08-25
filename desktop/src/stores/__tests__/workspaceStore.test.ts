@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useWorkspaceStore } from "../workspaceStore";
+import {
+  selectActiveDockOpen,
+  selectActiveDockTabs,
+  selectActiveDockViewKey,
+  useWorkspaceStore,
+} from "../workspaceStore";
 
 function reset() {
   useWorkspaceStore.setState({
@@ -9,8 +14,7 @@ function reset() {
     centerMode: "home",
     centerReturnMode: "home",
     pendingAsk: null,
-    dock: { open: false, activeViewKey: null },
-    dockTabs: [],
+    workbenchByConversation: {},
     settingsOpen: false,
     settingsSection: "appearance",
     projectCreateOpen: false,
@@ -81,13 +85,11 @@ describe("workspaceStore — Dock shell", () => {
 
   it("opens, activates and closes the Dock", () => {
     useWorkspaceStore.getState().setDockOpen(true);
-    expect(useWorkspaceStore.getState().dock.open).toBe(true);
+    expect(selectActiveDockOpen(useWorkspaceStore.getState())).toBe(true);
 
     useWorkspaceStore.getState().setDockActiveTab("tab-1");
-    expect(useWorkspaceStore.getState().dock).toEqual({
-      open: true,
-      activeViewKey: "tab-1",
-    });
+    expect(selectActiveDockOpen(useWorkspaceStore.getState())).toBe(true);
+    expect(selectActiveDockViewKey(useWorkspaceStore.getState())).toBe("tab-1");
   });
 
   it("adds, updates, and deduplicates canonical Dock tabs by viewKey", () => {
@@ -106,10 +108,10 @@ describe("workspaceStore — Dock shell", () => {
       target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
     });
 
-    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(1);
 
     useWorkspaceStore.getState().updateDockTab("dbfox.data.table:ds-1:orders", { title: "orders v2" });
-    expect(useWorkspaceStore.getState().dockTabs[0].title).toBe("orders v2");
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())[0].title).toBe("orders v2");
   });
 
   it("disallows modifying viewKey and viewType through updateDockTab", () => {
@@ -125,7 +127,7 @@ describe("workspaceStore — Dock shell", () => {
       { viewKey: "illegal:key", viewType: "illegal.type", title: "orders updated" },
     );
 
-    const tab = useWorkspaceStore.getState().dockTabs[0];
+    const tab = selectActiveDockTabs(useWorkspaceStore.getState())[0];
     expect(tab.viewKey).toBe("dbfox.data.table:ds-1:orders");
     expect(tab.viewType).toBe("dbfox.data.table");
     expect(tab.title).toBe("orders updated");
@@ -167,8 +169,8 @@ describe("workspaceStore — Dock shell", () => {
     useWorkspaceStore.getState().closeDockTab("dbfox.data.table:ds-1:orders");
 
     const state = useWorkspaceStore.getState();
-    expect(state.dockTabs.map((tab) => tab.viewKey)).toEqual(["dbfox.data.table:ds-1:users"]);
-    expect(state.dock.activeViewKey).toBe("dbfox.data.table:ds-1:users");
+    expect(selectActiveDockTabs(state).map((tab) => tab.viewKey)).toEqual(["dbfox.data.table:ds-1:users"]);
+    expect(selectActiveDockViewKey(state)).toBe("dbfox.data.table:ds-1:users");
   });
 
   it("isolates Workbench tabs per Conversation and restores them on switch", () => {
@@ -188,13 +190,13 @@ describe("workspaceStore — Dock shell", () => {
       title: "SQL Console",
       closeable: true,
     });
-    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(2);
-    expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("dbfox.data.sql:ds-1");
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(2);
+    expect(selectActiveDockViewKey(useWorkspaceStore.getState())).toBe("dbfox.data.sql:ds-1");
 
     // Switch to Conversation B: starts empty
     useWorkspaceStore.getState().openConversationCenter("conv-B");
-    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(0);
-    expect(useWorkspaceStore.getState().dock.open).toBe(false);
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(0);
+    expect(selectActiveDockOpen(useWorkspaceStore.getState())).toBe(false);
 
     // In Conversation B: open Piano Studio tab
     useWorkspaceStore.getState().openDockTab({
@@ -203,19 +205,19 @@ describe("workspaceStore — Dock shell", () => {
       title: "Warm Light",
       closeable: true,
     });
-    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
-    expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("dbfox.music:warm-light");
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(1);
+    expect(selectActiveDockViewKey(useWorkspaceStore.getState())).toBe("dbfox.music:warm-light");
 
     // Switch back to Conversation A: restores orders and SQL tabs with active tab
     useWorkspaceStore.getState().openConversationCenter("conv-A");
-    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(2);
-    expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("dbfox.data.sql:ds-1");
-    expect(useWorkspaceStore.getState().dock.open).toBe(true);
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(2);
+    expect(selectActiveDockViewKey(useWorkspaceStore.getState())).toBe("dbfox.data.sql:ds-1");
+    expect(selectActiveDockOpen(useWorkspaceStore.getState())).toBe(true);
 
     // Switch back to Conversation B: restores Warm Light tab
     useWorkspaceStore.getState().openConversationCenter("conv-B");
-    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
-    expect(useWorkspaceStore.getState().dock.activeViewKey).toBe("dbfox.music:warm-light");
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(1);
+    expect(selectActiveDockViewKey(useWorkspaceStore.getState())).toBe("dbfox.music:warm-light");
   });
 
   it("migrates draft workbench tabs to the new conversation upon creation", () => {
@@ -229,12 +231,13 @@ describe("workspaceStore — Dock shell", () => {
       title: "SQL Console Draft",
       closeable: true,
     });
-    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(1);
 
     // New conversation is created
     useWorkspaceStore.getState().setProjectActiveConversation("project-1", "conv-new");
-    expect(useWorkspaceStore.getState().dockTabs).toHaveLength(1);
-    expect(useWorkspaceStore.getState().dockTabs[0].viewKey).toBe("dbfox.data.sql:ds-draft");
+    useWorkspaceStore.getState().openConversationCenter("conv-new");
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(1);
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())[0].viewKey).toBe("dbfox.data.sql:ds-draft");
 
     // And workbenchByConversation for draft is transferred to conv-new
     expect(useWorkspaceStore.getState().workbenchByConversation["conv-new"]?.tabs).toHaveLength(1);

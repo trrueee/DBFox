@@ -8,7 +8,11 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from engine.agent.resource_refs import ProjectResourceDescriptor
 from engine.errors import DBFoxError, ToolInputError
+from engine.models import AgentSession, Project
+from engine.tools.builtin.contracts import ProjectResourceSearchInput
+from engine.tools.builtin.project_resources import ProjectResourceSearchTool
 from engine.tools.runtime.base import (
     BaseTool,
     ToolExecutionSpec,
@@ -315,12 +319,59 @@ def test_product_registry_contains_only_kernel_tools_without_system_dlcs():
     assert names == {
         "conversation_read",
         "conversation_search",
+        "project_resource_search",
         "remote_job_cancel",
         "remote_job_status",
         "remote_job_submit",
         "request_clarification",
         "update_plan",
     }
+
+
+def test_project_resource_search_pages_large_catalog_without_granting_authority(
+    db_session,
+):
+    db_session.add(Project(id="resource-search-project", name="Resource search"))
+    db_session.commit()
+    db_session.add(
+        AgentSession(
+            id="resource-search-session",
+            project_id="resource-search-project",
+            title="Resource search",
+        )
+    )
+    db_session.commit()
+
+    def provider(_db, project_id):
+        assert project_id == "resource-search-project"
+        return tuple(
+            ProjectResourceDescriptor(
+                kind="verification.resource",
+                id=f"resource-{index:03d}",
+                version=index,
+                name=f"Resource {index:03d}",
+            )
+            for index in range(75)
+        )
+
+    tool = ProjectResourceSearchTool((provider,))
+    context = ToolRunContext.for_invocation(
+        request=SimpleNamespace(session_id="resource-search-session"),
+        idempotency_key="resource-search",
+        metadata_session=db_session,
+    )
+    first = tool.run(ProjectResourceSearchInput(limit=50), context)
+    second = tool.run(
+        ProjectResourceSearchInput(limit=50, cursor=first.next_cursor),
+        context,
+    )
+
+    assert first.returned_count == 50
+    assert first.has_more is True
+    assert first.next_cursor == "50"
+    assert second.returned_count == 25
+    assert second.has_more is False
+    assert context.scope_refs == ()
 
 
 def test_every_product_function_has_strict_input_and_output_contracts():

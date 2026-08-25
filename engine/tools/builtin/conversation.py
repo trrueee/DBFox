@@ -71,7 +71,7 @@ class ConversationSearchTool(
         concurrency="parallel_safe",
         max_output_bytes=65_536,
         capabilities=("metadata_read",),
-        required_resource_kinds=(),
+        required_resources=(),
     )
 
     def run(
@@ -145,7 +145,7 @@ class ConversationReadTool(BaseTool[ConversationReadInput, ConversationReadOutpu
         concurrency="parallel_safe",
         max_output_bytes=65_536,
         capabilities=("metadata_read",),
-        required_resource_kinds=(),
+        required_resources=(),
     )
 
     def run(

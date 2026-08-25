@@ -388,6 +388,7 @@ class AgentSessionInput(Base):  # type: ignore[misc,valid-type]
     selected_artifact_ids_json = Column(Text, nullable=False, default="[]")
     workspace_context_json = Column(Text, nullable=False, default="{}")
     resource_refs_json = Column(Text, nullable=False, default="[]")
+    references_json = Column(Text, nullable=False, default="[]")
     reply_to_request_id = Column(String, nullable=True)
     status = Column(String, nullable=False, default="admitted")
     admitted_at = Column(DateTime, nullable=False, default=utcnow)
@@ -448,6 +449,7 @@ class AgentToolInvocation(Base):  # type: ignore[misc,valid-type]
     owner_id = Column(String, nullable=True)
     package_digest = Column(String, nullable=True)
     input_json = Column(Text, nullable=False)
+    resource_refs_json = Column(Text, nullable=False, default="[]")
 
     input_hash = Column(String, nullable=False)
     idempotency_key = Column(String, nullable=False)

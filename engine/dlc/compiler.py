@@ -69,9 +69,9 @@ def _owned_resource_kind(owner_id: str, kind: str) -> bool:
 
 def _check_tool_resource_ownership(manifest: DlcManifest, tool: BaseTool[Any, Any]) -> None:
     foreign = tuple(
-        kind
-        for kind in tool.execution.required_resource_kinds
-        if not _owned_resource_kind(manifest.id, kind)
+        requirement.kind
+        for requirement in tool.execution.required_resources
+        if not _owned_resource_kind(manifest.id, requirement.kind)
     )
     if foreign:
         raise DlcError(

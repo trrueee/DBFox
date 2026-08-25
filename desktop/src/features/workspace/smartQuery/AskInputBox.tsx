@@ -1,5 +1,6 @@
 import { ArrowUp } from "lucide-react";
 import { Button } from "../../../components/ui";
+import type { WorkbenchReference } from "../../../../../sdk/frontend/index";
 import "../SmartQueryHome.css";
 
 interface AskInputBoxProps {
@@ -7,15 +8,27 @@ interface AskInputBoxProps {
   onChange: (value: string) => void;
   onSubmit: () => void;
   projectId?: string;
+  reference?: WorkbenchReference | null;
+  onClearReference?: () => void;
 }
 
 export function AskInputBox({
   value,
   onChange,
   onSubmit,
+  reference,
+  onClearReference,
 }: AskInputBoxProps) {
   return (
     <div className="ask-input">
+      {reference && (
+        <div className="ask-input__reference" aria-label="当前引用语境">
+          <span>{reference.label}</span>
+          {onClearReference && (
+            <button type="button" onClick={onClearReference} aria-label="清除引用">×</button>
+          )}
+        </div>
+      )}
       <textarea
         className="ask-input__textarea"
         value={value}

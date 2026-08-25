@@ -13,6 +13,21 @@ import type {
 import type { DockViewContribution } from "../../dock/types";
 import { ProjectResourceSidebar } from "../../resources/ProjectResourceSidebar";
 import { WorkspaceDock } from "../WorkspaceDock";
+import type { WorkspaceDockTab } from "../../../types/workspace";
+
+function setTestWorkbench(tabs: WorkspaceDockTab[], activeViewKey: string | null) {
+  useWorkspaceStore.setState({
+    workbenchByConversation: {
+      "draft:project-1": {
+        scopeId: "visual-test-scope",
+        open: true,
+        activeViewKey,
+        tabs,
+        reference: null,
+      },
+    },
+  });
+}
 
 vi.mock("../../projects/useProjectState", () => ({
   useProjectState: () => ({
@@ -56,8 +71,7 @@ describe("DLC visual conformance (spec §20/§34)", () => {
       mainSurfaceByProject: {},
       pendingAsk: null,
       settingsOpen: false,
-      dock: { open: true, activeViewKey: null },
-      dockTabs: [],
+      workbenchByConversation: {},
     });
     useConversationStore.setState({ activeConversationId: null, summaries: [] });
   });
@@ -130,10 +144,7 @@ describe("DLC visual conformance (spec §20/§34)", () => {
       title: view.resolveTitle?.({} as never) ?? `view-${index}`,
       closeable: true,
     }));
-    useWorkspaceStore.setState({
-      dockTabs: tabs,
-      dock: { open: true, activeViewKey: tabs[3].viewKey },
-    });
+    setTestWorkbench(tabs, tabs[3].viewKey);
     useDlcStore.getState().setProjectionResult("snap-conformance", {}, {
       connectors: [],
       dockViews,
@@ -163,15 +174,12 @@ describe("DLC visual conformance (spec §20/§34)", () => {
 
   it("ellipsizes long DLC titles in the tab strip", () => {
     const dockViews = [syntheticDockView(0)];
-    useWorkspaceStore.setState({
-      dockTabs: [{
+    setTestWorkbench([{
         viewKey: "synthetic.dock-0:1",
         viewType: "synthetic.dock-0",
         title: dockViews[0].resolveTitle?.({} as never) ?? "",
         closeable: true,
-      }],
-      dock: { open: true, activeViewKey: "synthetic.dock-0:1" },
-    });
+      }], "synthetic.dock-0:1");
     useDlcStore.getState().setProjectionResult("snap-conformance", {}, {
       connectors: [],
       dockViews,
@@ -207,15 +215,12 @@ describe("DLC visual conformance (spec §20/§34)", () => {
         throw new Error("renderer exploded");
       },
     });
-    useWorkspaceStore.setState({
-      dockTabs: [{
+    setTestWorkbench([{
         viewKey: "synthetic.broken.view:1",
         viewType: "synthetic.broken.view",
         title: "Broken View",
         closeable: true,
-      }],
-      dock: { open: true, activeViewKey: "synthetic.broken.view:1" },
-    });
+      }], "synthetic.broken.view:1");
     useDlcStore.getState().setProjectionResult("snap-broken", {}, staged.getContributions());
 
     render(

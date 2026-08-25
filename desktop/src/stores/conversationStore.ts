@@ -39,6 +39,7 @@ import type {
   QuestionItem,
 } from "../types/conversation";
 import type { RequestedResourceRef } from "../lib/api/generated/types.gen";
+import type { WorkbenchReference } from "../../../sdk/frontend/index";
 import {
   reduceStreamEvent,
   removeConversationState,
@@ -80,6 +81,7 @@ export interface ConversationActions {
     mode: ConversationDeliveryMode,
     idempotencyKey: string,
     requestedResources?: readonly RequestedResourceRef[],
+    references?: readonly WorkbenchReference[],
   ) => Promise<void>;
   cancelRun: (runId: string) => Promise<void>;
   resolveApproval: (runId: string, approvalId: string, approved: boolean) => Promise<void>;
@@ -220,7 +222,14 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }
   },
 
-  sendMessage: async (conversationId, content, mode, idempotencyKey, requestedResources = []) => {
+  sendMessage: async (
+    conversationId,
+    content,
+    mode,
+    idempotencyKey,
+    requestedResources = [],
+    references = [],
+  ) => {
     const llmPayload = requireConversationLlmPayload();
     const detail = get().detailById[conversationId]
       || await get().openConversation(conversationId);
@@ -232,6 +241,23 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         requested_resources: requestedResources.map((ref) => ({
           kind: ref.kind,
           id: ref.id,
+        })),
+      } : {}),
+      ...(references.length > 0 ? {
+        references: references.map((reference) => ({
+          label: reference.label,
+          authority: reference.authority
+            ? { kind: reference.authority.kind, id: reference.authority.id }
+            : null,
+          object: reference.object
+            ? {
+                kind: reference.object.kind,
+                id: reference.object.id,
+                version: reference.object.version ?? null,
+              }
+            : null,
+          locator: reference.locator ?? null,
+          artifact_id: reference.artifactId ?? null,
         })),
       } : {}),
       selected_artifact_ids: detail.selected_artifact_id ? [detail.selected_artifact_id] : [],

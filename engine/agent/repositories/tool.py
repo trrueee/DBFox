@@ -25,6 +25,8 @@ from engine.agent.run_item import (
 )
 from engine.agent.session import SessionLease
 from engine.agent.tool import ToolInvocation, ToolInvocationStatus
+from engine.agent.resource_refs import dump_resource_refs, load_resource_refs
+from engine.resource import ResourceScopeRef
 from engine.json_codec import canonical_dumps as _json, load_array, load_object
 from engine.models import AgentObservationRecord, AgentToolInvocation, AgentTurn
 from engine.tools.materialization import ToolMaterialization
@@ -55,6 +57,7 @@ class ToolInvocationRepository:
         raw_input: dict[str, Any],
         materialization: ToolMaterialization,
         policy_decision: dict[str, Any],
+        resource_refs: tuple[ResourceScopeRef, ...] = (),
     ) -> ToolInvocation:
         begin_agent_write(self.session)
         tool = materialization.require(tool_name)
@@ -85,6 +88,7 @@ class ToolInvocationRepository:
                 "tool": tool.name,
                 "contract_hash": tool.contract_hash,
                 "authorized_input_hash": authorized_input_hash,
+                "resource_refs": [ref.model_dump(mode="json") for ref in resource_refs],
             }
         )
         policy_status = str(policy_decision.get("status") or "blocked")
@@ -109,6 +113,7 @@ class ToolInvocationRepository:
             # the provider's untrusted request. Approval and leaf execution
             # therefore bind to exactly the same canonical input.
             input_json=_json(authorized_input),
+            resource_refs_json=dump_resource_refs(resource_refs),
             input_hash=authorized_input_hash,
             idempotency_key=idempotency_key,
             status=status.value,
@@ -552,6 +557,7 @@ class ToolInvocationRepository:
             package_digest=str(row.package_digest) if row.package_digest is not None else None,
             authorized_input=load_object(str(row.input_json)),
             authorized_input_hash=str(row.input_hash),
+            resource_refs=load_resource_refs(str(row.resource_refs_json or "[]")),
             idempotency_key=str(row.idempotency_key),
             status=ToolInvocationStatus(str(row.status)),
             policy=load_object(str(row.policy_json or "{}")),

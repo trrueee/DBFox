@@ -294,6 +294,11 @@ export function createStagedExtensionHost(
         services.openDockTab({ ...view }, activate);
       },
     },
+    workbench: {
+      currentScopeId(): string {
+        return useWorkspaceStore.getState().ensureActiveWorkbenchScope();
+      },
+    },
     artifactRenderers: {
       register(contribution: ArtifactRendererContribution<unknown>): void {
         if (!contribution || typeof contribution.type !== "string" || !contribution.type.trim()) {

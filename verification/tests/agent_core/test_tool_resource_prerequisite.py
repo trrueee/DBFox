@@ -14,6 +14,7 @@ from engine.tools.runtime import (
     ToolInputModel,
     ToolOutputModel,
     ToolPresentation,
+    ToolResourceRequirement,
     ToolRegistry,
     ToolRunContext,
 )
@@ -44,12 +45,12 @@ class FreeProbe(BaseTool[ProbeInput, ProbeOutput]):
 
 class AlphaProbe(FreeProbe):
     name = "verification_alpha"
-    execution = ToolExecutionSpec(required_resource_kinds=("verification.alpha",))
+    execution = ToolExecutionSpec(required_resources=(ToolResourceRequirement(kind="verification.alpha"),))
 
 
 class BetaProbe(FreeProbe):
     name = "verification_beta"
-    execution = ToolExecutionSpec(required_resource_kinds=("verification.beta",))
+    execution = ToolExecutionSpec(required_resources=(ToolResourceRequirement(kind="verification.beta"),))
 
 
 def _registry() -> ToolRegistry:
@@ -144,13 +145,16 @@ def test_missing_frozen_resource_fails_closed(db_session):
 def test_required_resource_kind_is_part_of_frozen_tool_contract():
     class ChangedProbe(FreeProbe):
         name = "verification_alpha"
-        execution = ToolExecutionSpec(required_resource_kinds=("verification.alpha",))
+        execution = ToolExecutionSpec(required_resources=(ToolResourceRequirement(kind="verification.alpha"),))
 
     assert current_tool_contract_hash(FreeProbe()) != current_tool_contract_hash(ChangedProbe())
 
 
 def test_required_resource_kind_validation():
     with pytest.raises(ValueError, match="namespaced identifier"):
-        ToolExecutionSpec(required_resource_kinds=("",))
-    with pytest.raises(ValueError, match="duplicates"):
-        ToolExecutionSpec(required_resource_kinds=("verification.alpha", "verification.alpha"))
+        ToolExecutionSpec(required_resources=(ToolResourceRequirement(kind=""),))
+    with pytest.raises(ValueError, match="duplicate"):
+        ToolExecutionSpec(required_resources=(
+            ToolResourceRequirement(kind="verification.alpha"),
+            ToolResourceRequirement(kind="verification.alpha"),
+        ))

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from engine.agent.context import ContextAssembler
+from engine.agent.resource_refs import ProjectResourceDescriptor
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.session import DeliveryMode
 from engine.tools.runtime.attempt import ResourceScopeRef
@@ -13,7 +14,54 @@ from engine.models import (
     AgentSession,
     AgentTaskPlanRecord,
     AgentTurn,
+    Project,
 )
+
+
+def test_project_resource_directory_snapshot_is_bounded_and_reports_full_kind_counts(
+    db_session,
+) -> None:
+    db_session.add(Project(id="context-resource-project", name="Resources"))
+    db_session.commit()
+    db_session.add(
+        AgentSession(
+            id="context-resource-session",
+            project_id="context-resource-project",
+            title="Resources",
+        )
+    )
+    db_session.commit()
+    admission = SessionRepository(db_session).admit(
+        session_id="context-resource-session",
+        resource_refs=(),
+        content="Find a resource without attaching authority to this Input.",
+        idempotency_key="context-resource-directory",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+
+    def provider(_db, project_id):
+        assert project_id == "context-resource-project"
+        return tuple(
+            ProjectResourceDescriptor(
+                kind="verification.resource",
+                id=f"resource-{index:03d}",
+                version=index,
+                name=f"Resource {index:03d}",
+            )
+            for index in range(75)
+        )
+
+    snapshot = ContextAssembler(
+        db_session,
+        resource_providers=(provider,),
+    ).build(admission.run_id)
+
+    assert len(snapshot.resource_directory) == 32
+    assert snapshot.resource_directory_counts == {"verification.resource": 75}
+    assert snapshot.resource_directory_truncated is True
 
 
 def test_next_run_reads_durable_history_and_selected_artifact(

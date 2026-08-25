@@ -14,6 +14,7 @@ from dbfox_dlc_api import (
     BaseTool,
     ExtensionToolRunContext,
     ToolExecutionSpec,
+    ToolResourceRequirement,
     ToolInputError,
     ToolObservationProjection,
     ToolOutcome,
@@ -48,7 +49,7 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
     execution = ToolExecutionSpec(
         recovery="retry_safe",
         capabilities=("network", "filesystem_read"),
-        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=DATABASE_RESOURCE_KIND, selector_field="database_id"),),
     )
     semantics = ToolSemanticSpec(produces=("dbfox.data.sample_rows",))
     presentation = ToolPresentation(title="查看数据样例", category="query")

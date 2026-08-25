@@ -13,6 +13,7 @@ from dbfox_dlc_api import (
     BaseTool,
     ExtensionToolRunContext,
     ToolExecutionSpec,
+    ToolResourceRequirement,
     ToolInputError,
     ToolObservationProjection,
     ToolPolicy,
@@ -99,7 +100,7 @@ class ResultInspectTool(BaseTool[ResultInspectInput, ResultInspectOutput]):
     execution = ToolExecutionSpec(
         recovery="retry_safe",
         capabilities=("filesystem_read",),
-        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=DATABASE_RESOURCE_KIND, artifact_selector_field="result_artifact_id"),),
     )
     semantics = ToolSemanticSpec(
         produces=("dbfox.data.query_result",),
@@ -203,7 +204,7 @@ class ResultProfileTool(BaseTool[ResultProfileInput, ResultProfileOutput]):
     execution = ToolExecutionSpec(
         recovery="retry_safe",
         capabilities=("filesystem_read",),
-        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=DATABASE_RESOURCE_KIND, artifact_selector_field="result_artifact_id"),),
     )
     semantics = ToolSemanticSpec(publishes_artifact_references=True)
     presentation = ToolPresentation(title="分析结果分布与质量", category="query")
@@ -287,7 +288,7 @@ class ChartCreateTool(BaseTool[ChartCreateInput, ChartCreateOutput]):
     execution = ToolExecutionSpec(
         recovery="retry_safe",
         capabilities=("filesystem_read",),
-        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=DATABASE_RESOURCE_KIND, artifact_selector_field="result_artifact_id"),),
     )
     semantics = ToolSemanticSpec(publishes_artifact_references=True)
     presentation = ToolPresentation(title="生成结果图表", category="visualize")

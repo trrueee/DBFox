@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import pytest
 
 from engine.agent.events import RuntimeEventType
+from engine.agent.references import load_input_references
 from engine.agent.resource_refs import ProjectResourceDescriptor, load_resource_refs
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.session import SessionRepository
@@ -215,6 +216,14 @@ def test_conversation_resource_intent_is_durable_and_message_attachments_are_add
             "idempotency_key": "resource-intent-additive-1",
             "delivery_mode": "queue",
             "requested_resources": [{"kind": "dbfox.data.database", "id": "db-2"}],
+            "references": [
+                {
+                    "label": "orders rows 20-30",
+                    "authority": {"kind": "dbfox.data.database", "id": "db-2"},
+                    "object": {"kind": "dbfox.data.table", "id": "orders"},
+                    "locator": "rows:20-30",
+                }
+            ],
             "llm_credential_id": "credential-1",
         },
         headers=_headers(),
@@ -228,6 +237,13 @@ def test_conversation_resource_intent_is_durable_and_message_attachments_are_add
         ("dbfox.data.database", "db-1"),
         ("dbfox.data.database", "db-2"),
     ]
+    references = load_input_references(str(stored_input.references_json))
+    assert len(references) == 1
+    assert references[0].authority is not None
+    assert references[0].authority.kind == "dbfox.data.database"
+    assert references[0].object is not None
+    assert references[0].object.kind == "dbfox.data.table"
+    assert references[0].locator == "rows:20-30"
     stored_run = db_session.get(AgentRun, admitted.json()["run_id"])
     assert stored_run is not None
     assert not hasattr(stored_run, "datasource_id")

@@ -26,12 +26,19 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "../../components/ui";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
+import {
+  selectActiveDockOpen,
+  selectActiveDockTabs,
+  selectActiveDockViewKey,
+  selectActiveWorkbenchScopeId,
+  useWorkspaceStore,
+} from "../../stores/workspaceStore";
 import type { WorkspaceDockTab } from "../../types/workspace";
 import type { DockViewRegistry } from "../dock/dockViewComposition";
 import { DEFAULT_REGISTRY, dockViewTitle } from "../dock/dockViewComposition";
 import { useDlcStore } from "../dlc/extensionStore";
 import type { DockViewContribution } from "../dock/types";
+import type { WorkbenchReference } from "../../../../sdk/frontend/index";
 import { clearCspFlexBasis, setCspFlexBasis } from "../../lib/cspVirtualLayout";
 import "./WorkspaceDock.css";
 
@@ -108,8 +115,11 @@ export function WorkspaceDock({
   showToast,
   registry = DEFAULT_REGISTRY,
 }: WorkspaceDockProps) {
-  const dock = useWorkspaceStore((s) => s.dock);
-  const dockTabs = useWorkspaceStore((s) => s.dockTabs);
+  const dockOpen = useWorkspaceStore(selectActiveDockOpen);
+  const dockTabs = useWorkspaceStore(selectActiveDockTabs);
+  const activeViewKey = useWorkspaceStore(selectActiveDockViewKey);
+  const workbenchScopeId = useWorkspaceStore(selectActiveWorkbenchScopeId);
+  const setWorkbenchReference = useWorkspaceStore((s) => s.setWorkbenchReference);
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
   const setDockActiveTab = useWorkspaceStore((s) => s.setDockActiveTab);
   const closeDockTab = useWorkspaceStore((s) => s.closeDockTab);
@@ -131,7 +141,7 @@ export function WorkspaceDock({
     });
   }, [activeConversationId, activeProjectId, dlcDockViews, dockTabs, registry]);
 
-  const activeKey = dock.activeViewKey;
+  const activeKey = activeViewKey;
   const activeTab =
     visibleTabs.find((tab) => tab.viewKey === activeKey) ?? visibleTabs.at(-1) ?? null;
 
@@ -231,7 +241,7 @@ export function WorkspaceDock({
     setDockWidth(clampDockWidth(current + delta));
   }, [clampDockWidth, dockWidth]);
 
-  if (!dock.open) {
+  if (!dockOpen) {
     return (
       <aside className="workspace-dock workspace-dock--collapsed" aria-label="工作台 Dock">
         <Tooltip>
@@ -368,6 +378,8 @@ export function WorkspaceDock({
           activeProjectId,
           activeConversationId,
           showToast,
+          workbenchScopeId,
+          setWorkbenchReference,
           registry,
           dlcDockViews,
         )}
@@ -381,6 +393,8 @@ function renderDockTab(
   activeProjectId: string,
   activeConversationId: string | null,
   showToast: WorkspaceDockProps["showToast"],
+  workbenchScopeId: string,
+  onAsk: (reference: WorkbenchReference) => void,
   registry: DockViewRegistry,
   dlcDockViews: readonly DockViewContribution[],
 ) {
@@ -408,6 +422,8 @@ function renderDockTab(
         activeProjectId,
         activeConversationId,
         showToast,
+        workbenchScopeId,
+        onAsk,
       })}
     </div>
   );

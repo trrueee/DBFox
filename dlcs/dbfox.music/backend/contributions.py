@@ -17,6 +17,7 @@ from dbfox_dlc_api import (
     ResourceScopeRef,
     SemanticArtifactCompletionSupport,
     ToolExecutionSpec,
+    ToolResourceRequirement,
     ToolInputError,
     ToolObservationProjection,
     ToolOutcome,
@@ -182,7 +183,7 @@ class ComposePianoTool(BaseTool[ComposePianoInput, ScoreRevisionOutput]):
         recovery="reconcile",
         retryable=False,
         concurrency="sequential",
-        required_resource_kinds=(LIBRARY_KIND,),
+        required_resources=(ToolResourceRequirement(kind=LIBRARY_KIND),),
     )
     semantics = ToolSemanticSpec(produces=(SCORE_REVISION_ARTIFACT,))
     presentation = ToolPresentation(title="创作钢琴谱", category="manage")
@@ -239,7 +240,7 @@ class _ScoreWriteTool:
         recovery="never_retry",
         retryable=False,
         concurrency="sequential",
-        required_resource_kinds=(SCORE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=SCORE_KIND, selector_field="score_id"),),
     )
     semantics = ToolSemanticSpec(produces=(SCORE_REVISION_ARTIFACT,))
 
@@ -383,7 +384,7 @@ class AnalyzeScoreTool(BaseTool[AnalyzeScoreInput, ScoreAnalysisOutput]):
         retryable=True,
         max_retries=1,
         concurrency="parallel_safe",
-        required_resource_kinds=(SCORE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=SCORE_KIND, selector_field="score_id"),),
     )
     semantics = ToolSemanticSpec(produces=(SCORE_ANALYSIS_ARTIFACT,))
     presentation = ToolPresentation(title="分析乐谱", category="explore")
@@ -437,7 +438,7 @@ class AnalyzeAudioTool(BaseTool[AnalyzeAudioInput, AudioAnalysisOutput]):
         retryable=True,
         max_retries=1,
         concurrency="parallel_safe",
-        required_resource_kinds=(AUDIO_KIND,),
+        required_resources=(ToolResourceRequirement(kind=AUDIO_KIND, selector_field="audio_source_id"),),
     )
     semantics = ToolSemanticSpec(produces=(AUDIO_ANALYSIS_ARTIFACT,))
     presentation = ToolPresentation(title="分析钢琴录音", category="explore")
@@ -510,7 +511,7 @@ class TranscribePianoTool(BaseTool[TranscribePianoInput, TranscriptionOutput]):
         recovery="never_retry",
         retryable=False,
         concurrency="sequential",
-        required_resource_kinds=(AUDIO_KIND,),
+        required_resources=(ToolResourceRequirement(kind=AUDIO_KIND, selector_field="audio_source_id"),),
     )
     semantics = ToolSemanticSpec(produces=(SCORE_REVISION_ARTIFACT, TRANSCRIPTION_ARTIFACT))
     presentation = ToolPresentation(title="把钢琴录音转成乐谱", category="manage")
@@ -578,7 +579,10 @@ class AlignScoreToAudioTool(BaseTool[AlignScoreInput, AlignmentOutput]):
         retryable=True,
         max_retries=1,
         concurrency="parallel_safe",
-        required_resource_kinds=(AUDIO_KIND, SCORE_KIND),
+        required_resources=(
+            ToolResourceRequirement(kind=AUDIO_KIND, selector_field="audio_source_id"),
+            ToolResourceRequirement(kind=SCORE_KIND, selector_field="score_id"),
+        ),
     )
     semantics = ToolSemanticSpec(produces=(ALIGNMENT_ARTIFACT,))
     presentation = ToolPresentation(title="对齐录音与乐谱", category="visualize")

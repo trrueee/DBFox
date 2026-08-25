@@ -33,6 +33,7 @@ from engine.tools.runtime.base import (
     ToolExecutionSpec,
     ToolInputModel,
     ToolOutputModel,
+    ToolResourceRequirement,
 )
 from engine.tools.runtime.resource_context import build_tool_scope_context
 
@@ -218,7 +219,7 @@ def test_in_process_execution_uses_composite_resolver(db_session, tmp_path) -> N
         output_model = DummyOutput
         presentation = "code"
         execution = ToolExecutionSpec(
-            required_resource_kinds=("synthetic.workspace",),
+            required_resources=(ToolResourceRequirement(kind="synthetic.workspace"),),
             backend="in_process",
         )
 
@@ -266,7 +267,7 @@ def test_composite_resolver_supports_third_resource_extension(db_session) -> Non
         output_model = DummyOutput
         presentation = "code"
         execution = ToolExecutionSpec(
-            required_resource_kinds=("custom.source",),
+            required_resources=(ToolResourceRequirement(kind="custom.source"),),
             backend="in_process",
         )
 

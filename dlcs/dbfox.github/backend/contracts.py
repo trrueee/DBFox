@@ -48,7 +48,7 @@ class GithubFileEntry(BaseModel):
 
 
 class GithubRepoOverviewInput(ToolInputModel):
-    pass
+    repository_id: str = Field(min_length=1, max_length=128)
 
 
 class GithubRepoOverviewOutput(ToolOutputModel):
@@ -62,6 +62,7 @@ class GithubRepoOverviewOutput(ToolOutputModel):
 
 
 class GithubListFilesInput(ToolInputModel):
+    repository_id: str = Field(min_length=1, max_length=128)
     path: str = Field(default="", max_length=1024)
     limit: int = Field(default=50, ge=1, le=100)
 
@@ -74,6 +75,7 @@ class GithubListFilesOutput(ToolOutputModel):
 
 
 class GithubReadFileInput(ToolInputModel):
+    repository_id: str = Field(min_length=1, max_length=128)
     path: str = Field(min_length=1, max_length=1024)
 
 

@@ -36,7 +36,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "f5a6b7c8d9eb"
+FOUNDATION_HEAD_REVISION = "f6a7b8c9d0ec"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -272,6 +272,12 @@ def _assert_final_contract(engine) -> None:
         item["name"]: item for item in inspect(engine).get_columns("agent_session_inputs")
     }
     assert input_columns["resource_refs_json"]["nullable"] is False
+    assert input_columns["references_json"]["nullable"] is False
+    invocation_columns = {
+        item["name"]: item
+        for item in inspect(engine).get_columns("agent_tool_invocations")
+    }
+    assert invocation_columns["resource_refs_json"]["nullable"] is False
 
     assert not any(name.startswith("agent_runtime_") for name in tables)
     assert {"agent_checkpoints", "agent_trace_events"}.isdisjoint(tables)
@@ -338,6 +344,126 @@ def test_fresh_upgrade_has_the_complete_foundation_v2_contract(monkeypatch, tmp_
             assert connection.execute(text("SELECT COUNT(*) FROM foundation_runtime_state")).scalar_one() == 0
         _assert_final_contract(engine)
         command.check(_alembic_config(database_url))
+    finally:
+        engine.dispose()
+
+
+def test_invocation_resource_migration_preserves_historical_input_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "invocation-resource-authority.db")
+    _upgrade(monkeypatch, database_url, "f5a6b7c8d9eb")
+    historical_refs = [
+        {"kind": "verification.resource", "id": "resource-a", "version": 4}
+    ]
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("""
+                INSERT INTO projects (
+                    id, name, status, created_at, updated_at
+                ) VALUES (
+                    'invocation-project', 'Invocation project', 'active',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+            """))
+            connection.execute(text("""
+                INSERT INTO agent_sessions (
+                    id, project_id, title, input_sequence, event_sequence,
+                    event_floor_sequence, lease_token, context_epoch,
+                    message_sequence, created_at, updated_at
+                ) VALUES (
+                    'invocation-session', 'invocation-project', 'Invocation',
+                    1, 0, 0, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+            """))
+            connection.execute(
+                text("""
+                    INSERT INTO agent_session_inputs (
+                        id, session_id, sequence, idempotency_key, content,
+                        delivery_mode, selected_artifact_ids_json,
+                        workspace_context_json, resource_refs_json, status,
+                        admitted_at
+                    ) VALUES (
+                        'invocation-input', 'invocation-session', 1,
+                        'invocation-input-key', 'read resource', 'queue', '[]',
+                        '{}', :resource_refs, 'running', CURRENT_TIMESTAMP
+                    )
+                """),
+                {"resource_refs": json.dumps(historical_refs)},
+            )
+            connection.execute(text("""
+                INSERT INTO agent_runs (
+                    id, session_id, question, status, input_id,
+                    created_at, updated_at
+                ) VALUES (
+                    'invocation-run', 'invocation-session', 'read resource',
+                    'running', 'invocation-input', CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP
+                )
+            """))
+            connection.execute(text("""
+                UPDATE agent_session_inputs
+                SET run_id = 'invocation-run'
+                WHERE id = 'invocation-input'
+            """))
+            connection.execute(text("""
+                INSERT INTO agent_turns (
+                    id, session_id, run_id, sequence, status,
+                    agent_definition_version, prompt_version, prompt_hash,
+                    context_hash, tool_materialization_hash, provider,
+                    model_name, created_at
+                ) VALUES (
+                    'invocation-turn', 'invocation-session', 'invocation-run', 1,
+                    'completed', 'v1', 'v1', 'prompt-hash', 'context-hash',
+                    'tools-hash', 'test', 'test-model', CURRENT_TIMESTAMP
+                )
+            """))
+            connection.execute(
+                text("""
+                    INSERT INTO agent_tool_invocations (
+                        id, session_id, run_id, turn_id, provider_call_id,
+                        tool_name, input_json, input_hash, idempotency_key,
+                        status, policy_json, recovery_policy, attempt_count,
+                        presentation_json, declared_version, contract_hash,
+                        created_at
+                    ) VALUES (
+                        'invocation-old', 'invocation-session', 'invocation-run',
+                        'invocation-turn', 'provider-call', 'verification_probe',
+                        '{}', 'input-hash', 'invocation-key', 'succeeded', '{}',
+                        'retry_safe', 1, :presentation,
+                        '1', 'contract-hash', CURRENT_TIMESTAMP
+                    )
+                """),
+                {
+                    "presentation": json.dumps(
+                        {
+                            "title": "Probe",
+                            "category": "explore",
+                            "visibility": "developer",
+                            "progress": "none",
+                        }
+                    )
+                },
+            )
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            assert json.loads(connection.execute(text("""
+                SELECT resource_refs_json
+                FROM agent_tool_invocations
+                WHERE id = 'invocation-old'
+            """)).scalar_one()) == historical_refs
+            assert connection.execute(text("""
+                SELECT references_json
+                FROM agent_session_inputs
+                WHERE id = 'invocation-input'
+            """)).scalar_one() == "[]"
     finally:
         engine.dispose()
 

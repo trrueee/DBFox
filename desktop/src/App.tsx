@@ -10,7 +10,12 @@ import "./App.css";
 import { setDialogContainer } from "./components/ui/dialogContainer";
 import { setToastRoot, useToast } from "./components/toastState";
 import { installClientErrorLogging, recordClientLog } from "./lib/diagnostics/clientLog";
-import { useWorkspaceStore } from "./stores/workspaceStore";
+import {
+  selectActiveDockOpen,
+  selectActiveDockTabs,
+  selectActiveDockViewKey,
+  useWorkspaceStore,
+} from "./stores/workspaceStore";
 import { useArtifactDockStore } from "./stores/artifactDockStore";
 import { useConversationStore } from "./stores/conversationStore";
 import { DesktopLifecycleMonitor } from "./features/appShell/DesktopLifecycleMonitor";
@@ -138,8 +143,9 @@ export default function App() {
 
   // ── Store selectors ──
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
-  const dock = useWorkspaceStore((s) => s.dock);
-  const dockTabs = useWorkspaceStore((s) => s.dockTabs);
+  const dockOpen = useWorkspaceStore(selectActiveDockOpen);
+  const dockTabs = useWorkspaceStore(selectActiveDockTabs);
+  const activeDockViewKey = useWorkspaceStore(selectActiveDockViewKey);
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
   const openDockArtifacts = useArtifactDockStore((s) => s.openArtifacts);
   const showSmartQueryHome = useWorkspaceStore((s) => s.showSmartQueryHome);
@@ -195,15 +201,14 @@ export default function App() {
       }
       if (event.key === "\\") {
         event.preventDefault();
-        setDockOpen(!dock.open);
+        setDockOpen(!dockOpen);
       }
     };
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [
     activeConversationId,
-    dock.open,
-    dockTabs,
+    dockOpen,
     openConversationCenter,
     openDockArtifacts,
     setDockOpen,
@@ -211,7 +216,7 @@ export default function App() {
   ]);
 
   const activeDockTab = dockTabs.find(
-    (tab) => tab.viewKey === dock.activeViewKey,
+    (tab) => tab.viewKey === activeDockViewKey,
   );
 
   return (

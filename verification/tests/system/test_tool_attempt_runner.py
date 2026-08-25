@@ -29,6 +29,7 @@ from engine.tools.runtime.base import (
     ToolInputModel,
     ToolOutputModel,
     ToolPresentation,
+    ToolResourceRequirement,
 )
 from engine.tools.materialization import current_tool_contract_hash
 
@@ -84,7 +85,9 @@ class _FileProbeTool(BaseTool[_FileProbeInput, _FileProbeOutput]):
     input_model = _FileProbeInput
     output_model = _FileProbeOutput
     presentation = ToolPresentation(title="File probe", category="explore")
-    execution = ToolExecutionSpec(required_resource_kinds=("synthetic.workspace",))
+    execution = ToolExecutionSpec(required_resources=(
+        ToolResourceRequirement(kind="synthetic.workspace"),
+    ))
 
     def run(self, _input, _context):
         return _FileProbeOutput()

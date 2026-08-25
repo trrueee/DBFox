@@ -55,12 +55,14 @@ async function loadProject(projectId) {
   emit();
 }
 
-function stateKey(projectId, kind, id) { return `${projectId}:${kind}:${id}`; }
+function stateKey(projectId, kind, id) {
+  return `${host.workbench.currentScopeId()}:${projectId}:${kind}:${id}`;
+}
 
 function openStudio(projectId, kind, value) {
   const id = value?.id || value?.scoreId || value?.score_id || "new";
   const key = stateKey(projectId, kind, id);
-  studioState.set(key, { projectId, kind, value });
+  studioState.set(key, { projectId, scopeId: host.workbench.currentScopeId(), kind, value });
   host.dockViews.open({
     viewKey: `music-studio:${key}`,
     viewType: STUDIO_VIEW,
@@ -80,8 +82,12 @@ function openStudio(projectId, kind, value) {
 function promoteEmptyStudio(projectId, value) {
   if (!projectId) return false;
   for (const [key, state] of studioState.entries()) {
-    if (state.projectId !== projectId || state.kind !== "empty") continue;
-    studioState.set(key, { projectId, kind: "score", value });
+    if (
+      state.projectId !== projectId
+      || state.scopeId !== host.workbench.currentScopeId()
+      || state.kind !== "empty"
+    ) continue;
+    studioState.set(key, { ...state, kind: "score", value });
     host.dockViews.open({
       viewKey: `music-studio:${key}`,
       viewType: STUDIO_VIEW,
@@ -301,12 +307,15 @@ function ScoreStudio({ projectId, source, context }) {
 
   function handleAskMeasure(m) {
     if (!m) return;
-    context?.onAsk?.({
+    context.onAsk({
       label: `${document.title || "乐谱"} · 第 ${m} 小节`,
-      kind: "dbfox.music.score",
-      id: result.revision.score_id,
+      authority: { kind: SCORE_KIND, id: result.revision.score_id },
+      object: {
+        kind: "dbfox.music.measure",
+        id: `${result.revision.score_id}:${m}`,
+        version: result.revision.revision,
+      },
       locator: `measure:${m}`,
-      resourceRef: { kind: SCORE_KIND, id: result.revision.score_id },
     });
   }
 

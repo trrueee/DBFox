@@ -514,6 +514,28 @@ export type ConversationInputAcceptedResponse = {
 };
 
 /**
+ * ConversationInputReference
+ *
+ * One bounded user-visible selection attached to a Conversation Input.
+ */
+export type ConversationInputReference = {
+    /**
+     * Artifact Id
+     */
+    artifact_id?: string | null;
+    authority?: RequestedResourceRef | null;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Locator
+     */
+    locator?: string | null;
+    object?: ReferencedObject | null;
+};
+
+/**
  * ConversationInputRequest
  */
 export type ConversationInputRequest = {
@@ -538,6 +560,10 @@ export type ConversationInputRequest = {
      * Model Name
      */
     model_name?: string | null;
+    /**
+     * References
+     */
+    references?: Array<ConversationInputReference>;
     /**
      * Requested Resources
      */
@@ -1919,6 +1945,26 @@ export type QuestionResolutionRequest = {
  * QuestionStatus
  */
 export type QuestionStatus = 'pending' | 'answered' | 'expired' | 'cancelled';
+
+/**
+ * ReferencedObject
+ *
+ * Capability-owned object identity; never execution authority by itself.
+ */
+export type ReferencedObject = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Version
+     */
+    version?: string | number | null;
+};
 
 /**
  * RequestedResourceRef

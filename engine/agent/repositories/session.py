@@ -25,6 +25,10 @@ from engine.agent.run_item import (
 from engine.agent.session import DeliveryMode, SessionInputStatus, SessionLease
 from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.resource_refs import dump_resource_refs
+from engine.agent.references import (
+    ConversationInputReference,
+    dump_input_references,
+)
 from engine.json_codec import canonical_dumps as _json
 from engine.models import (
     AgentMessage,
@@ -171,6 +175,7 @@ class SessionRepository:
         delivery_mode: DeliveryMode = DeliveryMode.QUEUE,
         selected_artifact_ids: list[str] | None = None,
         workspace_context: dict[str, Any] | None = None,
+        references: tuple[ConversationInputReference, ...] = (),
         reply_to_request_id: str | None = None,
     ) -> Admission:
         begin_agent_write(self.session)
@@ -204,6 +209,7 @@ class SessionRepository:
                     idempotency_key=idempotency_key,
                     selected_artifact_ids=selected_artifact_ids,
                     workspace_context=workspace_context,
+                    references=references,
                 )
 
         if delivery_mode is DeliveryMode.CANCEL_AND_REPLACE:
@@ -231,6 +237,7 @@ class SessionRepository:
             selected_artifact_ids_json=_json(selected_artifact_ids or []),
             workspace_context_json=_json(workspace_context or {}),
             resource_refs_json=dump_resource_refs(resource_refs),
+            references_json=dump_input_references(references),
             reply_to_request_id=reply_to_request_id,
             status=SessionInputStatus.ADMITTED.value,
             admitted_at=now,
@@ -615,6 +622,7 @@ class SessionRepository:
         idempotency_key: str,
         selected_artifact_ids: list[str] | None,
         workspace_context: dict[str, Any] | None,
+        references: tuple[ConversationInputReference, ...],
     ) -> Admission:
         # Inherit frozen resource refs from the run's original input.
         # A steer cannot change the active Run's resource authority.
@@ -624,7 +632,6 @@ class SessionRepository:
             if original_input is not None and original_input.resource_refs_json is not None
             else None
         )
-
         aggregate.input_sequence = int(aggregate.input_sequence or 0) + 1
         aggregate.message_sequence = int(aggregate.message_sequence or 0) + 1
         now = _utcnow()
@@ -654,6 +661,7 @@ class SessionRepository:
             selected_artifact_ids_json=_json(selected_artifact_ids or []),
             workspace_context_json=_json(workspace_context or {}),
             resource_refs_json=inherited_refs_json,
+            references_json=dump_input_references(references),
             status=SessionInputStatus.ADMITTED.value,
             admitted_at=now,
         )

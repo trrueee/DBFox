@@ -58,7 +58,7 @@ async function loadBindings(projectId) {
 }
 
 function openFile(projectId, binding, path) {
-  const stateKey = `${projectId}:${binding.id}:${path}`;
+  const stateKey = `${extensionHost.workbench.currentScopeId()}:${projectId}:${binding.id}:${path}`;
   fileStateByKey.set(stateKey, {
     projectId,
     bindingId: binding.id,

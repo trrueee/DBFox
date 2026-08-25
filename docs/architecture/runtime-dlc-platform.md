@@ -254,7 +254,9 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
   are composable; Core deterministically flattens each key into one provider-safe wire name at
   materialization and freezes that name with owner/package digest.
 - Every Resource kind is namespaced (`owner_id.*`). A DLC provider/resolver and its Tool
-  `required_resource_kinds` may expose or consume only its own namespace.
+  `required_resources` may expose or consume only its own namespace. Requirements bind an exact
+  Invocation resource through an input selector or an immutable Artifact; Project kind discovery
+  controls model visibility only and never grants all matching resources.
 - Cross-capability work is an Agent composition concern. No DLC receives another DLC's private
   resolved handle through `Any`; a future Composition DLC requires an explicit dependency contract.
 - Runtime aliases are not supported. Existing Workspace/GitHub durable identities are migrated once

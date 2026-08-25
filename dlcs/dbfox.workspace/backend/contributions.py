@@ -12,6 +12,7 @@ from dbfox_dlc_api import (
     ExtensionToolRunContext,
     ResourceScopeRef,
     ToolExecutionSpec,
+    ToolResourceRequirement,
     ToolInputError,
     ToolOutcome,
     ToolObservationProjection,
@@ -75,7 +76,7 @@ class WorkspaceFileSearchTool(BaseTool[FileSearchInput, FileSearchOutput]):
         max_retries=1,
         concurrency="parallel_safe",
         capabilities=("filesystem_read",),
-        required_resource_kinds=(WORKSPACE_RESOURCE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=WORKSPACE_RESOURCE_KIND),),
     )
     semantics = ToolSemanticSpec(produces=("dbfox.workspace.file_search",))
     presentation = ToolPresentation(title="搜索项目文件", category="explore")
@@ -138,7 +139,7 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
         concurrency="parallel_safe",
         max_output_bytes=1_000_000,
         capabilities=("filesystem_read",),
-        required_resource_kinds=(WORKSPACE_RESOURCE_KIND,),
+        required_resources=(ToolResourceRequirement(kind=WORKSPACE_RESOURCE_KIND),),
     )
     semantics = ToolSemanticSpec(produces=(FILE_SNAPSHOT,))
     presentation = ToolPresentation(title="读取项目文件", category="explore")

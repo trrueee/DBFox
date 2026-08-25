@@ -93,6 +93,28 @@ def load_resource_refs(raw_json: str) -> tuple[ResourceScopeRef, ...]:
     return tuple(refs)
 
 
+def discover_resources_from_providers(
+    db: Any,
+    project_id: str,
+    providers: tuple[ProjectResourceProvider, ...],
+) -> tuple[ProjectResourceDescriptor, ...]:
+    """Compose current Project resource descriptors without granting authority."""
+
+    descriptors: list[ProjectResourceDescriptor] = []
+    seen: set[tuple[str, str]] = set()
+    for provider in providers:
+        for descriptor in provider(db, project_id):
+            key = (descriptor.kind, descriptor.id)
+            if key in seen:
+                raise ValueError(
+                    "Duplicate resource discovery identity "
+                    f"(kind={descriptor.kind!r}, id={descriptor.id!r})"
+                )
+            seen.add(key)
+            descriptors.append(descriptor)
+    return tuple(descriptors)
+
+
 def resource_refs_for_run(
     db: Any,
     run: Any,

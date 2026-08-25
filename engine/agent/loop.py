@@ -24,6 +24,10 @@ from engine.agent.control import (
 )
 from engine.agent.context import ContextAssembler, ContextSnapshot
 from engine.agent.context_fragment import ContextContributor
+from engine.agent.resource_refs import (
+    ProjectResourceProvider,
+    load_resource_refs,
+)
 from engine.agent.guidance import (
     CapabilityGuidanceContribution,
     materialize_capability_guidance,
@@ -57,11 +61,7 @@ from engine.llm.config import (
 )
 from engine.llm.endpoint_policy import LlmEndpointPolicyError
 from engine.json_codec import load_object
-from engine.models import (
-    AgentSessionInput,
-    AgentTurn,
-)
-from engine.agent.resource_refs import load_resource_refs
+from engine.models import AgentSessionInput, AgentTurn
 from engine.tools.materialization import ToolMaterialization, materialize_tools
 from engine.tools.runtime import ToolExecutionTask, ToolExecutor, ToolRegistry
 from engine.tools.runtime.attempt import CompositeResourceResolver
@@ -184,6 +184,7 @@ class RunLoop:
         live_stream: LiveStreamHub = LIVE_STREAM_HUB,
         tool_executor: ToolExecutor | None = None,
         resource_resolver: CompositeResourceResolver | None = None,
+        resource_providers: tuple[ProjectResourceProvider, ...] = (),
         pricing_resolver: (
             Callable[[ProviderSettings], ModelPricing | None] | None
         ) = None,
@@ -218,6 +219,7 @@ class RunLoop:
         self.pricing_resolver = pricing_resolver or (lambda _settings: None)
         self.prompts = PromptAssembler()
         self.context_contributors = context_contributors
+        self.resource_providers = resource_providers
         self.capability_guidance = capability_guidance or ()
         self.completion = completion
         self.tool_dispatcher = ToolDispatcher(
@@ -226,6 +228,7 @@ class RunLoop:
             definition=self.definition,
             executor=self.tool_executor,
             resource_resolver=resource_resolver,
+            resource_providers=resource_providers,
         )
         self.terminalizer = Terminalizer(session_factory=self.session_factory)
 
@@ -814,6 +817,7 @@ class RunLoop:
             context = ContextAssembler(
                 db,
                 contributors=self.context_contributors,
+                resource_providers=self.resource_providers,
             ).build(run_id)
             state = RunWorkingStateAssembler(
                 db,
@@ -824,19 +828,20 @@ class RunLoop:
             )
             groups = _relevant_tool_groups(groups, context)
 
-            available_resource_kinds: frozenset[str] = frozenset()
+            available_resource_kinds: set[str] = set()
             if run.input_id:
                 input_row = db.get(AgentSessionInput, str(run.input_id))
                 if input_row is not None and input_row.resource_refs_json is not None:
                     frozen_refs = load_resource_refs(str(input_row.resource_refs_json))
-                    available_resource_kinds = frozenset(r.kind for r in frozen_refs)
+                    available_resource_kinds.update(r.kind for r in frozen_refs)
+            available_resource_kinds.update(context.resource_directory_counts)
 
             tools = materialize_tools(
                 self.registry,
                 allowed_groups=(groups or None),
                 allowed_names=(set(_FINALIZATION_TOOL_NAMES) if finalizing else None),
                 execution_mode=self.definition.execution_mode,
-                available_resource_kinds=available_resource_kinds,
+                available_resource_kinds=frozenset(available_resource_kinds),
             )
             tool_schemas = tools.provider_schemas()
             artifact_types = frozenset(
@@ -844,7 +849,7 @@ class RunLoop:
             )
             active_guidance = materialize_capability_guidance(
                 self.capability_guidance,
-                resource_kinds=available_resource_kinds,
+                resource_kinds=frozenset(available_resource_kinds),
                 artifact_types=artifact_types,
                 tools=tools,
                 registry=self.registry,

@@ -3,6 +3,10 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.agent.resource_refs import MAX_INPUT_RESOURCE_REFS, RequestedResourceRef
+from engine.agent.references import (
+    MAX_INPUT_REFERENCES,
+    ConversationInputReference,
+)
 from engine.agent.session import DeliveryMode
 
 
@@ -39,6 +43,10 @@ class ConversationInputRequest(BaseModel):
         max_length=MAX_INPUT_RESOURCE_REFS,
     )
     selected_artifact_ids: list[str] = Field(default_factory=list, max_length=20)
+    references: list[ConversationInputReference] = Field(
+        default_factory=list,
+        max_length=MAX_INPUT_REFERENCES,
+    )
     workspace_context: dict[str, object] = Field(default_factory=dict)
     llm_credential_id: str = Field(min_length=1, max_length=256)
     api_base: str | None = Field(default=None, max_length=2048)

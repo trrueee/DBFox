@@ -63,6 +63,37 @@ class ToolPolicy(BaseModel):
     visible_to_model: bool = True
 
 
+class ToolResourceRequirement(BaseModel):
+    """Declarative binding from one Tool input to one exact Project Resource."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: str
+    selector_field: str | None = Field(default=None, min_length=1, max_length=64)
+    artifact_selector_field: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+    )
+
+    @model_validator(mode="after")
+    def validate_kind(self) -> "ToolResourceRequirement":
+        if not is_namespaced_resource_kind(self.kind) or len(self.kind) > 64:
+            raise ValueError(
+                "Resource kind must be a namespaced identifier such as "
+                "'dbfox.data.database'"
+            )
+        if (
+            self.selector_field is not None
+            and self.artifact_selector_field is not None
+        ):
+            raise ValueError(
+                "A resource requirement cannot use both an identity selector "
+                "and an artifact selector"
+            )
+        return self
+
+
 class ToolExecutionSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -74,7 +105,7 @@ class ToolExecutionSpec(BaseModel):
     max_output_bytes: int = Field(default=1_000_000, ge=1_024, le=16_000_000)
     backend: ToolExecutionBackend = "in_process"
     capabilities: tuple[ToolCapability, ...] = ()
-    required_resource_kinds: tuple[str, ...] = ()
+    required_resources: tuple[ToolResourceRequirement, ...] = ()
 
     @model_validator(mode="after")
     def validate_execution_spec(self) -> "ToolExecutionSpec":
@@ -91,15 +122,11 @@ class ToolExecutionSpec(BaseModel):
             )
         if len(set(self.capabilities)) != len(self.capabilities):
             raise ValueError("Tool capabilities must not contain duplicates")
-        if len(self.required_resource_kinds) > 8:
-            raise ValueError("Tool required_resource_kinds cannot exceed 8 items")
-        if len(set(self.required_resource_kinds)) != len(self.required_resource_kinds):
-            raise ValueError("Tool required_resource_kinds must not contain duplicates")
-        for kind in self.required_resource_kinds:
-            if not isinstance(kind, str) or not is_namespaced_resource_kind(kind):
-                raise ValueError("Resource kind must be a namespaced identifier such as 'dbfox.data.database'")
-            if len(kind) > 64:
-                raise ValueError("Resource kind cannot exceed 64 characters")
+        if len(self.required_resources) > 8:
+            raise ValueError("Tool required_resources cannot exceed 8 items")
+        kinds = [requirement.kind for requirement in self.required_resources]
+        if len(set(kinds)) != len(kinds):
+            raise ValueError("Tool required_resources cannot contain duplicate kinds")
         return self
 
 
@@ -236,6 +263,17 @@ class BaseTool(Generic[I, O]):
             ToolExecutionSpec,
             getattr(cls, "execution", ToolExecutionSpec()),
         )
+        input_fields = set(input_model.model_fields)
+        for requirement in execution.required_resources:
+            for selector_field in (
+                requirement.selector_field,
+                requirement.artifact_selector_field,
+            ):
+                if selector_field is not None and selector_field not in input_fields:
+                    raise TypeError(
+                        f"{cls.__name__} resource selector field "
+                        f"{selector_field!r} is not present in its input model"
+                    )
         if (
             execution.recovery is ToolRecoveryPolicy.RECONCILE
             and "reconcile" not in cls.__dict__

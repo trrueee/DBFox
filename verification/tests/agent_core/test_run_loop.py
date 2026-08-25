@@ -16,8 +16,16 @@ from engine.agent.definition import AgentDefinition
 from engine.agent.events import LiveStreamHub
 from engine.agent.loop import RunLoop
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.resource_refs import ProjectResourceDescriptor
 from engine.agent.turn import TurnStreamItem, TurnStreamKind, TurnTermination
-from engine.models import AgentObservationRecord, AgentRun, AgentSession, AgentToolInvocation
+from engine.models import (
+    AgentObservationRecord,
+    AgentRun,
+    AgentSession,
+    AgentSessionInput,
+    AgentToolInvocation,
+    Project,
+)
 from engine.resource import ResourceScopeRef
 from engine.tools.runtime import (
     BaseTool,
@@ -27,6 +35,11 @@ from engine.tools.runtime import (
     ToolPolicy,
     ToolPresentation,
     ToolRegistry,
+)
+from engine.tools.runtime.attempt import CompositeResourceResolver
+from verification.testkit.synthetic_resources import (
+    SYNTHETIC_RESOURCE_KIND,
+    ResourceProbeTool,
 )
 
 
@@ -140,13 +153,38 @@ class ScriptedModel:
         yield from self.script()
 
 
-def _execute(db_session, *, scripts, registry, session_id="agent-core-loop"):
-    db_session.add(AgentSession(id=session_id, title="Agent Core loop"))
+def _execute(
+    db_session,
+    *,
+    scripts,
+    registry,
+    session_id="agent-core-loop",
+    project_id=None,
+    resource_refs=None,
+    resource_providers=(),
+    resource_resolver=None,
+):
+    if project_id is not None:
+        db_session.add(Project(id=project_id, name=f"Project {project_id}"))
+        db_session.commit()
+    db_session.add(
+        AgentSession(id=session_id, project_id=project_id, title="Agent Core loop")
+    )
     db_session.commit()
     sessions = SessionRepository(db_session)
     admission = sessions.admit(
         session_id=session_id,
-        resource_refs=(ResourceScopeRef(kind="verification.resource", id="resource-1", version=1),),
+        resource_refs=(
+            resource_refs
+            if resource_refs is not None
+            else (
+                ResourceScopeRef(
+                    kind="verification.resource",
+                    id="resource-1",
+                    version=1,
+                ),
+            )
+        ),
         content="Exercise the real Agent loop.",
         idempotency_key=session_id,
         llm_credential_id="verification-credential",
@@ -169,6 +207,8 @@ def _execute(db_session, *, scripts, registry, session_id="agent-core-loop"):
         registry=registry,
         definition=AgentDefinition(allowed_tool_groups=("verification",)),
         live_stream=LiveStreamHub(),
+        resource_providers=resource_providers,
+        resource_resolver=resource_resolver,
     ).execute(lease=lease, run_id=admission.run_id)
     db_session.expire_all()
     return admission.run_id
@@ -228,3 +268,95 @@ def test_real_loop_suspends_before_approval_tool_execution(db_session):
     assert run is not None and run.status == "waiting_approval"
     assert invocation.status == "waiting_approval"
     assert _EVENTS == []
+
+
+def test_project_resource_discovery_materializes_domain_tool_and_binds_invocation_authority(
+    db_session,
+):
+    access_log: list[str] = []
+
+    def provider(_db, project_id):
+        assert project_id == "project-auto-resource"
+        return (
+            ProjectResourceDescriptor(
+                kind=SYNTHETIC_RESOURCE_KIND,
+                id="resource-a",
+                version=7,
+                name="Resource A",
+            ),
+        )
+
+    def call():
+        yield from _tool_turn(
+            "resource-call",
+            "verification_resource_probe",
+            {"resource_id": "resource-a"},
+        )
+
+    resolver = (
+        CompositeResourceResolver()
+        .register(
+            SYNTHETIC_RESOURCE_KIND,
+            lambda ref: {"id": ref.id, "value": f"value:{ref.id}"},
+        )
+        .freeze()
+    )
+    run_id = _execute(
+        db_session,
+        scripts=(call, lambda: _answer_turn("Resource A was read.")),
+        registry=ToolRegistry().register(ResourceProbeTool(access_log)),
+        session_id="agent-core-auto-resource",
+        project_id="project-auto-resource",
+        resource_refs=(),
+        resource_providers=(provider,),
+        resource_resolver=resolver,
+    )
+
+    run = db_session.get(AgentRun, run_id)
+    admitted_input = db_session.query(AgentSessionInput).filter_by(run_id=run_id).one()
+    invocation = db_session.query(AgentToolInvocation).filter_by(run_id=run_id).one()
+    assert run is not None and run.status == "completed"
+    assert admitted_input.resource_refs_json == "[]"
+    assert invocation.resource_refs_json == (
+        '[{"id":"resource-a","kind":"verification.resource","version":7}]'
+    )
+    assert access_log == ["resource-a"]
+
+
+def test_project_resource_invocation_rejects_identity_outside_discovery_ceiling(
+    db_session,
+):
+    access_log: list[str] = []
+
+    def provider(_db, _project_id):
+        return (
+            ProjectResourceDescriptor(
+                kind=SYNTHETIC_RESOURCE_KIND,
+                id="resource-a",
+                version=1,
+                name="Resource A",
+            ),
+        )
+
+    def call():
+        yield from _tool_turn(
+            "resource-call-denied",
+            "verification_resource_probe",
+            {"resource_id": "resource-b"},
+        )
+
+    run_id = _execute(
+        db_session,
+        scripts=(call, lambda: _answer_turn("Resource B is unavailable.")),
+        registry=ToolRegistry().register(ResourceProbeTool(access_log)),
+        session_id="agent-core-resource-denied",
+        project_id="project-resource-denied",
+        resource_refs=(),
+        resource_providers=(provider,),
+        resource_resolver=CompositeResourceResolver().freeze(),
+    )
+
+    invocation = db_session.query(AgentToolInvocation).filter_by(run_id=run_id).one()
+    assert invocation.status == "rejected"
+    assert invocation.resource_refs_json == "[]"
+    assert access_log == []

@@ -100,7 +100,7 @@ async function loadCatalog(projectId, databaseId, options = {}) {
 }
 
 function openSqlConsole(projectId, database) {
-  const stateKey = `${projectId}:${database.id}`;
+  const stateKey = `${host.workbench.currentScopeId()}:${projectId}:${database.id}`;
   if (!sqlStateByKey.has(stateKey)) {
     sqlStateByKey.set(stateKey, {
       projectId,
@@ -122,7 +122,7 @@ function openSqlConsole(projectId, database) {
 }
 
 function openTable(projectId, database, table) {
-  const stateKey = `${projectId}:${database.id}:${table.table_id}`;
+  const stateKey = `${host.workbench.currentScopeId()}:${projectId}:${database.id}:${table.table_id}`;
   tableStateByKey.set(stateKey, { projectId, database, table });
   host.dockViews.open({
     viewKey: `data-table:${stateKey}`,
@@ -245,17 +245,6 @@ function ConnectionDialog({ projectId }) {
         React.createElement("button", { type: "button", className: "dbfox-data-dialog__button", onClick: close }, "取消"),
         React.createElement("button", { type: "submit", className: "dbfox-data-dialog__button is-primary", disabled: saving }, saving ? "正在保存…" : "保存连接")))
   );
-}
-
-function formatSql(raw) {
-  if (!raw || !raw.trim()) return raw;
-  const keywords = ["SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "LIMIT", "LEFT JOIN", "RIGHT JOIN", "INNER JOIN", "JOIN", "UNION", "VALUES", "SET", "INSERT INTO", "UPDATE", "DELETE FROM"];
-  let formatted = raw.trim();
-  for (const kw of keywords) {
-    const regex = new RegExp(`\\b${kw}\\b`, "gi");
-    formatted = formatted.replace(regex, (match) => `\n${match.toUpperCase()}`);
-  }
-  return formatted.split("\n").map((line) => line.trim()).filter(Boolean).join("\n  ").replace(/^  /, "");
 }
 
 function DatabaseRow({ projectId, database }) {
@@ -430,7 +419,6 @@ function SqlBlock({
     const statement = (block.sql || "").trim();
     if (!statement) return;
     const explainSql = statement.toUpperCase().startsWith("EXPLAIN") ? statement : `EXPLAIN ${statement}`;
-    onUpdate({ ...block, sql: explainSql });
     onExecute(block.id, explainSql);
   }
 
@@ -582,7 +570,7 @@ function SqlConsoleDock({ view }) {
       state.sessionId = value.session_id;
       updateBlock({
         ...block,
-        sql: targetSql || block.sql,
+        sql: block.sql,
         running: false,
         error: "",
         result: value,
@@ -655,7 +643,7 @@ function SqlConsoleDock({ view }) {
         }, "+ 添加新查询"))));
 }
 
-function CatalogTableDock({ view }) {
+function CatalogTableDock({ view, context }) {
   const state = tableStateByKey.get(view.stateKey || "");
   const [detail, setDetail] = React.useState(null);
   const [error, setError] = React.useState("");
@@ -705,7 +693,21 @@ function CatalogTableDock({ view }) {
       React.createElement("div", null,
         React.createElement("strong", null, state.table.qualified_name),
         React.createElement("small", null, `${state.database.display_name} · Catalog r${detail.catalog_revision}`)),
-      React.createElement("span", null, `${columns.length} 个字段`)),
+      React.createElement("div", { className: "dbfox-data-table__header-actions" },
+        React.createElement("span", null, `${columns.length} 个字段`),
+        React.createElement("button", {
+          type: "button",
+          onClick: () => context.onAsk({
+            label: `${state.database.display_name} · ${state.table.qualified_name}`,
+            authority: { kind: "dbfox.data.database", id: state.database.id },
+            object: {
+              kind: "dbfox.data.table",
+              id: state.table.table_id || state.table.qualified_name,
+              version: detail.catalog_revision,
+            },
+            locator: `table:${state.table.qualified_name}`,
+          }),
+        }, "询问 DBFox"))),
     React.createElement("nav", { className: "dbfox-data-table__tabs", "aria-label": "表视图" },
       React.createElement("button", { type: "button", className: tab === "schema" ? "is-active" : "", onClick: () => setTab("schema") }, "结构"),
       React.createElement("button", { type: "button", className: tab === "data" ? "is-active" : "", onClick: () => void loadPreview() }, "数据样例")),
@@ -823,7 +825,7 @@ export function register(extensionHost) {
     icon: () => React.createElement("span", { "aria-hidden": true }, "▦"),
     resolveTitle: (view) => tableStateByKey.get(view.stateKey || "")?.table.qualified_name || view.title,
     isVisible: (view, context) => !view.projectId || view.projectId === context.activeProjectId,
-    render: (view) => React.createElement(CatalogTableDock, { view }),
+    render: (view, context) => React.createElement(CatalogTableDock, { view, context }),
   });
   host.dockViews.register({
     viewType: SQL_VIEW_TYPE,

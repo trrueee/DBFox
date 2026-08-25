@@ -2,6 +2,7 @@ import { useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { getUserErrorMessage } from "../../../lib/api/client";
 import type { RequestedResourceRef } from "../../../lib/api/generated/types.gen";
+import type { WorkbenchReference } from "../../../../../sdk/frontend/index";
 import { useConversationStore } from "../../../stores/conversationStore";
 import { isTerminalRun } from "../conversationState";
 import type {
@@ -18,6 +19,7 @@ export function useConversationViewModel(conversationId: string) {
     mode: ConversationDeliveryMode;
     idempotencyKey: string;
     requestedResources: readonly RequestedResourceRef[];
+    references: readonly WorkbenchReference[];
   } | null>(null);
   const detail = useConversationStore((state) => state.detailById[conversationId]);
   const artifactsById = useConversationStore((state) => state.artifactsById);
@@ -40,18 +42,21 @@ export function useConversationViewModel(conversationId: string) {
       mode,
       idempotencyKey,
       requestedResources,
+      references,
     }: {
       targetConversationId: string;
       content: string;
       mode: ConversationDeliveryMode;
       idempotencyKey: string;
       requestedResources: readonly RequestedResourceRef[];
+      references: readonly WorkbenchReference[];
     }) => sendMessageAction(
       targetConversationId,
       content,
       mode,
       idempotencyKey,
       requestedResources,
+      references,
     ),
   });
   const cancelMutation = useMutation({
@@ -124,6 +129,7 @@ export function useConversationViewModel(conversationId: string) {
       content: string,
       mode: ConversationDeliveryMode,
       requestedResources: readonly RequestedResourceRef[] = [],
+      references: readonly WorkbenchReference[] = [],
     ) => {
       let intent = pendingSendIntent.current;
       if (
@@ -132,6 +138,7 @@ export function useConversationViewModel(conversationId: string) {
         || intent.content !== content
         || intent.mode !== mode
         || !sameRequestedResources(intent.requestedResources, requestedResources)
+        || JSON.stringify(intent.references) !== JSON.stringify(references)
       ) {
         intent = {
           conversationId: targetConversationId,
@@ -139,6 +146,7 @@ export function useConversationViewModel(conversationId: string) {
           mode,
           idempotencyKey: globalThis.crypto.randomUUID(),
           requestedResources: [...requestedResources],
+          references: [...references],
         };
         pendingSendIntent.current = intent;
       }
@@ -148,6 +156,7 @@ export function useConversationViewModel(conversationId: string) {
         mode,
         idempotencyKey: intent.idempotencyKey,
         requestedResources: intent.requestedResources,
+        references: intent.references,
       });
       if (pendingSendIntent.current === intent) pendingSendIntent.current = null;
     },

@@ -21,6 +21,24 @@ export interface RequestedResourceRef {
   version?: string | number | null;
 }
 
+export interface ReferencedObject {
+  kind: string;
+  id: string;
+  version?: string | number | null;
+}
+
+/**
+ * A user-visible Workbench subject. `authority` is the only field that may
+ * request execution authority; object/locator/artifact identify the subject.
+ */
+export interface WorkbenchReference {
+  label: string;
+  authority?: RequestedResourceRef;
+  object?: ReferencedObject;
+  locator?: string;
+  artifactId?: string;
+}
+
 export interface WorkspaceDockTab {
   viewKey: string;
   viewType: string;
@@ -46,6 +64,8 @@ export interface DockViewContext {
 
 export interface DockRenderContext extends DockViewContext {
   showToast: DockShowToast;
+  workbenchScopeId: string;
+  onAsk(reference: WorkbenchReference): void;
 }
 
 export interface DockViewContribution {
@@ -156,6 +176,10 @@ export interface FrontendExtensionHost {
   readonly dockViews: {
     register(contribution: DockViewContribution): void;
     open(view: WorkspaceDockTab, activate?: boolean): void;
+  };
+  readonly workbench: {
+    /** Stable across draft-to-Conversation promotion; isolates capability view state. */
+    currentScopeId(): string;
   };
   readonly artifactRenderers: {
     register(contribution: ArtifactRendererContribution<unknown>): void;

@@ -14,6 +14,7 @@ from dbfox_dlc_api import (
     ExtensionToolRunContext,
     ResourceScopeRef,
     ToolExecutionSpec,
+    ToolResourceRequirement,
     ToolInputError,
     ToolOutcome,
     ToolPolicy,
@@ -117,7 +118,7 @@ class GithubRepoOverviewTool(BaseTool[GithubRepoOverviewInput, GithubRepoOvervie
         max_retries=1,
         concurrency="parallel_safe",
         capabilities=("network",),
-        required_resource_kinds=(GITHUB_REPOSITORY_KIND,),
+        required_resources=(ToolResourceRequirement(kind=GITHUB_REPOSITORY_KIND, selector_field="repository_id"),),
     )
     semantics = ToolSemanticSpec(produces=("dbfox.github.repo_overview",))
     presentation = ToolPresentation(
@@ -155,7 +156,7 @@ class GithubListFilesTool(BaseTool[GithubListFilesInput, GithubListFilesOutput])
         max_retries=1,
         concurrency="parallel_safe",
         capabilities=("network",),
-        required_resource_kinds=(GITHUB_REPOSITORY_KIND,),
+        required_resources=(ToolResourceRequirement(kind=GITHUB_REPOSITORY_KIND, selector_field="repository_id"),),
     )
     semantics = ToolSemanticSpec(produces=("dbfox.github.file_list",))
     presentation = ToolPresentation(
@@ -199,7 +200,7 @@ class GithubReadFileTool(BaseTool[GithubReadFileInput, GithubReadFileOutput]):
         concurrency="parallel_safe",
         max_output_bytes=200_000,
         capabilities=("network",),
-        required_resource_kinds=(GITHUB_REPOSITORY_KIND,),
+        required_resources=(ToolResourceRequirement(kind=GITHUB_REPOSITORY_KIND, selector_field="repository_id"),),
     )
     semantics = ToolSemanticSpec(produces=(GITHUB_FILE_SNAPSHOT_ARTIFACT_TYPE,))
     presentation = ToolPresentation(

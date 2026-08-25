@@ -14,6 +14,7 @@ from dbfox_dlc_api import (
     ToolAdmissionContext,
     ToolAdmissionDecision,
     ToolExecutionSpec,
+    ToolResourceRequirement,
     ToolInputError,
     ToolObservationProjection,
     ToolOutcome,
@@ -60,7 +61,9 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
     execution = ToolExecutionSpec(
         recovery="retry_safe",
         capabilities=("network", "filesystem_read"),
-        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        required_resources=(
+            ToolResourceRequirement(kind=DATABASE_RESOURCE_KIND, selector_field="database_id"),
+        ),
     )
     semantics = ToolSemanticSpec(produces=("dbfox.data.validated_query",))
     presentation = ToolPresentation(title="验证分析 SQL", category="query")
@@ -181,7 +184,9 @@ class SqlExecuteReadonlyTool(
     execution = ToolExecutionSpec(
         recovery="retry_safe",
         capabilities=("network", "filesystem_read"),
-        required_resource_kinds=(DATABASE_RESOURCE_KIND,),
+        required_resources=(
+            ToolResourceRequirement(kind=DATABASE_RESOURCE_KIND, selector_field="database_id"),
+        ),
     )
     semantics = ToolSemanticSpec(produces=("dbfox.data.query_result",))
     presentation = ToolPresentation(title="执行只读查询", category="query")

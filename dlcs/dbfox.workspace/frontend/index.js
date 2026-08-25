@@ -38,7 +38,7 @@ async function loadBinding(projectId) {
   return result?.binding || null;
 }
 function openFile(projectId, binding, path) {
-  const stateKey = `${projectId}:${path}`;
+  const stateKey = `${host.workbench.currentScopeId()}:${projectId}:${path}`;
   fileState.set(stateKey, { projectId, path, binding });
   host.dockViews.open({
     viewKey: `workspace-file:${stateKey}`,

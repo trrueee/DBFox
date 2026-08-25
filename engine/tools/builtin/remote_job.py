@@ -186,7 +186,7 @@ class RemoteJobSubmitTool(BaseTool[RemoteJobSubmitInput, RemoteJobSubmitOutput])
         max_output_bytes=1_000_000,
         backend="in_process",
         capabilities=(),
-        required_resource_kinds=(),
+        required_resources=(),
     )
     semantics = ToolSemanticSpec(
         produces=("dbfox.remote_job",),
@@ -264,7 +264,7 @@ class RemoteJobStatusTool(BaseTool[RemoteJobStatusInput, RemoteJobStatusOutput])
         max_output_bytes=1_000_000,
         backend="in_process",
         capabilities=("metadata_read",),
-        required_resource_kinds=(),
+        required_resources=(),
     )
     semantics = ToolSemanticSpec(
         produces=("dbfox.remote_job",),
@@ -325,7 +325,7 @@ class RemoteJobCancelTool(BaseTool[RemoteJobCancelInput, RemoteJobCancelOutput])
         max_output_bytes=1_000_000,
         backend="in_process",
         capabilities=("metadata_read",),
-        required_resource_kinds=(),
+        required_resources=(),
     )
     semantics = ToolSemanticSpec(
         produces=("dbfox.remote_job",),
