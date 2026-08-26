@@ -4,7 +4,7 @@ uvicorn[standard]
 sqlalchemy>=2.0.0
 alembic>=1.11.0
 pymysql>=1.2.0
-psycopg2-binary>=2.9.0
+psycopg2-binary>=2.9.12
 duckdb>=1.5.5
 httpx>=0.28.1
 sqlglot>=30.17.0
