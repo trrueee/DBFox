@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 from pathlib import Path
 
 from engine.dlc.package_builder import (
-    build_dlc_package_from_source,
+    build_dlc_package,
+    collect_payload_files,
     load_private_key,
+    read_manifest_template,
 )
+from engine.dlc.integrity import canonical_json_bytes
 from engine.dlc.system_bundle import SystemDlcBundleManifest, SystemDlcPackagePin
 from engine.dlc.trust import public_key_to_base64
 
@@ -18,18 +23,23 @@ SYSTEM_DLC_SOURCES = (
     REPOSITORY_ROOT / "dlcs" / "dbfox_data",
     REPOSITORY_ROOT / "dlcs" / "dbfox.workspace",
     REPOSITORY_ROOT / "dlcs" / "dbfox.music",
+    REPOSITORY_ROOT / "dlcs" / "dbfox.visualization",
 )
 SYSTEM_DLC_BUNDLE_INDEX = "system-dlcs.json"
 SYSTEM_DLC_DEFAULT_ENABLED = {
     "dbfox.data": True,
     "dbfox.workspace": True,
     "dbfox.music": True,
+    "dbfox.visualization": True,
 }
+_RELEASE_VERSION_PATTERN = re.compile(r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
 
 
 def build_system_dlc_bundle(
     output_dir: Path,
     private_key_path: Path,
+    *,
+    development: bool = False,
 ) -> Path:
     """Build deterministic signed packages and return the pinned bundle manifest."""
 
@@ -40,7 +50,18 @@ def build_system_dlc_bundle(
 
     pins: list[SystemDlcPackagePin] = []
     for source_root in SYSTEM_DLC_SOURCES:
-        built = build_dlc_package_from_source(source_root, private_key=private_key)
+        manifest_data = read_manifest_template(source_root)
+        payload_files = collect_payload_files(source_root)
+        if development:
+            manifest_data["version"] = _development_version(
+                manifest_data,
+                payload_files,
+            )
+        built = build_dlc_package(
+            manifest_data,
+            payload_files,
+            private_key=private_key,
+        )
         filename = f"{built.manifest.id}.dbfox-dlc"
         destination = output_dir / filename
         temporary = output_dir / f".{filename}.tmp"
@@ -59,6 +80,7 @@ def build_system_dlc_bundle(
     manifest = SystemDlcBundleManifest(
         publisher_public_key=public_key,
         packages=tuple(pins),
+        development=development,
     )
     manifest_path = output_dir / SYSTEM_DLC_BUNDLE_INDEX
     temporary_manifest = output_dir / f".{SYSTEM_DLC_BUNDLE_INDEX}.tmp"
@@ -76,9 +98,36 @@ def build_system_dlc_bundle(
     return manifest_path
 
 
+def _development_version(
+    manifest_data: dict[str, object],
+    payload_files: dict[str, bytes],
+) -> str:
+    """Derive one reproducible prerelease version from mutable source inputs."""
+
+    base_version = manifest_data.get("version")
+    if not isinstance(base_version, str) or not _RELEASE_VERSION_PATTERN.fullmatch(
+        base_version
+    ):
+        raise ValueError(
+            "Development System DLC templates must declare a release X.Y.Z version"
+        )
+    source_contract = {
+        "manifest": manifest_data,
+        "payload_sha256": {
+            path: hashlib.sha256(content).hexdigest()
+            for path, content in sorted(payload_files.items())
+        },
+    }
+    fingerprint = hashlib.sha256(canonical_json_bytes(source_contract)).hexdigest()[:12]
+    return f"{base_version}-dev.{fingerprint}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build signed dbfox.data, dbfox.workspace, and dbfox.music System DLCs"
+        description=(
+            "Build signed dbfox.data, dbfox.workspace, dbfox.music, and "
+            "dbfox.visualization System DLCs"
+        )
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--private-key", type=Path, required=True)

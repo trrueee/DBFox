@@ -25,7 +25,11 @@ def prepare_dev_system_dlcs() -> tuple[Path, Path]:
         write_keypair(private_key, password=None)
 
     output_dir = private_runtime_dir("development-system-dlcs")
-    manifest = build_system_dlc_bundle(output_dir, private_key)
+    manifest = build_system_dlc_bundle(
+        output_dir,
+        private_key,
+        development=True,
+    )
     return output_dir.resolve(), manifest.resolve()
 
 

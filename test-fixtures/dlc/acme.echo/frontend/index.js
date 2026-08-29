@@ -26,12 +26,14 @@ export function register(host) {
     render: () => react().createElement("section", null, "Acme Echo is active"),
   });
 
-  host.artifactRenderers.register({
-    type: "acme.echo.message",
-    supportedSchemaVersions: [1],
+  host.artifactViews.register({
+    id: "acme.echo.message",
+    title: "Echo",
+    priority: 50,
+    surfaces: ["inline", "workspace"],
+    artifactTypes: [{ type: "acme.echo.message", schemaVersions: [1] }],
     parsePayload: parseEchoPayload,
-    render: (artifact) => {
-      const payload = parseEchoPayload(artifact.payload);
+    render: (_artifact, payload) => {
       return react().createElement("p", null, payload.message);
     },
   });
