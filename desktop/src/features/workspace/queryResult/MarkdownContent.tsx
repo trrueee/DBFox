@@ -1,7 +1,8 @@
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeSanitize from "rehype-sanitize";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import type { ReactNode } from "react";
 import { remarkDbfoxCitations } from "./remarkDbfoxCitations";
 import { remarkSafeBreaks } from "./remarkSafeBreaks";
 import "./MarkdownContent.css";
@@ -23,31 +24,49 @@ const BASE_MARKDOWN_COMPONENTS: Components = {
   img: () => null,
 };
 
+const DBFOX_MARKDOWN_SCHEMA = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), "dbfox-artifact-embed"],
+  attributes: {
+    ...defaultSchema.attributes,
+    "dbfox-artifact-embed": ["dataArtifactId"],
+  },
+};
+
 interface MarkdownCitation {
   artifact_id: string;
   label?: string;
+}
+
+interface ArtifactEmbedComponentProps {
+  "data-artifact-id"?: string;
 }
 
 export function MarkdownContent({
   content,
   className = "",
   citations = [],
+  artifactRefs = [],
   onCitation,
+  renderArtifact,
 }: {
   content: string;
   className?: string;
   citations?: MarkdownCitation[];
+  artifactRefs?: Array<{ artifact_id: string }>;
   onCitation?: (artifactId: string) => void;
+  renderArtifact?: (artifactId: string) => ReactNode;
 }) {
   const citationIndex = new Map<string, number>();
   for (const citation of citations) {
     if (!citationIndex.has(citation.artifact_id)) citationIndex.set(citation.artifact_id, citationIndex.size + 1);
   }
   const artifactOrder = Array.from(citationIndex.keys());
+  const allowedArtifactEmbeds = artifactRefs.map((item) => item.artifact_id);
   const unreferencedCitations = citations.filter(
     (citation) => !content.includes(`{{cite:${citation.artifact_id}}}`),
   );
-  const components: Components = {
+  const components = {
     ...BASE_MARKDOWN_COMPONENTS,
     a: ({ children, href }) => {
       const prefix = "#dbfox-artifact:";
@@ -68,13 +87,25 @@ export function MarkdownContent({
       }
       return <a href={href} className="hifi-md-link" target="_blank" rel="noopener noreferrer">{children}</a>;
     },
-  };
+    "dbfox-artifact-embed": (properties: ArtifactEmbedComponentProps) => {
+      const artifactId = String(properties["data-artifact-id"] ?? "");
+      return (
+        <div className="hifi-md-artifact-embed" data-artifact-id={artifactId}>
+          {renderArtifact?.(artifactId)}
+        </div>
+      );
+    },
+  } as Components;
   return (
     <div className={`hifi-markdown-content ${className}`.trim()}>
       <ReactMarkdown
         components={components}
-        remarkPlugins={[remarkGfm, remarkSafeBreaks, [remarkDbfoxCitations, { artifactOrder }]]}
-        rehypePlugins={[rehypeSanitize]}
+        remarkPlugins={[
+          remarkGfm,
+          remarkSafeBreaks,
+          [remarkDbfoxCitations, { artifactOrder, allowedArtifactEmbeds }],
+        ]}
+        rehypePlugins={[[rehypeSanitize, DBFOX_MARKDOWN_SCHEMA]]}
       >
         {content}
       </ReactMarkdown>

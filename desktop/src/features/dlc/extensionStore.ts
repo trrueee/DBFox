@@ -7,7 +7,7 @@ import type {
 export const EMPTY_CONTRIBUTIONS: DlcContributionSet = Object.freeze({
   connectors: Object.freeze([]),
   dockViews: Object.freeze([]),
-  artifactRenderers: Object.freeze([]),
+  artifactViews: Object.freeze([]),
 });
 
 export interface DlcStoreState {

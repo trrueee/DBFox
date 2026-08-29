@@ -3,15 +3,16 @@ import {
   ArtifactDockContent,
   ArtifactsDockContent,
   DockSuspense,
-} from "../appShell/dockViewContent";
-import { useArtifactDockStore } from "../../stores/artifactDockStore";
+} from "./dockViewContent";
+import { useConversationStore } from "../../stores/conversationStore";
 import type { DockViewContribution } from "./types";
+import { CORE_DOCK_VIEW_TYPES } from "../dlc/coreContributionIds";
 
 const iconProps = { size: 13, "aria-hidden": true as const };
 
 export const coreDockViews: readonly DockViewContribution[] = [
   {
-    viewType: "core.artifacts",
+    viewType: CORE_DOCK_VIEW_TYPES.artifacts,
     icon: () => <Sparkles {...iconProps} />,
     resolveTitle: () => "✦ 工件",
     isVisible: (view, context) =>
@@ -27,12 +28,12 @@ export const coreDockViews: readonly DockViewContribution[] = [
     ),
   },
   {
-    viewType: "core.artifact",
+    viewType: CORE_DOCK_VIEW_TYPES.artifact,
     icon: () => <FileText {...iconProps} />,
     resolveTitle: (view) => view.title,
     isVisible: (view, context) => {
       const artifactId = view.target?.type === "artifact" ? view.target.id : "";
-      const convId = useArtifactDockStore.getState().conversationIdByArtifactId[artifactId];
+      const convId = useConversationStore.getState().artifactsById[artifactId]?.session_id;
       return (
         Boolean(context.activeConversationId)
         && (!convId || convId === context.activeConversationId)
@@ -40,7 +41,11 @@ export const coreDockViews: readonly DockViewContribution[] = [
     },
     render: (view, context) => (
       <DockSuspense>
-        <ArtifactDockContent tab={view} showToast={context.showToast} />
+        <ArtifactDockContent
+          tab={view}
+          showToast={context.showToast}
+          onAsk={context.onAsk}
+        />
       </DockSuspense>
     ),
   },

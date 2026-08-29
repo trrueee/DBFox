@@ -58,7 +58,7 @@ export default function TitleBar() {
               onClick={handleToggleMaximize}
               title={maximized ? "还原" : "最大化"}
             >
-              <Square size={12} />
+              <Square size={14} />
             </button>
             <button
               className="titlebar-btn titlebar-btn-close"

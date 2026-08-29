@@ -1,32 +1,17 @@
-export type DockTargetRef =
-  | {
-      type: "resource";
-      kind: string;
-      id: string;
-      version?: string | number | null;
-    }
-  | {
-      type: "artifact";
-      id: string;
-    }
-  | {
-      type: "conversation";
-      id: string;
-    };
-
 /**
  * 右栏 Dock Tab（P6 Canonical Envelope）：
  * Dock Shell 仅持有 viewKey、viewType、title、closeable 及可选的 projectId/target/stateKey。
  * 领域 payload 全部归 capability-owned store。
  */
-export type { WorkspaceDockTab } from "../../../sdk/frontend/index";
+export type { WorkspaceDockTab, WorkbenchReference } from "../../../sdk/frontend/index";
 
-export type WorkspaceCenterMode = "home" | "conversation" | "project-create";
+export type WorkspaceCenterMode = "home" | "conversation" | "project" | "project-create";
 
 /** Fixed Main Surface states for Workbench Shell V2. */
 export type MainSurfaceRef =
   | { kind: "conversation"; conversationId?: string }
   | { kind: "new-conversation" }
+  | { kind: "project-overview" }
   | { kind: "project-create" }
   | { kind: "empty" };
 

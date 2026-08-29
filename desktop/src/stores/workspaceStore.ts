@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { WorkbenchReference } from "../../../sdk/frontend/index";
+import type { WorkbenchReference } from "../types/workspace";
 import type {
   MainSurfaceRef,
   WorkspaceCenterMode,
@@ -7,21 +7,16 @@ import type {
 } from "../types/workspace";
 import type { AppSettingsSection } from "../types/settings";
 
-export interface ProjectShellState {
-  activeConversationId?: string;
-}
-
 export interface ConversationWorkbenchState {
   scopeId: string;
   open: boolean;
   activeViewKey: string | null;
   tabs: WorkspaceDockTab[];
-  reference: WorkbenchReference | null;
+  references: WorkbenchReference[];
 }
 
 interface WorkspaceState {
   activeProjectId: string;
-  projectShell: Record<string, ProjectShellState>;
   mainSurfaceByProject: Record<string, MainSurfaceRef>;
   workbenchByConversation: Record<string, ConversationWorkbenchState>;
   centerMode: WorkspaceCenterMode;
@@ -35,6 +30,7 @@ interface WorkspaceState {
 interface WorkspaceActions {
   setActiveProject: (projectId: string) => void;
   setProjectActiveConversation: (projectId: string, conversationId: string) => void;
+  promoteDraftWorkbenchToConversation: (projectId: string, conversationId: string) => void;
   setProjectMainSurface: (projectId: string, surface: MainSurfaceRef) => void;
   openSettings: (section?: AppSettingsSection) => void;
   closeSettings: () => void;
@@ -42,7 +38,9 @@ interface WorkspaceActions {
   setDockOpen: (open: boolean) => void;
   setDockActiveTab: (viewKey: string) => void;
   closeDockTab: (viewKey: string) => void;
+  reconcileDockViewTypes: (allowedViewTypes: readonly string[]) => void;
   showSmartQueryHome: (initialAsk?: string) => void;
+  showProjectOverview: () => void;
   openConversationCenter: (conversationId?: string) => void;
   openProjectCreate: () => void;
   closeProjectCreate: () => void;
@@ -53,7 +51,9 @@ interface WorkspaceActions {
     viewKey: string,
     patch: Partial<Omit<WorkspaceDockTab, "viewKey" | "viewType">>,
   ) => void;
-  setWorkbenchReference: (reference: WorkbenchReference | null) => void;
+  addWorkbenchReference: (reference: WorkbenchReference) => void;
+  removeWorkbenchReference: (reference: WorkbenchReference) => void;
+  clearWorkbenchReferences: () => void;
   ensureActiveWorkbenchScope: () => string;
 }
 
@@ -74,7 +74,7 @@ function createWorkbench(): ConversationWorkbenchState {
     open: false,
     activeViewKey: null,
     tabs: [],
-    reference: null,
+    references: [],
   };
 }
 
@@ -83,11 +83,11 @@ const EMPTY_WORKBENCH: ConversationWorkbenchState = Object.freeze({
   open: false,
   activeViewKey: null,
   tabs: Object.freeze([]) as unknown as WorkspaceDockTab[],
-  reference: null,
+  references: Object.freeze([]) as unknown as WorkbenchReference[],
 });
 
 export function getActiveWorkbenchKey(
-  state: Pick<WorkspaceState, "activeProjectId" | "projectShell" | "mainSurfaceByProject">,
+  state: Pick<WorkspaceState, "activeProjectId" | "mainSurfaceByProject">,
   conversationIdOverride?: string,
 ): string {
   if (conversationIdOverride) return conversationIdOverride;
@@ -98,7 +98,19 @@ export function getActiveWorkbenchKey(
   if (surface?.kind === "conversation" && surface.conversationId) {
     return surface.conversationId;
   }
-  return state.projectShell[projectId]?.activeConversationId ?? `draft:${projectId}`;
+  return `draft:${projectId}`;
+}
+
+/** The shell surface is the sole authority for the selected Conversation. */
+export function selectActiveConversationId(
+  state: Pick<WorkspaceState, "activeProjectId" | "mainSurfaceByProject">,
+): string | null {
+  const surface = state.activeProjectId
+    ? state.mainSurfaceByProject[state.activeProjectId]
+    : undefined;
+  return surface?.kind === "conversation" && surface.conversationId
+    ? surface.conversationId
+    : null;
 }
 
 export function selectActiveWorkbench(state: WorkspaceStore): ConversationWorkbenchState {
@@ -113,9 +125,9 @@ export const selectActiveDockTabs = (state: WorkspaceStore): WorkspaceDockTab[] 
   selectActiveWorkbench(state).tabs;
 export const selectActiveWorkbenchScopeId = (state: WorkspaceStore): string =>
   selectActiveWorkbench(state).scopeId;
-export const selectActiveWorkbenchReference = (
+export const selectActiveWorkbenchReferences = (
   state: WorkspaceStore,
-): WorkbenchReference | null => selectActiveWorkbench(state).reference;
+): WorkbenchReference[] => selectActiveWorkbench(state).references;
 
 function updateActiveWorkbench(
   state: WorkspaceState,
@@ -133,7 +145,6 @@ function updateActiveWorkbench(
 
 export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   activeProjectId: "",
-  projectShell: {},
   mainSurfaceByProject: {},
   workbenchByConversation: {},
   centerMode: "home",
@@ -146,6 +157,14 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   setActiveProject: (activeProjectId) => set({ activeProjectId }),
 
   setProjectActiveConversation: (projectId, conversationId) =>
+    set((state) => ({
+      mainSurfaceByProject: {
+        ...state.mainSurfaceByProject,
+        [projectId]: { kind: "conversation", conversationId },
+      },
+    })),
+
+  promoteDraftWorkbenchToConversation: (projectId, conversationId) =>
     set((state) => {
       const draftKey = `draft:${projectId}`;
       const nextWorkbenches = { ...state.workbenchByConversation };
@@ -156,13 +175,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
         delete nextWorkbenches[draftKey];
       }
       return {
-        projectShell: {
-          ...state.projectShell,
-          [projectId]: {
-            ...(state.projectShell[projectId] ?? {}),
-            activeConversationId: conversationId,
-          },
-        },
         workbenchByConversation: nextWorkbenches,
       };
     }),
@@ -202,6 +214,26 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
       return { ...workbench, tabs, activeViewKey };
     })),
 
+  reconcileDockViewTypes: (allowedViewTypes) =>
+    set((state) => {
+      const allowed = new Set(allowedViewTypes);
+      const workbenchByConversation = Object.fromEntries(
+        Object.entries(state.workbenchByConversation).map(([key, workbench]) => {
+          const tabs = workbench.tabs.filter((tab) => allowed.has(tab.viewType));
+          const activeViewKey = tabs.some((tab) => tab.viewKey === workbench.activeViewKey)
+            ? workbench.activeViewKey
+            : (tabs[0]?.viewKey ?? null);
+          return [key, {
+            ...workbench,
+            tabs,
+            activeViewKey,
+            open: tabs.length ? workbench.open : false,
+          }];
+        }),
+      );
+      return { workbenchByConversation };
+    }),
+
   openDockTab: (tab, activate = true) =>
     set((state) => ({
       ...updateActiveWorkbench(state, (workbench) => {
@@ -237,10 +269,28 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
       };
     })),
 
-  setWorkbenchReference: (reference) =>
+  addWorkbenchReference: (reference) =>
     set((state) => updateActiveWorkbench(state, (workbench) => ({
       ...workbench,
-      reference,
+      references: workbench.references.some(
+        (item) => workbenchReferenceKey(item) === workbenchReferenceKey(reference),
+      )
+        ? workbench.references
+        : [...workbench.references, reference].slice(-12),
+    }))),
+
+  removeWorkbenchReference: (reference) =>
+    set((state) => updateActiveWorkbench(state, (workbench) => ({
+      ...workbench,
+      references: workbench.references.filter(
+        (item) => workbenchReferenceKey(item) !== workbenchReferenceKey(reference),
+      ),
+    }))),
+
+  clearWorkbenchReferences: () =>
+    set((state) => updateActiveWorkbench(state, (workbench) => ({
+      ...workbench,
+      references: [],
     }))),
 
   ensureActiveWorkbenchScope: () => {
@@ -266,15 +316,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
         centerReturnMode: "home",
         pendingAsk: initialAsk ?? null,
         settingsOpen: false,
-        projectShell: projectId
-          ? {
-              ...state.projectShell,
-              [projectId]: {
-                ...(state.projectShell[projectId] ?? {}),
-                activeConversationId: undefined,
-              },
-            }
-          : state.projectShell,
         mainSurfaceByProject: projectId
           ? {
               ...state.mainSurfaceByProject,
@@ -284,11 +325,27 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
       };
     }),
 
+  showProjectOverview: () =>
+    set((state) => ({
+      centerMode: "project",
+      centerReturnMode: "project",
+      pendingAsk: null,
+      settingsOpen: false,
+      mainSurfaceByProject: state.activeProjectId
+        ? {
+            ...state.mainSurfaceByProject,
+            [state.activeProjectId]: { kind: "project-overview" },
+          }
+        : state.mainSurfaceByProject,
+    })),
+
   openConversationCenter: (conversationId) =>
     set((state) => {
       const projectId = state.activeProjectId;
       const targetConversationId = conversationId
-        ?? (projectId ? state.projectShell[projectId]?.activeConversationId : undefined);
+        ?? (projectId && state.mainSurfaceByProject[projectId]?.kind === "conversation"
+          ? state.mainSurfaceByProject[projectId].conversationId
+          : undefined);
       return {
         centerMode: "conversation",
         centerReturnMode: "conversation",
@@ -301,15 +358,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
                 : { kind: "new-conversation" },
             }
           : state.mainSurfaceByProject,
-        projectShell: projectId && targetConversationId
-          ? {
-              ...state.projectShell,
-              [projectId]: {
-                ...(state.projectShell[projectId] ?? {}),
-                activeConversationId: targetConversationId,
-              },
-            }
-          : state.projectShell,
       };
     }),
 
@@ -322,3 +370,14 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     })),
   clearPendingAsk: () => set({ pendingAsk: null }),
 }));
+
+function workbenchReferenceKey(reference: WorkbenchReference): string {
+  if (reference.artifactId) return `artifact:${reference.artifactId}`;
+  if (reference.object) {
+    return `object:${reference.object.kind}:${reference.object.id}:${reference.object.version ?? ""}`;
+  }
+  if (reference.authority) {
+    return `authority:${reference.authority.kind}:${reference.authority.id}:${reference.locator ?? ""}`;
+  }
+  return `locator:${reference.locator ?? reference.label}`;
+}

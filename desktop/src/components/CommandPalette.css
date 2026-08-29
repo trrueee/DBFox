@@ -1,11 +1,18 @@
-.dbfox-command-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  display: flex;
-  justify-content: center;
-  padding-top: 10vh;
-  background: rgba(15, 23, 42, 0.16);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+.dbfox-command-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-width: 680px;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dbfox-command-dialog > .dbfox-command-panel {
+  width: 100%;
+}
+
+.dbfox-command-dialog > .dbfox-dialog-close {
+  display: none;
 }

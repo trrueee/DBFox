@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Sparkles, Cpu, Bug, MessageSquare, Palette } from "lucide-react";
+import { Bug, Cpu, FolderKanban, Home, MessageSquare, PackageOpen, Palette, Plus } from "lucide-react";
 import type { CommandItem } from "../../components/CommandPalette";
 import type { ConversationSummary } from "../../types/conversation";
 import type { AppSettingsSection } from "../../types/settings";
@@ -7,6 +7,7 @@ import type { AppSettingsSection } from "../../types/settings";
 export interface UseAppCommandsProps {
   conversations: ConversationSummary[];
   showSmartQueryHome: () => void;
+  showProjectOverview: () => void;
   openConversation: (conversationId: string) => void;
   openSettings: (section?: AppSettingsSection) => void;
 }
@@ -14,37 +15,60 @@ export interface UseAppCommandsProps {
 export function useAppCommands({
   conversations,
   showSmartQueryHome,
+  showProjectOverview,
   openConversation,
   openSettings,
 }: UseAppCommandsProps) {
   const commandItems = useMemo<CommandItem[]>(() => {
     const items: CommandItem[] = [
       {
-        id: "smart-query",
-        name: "智能问数 (AI 问数)",
-        category: "快捷入口",
-        icon: <Sparkles size={13} />,
+        id: "new-task",
+        name: "新任务",
+        category: "新任务",
+        icon: <Plus size={16} />,
         action: () => showSmartQueryHome(),
+      },
+      {
+        id: "home",
+        name: "主页",
+        category: "前往",
+        icon: <Home size={16} />,
+        action: () => showSmartQueryHome(),
+      },
+      {
+        id: "project-context",
+        name: "项目管理",
+        description: "配置项目资源，查看最近工作",
+        category: "前往",
+        icon: <FolderKanban size={16} />,
+        action: () => showProjectOverview(),
+      },
+      {
+        id: "extensions",
+        name: "打开扩展",
+        category: "操作",
+        icon: <PackageOpen size={16} />,
+        action: () => openSettings("dlc"),
       },
       {
         id: "appearance-settings",
         name: "外观与字号设置",
         category: "设置",
-        icon: <Palette size={13} />,
+        icon: <Palette size={16} />,
         action: () => openSettings("appearance"),
       },
       {
         id: "llm-config",
         name: "模型服务设置",
         category: "设置",
-        icon: <Cpu size={13} />,
+        icon: <Cpu size={16} />,
         action: () => openSettings("model"),
       },
       {
         id: "diagnostics-logs",
         name: "系统诊断",
         category: "设置",
-        icon: <Bug size={13} />,
+        icon: <Bug size={16} />,
         action: () => openSettings("diagnostics"),
       },
     ];
@@ -53,8 +77,8 @@ export function useAppCommands({
         id: `conversation-${conversation.id}`,
         name: conversation.title || "新对话",
         description: conversationCommandDescription(conversation),
-        category: "最近对话",
-        icon: <MessageSquare size={13} />,
+        category: "最近工作",
+        icon: <MessageSquare size={16} />,
         action: () => openConversation(conversation.id),
       });
     });
@@ -63,6 +87,7 @@ export function useAppCommands({
   }, [
     conversations,
     showSmartQueryHome,
+    showProjectOverview,
     openConversation,
     openSettings,
   ]);

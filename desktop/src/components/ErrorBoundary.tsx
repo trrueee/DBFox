@@ -1,5 +1,14 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { TriangleAlert } from "lucide-react";
+import { RotateCcw, TriangleAlert } from "lucide-react";
+import {
+  Button,
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "./ui";
 
 interface Props {
   children: ReactNode;
@@ -8,6 +17,28 @@ interface Props {
 
 interface State {
   hasError: boolean;
+}
+
+export function FatalErrorFallback({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Empty className="app-error-boundary-panel" role="alert">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <TriangleAlert aria-hidden="true" />
+        </EmptyMedia>
+        <EmptyTitle role="heading" aria-level={1}>DBFox 界面发生异常</EmptyTitle>
+        <EmptyDescription>
+          当前界面无法继续渲染。可以先重试；如果问题持续出现，请重启应用并查看诊断日志。
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button type="button" onClick={onRetry}>
+          <RotateCcw size={14} aria-hidden="true" />
+          重试渲染
+        </Button>
+      </EmptyContent>
+    </Empty>
+  );
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -32,20 +63,9 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback;
       return (
-        <div className="app-error-boundary">
-          <div className="app-error-boundary-icon" aria-hidden="true">
-            <TriangleAlert size={22} />
-          </div>
-          <h1 className="app-error-boundary-title">
-            DBFox 启动异常
-          </h1>
-          <p className="app-error-boundary-message">
-            应用初始化时发生了未预期的错误。请尝试重启应用。
-          </p>
-          <button className="app-error-boundary-reset" onClick={this.handleReset}>
-            重新加载
-          </button>
-        </div>
+        <main className="app-error-boundary">
+          <FatalErrorFallback onRetry={this.handleReset} />
+        </main>
       );
     }
     return this.props.children;

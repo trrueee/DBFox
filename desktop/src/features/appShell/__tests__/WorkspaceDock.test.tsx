@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import { useDlcStore } from "../../dlc/extensionStore";
+import { ConversationWorkspaceLayout } from "../ConversationWorkspaceLayout";
 import { planDockTabWindow, WorkspaceDock } from "../WorkspaceDock";
 import type { WorkspaceDockTab } from "../../../types/workspace";
 
@@ -14,14 +15,13 @@ function setWorkbench(
   useWorkspaceStore.setState({
     activeProjectId: "",
     mainSurfaceByProject: {},
-    projectShell: {},
     workbenchByConversation: {
       "draft:default": {
         scopeId: "test-scope",
         open,
         activeViewKey,
         tabs,
-        reference: null,
+        references: [],
       },
     },
   });
@@ -61,7 +61,7 @@ describe("WorkspaceDock", () => {
         isVisible: () => true,
         render: (view) => <div data-testid="sql-console" data-tab-id={view.stateKey} />,
       }],
-      artifactRenderers: [],
+      artifactViews: [],
     });
     setWorkbench(true, "dbfox.data.sql-console:ds-1", [{
       viewKey: "dbfox.data.sql-console:ds-1",
@@ -69,7 +69,7 @@ describe("WorkspaceDock", () => {
       title: "SQL 控制台",
       closeable: false,
       stateKey: "sql-ds-1",
-      target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
+      target: { type: "object", object: { kind: "dbfox.data.database", id: "ds-1" } },
     }]);
     useWorkspaceStore.setState({
       centerMode: "home",
@@ -86,19 +86,66 @@ describe("WorkspaceDock", () => {
     expect(await screen.findByTestId("sql-console")).toHaveProperty("dataset.tabId", "sql-ds-1");
   });
 
+  it("uses Radix tabpanel association and controlled activation across dock tabs", async () => {
+    const firstTab = useWorkspaceStore.getState().workbenchByConversation["draft:default"].tabs[0];
+    setWorkbench(true, firstTab.viewKey, [
+      firstTab,
+      {
+        ...firstTab,
+        viewKey: "dbfox.data.sql-console:ds-2",
+        title: "SQL 控制台 2",
+        stateKey: "sql-ds-2",
+      },
+    ]);
+    renderDock();
+
+    const first = await screen.findByRole("tab", { name: "SQL 控制台" });
+    const second = screen.getByRole("tab", { name: "SQL 控制台 2" });
+    const firstPanel = screen.getByRole("tabpanel", { name: "SQL 控制台" });
+    expect(first.getAttribute("aria-controls")).toBe(firstPanel.id);
+    expect(first.getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(second);
+    expect(second.getAttribute("aria-selected")).toBe("true");
+    expect(second.getAttribute("aria-controls")).toBe(
+      screen.getByRole("tabpanel", { name: "SQL 控制台 2" }).id,
+    );
+  });
+
   it("hides close controls for fixed tabs and exposes collapse", async () => {
     renderDock();
 
     await screen.findByRole("tab", { name: "SQL 控制台" });
     expect(screen.queryByRole("button", { name: "关闭 SQL 控制台" })).toBeNull();
-    expect(screen.getByRole("button", { name: "收起工作台 Dock" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "收起工作区" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "工作区全屏" })).toBeTruthy();
+  });
+
+  it("restores focus to the resulting active Radix tab after closing a tab", async () => {
+    const firstTab = useWorkspaceStore.getState().workbenchByConversation["draft:default"].tabs[0];
+    setWorkbench(true, "dbfox.data.sql-console:ds-2", [
+      { ...firstTab, closeable: true },
+      {
+        ...firstTab,
+        viewKey: "dbfox.data.sql-console:ds-2",
+        title: "SQL 控制台 2",
+        stateKey: "sql-ds-2",
+        closeable: true,
+      },
+    ]);
+    renderDock();
+
+    const first = await screen.findByRole("tab", { name: "SQL 控制台" });
+    fireEvent.click(screen.getByRole("button", { name: "关闭 SQL 控制台 2" }));
+
+    expect(first.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(first);
   });
 
   it("renders a collapsed rail when the dock is closed", async () => {
     useWorkspaceStore.getState().setDockOpen(false);
     renderDock();
 
-    expect(screen.getByRole("button", { name: "展开工作台 Dock" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "展开工作区" })).toBeTruthy();
     expect(screen.queryByRole("tab", { name: "SQL 控制台" })).toBeNull();
   });
 
@@ -157,19 +204,19 @@ describe("WorkspaceDock", () => {
           </button>
         ),
       }],
-      artifactRenderers: [],
+      artifactViews: [],
     });
 
     renderDock();
     fireEvent.click(await screen.findByTestId("dlc-dock-view"));
     expect(
-      useWorkspaceStore.getState().workbenchByConversation["draft:default"].reference,
-    ).toEqual({
+      useWorkspaceStore.getState().workbenchByConversation["draft:default"].references,
+    ).toEqual([{
       label: "test-scope",
       authority: { kind: "acme.runtime.resource", id: "resource-1" },
       object: { kind: "acme.runtime.object", id: "object-1" },
       locator: "item:1",
-    });
+    }]);
   });
 
   it("hides the overflow trigger when every tab fits", () => {
@@ -178,9 +225,16 @@ describe("WorkspaceDock", () => {
   });
 
   it("exposes a keyboard-operable width separator", () => {
-    renderDock();
-    const separator = screen.getByRole("separator", { name: "调整工作台宽度" });
+    render(
+      <ConversationWorkspaceLayout
+        dockOpen
+        conversation={<div>Conversation</div>}
+        dock={<div>Dock</div>}
+      />,
+    );
+    const separator = screen.getByRole("separator", { name: "调整工作区宽度" });
     expect(separator.getAttribute("aria-orientation")).toBe("vertical");
+    expect(separator.tabIndex).toBe(0);
   });
 });
 

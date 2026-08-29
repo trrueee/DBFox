@@ -9,6 +9,7 @@ describe("useAppCommands", () => {
       useAppCommands({
         conversations: [],
         showSmartQueryHome: vi.fn(),
+        showProjectOverview: vi.fn(),
         openConversation: vi.fn(),
         openSettings,
       }),
@@ -26,6 +27,7 @@ describe("useAppCommands", () => {
       useAppCommands({
         conversations: [],
         showSmartQueryHome: vi.fn(),
+        showProjectOverview: vi.fn(),
         openConversation: vi.fn(),
         openSettings,
       }),
@@ -45,6 +47,7 @@ describe("useAppCommands", () => {
       useAppCommands({
         conversations: [],
         showSmartQueryHome: vi.fn(),
+        showProjectOverview: vi.fn(),
         openConversation: vi.fn(),
         openSettings,
       }),
@@ -59,6 +62,7 @@ describe("useAppCommands", () => {
       useAppCommands({
         conversations: [],
         showSmartQueryHome: vi.fn(),
+        showProjectOverview: vi.fn(),
         openConversation: vi.fn(),
         openSettings: vi.fn(),
       }),
@@ -67,5 +71,24 @@ describe("useAppCommands", () => {
     expect(result.current.commandItems.find((item) => item.id === "connection-manager")).toBeUndefined();
     expect(result.current.commandItems.find((item) => item.id === "create-datasource")).toBeUndefined();
     expect(result.current.commandItems.find((item) => item.id === "new-sql")).toBeUndefined();
+  });
+
+  it("routes project management through the Core-owned project overview and drops the context command", () => {
+    const showProjectOverview = vi.fn();
+    const { result } = renderHook(() =>
+      useAppCommands({
+        conversations: [],
+        showSmartQueryHome: vi.fn(),
+        showProjectOverview,
+        openConversation: vi.fn(),
+        openSettings: vi.fn(),
+      }),
+    );
+
+    expect(result.current.commandItems.find((item) => item.id === "add-context")).toBeUndefined();
+    const command = result.current.commandItems.find((item) => item.id === "project-context");
+    expect(command?.name).toBe("项目管理");
+    command?.action();
+    expect(showProjectOverview).toHaveBeenCalledOnce();
   });
 });

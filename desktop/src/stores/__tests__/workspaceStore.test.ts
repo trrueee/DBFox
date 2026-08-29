@@ -3,13 +3,14 @@ import {
   selectActiveDockOpen,
   selectActiveDockTabs,
   selectActiveDockViewKey,
+  selectActiveConversationId,
+  selectActiveWorkbenchReferences,
   useWorkspaceStore,
 } from "../workspaceStore";
 
 function reset() {
   useWorkspaceStore.setState({
     activeProjectId: "",
-    projectShell: {},
     mainSurfaceByProject: {},
     centerMode: "home",
     centerReturnMode: "home",
@@ -24,19 +25,21 @@ function reset() {
 describe("workspaceStore — Shell", () => {
   beforeEach(reset);
 
-  it("keeps conversation selections scoped per Project", () => {
+  it("keeps the selected Conversation solely in each Project main surface", () => {
     useWorkspaceStore.getState().setActiveProject("project-1");
     useWorkspaceStore.getState().setProjectActiveConversation("project-1", "conv-1");
 
     useWorkspaceStore.getState().setActiveProject("project-2");
     useWorkspaceStore.getState().setProjectActiveConversation("project-2", "conv-2");
 
-    expect(useWorkspaceStore.getState().projectShell["project-1"]).toEqual({
-      activeConversationId: "conv-1",
+    expect(useWorkspaceStore.getState().mainSurfaceByProject["project-1"]).toEqual({
+      kind: "conversation",
+      conversationId: "conv-1",
     });
-    expect(useWorkspaceStore.getState().projectShell["project-2"]).toEqual({
-      activeConversationId: "conv-2",
-    });
+    expect(selectActiveConversationId(useWorkspaceStore.getState())).toBe("conv-2");
+
+    useWorkspaceStore.getState().showProjectOverview();
+    expect(selectActiveConversationId(useWorkspaceStore.getState())).toBeNull();
   });
 
   it("tracks the fixed Main Surface per Project", () => {
@@ -50,6 +53,15 @@ describe("workspaceStore — Shell", () => {
     expect(useWorkspaceStore.getState().mainSurfaceByProject["project-1"]).toEqual({
       kind: "conversation",
       conversationId: "conv-9",
+    });
+  });
+
+  it("opens the Core-owned Project Overview without creating parallel domain state", () => {
+    useWorkspaceStore.getState().setActiveProject("project-1");
+    useWorkspaceStore.getState().showProjectOverview();
+
+    expect(useWorkspaceStore.getState().mainSurfaceByProject["project-1"]).toEqual({
+      kind: "project-overview",
     });
   });
 
@@ -92,20 +104,42 @@ describe("workspaceStore — Dock shell", () => {
     expect(selectActiveDockViewKey(useWorkspaceStore.getState())).toBe("tab-1");
   });
 
+  it("keeps a bounded deduplicated set of removable Composer references", () => {
+    const artifact = { label: "Result", artifactId: "artifact_result" };
+    useWorkspaceStore.getState().addWorkbenchReference(artifact);
+    useWorkspaceStore.getState().addWorkbenchReference(artifact);
+    for (let index = 0; index < 13; index += 1) {
+      useWorkspaceStore.getState().addWorkbenchReference({
+        label: `Table ${index}`,
+        object: { kind: "dbfox.data.table", id: `table-${index}` },
+      });
+    }
+
+    const references = selectActiveWorkbenchReferences(useWorkspaceStore.getState());
+    expect(references).toHaveLength(12);
+    expect(references.at(-1)?.label).toBe("Table 12");
+
+    const target = references[0];
+    useWorkspaceStore.getState().removeWorkbenchReference(target);
+    expect(selectActiveWorkbenchReferences(useWorkspaceStore.getState())).not.toContain(target);
+    useWorkspaceStore.getState().clearWorkbenchReferences();
+    expect(selectActiveWorkbenchReferences(useWorkspaceStore.getState())).toEqual([]);
+  });
+
   it("adds, updates, and deduplicates canonical Dock tabs by viewKey", () => {
     useWorkspaceStore.getState().openDockTab({
       viewKey: "dbfox.data.table:ds-1:orders",
       viewType: "dbfox.data.table",
       title: "orders",
       closeable: true,
-      target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
+      target: { type: "object", object: { kind: "dbfox.data.database", id: "ds-1" } },
     });
     useWorkspaceStore.getState().openDockTab({
       viewKey: "dbfox.data.table:ds-1:orders",
       viewType: "dbfox.data.table",
       title: "orders",
       closeable: true,
-      target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
+      target: { type: "object", object: { kind: "dbfox.data.database", id: "ds-1" } },
     });
 
     expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(1);
@@ -151,20 +185,41 @@ describe("workspaceStore — Dock shell", () => {
     }).toThrow(/already registered with viewType "type\.one"/);
   });
 
+  it("removes Dock tabs whose contributing DLC was deactivated", () => {
+    useWorkspaceStore.getState().openDockTab({
+      viewKey: "core:artifacts",
+      viewType: "core.artifacts",
+      title: "Artifacts",
+      closeable: false,
+    });
+    useWorkspaceStore.getState().openDockTab({
+      viewKey: "acme:report",
+      viewType: "acme.report",
+      title: "Report",
+      closeable: true,
+    });
+
+    useWorkspaceStore.getState().reconcileDockViewTypes(["core.artifacts"]);
+
+    expect(selectActiveDockTabs(useWorkspaceStore.getState()).map((tab) => tab.viewType))
+      .toEqual(["core.artifacts"]);
+    expect(selectActiveDockViewKey(useWorkspaceStore.getState())).toBe("core:artifacts");
+  });
+
   it("closes the active Dock tab and advances to its neighbor", () => {
     useWorkspaceStore.getState().openDockTab({
       viewKey: "dbfox.data.table:ds-1:orders",
       viewType: "dbfox.data.table",
       title: "orders",
       closeable: true,
-      target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
+      target: { type: "object", object: { kind: "dbfox.data.database", id: "ds-1" } },
     });
     useWorkspaceStore.getState().openDockTab({
       viewKey: "dbfox.data.table:ds-1:users",
       viewType: "dbfox.data.table",
       title: "users",
       closeable: true,
-      target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
+      target: { type: "object", object: { kind: "dbfox.data.database", id: "ds-1" } },
     });
     useWorkspaceStore.getState().closeDockTab("dbfox.data.table:ds-1:orders");
 
@@ -234,6 +289,7 @@ describe("workspaceStore — Dock shell", () => {
     expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(1);
 
     // New conversation is created
+    useWorkspaceStore.getState().promoteDraftWorkbenchToConversation("project-1", "conv-new");
     useWorkspaceStore.getState().setProjectActiveConversation("project-1", "conv-new");
     useWorkspaceStore.getState().openConversationCenter("conv-new");
     expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(1);

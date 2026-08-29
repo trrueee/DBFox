@@ -1,42 +1,33 @@
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import { setDialogContainer } from "./components/ui/dialogContainer";
 import { setToastRoot, useToast } from "./components/toastState";
 import { installClientErrorLogging, recordClientLog } from "./lib/diagnostics/clientLog";
 import {
+  selectActiveConversationId,
   selectActiveDockOpen,
-  selectActiveDockTabs,
-  selectActiveDockViewKey,
   useWorkspaceStore,
 } from "./stores/workspaceStore";
-import { useArtifactDockStore } from "./stores/artifactDockStore";
+import { openArtifactsDock } from "./stores/artifactDockStore";
 import { useConversationStore } from "./stores/conversationStore";
 import { DesktopLifecycleMonitor } from "./features/appShell/DesktopLifecycleMonitor";
 import { LoadingState } from "./components/ui";
 import { ConversationCenter } from "./features/appShell/ConversationCenter";
+import { ConversationWorkspaceLayout } from "./features/appShell/ConversationWorkspaceLayout";
 import { ResizableWorkspaceLayout } from "./features/appShell/ResizableWorkspaceLayout";
 import { ProjectResourceSidebar } from "./features/resources/ProjectResourceSidebar";
 import { productResourceConnectors } from "./features/resources/resourceConnectorComposition";
 import { useProductDockBootstrap } from "./features/dock/useProductDockBootstrap";
 import { useDlcStore } from "./features/dlc/extensionStore";
-import { fetchAndLoadActiveExtensions } from "./features/dlc/extensionLoader";
+import {
+  fetchAndLoadActiveExtensions,
+  invalidateActiveFrontendExtensions,
+} from "./features/dlc/extensionLoader";
 import { getRuntimeSession, subscribeEngineState } from "./lib/api/client";
 
 const AppCommandPalette = lazy(() =>
   import("./features/appShell/AppCommandPalette").then((module) => ({
     default: module.AppCommandPalette,
-  })),
-);
-const ContextDrawer = lazy(() =>
-  import("./features/assistant/ContextDrawer").then((module) => ({
-    default: module.ContextDrawer,
   })),
 );
 const SettingsPage = lazy(() =>
@@ -67,15 +58,15 @@ function TitleBarFallback() {
 
 function WorkspaceDockFallback() {
   return (
-    <div className="app-dock-fallback" role="status" aria-label="正在载入工作台 Dock">
-      <LoadingState label="正在载入工作台" />
+    <div className="app-dock-fallback" role="status" aria-label="正在载入工作区">
+      <LoadingState label="正在载入工作区" />
     </div>
   );
 }
 
 function SidebarFallback() {
   return (
-    <div className="app-sidebar-fallback" role="status" aria-label="正在载入数据源">
+    <div className="app-sidebar-fallback" role="status" aria-label="正在载入主导航">
       <span className="app-skeleton app-skeleton--heading" />
       <span className="app-skeleton app-skeleton--control" />
       <span className="app-skeleton app-skeleton--control" />
@@ -99,7 +90,6 @@ function AppLayoutFallback() {
 
 
 export default function App() {
-  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const loadedEngineGenerationRef = useRef(0);
 
@@ -121,7 +111,7 @@ export default function App() {
     void subscribeEngineState((status) => {
       if (disposed) return;
       if (status.state !== "ready") {
-        useDlcStore.getState().reset();
+        invalidateActiveFrontendExtensions();
         return;
       }
       const generation = status.generation ?? 0;
@@ -142,12 +132,9 @@ export default function App() {
   }, []);
 
   // ── Store selectors ──
-  const activeConversationId = useConversationStore((s) => s.activeConversationId);
+  const activeConversationId = useWorkspaceStore(selectActiveConversationId);
   const dockOpen = useWorkspaceStore(selectActiveDockOpen);
-  const dockTabs = useWorkspaceStore(selectActiveDockTabs);
-  const activeDockViewKey = useWorkspaceStore(selectActiveDockViewKey);
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
-  const openDockArtifacts = useArtifactDockStore((s) => s.openArtifacts);
   const showSmartQueryHome = useWorkspaceStore((s) => s.showSmartQueryHome);
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
   const settingsOpen = useWorkspaceStore((s) => s.settingsOpen);
@@ -197,7 +184,7 @@ export default function App() {
       }
       if (event.key === "4" && activeConversationId) {
         event.preventDefault();
-        openDockArtifacts(activeConversationId);
+        openArtifactsDock(activeConversationId);
       }
       if (event.key === "\\") {
         event.preventDefault();
@@ -210,14 +197,9 @@ export default function App() {
     activeConversationId,
     dockOpen,
     openConversationCenter,
-    openDockArtifacts,
     setDockOpen,
     showSmartQueryHome,
   ]);
-
-  const activeDockTab = dockTabs.find(
-    (tab) => tab.viewKey === activeDockViewKey,
-  );
 
   return (
     <div className="app-shell">
@@ -246,11 +228,15 @@ export default function App() {
                 </Suspense>
               ) : (
                 <ProjectResourceSidebar
+                  connectors={connectors}
                   collapsed={sidebarCollapsed && !settingsOpen}
                   onToggleCollapse={toggleSidebarCollapse}
                   onNewProject={() => useWorkspaceStore.getState().openProjectCreate()}
                   onOpenSettings={handleOpenSettings}
-                  connectors={connectors}
+                  onOpenExtensions={() => {
+                    setSidebarCollapsed(false);
+                    openSettings("dlc");
+                  }}
                 />
               )}
               workspace={
@@ -263,22 +249,26 @@ export default function App() {
                     </Suspense>
                   </section>
                 ) : (
-                  <div className="app-v3-stage">
-                    <section className="app-main app-main--conversation">
-                      <div className="app-main-scroll">
-                        <ConversationCenter
+                  <ConversationWorkspaceLayout
+                    dockOpen={dockOpen}
+                    conversation={(
+                      <section className="app-main app-main--conversation">
+                        <div className="app-main-scroll">
+                          <ConversationCenter
+                            onNewProject={() => useWorkspaceStore.getState().openProjectCreate()}
+                          />
+                        </div>
+                      </section>
+                    )}
+                    dock={(
+                      <Suspense fallback={<WorkspaceDockFallback />}>
+                        <WorkspaceDock
+                          activeConversationId={activeConversationId}
                           showToast={toast}
-                          onNewProject={() => useWorkspaceStore.getState().openProjectCreate()}
                         />
-                      </div>
-                    </section>
-                    <Suspense fallback={<WorkspaceDockFallback />}>
-                      <WorkspaceDock
-                        activeConversationId={activeConversationId}
-                        showToast={toast}
-                      />
-                    </Suspense>
-                  </div>
+                      </Suspense>
+                    )}
+                  />
                 )
               }
             />
@@ -292,6 +282,7 @@ export default function App() {
             <Suspense fallback={null}>
               <AppCommandPalette
                 showSmartQueryHome={showSmartQueryHome}
+                showProjectOverview={() => useWorkspaceStore.getState().showProjectOverview()}
                 openConversation={openConversationFromPalette}
                 openSettings={openSettings}
                 onClose={() => setShowCommandPalette(false)}
@@ -299,16 +290,6 @@ export default function App() {
             </Suspense>
           )}
 
-          {!settingsOpen && rightDrawerOpen && (
-            <Suspense fallback={null}>
-              <ContextDrawer
-                open
-                type="props"
-                activeTab={activeDockTab}
-                onClose={() => setRightDrawerOpen(false)}
-              />
-            </Suspense>
-          )}
         </main>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { FolderOpen, RefreshCw } from "lucide-react";
+import { AlertTriangle, FolderOpen, RefreshCw } from "lucide-react";
 import {
   ApiError,
   getRuntimeSession,
@@ -13,7 +13,11 @@ import {
   restartDesktopEngine,
 } from "../lib/desktopHost";
 import { FoxIcon } from "./brand/FoxIcon";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "./ui/empty";
+import { Progress } from "./ui/progress";
+import { Spinner } from "./ui/spinner";
 
 type StartupStage = "starting" | "health-check" | "failed" | "ready";
 
@@ -57,13 +61,13 @@ function startupFailure(error: unknown): StartupFailure {
     case "DBFOX_METADATA_FOREIGN_KEY_VIOLATION":
       return {
         code,
-        summary: "本地数据库完整性检查失败，请查看诊断日志。",
+        summary: "本地工作区完整性检查失败，请查看诊断日志。",
         ...diagnostics,
       };
     case "DBFOX_METADATA_MIGRATION_FAILED":
       return {
         code,
-        summary: "本地数据库升级失败，请查看诊断日志。",
+        summary: "本地工作区升级失败，请查看诊断日志。",
         ...diagnostics,
       };
     case "ENGINE_STARTUP_TIMEOUT":
@@ -214,7 +218,13 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
   if (stage === "ready") {
     return (
       <>
-        {runtimeNotice ? <div className="engine-runtime-notice" role="status">{runtimeNotice}</div> : null}
+        {runtimeNotice ? (
+          <Alert className="engine-runtime-notice" role="status">
+            <Spinner role="presentation" aria-label={undefined} />
+            <AlertTitle>正在恢复本地引擎</AlertTitle>
+            <AlertDescription>{runtimeNotice}</AlertDescription>
+          </Alert>
+        ) : null}
         {children}
       </>
     );
@@ -223,44 +233,59 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
   const isLoading = stage !== "failed";
 
   return (
-    <main className="engine-startup-gate" aria-live="polite" aria-busy={isLoading}>
-      <span
-        className={`engine-startup-gate__mark ${isLoading ? "is-loading" : "is-failed"}`}
-        aria-hidden="true"
-      >
-        <FoxIcon variant="app" size={52} alt="" />
-      </span>
-      <h1>DBFox</h1>
-      <p className="engine-startup-gate__message">
-        {failure?.summary ?? startupMessage(stage, enginePhase)}
-      </p>
+    <main className="engine-startup-gate">
+      <Empty className="w-full max-w-lg" aria-live="polite" aria-busy={isLoading}>
+        <EmptyHeader>
+          <EmptyMedia variant="icon" className="size-16 bg-[var(--color-primary-soft)]">
+            <FoxIcon variant="app" size={52} alt="" />
+          </EmptyMedia>
+          <EmptyTitle>DBFox</EmptyTitle>
+          {isLoading ? <EmptyDescription>{startupMessage(stage, enginePhase)}</EmptyDescription> : null}
+        </EmptyHeader>
 
-      {stage === "failed" && (
-        <>
-          <div className="engine-startup-gate__actions">
-            <Button type="button" onClick={() => void retry()}>
-              <RefreshCw aria-hidden="true" />
-              重试启动
-            </Button>
-            <Button type="button" variant="outline" onClick={() => void openDiagnosticLogs()}>
-              <FolderOpen aria-hidden="true" />
-              打开诊断日志
-            </Button>
-          </div>
-          {failure?.code && (
-            <details className="engine-startup-gate__details">
-              <summary>技术信息</summary>
-              <code className="engine-startup-gate__code">
-                {failure.code}
-                {failure.engineStage ? ` · ${failure.engineStage}` : ""}
-                {failure.fingerprint ? ` · ${failure.fingerprint}` : ""}
-              </code>
-            </details>
-          )}
-        </>
-      )}
+        {isLoading ? (
+          <EmptyContent>
+            <Progress aria-label={startupMessage(stage, enginePhase)} className="max-w-72" />
+          </EmptyContent>
+        ) : null}
 
-      {actionMessage && <p className="engine-startup-gate__action-message" role="status">{actionMessage}</p>}
+        {stage === "failed" ? (
+          <Alert variant="destructive" className="max-w-md text-left">
+            <AlertTriangle aria-hidden="true" />
+            <AlertTitle>DBFox 未能启动</AlertTitle>
+            <AlertDescription>
+              <p>{failure?.summary ?? startupMessage(stage, enginePhase)}</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button type="button" onClick={() => void retry()}>
+                  <RefreshCw aria-hidden="true" />
+                  重试启动
+                </Button>
+                <Button type="button" variant="outline" onClick={() => void openDiagnosticLogs()}>
+                  <FolderOpen aria-hidden="true" />
+                  打开诊断日志
+                </Button>
+              </div>
+              {failure?.code ? (
+                <details className="text-[var(--color-text-muted)]">
+                  <summary className="cursor-pointer select-none">技术信息</summary>
+                  <code className="mt-2 block rounded-md border border-[var(--color-border)] bg-[var(--sql-code-surface)] px-2 py-1 font-[var(--font-family-code)] text-xs">
+                    {failure.code}
+                    {failure.engineStage ? ` · ${failure.engineStage}` : ""}
+                    {failure.fingerprint ? ` · ${failure.fingerprint}` : ""}
+                  </code>
+                </details>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {actionMessage ? (
+          <Alert className="max-w-md" role="status">
+            <AlertTitle>运行时操作</AlertTitle>
+            <AlertDescription>{actionMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+      </Empty>
     </main>
   );
 }

@@ -1,4 +1,3 @@
-import type { AgentArtifactPayload } from "../lib/api/types/artifact";
 import type { RequestedResourceRef, RunProjection } from "../lib/api/generated/types.gen";
 
 /**
@@ -63,7 +62,8 @@ export type RunItemStatus =
   | "waiting"
   | "completed"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "expired";
 
 export interface ArtifactReference {
   artifact_id: string;
@@ -194,7 +194,8 @@ export interface ConversationArtifact {
   status: "creating" | "completed" | "failed" | "stale";
   visibility: ConversationArtifactVisibility;
   summary?: string | null;
-  payload: AgentArtifactPayload;
+  /** DLC-owned payload; each registered Artifact View validates its own schema once. */
+  payload: Record<string, unknown>;
   payload_ref?: string | null;
   resource_refs?: RequestedResourceRef[];
   provenance: Record<string, unknown>;

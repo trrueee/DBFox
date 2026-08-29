@@ -1,27 +1,30 @@
 import {
   useCallback,
-  useEffect,
-  useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
   HelpCircle,
+  Maximize2,
   MoreHorizontal,
+  Minimize2,
   PanelRightClose,
   PanelRightOpen,
   X,
 } from "lucide-react";
 import {
+  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   EmptyState,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -38,8 +41,7 @@ import type { DockViewRegistry } from "../dock/dockViewComposition";
 import { DEFAULT_REGISTRY, dockViewTitle } from "../dock/dockViewComposition";
 import { useDlcStore } from "../dlc/extensionStore";
 import type { DockViewContribution } from "../dock/types";
-import type { WorkbenchReference } from "../../../../sdk/frontend/index";
-import { clearCspFlexBasis, setCspFlexBasis } from "../../lib/cspVirtualLayout";
+import type { WorkbenchReference } from "../../types/workspace";
 import "./WorkspaceDock.css";
 
 export interface WorkspaceDockProps {
@@ -48,8 +50,6 @@ export interface WorkspaceDockProps {
   registry?: DockViewRegistry;
 }
 
-const DOCK_MIN_WIDTH_PX = 320;
-const DOCK_MAX_WIDTH_RATIO = 0.56;
 const OVERFLOW_TRIGGER_RESERVE_PX = 30;
 
 export interface DockTabWindow {
@@ -107,7 +107,7 @@ function dockTabIcon(
   dlcDockViews: readonly DockViewContribution[],
 ) {
   return resolveDockView(tab.viewType, registry, dlcDockViews)?.icon(tab)
-    ?? <HelpCircle size={13} aria-hidden="true" />;
+    ?? <HelpCircle size={14} aria-hidden="true" />;
 }
 
 export function WorkspaceDock({
@@ -119,7 +119,7 @@ export function WorkspaceDock({
   const dockTabs = useWorkspaceStore(selectActiveDockTabs);
   const activeViewKey = useWorkspaceStore(selectActiveDockViewKey);
   const workbenchScopeId = useWorkspaceStore(selectActiveWorkbenchScopeId);
-  const setWorkbenchReference = useWorkspaceStore((s) => s.setWorkbenchReference);
+  const addWorkbenchReference = useWorkspaceStore((s) => s.addWorkbenchReference);
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
   const setDockActiveTab = useWorkspaceStore((s) => s.setDockActiveTab);
   const closeDockTab = useWorkspaceStore((s) => s.closeDockTab);
@@ -148,6 +148,10 @@ export function WorkspaceDock({
   // ── Tab strip windowing: direct tabs + overflow menu (no hidden scrollbar) ──
   const tabsRef = useRef<HTMLDivElement>(null);
   const tabWidthsRef = useRef(new Map<string, number>());
+  const tabTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const overflowTriggerRef = useRef<HTMLButtonElement>(null);
+  const collapseButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusAfterCloseRef = useRef(false);
   const [tabWindow, setTabWindow] = useState<DockTabWindow | null>(null);
   const activeTabIndex = Math.max(
     0,
@@ -180,94 +184,74 @@ export function WorkspaceDock({
     if (measured > 0) tabWidthsRef.current.set(viewKey, measured);
   }, []);
 
+  const registerTabTrigger = useCallback((viewKey: string) => (node: HTMLButtonElement | null) => {
+    if (node) tabTriggerRefs.current.set(viewKey, node);
+    else tabTriggerRefs.current.delete(viewKey);
+  }, []);
+
   const resolvedWindow = tabWindow ?? { start: 0, end: visibleTabs.length };
   const directTabs = visibleTabs.slice(resolvedWindow.start, resolvedWindow.end);
-  const overflowTabs = [
+  const overflowTabs = useMemo(() => [
     ...visibleTabs.slice(0, resolvedWindow.start),
     ...visibleTabs.slice(resolvedWindow.end),
-  ];
+  ], [resolvedWindow.end, resolvedWindow.start, visibleTabs]);
 
-  // ── Subtle resizer: drag the left edge; keyboard adjustable ──
-  const [dockWidth, setDockWidth] = useState<number | null>(null);
-  const [resizing, setResizing] = useState(false);
-  const resizeDragRef = useRef<{ pointerId: number; startClientX: number; startWidth: number } | null>(null);
-  const widthToken = useId().replace(/[^a-zA-Z0-9_-]/g, "");
-
-  useEffect(() => {
-    setCspFlexBasis(widthToken, dockWidth);
-    return () => clearCspFlexBasis(widthToken);
-  }, [dockWidth, widthToken]);
-
-  const clampDockWidth = useCallback((width: number) => {
-    const stageWidth = tabsRef.current?.closest("aside")?.parentElement?.clientWidth ?? 0;
-    const maxWidth = stageWidth > 0 ? Math.floor(stageWidth * DOCK_MAX_WIDTH_RATIO) : Number.POSITIVE_INFINITY;
-    return Math.min(Math.max(Math.round(width), DOCK_MIN_WIDTH_PX), Math.max(DOCK_MIN_WIDTH_PX, maxWidth));
-  }, []);
-
-  const handleResizerPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (dockWidth === null) {
-      setDockWidth(clampDockWidth(event.currentTarget.parentElement?.offsetWidth ?? 440));
+  useLayoutEffect(() => {
+    if (!restoreFocusAfterCloseRef.current) return;
+    const activeTrigger = activeTab ? tabTriggerRefs.current.get(activeTab.viewKey) : null;
+    if (activeTrigger) {
+      activeTrigger.focus();
+      restoreFocusAfterCloseRef.current = false;
+      return;
     }
-    resizeDragRef.current = {
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startWidth: event.currentTarget.parentElement?.offsetWidth ?? 440,
-    };
-    setResizing(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }, [clampDockWidth, dockWidth]);
-
-  const handleResizerPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = resizeDragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const delta = drag.startClientX - event.clientX;
-    setDockWidth(clampDockWidth(drag.startWidth + delta));
-  }, [clampDockWidth]);
-
-  const handleResizerPointerEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (resizeDragRef.current?.pointerId === event.pointerId) {
-      resizeDragRef.current = null;
-      setResizing(false);
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    if (activeTab && overflowTabs.some((tab) => tab.viewKey === activeTab.viewKey)) {
+      // The active window is recalculated in the preceding layout effect. Keep
+      // the pending target until its real Radix trigger has mounted.
+      overflowTriggerRef.current?.focus();
+      return;
     }
-  }, []);
+    collapseButtonRef.current?.focus();
+    restoreFocusAfterCloseRef.current = false;
+  }, [activeTab, directTabs, overflowTabs]);
 
-  const handleResizerKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const step = event.shiftKey ? 48 : 16;
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    const current = dockWidth ?? event.currentTarget.parentElement?.offsetWidth ?? 440;
-    const delta = event.key === "ArrowLeft" ? step : -step;
-    setDockWidth(clampDockWidth(current + delta));
-  }, [clampDockWidth, dockWidth]);
+  const handleCloseTab = (viewKey: string) => {
+    restoreFocusAfterCloseRef.current = true;
+    closeDockTab(viewKey);
+  };
+
+  const [fullscreen, setFullscreen] = useState(false);
 
   if (!dockOpen) {
     return (
-      <aside className="workspace-dock workspace-dock--collapsed" aria-label="工作台 Dock">
+      <aside className="workspace-dock workspace-dock--collapsed" aria-label="工作区">
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
+            <Button
               type="button"
+              size="icon-sm"
+              variant="ghost"
               className="workspace-dock__expand"
               onClick={() => setDockOpen(true)}
-              aria-label="展开工作台 Dock"
+              aria-label="展开工作区"
             >
               <PanelRightOpen size={16} aria-hidden="true" />
-            </button>
+            </Button>
           </TooltipTrigger>
-          <TooltipContent>展开工作台</TooltipContent>
+          <TooltipContent>展开工作区</TooltipContent>
         </Tooltip>
         {visibleTabs.slice(0, 4).map((tab) => (
           <Tooltip key={tab.viewKey}>
             <TooltipTrigger asChild>
-              <button
+              <Button
                 type="button"
+                size="icon-sm"
+                variant="ghost"
                 className="workspace-dock__rail-item"
                 aria-label={dockViewTitle(tab, registry)}
                 onClick={() => setDockActiveTab(tab.viewKey)}
               >
                 {dockTabIcon(tab, registry, dlcDockViews)}
-              </button>
+              </Button>
             </TooltipTrigger>
             <TooltipContent>{tab.title}</TooltipContent>
           </Tooltip>
@@ -277,27 +261,14 @@ export function WorkspaceDock({
   }
 
   return (
-    <aside
+    <Tabs value={activeTab?.viewKey ?? ""} onValueChange={setDockActiveTab} asChild>
+      <aside
       className="workspace-dock"
-      aria-label="工作台 Dock"
-      data-csp-flex-basis={widthToken}
+      aria-label="工作区"
+      data-fullscreen={fullscreen ? "true" : undefined}
     >
-      <div
-        className="workspace-dock__resizer"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="调整工作台宽度"
-        aria-valuenow={dockWidth ?? undefined}
-        data-resizing={resizing ? "true" : undefined}
-        onPointerDown={handleResizerPointerDown}
-        onPointerMove={handleResizerPointerMove}
-        onPointerUp={handleResizerPointerEnd}
-        onPointerCancel={handleResizerPointerEnd}
-        onKeyDown={handleResizerKeyDown}
-        tabIndex={0}
-      />
       <header className="workspace-dock__tabbar">
-        <div className="workspace-dock__tabs" role="tablist" aria-label="工作台标签" ref={tabsRef}>
+        <TabsList className="workspace-dock__tabs" aria-label="工作区标签" ref={tabsRef}>
           {directTabs.map((tab) => {
             const active = tab.viewKey === activeTab?.viewKey;
             return (
@@ -306,10 +277,9 @@ export function WorkspaceDock({
                 ref={registerTabNode(tab.viewKey)}
                 className={`workspace-dock__tab ${active ? "is-active" : ""}`}
               >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
+                <TabsTrigger
+                  ref={registerTabTrigger(tab.viewKey)}
+                  value={tab.viewKey}
                   className="workspace-dock__tab-main"
                   title={tab.title}
                   onClick={() => setDockActiveTab(tab.viewKey)}
@@ -318,18 +288,20 @@ export function WorkspaceDock({
                     {dockTabIcon(tab, registry, dlcDockViews)}
                   </span>
                   <span className="workspace-dock__tab-title">{tab.title}</span>
-                </button>
+                </TabsTrigger>
                 {tab.closeable && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button
+                      <Button
                         type="button"
+                        size="icon-sm"
+                        variant="ghost"
                         className="workspace-dock__tab-close"
                         aria-label={`关闭 ${tab.title}`}
-                        onClick={() => closeDockTab(tab.viewKey)}
+                        onClick={() => handleCloseTab(tab.viewKey)}
                       >
-                        <X size={11} aria-hidden="true" />
-                      </button>
+                        <X size={14} aria-hidden="true" />
+                      </Button>
                     </TooltipTrigger>
                     <TooltipContent>关闭 {tab.title}</TooltipContent>
                   </Tooltip>
@@ -340,13 +312,16 @@ export function WorkspaceDock({
           {overflowTabs.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button
+                <Button
+                  ref={overflowTriggerRef}
                   type="button"
+                  size="icon-sm"
+                  variant="ghost"
                   className="workspace-dock__overflow"
                   aria-label={`更多标签（${overflowTabs.length} 个）`}
                 >
-                  <MoreHorizontal size={15} aria-hidden="true" />
-                </button>
+                  <MoreHorizontal size={16} aria-hidden="true" />
+                </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {overflowTabs.map((tab) => (
@@ -357,34 +332,71 @@ export function WorkspaceDock({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-        </div>
+        </TabsList>
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
+            <Button
               type="button"
-              className="workspace-dock__collapse"
-              onClick={() => setDockOpen(false)}
-              aria-label="收起工作台 Dock"
+              size="icon-sm"
+              variant="ghost"
+              className="workspace-dock__fullscreen"
+              onClick={() => setFullscreen((value) => !value)}
+              aria-label={fullscreen ? "退出工作区全屏" : "工作区全屏"}
             >
-              <PanelRightClose size={15} aria-hidden="true" />
-            </button>
+              {fullscreen ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
+            </Button>
           </TooltipTrigger>
-          <TooltipContent>收起工作台</TooltipContent>
+          <TooltipContent>{fullscreen ? "退出全屏" : "全屏"}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              ref={collapseButtonRef}
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="workspace-dock__collapse"
+              onClick={() => {
+                setFullscreen(false);
+                setDockOpen(false);
+              }}
+              aria-label="收起工作区"
+            >
+              <PanelRightClose size={16} aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>收起工作区</TooltipContent>
         </Tooltip>
       </header>
-      <div className="workspace-dock__content" key={activeTab?.viewKey ?? "empty"}>
-        {renderDockTab(
-          activeTab,
-          activeProjectId,
-          activeConversationId,
-          showToast,
-          workbenchScopeId,
-          setWorkbenchReference,
-          registry,
-          dlcDockViews,
-        )}
-      </div>
-    </aside>
+      {activeTab ? (
+        <TabsContent className="workspace-dock__content" value={activeTab.viewKey}>
+          {renderDockTab(
+            activeTab,
+            activeProjectId,
+            activeConversationId,
+            showToast,
+            workbenchScopeId,
+            addWorkbenchReference,
+            registry,
+            dlcDockViews,
+          )}
+        </TabsContent>
+      ) : (
+        <div className="workspace-dock__content">
+          {renderDockTab(
+            null,
+            activeProjectId,
+            activeConversationId,
+            showToast,
+            workbenchScopeId,
+            addWorkbenchReference,
+            registry,
+            dlcDockViews,
+          )}
+        </div>
+      )}
+      </aside>
+    </Tabs>
   );
 }
 
@@ -412,12 +424,12 @@ function renderDockTab(
     return (
       <EmptyState
         title="未知视图"
-        description={`该 Dock 视图类型暂无渲染器：${tab.viewType}`}
+        description={`该工作区视图类型暂无渲染器：${tab.viewType}`}
       />
     );
   }
   return (
-    <div key={tab.viewKey}>
+    <div className="workspace-dock__body-slot" key={tab.viewKey}>
       {contribution.render(tab, {
         activeProjectId,
         activeConversationId,

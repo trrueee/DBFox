@@ -1,22 +1,25 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { SqlBackedPageResponse } from "../sqlBackedTypes";
-import { useSqlBackedDataView } from "../useSqlBackedDataView";
+import { ApiError } from "../../../../lib/api/client";
+import type { DataFramePageResponse } from "../dataFrameViewTypes";
+import { useDataFrameView } from "../useDataFrameView";
 
 const source = {
-  kind: "artifact-result" as const,
+  kind: "artifact-representation" as const,
   artifactId: "result-artifact-1",
-  columns: ["id"],
+  representationType: "dbfox.dataframe.v1",
 };
 
-function pageResponse(rows: Array<Record<string, unknown>>, page: number): SqlBackedPageResponse {
+function pageResponse(rows: Array<Record<string, unknown>>, page: number): DataFramePageResponse {
   return {
     columns: ["id"],
+    columnTypes: ["integer"],
     rows,
     page,
     pageSize: 20,
     hasNextPage: page < 3,
     latencyMs: 5,
+    sourceTruncated: false,
     consistency: "live_reexecution",
     originalExecutedAt: "2026-07-20T00:00:00Z",
     viewExecutedAt: "2026-07-20T00:00:01Z",
@@ -28,7 +31,7 @@ function pageResponse(rows: Array<Record<string, unknown>>, page: number): SqlBa
   };
 }
 
-describe("useSqlBackedDataView", () => {
+describe("useDataFrameView", () => {
   it("keeps last stable data while loading the next page", async () => {
     const fetchPage = vi
       .fn()
@@ -36,7 +39,7 @@ describe("useSqlBackedDataView", () => {
       .mockReturnValueOnce(new Promise(() => {}));
     const exportAll = vi.fn();
 
-    const { result } = renderHook(() => useSqlBackedDataView({ source, fetchPage, exportAll }));
+    const { result } = renderHook(() => useDataFrameView({ source, fetchPage, exportAll }));
 
     await waitFor(() => expect(result.current.rows).toEqual([["1"]]));
 
@@ -62,7 +65,7 @@ describe("useSqlBackedDataView", () => {
       }],
     });
 
-    const { result } = renderHook(() => useSqlBackedDataView({ source: typedSource, fetchPage, exportAll: vi.fn() }));
+    const { result } = renderHook(() => useDataFrameView({ source: typedSource, fetchPage, exportAll: vi.fn() }));
 
     await waitFor(() => expect(result.current.rows).toEqual([[
       null,
@@ -75,11 +78,11 @@ describe("useSqlBackedDataView", () => {
   });
 
   it("does not let an older response overwrite a newer response", async () => {
-    const resolvers: Array<(value: SqlBackedPageResponse) => void> = [];
-    const fetchPage = vi.fn(() => new Promise<SqlBackedPageResponse>((resolve) => resolvers.push(resolve)));
+    const resolvers: Array<(value: DataFramePageResponse) => void> = [];
+    const fetchPage = vi.fn(() => new Promise<DataFramePageResponse>((resolve) => resolvers.push(resolve)));
     const exportAll = vi.fn();
 
-    const { result } = renderHook(() => useSqlBackedDataView({ source, fetchPage, exportAll }));
+    const { result } = renderHook(() => useDataFrameView({ source, fetchPage, exportAll }));
 
     await waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(1));
     act(() => result.current.setPage(2));
@@ -97,10 +100,27 @@ describe("useSqlBackedDataView", () => {
     expect(result.current.page).toBe(3);
   });
 
+  it("retains the structured API error instead of flattening raw provider text", async () => {
+    const failure = new ApiError(
+      "private provider failure",
+      503,
+      "RESULT_VIEW_UNAVAILABLE",
+      [],
+      { request_id: "result-request-9" },
+    );
+    const { result } = renderHook(() => useDataFrameView({
+      source,
+      fetchPage: vi.fn().mockRejectedValue(failure),
+      exportAll: vi.fn(),
+    }));
+
+    await waitFor(() => expect(result.current.error).toBe(failure));
+  });
+
   it("resets to page one when search, sort, or filters change", async () => {
     const fetchPage = vi.fn().mockResolvedValue(pageResponse([{ id: "1" }], 1));
     const exportAll = vi.fn();
-    const { result } = renderHook(() => useSqlBackedDataView({ source, fetchPage, exportAll }));
+    const { result } = renderHook(() => useDataFrameView({ source, fetchPage, exportAll }));
 
     await waitFor(() => expect(result.current.rows).toEqual([["1"]]));
     act(() => result.current.setPage(2));
@@ -109,29 +129,29 @@ describe("useSqlBackedDataView", () => {
     act(() => result.current.setSearch("active"));
     expect(result.current.page).toBe(1);
 
-    act(() => result.current.setSort([{ column: "id", direction: "desc" }]));
+    act(() => result.current.setSort([{ field: "id", direction: "desc" }]));
     expect(result.current.page).toBe(1);
 
-    act(() => result.current.setFilters([{ column: "id", operator: "equals", value: "1" }]));
+    act(() => result.current.setFilters([{ field: "id", operator: "equals", value: "1" }]));
     expect(result.current.page).toBe(1);
   });
 
   it("exports all rows with the current search, filters, and sort", async () => {
     const fetchPage = vi.fn().mockResolvedValue(pageResponse([{ id: "1" }], 1));
     const exportAll = vi.fn().mockResolvedValue(new Blob(["id\n1\n"], { type: "text/csv" }));
-    const { result } = renderHook(() => useSqlBackedDataView({ source, fetchPage, exportAll }));
+    const { result } = renderHook(() => useDataFrameView({ source, fetchPage, exportAll }));
 
     await waitFor(() => expect(result.current.rows).toEqual([["1"]]));
     act(() => result.current.setSearch("active"));
-    act(() => result.current.setSort([{ column: "id", direction: "desc" }]));
-    act(() => result.current.setFilters([{ column: "id", operator: "equals", value: "1" }]));
+    act(() => result.current.setSort([{ field: "id", direction: "desc" }]));
+    act(() => result.current.setFilters([{ field: "id", operator: "equals", value: "1" }]));
 
     await result.current.exportAll();
 
     expect(exportAll).toHaveBeenCalledWith({
       source,
-      sort: [{ column: "id", direction: "desc" }],
-      filters: [{ column: "id", operator: "equals", value: "1" }],
+      sort: [{ field: "id", direction: "desc" }],
+      filters: [{ field: "id", operator: "equals", value: "1" }],
       search: "active",
     });
   });

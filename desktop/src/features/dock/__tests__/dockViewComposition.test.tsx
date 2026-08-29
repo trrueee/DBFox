@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceDockTab } from "../../../types/workspace";
-import { dockViewTitle, getDockView } from "../dockViewRegistry";
+import { dockViewTitle, getDockView } from "../dockViewComposition";
 
 function tab(overrides: Partial<WorkspaceDockTab> = {}): WorkspaceDockTab {
   return {
@@ -8,7 +8,7 @@ function tab(overrides: Partial<WorkspaceDockTab> = {}): WorkspaceDockTab {
     viewType: "dbfox.data.table",
     title: "orders",
     closeable: true,
-    target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
+    target: { type: "object", object: { kind: "dbfox.data.database", id: "ds-1" } },
     ...overrides,
   };
 }
@@ -66,3 +66,4 @@ describe("dock view registry", () => {
     expect(dockViewTitle(unknown)).toBe("Future view");
   });
 });
+

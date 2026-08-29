@@ -3,7 +3,7 @@ import {
   selectActiveDockTabs,
   useWorkspaceStore,
 } from "../../stores/workspaceStore";
-import { useArtifactDockStore } from "../../stores/artifactDockStore";
+import { openArtifactsDock } from "../../stores/artifactDockStore";
 
 /**
  * Product-level Dock bootstrap:
@@ -12,7 +12,6 @@ import { useArtifactDockStore } from "../../stores/artifactDockStore";
  */
 export function useProductDockBootstrap(activeConversationId: string | null) {
   const dockTabs = useWorkspaceStore(selectActiveDockTabs);
-  const openDockArtifacts = useArtifactDockStore((s) => s.openArtifacts);
 
   // 当前对话保证有「✦ 工件」Tab，但不抢走用户当前打开的 Tab。
   useEffect(() => {
@@ -25,7 +24,7 @@ export function useProductDockBootstrap(activeConversationId: string | null) {
           && tab.target.id === activeConversationId,
       )
     ) {
-      openDockArtifacts(activeConversationId, false);
+      openArtifactsDock(activeConversationId, false);
     }
-  }, [activeConversationId, dockTabs, openDockArtifacts]);
+  }, [activeConversationId, dockTabs]);
 }

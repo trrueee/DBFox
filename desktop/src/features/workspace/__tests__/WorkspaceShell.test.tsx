@@ -25,13 +25,13 @@ describe("WorkspaceShell", () => {
 
   it("allows callers to specialize the scroll body", () => {
     render(
-      <WorkspaceShell title="Artifact result" bodyClassName="workspace-shell__body--artifact-result">
+      <WorkspaceShell title="Artifact result" bodyClassName="workspace-shell__body--artifact">
         <div>Rows</div>
       </WorkspaceShell>,
     );
 
     const shell = screen.getByRole("region", { name: "Artifact result" });
-    expect(shell.querySelector(".workspace-shell__body")?.classList.contains("workspace-shell__body--artifact-result")).toBe(
+    expect(shell.querySelector(".workspace-shell__body")?.classList.contains("workspace-shell__body--artifact")).toBe(
       true,
     );
   });
@@ -92,3 +92,4 @@ describe("WorkspaceShell", () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });
+

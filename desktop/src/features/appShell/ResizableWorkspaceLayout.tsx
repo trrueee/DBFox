@@ -44,9 +44,9 @@ export function ResizableWorkspaceLayout({
       <ResizablePanel
         id="app-sidebar-panel"
         className={`app-sidebar-panel ${sidebarCollapsed ? "app-sidebar-panel--collapsed" : ""}`}
-        defaultSize={sidebarCollapsed ? 36 : sidebarDefaultWidth}
-        minSize={sidebarCollapsed ? 36 : 248}
-        maxSize={sidebarCollapsed ? 36 : settingsOpen ? 320 : 420}
+        defaultSize={sidebarCollapsed ? 48 : sidebarDefaultWidth}
+        minSize={sidebarCollapsed ? 48 : 240}
+        maxSize={sidebarCollapsed ? 48 : settingsOpen ? 320 : 336}
         disabled={sidebarCollapsed}
         groupResizeBehavior="preserve-pixel-size"
         onResize={(size) => {
@@ -58,7 +58,7 @@ export function ResizableWorkspaceLayout({
 
       {!sidebarCollapsed && (
         <ResizableHandle
-          aria-label="Resize datasource sidebar"
+          aria-label="调整主导航宽度"
           className="app-sidebar-resize-handle"
         />
       )}

@@ -8,7 +8,8 @@ import {
   selectActiveWorkbench,
   useWorkspaceStore,
 } from "../../../stores/workspaceStore";
-import { useArtifactDockStore } from "../../../stores/artifactDockStore";
+import { openArtifactDock } from "../../../stores/artifactDockStore";
+import type { ConversationArtifact } from "../../../types/conversation";
 import {
   createDockViewRegistry,
   productDockViews,
@@ -19,7 +20,6 @@ import { WorkspaceDock } from "../../appShell/WorkspaceDock";
 function resetAll() {
   useWorkspaceStore.setState({
     activeProjectId: "project-1",
-    projectShell: {},
     mainSurfaceByProject: {},
     workbenchByConversation: {
       "draft:project-1": {
@@ -27,12 +27,11 @@ function resetAll() {
         open: true,
         activeViewKey: null,
         tabs: [],
-        reference: null,
+        references: [],
       },
     },
     settingsOpen: false,
   });
-  useArtifactDockStore.setState({ artifactById: {}, conversationIdByArtifactId: {} });
 }
 
 describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
@@ -49,7 +48,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         title: "users",
         closeable: true,
         projectId: "project-1",
-        target: { type: "resource", kind: "dbfox.data.database", id: "ds-1" },
+        target: { type: "object", object: { kind: "dbfox.data.database", id: "ds-1" } },
         stateKey: "dbfox.data.table:ds-1:users",
       };
 
@@ -61,6 +60,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
         "projectId",
         "target",
         "stateKey",
+        "selectedViewId",
       ]);
 
       for (const key of Object.keys(canonicalTab)) {
@@ -162,24 +162,30 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
 
   describe("E. Artifact Capability State Ownership", () => {
     it("stores artifact reference as identity target without full object in shell tab", () => {
-      const artifact = {
+      const artifact: ConversationArtifact = {
         id: "art-100",
-        type: "result_view" as const,
+        session_id: "conv-88",
+        run_id: "run-1",
+        version: 1,
+        type: "dbfox.data.result_view",
+        schema_version: 2,
         title: "QueryResult #100",
-        sourceSqlArtifactId: "sql-1",
-        columns: [],
-        queryFingerprint: "fp",
+        status: "completed",
+        visibility: "primary",
+        payload: {},
+        provenance: {},
+        relations: [],
       };
 
-      useArtifactDockStore.getState().openArtifact(artifact, "conv-88");
+      openArtifactDock(artifact);
 
       const tab = selectActiveDockTabs(useWorkspaceStore.getState())[0];
       expect(tab.viewKey).toBe("core.artifact:art-100");
       expect(tab.viewType).toBe("core.artifact");
       expect(tab.target).toEqual({ type: "artifact", id: "art-100" });
 
-      expect(useArtifactDockStore.getState().artifactById["art-100"]).toBe(artifact);
-      expect(useArtifactDockStore.getState().conversationIdByArtifactId["art-100"]).toBe("conv-88");
+      expect(tab).not.toHaveProperty("artifact");
+      expect(tab).not.toHaveProperty("conversationId");
     });
   });
 
@@ -214,7 +220,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
   describe("G. Unknown ViewType Fallback & Generic Empty State", () => {
     it("renders graceful unknown fallback state without crashing", async () => {
       useWorkspaceStore.setState({ workbenchByConversation: { "draft:project-1": {
-        scopeId: "future-scope", open: true, activeViewKey: "future:99", reference: null, tabs: [{
+        scopeId: "future-scope", open: true, activeViewKey: "future:99", references: [], tabs: [{
           viewKey: "future:99",
           viewType: "future.third-party.extension",
           title: "Future View",
@@ -233,12 +239,12 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
 
       expect(await screen.findByRole("tab", { name: "Future View" })).toBeTruthy();
       expect(screen.getByText("未知视图")).toBeTruthy();
-      expect(screen.getByText(/该 Dock 视图类型暂无渲染器：future\.third-party\.extension/)).toBeTruthy();
+      expect(screen.getByText(/该工作区视图类型暂无渲染器：future\.third-party\.extension/)).toBeTruthy();
     });
 
     it("renders capability-neutral empty state when no tabs are open", () => {
       useWorkspaceStore.setState({ workbenchByConversation: { "draft:project-1": {
-        scopeId: "empty-scope", open: true, activeViewKey: null, tabs: [], reference: null,
+        scopeId: "empty-scope", open: true, activeViewKey: null, tabs: [], references: [],
       } } });
 
       render(
@@ -280,7 +286,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
 
       // Open tab in WorkspaceStore
       useWorkspaceStore.setState({ workbenchByConversation: { "draft:project-1": {
-        scopeId: "custom-scope", open: true, activeViewKey: "custom:my-tool", reference: null, tabs: [{
+        scopeId: "custom-scope", open: true, activeViewKey: "custom:my-tool", references: [], tabs: [{
           viewKey: "custom:my-tool",
           viewType: "test.example.custom-panel",
           title: "My Extension",

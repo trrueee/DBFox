@@ -50,6 +50,50 @@ describe("MarkdownContent", () => {
     expect(onCitation).toHaveBeenCalledWith("artifact_result_1");
   });
 
+  it("renders an authorized Artifact at its exact Markdown block position", () => {
+    const renderArtifact = vi.fn((artifactId: string) => (
+      <section data-testid="embedded-artifact">Artifact {artifactId}</section>
+    ));
+    const { container } = render(
+      <MarkdownContent
+        content={[
+          "正文第一段。",
+          "",
+          "{{artifact:artifact_visualization_1}}",
+          "",
+          "正文结论。",
+        ].join("\n")}
+        artifactRefs={[{ artifact_id: "artifact_visualization_1" }]}
+        renderArtifact={renderArtifact}
+      />,
+    );
+
+    expect(renderArtifact).toHaveBeenCalledWith("artifact_visualization_1");
+    expect(screen.getByTestId("embedded-artifact")).toBeTruthy();
+    const children = Array.from(
+      container.querySelector(".hifi-markdown-content")?.children ?? [],
+    );
+    expect(children.map((node) => node.textContent)).toEqual([
+      "正文第一段。",
+      "Artifact artifact_visualization_1",
+      "正文结论。",
+    ]);
+  });
+
+  it("does not activate an Artifact marker absent from validated references", () => {
+    const renderArtifact = vi.fn();
+    render(
+      <MarkdownContent
+        content="{{artifact:artifact_fabricated}}"
+        artifactRefs={[]}
+        renderArtifact={renderArtifact}
+      />,
+    );
+
+    expect(renderArtifact).not.toHaveBeenCalled();
+    expect(screen.getByText("{{artifact:artifact_fabricated}}")).toBeTruthy();
+  });
+
   it("does not render untrusted raw HTML", () => {
     const { container } = render(<MarkdownContent content={'<img src=x onerror="alert(1)">'} />);
     expect(container.querySelector("img")).toBeNull();

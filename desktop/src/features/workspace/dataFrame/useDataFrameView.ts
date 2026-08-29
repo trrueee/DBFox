@@ -1,71 +1,72 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ArtifactViewFilter, ArtifactViewSort } from "../../../lib/api/types";
+import type { DataFrameFilter, DataFrameSort } from "../../../lib/api/types";
 import type {
-  SqlBackedDataViewSource,
-  SqlBackedExportRequest,
-  SqlBackedLoadingMode,
-  SqlBackedPageRequest,
-  SqlBackedPageResponse,
-  UseSqlBackedDataViewOptions,
-} from "./sqlBackedTypes";
+  DataFrameViewSource,
+  DataFrameExportRequest,
+  DataFrameLoadingMode,
+  DataFramePageRequest,
+  DataFramePageResponse,
+  UseDataFrameViewOptions,
+} from "./dataFrameViewTypes";
 
 type SetPageValue = number | ((page: number) => number);
 
-export interface SqlBackedDataViewState {
-  source: SqlBackedDataViewSource;
+export interface DataFrameViewState {
+  source: DataFrameViewSource;
   page: number;
   setPage: (value: SetPageValue) => void;
   pageSize: number;
   setPageSize: (value: number) => void;
   search: string;
   setSearch: (value: string) => void;
-  sort: ArtifactViewSort[];
-  setSort: (value: ArtifactViewSort[]) => void;
-  filters: ArtifactViewFilter[];
-  setFilters: (value: ArtifactViewFilter[]) => void;
-  data: SqlBackedPageResponse | null;
+  sort: DataFrameSort[];
+  setSort: (value: DataFrameSort[]) => void;
+  filters: DataFrameFilter[];
+  setFilters: (value: DataFrameFilter[]) => void;
+  data: DataFramePageResponse | null;
   rows: unknown[][];
   columns: string[];
+  columnTypes: Array<string | undefined>;
   rowCount: number | null | undefined;
   hasNextPage: boolean;
   latencyMs: number | undefined;
-  consistency: "durable_snapshot" | "live_reexecution" | "live_query" | undefined;
+  consistency: "durable_snapshot" | "live_reexecution" | undefined;
   originalExecutedAt: string | null | undefined;
   viewExecutedAt: string | undefined;
   viewExecutionId: string | undefined;
   warnings: string[];
   notices: string[];
-  error: string | null;
-  loadingMode: SqlBackedLoadingMode;
+  error: unknown | null;
+  loadingMode: DataFrameLoadingMode;
   isLoading: boolean;
   refresh: () => void;
   exportAll: () => Promise<Blob>;
 }
 
-export function useSqlBackedDataView({
+export function useDataFrameView({
   source,
   fetchPage,
   exportAll: requestExportAll,
   enabled = true,
   initialPageSize = 20,
   countMode = "estimate",
-}: UseSqlBackedDataViewOptions): SqlBackedDataViewState {
+}: UseDataFrameViewOptions): DataFrameViewState {
   const [page, setPageState] = useState(1);
   const [pageSize, setPageSizeState] = useState(initialPageSize);
   const [search, setSearchState] = useState("");
-  const [sort, setSortState] = useState<ArtifactViewSort[]>([]);
-  const [filters, setFiltersState] = useState<ArtifactViewFilter[]>([]);
-  const [data, setData] = useState<SqlBackedPageResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loadingMode, setLoadingMode] = useState<SqlBackedLoadingMode>("idle");
+  const [sort, setSortState] = useState<DataFrameSort[]>([]);
+  const [filters, setFiltersState] = useState<DataFrameFilter[]>([]);
+  const [data, setData] = useState<DataFramePageResponse | null>(null);
+  const [error, setError] = useState<unknown | null>(null);
+  const [loadingMode, setLoadingMode] = useState<DataFrameLoadingMode>("idle");
   const requestSeqRef = useRef(0);
   const requestControllerRef = useRef<AbortController | null>(null);
-  const nextLoadingModeRef = useRef<SqlBackedLoadingMode>("initial");
-  const dataRef = useRef<SqlBackedPageResponse | null>(null);
+  const nextLoadingModeRef = useRef<DataFrameLoadingMode>("initial");
+  const dataRef = useRef<DataFramePageResponse | null>(null);
 
   const normalizedSearch = search.trim();
 
-  const buildPageRequest = useCallback((): SqlBackedPageRequest => ({
+  const buildPageRequest = useCallback((): DataFramePageRequest => ({
     source,
     page,
     pageSize,
@@ -75,7 +76,7 @@ export function useSqlBackedDataView({
     countMode,
   }), [countMode, filters, normalizedSearch, page, pageSize, sort, source]);
 
-  const load = useCallback(async (mode: SqlBackedLoadingMode) => {
+  const load = useCallback(async (mode: DataFrameLoadingMode) => {
     const seq = ++requestSeqRef.current;
     requestControllerRef.current?.abort();
     const controller = new AbortController();
@@ -90,7 +91,7 @@ export function useSqlBackedDataView({
     } catch (err) {
       if (seq !== requestSeqRef.current) return;
       if (isAbortError(err)) return;
-      setError(err instanceof Error ? err.message : String(err));
+      setError(err);
     } finally {
       if (requestControllerRef.current === controller) requestControllerRef.current = null;
       if (seq === requestSeqRef.current) setLoadingMode("idle");
@@ -133,13 +134,13 @@ export function useSqlBackedDataView({
     setPageState(1);
   }, []);
 
-  const setSort = useCallback((value: ArtifactViewSort[]) => {
+  const setSort = useCallback((value: DataFrameSort[]) => {
     nextLoadingModeRef.current = "filter";
     setSortState(value);
     setPageState(1);
   }, []);
 
-  const setFilters = useCallback((value: ArtifactViewFilter[]) => {
+  const setFilters = useCallback((value: DataFrameFilter[]) => {
     nextLoadingModeRef.current = "filter";
     setFiltersState(value);
     setPageState(1);
@@ -153,7 +154,7 @@ export function useSqlBackedDataView({
 
   const handleExportAll = useCallback(async () => {
     if (!enabled) throw new Error("当前数据视图尚未就绪");
-    const req: SqlBackedExportRequest = {
+    const req: DataFrameExportRequest = {
       source,
       sort: sort.length ? sort : undefined,
       filters: filters.length ? filters : undefined,
@@ -167,7 +168,7 @@ export function useSqlBackedDataView({
     }
   }, [enabled, filters, normalizedSearch, requestExportAll, sort, source]);
 
-  const columns = data?.columns ?? source.columns;
+  const columns = useMemo(() => data?.columns ?? [], [data?.columns]);
   const rows = useMemo(
     () => (data?.rows ?? []).map((row) => columns.map((column) => row[column])),
     [columns, data?.rows],
@@ -188,6 +189,7 @@ export function useSqlBackedDataView({
     data,
     rows,
     columns,
+    columnTypes: data?.columnTypes ?? [],
     rowCount: data?.rowCount,
     hasNextPage: Boolean(data?.hasNextPage),
     latencyMs: data?.latencyMs,

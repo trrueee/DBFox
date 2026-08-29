@@ -1,25 +1,8 @@
-import { create } from "zustand";
-
-import type { ResultViewArtifact } from "../types/agentArtifact";
+import type { ConversationArtifact } from "../types/conversation";
 import { useWorkspaceStore } from "./workspaceStore";
 
-export interface ArtifactDockState {
-  artifactById: Record<string, ResultViewArtifact>;
-  conversationIdByArtifactId: Record<string, string>;
-}
-
-interface ArtifactDockActions {
-  openArtifacts: (conversationId: string, activate?: boolean) => void;
-  openArtifact: (artifact: ResultViewArtifact, conversationId?: string) => void;
-}
-
-export type ArtifactDockStore = ArtifactDockState & ArtifactDockActions;
-
-export const useArtifactDockStore = create<ArtifactDockStore>()((set) => ({
-  artifactById: {},
-  conversationIdByArtifactId: {},
-
-  openArtifacts: (conversationId, activate = true) => {
+/** Dock commands only. Artifact data remains authoritative in conversationStore. */
+export function openArtifactsDock(conversationId: string, activate = true): void {
     const viewKey = `core.artifacts:${conversationId}`;
     useWorkspaceStore.getState().openDockTab(
       {
@@ -34,31 +17,25 @@ export const useArtifactDockStore = create<ArtifactDockStore>()((set) => ({
       },
       activate,
     );
-  },
+}
 
-  openArtifact: (artifact, conversationId) => {
+export function openArtifactDock(
+  artifact: ConversationArtifact,
+  options: { activate?: boolean; selectedViewId?: string } = {},
+): void {
     const viewKey = `core.artifact:${artifact.id}`;
-    useWorkspaceStore.getState().openDockTab({
-      viewKey,
-      viewType: "core.artifact",
-      title: artifact.title,
-      closeable: true,
-      target: {
-        type: "artifact",
-        id: artifact.id,
+    useWorkspaceStore.getState().openDockTab(
+      {
+        viewKey,
+        viewType: "core.artifact",
+        title: artifact.title,
+        closeable: true,
+        target: {
+          type: "artifact",
+          id: artifact.id,
+        },
+        selectedViewId: options.selectedViewId,
       },
-    });
-    set((state) => ({
-      artifactById: {
-        ...state.artifactById,
-        [artifact.id]: artifact,
-      },
-      conversationIdByArtifactId: conversationId
-        ? {
-            ...state.conversationIdByArtifactId,
-            [artifact.id]: conversationId,
-          }
-        : state.conversationIdByArtifactId,
-    }));
-  },
-}));
+      options.activate ?? true,
+    );
+}

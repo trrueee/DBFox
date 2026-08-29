@@ -1,17 +1,16 @@
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
-import { EmptyState, LoadingState } from "../../components/ui";
-import { useArtifactDockStore } from "../../stores/artifactDockStore";
+import { MessageSquarePlus } from "lucide-react";
+import { Button, EmptyState, LoadingState } from "../../components/ui";
+import { openArtifactDock } from "../../stores/artifactDockStore";
+import { useConversationStore } from "../../stores/conversationStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useConversationViewModel } from "../conversation/workspace/useConversationViewModel";
-import { isPrimaryConversationArtifact } from "../conversation/workspace/conversationArtifactModels";
-import {
-  createArtifactRendererRegistry,
-  productArtifactRenderers,
-  renderArtifact,
-  type ArtifactEnvelope,
-} from "../workspace/artifacts/artifactRendererRegistry";
-import { WorkspaceShell } from "./WorkspaceShell";
+import { isPrimaryConversationArtifact } from "../conversation/workspace/conversationArtifactSelectors";
+import { ArtifactViewHost } from "../workspace/artifacts/ArtifactViewHost";
+import { WorkspaceShell } from "../workspace/WorkspaceShell";
 import type { WorkspaceDockTab } from "../../types/workspace";
-import type { DockShowToast } from "../dock/types";
+import type { DockShowToast } from "./types";
+import { toArtifactEnvelope } from "../workspace/artifacts/artifactEnvelope";
 
 const ArtifactDock = lazy(() =>
   import("../conversation/workspace/ArtifactDock").then((module) => ({ default: module.ArtifactDock })),
@@ -20,7 +19,7 @@ const ArtifactDock = lazy(() =>
 export type { DockShowToast };
 
 export function DockSuspense({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<LoadingState label="正在载入工作台" />}>{children}</Suspense>;
+  return <Suspense fallback={<LoadingState label="�������빤��̨" />}>{children}</Suspense>;
 }
 
 export function ArtifactsDockContent({ conversationId }: { conversationId: string }) {
@@ -33,7 +32,6 @@ export function ArtifactsDockContent({ conversationId }: { conversationId: strin
     selectArtifact,
     loadRunArtifacts,
   } = viewModel;
-  const openDockArtifact = useArtifactDockStore((s) => s.openArtifact);
   const pendingRevealArtifactIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -91,8 +89,8 @@ export function ArtifactsDockContent({ conversationId }: { conversationId: strin
   if (!conversationId || artifacts.filter(isPrimaryConversationArtifact).length === 0) {
     return (
       <EmptyState
-        title="暂无工件"
-        description="AI 完成分析后，查询结果、图表和笔记会出现在这里。"
+        title="���޹���"
+        description="������ɺ����ɵĽ����ͼ���ͱʼǻ���������"
       />
     );
   }
@@ -102,7 +100,7 @@ export function ArtifactsDockContent({ conversationId }: { conversationId: strin
       artifacts={artifacts}
       selectedArtifactId={detail?.selected_artifact_id}
       onSelectArtifact={handleSelectArtifact}
-      onOpenResultTab={(artifact) => openDockArtifact(artifact, conversationId)}
+      onOpenArtifact={(artifact) => openArtifactDock(artifact)}
     />
   );
 }
@@ -110,74 +108,77 @@ export function ArtifactsDockContent({ conversationId }: { conversationId: strin
 export function ArtifactDockContent({
   tab,
   showToast,
+  onAsk,
 }: {
   tab: WorkspaceDockTab;
   showToast: DockShowToast;
+  onAsk: (reference: import("../../../../sdk/frontend/index").WorkbenchReference) => void;
 }) {
   const artifactId = tab.target?.type === "artifact" ? tab.target.id : "";
-  const artifact = useArtifactDockStore((s) => s.artifactById[artifactId]);
-  const conversationId = useArtifactDockStore((s) => s.conversationIdByArtifactId[artifactId]);
-
-  const rendererRegistry = useMemo(
-    () =>
-      createArtifactRendererRegistry(
-        productArtifactRenderers({
-          dataActions: {
-            onOpenResultTab: (value) => {
-              useArtifactDockStore.getState().openArtifact(value, conversationId);
-            },
-          },
-        }),
-      ),
-    [conversationId],
-  );
+  const artifact = useConversationStore((s) => s.artifactsById[artifactId]);
+  const updateDockTab = useWorkspaceStore((s) => s.updateDockTab);
 
   if (!artifact) {
     return (
       <WorkspaceShell
         title={tab.title}
-        description="基于工件 ID 实时分页查询，当前表格不是历史结果快照。"
-        bodyClassName="workspace-shell__body--artifact-result"
+        description="�ñ�ǩ�����ù������ݣ���������ע�����ͼ�����ȡ��"
+        showHeader={false}
+        aria-label={tab.title}
+        bodyClassName="workspace-shell__body--artifact"
       >
         <EmptyState
-          title="工件不可用"
-          description="该工件已关闭或未在当前会话中载入。"
+          title="����������"
+          description="�ù����ѹرջ�δ�ڵ�ǰ�Ự�����롣"
         />
       </WorkspaceShell>
     );
   }
 
-  const envelope: ArtifactEnvelope = {
-    id: artifact.id,
-    type: artifact.type,
-    schema_version: artifact.schemaVersion ?? 1,
-    title: artifact.title,
-    payload: {
-      sourceSqlArtifactId: artifact.sourceSqlArtifactId,
-      queryFingerprint: artifact.queryFingerprint,
-      datasourceGeneration: artifact.datasourceGeneration,
-      columns: artifact.columns,
-      rowCount: artifact.rowCount,
-      returnedRows: artifact.returnedRows,
-      latencyMs: artifact.latencyMs,
-      truncated: artifact.truncated,
-    },
-  };
+  const envelope = toArtifactEnvelope(artifact);
 
   return (
     <WorkspaceShell
       title={artifact.title}
-      description="基于工件 ID 实时分页查询，当前表格不是历史结果快照。"
-      bodyClassName="workspace-shell__body--artifact-result"
+      description="ͬһ�;ù����ڹ������еĽ�����ͼ��"
+      showHeader={false}
+      aria-label={artifact.title}
+      bodyClassName="workspace-shell__body--artifact"
     >
-      {renderArtifact(
-        envelope,
-        {
-          onToast: showToast,
-          mode: "workspace",
-        },
-        rendererRegistry,
-      )}
+      <div className="workspace-artifact-context-action">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            onAsk({
+              label: artifact.title,
+              object: { kind: "artifact", id: artifact.id, version: artifact.version },
+              artifactId: artifact.id,
+            });
+            showToast("�Ѽ���Ի�������", "success");
+          }}
+        >
+          <MessageSquarePlus size={14} aria-hidden="true" />
+          ����Ի�������
+        </Button>
+      </div>
+      <ArtifactViewHost
+        artifact={envelope}
+        surface="workspace"
+        onToast={showToast}
+        selectedViewId={tab.selectedViewId}
+        onSelectedViewChange={(selectedViewId) => updateDockTab(tab.viewKey, { selectedViewId })}
+        resolveArtifact={(relatedId) => {
+            const related = useConversationStore.getState().artifactsById[relatedId];
+            return related ? toArtifactEnvelope(related) : null;
+        }}
+        openArtifact={(value) => {
+            const canonical = useConversationStore.getState().artifactsById[value.id];
+            if (canonical) openArtifactDock(canonical);
+        }}
+      />
     </WorkspaceShell>
   );
 }
+

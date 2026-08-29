@@ -11,14 +11,14 @@
 
 .workspace-shell__header {
   display: flex;
-  min-height: 52px;
+  min-height: 40px;
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   border-bottom: 1px solid hsl(var(--border));
   background: hsl(var(--card));
-  padding: 10px 14px;
+  padding: 6px 12px;
 }
 
 .workspace-shell__heading {
@@ -29,7 +29,7 @@
   margin: 0;
   color: hsl(var(--foreground));
   font-size: var(--ui-font-title);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -55,10 +55,19 @@
   overflow: auto;
 }
 
-.workspace-shell__body--artifact-result {
+.workspace-shell__body--artifact {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.workspace-artifact-context-action {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--surface-panel);
 }
 
 .workspace-shell__state {
@@ -99,3 +108,4 @@
   gap: 12px;
   padding: 14px;
 }
+

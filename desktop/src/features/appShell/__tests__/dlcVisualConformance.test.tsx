@@ -11,7 +11,7 @@ import type {
   ResourceConnectorContribution,
 } from "../../resources/types";
 import type { DockViewContribution } from "../../dock/types";
-import { ProjectResourceSidebar } from "../../resources/ProjectResourceSidebar";
+import { ResourceViewContainer } from "../../resources/ResourceViewContainer";
 import { WorkspaceDock } from "../WorkspaceDock";
 import type { WorkspaceDockTab } from "../../../types/workspace";
 
@@ -23,7 +23,7 @@ function setTestWorkbench(tabs: WorkspaceDockTab[], activeViewKey: string | null
         open: true,
         activeViewKey,
         tabs,
-        reference: null,
+        references: [],
       },
     },
   });
@@ -31,6 +31,7 @@ function setTestWorkbench(tabs: WorkspaceDockTab[], activeViewKey: string | null
 
 vi.mock("../../projects/useProjectState", () => ({
   useProjectState: () => ({
+    activeProject: { id: "project-1", name: "订单分析", status: "active" },
     projects: [{ id: "project-1", name: "订单分析", status: "active" }],
     loadingProjects: false,
     projectError: "",
@@ -73,20 +74,14 @@ describe("DLC visual conformance (spec §20/§34)", () => {
       settingsOpen: false,
       workbenchByConversation: {},
     });
-    useConversationStore.setState({ activeConversationId: null, summaries: [] });
+    useConversationStore.setState({ summaries: [] });
   });
 
-  it("renders 10 synthetic DLC connectors as uniform host-owned sidebar sections", () => {
+  it("renders 10 synthetic DLC connectors as uniform host-owned Resource View sections", () => {
     const connectors = Array.from({ length: 10 }, (_, index) => syntheticConnector(index));
     render(
       <TooltipProvider>
-        <ProjectResourceSidebar
-          collapsed={false}
-          onToggleCollapse={vi.fn()}
-          onNewProject={vi.fn()}
-          onOpenSettings={vi.fn()}
-          connectors={connectors}
-        />
+        <ResourceViewContainer projectId="project-1" connectors={connectors} />
       </TooltipProvider>,
     );
 
@@ -101,11 +96,11 @@ describe("DLC visual conformance (spec §20/§34)", () => {
 
     // Only the expanded section mounts DLC content, inside the host-owned slot.
     expect(screen.getByTestId("synthetic-resource-0")).toBeInTheDocument();
-    expect(screen.getByTestId("synthetic-resource-0").closest(".ds-connector-section__content")).toBeTruthy();
+    expect(screen.getByTestId("synthetic-resource-0").closest(".resource-view__body")).toBeTruthy();
 
     // Expanding a late section keeps the host chrome intact.
     fireEvent.click(screen.getByRole("button", { name: /扩展 9/ }));
-    expect(screen.getByTestId("synthetic-resource-9").closest(".ds-connector-section__content")).toBeTruthy();
+    expect(screen.getByTestId("synthetic-resource-9").closest(".resource-view__body")).toBeTruthy();
     expect(screen.getByText("资源")).toBeInTheDocument();
   });
 
@@ -118,13 +113,7 @@ describe("DLC visual conformance (spec §20/§34)", () => {
     };
     render(
       <TooltipProvider>
-        <ProjectResourceSidebar
-          collapsed={false}
-          onToggleCollapse={vi.fn()}
-          onNewProject={vi.fn()}
-          onOpenSettings={vi.fn()}
-          connectors={[emptyConnector]}
-        />
+        <ResourceViewContainer projectId="project-1" connectors={[emptyConnector]} />
       </TooltipProvider>,
     );
 
@@ -148,7 +137,7 @@ describe("DLC visual conformance (spec §20/§34)", () => {
     useDlcStore.getState().setProjectionResult("snap-conformance", {}, {
       connectors: [],
       dockViews,
-      artifactRenderers: [],
+      artifactViews: [],
     });
 
     render(
@@ -183,7 +172,7 @@ describe("DLC visual conformance (spec §20/§34)", () => {
     useDlcStore.getState().setProjectionResult("snap-conformance", {}, {
       connectors: [],
       dockViews,
-      artifactRenderers: [],
+      artifactViews: [],
     });
 
     render(

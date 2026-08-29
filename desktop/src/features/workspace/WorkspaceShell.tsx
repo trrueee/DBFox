@@ -81,3 +81,4 @@ function renderState(state: WorkspaceShellState | undefined) {
       return null;
   }
 }
+

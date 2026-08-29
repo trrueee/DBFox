@@ -2,12 +2,14 @@ import { lazy, Suspense, useCallback, useState } from "react";
 import { Plus } from "lucide-react";
 import { useConversationStore } from "../../stores/conversationStore";
 import {
-  selectActiveWorkbenchReference,
+  selectActiveWorkbenchReferences,
   useWorkspaceStore,
 } from "../../stores/workspaceStore";
 import { getUserErrorMessage } from "../../lib/api/client";
 import { SmartQueryHome } from "../workspace/SmartQueryHome";
-import { Button, EmptyState, LoadingState } from "../../components/ui";
+import { Button, EmptyState, ErrorState, LoadingState } from "../../components/ui";
+import { ProjectOverview } from "../projects/ProjectOverview";
+import type { WorkbenchReference } from "../../types/workspace";
 
 const ConversationWorkspace = lazy(() =>
   import("../conversation/workspace/ConversationWorkspace").then((module) => ({ default: module.ConversationWorkspace })),
@@ -15,11 +17,17 @@ const ConversationWorkspace = lazy(() =>
 import "./ConversationCenter.css";
 
 interface ConversationCenterProps {
-  showToast: (message: string, type?: "success" | "error" | "warning" | "info") => void;
   onNewProject: () => void;
 }
 
-export function ConversationCenter({ showToast, onNewProject }: ConversationCenterProps) {
+interface PendingSubmission {
+  conversationId: string;
+  content: string;
+  idempotencyKey: string;
+  references: readonly WorkbenchReference[];
+}
+
+export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
   const centerMode = useWorkspaceStore((s) => s.centerMode);
   const mainSurface = useWorkspaceStore((s) =>
     s.activeProjectId ? s.mainSurfaceByProject[s.activeProjectId] : undefined,
@@ -27,47 +35,66 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
   const pendingAsk = useWorkspaceStore((s) => s.pendingAsk);
   const clearPendingAsk = useWorkspaceStore((s) => s.clearPendingAsk);
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
-  const activeConversationId = useConversationStore((s) => s.activeConversationId);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
-  const reference = useWorkspaceStore(selectActiveWorkbenchReference);
+  const references = useWorkspaceStore(selectActiveWorkbenchReferences);
   const setProjectActiveConversation = useWorkspaceStore(
     (state) => state.setProjectActiveConversation,
   );
-  const setWorkbenchReference = useWorkspaceStore((state) => state.setWorkbenchReference);
+  const promoteDraftWorkbenchToConversation = useWorkspaceStore(
+    (state) => state.promoteDraftWorkbenchToConversation,
+  );
+  const removeWorkbenchReference = useWorkspaceStore((state) => state.removeWorkbenchReference);
+  const clearWorkbenchReferences = useWorkspaceStore((state) => state.clearWorkbenchReferences);
   const [askInputValue, setAskInputValue] = useState("");
+  const [submitError, setSubmitError] = useState<unknown | null>(null);
+  const [pendingSubmission, setPendingSubmission] = useState<PendingSubmission | null>(null);
   const displayAsk = pendingAsk ?? askInputValue;
 
   const handleSubmitAsk = useCallback(async () => {
     const text = displayAsk.trim();
     if (!text) return;
+    setSubmitError(null);
     try {
-      const detail = await useConversationStore.getState().createAndOpenConversation(text);
-      setProjectActiveConversation(activeProjectId, detail.id);
-      openConversationCenter(detail.id);
+      let submission = pendingSubmission?.content === text ? pendingSubmission : null;
+      if (!submission) {
+        const detail = await useConversationStore.getState().createAndOpenConversation(text);
+        submission = {
+          conversationId: detail.id,
+          content: text,
+          idempotencyKey: globalThis.crypto.randomUUID(),
+          references,
+        };
+        setPendingSubmission(submission);
+      }
       await useConversationStore
         .getState()
         .sendMessage(
-          detail.id,
-          text,
+          submission.conversationId,
+          submission.content,
           "queue",
-          globalThis.crypto.randomUUID(),
-          reference ? [reference] : [],
+          submission.idempotencyKey,
+          submission.references,
         );
+      promoteDraftWorkbenchToConversation(activeProjectId, submission.conversationId);
+      setProjectActiveConversation(activeProjectId, submission.conversationId);
+      openConversationCenter(submission.conversationId);
       clearPendingAsk();
-      setWorkbenchReference(null);
+      clearWorkbenchReferences();
       setAskInputValue("");
+      setPendingSubmission(null);
     } catch (error) {
-      showToast(getUserErrorMessage(error, "创建智能分析失败，请重试。"), "error");
+      setSubmitError(error);
     }
   }, [
     activeProjectId,
     clearPendingAsk,
     displayAsk,
     openConversationCenter,
-    reference,
+    pendingSubmission,
+    promoteDraftWorkbenchToConversation,
+    references,
     setProjectActiveConversation,
-    setWorkbenchReference,
-    showToast,
+    clearWorkbenchReferences,
   ]);
 
   if (!activeProjectId) {
@@ -91,12 +118,20 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
     centerMode === "conversation" ? { kind: "conversation" as const } : { kind: "new-conversation" as const }
   );
 
-  if (effectiveSurface.kind === "conversation" && activeConversationId) {
+  if (effectiveSurface.kind === "conversation" && effectiveSurface.conversationId) {
     return (
       <section className="conversation-center" aria-label="对话">
         <Suspense fallback={<LoadingState label="正在载入对话" />}>
-          <ConversationWorkspace conversationId={activeConversationId} />
+          <ConversationWorkspace conversationId={effectiveSurface.conversationId} />
         </Suspense>
+      </section>
+    );
+  }
+
+  if (effectiveSurface.kind === "project-overview") {
+    return (
+      <section className="conversation-center" aria-label="项目上下文">
+        <ProjectOverview />
       </section>
     );
   }
@@ -108,11 +143,26 @@ export function ConversationCenter({ showToast, onNewProject }: ConversationCent
         onAskInputChange={(value) => {
           clearPendingAsk();
           setAskInputValue(value);
+          setSubmitError(null);
+          setPendingSubmission(null);
         }}
         onSubmitAsk={() => void handleSubmitAsk()}
         projectId={activeProjectId}
-        reference={reference}
-        onClearReference={() => setWorkbenchReference(null)}
+        references={references}
+        onRemoveReference={(reference) => {
+          removeWorkbenchReference(reference);
+          setSubmitError(null);
+          setPendingSubmission(null);
+        }}
+        feedback={submitError ? (
+          <ErrorState
+            title="无法开始任务"
+            description={getUserErrorMessage(submitError, "创建任务失败，请重试。")}
+            error={submitError}
+            onRetry={() => void handleSubmitAsk()}
+            retryLabel="重试发送"
+          />
+        ) : null}
       />
     </section>
   );

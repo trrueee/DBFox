@@ -11,6 +11,11 @@ import {
   CommandKbd,
   CommandList,
   CommandSearch,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
 } from "./ui";
 import "./CommandPalette.css";
 
@@ -49,23 +54,21 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
   if (!open) return null;
 
   return (
-    <div className="dbfox-command-overlay" onClick={onClose} role="presentation">
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent className="dbfox-command-dialog">
+        <DialogHeader className="sr-only">
+          <DialogTitle>全局搜索</DialogTitle>
+          <DialogDescription>搜索任务、项目、对话和应用操作。</DialogDescription>
+        </DialogHeader>
       <Command
         label="全局搜索"
         loop
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onClose();
-          }
-        }}
       >
         <CommandSearch>
-          <Search size={15} className="dbfox-command-search-icon" />
+          <Search size={16} className="dbfox-command-search-icon" />
           <CommandInput
             autoFocus
-            placeholder="搜索对话、数据表、字段和操作…"
+            placeholder="搜索任务、项目和操作…"
           />
           <CommandKbd>Esc</CommandKbd>
         </CommandSearch>
@@ -90,7 +93,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
                   onSelect={() => runCommand(command)}
                 >
                   <CommandItemIcon>
-                    {command.icon || <Search size={13} />}
+                    {command.icon || <Search size={14} />}
                   </CommandItemIcon>
                   <CommandItemLabel>
                     <span>{command.name}</span>
@@ -108,6 +111,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
         </CommandList>
 
       </Command>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
