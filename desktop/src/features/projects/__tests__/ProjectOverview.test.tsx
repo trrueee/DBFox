@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ConnectorProjectResource } from "../../../../../sdk/frontend/index";
+import type { ConnectorContext, ConnectorProjectResource } from "../../../../../sdk/frontend/index";
 import { ProjectOverview } from "../ProjectOverview";
 
 vi.mock("../useProjectState", () => ({
