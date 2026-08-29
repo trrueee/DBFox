@@ -4,21 +4,19 @@
   padding: 12px;
   color: hsl(var(--popover-foreground));
   background: hsl(var(--popover));
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius-md);
-  box-shadow:
-    0 18px 42px rgba(15, 23, 42, 0.16),
-    0 2px 10px rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-lg);
   outline: none;
   transform-origin: var(--radix-hover-card-content-transform-origin);
 }
 
 .dbfox-hover-card-content[data-state="open"] {
-  animation: dbfox-hover-card-in 140ms ease-out;
+  animation: dbfox-hover-card-in 140ms var(--ease-out);
 }
 
 .dbfox-hover-card-content[data-state="closed"] {
-  animation: dbfox-hover-card-out 90ms ease-in;
+  animation: dbfox-hover-card-out 90ms var(--ease-in);
 }
 
 .dbfox-hover-card-arrow {

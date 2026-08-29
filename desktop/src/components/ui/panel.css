@@ -4,7 +4,7 @@
   min-height: 0;
   color: var(--color-text-primary);
   background: var(--surface-raised);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-panel);
 }
 
@@ -16,14 +16,15 @@
   min-height: var(--density-toolbar-min-height);
   gap: var(--density-gap);
   padding: var(--density-gap) var(--density-panel-padding);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .dbfox-panel__title {
   margin: 0;
   color: var(--color-text-primary);
   font-size: var(--ui-font-body);
-  font-weight: 650;
+  font-weight: 600;
+  letter-spacing: var(--tracking-title, -0.01em);
   line-height: 1.25;
 }
 
@@ -49,5 +50,5 @@
   padding: var(--density-gap) var(--density-panel-padding);
   color: var(--color-text-secondary);
   font-size: var(--ui-font-control);
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--hairline);
 }

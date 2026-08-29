@@ -33,6 +33,11 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [loadError, setLoadError] = useState<unknown | null>(null);
+  const [operationError, setOperationError] = useState<{
+    label: string;
+    error: unknown;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,9 +50,10 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
       if (!cancelled) {
         setConfiguration(nextConfiguration);
         setRecovery(nextRecovery);
+        setLoadError(null);
       }
     }).catch((error) => {
-      if (!cancelled) showToast(getUserErrorMessage(error, "无法读取桌面发布状态"), "error");
+      if (!cancelled) setLoadError(error);
     });
     return () => { cancelled = true; };
   }, [desktopRuntime, showToast]);
@@ -55,6 +61,7 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
   const checkForUpdate = useCallback(async () => {
     if (!configuration?.configured || checking) return;
     setChecking(true);
+    setOperationError(null);
     try {
       const result = await checkForDesktopUpdate();
       setUpdate(result);
@@ -63,7 +70,7 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
         result.available ? "info" : "success",
       );
     } catch (error) {
-      showToast(getUserErrorMessage(error, "检查更新失败"), "error");
+      setOperationError({ label: "检查更新失败", error });
     } finally {
       setChecking(false);
     }
@@ -72,12 +79,13 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
   const installUpdate = async () => {
     if (!update?.available || installing) return;
     setInstalling(true);
+    setOperationError(null);
     try {
       showToast("正在下载并验证发布者签名，安装开始后应用会安全退出", "info");
       await installPendingDesktopUpdate();
     } catch (error) {
       setInstalling(false);
-      showToast(getUserErrorMessage(error, "更新安装失败"), "error");
+      setOperationError({ label: "更新安装失败", error });
     }
   };
 
@@ -85,16 +93,31 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
   const systemManaged = configuration?.platformPolicy === "system-package-manager";
   return (
     <SettingsContent>
-      <SettingsStatus
-        tone={configured ? "success" : "warning"}
-        label={configured ? "代码签名更新通道已启用" : systemManaged ? "由系统包管理器负责更新" : "此构建未启用自动更新"}
-        description={configured
-          ? "手动检查只读取官方发布清单；Windows 或 macOS 更新必须匹配已安装应用的代码签名身份。"
-          : systemManaged
-            ? "Linux 不从应用内安装更新，请使用发行包或系统包管理器完成升级。"
-            : "开发构建不会联网检查更新，也不能安装未签名更新包。"}
-        meta={`版本：${configuration?.currentVersion ?? "读取中…"} · 通道：${configuration?.channel ?? "stable"}`}
-      />
+      {loadError ? (
+        <SettingsStatus
+          tone="danger"
+          label="无法读取桌面发布状态"
+          description={getUserErrorMessage(loadError, "无法读取桌面发布状态")}
+          error={loadError}
+        />
+      ) : configuration === null ? (
+        <SettingsStatus
+          tone="loading"
+          label="正在读取桌面发布状态"
+          description="正在读取更新通道、当前版本和异常退出恢复信息。"
+        />
+      ) : (
+        <SettingsStatus
+          tone={configured ? "success" : "warning"}
+          label={configured ? "代码签名更新通道已启用" : systemManaged ? "由系统包管理器负责更新" : "此构建未启用自动更新"}
+          description={configured
+            ? "手动检查只读取官方发布清单；Windows 或 macOS 更新必须匹配已安装应用的代码签名身份。"
+            : systemManaged
+              ? "Linux 不从应用内安装更新，请使用发行包或系统包管理器完成升级。"
+              : "开发构建不会联网检查更新，也不能安装未签名更新包。"}
+          meta={`版本：${configuration.currentVersion} · 通道：${configuration.channel}`}
+        />
+      )}
 
       <SettingsSection
         icon={Download}
@@ -107,6 +130,14 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
           </Button>
         )}
       >
+        {operationError ? (
+          <SettingsStatus
+            tone="danger"
+            label={operationError.label}
+            description={getUserErrorMessage(operationError.error, `${operationError.label}，请重试`)}
+            error={operationError.error}
+          />
+        ) : null}
         {update?.available ? (
           <div className="update-release">
             <div>
@@ -137,7 +168,7 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
           tone={recovery?.previousUncleanExit ? "warning" : "success"}
           label={recovery?.previousUncleanExit ? "检测到上次异常退出" : "上次会话正常结束"}
           description={recovery?.previousUncleanExit
-            ? "原生窗口状态会恢复；Agent 对话和工件继续以数据库为事实来源。若运行异常，请导出诊断包。"
+            ? "原生窗口状态会恢复；Agent 对话和工件继续以本地耐久存储为事实来源。若运行异常，请导出诊断包。"
             : "应用内面板和持久化工作区会从各自的唯一事实来源恢复。"}
         />
       </SettingsSection>

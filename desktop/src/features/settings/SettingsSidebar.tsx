@@ -18,12 +18,12 @@ export function SettingsSidebar({
   return (
     <aside className="settings-sidebar" aria-label="设置导航">
       <button type="button" className="settings-sidebar__back" onClick={onClose}>
-        <ArrowLeft size={15} aria-hidden="true" />
+        <ArrowLeft size={16} aria-hidden="true" />
         <span>返回工作区</span>
       </button>
 
       <div className="settings-sidebar__title">
-        <Settings size={17} aria-hidden="true" />
+        <Settings size={16} aria-hidden="true" />
         <h2>设置</h2>
       </div>
 
@@ -39,7 +39,7 @@ export function SettingsSidebar({
               aria-current={selected ? "page" : undefined}
               onClick={() => onSectionChange(item.id)}
             >
-              <Icon size={15} aria-hidden="true" />
+              <Icon size={16} aria-hidden="true" />
               <span>{item.title}</span>
             </button>
           );

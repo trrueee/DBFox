@@ -2,16 +2,16 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(15, 23, 42, 0.34);
-  backdrop-filter: blur(2px);
+  background: var(--overlay-scrim);
+  backdrop-filter: blur(3px);
 }
 
 .dbfox-dialog-overlay[data-state="open"] {
-  animation: dbfox-dialog-overlay-in 140ms ease-out;
+  animation: dbfox-dialog-overlay-in 160ms var(--ease-out);
 }
 
 .dbfox-dialog-overlay[data-state="closed"] {
-  animation: dbfox-dialog-overlay-out 100ms ease-in;
+  animation: dbfox-dialog-overlay-out 120ms var(--ease-in);
 }
 
 .dbfox-dialog-content {
@@ -22,56 +22,53 @@
   display: grid;
   width: min(calc(100vw - 32px), 512px);
   max-width: 512px;
-  gap: 16px;
+  gap: 18px;
   padding: 24px;
   color: hsl(var(--card-foreground));
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius-lg, 12px);
-  box-shadow: var(--shadow-panel-elevated, 0 24px 70px rgba(15, 23, 42, 0.22));
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-xl, 16px);
+  box-shadow: var(--shadow-panel-elevated, var(--shadow-xl));
   outline: none;
   transform: translate(-50%, -50%);
 }
 
 .dbfox-dialog-content[data-state="open"] {
-  animation: dbfox-dialog-content-in 160ms ease-out;
+  animation: dbfox-dialog-content-in 200ms var(--ease-out);
 }
 
 .dbfox-dialog-content[data-state="closed"] {
-  animation: dbfox-dialog-content-out 110ms ease-in;
+  animation: dbfox-dialog-content-out 130ms var(--ease-in);
 }
 
 .dbfox-dialog-close {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 14px;
+  right: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   color: hsl(var(--muted-foreground));
   cursor: pointer;
   background: transparent;
   border: 0;
-  border-radius: var(--radius-sm, 4px);
-  opacity: 0.72;
+  border-radius: var(--radius-sm, 6px);
   transition:
-    color 120ms ease,
-    background 120ms ease,
-    opacity 120ms ease;
+    color var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-dialog-close:hover {
   color: hsl(var(--foreground));
-  background: hsl(var(--muted));
-  opacity: 1;
+  background: var(--control-bg-hover);
 }
 
 .dbfox-dialog-close:focus-visible {
-  outline: 2px solid hsl(var(--ring));
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .dbfox-dialog-close:disabled {
@@ -112,16 +109,17 @@
 .dbfox-dialog-title {
   margin: 0;
   color: hsl(var(--foreground));
-  font-size: var(--ui-font-title);
-  font-weight: 650;
-  line-height: 1;
+  font-size: var(--ui-font-headline);
+  font-weight: 600;
+  letter-spacing: var(--tracking-title, -0.01em);
+  line-height: 1.3;
 }
 
 .dbfox-dialog-description {
   margin: 0;
   color: hsl(var(--muted-foreground));
   font-size: var(--ui-font-body);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 @media (min-width: 640px) {
@@ -154,7 +152,7 @@
 @keyframes dbfox-dialog-content-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.96);
+    transform: translate(-50%, -50%) scale(0.97);
   }
 
   to {

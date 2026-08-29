@@ -11,11 +11,9 @@
   justify-content: center;
   padding: 24px;
   box-sizing: border-box;
-  font-family: system-ui, sans-serif;
-  color: #f4f7fb;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(167, 155, 255, 0.13), transparent 30%),
-    #0b1020;
+  font-family: "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+  color: #f4f5f7;
+  background: #101114;
   text-align: center;
 }
 
@@ -32,7 +30,7 @@
 #boot-indicator p {
   max-width: 400px;
   margin: 0;
-  color: #a1a1aa;
+  color: #9299a4;
   font-size: var(--ui-font-control, 13px);
   line-height: 1.5;
 }
@@ -43,18 +41,17 @@
   width: 76px;
   height: 76px;
   place-items: center;
-  border: 1px solid rgba(167, 155, 255, 0.28);
+  border: 1px solid rgba(122, 162, 255, 0.28);
   border-radius: 50%;
-  background: #151d30;
-  box-shadow: 0 16px 36px rgba(3, 7, 18, 0.36);
+  background: #1a1c20;
 }
 
 .boot-indicator-mark::after {
   position: absolute;
   inset: -5px;
   border: 2px solid transparent;
-  border-top-color: #a79bff;
-  border-right-color: #55d4cf;
+  border-top-color: #7aa2ff;
+  border-right-color: #59616d;
   border-radius: 50%;
   content: "";
   animation: boot-indicator-spin 1.1s linear infinite;
@@ -66,11 +63,11 @@
 
 #boot-indicator[data-state="error"] h1,
 #boot-indicator[data-state="error"] p {
-  color: #ffb4b8;
+  color: #fca5a5;
 }
 
 #boot-indicator[data-state="error"] .boot-indicator-mark::after {
-  border-top-color: #ff7b82;
+  border-top-color: #fca5a5;
   border-right-color: transparent;
   animation: none;
 }

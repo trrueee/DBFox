@@ -14,6 +14,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { SettingsContent, SettingsSection, SettingsStatus } from "../../components/settings";
+import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import {
   Dialog,
@@ -60,6 +61,12 @@ interface RemoveVersionTarget {
   version: DlcInstalledVersionItem;
 }
 
+interface DlcActionError {
+  scope: "page" | "inspection" | "remove" | "uninstall";
+  label: string;
+  error: unknown;
+}
+
 const STATE_PRESENTATION: Record<DlcLifecycleState, { label: string; tone: string }> = {
   installed_disabled: { label: "已安装，未启用", tone: "neutral" },
   enable_pending_restart: { label: "等待重启启用", tone: "warning" },
@@ -87,11 +94,12 @@ function upsertDlc(payload: DlcListResponse | null, item: DlcLifecycleItem): Dlc
 export function DlcCenter({ showToast }: DlcCenterProps) {
   const desktopRuntime = canManageDlcPackages();
   const [payload, setPayload] = useState<DlcListResponse | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<unknown | null>(null);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [candidate, setCandidate] = useState<InspectedPackage | null>(null);
   const [uninstallTarget, setUninstallTarget] = useState<DlcLifecycleItem | null>(null);
   const [removeVersionTarget, setRemoveVersionTarget] = useState<RemoveVersionTarget | null>(null);
+  const [actionError, setActionError] = useState<DlcActionError | null>(null);
 
   const refresh = useCallback(async () => {
     const next = await listDlcs();
@@ -108,7 +116,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
         setLoadError(null);
       }
     }).catch((error) => {
-      if (!cancelled) setLoadError(getUserErrorMessage(error, "无法读取 DLC 列表"));
+      if (!cancelled) setLoadError(error);
     });
     return () => { cancelled = true; };
   }, []);
@@ -121,13 +129,14 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
   const choosePackage = async () => {
     if (!desktopRuntime || actionKey) return;
     setActionKey("pick");
+    setActionError(null);
     try {
       const archivePath = await pickDlcPackage();
       if (!archivePath) return;
       const inspection = await inspectDlcPackage(archivePath);
       setCandidate({ archivePath, inspection });
     } catch (error) {
-      showToast(getUserErrorMessage(error, "无法检查 DLC 安装包"), "error");
+      setActionError({ scope: "page", label: "无法检查 DLC 安装包", error });
     } finally {
       setActionKey(null);
     }
@@ -136,6 +145,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
   const trustCandidate = async () => {
     if (!candidate || actionKey) return;
     setActionKey("trust");
+    setActionError(null);
     try {
       await trustDlcPublisher(candidate.archivePath, candidate.inspection);
       setCandidate((current) => current ? {
@@ -148,7 +158,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
       } : null);
       showToast("发布者公钥已在本机受信任；安装包仍需单独确认安装", "success");
     } catch (error) {
-      showToast(getUserErrorMessage(error, "无法信任此发布者"), "error");
+      setActionError({ scope: "inspection", label: "无法信任此发布者", error });
     } finally {
       setActionKey(null);
     }
@@ -157,13 +167,14 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
   const installCandidate = async () => {
     if (!candidate || candidate.inspection.trust_required || actionKey) return;
     setActionKey("install");
+    setActionError(null);
     try {
       const installed = await installDlcPackage(candidate.archivePath);
       setPayload((current) => upsertDlc(current, installed));
       setCandidate(null);
       showToast(`${installed.display_name} 已安装，默认保持禁用`, "success");
     } catch (error) {
-      showToast(getUserErrorMessage(error, "DLC 安装失败"), "error");
+      setActionError({ scope: "inspection", label: "DLC 安装失败", error });
     } finally {
       setActionKey(null);
     }
@@ -172,6 +183,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
   const setEnabled = async (item: DlcLifecycleItem, enabled: boolean) => {
     if (actionKey) return;
     setActionKey(`${enabled ? "enable" : "disable"}:${item.dlc_id}`);
+    setActionError(null);
     try {
       const updated = await setDlcEnabled(item.dlc_id, enabled);
       setPayload((current) => upsertDlc(current, updated));
@@ -180,7 +192,11 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
         "info",
       );
     } catch (error) {
-      showToast(getUserErrorMessage(error, enabled ? "无法启用 DLC" : "无法停用 DLC"), "error");
+      setActionError({
+        scope: "page",
+        label: enabled ? "无法启用 DLC" : "无法停用 DLC",
+        error,
+      });
     } finally {
       setActionKey(null);
     }
@@ -189,13 +205,14 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
   const restartNow = async () => {
     if (!desktopRuntime || actionKey) return;
     setActionKey("restart");
+    setActionError(null);
     try {
       showToast("正在安全重启本地引擎并重建 DLC 运行时…", "info");
       await restartDlcRuntime();
       await refresh();
       showToast("本地引擎已重启，DLC 运行状态已刷新", "success");
     } catch (error) {
-      showToast(getUserErrorMessage(error, "本地引擎重启失败，请查看诊断日志"), "error");
+      setActionError({ scope: "page", label: "本地引擎重启失败", error });
     } finally {
       setActionKey(null);
     }
@@ -204,6 +221,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
   const selectVersion = async (item: DlcLifecycleItem, packageDigest: string) => {
     if (actionKey) return;
     setActionKey(`select:${item.dlc_id}:${packageDigest}`);
+    setActionError(null);
     try {
       const updated = await selectDlcVersion(item.dlc_id, packageDigest);
       setPayload((current) => upsertDlc(current, updated));
@@ -214,7 +232,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
         "info",
       );
     } catch (error) {
-      showToast(getUserErrorMessage(error, "无法选择 DLC 包版本"), "error");
+      setActionError({ scope: "page", label: "无法选择 DLC 包版本", error });
     } finally {
       setActionKey(null);
     }
@@ -224,13 +242,14 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
     if (!removeVersionTarget || actionKey) return;
     const { item, version } = removeVersionTarget;
     setActionKey(`remove:${item.dlc_id}:${version.package_digest}`);
+    setActionError(null);
     try {
       await removeDlcVersion(item.dlc_id, version.package_digest);
       await refresh();
       setRemoveVersionTarget(null);
       showToast(`${item.display_name} ${version.version} 的旧包字节已移除`, "success");
     } catch (error) {
-      showToast(getUserErrorMessage(error, "无法移除旧 DLC 包版本"), "error");
+      setActionError({ scope: "remove", label: "无法移除旧 DLC 包版本", error });
     } finally {
       setActionKey(null);
     }
@@ -239,6 +258,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
   const confirmUninstall = async () => {
     if (!uninstallTarget || actionKey) return;
     setActionKey(`uninstall:${uninstallTarget.dlc_id}`);
+    setActionError(null);
     try {
       const result = await uninstallDlc(uninstallTarget.dlc_id);
       setPayload((current) => current ? {
@@ -251,7 +271,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
         "success",
       );
     } catch (error) {
-      showToast(getUserErrorMessage(error, "DLC 卸载失败"), "error");
+      setActionError({ scope: "uninstall", label: "DLC 卸载失败", error });
     } finally {
       setActionKey(null);
     }
@@ -282,7 +302,8 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
           <SettingsStatus
             tone="danger"
             label="无法读取 DLC 状态"
-            description={loadError}
+            description={getUserErrorMessage(loadError, "无法读取 DLC 列表")}
+            error={loadError}
             meta={(
               <Button
                 variant="outline"
@@ -292,6 +313,15 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
                 重试
               </Button>
             )}
+          />
+        ) : null}
+
+        {actionError?.scope === "page" ? (
+          <SettingsStatus
+            tone="danger"
+            label={actionError.label}
+            description={getUserErrorMessage(actionError.error, `${actionError.label}，请重试`)}
+            error={actionError.error}
           />
         ) : null}
 
@@ -326,12 +356,12 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
         >
           {payload === null && !loadError ? (
             <div className="dlc-center__loading" role="status">
-              <RefreshCw className="is-spinning" size={18} aria-hidden="true" />
+              <RefreshCw className="is-spinning" size={16} aria-hidden="true" />
               正在读取本机 DLC registry…
             </div>
           ) : payload?.dlcs.length === 0 ? (
             <div className="dlc-center__empty">
-              <Box size={28} aria-hidden="true" />
+              <Box size={20} aria-hidden="true" />
               <strong>尚未安装 DLC 扩展</strong>
               <span>选择一个签名的 .dbfox-dlc 文件；检查和安装阶段不会执行扩展代码。</span>
             </div>
@@ -345,9 +375,15 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
                   actionKey={actionKey}
                   onSetEnabled={setEnabled}
                   onSelectVersion={selectVersion}
-                  onRemoveVersion={(version) => setRemoveVersionTarget({ item, version })}
+                  onRemoveVersion={(version) => {
+                    setActionError(null);
+                    setRemoveVersionTarget({ item, version });
+                  }}
                   onRestart={restartNow}
-                  onUninstall={setUninstallTarget}
+                  onUninstall={(target) => {
+                    setActionError(null);
+                    setUninstallTarget(target);
+                  }}
                   desktopRuntime={desktopRuntime}
                 />
               ))}
@@ -359,8 +395,12 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
       <PackageInspectionDialog
         candidate={candidate}
         actionKey={actionKey}
+        actionError={actionError?.scope === "inspection" ? actionError : null}
         onOpenChange={(open) => {
-          if (!open && !busy) setCandidate(null);
+          if (!open && !busy) {
+            setCandidate(null);
+            setActionError(null);
+          }
         }}
         onTrust={trustCandidate}
         onInstall={installCandidate}
@@ -369,7 +409,10 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
       <Dialog
         open={uninstallTarget !== null}
         onOpenChange={(open) => {
-          if (!open && !busy) setUninstallTarget(null);
+          if (!open && !busy) {
+            setUninstallTarget(null);
+            setActionError(null);
+          }
         }}
       >
         <DialogContent className="dlc-confirm-dialog">
@@ -384,6 +427,14 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
             label="数据保留策略"
             description={`APP_DATA/dlcs/data/${uninstallTarget?.dlc_id ?? "<dlc_id>"}/ 不会被删除。`}
           />
+          {actionError?.scope === "uninstall" ? (
+            <SettingsStatus
+              tone="danger"
+              label={actionError.label}
+              description={getUserErrorMessage(actionError.error, "DLC 卸载失败，请重试")}
+              error={actionError.error}
+            />
+          ) : null}
           <DialogFooter>
             <Button variant="outline" disabled={busy} onClick={() => setUninstallTarget(null)}>取消</Button>
             <Button variant="destructive" disabled={busy} onClick={() => void confirmUninstall()}>
@@ -397,7 +448,10 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
       <Dialog
         open={removeVersionTarget !== null}
         onOpenChange={(open) => {
-          if (!open && !busy) setRemoveVersionTarget(null);
+          if (!open && !busy) {
+            setRemoveVersionTarget(null);
+            setActionError(null);
+          }
         }}
       >
         <DialogContent className="dlc-confirm-dialog">
@@ -412,6 +466,14 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
             label="包回滚不等于数据回滚"
             description="移除后不能再选择这个包；DLC-owned schema 和数据仍保持当前版本。"
           />
+          {actionError?.scope === "remove" ? (
+            <SettingsStatus
+              tone="danger"
+              label={actionError.label}
+              description={getUserErrorMessage(actionError.error, "无法移除旧 DLC 包版本，请重试")}
+              error={actionError.error}
+            />
+          ) : null}
           <DialogFooter>
             <Button variant="outline" disabled={busy} onClick={() => setRemoveVersionTarget(null)}>取消</Button>
             <Button variant="destructive" disabled={busy} onClick={() => void confirmRemoveVersion()}>
@@ -457,8 +519,8 @@ function DlcCard({
           <p>{item.description || "此扩展未提供说明。"}</p>
         </div>
         <span className={`dlc-state dlc-state--${state.tone}`}>
-          {item.state === "active" ? <CheckCircle2 size={13} aria-hidden="true" /> : null}
-          {item.state === "activation_failed" ? <TriangleAlert size={13} aria-hidden="true" /> : null}
+          {item.state === "active" ? <CheckCircle2 size={14} aria-hidden="true" /> : null}
+          {item.state === "activation_failed" ? <TriangleAlert size={14} aria-hidden="true" /> : null}
           {state.label}
         </span>
       </header>
@@ -518,7 +580,7 @@ function DlcCard({
                       disabled={busy}
                       onClick={() => void onSelectVersion(item, version.package_digest)}
                     >
-                      <RotateCcw size={13} aria-hidden="true" />
+                      <RotateCcw size={14} aria-hidden="true" />
                       {actionKey === selectKey ? "正在选择…" : "选择 / 回滚"}
                     </Button>
                   ) : null}
@@ -530,7 +592,7 @@ function DlcCard({
                       title={version.removable ? "移除此旧版本包" : "当前运行版本必须在重启切换后才能移除"}
                       onClick={() => onRemoveVersion(version)}
                     >
-                      <Trash2 size={13} aria-hidden="true" />
+                      <Trash2 size={14} aria-hidden="true" />
                       移除旧版本
                     </Button>
                   ) : null}
@@ -549,10 +611,11 @@ function DlcCard({
       </details>
 
       {item.activation_failure ? (
-        <div className="dlc-activation-error" role="alert">
-          <TriangleAlert size={16} aria-hidden="true" />
-          <div><strong>{item.activation_failure.code}</strong><span>{item.activation_failure.message}</span></div>
-        </div>
+        <Alert className="dlc-activation-error" variant="destructive">
+          <TriangleAlert aria-hidden="true" />
+          <AlertTitle>{item.activation_failure.code}</AlertTitle>
+          <AlertDescription>{item.activation_failure.message}</AlertDescription>
+        </Alert>
       ) : null}
 
       <footer className="dlc-card__actions">
@@ -590,12 +653,14 @@ function DlcCard({
 function PackageInspectionDialog({
   candidate,
   actionKey,
+  actionError,
   onOpenChange,
   onTrust,
   onInstall,
 }: {
   candidate: InspectedPackage | null;
   actionKey: string | null;
+  actionError: DlcActionError | null;
   onOpenChange: (open: boolean) => void;
   onTrust: () => Promise<void>;
   onInstall: () => Promise<void>;
@@ -653,6 +718,14 @@ function PackageInspectionDialog({
                 meta={<ShieldCheck size={16} aria-hidden="true" />}
               />
             )}
+            {actionError ? (
+              <SettingsStatus
+                tone="danger"
+                label={actionError.label}
+                description={getUserErrorMessage(actionError.error, `${actionError.label}，请重试`)}
+                error={actionError.error}
+              />
+            ) : null}
           </div>
         ) : null}
         <DialogFooter>

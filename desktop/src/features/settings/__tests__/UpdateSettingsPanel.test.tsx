@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../../lib/api/client";
 
 const { configurationMock, recoveryMock, checkMock, installMock } = vi.hoisted(() => ({
   configurationMock: vi.fn(),
@@ -66,5 +67,32 @@ describe("UpdateSettingsPanel", () => {
 
     await waitFor(() => expect(installMock).toHaveBeenCalledOnce());
     expect(showToast).toHaveBeenCalledWith("发现 DBFox 1.0.4", "info");
+  });
+
+  it("keeps update check failures inline without exposing raw details", async () => {
+    configurationMock.mockResolvedValue({
+      configured: true, channel: "stable", currentVersion: "1.0.3", platformPolicy: "code-signed",
+    });
+    recoveryMock.mockResolvedValue({ previousUncleanExit: false });
+    checkMock.mockRejectedValueOnce(new ApiError(
+      "private feed URL failed",
+      503,
+      "UPDATE_FEED_UNAVAILABLE",
+      [],
+      { request_id: "update-request-4", secret: "must-not-render" },
+    ));
+    const showToast = vi.fn();
+
+    render(<UpdateSettingsPanel showToast={showToast} />);
+    await screen.findByText("代码签名更新通道已启用");
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByText("检查更新失败")).toBeTruthy();
+    fireEvent.click(screen.getByText("技术详情"));
+    expect(screen.getByText("UPDATE_FEED_UNAVAILABLE")).toBeTruthy();
+    expect(screen.getByText("update-request-4")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("private feed URL failed");
+    expect(document.body.textContent).not.toContain("must-not-render");
+    expect(showToast).not.toHaveBeenCalledWith(expect.any(String), "error");
   });
 });

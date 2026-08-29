@@ -1,22 +1,22 @@
 .dbfox-badge {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   padding: 2px 8px;
-  font-size: var(--ui-font-control);
-  font-weight: 650;
-  line-height: 1.2;
+  font-size: var(--ui-font-label);
+  font-weight: 500;
+  line-height: 1.35;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   transition:
-    color 150ms ease,
-    background-color 150ms ease,
-    border-color 150ms ease,
-    box-shadow 150ms ease;
+    color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-badge:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px hsl(var(--ring));
+  box-shadow: var(--focus-ring);
 }
 
 .dbfox-badge--default {
@@ -31,21 +31,21 @@
 
 .dbfox-badge--success {
   color: hsl(var(--success));
-  background: hsl(var(--success) / 0.15);
+  background: hsl(var(--success) / 0.12);
 }
 
 .dbfox-badge--warning {
   color: hsl(var(--warning));
-  background: hsl(var(--warning) / 0.15);
+  background: hsl(var(--warning) / 0.12);
 }
 
 .dbfox-badge--destructive {
   color: hsl(var(--destructive));
-  background: hsl(var(--destructive) / 0.15);
+  background: hsl(var(--destructive) / 0.10);
 }
 
 .dbfox-badge--outline {
   color: hsl(var(--muted-foreground));
   background: transparent;
-  border-color: hsl(var(--border));
+  border-color: var(--hairline-strong);
 }

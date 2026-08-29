@@ -4,7 +4,7 @@
   gap: 2px;
   padding: 2px;
   border-radius: var(--radius-control);
-  background: var(--surface-panel-muted);
+  background: var(--control-bg-pressed);
 }
 
 .dbfox-tabs-trigger {
@@ -13,31 +13,31 @@
   justify-content: center;
   white-space: nowrap;
   min-height: var(--density-control-height-sm);
-  padding: 0 10px;
+  padding: 0 12px;
   border-radius: calc(var(--radius-control) - 2px);
   color: var(--color-text-secondary);
   font-size: var(--ui-font-control);
+  font-weight: 500;
   outline: none;
   transition:
-    color 120ms ease,
-    background 120ms ease,
-    border-color 120ms ease;
+    color var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-tabs-trigger:focus-visible {
   box-shadow: var(--focus-ring);
 }
 
-.dbfox-tabs-trigger:hover:not(:disabled) {
+.dbfox-tabs-trigger:hover:not(:disabled):not([data-state="active"]) {
   color: var(--color-text-primary);
-  background: var(--control-bg-hover);
+  background: color-mix(in srgb, var(--control-bg-hover) 60%, transparent);
 }
 
 .dbfox-tabs-trigger[data-state="active"] {
-  color: var(--color-primary);
-  background: var(--control-bg);
-  box-shadow: var(--shadow-card);
-  font-weight: 600;
+  color: var(--color-text-primary);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-sm);
 }
 
 .dbfox-tabs-trigger:disabled {

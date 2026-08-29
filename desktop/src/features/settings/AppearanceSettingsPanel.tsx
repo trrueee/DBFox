@@ -27,7 +27,13 @@ import {
   SettingsToggle,
 } from "../../components/settings";
 import { Button } from "../../components/ui/button";
-import { Select } from "../../components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { useTheme } from "../../hooks/themeContext";
 import type {
   AccentColor,
@@ -107,7 +113,7 @@ const UI_FONT_FAMILY_OPTIONS: readonly { value: UiFontFamily; label: string }[] 
 
 const DATA_FONT_FAMILY_OPTIONS: readonly { value: DataFontFamily; label: string }[] = [
   { value: "system", label: "系统字体" },
-  { value: "dense", label: "数据库密集字体" },
+  { value: "dense", label: "高密度数据字体" },
   { value: "mono", label: "等宽数据字体" },
 ];
 
@@ -189,7 +195,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
       <SettingsStatus
         tone="info"
         label="即时预览，自动保存"
-        description="设置只保存在本机，不会进入数据库、会话或模型上下文。"
+        description="设置只保存在本机，不会进入项目内容、会话或模型上下文。"
         meta={theme === "dark" ? "当前：深色" : "当前：浅色"}
       />
 
@@ -199,7 +205,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
         description="使用受控色板保持文本、状态色和焦点环在浅色与深色模式下都清晰可辨。"
         trailing={(
           <Button variant="outline" size="sm" onClick={reset}>
-            <RotateCcw size={13} aria-hidden="true" />
+            <RotateCcw size={14} aria-hidden="true" />
             恢复默认
           </Button>
         )}
@@ -227,7 +233,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
                     <span>{option.description}</span>
                   </span>
                   <RadioGroup.Indicator className="appearance-choice-indicator">
-                    <Check size={12} aria-hidden="true" />
+                    <Check size={14} aria-hidden="true" />
                   </RadioGroup.Indicator>
                 </RadioGroup.Item>
               );
@@ -256,7 +262,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
                 <span className="appearance-accent-option__swatch" aria-hidden="true" />
                 <span>{option.label}</span>
                 <RadioGroup.Indicator className="appearance-accent-option__indicator">
-                  <Check size={11} aria-hidden="true" />
+                  <Check size={14} aria-hidden="true" />
                 </RadioGroup.Indicator>
               </RadioGroup.Item>
             ))}
@@ -288,7 +294,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
                   <small>{option.description}</small>
                 </span>
                 <RadioGroup.Indicator className="appearance-choice-indicator">
-                  <Check size={12} aria-hidden="true" />
+                  <Check size={14} aria-hidden="true" />
                 </RadioGroup.Indicator>
               </RadioGroup.Item>
             ))}
@@ -302,23 +308,35 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
         description="密度统一调整工具栏、按钮、侧栏和面板留白；字体预设只使用本机字体栈，离线也可稳定回退。"
       >
         <SettingsField label="界面密度" htmlFor="appearance-density" hint="紧凑适合宽表和高信息密度，舒适适合高 DPI 与触控板操作。">
-          <Select id="appearance-density" value={appearance.density} onChange={(event) => updateAppearance({ density: event.target.value as DensityMode })}>
-            {DENSITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          <Select value={appearance.density} onValueChange={(value) => updateAppearance({ density: value as DensityMode })}>
+            <SelectTrigger id="appearance-density" aria-describedby="appearance-density-description"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {DENSITY_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
         <SettingsField label="界面字体" htmlFor="appearance-ui-family" hint="侧栏、工具栏、标签页和设置页面。">
-          <Select id="appearance-ui-family" value={appearance.uiFontFamily} onChange={(event) => updateAppearance({ uiFontFamily: event.target.value as UiFontFamily })}>
-            {UI_FONT_FAMILY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          <Select value={appearance.uiFontFamily} onValueChange={(value) => updateAppearance({ uiFontFamily: value as UiFontFamily })}>
+            <SelectTrigger id="appearance-ui-family" aria-describedby="appearance-ui-family-description"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {UI_FONT_FAMILY_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
-        <SettingsField label="数据字体" htmlFor="appearance-data-family" hint="数据库密集预设使用表格数字对齐和较窄的本机字体栈。">
-          <Select id="appearance-data-family" value={appearance.dataFontFamily} onChange={(event) => updateAppearance({ dataFontFamily: event.target.value as DataFontFamily })}>
-            {DATA_FONT_FAMILY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        <SettingsField label="数据字体" htmlFor="appearance-data-family" hint="高密度数据预设使用表格数字对齐和较窄的本机字体栈。">
+          <Select value={appearance.dataFontFamily} onValueChange={(value) => updateAppearance({ dataFontFamily: value as DataFontFamily })}>
+            <SelectTrigger id="appearance-data-family" aria-describedby="appearance-data-family-description"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {DATA_FONT_FAMILY_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
         <SettingsField label="代码字体" htmlFor="appearance-code-family" hint="未安装首选字体时自动落到系统等宽字体，不从网络下载字体。">
-          <Select id="appearance-code-family" value={appearance.codeFontFamily} onChange={(event) => updateAppearance({ codeFontFamily: event.target.value as CodeFontFamily })}>
-            {CODE_FONT_FAMILY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          <Select value={appearance.codeFontFamily} onValueChange={(value) => updateAppearance({ codeFontFamily: value as CodeFontFamily })}>
+            <SelectTrigger id="appearance-code-family" aria-describedby="appearance-code-family-description"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {CODE_FONT_FAMILY_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
       </SettingsSection>
@@ -326,26 +344,38 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
       <SettingsSection
         icon={Rows3}
         title="行高与数据表"
-        description="保持数据库工具的信息密度，同时允许按屏幕与阅读习惯调整。"
+        description="保持专业工具的信息密度，同时允许按屏幕与阅读习惯调整。"
       >
         <SettingsField label="Agent 对话行高" htmlFor="appearance-agent-line-height">
-          <Select id="appearance-agent-line-height" value={appearance.agentLineHeight} onChange={(event) => updateAppearance({ agentLineHeight: Number(event.target.value) })}>
-            {AGENT_LINE_HEIGHT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          <Select value={String(appearance.agentLineHeight)} onValueChange={(value) => updateAppearance({ agentLineHeight: Number(value) })}>
+            <SelectTrigger id="appearance-agent-line-height"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {AGENT_LINE_HEIGHT_OPTIONS.map((option) => <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
         <SettingsField label="SQL 与代码行高" htmlFor="appearance-code-line-height">
-          <Select id="appearance-code-line-height" value={appearance.codeLineHeight} onChange={(event) => updateAppearance({ codeLineHeight: Number(event.target.value) })}>
-            {CODE_LINE_HEIGHT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          <Select value={String(appearance.codeLineHeight)} onValueChange={(value) => updateAppearance({ codeLineHeight: Number(value) })}>
+            <SelectTrigger id="appearance-code-line-height"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {CODE_LINE_HEIGHT_OPTIONS.map((option) => <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
         <SettingsField label="数据表默认行高" htmlFor="appearance-table-row-height">
-          <Select id="appearance-table-row-height" value={appearance.tableRowHeight} onChange={(event) => updateAppearance({ tableRowHeight: Number(event.target.value) })}>
-            {TABLE_ROW_HEIGHT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          <Select value={String(appearance.tableRowHeight)} onValueChange={(value) => updateAppearance({ tableRowHeight: Number(value) })}>
+            <SelectTrigger id="appearance-table-row-height"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TABLE_ROW_HEIGHT_OPTIONS.map((option) => <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
         <SettingsField label="NULL 显示" htmlFor="appearance-null-style">
-          <Select id="appearance-null-style" value={appearance.tableNullStyle} onChange={(event) => updateAppearance({ tableNullStyle: event.target.value as NullStyle })}>
-            {NULL_STYLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          <Select value={appearance.tableNullStyle} onValueChange={(value) => updateAppearance({ tableNullStyle: value as NullStyle })}>
+            <SelectTrigger id="appearance-null-style"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {NULL_STYLE_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
         <div className="appearance-toggle-grid">
@@ -361,15 +391,21 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
         description="系统缩放始终由 Electron 和操作系统处理；这里提供额外的对比度与动效控制。"
       >
         <SettingsField label="对比度" htmlFor="appearance-contrast">
-          <Select id="appearance-contrast" value={appearance.contrastMode} onChange={(event) => updateAppearance({ contrastMode: event.target.value as ContrastMode })}>
-            <option value="system">跟随系统</option>
-            <option value="high">增强对比度</option>
+          <Select value={appearance.contrastMode} onValueChange={(value) => updateAppearance({ contrastMode: value as ContrastMode })}>
+            <SelectTrigger id="appearance-contrast"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="system">跟随系统</SelectItem>
+              <SelectItem value="high">增强对比度</SelectItem>
+            </SelectContent>
           </Select>
         </SettingsField>
         <SettingsField label="动效" htmlFor="appearance-motion" hint="跟随系统时仍会尊重 prefers-reduced-motion。">
-          <Select id="appearance-motion" value={appearance.motionMode} onChange={(event) => updateAppearance({ motionMode: event.target.value as MotionMode })}>
-            <option value="system">跟随系统</option>
-            <option value="reduce">减少动效</option>
+          <Select value={appearance.motionMode} onValueChange={(value) => updateAppearance({ motionMode: value as MotionMode })}>
+            <SelectTrigger id="appearance-motion" aria-describedby="appearance-motion-description"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="system">跟随系统</SelectItem>
+              <SelectItem value="reduce">减少动效</SelectItem>
+            </SelectContent>
           </Select>
         </SettingsField>
         <SettingsStatus tone="neutral" label="系统缩放：自动" description="Windows 125%、150%、200% 缩放由 WebView 按实际 DPI 应用，不通过 CSS zoom 二次缩放。" />
@@ -380,14 +416,20 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
         title="工作区尺寸"
         description="窗口尺寸由原生窗口状态恢复；下列选项只控制应用内部面板。"
       >
-        <SettingsField label="数据源侧栏宽度" htmlFor="appearance-sidebar-width">
-          <Select id="appearance-sidebar-width" value={appearance.sidebarWidth} onChange={(event) => updateAppearance({ sidebarWidth: Number(event.target.value) })}>
-            {SIDEBAR_WIDTH_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        <SettingsField label="主导航宽度" htmlFor="appearance-sidebar-width">
+          <Select value={String(appearance.sidebarWidth)} onValueChange={(value) => updateAppearance({ sidebarWidth: Number(value) })}>
+            <SelectTrigger id="appearance-sidebar-width"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {SIDEBAR_WIDTH_OPTIONS.map((option) => <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
         <SettingsField label="Agent 工件面板宽度" htmlFor="appearance-artifact-width" hint="当前产品使用右侧工件面板，不存在独立底部面板，因此不提供无效的“底部高度”设置。">
-          <Select id="appearance-artifact-width" value={appearance.artifactDockWidth} onChange={(event) => updateAppearance({ artifactDockWidth: Number(event.target.value) })}>
-            {ARTIFACT_DOCK_WIDTH_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          <Select value={String(appearance.artifactDockWidth)} onValueChange={(value) => updateAppearance({ artifactDockWidth: Number(value) })}>
+            <SelectTrigger id="appearance-artifact-width" aria-describedby="appearance-artifact-width-description"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {ARTIFACT_DOCK_WIDTH_OPTIONS.map((option) => <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
       </SettingsSection>
@@ -398,8 +440,8 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
         description="JSON 文件只包含本页设置；严格校验版本与字段，不包含 Token、API Key、连接凭据、SQL、会话或日志。"
       >
         <div className="appearance-transfer-actions">
-          <Button variant="outline" onClick={exportSettings}><Download size={15} aria-hidden="true" />导出设置</Button>
-          <Button variant="outline" onClick={() => importInputRef.current?.click()}><Upload size={15} aria-hidden="true" />导入设置</Button>
+          <Button variant="outline" onClick={exportSettings}><Download size={16} aria-hidden="true" />导出设置</Button>
+          <Button variant="outline" onClick={() => importInputRef.current?.click()}><Upload size={16} aria-hidden="true" />导入设置</Button>
           <input
             ref={importInputRef}
             className="appearance-file-input"
@@ -422,11 +464,13 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
           hint="以侧栏、标签和工具栏文字为基准，标题和正文按同一档位同步调整。"
         >
           <Select
-            id="appearance-ui-font-size"
-            value={appearance.uiFontSize}
-            onChange={(event) => updateFontSize("uiFontSize", event.target.value)}
+            value={String(appearance.uiFontSize)}
+            onValueChange={(value) => updateFontSize("uiFontSize", value)}
           >
-            {UI_FONT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            <SelectTrigger id="appearance-ui-font-size" aria-describedby="appearance-ui-font-size-description"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {UI_FONT_OPTIONS.map((option) => <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
         <SettingsField
@@ -435,11 +479,13 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
           hint="数据预览表格、字段名和单元格内容。"
         >
           <Select
-            id="appearance-data-font-size"
-            value={appearance.dataFontSize}
-            onChange={(event) => updateFontSize("dataFontSize", event.target.value)}
+            value={String(appearance.dataFontSize)}
+            onValueChange={(value) => updateFontSize("dataFontSize", value)}
           >
-            {DATA_FONT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            <SelectTrigger id="appearance-data-font-size" aria-describedby="appearance-data-font-size-description"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {DATA_FONT_OPTIONS.map((option) => <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
         <SettingsField
@@ -448,11 +494,13 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
           hint="SQL 编辑器、代码块和格式化数据预览。"
         >
           <Select
-            id="appearance-code-font-size"
-            value={appearance.codeFontSize}
-            onChange={(event) => updateFontSize("codeFontSize", event.target.value)}
+            value={String(appearance.codeFontSize)}
+            onValueChange={(value) => updateFontSize("codeFontSize", value)}
           >
-            {CODE_FONT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            <SelectTrigger id="appearance-code-font-size" aria-describedby="appearance-code-font-size-description"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {CODE_FONT_OPTIONS.map((option) => <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
         <SettingsField
@@ -461,11 +509,13 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
           hint="回答正文、输入框、运行时间线和工具详情。"
         >
           <Select
-            id="appearance-agent-font-size"
-            value={appearance.agentFontSize}
-            onChange={(event) => updateFontSize("agentFontSize", event.target.value)}
+            value={String(appearance.agentFontSize)}
+            onValueChange={(value) => updateFontSize("agentFontSize", value)}
           >
-            {AGENT_FONT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            <SelectTrigger id="appearance-agent-font-size" aria-describedby="appearance-agent-font-size-description"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {AGENT_FONT_OPTIONS.map((option) => <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>)}
+            </SelectContent>
           </Select>
         </SettingsField>
       </SettingsSection>

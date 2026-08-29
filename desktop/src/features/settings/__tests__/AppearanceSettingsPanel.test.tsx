@@ -33,10 +33,10 @@ describe("AppearanceSettingsPanel", () => {
     expect(screen.getByRole("radiogroup", { name: "主题模式" })).toBeTruthy();
     expect(screen.getByRole("radiogroup", { name: "强调色" })).toBeTruthy();
     expect(screen.getByRole("radiogroup", { name: "中性色调" })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "界面基准字号" }).textContent).toContain("12 px（默认）");
-    expect(screen.getByRole("combobox", { name: "数据字号" }).textContent).toContain("12 px（默认）");
-    expect(screen.getByRole("combobox", { name: "SQL 与代码字号" }).textContent).toContain("13 px（默认）");
-    expect(screen.getByRole("combobox", { name: "Agent 对话字号" }).textContent).toContain("16 px（默认）");
+    expect(screen.getByRole("combobox", { name: "界面基准字号" }).textContent).toContain("14 px（默认）");
+    expect(screen.getByRole("combobox", { name: "数据字号" }).textContent).toContain("14 px（默认）");
+    expect(screen.getByRole("combobox", { name: "SQL 与代码字号" }).textContent).toContain("14 px（默认）");
+    expect(screen.getByRole("combobox", { name: "Agent 对话字号" }).textContent).toContain("14 px（默认）");
   });
 
   it("previews palette changes immediately and can reset them", () => {
@@ -51,7 +51,7 @@ describe("AppearanceSettingsPanel", () => {
     expect(document.documentElement.dataset.accent).toBe("blue");
 
     fireEvent.click(screen.getByRole("button", { name: /恢复默认/ }));
-    expect(document.documentElement.dataset.accent).toBe("violet");
+    expect(document.documentElement.dataset.accent).toBe("blue");
     expect(showToast).toHaveBeenCalledWith("外观设置已恢复默认值", "success");
   });
 
@@ -62,10 +62,10 @@ describe("AppearanceSettingsPanel", () => {
       </ThemeProvider>,
     );
 
-    chooseSelectOption("数据字号", "14 px");
+    chooseSelectOption("数据字号", "15 px");
 
-    expect(document.documentElement.dataset.dataFontSize).toBe("14");
-    expect(screen.getByRole("combobox", { name: "数据字号" }).textContent).toContain("14 px");
+    expect(document.documentElement.dataset.dataFontSize).toBe("15");
+    expect(screen.getByRole("combobox", { name: "数据字号" }).textContent).toContain("15 px");
   });
 });
 

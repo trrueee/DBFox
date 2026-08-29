@@ -1,0 +1,65 @@
+.dbfox-switch {
+  position: relative;
+  display: inline-flex;
+  width: 40px;
+  height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--control-bg-pressed);
+  cursor: pointer;
+  padding: 2px;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+}
+
+.dbfox-switch[data-size="sm"] {
+  width: 34px;
+  height: 20px;
+}
+
+.dbfox-switch[data-state="checked"] {
+  border-color: transparent;
+  background: var(--color-primary-fill);
+}
+
+.dbfox-switch:focus-visible {
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.dbfox-switch:disabled {
+  cursor: not-allowed;
+  opacity: var(--control-disabled-opacity);
+}
+
+.dbfox-switch__thumb {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-sm), 0 0 0 1px var(--hairline);
+  transform: translateX(0);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+.dbfox-switch[data-size="sm"] .dbfox-switch__thumb {
+  width: 14px;
+  height: 14px;
+}
+
+.dbfox-switch[data-state="checked"] .dbfox-switch__thumb {
+  transform: translateX(16px);
+}
+
+.dbfox-switch[data-size="sm"][data-state="checked"] .dbfox-switch__thumb {
+  transform: translateX(14px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbfox-switch,
+  .dbfox-switch__thumb {
+    transition: none;
+  }
+}

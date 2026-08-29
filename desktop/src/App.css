@@ -1,16 +1,6 @@
-/* 闂備礁纾崕銈夊礉韫囨稑鐤鹃柡灞诲劚閻撴盯鏌熼懜顒€濡芥繛鍛矒閺屽秹鎮滃Ο鍝勵潊闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春?
-   DBFox Design System CSS
-   Tokens imported from styles/tokens.css
-   闂備礁纾崕銈夊礉韫囨稑鐤鹃柡灞诲劚閻撴盯鏌熼懜顒€濡芥繛鍛矒閺屽秹鎮滃Ο鍝勵潊闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春?*/
+/* Application shell layout. Feature and DLC presentation live in their own scopes. */
 
-@import "./styles/tokens.css";
 
-/* 闂備礁纾崕銈夊礉韫囨稑鐤鹃柡灞诲劚閻撴盯鏌熼懜顒€濡芥繛鍛矒閺屽秹鎮滃Ο鍝勵潊闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春?
-   Window Shell 闂?replaces the old fixed 1598闂?066 canvas board.
-   The whole app now lives in one fluid window: TitleBar on top,
-   app-body (sidebar + main surface + drawer) in the middle,
-   status bar at the bottom. No transform/scale, no letterbox.
-   闂備礁纾崕銈夊礉韫囨稑鐤鹃柡灞诲劚閻撴盯鏌熼懜顒€濡芥繛鍛矒閺屽秹鎮滃Ο鍝勵潊闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春閿熺姴绠涢柕濠忛檮閻濇娊姊哄畷鍥у妺闁告柨绻樺鏌ュ蓟閵夈儳鍘搁梺纭呭焽閸斿秴鈻嶅鍫熺厓闁绘垶锚婵偓闂佸搫鎳忛悡锟犲春?*/
 .app-shell {
   position: fixed;
   inset: 0;
@@ -53,7 +43,7 @@
 }
 
 .app-sidebar-panel--collapsed {
-  flex-basis: 36px;
+  flex-basis: 48px;
 }
 
 .app-sidebar-resize-handle {
@@ -66,8 +56,6 @@
   min-height: 0;
 }
 
-/* Main surface 鈥?the primary workspace. Quiet Workbench: first-class regions are
-   never cards; they are contiguous surfaces separated by hairlines, not gaps. */
 .app-main {
   flex: 1;
   min-width: 0;
@@ -78,169 +66,6 @@
   overflow: hidden;
 }
 
-.app-tabbar {
-  height: var(--density-toolbar-min-height);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 6px 0 2px;
-  background: var(--surface-raised);
-  border-bottom: 1px solid var(--hairline);
-}
-
-/* 鈹€鈹€ 椤舵爮椤圭洰鏍囪瘑锛堣璁″熀绾?搂4锛氭垜鍦ㄥ摢閲岋級 鈹€鈹€ */
-.app-project-identity {
-  display: inline-flex;
-  flex: 0 0 auto;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-2) 0 var(--space-3);
-}
-
-.app-project-identity__generic {
-  color: var(--color-text-muted);
-}
-
-.app-project-identity__name {
-  overflow: hidden;
-  color: var(--color-text-primary);
-  font-size: var(--ui-font-control);
-  font-weight: 600;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.app-project-identity__meta {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--ui-font-micro);
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.app-project-identity__dot {
-  width: 6px;
-  height: 6px;
-  flex-shrink: 0;
-  border-radius: var(--radius-pill);
-  background: var(--color-border-hover);
-}
-
-.app-project-identity__dot.is-success {
-  background: var(--color-success);
-}
-
-.app-project-identity__dot.is-info {
-  background: var(--color-info);
-}
-
-.app-project-identity__dot.is-warning {
-  background: var(--color-warning);
-}
-
-.app-project-identity__dot.is-error {
-  background: var(--color-danger);
-}
-
-.app-tabbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-right: 4px;
-}
-
-/* 鈹€鈹€ V3锛氫腑闂村璇?+ 鍙充晶 Dock 鈹€鈹€
-   Conversation 鍜?Dock 鏄袱涓钩绾у伐浣滃尯鍩燂紝鐩存帴鐩搁偦锛?
-   鍖哄煙涔嬮棿鍙厑璁?hairline 鍒嗛殧锛屼笉鍏佽 gap 闇插嚭 canvas銆?*/
-.app-v3-stage {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-.app-v3-stage > .conversation-center,
-.app-v3-stage > .app-main--conversation {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.app-dock-toggle {
-  display: inline-flex;
-  width: var(--density-control-height-sm);
-  height: var(--density-control-height-sm);
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-control);
-  background: var(--surface-panel-muted);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition:
-    color var(--motion-fast) ease-out,
-    border-color var(--motion-fast) ease-out,
-    background-color var(--motion-fast) ease-out;
-}
-
-.app-dock-toggle:hover {
-  border-color: var(--color-primary);
-  background: var(--control-bg-hover);
-  color: var(--color-primary);
-}
-
-.app-dock-toggle:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-
-.app-cmd-btn {
-  height: var(--density-control-height-sm);
-  min-width: 132px;
-  padding: 0 7px 0 9px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-control);
-  background: var(--surface-panel-muted);
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-label);
-  font-family: inherit;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-.app-cmd-btn:hover {
-  border-color: var(--color-border-hover);
-  background: var(--control-bg-hover);
-  color: var(--color-text-primary);
-}
-.app-cmd-btn span {
-  margin-right: auto;
-}
-.app-cmd-btn:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-.app-cmd-btn kbd {
-  background: var(--surface-elevated);
-  color: var(--color-text-muted);
-  padding: 0 5px;
-  border-radius: 4px;
-  font-size: var(--ui-font-micro);
-  font-family: inherit;
-  line-height: 16px;
-}
-
 .app-main-scroll {
   flex: 1;
   min-height: 0;
@@ -249,20 +74,26 @@
   flex-direction: column;
 }
 
-.workspace-route-loading {
-  flex: 1;
+.app-v3-stage {
   min-height: 0;
-  display: grid;
-  place-items: center;
-  color: var(--text-muted);
-  font-size: var(--ui-font-control);
+  flex: 1 1 auto;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
 }
+
+.app-conversation-panel > .app-main--conversation {
+  height: 100%;
+  min-width: 0;
+}
+
+/* ── Loading fallbacks (must match their real counterparts' geometry) ── */
 
 .app-titlebar-fallback {
   grid-row: 1;
   height: 40px;
   border-bottom: 1px solid var(--hairline);
-  background: var(--surface-raised);
+  background: var(--sidebar-bg);
 }
 
 .app-layout-fallback {
@@ -291,29 +122,31 @@
   background: var(--surface-workspace);
 }
 
-.app-tabs-fallback {
-  width: 220px;
-  height: 24px;
-  margin-left: var(--space-2);
-  border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, var(--color-bg), var(--control-bg-hover), var(--color-bg));
-  background-size: 200% 100%;
-  animation: app-skeleton-shift 1.4s ease-in-out infinite;
+.app-dock-fallback {
+  display: flex;
+  flex: 0 0 44px;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--hairline);
+  background: var(--surface-raised);
 }
 
 .app-skeleton {
   display: block;
   height: 12px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, var(--color-border), var(--control-bg-hover), var(--color-border));
+  background:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-text-primary) 7%, transparent), transparent)
+    var(--control-bg-hover);
   background-size: 200% 100%;
-  animation: app-skeleton-shift 1.4s ease-in-out infinite;
+  animation: app-skeleton-shift 1.6s var(--ease-in-out) infinite;
 }
 
 .app-skeleton--heading { width: 38%; }
-.app-skeleton--control { width: 100%; height: 34px; }
-.app-skeleton--row { width: 82%; }
-.app-skeleton--row-short { width: 62%; }
+.app-skeleton--control { width: 100%; height: 32px; border-radius: var(--radius-control); }
+.app-skeleton--row { width: 82%; border-radius: var(--radius-row); }
+.app-skeleton--row-short { width: 62%; border-radius: var(--radius-row); }
 
 @keyframes app-skeleton-shift {
   from { background-position: 200% 0; }
@@ -321,102 +154,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-tabs-fallback,
   .app-skeleton {
     animation: none;
   }
 }
 
-/* Card rules */
-.hifi-card {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-panel);
-  overflow: hidden;
-}
+/* ── Global scrollbars (App.css loads last; these are the canonical rules) ── */
 
-/* Workspace content participates in the .app-body flex layout. */
-.hifi-col {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Left Sidebar - Data Source */
-.hifi-sidebar-panel {
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  padding: var(--density-panel-padding);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  box-sizing: border-box;
-}
-
-.hifi-sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  padding: 0 4px;
-}
-
-.hifi-tree-container {
-  flex: 1; overflow-y: auto; margin-right: -4px; padding-right: 4px;
-}
-
-.hifi-tree-node {
-  display: flex; align-items: center; height: var(--density-tree-row-height, 28px); padding: 0 6px;
-  border-radius: var(--radius-sm, 6px); cursor: pointer; font-size: var(--ui-font-control, 12px);
-  color: var(--color-text-secondary); transition: background var(--motion-fast) ease, color var(--motion-fast) ease;
-  width: 100%; text-align: left; border: 0; background: transparent;
-}
-.hifi-tree-node:hover { background: var(--control-bg-hover); color: var(--color-text-primary); }
-.hifi-tree-node.active,
-.hifi-tree-node[aria-current="page"] {
-  background: var(--nav-active-bg);
-  color: var(--color-text-primary);
-  font-weight: 550;
-}
-.hifi-tree-node.active svg,
-.hifi-tree-node[aria-current="page"] svg {
-  color: var(--color-primary);
-}
-
-.hifi-tree-indent {
-  width: 12px;
-  flex-shrink: 0;
-}
-
-.hifi-sidebar-col {
-  width: 240px;
-  flex-shrink: 0;
-}
-
-.hifi-empty-state {
-  padding: 48px 32px;
-  text-align: center;
-  border: 1px dashed var(--color-border);
-  border-radius: 12px;
-  background: var(--color-bg);
-}
-
-/* UI Text Copy Prevention */
-.u-select-none,
-.hifi-tree-node,
-.ds-quick-nav-item,
-.field-label {
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-}
-
-/* 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?Custom Premium Scrollbars 闂備礁鍟块崢婊堝磻閹剧粯鐓冮柛蹇擃槸娴?*/
 ::-webkit-scrollbar {
   width: var(--scrollbar-size);
   height: var(--scrollbar-size);
@@ -425,12 +169,17 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-text-muted) 24%, transparent);
+  background: color-mix(in srgb, var(--color-text-muted) 32%, transparent);
+  border: 2px solid transparent;
   border-radius: var(--radius-pill);
-  transition: background var(--motion-fast) ease;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--color-text-muted) 48%, transparent);
+  background: color-mix(in srgb, var(--color-text-muted) 52%, transparent);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* Electron inactive-window state dimming. */
@@ -441,17 +190,4 @@
 }
 .window-inactive .titlebar-title {
   color: var(--color-text-muted);
-}
-
-
-
-
-.app-dock-fallback {
-  display: flex;
-  flex: 0 0 44px;
-  min-height: 0;
-  align-items: center;
-  justify-content: center;
-  border-left: 1px solid var(--hairline);
-  background: var(--surface-raised);
 }

@@ -5,20 +5,18 @@
   max-height: 520px;
   overflow: hidden;
   background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow:
-    0 20px 60px rgba(15, 23, 42, 0.14),
-    0 0 0 1px rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-xl, 16px);
+  box-shadow: var(--shadow-xl);
 }
 
 .dbfox-command-search {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
+  gap: 12px;
+  padding: 14px 18px;
   background: var(--color-panel);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .dbfox-command-search-icon {
@@ -30,7 +28,7 @@
   flex: 1;
   color: var(--color-text-primary);
   font-family: var(--font-family);
-  font-size: var(--ui-font-body);
+  font-size: var(--ui-font-body-lg);
   background: transparent;
   border: none;
   outline: none;
@@ -44,21 +42,22 @@
   flex-shrink: 0;
   padding: 1px 6px;
   color: var(--color-text-muted);
-  font-family: "Fira Code", monospace;
+  font-family: var(--font-family-code);
   font-size: var(--ui-font-caption);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+  background: var(--control-bg-hover);
+  border: 1px solid var(--hairline);
+  border-bottom-width: 2px;
+  border-radius: 5px;
 }
 
 .dbfox-command-list {
   flex: 1;
-  padding: 6px;
+  padding: 8px;
   overflow-y: auto;
 }
 
 .dbfox-command-empty {
-  padding: 32px 20px;
+  padding: 40px 20px;
   color: var(--color-text-muted);
   font-size: var(--ui-font-control);
   text-align: center;
@@ -70,11 +69,11 @@
 
 .dbfox-command-category {
   display: block;
-  padding: 8px 10px 3px;
+  padding: 10px 10px 4px;
   color: var(--color-text-muted);
-  font-size: var(--ui-font-caption);
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: var(--ui-font-nano);
+  font-weight: 500;
+  letter-spacing: var(--tracking-caps, 0.05em);
   text-transform: uppercase;
 }
 
@@ -82,15 +81,15 @@
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 44px;
-  gap: 9px;
-  padding: 6px 9px;
+  min-height: 40px;
+  gap: 10px;
+  padding: 6px 10px;
   color: inherit;
   font-family: var(--font-family);
   text-align: left;
   cursor: pointer;
-  border-radius: 8px;
-  transition: background 80ms ease;
+  border-radius: var(--radius-md);
+  transition: background 80ms var(--ease-out);
 }
 
 .dbfox-command-item:hover,
@@ -107,7 +106,7 @@
   height: 26px;
   color: var(--color-text-muted);
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .dbfox-command-item[data-selected="true"] .dbfox-command-item-icon {
@@ -122,8 +121,8 @@
   gap: 2px;
   min-width: 0;
   color: var(--color-text-primary);
-  font-size: var(--ui-font-body);
-  font-weight: 400;
+  font-size: var(--ui-font-control);
+  font-weight: 500;
 }
 
 .dbfox-command-item-label small {
@@ -138,5 +137,4 @@
 
 .dbfox-command-item[data-selected="true"] .dbfox-command-item-label {
   color: var(--color-text-primary);
-  font-weight: 550;
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Copy, ExternalLink } from "lucide-react";
 import { ImageCell } from "../ImageCell";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -40,6 +41,7 @@ export function CellValuePreview({
   onCopyValue,
 }: CellValuePreviewProps) {
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [hoverOpen, setHoverOpen] = useState(false);
   const presentation = classifyCellValue(value, { dataType });
   const resolvedDisplayValue = displayValue ?? presentation.displayText;
   const isJson = presentation.kind === "json";
@@ -75,7 +77,7 @@ export function CellValuePreview({
             setViewerOpen(true);
           }}
         >
-          <ExternalLink size={13} aria-hidden="true" />
+          <ExternalLink size={14} aria-hidden="true" />
           <span>{resolvedDisplayValue}</span>
         </button>
         <ValueViewerDialog
@@ -110,7 +112,15 @@ export function CellValuePreview({
 
   return (
     <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-      <HoverCard openDelay={180} closeDelay={80}>
+      <HoverCard
+        open={!viewerOpen && hoverOpen}
+        openDelay={180}
+        closeDelay={80}
+        onOpenChange={(open) => {
+          if (viewerOpen) return;
+          setHoverOpen(open);
+        }}
+      >
         <HoverCardTrigger asChild>
           <button
             type="button"
@@ -118,6 +128,7 @@ export function CellValuePreview({
             className={joinClassNames("dbfox-cell-preview-trigger", triggerClassName)}
             onClick={(event) => {
               event.stopPropagation();
+              setHoverOpen(false);
               setViewerOpen(true);
             }}
           >
@@ -174,21 +185,22 @@ function ValueViewerDialog({
         binaryPlaceholder={presentation.kind === "binary-placeholder"}
       />
       <div className="dbfox-cell-value-actions">
-        <button
+        <Button
           type="button"
+          size="sm"
           onClick={() => {
             if (onCopyValue) onCopyValue(presentation.copyText);
             else void navigator.clipboard.writeText(presentation.copyText);
           }}
         >
-          <Copy size={13} aria-hidden="true" />
+          <Copy size={14} aria-hidden="true" />
           复制值
-        </button>
+        </Button>
         {onOpenExternal && (
-          <button type="button" onClick={onOpenExternal}>
-            <ExternalLink size={13} aria-hidden="true" />
+          <Button type="button" size="sm" variant="outline" onClick={onOpenExternal}>
+            <ExternalLink size={14} aria-hidden="true" />
             在浏览器打开
-          </button>
+          </Button>
         )}
       </div>
     </DialogContent>

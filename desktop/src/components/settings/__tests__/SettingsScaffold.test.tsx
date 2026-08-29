@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SettingsField } from "../SettingsScaffold";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 
 describe("SettingsField", () => {
   afterEach(cleanup);
@@ -44,5 +45,24 @@ describe("SettingsField", () => {
     const group = screen.getByRole("group", { name: "API Key" });
     const hint = screen.getByText("凭据由系统安全存储管理");
     expect(group.getAttribute("aria-describedby")).toContain(hint.id);
+  });
+
+  it("associates a compound select label and hint with its real trigger", () => {
+    render(
+      <SettingsField label="默认模型" htmlFor="model-preset" hint="选择一个已配置的模型">
+        <Select defaultValue="auto">
+          <SelectTrigger id="model-preset" aria-describedby="model-preset-description">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">自动</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingsField>,
+    );
+
+    const trigger = screen.getByRole("combobox", { name: "默认模型" });
+    const hint = screen.getByText("选择一个已配置的模型");
+    expect(trigger.getAttribute("aria-describedby")).toContain(hint.id);
   });
 });

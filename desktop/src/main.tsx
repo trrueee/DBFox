@@ -1,6 +1,7 @@
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
+import "./styles/tokens.css";
 import "./index.css";
 import App from "./App.tsx";
 import "./csp-safe.css";
@@ -12,6 +13,15 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { hideBootIndicator } from "./boot";
 import { queryClient } from "./lib/queryClient";
 
+const DesignLab = import.meta.env.DEV
+  ? lazy(() => import("./design-lab/DesignLab").then((module) => ({
+    default: module.DesignLab,
+  })))
+  : null;
+
+const SHOW_DESIGN_LAB = import.meta.env.DEV
+  && new URLSearchParams(window.location.search).get("design-lab") === "1";
+
 function renderApplication(): void {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
@@ -20,9 +30,15 @@ function renderApplication(): void {
           <ThemeProvider>
             <TooltipProvider>
               <ToastProvider>
-                <EngineStartupGate>
-                  <App />
-                </EngineStartupGate>
+                {SHOW_DESIGN_LAB && DesignLab ? (
+                  <Suspense fallback={null}>
+                    <DesignLab />
+                  </Suspense>
+                ) : (
+                  <EngineStartupGate>
+                    <App />
+                  </EngineStartupGate>
+                )}
               </ToastProvider>
             </TooltipProvider>
           </ThemeProvider>

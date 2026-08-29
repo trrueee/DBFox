@@ -1,50 +1,66 @@
-import { useState } from "react";
-import { compactJsonPreview, type JsonValue } from "./jsonValue";
+import { JsonView } from "react-json-view-lite";
+import { type JsonValue } from "./jsonValue";
 
-export function JsonTree({ data, depth = 0 }: { data: JsonValue; depth?: number }) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+const jsonViewStyles = {
+  container: "dbfox-json-view",
+  basicChildStyle: "dbfox-json-view__item",
+  label: "dbfox-json-view__label",
+  clickableLabel: "dbfox-json-view__label dbfox-json-view__label--clickable",
+  nullValue: "dbfox-json-view__value dbfox-json-view__value--null",
+  undefinedValue: "dbfox-json-view__value dbfox-json-view__value--null",
+  numberValue: "dbfox-json-view__value dbfox-json-view__value--number",
+  stringValue: "dbfox-json-view__value dbfox-json-view__value--string",
+  booleanValue: "dbfox-json-view__value dbfox-json-view__value--boolean",
+  otherValue: "dbfox-json-view__value",
+  punctuation: "dbfox-json-view__punctuation",
+  expandIcon: "dbfox-json-view__toggle dbfox-json-view__toggle--collapsed",
+  collapseIcon: "dbfox-json-view__toggle dbfox-json-view__toggle--expanded",
+  collapsedContent: "dbfox-json-view__collapsed-content",
+  childFieldsContainer: "dbfox-json-view__children",
+  quotesForFieldNames: true,
+  noQuotesForStringValues: false,
+  stringifyStringValues: false,
+  ariaLables: {
+    collapseJson: "折叠 JSON 节点",
+    expandJson: "展开 JSON 节点",
+  },
+};
 
-  if (data === null) return <span className="text-[var(--text-muted)]">null</span>;
-  if (typeof data === "boolean") return <span className="font-bold text-[var(--accent-indigo)]">{String(data)}</span>;
-  if (typeof data === "number") return <span className="font-bold text-[var(--accent-green)]">{data}</span>;
-  if (typeof data === "string") return <span className="text-[var(--accent-amber)]">&quot;{data}&quot;</span>;
+// Upstream calls this CSS-class map `style`, but it never becomes a DOM style
+// attribute. Keep it in a component-props object so the CSP source contract can
+// continue rejecting every JSX inline-style attribute without a false positive.
+const jsonViewPresentationProps = {
+  style: jsonViewStyles,
+  shouldExpandNode: shouldExpandJsonNode,
+  clickToExpandNode: true,
+};
 
-  const isArray = Array.isArray(data);
-  const keys = isArray ? data.map((_, index) => String(index)) : Object.keys(data);
+export function JsonTree({ data }: { data: JsonValue }) {
+  if (data === null || typeof data !== "object") {
+    return <span className={scalarClassName(data)}>{formatScalar(data)}</span>;
+  }
 
   return (
-    <div className={depth > 0 ? "json-tree json-tree--nested" : "json-tree"}>
-      <span className="text-[var(--text-muted)]">{isArray ? "[" : "{"}</span>
-      <div className="ml-1.5 border-l border-dashed border-[var(--border-light)] pl-2">
-        {keys.map((key) => {
-          const value = isArray ? data[Number(key)] : data[key];
-          const expandable = value !== null && typeof value === "object";
-          const isCollapsed = collapsed[key];
-          return (
-            <div key={key} className="my-0.5">
-              {!isArray && <span className="mr-1 font-semibold text-[var(--text-secondary)]">&quot;{key}&quot;:</span>}
-              {expandable && (
-                <button
-                  type="button"
-                  className="mr-1 border-0 bg-transparent px-1 font-mono text-[var(--ui-font-label)] text-[var(--text-muted)] cursor-pointer"
-                  onClick={() => setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))}
-                >
-                  {isCollapsed ? "▶" : "▼"}
-                </button>
-              )}
-              {expandable && isCollapsed ? (
-                <span className="text-[var(--ui-font-control)] text-[var(--text-muted)]">{compactJsonPreview(value)}</span>
-              ) : expandable ? (
-                <JsonTree data={value} depth={depth + 1} />
-              ) : (
-                <JsonTree data={value} depth={depth + 1} />
-              )}
-              {key !== keys[keys.length - 1] && <span className="text-[var(--text-muted)]">,</span>}
-            </div>
-          );
-        })}
-      </div>
-      <span className="text-[var(--text-muted)]">{isArray ? "]" : "}"}</span>
-    </div>
+    <JsonView
+      aria-label="JSON 结构"
+      data={data}
+      {...jsonViewPresentationProps}
+    />
   );
+}
+
+function shouldExpandJsonNode(level: number, value: unknown) {
+  if (level === 0) return true;
+  if (level >= 2) return false;
+  if (Array.isArray(value)) return value.length <= 24;
+  return value !== null && typeof value === "object" && Object.keys(value).length <= 24;
+}
+
+function scalarClassName(value: null | boolean | number | string) {
+  if (value === null) return "dbfox-json-view__value dbfox-json-view__value--null";
+  return `dbfox-json-view__value dbfox-json-view__value--${typeof value}`;
+}
+
+function formatScalar(value: null | boolean | number | string) {
+  return typeof value === "string" ? JSON.stringify(value) : String(value);
 }

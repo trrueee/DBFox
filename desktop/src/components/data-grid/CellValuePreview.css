@@ -24,7 +24,7 @@
 .dbfox-cell-boolean {
   font-family: var(--font-mono);
   font-size: var(--ui-font-label);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .dbfox-cell-boolean.is-true {
@@ -96,7 +96,7 @@
   color: var(--text-muted, var(--agent-text-muted));
   padding: 1px 5px;
   font-size: var(--ui-font-caption);
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -147,7 +147,7 @@
 .dbfox-cell-preview-title {
   color: var(--accent-indigo, var(--agent-accent));
   font-size: var(--ui-font-label);
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .dbfox-cell-preview-subtitle {
@@ -177,6 +177,109 @@
   line-height: 1.55;
 }
 
+.dbfox-json-view {
+  min-width: max-content;
+  color: var(--text-primary, var(--agent-text));
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.dbfox-json-view__item {
+  margin-block: 1px;
+}
+
+.dbfox-json-view__children {
+  margin: 1px 0 1px 7px;
+  padding: 0 0 0 12px;
+  border-left: 1px dashed var(--border-light, var(--agent-border-subtle));
+}
+
+.dbfox-json-view__label {
+  margin-right: 5px;
+  color: var(--text-secondary, var(--agent-text-secondary));
+  font-weight: 600;
+}
+
+.dbfox-json-view__label--clickable {
+  cursor: pointer;
+}
+
+.dbfox-json-view__toggle {
+  position: relative;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  margin-right: 1px;
+  border-radius: 4px;
+  color: var(--text-muted, var(--agent-text-muted));
+  cursor: pointer;
+  vertical-align: -5px;
+}
+
+.dbfox-json-view__toggle::after {
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentcolor;
+  border-bottom: 1.5px solid currentcolor;
+  content: "";
+  transform: rotate(-45deg);
+  transition: transform var(--motion-duration-fast, 120ms) ease;
+}
+
+.dbfox-json-view__toggle--expanded::after {
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+.dbfox-json-view__toggle:hover {
+  background: var(--bg-secondary, var(--agent-surface-muted));
+  color: var(--text-primary, var(--agent-text));
+}
+
+.dbfox-json-view__toggle:focus-visible {
+  outline: 2px solid var(--accent-indigo, var(--agent-accent));
+  outline-offset: 1px;
+}
+
+.dbfox-json-view__collapsed-content {
+  margin-right: 5px;
+  color: var(--text-muted, var(--agent-text-muted));
+}
+
+.dbfox-json-view__collapsed-content::after {
+  content: "…";
+}
+
+.dbfox-json-view__value--null {
+  color: var(--text-muted, var(--agent-text-muted));
+}
+
+.dbfox-json-view__value--number {
+  color: var(--accent-green);
+  font-weight: 600;
+}
+
+.dbfox-json-view__value--string {
+  color: var(--accent-amber);
+}
+
+.dbfox-json-view__value--boolean {
+  color: var(--accent-indigo, var(--agent-accent));
+  font-weight: 600;
+}
+
+.dbfox-json-view__punctuation {
+  color: var(--text-muted, var(--agent-text-muted));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbfox-json-view__toggle::after {
+    transition: none;
+  }
+}
+
 .dbfox-cell-preview-footer {
   flex: 0 0 auto;
   border-top: 1px solid var(--border-light, var(--agent-border-subtle));
@@ -199,7 +302,7 @@
   overflow: hidden;
   font-family: var(--font-mono);
   font-size: var(--ui-font-label);
-  font-weight: 800;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -222,7 +325,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-secondary, var(--agent-text-secondary));
-  font-weight: 800;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -265,7 +368,7 @@
 .dbfox-cell-preview-binary-note {
   max-width: 48ch;
   color: var(--text-secondary, var(--agent-text-secondary));
-  font-family: var(--font-sans);
+  font-family: var(--font-family-ui);
   line-height: 1.6;
 }
 
@@ -287,23 +390,4 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.dbfox-cell-value-actions button {
-  display: inline-flex;
-  height: 30px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: 1px solid var(--border-medium, var(--agent-border));
-  border-radius: 7px;
-  background: var(--bg-surface, var(--agent-surface));
-  color: var(--text-primary, var(--agent-text));
-  cursor: pointer;
-  font: inherit;
-}
-
-.dbfox-cell-value-actions button:hover {
-  border-color: color-mix(in srgb, var(--accent-indigo, var(--agent-accent)) 42%, var(--border-medium));
-  color: var(--accent-indigo, var(--agent-accent));
 }

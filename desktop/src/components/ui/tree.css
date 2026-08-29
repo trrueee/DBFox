@@ -1,0 +1,161 @@
+.dbfox-tree {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: var(--ui-font-control);
+}
+
+.dbfox-tree.is-virtualized {
+  max-block-size: min(28rem, 60vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.dbfox-tree__virtual-canvas {
+  position: relative;
+  min-width: 0;
+}
+
+.dbfox-tree__virtual-row {
+  position: absolute;
+  inset: 0 0 auto;
+  min-width: 0;
+}
+
+.dbfox-tree__virtual-depth-2 { padding-inline-start: var(--space-3); }
+.dbfox-tree__virtual-depth-3 { padding-inline-start: calc(var(--space-3) * 2); }
+.dbfox-tree__virtual-depth-4 { padding-inline-start: calc(var(--space-3) * 3); }
+.dbfox-tree__virtual-depth-5 { padding-inline-start: calc(var(--space-3) * 4); }
+.dbfox-tree__virtual-depth-6 { padding-inline-start: calc(var(--space-3) * 5); }
+.dbfox-tree__virtual-depth-7 { padding-inline-start: calc(var(--space-3) * 6); }
+.dbfox-tree__virtual-depth-8 { padding-inline-start: calc(var(--space-3) * 7); }
+
+.dbfox-tree [data-part="tree"] {
+  min-width: 0;
+  outline: none;
+}
+
+.dbfox-tree__row {
+  display: flex;
+  min-width: 0;
+  min-height: var(--density-tree-row-height);
+  align-items: center;
+  gap: var(--space-1);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: default;
+  outline: none;
+  padding: 0 var(--space-2);
+  user-select: none;
+}
+
+.dbfox-tree__row-shell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.dbfox-tree__row-shell > .dbfox-tree__row {
+  flex: 1 1 auto;
+}
+
+.dbfox-tree__row:hover {
+  background: var(--control-bg-hover);
+  color: var(--text-primary);
+}
+
+.dbfox-tree__row-shell:hover {
+  background: var(--control-bg-hover);
+}
+
+.dbfox-tree__row[data-selected] {
+  background: var(--nav-active-bg);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.dbfox-tree__item-shell[data-selected],
+.dbfox-tree [data-part="branch"][data-selected] > .dbfox-tree__row-shell {
+  background: var(--nav-active-bg);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.dbfox-tree__row[data-focus] {
+  box-shadow: var(--focus-ring);
+}
+
+.dbfox-tree__item-shell[data-focus] {
+  box-shadow: var(--focus-ring);
+}
+
+.dbfox-tree__group {
+  margin-inline-start: var(--space-3);
+  padding-inline-start: var(--space-2);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.dbfox-tree__indicator,
+.dbfox-tree__icon {
+  display: inline-flex;
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+  flex: 0 0 var(--icon-size-sm);
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.dbfox-tree__indicator svg,
+.dbfox-tree__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.dbfox-tree__indicator {
+  transition: transform var(--motion-fast) ease-out;
+}
+
+.dbfox-tree__indicator[data-state="open"] {
+  transform: rotate(90deg);
+}
+
+.dbfox-tree__indicator--leaf {
+  width: var(--icon-size-sm);
+}
+
+.dbfox-tree__label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dbfox-tree__meta {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: var(--ui-font-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.dbfox-tree__actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+  padding-inline-end: var(--space-1);
+}
+
+.dbfox-tree__branch-footer {
+  color: var(--text-tertiary);
+  font-size: var(--ui-font-caption);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbfox-tree__indicator {
+    transition: none;
+  }
+}

@@ -1,14 +1,14 @@
 .dbfox-tooltip-content {
   z-index: 70;
   max-width: min(280px, calc(100vw - 24px));
-  border: 1px solid var(--border-medium, var(--agent-border));
-  border-radius: 6px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 8px;
   background: var(--bg-elevated, var(--agent-surface));
   color: var(--text-primary, var(--agent-text));
-  padding: 5px 8px;
+  padding: 5px 10px;
   box-shadow: var(--shadow-md, var(--agent-shadow-hover));
   font-size: var(--ui-font-caption);
-  font-weight: 700;
+  font-weight: 400;
   line-height: 1.45;
   overflow-wrap: anywhere;
   will-change: transform, opacity;
@@ -16,16 +16,16 @@
 
 .dbfox-tooltip-content[data-state="delayed-open"],
 .dbfox-tooltip-content[data-state="instant-open"] {
-  animation: dbfox-tooltip-in 120ms ease-out;
+  animation: dbfox-tooltip-in 120ms var(--ease-out);
 }
 
 .dbfox-tooltip-content[data-state="closed"] {
-  animation: dbfox-tooltip-out 90ms ease-in;
+  animation: dbfox-tooltip-out 90ms var(--ease-in);
 }
 
 .dbfox-tooltip-arrow {
   fill: var(--bg-elevated, var(--agent-surface));
-  stroke: var(--border-medium, var(--agent-border));
+  stroke: var(--hairline-strong);
   stroke-width: 1px;
 }
 

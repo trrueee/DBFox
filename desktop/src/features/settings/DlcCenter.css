@@ -94,7 +94,7 @@
   padding: 0 9px;
   color: var(--color-text-secondary);
   font-size: var(--ui-font-caption);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .dlc-state--success {
@@ -267,7 +267,7 @@
 .dlc-permissions summary {
   width: fit-content;
   cursor: pointer;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .dlc-permissions summary:focus-visible {
@@ -295,32 +295,8 @@
 }
 
 .dlc-activation-error {
-  display: flex;
-  gap: 9px;
   margin-top: 14px;
-  border: 1px solid color-mix(in srgb, var(--color-danger) 28%, transparent);
-  border-radius: 9px;
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
   padding: 10px 12px;
-}
-
-.dlc-activation-error > div {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.dlc-activation-error strong,
-.dlc-activation-error span {
-  font-size: var(--ui-font-caption);
-  line-height: 1.45;
-}
-
-.dlc-activation-error span {
-  color: var(--color-text-secondary);
-  overflow-wrap: anywhere;
 }
 
 .dlc-card__actions {

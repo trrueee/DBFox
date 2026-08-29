@@ -2,83 +2,78 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ═══════════════════════════════════════════════════════
-   DBFox Design System
-   Palette: Precision Violet + Data Teal
-   Typography: system UI + local monospace fallbacks
-   Feel: restrained, technical, data-forward desktop tooling
-   ═══════════════════════════════════════════════════════ */
+/* Tailwind bridge and global reset. Product tokens live in styles/tokens.css. */
 
 @layer base {
   :root {
-    --background: 214 47% 97%;           /* #F4F7FB */
-    --foreground: 221 38% 15%;           /* #172033 */
-    --card: 0 0% 100%;                   /* #FFFFFF */
-    --card-foreground: 221 38% 15%;
+    --background: 220 20% 97%;
+    --foreground: 220 18% 13%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 18% 13%;
     --popover: 0 0% 100%;
-    --popover-foreground: 221 38% 15%;
-    --primary: 248 64% 59%;              /* #6554D9 brand violet */
+    --popover-foreground: 220 18% 13%;
+    --primary: 208 85% 40%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 214 33% 95%;            /* #EEF3F8 */
-    --secondary-foreground: 216 16% 38%;
-    --muted: 214 33% 95%;
-    --muted-foreground: 215 16% 42%;     /* #64748B */
-    --accent: 177 62% 58%;               /* #55D4CF data cyan */
-    --accent-foreground: 220 39% 14%;
-    --destructive: 0 50% 48%;
+    --secondary: 220 16% 94%;
+    --secondary-foreground: 220 12% 32%;
+    --muted: 220 16% 95%;
+    --muted-foreground: 220 9% 42%;
+    --accent: 208 60% 96%;
+    --accent-foreground: 208 67% 34%;
+    --destructive: 0 72% 42%;
     --destructive-foreground: 0 0% 100%;
-    --success: 164 72% 31%;
+    --success: 158 64% 28%;
     --success-foreground: 0 0% 100%;
-    --warning: 34 75% 36%;
+    --warning: 32 80% 34%;
     --warning-foreground: 0 0% 100%;
-    --border: 213 30% 88%;               /* #D8E0EA */
-    --input: 213 30% 88%;
-    --ring: 248 64% 59%;
-    --radius: 5px;
-    --sidebar-background: 214 33% 95%;
-    --sidebar-foreground: 221 38% 15%;
-    --sidebar-primary: 248 64% 59%;
+    --border: 220 14% 89%;
+    --input: 220 14% 89%;
+    --ring: 208 85% 40%;
+    --radius: 8px;
+    --sidebar-background: 220 18% 93%;
+    --sidebar-foreground: 220 18% 13%;
+    --sidebar-primary: 208 85% 40%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 248 64% 96%;
-    --sidebar-accent-foreground: 248 52% 42%;
-    --sidebar-border: 213 30% 88%;
-    --sidebar-ring: 248 64% 59%;
-    font-family: "Fira Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --sidebar-accent: 220 18% 92%;
+    --sidebar-accent-foreground: 220 18% 13%;
+    --sidebar-border: 220 14% 89%;
+    --sidebar-ring: 208 85% 40%;
+    font-family: var(--font-family-ui);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
 
   .dark {
-    --background: 226 49% 8%;            /* #0B1020 */
-    --foreground: 214 47% 97%;           /* #F4F7FB */
-    --card: 222 39% 14%;                 /* #151D30 */
-    --card-foreground: 214 47% 97%;
-    --primary: 247 100% 80%;             /* #A79BFF */
-    --primary-foreground: 226 41% 12%;   /* #12182B */
-    --secondary: 218 31% 18%;
-    --secondary-foreground: 216 22% 76%;
-    --muted: 222 34% 18%;
-    --muted-foreground: 216 22% 70%;
-    --accent: 178 35% 18%;
-    --accent-foreground: 178 60% 68%;
-    --destructive: 0 55% 52%;
+    --background: 222 14% 9%;
+    --foreground: 216 16% 95%;
+    --card: 220 12% 14%;
+    --card-foreground: 216 16% 95%;
+    --primary: 208 81% 35%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 10% 18%;
+    --secondary-foreground: 216 12% 82%;
+    --muted: 220 10% 18%;
+    --muted-foreground: 218 9% 64%;
+    --accent: 220 11% 20%;
+    --accent-foreground: 210 90% 78%;
+    --destructive: 0 55% 55%;
     --destructive-foreground: 0 0% 100%;
-    --success: 160 59% 56%;
-    --success-foreground: 226 41% 12%;
-    --warning: 41 85% 62%;
-    --warning-foreground: 226 41% 12%;
-    --border: 218 31% 24%;
-    --input: 218 31% 24%;
-    --ring: 247 100% 80%;
-    --sidebar-background: 223 45% 11%;
-    --sidebar-foreground: 214 47% 97%;
-    --sidebar-primary: 247 100% 80%;
-    --sidebar-primary-foreground: 226 41% 12%;
-    --sidebar-accent: 222 34% 18%;
-    --sidebar-accent-foreground: 247 100% 84%;
-    --sidebar-border: 218 31% 24%;
-    --sidebar-ring: 247 100% 80%;
+    --success: 152 50% 52%;
+    --success-foreground: 160 40% 10%;
+    --warning: 38 85% 60%;
+    --warning-foreground: 30 40% 10%;
+    --border: 220 11% 24%;
+    --input: 220 11% 24%;
+    --ring: 210 90% 62%;
+    --sidebar-background: 225 13% 7%;
+    --sidebar-foreground: 216 16% 95%;
+    --sidebar-primary: 208 81% 35%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 11% 18%;
+    --sidebar-accent-foreground: 210 90% 78%;
+    --sidebar-border: 220 11% 20%;
+    --sidebar-ring: 210 90% 62%;
   }
 }
 
@@ -86,15 +81,25 @@
   * { @apply border-border; }
   body { @apply bg-background text-foreground; overflow: hidden; height: 100vh; width: 100vw; }
   #root { height: 100vh; width: 100vw; }
-  ::-webkit-scrollbar { width: var(--scrollbar-size, 6px); height: var(--scrollbar-size, 6px); }
+  ::-webkit-scrollbar { width: var(--scrollbar-size, 8px); height: var(--scrollbar-size, 8px); }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
     background: hsl(var(--border));
-    border: 1px solid transparent;
+    border: 2px solid transparent;
     border-radius: var(--radius-pill, 999px);
     background-clip: padding-box;
   }
-  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); background-clip: padding-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  }
+
+  /* One focus language: keyboard focus gets the shared ring, pointer focus stays quiet. */
+  :focus-visible {
+    outline: none;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -102,95 +107,9 @@
    ═══════════════════════════════════════════════════════ */
 
 @layer base {
-  .font-mono, code, pre { font-family: "Fira Code", "JetBrains Mono", monospace; }
+  .font-mono, code, pre { font-family: var(--font-family-code); }
   .tabular-nums { font-variant-numeric: tabular-nums; }
-}
-
-/* ═══════════════════════════════════════════════════════
-   Professional Data Table
-   ═══════════════════════════════════════════════════════ */
-
-@layer components {
-  .dbfox-table {
-    @apply w-full border-collapse;
-    font-family: "Fira Code", "JetBrains Mono", monospace;
-    font-variant-numeric: tabular-nums;
-    font-size: var(--ui-font-data);
-  }
-  .dbfox-table thead { @apply sticky top-0 z-10; }
-  .dbfox-table th {
-    @apply bg-[hsl(var(--secondary))] border-b-2 border-[hsl(var(--border))]
-           px-3 py-1.5 text-left font-semibold
-           text-[hsl(var(--muted-foreground))] whitespace-nowrap select-none;
-    font-size: var(--ui-font-data);
-  }
-  .dbfox-table td {
-    @apply px-3 py-1 border-b border-[hsl(var(--border)/0.7)]
-           text-[hsl(var(--foreground))];
-  }
-  .dbfox-table tbody tr:hover td { @apply bg-[hsl(var(--primary)/0.04)]; }
-  .dbfox-table .cell-null { @apply text-[hsl(var(--muted-foreground))] italic; }
-  .dbfox-table .cell-number { @apply text-right; }
-
-  /* ── Status badges ── */
-  .badge-safe    { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[12px] font-semibold bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]; }
-  .badge-warn    { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[12px] font-semibold bg-[hsl(var(--warning)/0.12)] text-[hsl(var(--warning))]; }
-  .badge-danger  { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[12px] font-semibold bg-[hsl(var(--destructive)/0.12)] text-[hsl(var(--destructive))]; }
-  .badge-neutral { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[12px] font-semibold bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]; }
-  .badge-primary { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[12px] font-semibold bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]; }
-
-  /* ── Context Bar ── */
-  .ctx-bar {
-    @apply flex items-center gap-3 px-4 py-2 bg-[hsl(var(--card))]
-           border-b border-[hsl(var(--border))] flex-shrink-0 flex-wrap select-none;
-  }
-  .ctx-bar-title {
-    @apply font-bold text-[hsl(var(--foreground))] text-[0.9rem] tracking-tight;
-    font-family: "Fira Sans", system-ui, sans-serif;
-  }
-  .ctx-bar-meta {
-    @apply text-[12px] text-[hsl(var(--muted-foreground))] font-medium;
-  }
-  .ctx-bar-tab {
-    @apply px-3 py-1 text-[12px] font-semibold rounded-sm cursor-pointer
-           border-none transition-colors;
-  }
-  .ctx-bar-tab-active {
-    @apply bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))];
-  }
-  .ctx-bar-tab-inactive {
-    @apply bg-transparent text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--foreground))];
-  }
-
-  /* ── Copilot intelligence panel ── */
-  .copilot-section-title {
-    @apply text-[12px] font-bold text-[hsl(var(--muted-foreground))]
-           uppercase tracking-widest mb-2 select-none;
-  }
-  .copilot-context-card {
-    @apply rounded-md border border-[hsl(var(--border))]
-           bg-[hsl(var(--secondary))] p-3.5;
-  }
-  .copilot-context-row {
-    @apply flex justify-between items-center py-1.5 text-[0.76rem]
-           border-b border-[hsl(var(--border)/0.4)] last:border-0;
-  }
-  .copilot-context-label {
-    @apply text-[hsl(var(--muted-foreground))] text-[12px] font-medium;
-  }
-  .copilot-context-value {
-    @apply text-[hsl(var(--foreground))] font-semibold text-right;
-    font-family: "Fira Code", "JetBrains Mono", monospace;
-  }
-  .copilot-suggestion-btn {
-    @apply flex items-center gap-2.5 w-full px-3 py-2 text-left
-           text-[0.78rem] text-[hsl(var(--foreground))]
-           bg-[hsl(var(--card))] border border-[hsl(var(--border))]
-           rounded-md cursor-pointer font-medium
-           hover:border-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.03)]
-           transition-colors;
-  }
-
+  h1, h2, h3, h4 { letter-spacing: var(--tracking-title, -0.01em); }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -201,4 +120,4 @@
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.animate-fade-up { animation: fade-up 0.2s ease-out both; }
+.animate-fade-up { animation: fade-up 0.2s var(--ease-out, ease-out) both; }

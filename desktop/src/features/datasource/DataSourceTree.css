@@ -234,7 +234,7 @@
   background: transparent;
   font: inherit;
   font-size: var(--ui-font-label, 13px);
-  font-weight: 550;
+  font-weight: 600;
   color: var(--color-text-secondary);
   cursor: pointer;
   text-align: left;
@@ -263,7 +263,7 @@
 
 .ds-resource-header-label {
   font-size: var(--ui-font-label, 13px);
-  font-weight: 550;
+  font-weight: 600;
   color: var(--color-text-secondary);
 }
 
@@ -450,7 +450,7 @@
 }
 
 .ds-tree-datasource-row {
-  font-weight: 550;
+  font-weight: 600;
   padding-left: 6px;
 }
 

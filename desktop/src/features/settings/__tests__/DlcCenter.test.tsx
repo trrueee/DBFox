@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../../lib/api/client";
 
 import type {
   DlcLifecycleItem,
@@ -116,6 +117,47 @@ describe("DlcCenter", () => {
 
     expect(await screen.findByText("尚未安装 DLC 扩展")).toBeTruthy();
     expect(screen.getByText(/检查和安装阶段不会执行扩展代码/)).toBeTruthy();
+  });
+
+  it("keeps a list failure inline with safe Problem Details correlation metadata", async () => {
+    mockListDlcs.mockRejectedValueOnce(new ApiError(
+      "private registry failure",
+      503,
+      "DLC_REGISTRY_UNAVAILABLE",
+      [],
+      { request_id: "dlc-request-5", secret: "must-not-render" },
+    ));
+
+    renderCenter();
+
+    expect(await screen.findByText("无法读取 DLC 状态")).toBeTruthy();
+    fireEvent.click(screen.getByText("技术详情"));
+    expect(screen.getByText("DLC_REGISTRY_UNAVAILABLE")).toBeTruthy();
+    expect(screen.getByText("dlc-request-5")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("private registry failure");
+    expect(document.body.textContent).not.toContain("must-not-render");
+  });
+
+  it("keeps package inspection failures on the page with safe correlation metadata", async () => {
+    mockInspectDlcPackage.mockRejectedValueOnce(new ApiError(
+      "archive path C:\\private\\addon.dbfox-dlc",
+      400,
+      "INVALID_DLC_ARCHIVE",
+      [],
+      { request_id: "dlc-action-6", secret: "must-not-render" },
+    ));
+    const showToast = vi.fn();
+    render(<DlcCenter showToast={showToast} />);
+    await screen.findByText("尚未安装 DLC 扩展");
+
+    fireEvent.click(screen.getByRole("button", { name: "从文件安装" }));
+    expect(await screen.findByText("无法检查 DLC 安装包")).toBeTruthy();
+    fireEvent.click(screen.getByText("技术详情"));
+    expect(screen.getByText("INVALID_DLC_ARCHIVE")).toBeTruthy();
+    expect(screen.getByText("dlc-action-6")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("C:\\private\\addon.dbfox-dlc");
+    expect(document.body.textContent).not.toContain("must-not-render");
+    expect(showToast).not.toHaveBeenCalledWith(expect.any(String), "error");
   });
 
   it("installs an already trusted package disabled", async () => {

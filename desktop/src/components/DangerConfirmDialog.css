@@ -38,12 +38,12 @@
 
 .danger-confirm-dialog-label {
   color: hsl(var(--destructive));
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .danger-confirm-dialog-code {
   padding: 2px 6px;
-  font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace);
+  font-family: var(--font-family-code);
   background: hsl(var(--destructive) / 0.15);
   border-radius: var(--radius-sm, 4px);
 }

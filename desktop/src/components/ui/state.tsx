@@ -1,8 +1,13 @@
 import * as React from "react";
-import { AlertTriangle, Inbox, Loader2 } from "lucide-react";
-import { Button } from "./button";
+import { AlertTriangle, Inbox } from "lucide-react";
+
 import { cn } from "../../lib/utils";
-import "./state.css";
+import { Alert, AlertDescription, AlertTitle } from "./alert";
+import { Button } from "./button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "./empty";
+import { ErrorDetails } from "./error-details";
+import { ShadcnSkeleton } from "./skeleton";
+import { Spinner } from "./spinner";
 
 interface StateBlockProps extends React.HTMLAttributes<HTMLDivElement> {
   title: string;
@@ -14,47 +19,38 @@ interface EmptyStateProps extends StateBlockProps {
   action?: React.ReactNode;
 }
 
+/** Product composition of the vendored shadcn Empty primitives. */
 function EmptyState({ title, description, action, icon, className, ...props }: EmptyStateProps) {
   return (
-    <div
-      className={cn("dbfox-empty-state", className)}
-      {...props}
-    >
-      <div className="dbfox-empty-state__icon">
-        {icon ?? <Inbox aria-hidden="true" />}
-      </div>
-      <h3 className="dbfox-empty-state__title">{title}</h3>
-      {description ? <p className="dbfox-empty-state__description">{description}</p> : null}
-      {action ? <div className="dbfox-empty-state__action">{action}</div> : null}
-    </div>
+    <Empty className={cn("min-h-48", className)} {...props}>
+      <EmptyHeader>
+        <EmptyMedia variant="icon">{icon ?? <Inbox aria-hidden="true" />}</EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        {description ? <EmptyDescription>{description}</EmptyDescription> : null}
+      </EmptyHeader>
+      {action ? <EmptyContent>{action}</EmptyContent> : null}
+    </Empty>
   );
 }
 
 interface ErrorStateProps extends StateBlockProps {
+  error?: unknown;
   onRetry?: () => void;
   retryLabel?: string;
 }
 
-function ErrorState({ title, description, icon, onRetry, retryLabel = "重试", className, ...props }: ErrorStateProps) {
+/** Product composition of the vendored shadcn Alert primitives. */
+function ErrorState({ title, description, error, icon, onRetry, retryLabel = "重试", className, ...props }: ErrorStateProps) {
   return (
-    <div
-      role="alert"
-      className={cn("dbfox-error-state", className)}
-      {...props}
-    >
-      <div className="dbfox-error-state__icon">
-        {icon ?? <AlertTriangle aria-hidden="true" />}
-      </div>
-      <div className="dbfox-error-state__content">
-        <h3 className="dbfox-error-state__title">{title}</h3>
-        {description ? <p className="dbfox-error-state__description">{description}</p> : null}
-        {onRetry ? (
-          <Button className="dbfox-error-state__retry" size="sm" variant="outline" onClick={onRetry}>
-            {retryLabel}
-          </Button>
-        ) : null}
-      </div>
-    </div>
+    <Alert variant="destructive" className={className} {...props}>
+      {icon ?? <AlertTriangle aria-hidden="true" />}
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>
+        {description ? <p>{description}</p> : null}
+        {onRetry ? <Button size="sm" variant="outline" onClick={onRetry}>{retryLabel}</Button> : null}
+        {error ? <ErrorDetails error={error} /> : null}
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -62,35 +58,30 @@ interface LoadingStateProps extends React.HTMLAttributes<HTMLDivElement> {
   label?: string;
 }
 
+/** shadcn Spinner in the documented Empty loading composition. */
 function LoadingState({ label = "加载中", className, ...props }: LoadingStateProps) {
   return (
-    <div
-      role="status"
-      className={cn("dbfox-loading-state", className)}
-      {...props}
-    >
-      <Loader2 className="dbfox-loading-state__icon" aria-hidden="true" />
-      <span>{label}</span>
-    </div>
+    <Empty role="status" className={cn("min-h-32 gap-3 p-6 md:p-8", className)} {...props}>
+      <EmptyHeader>
+        <EmptyMedia><Spinner role="presentation" aria-label={undefined} /></EmptyMedia>
+        <EmptyTitle className="text-sm">{label}</EmptyTitle>
+      </EmptyHeader>
+    </Empty>
   );
 }
 
-interface SkeletonProps extends React.HTMLAttributes<HTMLSpanElement> {
+interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: "text" | "row" | "control";
 }
 
-/**
- * 尺寸全部由 CSS 变体控制：text/row 占满行宽，control 为固定宽度。
- * CSP（style-src-attr 'none'）禁止内联 style 属性，因此不提供 width prop。
- */
+const SKELETON_VARIANTS = {
+  text: "h-3 w-full",
+  row: "h-8 w-full",
+  control: "h-8 w-24",
+} as const;
+
 function Skeleton({ variant = "text", className, ...props }: SkeletonProps) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("dbfox-skeleton", `dbfox-skeleton--${variant}`, className)}
-      {...props}
-    />
-  );
+  return <ShadcnSkeleton aria-hidden="true" className={cn(SKELETON_VARIANTS[variant], className)} {...props} />;
 }
 
 export { EmptyState, ErrorState, LoadingState, Skeleton };

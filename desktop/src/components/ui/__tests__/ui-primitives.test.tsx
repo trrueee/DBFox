@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../../lib/api/client";
 import { Button } from "../button";
 import {
   Command,
@@ -18,12 +19,13 @@ import { Panel, PanelBody, PanelDescription, PanelFooter, PanelHeader, PanelTitl
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "../hover-card";
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../resizable";
-import { Select } from "../select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../select";
 import { EmptyState, ErrorState, LoadingState, Skeleton } from "../state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../tabs";
 import { ScrollArea } from "../scroll-area";
+import { Switch } from "../switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../tooltip";
-import { Toolbar, ToolbarGroup, ToolbarTitle } from "../toolbar";
+import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarTitle } from "../toolbar";
 import {
   Button as IndexedButton,
   Command as IndexedCommand,
@@ -65,7 +67,12 @@ import {
   ResizablePanel as IndexedResizablePanel,
   ResizablePanelGroup as IndexedResizablePanelGroup,
   Select as IndexedSelect,
+  SelectContent as IndexedSelectContent,
+  SelectItem as IndexedSelectItem,
+  SelectTrigger as IndexedSelectTrigger,
+  SelectValue as IndexedSelectValue,
   ScrollArea as IndexedScrollArea,
+  Switch as IndexedSwitch,
   Tabs as IndexedTabs,
   TabsContent as IndexedTabsContent,
   TabsList as IndexedTabsList,
@@ -75,6 +82,7 @@ import {
   TooltipProvider as IndexedTooltipProvider,
   TooltipTrigger as IndexedTooltipTrigger,
   Toolbar as IndexedToolbar,
+  ToolbarButton as IndexedToolbarButton,
   ToolbarGroup as IndexedToolbarGroup,
   ToolbarTitle as IndexedToolbarTitle,
 } from "../index";
@@ -101,7 +109,7 @@ describe("ui primitives", () => {
     expect(screen.getByText("最后检查 42ms")).toBeTruthy();
   });
 
-  it("provides toolbar, form control, and action states without page-specific classes", () => {
+  it("provides toolbar, form control, and action states without page-specific classes", async () => {
     const onClick = vi.fn();
 
     render(
@@ -109,12 +117,16 @@ describe("ui primitives", () => {
         <ToolbarTitle>SQL Console</ToolbarTitle>
         <ToolbarGroup>
           <Input aria-label="过滤" placeholder="过滤对象" />
-          <Select aria-label="环境" defaultValue="dev">
-            <option value="dev">Dev</option>
-            <option value="prod">Prod</option>
+          <Select defaultValue="dev">
+            <SelectTrigger aria-label="环境"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="dev">Dev</SelectItem>
+              <SelectItem value="prod">Prod</SelectItem>
+            </SelectContent>
           </Select>
-          <Button onClick={onClick}>执行</Button>
-          <Button disabled>取消</Button>
+          <ToolbarButton asChild><Button onClick={onClick}>执行</Button></ToolbarButton>
+          <ToolbarButton asChild><Button>清除</Button></ToolbarButton>
+          <ToolbarButton asChild><Button disabled>取消</Button></ToolbarButton>
         </ToolbarGroup>
       </Toolbar>
     );
@@ -124,6 +136,10 @@ describe("ui primitives", () => {
     expect(screen.getByLabelText("过滤").getAttribute("placeholder")).toBe("过滤对象");
     expect(screen.getByRole("combobox", { name: "环境" }).className).toContain("dbfox-select-trigger");
     expect(screen.getByRole("combobox", { name: "环境" }).textContent).toContain("Dev");
+    const executeButton = screen.getByRole("button", { name: "执行" });
+    executeButton.focus();
+    fireEvent.keyDown(executeButton, { key: "ArrowRight", code: "ArrowRight", keyCode: 39 });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "清除" })));
     chooseSelectOption("环境", "Prod");
     expect(screen.getByRole("combobox", { name: "环境" }).textContent).toContain("Prod");
     fireEvent.click(screen.getByRole("button", { name: "执行" }));
@@ -150,6 +166,50 @@ describe("ui primitives", () => {
     expect(screen.getByRole("status").textContent).toContain("正在加载列信息");
   });
 
+  it("discloses only safe RFC 9457 metadata through the Radix error details control", () => {
+    const error = new ApiError(
+      "provider secret must stay hidden",
+      422,
+      "VALIDATION_FAILED",
+      [{ password: "hidden-check-secret" }],
+      {
+        request_id: "request-42",
+        errors: [{ input: "hidden-field-secret" }],
+      },
+    );
+
+    render(<ErrorState title="保存失败" description="请检查标记项。" error={error} />);
+
+    const trigger = screen.getByText("技术详情").closest("summary");
+    if (!trigger) throw new Error("Expected native disclosure summary");
+    const details = trigger.closest("details");
+    expect(details?.open).toBe(false);
+    fireEvent.click(trigger);
+    expect(details?.open).toBe(true);
+    expect(screen.getByText("VALIDATION_FAILED")).toBeTruthy();
+    expect(screen.getByText("request-42")).toBeTruthy();
+    expect(screen.getAllByText("1 项")).toHaveLength(2);
+    expect(document.body.textContent).not.toContain("provider secret");
+    expect(document.body.textContent).not.toContain("hidden-check-secret");
+    expect(document.body.textContent).not.toContain("hidden-field-secret");
+  });
+
+  it("uses the Radix switch contract for controlled and disabled toggle states", () => {
+    const onCheckedChange = vi.fn();
+    render(
+      <>
+        <Switch aria-label="显示网格线" checked={false} onCheckedChange={onCheckedChange} />
+        <IndexedSwitch aria-label="冻结主键" checked disabled />
+      </>,
+    );
+
+    const toggle = screen.getByRole("switch", { name: "显示网格线" });
+    expect(toggle.getAttribute("data-state")).toBe("unchecked");
+    fireEvent.click(toggle);
+    expect(onCheckedChange).toHaveBeenCalledWith(true);
+    expect((screen.getByRole("switch", { name: "冻结主键" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("renders skeleton placeholders hidden from assistive technology", () => {
     const { container } = render(
       <>
@@ -160,13 +220,13 @@ describe("ui primitives", () => {
     );
 
     const text = screen.getByTestId("skeleton-text");
-    expect(text.className).toContain("dbfox-skeleton--text");
+    expect(text.className).toContain("h-3");
     expect(text.getAttribute("aria-hidden")).toBe("true");
-    // CSP（style-src-attr 'none'）：尺寸只由 CSS 变体控制，禁止内联 style。
+    // 应用 UI 合同：尺寸只由 CSS 变体控制，禁止业务组件内联 style。
     expect(text.hasAttribute("style")).toBe(false);
-    expect(screen.getByTestId("skeleton-row").className).toContain("dbfox-skeleton--row");
-    expect(screen.getByTestId("skeleton-control").className).toContain("dbfox-skeleton--control");
-    expect(container.querySelectorAll(".dbfox-skeleton")).toHaveLength(3);
+    expect(screen.getByTestId("skeleton-row").className).toContain("h-8");
+    expect(screen.getByTestId("skeleton-control").className).toContain("w-24");
+    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(3);
   });
 
   it("wraps Radix Popover as a DBFox primitive", () => {
@@ -202,7 +262,16 @@ describe("ui primitives", () => {
     expect(document.querySelector(".dbfox-resizable-panel-group")).toBeTruthy();
     expect(document.querySelector(".test-resizable-group")).toBeTruthy();
     expect(document.querySelectorAll(".dbfox-resizable-panel")).toHaveLength(2);
-    expect(screen.getByRole("separator", { name: "Resize sidebar" }).className).toContain("dbfox-resizable-handle");
+    const separator = screen.getByRole("separator", { name: "Resize sidebar" });
+    expect(separator.className).toContain("dbfox-resizable-handle");
+    expect(separator.getAttribute("aria-orientation")).toBe("vertical");
+    const valueMin = Number(separator.getAttribute("aria-valuemin"));
+    const valueNow = Number(separator.getAttribute("aria-valuenow"));
+    const valueMax = Number(separator.getAttribute("aria-valuemax"));
+    expect(Number.isFinite(valueMin)).toBe(true);
+    expect(valueMin).toBeLessThanOrEqual(valueNow);
+    expect(valueNow).toBeLessThanOrEqual(valueMax);
+    expect(separator.tabIndex).toBe(0);
     expect(screen.getByText("Sidebar panel")).toBeTruthy();
     expect(screen.getByText("Main panel")).toBeTruthy();
   });
@@ -386,11 +455,14 @@ describe("ui primitives", () => {
             <IndexedToolbarTitle>Controls</IndexedToolbarTitle>
             <IndexedToolbarGroup>
               <IndexedInput aria-label="Filter" />
-              <IndexedSelect aria-label="Mode" defaultValue="compact">
-                <option value="compact">Compact</option>
-                <option value="wide">Wide</option>
+              <IndexedSelect defaultValue="compact">
+                <IndexedSelectTrigger aria-label="Mode"><IndexedSelectValue /></IndexedSelectTrigger>
+                <IndexedSelectContent>
+                  <IndexedSelectItem value="compact">Compact</IndexedSelectItem>
+                  <IndexedSelectItem value="wide">Wide</IndexedSelectItem>
+                </IndexedSelectContent>
               </IndexedSelect>
-              <IndexedButton>Apply</IndexedButton>
+              <IndexedToolbarButton asChild><IndexedButton>Apply</IndexedButton></IndexedToolbarButton>
             </IndexedToolbarGroup>
           </IndexedToolbar>
           <IndexedCommand label="Indexed command">

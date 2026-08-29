@@ -9,24 +9,22 @@
   border: 1px solid var(--control-border);
   border-radius: var(--radius-control);
   transition:
-    border-color 150ms ease,
-    box-shadow 150ms ease,
-    opacity 150ms ease;
+    border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out),
+    opacity var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-input::placeholder {
   color: var(--color-text-muted);
 }
 
-.dbfox-input:hover:not(:disabled) {
+.dbfox-input:hover:not(:disabled):not(:focus-visible) {
   border-color: var(--control-border-hover);
-  background: var(--control-bg-hover);
 }
 
 .dbfox-input:focus-visible {
   outline: none;
-  border-color: var(--color-primary);
-  background: var(--control-bg);
+  border-color: var(--control-border-focus);
   box-shadow: var(--focus-ring);
 }
 

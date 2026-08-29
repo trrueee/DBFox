@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, CheckCircle2, ChevronDown, Copy, Download, FileWarning, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
+import { CheckCircle2, Copy, Download, FileWarning, MoreHorizontal, RefreshCw, Search, Trash2, X } from "lucide-react";
 import {
   Button,
   DropdownMenu,
@@ -8,6 +8,14 @@ import {
   DropdownMenuTrigger,
   EmptyState,
   ErrorState,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Toolbar,
+  ToolbarGroup,
 } from "../components/ui";
 import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
 import { SettingsSection, SettingsToggle } from "../components/settings";
@@ -23,6 +31,7 @@ interface DiagnosticsPageProps {
 }
 
 type DiagnosticGroupKey = "backend" | "frontend";
+type DiagnosticLevelFilter = "all" | "error" | "warning" | "info" | "debug";
 
 interface DiagnosticLogGroup {
   key: DiagnosticGroupKey;
@@ -53,10 +62,16 @@ type DiagnosticLogsView = Omit<DiagnosticLogsResponse, "environment"> & {
 export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPageProps) {
   const [logs, setLogs] = useState<DiagnosticLogsView | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown | null>(null);
+  const [actionError, setActionError] = useState<{
+    label: string;
+    error: unknown;
+  } | null>(null);
   const [showEmptyLogs, setShowEmptyLogs] = useState(false);
   const [selectedGroupKey, setSelectedGroupKey] = useState<DiagnosticGroupKey>("backend");
-  const [groupMenuOpen, setGroupMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [levelFilter, setLevelFilter] = useState<DiagnosticLevelFilter>("all");
+  const [wrapLines, setWrapLines] = useState(false);
   const [auditConfirmation, setAuditConfirmation] = useState<ConfirmationDetails | null>(null);
 
   const loadLogs = useCallback(async () => {
@@ -65,14 +80,12 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
     try {
       setLogs(await loadDiagnosticLogs());
     } catch (err) {
-      const message = getUserErrorMessage(err, "诊断日志加载失败");
-      setError(message);
+      setError(err);
       setLogs(frontendOnlyLogs());
-      onToast(message, "error");
     } finally {
       setLoading(false);
     }
-  }, [onToast]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,10 +98,8 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
         if (!cancelled) setLogs(nextLogs);
       } catch (err) {
         if (cancelled) return;
-        const message = getUserErrorMessage(err, "诊断日志加载失败");
-        setError(message);
+        setError(err);
         setLogs(frontendOnlyLogs());
-        onToast(message, "error");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -119,6 +130,7 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
       await handleCopy();
       return;
     }
+    setActionError(null);
     try {
       const result = await exportDesktopDiagnosticBundle({
         engineSnapshot: logs,
@@ -126,11 +138,12 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
       });
       onToast(`诊断包已导出：${result.path}`, "success");
     } catch (err) {
-      onToast(getUserErrorMessage(err, "诊断包导出失败"), "error");
+      setActionError({ label: "诊断包导出失败", error: err });
     }
   };
 
   const handleClearLogs = async () => {
+    setActionError(null);
     try {
       const result = await diagnosticsApi.clearLogs();
       if (result.cleared) {
@@ -140,7 +153,7 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
       }
       await loadLogs();
     } catch (err) {
-      onToast(getUserErrorMessage(err, "清空日志失败"), "error");
+      setActionError({ label: "清空日志失败", error: err });
     }
   };
 
@@ -168,12 +181,24 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
     ? selectedGroupKey
     : visibleGroups[0]?.key ?? selectedGroupKey;
   const selectedGroup = visibleGroups.find((group) => group.key === resolvedSelectedGroupKey) || visibleGroups[0] || null;
+  const visibleEntries = useMemo(
+    () => filterDiagnosticEntries(selectedGroup?.entries ?? [], searchQuery, levelFilter),
+    [levelFilter, searchQuery, selectedGroup],
+  );
   const totalSourcesCount = logs?.sources.length ?? 0;
   const nonEmptySourcesCount = logs?.sources.filter((source) => source.exists && source.size_bytes > 0).length ?? 0;
   const generatedAtLabel = logs?.generated_at ? formatDateTime(logs.generated_at) : "正在读取…";
   const backendEnvironment = logs?.environment && !("frontend_only" in logs.environment)
     ? logs.environment
     : null;
+  const handleCopyEntry = async (entry: DiagnosticLogEntry) => {
+    try {
+      await navigator.clipboard.writeText(formatDiagnosticEntry(entry));
+      onToast("日志行已复制", "success");
+    } catch {
+      onToast("日志行复制失败", "error");
+    }
+  };
   const actions = (
     <div className="diagnostics-actions">
       <SettingsToggle
@@ -240,7 +265,22 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
       )}
 
       {error ? (
-        <ErrorState className="diagnostics-error" title="诊断日志加载失败" description={error} />
+        <ErrorState
+          className="diagnostics-error"
+          title="诊断日志加载失败"
+          description={getUserErrorMessage(error, "诊断日志加载失败")}
+          error={error}
+          onRetry={() => void loadLogs()}
+        />
+      ) : null}
+
+      {actionError ? (
+        <ErrorState
+          className="diagnostics-error"
+          title={actionError.label}
+          description={getUserErrorMessage(actionError.error, `${actionError.label}，请重试`)}
+          error={actionError.error}
+        />
       ) : null}
 
       <div className="diagnostics-content">
@@ -268,49 +308,59 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
           trailing={<span className="diagnostics-source-count">{selectedGroup ? `${selectedGroup.sourceNames.length} 个原始源` : "无日志源"}</span>}
         >
           {visibleGroups.length > 0 ? (
-            <div className="diagnostics-source-toolbar">
+            <Toolbar className="diagnostics-source-toolbar" aria-label="日志查看工具">
               <div className="diagnostics-source-picker">
                 <span>日志分组</span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="diagnostics-source-trigger"
-                  aria-label="日志分组"
-                  aria-haspopup="listbox"
-                  aria-expanded={groupMenuOpen}
-                  onClick={() => setGroupMenuOpen((value) => !value)}
+                <Select
+                  value={resolvedSelectedGroupKey}
+                  onValueChange={(value) => setSelectedGroupKey(value as DiagnosticGroupKey)}
                 >
-                  <span>{selectedGroup?.label || "选择日志"}</span>
-                  <ChevronDown size={14} />
-                </Button>
-                {groupMenuOpen ? (
-                  <div className="diagnostics-source-menu" role="listbox" aria-label="日志分组">
+                  <SelectTrigger className="diagnostics-source-trigger" aria-label="日志分组">
+                    <SelectValue>{selectedGroup?.label || "选择日志"}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent aria-label="日志分组">
                     {visibleGroups.map((group) => (
-                      <Button
+                      <SelectItem
                         key={group.key}
-                        type="button"
-                        variant="ghost"
-                        role="option"
-                        aria-selected={group.key === resolvedSelectedGroupKey}
-                        className={`diagnostics-source-option${group.key === resolvedSelectedGroupKey ? " is-active" : ""}`}
-                        onClick={() => {
-                          setSelectedGroupKey(group.key);
-                          setGroupMenuOpen(false);
-                        }}
+                        value={group.key}
+                        textValue={group.label}
                       >
-                        <span>
-                          <strong>{group.label}</strong>
-                          <small>{group.sourceNames.join(", ") || "无原始源"}</small>
-                        </span>
-                        <em>{formatBytes(group.sizeBytes)}</em>
-                        {group.key === resolvedSelectedGroupKey ? <Check size={14} /> : null}
-                      </Button>
+                        {group.label} · {formatBytes(group.sizeBytes)}
+                      </SelectItem>
                     ))}
-                  </div>
-                ) : null}
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
+              <ToolbarGroup className="diagnostics-view-controls" aria-label="筛选与显示">
+                <div className="diagnostics-search-field">
+                  <Search size={14} aria-hidden="true" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    aria-label="搜索当前日志"
+                    placeholder="搜索消息、来源或级别"
+                  />
+                  {searchQuery ? (
+                    <Button type="button" size="icon-sm" variant="ghost" aria-label="清除日志搜索" onClick={() => setSearchQuery("")}>
+                      <X size={14} aria-hidden="true" />
+                    </Button>
+                  ) : null}
+                </div>
+                <Select value={levelFilter} onValueChange={(value) => setLevelFilter(value as DiagnosticLevelFilter)}>
+                  <SelectTrigger className="diagnostics-level-trigger" size="sm" aria-label="日志级别">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部级别</SelectItem>
+                    <SelectItem value="error">错误</SelectItem>
+                    <SelectItem value="warning">警告</SelectItem>
+                    <SelectItem value="info">信息 / 其他</SelectItem>
+                    <SelectItem value="debug">调试 / 跟踪</SelectItem>
+                  </SelectContent>
+                </Select>
+                <SettingsToggle checked={wrapLines} onCheckedChange={setWrapLines} label="自动换行" compact />
+              </ToolbarGroup>
+            </Toolbar>
           ) : null}
 
           <div className="diagnostics-sources">
@@ -332,14 +382,20 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
                   </span>
                 </div>
                 {selectedGroup.entries.length > 0 ? (
-                  <div className="diagnostics-log-list" role="table" aria-label={`${selectedGroup.label}内容`}>
+                  <>
+                    <div className="diagnostics-filter-status" role="status" aria-live="polite">
+                      显示 {visibleEntries.length} / {selectedGroup.entries.length} 行
+                    </div>
+                    {visibleEntries.length > 0 ? (
+                  <div className={`diagnostics-log-list${wrapLines ? " diagnostics-log-list--wrap" : ""}`} role="table" aria-label={`${selectedGroup.label}内容`} aria-rowcount={visibleEntries.length + 1}>
                     <div className="diagnostics-log-row diagnostics-log-row--header" role="row">
                       <span role="columnheader">时间</span>
                       <span role="columnheader">级别</span>
                       <span role="columnheader">来源</span>
                       <span role="columnheader">消息</span>
+                      <span role="columnheader" className="diagnostics-log-action-heading">操作</span>
                     </div>
-                    {selectedGroup.entries.map((entry) => (
+                    {visibleEntries.map((entry) => (
                       <div className="diagnostics-log-row" role="row" key={entry.id}>
                         <time role="cell" dateTime={entry.timestamp || undefined} title={entry.timestamp || undefined}>
                           {formatLogTime(entry.timestamp)}
@@ -356,9 +412,18 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
                         <span role="cell" className="diagnostics-log-message" title={entry.message}>
                           {entry.message}
                         </span>
+                        <span role="cell" className="diagnostics-log-action">
+                          <Button type="button" size="icon-sm" variant="ghost" aria-label={`复制日志行 ${formatLogTime(entry.timestamp)}`} onClick={() => void handleCopyEntry(entry)}>
+                            <Copy size={14} aria-hidden="true" />
+                          </Button>
+                        </span>
                       </div>
                     ))}
                   </div>
+                    ) : (
+                      <EmptyState className="diagnostics-filter-empty" title="没有匹配的日志" description="调整搜索内容或日志级别后重试。" />
+                    )}
+                  </>
                 ) : (
                   <div className="diagnostics-source-empty">
                     {selectedGroup.exists ? "无日志内容" : "日志文件不存在"}
@@ -369,7 +434,7 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
             {!loading && visibleGroups.length === 0 ? (
               <EmptyState
                 className="diagnostics-empty"
-                icon={<FileWarning size={18} />}
+                icon={<FileWarning size={16} />}
                 title="暂无有效日志（包含内容的日志源）"
               />
             ) : null}
@@ -519,6 +584,31 @@ function formatLogTime(value: string) {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function filterDiagnosticEntries(
+  entries: DiagnosticLogEntry[],
+  query: string,
+  levelFilter: DiagnosticLevelFilter,
+) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return entries.filter((entry) => {
+    if (levelFilter !== "all" && logLevelTone(entry.level) !== levelFilterTone(levelFilter)) return false;
+    if (!normalizedQuery) return true;
+    return [entry.timestamp, entry.level, entry.logger, entry.sourceName, entry.message]
+      .some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
+  });
+}
+
+function levelFilterTone(filter: Exclude<DiagnosticLevelFilter, "all">) {
+  if (filter === "debug") return "muted";
+  return filter;
+}
+
+function formatDiagnosticEntry(entry: DiagnosticLogEntry) {
+  return [entry.timestamp, entry.level, entry.logger || entry.sourceName, entry.message]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function logLevelTone(level: string) {
