@@ -40,11 +40,11 @@ describe("acme.echo packaged frontend fixture", () => {
       },
     )).toBe(true);
 
-    expect(contributions.artifactRenderers).toHaveLength(1);
-    const renderer = contributions.artifactRenderers[0];
-    expect(renderer.type).toBe("acme.echo.message");
-    expect(renderer.supportedSchemaVersions).toEqual([1]);
-    expect(renderer.parsePayload({ message: "hello" })).toEqual({ message: "hello" });
-    expect(() => renderer.parsePayload({ message: "" })).toThrow(/requires message/);
+    expect(contributions.artifactViews).toHaveLength(1);
+    const view = contributions.artifactViews[0];
+    expect(view.id).toBe("acme.echo.message");
+    expect(view.artifactTypes).toEqual([{ type: "acme.echo.message", schemaVersions: [1] }]);
+    expect(view.parsePayload({ message: "hello" })).toEqual({ message: "hello" });
+    expect(() => view.parsePayload({ message: "" })).toThrow(/requires message/);
   });
 });

@@ -38,11 +38,11 @@ describe("dbfox.music System DLC frontend fixture", () => {
     const contributions = staged.getContributions();
     expect(contributions.connectors.map((item) => item.id)).toEqual(["dbfox.music"]);
     expect(contributions.dockViews.map((item) => item.viewType)).toEqual(["dbfox.music.piano-studio"]);
-    expect(contributions.artifactRenderers.map((item) => item.type)).toEqual([
-      "dbfox.music.score_revision",
+    expect(contributions.artifactViews.map((item) => item.id)).toEqual([
+      "dbfox.music.score",
       "dbfox.music.transcription",
     ]);
-    expect(contributions.artifactRenderers[0].parsePayload({
+    expect(contributions.artifactViews[0].parsePayload({
       scoreId: "score-1", revision: 2, title: "Moonlit Window",
     })).toMatchObject({ scoreId: "score-1", revision: 2 });
   });

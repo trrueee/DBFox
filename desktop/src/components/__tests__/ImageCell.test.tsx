@@ -45,7 +45,7 @@ describe("ImageCell", () => {
 
     const image = await screen.findByRole(
       "img",
-      { name: "数据库单元格中的图片悬浮预览" },
+      { name: "数据单元格中的图片悬浮预览" },
       { timeout: 1_000 },
     );
     expect(image.getAttribute("src")).toBe("https://cdn.example.com/a.png");
@@ -70,10 +70,38 @@ describe("ImageCell", () => {
     fireEvent.click(screen.getByRole("button", { name: "预览图片 https://cdn.example.com/a.png" }));
 
     const dialog = screen.getByRole("dialog", { name: "图片预览" });
-    const image = within(dialog).getByRole("img", { name: "数据库单元格中的图片预览" });
+    const image = within(dialog).getByRole("img", { name: "数据单元格中的图片预览" });
     expect(image.getAttribute("src")).toBe("https://cdn.example.com/a.png");
     expect(image.getAttribute("referrerpolicy")).toBe("no-referrer");
     expect(openExternalMock).not.toHaveBeenCalled();
+  });
+
+  it("provides CSP-safe zoom, fit, actual-size, metadata, and keyboard controls", () => {
+    render(<ImageCell url="https://cdn.example.com/a.png" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "预览图片 https://cdn.example.com/a.png" }));
+    const dialog = screen.getByRole("dialog", { name: "图片预览" });
+    const image = within(dialog).getByRole("img", { name: "数据单元格中的图片预览" });
+    Object.defineProperty(image, "naturalWidth", { configurable: true, value: 1920 });
+    Object.defineProperty(image, "naturalHeight", { configurable: true, value: 1080 });
+    fireEvent.load(image);
+
+    expect(within(dialog).getByText("1920 × 1080 px")).toBeTruthy();
+    expect(within(dialog).getByText("适应 · 100%")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "放大图片" }));
+    expect(image.getAttribute("data-zoom")).toBe("125");
+
+    const canvas = within(dialog).getByLabelText(/图片画布/);
+    fireEvent.keyDown(canvas, { key: "+" });
+    expect(image.getAttribute("data-zoom")).toBe("150");
+    fireEvent.keyDown(canvas, { key: "0" });
+    expect(image.getAttribute("data-view-mode")).toBe("fit");
+    expect(image.getAttribute("data-zoom")).toBe("100");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "实际大小" }));
+    expect(image.getAttribute("data-view-mode")).toBe("actual");
+    expect(within(dialog).getByRole("button", { name: "实际大小" }).getAttribute("aria-pressed")).toBe("true");
+    expect(dialog.querySelector("[style]")).toBeNull();
   });
 
   it("keeps external navigation as a secondary explicit action", async () => {
@@ -85,6 +113,18 @@ describe("ImageCell", () => {
     await waitFor(() => expect(openExternalMock).toHaveBeenCalledWith(
       "https://cdn.example.com/a.png",
     ));
+  });
+
+  it("returns focus to the image trigger when Escape closes the dialog", async () => {
+    render(<ImageCell url="https://cdn.example.com/a.png" />);
+    const trigger = screen.getByRole("button", { name: "预览图片 https://cdn.example.com/a.png" });
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "图片预览" });
+
+    fireEvent.keyDown(dialog, { key: "Escape", code: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "图片预览" })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
   it("saves through the dedicated Host command instead of renderer file access", async () => {
@@ -104,9 +144,27 @@ describe("ImageCell", () => {
     render(<ImageCell url="https://cdn.example.com/broken.png" />);
 
     fireEvent.click(screen.getByRole("button", { name: "预览图片 https://cdn.example.com/broken.png" }));
-    fireEvent.error(screen.getByRole("img", { name: "数据库单元格中的图片预览" }));
+    fireEvent.error(screen.getByRole("img", { name: "数据单元格中的图片预览" }));
 
     expect(screen.getByRole("alert").textContent).toContain("图片无法预览");
+  });
+
+  it("closes and clears viewer state when a virtualized cell receives a new URL", () => {
+    const view = render(<ImageCell url="https://cdn.example.com/a.png" />);
+    fireEvent.click(screen.getByRole("button", { name: "预览图片 https://cdn.example.com/a.png" }));
+    const image = screen.getByRole("img", { name: "数据单元格中的图片预览" });
+    Object.defineProperty(image, "naturalWidth", { configurable: true, value: 800 });
+    Object.defineProperty(image, "naturalHeight", { configurable: true, value: 600 });
+    fireEvent.load(image);
+    fireEvent.click(screen.getByRole("button", { name: "放大图片" }));
+
+    view.rerender(<ImageCell url="https://cdn.example.com/b.png" />);
+
+    expect(screen.queryByRole("dialog", { name: "图片预览" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "预览图片 https://cdn.example.com/b.png" }));
+    const nextDialog = screen.getByRole("dialog", { name: "图片预览" });
+    expect(within(nextDialog).getByText("适应 · 100%")).toBeTruthy();
+    expect(within(nextDialog).queryByText("800 × 600 px")).toBeNull();
   });
 
   it("does not offer external navigation for non-HTTPS image URLs", () => {

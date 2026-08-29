@@ -28,35 +28,31 @@ afterEach(() => {
 });
 
 describe("bundle budget contract", () => {
-  it("accepts a split entry, chart renderer, and required workspace route chunks", () => {
+  it("accepts a bounded entry and required workspace route chunks", () => {
     const distDir = makeBundle({
       "index-entry.js": "console.log('entry')",
-      "ChartArtifactView-chart.js": "console.log('chart')",
       "ConversationWorkspace-route.js": "export {}",
     });
 
     expect(inspectBundle(distDir)).toMatchObject({
       entry: { file: "index-entry.js" },
-      chart: { file: "ChartArtifactView-chart.js" },
     });
   });
 
   it("rejects an entry that exceeds its size budget", () => {
     const distDir = makeBundle({
       "index-entry.js": "a".repeat(700 * 1024),
-      "ChartArtifactView-chart.js": "console.log('chart')",
       "ConversationWorkspace-route.js": "export {}",
     });
 
     expect(() => inspectBundle(distDir)).toThrow("Initial desktop entry exceeds its bundle budget");
   });
 
-  it("rejects a build that folds the chart renderer back into the entry", () => {
+  it("rejects a build without the independently loaded workspace route", () => {
     const distDir = makeBundle({
       "index-entry.js": "console.log('entry')",
-      "ConversationWorkspace-route.js": "export {}",
     });
 
-    expect(() => inspectBundle(distDir)).toThrow("ChartArtifactView must remain an independently deferred chart chunk");
+    expect(() => inspectBundle(distDir)).toThrow("Core workspace routes must remain independently loaded");
   });
 });

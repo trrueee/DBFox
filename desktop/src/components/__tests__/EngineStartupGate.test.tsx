@@ -1,13 +1,30 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { hostAvailableMock, restartMock, openLogsMock, waitForConfigMock, waitForHealthMock, subscribeMock } = vi.hoisted(() => ({
+const {
+  hostAvailableMock,
+  restartMock,
+  openLogsMock,
+  waitForConfigMock,
+  waitForHealthMock,
+  subscribeMock,
+  engineRuntimeState,
+} = vi.hoisted(() => ({
   hostAvailableMock: vi.fn(() => false),
   restartMock: vi.fn(),
   openLogsMock: vi.fn(),
   waitForConfigMock: vi.fn(),
   waitForHealthMock: vi.fn(),
-  subscribeMock: vi.fn(async () => () => undefined),
+  subscribeMock: vi.fn(async (
+    listener: (status: { state: string; generation?: number }) => void,
+  ) => {
+    void listener;
+    return () => undefined;
+  }),
+  engineRuntimeState: {
+    generation: 1,
+    listener: null as ((status: { state: string; generation?: number }) => void) | null,
+  },
 }));
 
 vi.mock("../../lib/desktopHost", () => ({
@@ -29,7 +46,7 @@ vi.mock("../../lib/api/client", () => ({
   },
   waitForEngineConfig: waitForConfigMock,
   waitEngineHealth: waitForHealthMock,
-  getRuntimeSession: () => ({ generation: 1 }),
+  getRuntimeSession: () => ({ generation: engineRuntimeState.generation }),
   subscribeEngineState: subscribeMock,
 }));
 
@@ -45,6 +62,8 @@ afterEach(() => {
   waitForHealthMock.mockReset();
   subscribeMock.mockReset();
   subscribeMock.mockResolvedValue(() => undefined);
+  engineRuntimeState.generation = 1;
+  engineRuntimeState.listener = null;
 });
 
 describe("EngineStartupGate", () => {
@@ -66,6 +85,7 @@ describe("EngineStartupGate", () => {
     );
 
     expect(screen.getByText("正在启动 DBFox…")).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "正在启动 DBFox…" })).toBeTruthy();
     expect(screen.queryByText("Workspace ready")).toBeNull();
 
     await act(async () => {
@@ -76,7 +96,7 @@ describe("EngineStartupGate", () => {
     expect(await screen.findByText("Workspace ready")).toBeTruthy();
   });
 
-  it("shows the branded loading mark and a concise failure reason", async () => {
+  it("shows the branded Empty/Alert recovery composition and a concise failure reason", async () => {
     waitForConfigMock.mockRejectedValue(
       new ApiError("startup failed", 503, "ENGINE_STARTUP_FAILED"),
     );
@@ -87,12 +107,13 @@ describe("EngineStartupGate", () => {
       </EngineStartupGate>,
     );
 
-    expect(container.querySelector(".engine-startup-gate__mark img")?.getAttribute("src")).toBe(
+    expect(container.querySelector('[data-slot="empty-icon"] img')?.getAttribute("src")).toBe(
       "/assets/fox/png/fox-icon-app-transparent-512.png",
     );
     expect(await screen.findByText("DBFox 启动失败，请重试或查看诊断日志。")).toBeTruthy();
     expect(screen.getByRole("button", { name: "重试启动" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "打开诊断日志" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("DBFox 未能启动");
   });
 
   it("restarts the desktop engine and mounts children after retry succeeds", async () => {
@@ -113,6 +134,49 @@ describe("EngineStartupGate", () => {
 
     await waitFor(() => expect(restartMock).toHaveBeenCalledOnce());
     expect(await screen.findByText("Workspace ready")).toBeTruthy();
+  });
+
+  it("keeps the workspace mounted while a newer engine generation becomes healthy", async () => {
+    hostAvailableMock.mockReturnValue(true);
+    waitForConfigMock
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(async (options: { afterGeneration?: number }) => {
+        expect(options.afterGeneration).toBe(1);
+        engineRuntimeState.generation = 2;
+      });
+    waitForHealthMock.mockResolvedValue(undefined);
+    subscribeMock.mockImplementation(async (listener: (
+      status: { state: string; generation?: number },
+    ) => void) => {
+      engineRuntimeState.listener = listener;
+      return () => {
+        engineRuntimeState.listener = null;
+      };
+    });
+
+    render(
+      <EngineStartupGate>
+        <div>Workspace ready</div>
+      </EngineStartupGate>,
+    );
+
+    expect(await screen.findByText("Workspace ready")).toBeTruthy();
+    await waitFor(() => expect(engineRuntimeState.listener).not.toBeNull());
+
+    act(() => {
+      engineRuntimeState.listener?.({ state: "restarting", generation: 1 });
+    });
+    expect(screen.getByText("本地引擎意外退出，正在自动恢复…")).toBeTruthy();
+    expect(screen.getByText("Workspace ready")).toBeTruthy();
+
+    await act(async () => {
+      engineRuntimeState.listener?.({ state: "ready", generation: 2 });
+    });
+
+    await waitFor(() => expect(waitForConfigMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(waitForHealthMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText("本地引擎意外退出，正在自动恢复…")).toBeNull());
+    expect(screen.getByText("Workspace ready")).toBeTruthy();
   });
 
   it("opens the desktop diagnostic log directory from the failure state", async () => {

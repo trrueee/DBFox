@@ -26,4 +26,15 @@ describe("desktop CSP network boundary", () => {
     expect(csp).toContain("img-src 'self' data: https:");
     expect(csp).not.toMatch(/connect-src[^;]*https:/i);
   });
+
+  it("allows audited renderer attributes without permitting inline style elements", () => {
+    const directives = CONTENT_SECURITY_POLICY.split(";").map((item) => item.trim());
+
+    expect(directives).toContain("style-src 'self' dlc-asset:");
+    expect(directives).toContain("style-src-elem 'self' dlc-asset:");
+    expect(directives).toContain("style-src-attr 'unsafe-inline'");
+    expect(directives.find((item) => item.startsWith("style-src-elem "))).not.toContain(
+      "'unsafe-inline'",
+    );
+  });
 });

@@ -26,8 +26,8 @@ describe("dbfox.github packaged frontend", () => {
     expect(contributions.dockViews.map((item) => item.viewType)).toEqual([
       "dbfox.github.file",
     ]);
-    expect(contributions.artifactRenderers.map((item) => item.type)).toEqual([
-      "dbfox.github.file_snapshot",
+    expect(contributions.artifactViews.map((item) => item.id)).toEqual([
+      "dbfox.github.file",
     ]);
     expect(invokeOperation).not.toHaveBeenCalled();
     expect(openDockTab).not.toHaveBeenCalled();

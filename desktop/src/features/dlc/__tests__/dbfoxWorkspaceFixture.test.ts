@@ -34,12 +34,12 @@ describe("dbfox.workspace System DLC frontend fixture", () => {
     expect(contributions.dockViews.map((item) => item.viewType)).toEqual([
       "dbfox.workspace.file",
     ]);
-    expect(contributions.artifactRenderers.map((item) => item.type)).toEqual([
-      "dbfox.workspace.file_snapshot",
-      "dbfox.workspace.code_patch",
+    expect(contributions.artifactViews.map((item) => item.id)).toEqual([
+      "dbfox.workspace.file-snapshot",
+      "dbfox.workspace.code-patch",
     ]);
 
-    const snapshot = contributions.artifactRenderers[0];
+    const snapshot = contributions.artifactViews[0];
     expect(snapshot.parsePayload({
       relativePath: "src/main.py",
       sha256: "a".repeat(64),
