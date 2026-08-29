@@ -23,7 +23,7 @@ from dbfox_dlc_api import (
     ToolSemanticSpec,
 )
 
-from .artifact_contracts import RESULT_VIEW_ARTIFACT_TYPE, SQL_ARTIFACT_TYPE
+from .artifact_contracts import SNAPSHOT_ARTIFACT_TYPE, SQL_ARTIFACT_TYPE
 from .connection import DataConnectionBoundary
 from .database_selection import select_database
 from .query_identity import query_fingerprint
@@ -191,19 +191,19 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
         )
         sample = ArtifactDraft(
             key="sample",
-            type=RESULT_VIEW_ARTIFACT_TYPE,
+            type=SNAPSHOT_ARTIFACT_TYPE,
             title="数据样例",
             summary=f"抽样返回 {len(model_window.rows)} 行、{len(model_window.columns)} 列",
             payload={
+                "backend": "durable_snapshot",
                 "sourceSqlArtifactId": "",
                 "queryFingerprint": fingerprint,
                 "datasourceGeneration": resource_ref.version,
                 "columns": model_window.columns,
                 "rowCount": len(redacted_rows),
-                "returnedRows": len(redacted_rows),
-                "latencyMs": latency_ms,
-                "executedAt": datetime.now(UTC).isoformat(),
+                "capturedAt": datetime.now(UTC).isoformat(),
                 "truncated": result.truncated or model_window.truncated,
+                "redacted": bool(sensitive_columns),
                 "evidenceKind": "sample_rows",
             },
             payload_ref=result_ref,
@@ -270,7 +270,7 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
             (
                 artifact
                 for artifact in artifacts
-                if str(getattr(artifact, "type", "")) == RESULT_VIEW_ARTIFACT_TYPE
+                if str(getattr(artifact, "type", "")) == SNAPSHOT_ARTIFACT_TYPE
             ),
             None,
         )

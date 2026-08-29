@@ -1,0 +1,239 @@
+.product-sidebar__topline {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: var(--space-2);
+}
+
+.product-sidebar__title {
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-control);
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.product-sidebar__new-task {
+  margin-top: 2px;
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.product-sidebar__new-task [data-sidebar="menu-button-icon"] {
+  color: var(--color-primary);
+}
+
+.product-sidebar__status {
+  margin: 0;
+  padding: 6px var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
+  line-height: 16px;
+}
+
+.product-sidebar__alert {
+  margin: 2px 0;
+  padding: 6px var(--space-2);
+  font-size: var(--ui-font-micro);
+}
+
+.product-sidebar__alert [data-slot="alert-description"] {
+  font-size: var(--ui-font-micro);
+  line-height: 16px;
+}
+
+.product-sidebar--collapsed {
+  width: 48px;
+  align-items: center;
+}
+
+.product-sidebar--collapsed [data-sidebar="header"],
+.product-sidebar--collapsed [data-sidebar="footer"] {
+  width: 100%;
+  place-items: center;
+  padding-inline: 6px;
+}
+
+.product-sidebar__collapsed-action {
+  width: 36px;
+  height: 36px;
+}
+
+/* ── Project groups: 项目行 → 对话 + 资源 ── */
+
+.project-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.project-group__header {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.project-group__header [data-sidebar="menu-button"] {
+  flex: 1 1 auto;
+  padding-right: 30px;
+}
+
+.project-group__manage {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  width: 24px;
+  height: 24px;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition:
+    opacity var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+
+.project-group__header:hover .project-group__manage,
+.project-group__header:focus-within .project-group__manage {
+  opacity: 1;
+}
+
+.project-group__body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 4px;
+}
+
+/* Conversation rows keep the empty icon column so their text aligns with the
+   project label; no guide line, matching the ZCode-style flat alignment. */
+
+/* Nested resource container loses the top-level section spacing. */
+.project-group__body .resource-view-container {
+  margin-top: 2px;
+}
+
+.project-group__body .resource-view__header {
+  min-height: 28px;
+}
+
+.project-group__body .resource-view__body {
+  padding: 2px 0 var(--space-2) var(--space-3);
+}
+
+.project-group__empty {
+  margin: 0;
+  padding: 4px 6px 6px 24px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
+  line-height: 16px;
+}
+
+.project-group__more {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  align-items: center;
+  padding: 0 6px 0 32px;
+  border: 0;
+  border-radius: var(--radius-row);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-control);
+  text-align: left;
+  transition:
+    color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out);
+}
+
+.project-group__more:hover {
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.project-group__more:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.resource-view-container {
+  min-height: 0;
+}
+
+.resource-view-container {
+  min-height: 0;
+}
+
+.resource-view {
+  min-width: 0;
+}
+
+.resource-view__header {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 2px;
+}
+
+.resource-view__toggle {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  min-height: 28px;
+  padding: 0 var(--space-1);
+  text-align: left;
+}
+
+.resource-view__toggle:hover,
+.resource-view__toggle:focus-visible {
+  background: hsl(var(--sidebar-accent));
+  color: var(--color-text-primary);
+}
+
+.resource-view__toggle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.resource-view__chevron {
+  flex: 0 0 auto;
+  transition: transform var(--motion-fast);
+}
+
+.resource-view__toggle[aria-expanded="true"] .resource-view__chevron {
+  transform: rotate(90deg);
+}
+
+.resource-view__icon {
+  display: inline-grid;
+  width: 16px;
+  flex: 0 0 16px;
+  place-items: center;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
+}
+
+.resource-view__title {
+  overflow: hidden;
+  font-size: var(--ui-font-control);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-view__body {
+  min-width: 0;
+  padding: 2px 0 var(--space-1) var(--space-2);
+}

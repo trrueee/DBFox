@@ -1,0 +1,15 @@
+{
+  "manifestSchemaVersion": 2,
+  "id": "dbfox.visualization",
+  "version": "1.0.0",
+  "displayName": "DBFox Visualization",
+  "publisher": "dbfox",
+  "description": "Safe interactive visual explanations for any Artifact exposing a supported Representation.",
+  "extensionApiVersion": "2",
+  "requiresDbfox": ">=1.0.0",
+  "entrypoints": {
+    "backend": "backend/entry.py",
+    "frontend": "frontend/index.js"
+  },
+  "permissions": []
+}

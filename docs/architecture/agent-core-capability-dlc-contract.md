@@ -4,7 +4,7 @@
 >
 > 状态：已接受
 >
-> 最后核验：2026-08-24
+> 最后核验：2026-08-28
 >
 > 适用范围：Project、Conversation、Run authority、Resource Runtime、Capability DLC、Workbench resource/context composition
 >
@@ -265,7 +265,9 @@ sql_validate
 → sql_execute_readonly
 ```
 
-Catalog、backup/restore、completion、Data context、Data connector、SQL/Table/Result Dock 和 Chart renderer 均归 Data DLC。
+Catalog、backup/restore、completion、Data context、Data connector，以及 SQL/Table/Result 的 Artifact/View
+均归 Data DLC。声明式图形创建和 Visualization View 归独立 `dbfox.visualization`；它只消费公开
+Representation，不依赖 Data 私有服务。
 
 Completion 已先完成所有权切换：Kernel 只提供按 Tool semantic capability 聚合 Artifact 与要求
 inline citation 的通用原语，`RuntimeContributionSnapshot` 保存带 owner 的 constraint/support；
@@ -307,7 +309,7 @@ locator，由 Backend 在消息 admission 时校验。
 执行迁移的第一条垂直链已经完成：Catalog、Preview、SQL validate/execute 的输入使用显式
 `database_id` 选择 frozen `(kind,id)`；SQL validation Artifact 与审批能力都绑定完整
 `ResourceScopeRef`，不再只绑定一个整数 generation。Artifact envelope 新增通用
-`resource_refs_json`，写入时必须是 Run authority 的精确子集；Result/Chart 可据此在同一 Run
+`resource_refs_json`，写入时必须是 Run authority 的精确子集；Result/Visualization 可据此在同一 Run
 含多个数据库时恢复来源。Resource version 保持 `str | int` 原值，Core 不解析 Data DLC 的
 复合 generation，也不把它强转成整数。
 
@@ -425,31 +427,18 @@ executor 直接消费该单一规则源，不保留镜像 pattern list。Preview
 namespaced SQL → ResultView Artifact drafts，query fingerprint 同时绑定 ResourceRef、参数化 SQL 与
 canonical parameter fingerprint，因此不同 filter value 不会共享结果 identity。
 
-第九步已迁移耐久 Result inspect/profile/chart。`DataStateStore` schema v3 直接拥有
-`query_results / query_result_rows`；
-SQL execute 与 Preview 只把经过统一 serializer 上限处理的行写入 Data 私有状态，并把 opaque result id
-写入通用 `Artifact.payload_ref`。`result_inspect` v2 必须先通过 Core 的 exact current-Run Artifact loader
-读取 namespaced ResultView，再同时核对 Artifact type、唯一 Database `ResourceScopeRef`、Run authority、
-resource version、query fingerprint 与 result record。分页只读取本地稳定快照，不保留 SQL、连接参数或
-凭据，也绝不通过分页重新执行数据库查询；源数据库在执行后发生变化不会改变已有 Result Artifact。
-跨 DatabaseResource 复用 `payload_ref` 会 fail closed。`result_profile` 和 `chart_create` 只允许 analytical
-`query_result`，不会把 Preview 的 sample rows 误当作总体分析；两者读取同一份最多 500 行的稳定样本，
-Chart Artifact 继续以 `derived_from` 关系和完整 ResourceRef 绑定来源 Result Artifact。
+第九步已经收敛为 reference-only Result、显式 Snapshot 和通用 Representation。普通
+`dbfox.data.result_view` 保存已校验 SQL Artifact、ResourceRef、generation、指纹和有界执行摘要，不保存
+完整结果行；分页、筛选、排序、profile 和 export 通过 Data 的只读执行边界实时重查，返回
+`live_reexecution`。用户或 Agent 明确冻结值时才创建 `dbfox.data.snapshot`，其读取返回
+`durable_snapshot`。两者是不同 Artifact，不存在失败时静默回退。
 
-没有复用 legacy `ResultViewService.page()`，因为其合同明确是 `live_reexecution`，与 Artifact 表示不可变
-执行证据的语义冲突；也没有增加 Core ResultRepository 或 DLC service locator。这里复用的是已有
-Artifact `payload_ref`、Data SQLite 事实源、公共 strict JSON codec 和 Data-owned row serializer，新增的
-两张表位于真实的 durable payload 边界。当前存储最多承接一次执行已被 1000 rows / 2 MiB 边界截断的
-行集，不引入新的无界磁盘写入。统计与图表推断算法也已迁为 `dbfox.data` 的单一实现，legacy 默认
-composition 在退出前直接复用，未保留镜像算法；数值字符串通过有限 Decimal 解析，非有限值仍拒绝。
-Workbench Artifact page/export/chart-data 现已切换到同一 payload 后端。Kernel 新增的是通用、只读的
-`ArtifactTableViewProvider / ArtifactChartViewProvider` contribution seam：Core API 只加载不可变 Artifact
-envelope、校验 `derived_from` 的同 Session source，并按 Artifact type 从 frozen Runtime snapshot 分派；
-Data DLC 独占行过滤、稳定排序、搜索、CSV spreadsheet-formula escaping 与 chart series 构建。这里没有
-通过 DLC operation 让前端回传可伪造的 payload descriptor，也没有让 Core import Data store。不存在
-无 `payload_ref` 时回放 SQL 的 fallback；旧 flat Result Artifact 明确 fail closed。API consistency 现在返回
-`durable_snapshot`，桌面端以轻量“耐久快照”标识替代“实时重查”。只有用户主动浏览当前 catalog table 的
-table-result 路由继续使用 live query；它不是历史 Artifact 读取合同。
+Core 只实现 `ArtifactRepresentationContribution` 的发现、JSON read、stream、预算、错误和 frozen Runtime
+snapshot 分派；公共第一种合同是 `dbfox.dataframe.v1`。Data 独占 SQL、generation fence、字段和操作符
+校验、稳定排序、筛选、CSV spreadsheet-formula escaping 与查询取消。Core 不保存 Data rows，不提供
+`/page`、`/chart-data` 或 chart-specific Provider。独立 `dbfox.visualization` 通过公开 Representation 读取
+兼容 Artifact，生成带 `derived_from` 血缘的 Visualization Artifact；Data 不再注册 `chart_create`。
+历史 `dbfox.data.chart` 仅由 Visualization DLC 精确只读渲染，不能创建或成为新依赖。
 
 第十步已建立 Data-owned Backup/Restore 的第一条安全垂直链。`DataStateStore` schema v4 直接拥有
 `backups / restore_operations`，备份 payload 只写入 DLC 私有 data path；记录保存相对 file name、SHA-256、
@@ -626,9 +615,9 @@ points 的 Host-owned Workbench 原则，但不引入完整 IDE framework。
 
 - `dbfox.data`、`dbfox.workspace` 与 `dbfox.music` 均以签名 System DLC 默认启用；Kernel-only 启动仅是包不可用时的明确 fail-closed 状态，不会注册领域 fallback。
 - Core HTTP 不再注册 DataSource、Schema、Query、Backup 业务路由；Data Workbench 通过 typed DLC operations 和 Artifact views 工作。
-- Alembic `e2f3a4b5c6d8` 将历史 Connection/DataSource identity 与 opaque credential refs 幂等导入 `dbfox.data/state.sqlite3`，验证后删除 Core Data 表和 Data FTS；当前 head `f3a4b5c6d7e9` 又移除最后的 Run/Data compatibility columns。Catalog、history 与 result rows 是 capability-owned 领域状态，不在 Core 保留镜像。
+- Alembic `e2f3a4b5c6d8` 将历史 Connection/DataSource identity 与 opaque credential refs 幂等导入 `dbfox.data/state.sqlite3`，验证后删除 Core Data 表和 Data FTS；当前 head `f3a4b5c6d7e9` 又移除最后的 Run/Data compatibility columns。Catalog 与显式 Snapshot 是 capability-owned 领域状态；普通 Result rows 不进入 Core 或 Data 元数据存储。
 - Project 当前模型只保留 identity/metadata；Conversation 只保留 Project 归属和 generic resource intent；Run 只从 frozen refs 获得权限。
-- Data Connector 以 `ConnectionProfile → DatabaseResource → provider objects` 展示资源；左侧 focus 与 Composer context selection 是两个独立状态。
+- Data Connector 以 `ConnectionProfile → DatabaseResource → provider objects` 展示资源；左侧 focus 只导航，Workbench Reference 才把对象与 locator 交给 Composer。
 - Dock collapsed state 使用独立 rail layout，不压缩 expanded tab strip；Composer 与 Conversation content column 共用版心，不作为 footer panel。
 - 迁移没有引入新依赖、双写、通用 `ProjectResourceBinding(config_json)`、service locator 或 Data 兼容 API；SQLite/Alembic、现有 DLC verifier/compiler、Credential Broker、Tool Runtime 与 Artifact envelope 被直接复用。
 
@@ -637,11 +626,11 @@ points 的 Host-owned Workbench 原则，但不引入完整 IDE framework。
 | 阶段 | 状态 | 新事实 | 旧事实删除条件 |
 | --- | --- | --- | --- |
 | A | 已完成 | ResourceKey + multi-resource Tool context | 所有内置工具和 bundled DLC 不再调用单值 `require_resource(kind)` |
-| B | 已完成 | ConversationResourceIntent + Composer Context Host | 前端不再调用 requested-resource contributors；浏览资源不改变 Run refs |
+| B | 已完成 | typed Workbench Reference + backend-derived initial explicit authority | 手工 `contextSelection`/`composerContext` Host 和 stores 已删除；浏览资源不改变 Input/Invocation authority |
 | C | 已完成 | Session/Run 只从 frozen refs 工作；Conversation API/UI 已删除 datasource/table context 合同；`agent_sessions.datasource_id/context_tables_json` 已物理删除 | 无 |
 | D | 已完成 | Project v2 + Workspace DLC binding；`projects.workspace_root` 已物理删除 | 无 |
-| E | 已完成 | ConnectionProfile + DatabaseResource、显式多数据库 Tool selection、generic Tool Admission、Artifact/approval ResourceRef fence、System Data `sql_validate → sql_execute_readonly`、Database-scoped Catalog、结构化/遮罩 Preview、不重执行 SQL 的耐久 result inspect/profile/chart、Workbench Result page/export/chart-data，以及 SQLite online backup + isolated restore | 旧 DataSource HTTP/Workbench 管理面、Core Data tables 与源码开发 fallback 已删除；网络 backup 未在官方 client 固定前不以私有 dump format 扩大范围 |
-| F | 已完成 | Frozen Sidecar 已内嵌官方 publisher key 与 Data/Workspace exact package pins；Electron Resources 只承载包字节，启动走 verify → content-addressed install → selected snapshot；Data/Workspace 均默认启用 | 无 |
+| E | 已完成 | ConnectionProfile + DatabaseResource、显式多数据库 Tool selection、generic Tool Admission、Artifact/approval ResourceRef fence、System Data `sql_validate → sql_execute_readonly`、Database-scoped Catalog、结构化/遮罩 Preview、reference-only Result、显式 Snapshot、`dbfox.dataframe.v1` Representation，以及 SQLite online backup + isolated restore | 旧 DataSource HTTP/Workbench 管理面、Core Data tables、旧 Artifact page/chart-data API 与源码开发 fallback 已删除；网络 backup 未在官方 client 固定前不以私有 dump format 扩大范围 |
+| F | 已完成 | Frozen Sidecar 已内嵌官方 publisher key 与 Data/Workspace exact package pins；Electron Resources 只承载包字节，启动走 verify → content-addressed install → selected snapshot；源码开发 bundle 使用内容指纹 prerelease version 并有界轮换旧开发 package bytes；Data/Workspace 均默认启用 | 无 |
 | G | 已完成 | Conversation legacy API、implicit datasource authority fallback、Session 历史物理列、Core Data tables 与 `projects.workspace_root` 已删除 | 无 |
 
 临时兼容代码只能存在于明确阶段，必须有调用量或 characterization test，不承载新业务逻辑，也不能被新模块依赖。

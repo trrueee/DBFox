@@ -809,13 +809,13 @@ sendToAi(datasourceId, payload):   // payload 见 §11：SQL / ERROR / Result �
 | --- | --- | --- | --- |
 | 设计令牌 | 新建设计系统 vs 扩展现有 `styles/tokens.css` | 扩展 `tokens.css`（控制台青、on-danger、图标/间距/动效、tabular-nums）；已废弃的 `--dbbrand-*`、`--motion-normal`、`--color-console-accent-soft` 随方案变更移除 | 新系统会形成第二份事实源 |
 | Skeleton | Radix 无此组件；`react-loading-skeleton` 等第三方 | 自研约 30 行 CSS + `<span>`（`components/ui/state.tsx`） | 纯视觉占位；引入依赖不划算；受 CSP 与测试约束 |
-| 分段切换器 | 新建 WorkspaceSwitcher 组件 vs 改造真实 `WorkspaceTabs` | 改造真实 `WorkspaceTabs`：胶囊分段形态、核心三模式 accent、Ctrl+1/2/3 快捷键提示，保留全部 tab 类型与关闭能力 | 真实 tab 模型承载多类型工作流，平行切换组件会造成双轨导航；CSP（`style-src-attr 'none'`）禁止内联 style，故不用 JS 测量滑动滑块 |
+| 分段切换器 | 新建 WorkspaceSwitcher 组件 vs 改造真实 `WorkspaceTabs` | 改造真实 `WorkspaceTabs`：胶囊分段形态、核心三模式 accent、Ctrl+1/2/3 快捷键提示，保留全部 tab 类型与关闭能力 | 真实 tab 模型承载多类型工作流，平行切换组件会造成双轨导航；应用 UI 合同禁止任意内联 layout，故不用 JS 测量滑动滑块 |
 | 数据库图标 | simple-icons 包；官方商标文件 | 官方品牌标识路径内联（CC0，`features/datasource/databaseBrandData.ts` + `DatabaseBrandIcon.tsx`），中性浅底块 + 官方品牌色 | 4 个字形不值得引入 MB 级依赖；渐变方块 + 字母缩写方案被评审否决 |
 | SQL Console 视觉 | 样板新写 ConsoleTranscript vs 改造真实 `SqlConsoleWorkspace` | 改造真实 `SqlConsoleWorkspace`：prompt 跟随库类型、错误内联、结果表格唯一盒形容器、等宽数字、控制台青光标；执行链路 / CodeMirror / TableArtifactView 不动 | 复用现有渲染与状态，避免第二套控制台 |
 | 持久 Console | 每次新建 sql-N tab vs 每项目一个持久 Session | `workspaceStore.openSqlConsole` 按 datasourceId 复用同一 tab 与 entries；未绑定临时控制台保留顺序编号 | 本基线要求「每个数据源一个持久 Console」；沿用现有 tab/state 模型做最小语义演进 |
 | 侧栏项目卡 | 新写侧栏组件 vs 改造真实 `DataSourceTree` | 项目卡列表取代单选下拉（激活项展开「对话/数据」视图）；默认「数据」保持树优先工作流；「新建对话」复用问数首页入口 | 不新增第二层导航容器；对话创建需真实提问，直接建空对话会污染数据 |
 | 顶栏项目标识 | 新加 Header 组件 vs 扩展 App tabbar | 在现有 tabbar 左侧加入项目标识（品牌图标 + 名称 + 状态点） | 不引入平行导航层 |
 | 核心模式快捷键 | 各组件自理 vs App 全局注册 | App 全局 keydown 注册 Ctrl+1/2/3；Tab 上 hover 淡入 kbd 提示（aria-hidden） | 快捷键是应用级合同，集中注册避免冲突 |
-| 对话区表面 | 真实 `conversationWorkspace.css` 约定 | 白色 `--agent-surface` 根背景、用户气泡 `--agent-user-bg`；SQL 卡动作沿用真实 `SqlArtifactView`（复制/发送到控制台） | 与真实产品一致，不另起第二套配色 |
+| 对话区表面 | 真实 `conversationWorkspace.css` 约定 | 白色 `--agent-surface` 根背景、用户气泡 `--agent-user-bg`；SQL 工件由 Data DLC 组合 Host `CodeArtifact`（复制/下载） | 与真实产品一致，不另起第二套配色 |
 
 已知偏差与后续项：侧栏快速导航（智能问数/对话历史/数据源管理）暂保留作为次级入口，待命令面板与顶栏完全覆盖后按 §21 移除；「发送到控制台」后自动聚焦 Live Prompt 与「控制台 hover 分组高亮」列入后续打磨。

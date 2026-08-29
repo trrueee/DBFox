@@ -7,9 +7,9 @@ import type {
 import type { ResourceConnectorContribution, ConnectorContext } from "../resources/types";
 import type { DockViewContribution, DockRenderContext, DockViewContext } from "../dock/types";
 import type {
-  ArtifactRendererContribution,
+  ArtifactViewContribution,
   ArtifactEnvelope,
-  ArtifactRendererContext,
+  ArtifactViewContext,
 } from "../workspace/artifacts/types";
 import { DlcErrorBoundary } from "./DlcErrorBoundary";
 import type { WorkspaceDockTab } from "../../types/workspace";
@@ -20,11 +20,14 @@ import {
   readDesktopPickedFile,
 } from "../../lib/desktopHost";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { Tree } from "../../components/ui";
+import { CodeArtifactView } from "../workspace/artifacts/CodeArtifactView";
 import type { DlcOperationInvokeOptions } from "./types";
 import type {
   CredentialEnrollmentBatchResult,
   CredentialEnrollmentInput,
-} from "../../../../sdk/frontend/index";
+} from "./types";
+import "./extension-host.css";
 
 /**
  * Ensures global SDK object is mounted on window for dynamic DLC scripts.
@@ -143,8 +146,20 @@ const DEFAULT_EXTENSION_HOST_SERVICES: ExtensionHostServices = {
   enrollCredentials: enrollBoundDlcCredentials,
 };
 
-function DlcRenderCallback({ render }: { render: () => React.ReactNode }) {
-  return <>{render()}</>;
+function DlcRenderCallback({
+  render,
+  dlcId,
+  surface,
+}: {
+  render: () => React.ReactNode;
+  dlcId: string;
+  surface: "connector" | "dock" | "artifact";
+}) {
+  return (
+    <div className={`dlc-slot dlc-slot--${surface}`} data-dlc-id={dlcId}>
+      {render()}
+    </div>
+  );
 }
 
 function reportCallbackFailure(dlcId: string, callback: string, error: unknown): void {
@@ -162,15 +177,36 @@ export function createStagedExtensionHost(
 ): StagedExtensionHostResult {
   const connectors: ResourceConnectorContribution[] = [];
   const dockViews: DockViewContribution[] = [];
-  const artifactRenderers: ArtifactRendererContribution<unknown>[] = [];
+  const artifactViews: ArtifactViewContribution<unknown>[] = [];
+  const connectorIds = new Set<string>();
+  const dockViewTypes = new Set<string>();
+  const artifactViewIds = new Set<string>();
+
+  const admitOwnedId = (id: string, kind: string, registered: Set<string>): void => {
+    if (id !== dlcId && !id.startsWith(`${dlcId}.`)) {
+      throw new Error(
+        `[DLC ${dlcId}] ${kind} id "${id}" must be owned by namespace "${dlcId}"`,
+      );
+    }
+    if (registered.has(id)) {
+      throw new Error(`[DLC ${dlcId}] Duplicate ${kind} id "${id}"`);
+    }
+    registered.add(id);
+  };
 
   const host: FrontendExtensionHost = {
     dlcId,
+    ui: {
+      version: "1.0.0",
+      Tree,
+      CodeArtifact: CodeArtifactView,
+    },
     connectors: {
       register(contribution: ResourceConnectorContribution): void {
         if (!contribution || typeof contribution.id !== "string" || !contribution.id.trim()) {
           throw new Error(`[DLC ${dlcId}] Invalid connector registration: missing valid id`);
         }
+        admitOwnedId(contribution.id, "connector", connectorIds);
         const safeContribution: ResourceConnectorContribution = {
           ...contribution,
           render(context: ConnectorContext) {
@@ -179,6 +215,8 @@ export function createStagedExtensionHost(
               { dlcId, componentName: `connector:${contribution.id}` },
               React.createElement(DlcRenderCallback, {
                 render: () => contribution.render(context),
+                dlcId,
+                surface: "connector",
               }),
             );
           },
@@ -188,6 +226,26 @@ export function createStagedExtensionHost(
                 await contribution.onAdd?.(context);
               } catch (error) {
                 reportCallbackFailure(dlcId, `connector:${contribution.id}:onAdd`, error);
+                throw error;
+              }
+            }
+            : undefined,
+          listResources: contribution.listResources
+            ? async (context: ConnectorContext) => {
+              try {
+                return (await contribution.listResources?.(context)) ?? [];
+              } catch (error) {
+                reportCallbackFailure(dlcId, `connector:${contribution.id}:listResources`, error);
+                throw error;
+              }
+            }
+            : undefined,
+          removeResource: contribution.removeResource
+            ? async (context: ConnectorContext, resource) => {
+              try {
+                await contribution.removeResource?.(context, resource);
+              } catch (error) {
+                reportCallbackFailure(dlcId, `connector:${contribution.id}:removeResource`, error);
                 throw error;
               }
             }
@@ -223,6 +281,7 @@ export function createStagedExtensionHost(
         ) {
           throw new Error(`[DLC ${dlcId}] Invalid dock view registration: missing valid viewType`);
         }
+        admitOwnedId(contribution.viewType, "dock view", dockViewTypes);
         const safeContribution: DockViewContribution = {
           ...contribution,
           icon(view: WorkspaceDockTab) {
@@ -255,6 +314,8 @@ export function createStagedExtensionHost(
               { dlcId, componentName: `dockView:${contribution.viewType}` },
               React.createElement(DlcRenderCallback, {
                 render: () => contribution.render(view, context),
+                dlcId,
+                surface: "dock",
               }),
             );
           },
@@ -275,26 +336,36 @@ export function createStagedExtensionHost(
         return useWorkspaceStore.getState().ensureActiveWorkbenchScope();
       },
     },
-    artifactRenderers: {
-      register(contribution: ArtifactRendererContribution<unknown>): void {
-        if (!contribution || typeof contribution.type !== "string" || !contribution.type.trim()) {
+    artifactViews: {
+      register(contribution: ArtifactViewContribution<unknown>): void {
+        if (!contribution || typeof contribution.id !== "string" || !contribution.id.trim()) {
           throw new Error(
-            `[DLC ${dlcId}] Invalid artifact renderer registration: missing valid type`,
+            `[DLC ${dlcId}] Invalid Artifact View registration: missing valid id`,
           );
         }
-        const safeContribution: ArtifactRendererContribution<unknown> = {
+        admitOwnedId(contribution.id, "Artifact View", artifactViewIds);
+        if (!contribution.artifactTypes?.length && !contribution.representationTypes?.length) {
+          throw new Error(`[DLC ${dlcId}] Invalid Artifact View registration: missing selector`);
+        }
+        const safeContribution: ArtifactViewContribution<unknown> = {
           ...contribution,
-          render(artifact: ArtifactEnvelope<unknown>, context: ArtifactRendererContext) {
+          render(
+            artifact: ArtifactEnvelope<unknown>,
+            payload: unknown,
+            context: ArtifactViewContext,
+          ) {
             return React.createElement(
               DlcErrorBoundary,
-              { dlcId, componentName: `artifactRenderer:${contribution.type}` },
+              { dlcId, componentName: `artifactView:${contribution.id}` },
               React.createElement(DlcRenderCallback, {
-                render: () => contribution.render(artifact, context),
+                render: () => contribution.render(artifact, payload, context),
+                dlcId,
+                surface: "artifact",
               }),
             );
           },
         };
-        artifactRenderers.push(safeContribution);
+        artifactViews.push(safeContribution);
       },
     },
     operations: {
@@ -319,7 +390,7 @@ export function createStagedExtensionHost(
       return {
         connectors: Object.freeze([...connectors]),
         dockViews: Object.freeze([...dockViews]),
-        artifactRenderers: Object.freeze([...artifactRenderers]),
+        artifactViews: Object.freeze([...artifactViews]),
       };
     },
   };

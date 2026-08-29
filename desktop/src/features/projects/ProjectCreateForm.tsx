@@ -1,6 +1,15 @@
 import { useState, type FormEvent } from "react";
-import { FolderPlus } from "lucide-react";
-import { Button, Input } from "../../components/ui";
+import { AlertCircle, FolderPlus } from "lucide-react";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
+  ErrorDetails,
+  Field,
+  FieldLabel,
+  Input,
+} from "../../components/ui";
 import { useProjectState } from "./useProjectState";
 import { getUserErrorMessage } from "../../lib/api/client";
 import "./ProjectCreateForm.css";
@@ -14,18 +23,20 @@ export function ProjectCreateForm({ onCreated, onCancel }: ProjectCreateFormProp
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [validationError, setValidationError] = useState("");
+  const [submitError, setSubmitError] = useState<unknown | null>(null);
   const { createProject } = useProjectState("");
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) {
-      setError("项目名称不能为空。");
+      setValidationError("项目名称不能为空。");
       return;
     }
     setSubmitting(true);
-    setError("");
+    setValidationError("");
+    setSubmitError(null);
     try {
       const project = await createProject({
         name: trimmedName,
@@ -33,7 +44,7 @@ export function ProjectCreateForm({ onCreated, onCancel }: ProjectCreateFormProp
       });
       onCreated(project.id);
     } catch (submitError) {
-      setError(getUserErrorMessage(submitError, "创建项目失败，请重试。"));
+      setSubmitError(submitError);
     } finally {
       setSubmitting(false);
     }
@@ -41,28 +52,48 @@ export function ProjectCreateForm({ onCreated, onCancel }: ProjectCreateFormProp
 
   return (
     <form className="project-create__form" onSubmit={(event) => void handleSubmit(event)}>
-      <label className="project-create__field">
-        <span className="project-create__label">项目名称</span>
+      <Field className="project-create__field" data-invalid={Boolean(validationError)}>
+        <FieldLabel htmlFor="project-create-name" className="project-create__label">项目名称</FieldLabel>
         <Input
+          id="project-create-name"
           autoFocus
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            setName(event.target.value);
+            if (validationError) setValidationError("");
+          }}
           placeholder="例如：电商经营分析"
           maxLength={128}
           disabled={submitting}
+          aria-invalid={Boolean(validationError)}
         />
-      </label>
-      <label className="project-create__field">
-        <span className="project-create__label">项目描述（可选）</span>
+      </Field>
+      <Field className="project-create__field">
+        <FieldLabel htmlFor="project-create-description" className="project-create__label">项目描述（可选）</FieldLabel>
         <Input
+          id="project-create-description"
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           placeholder="这个项目主要分析什么？"
           maxLength={2_000}
           disabled={submitting}
         />
-      </label>
-      {error ? <div className="project-create__error" role="alert">{error}</div> : null}
+      </Field>
+      {validationError ? (
+        <Alert className="project-create__error" variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription>{validationError}</AlertDescription>
+        </Alert>
+      ) : submitError ? (
+        <Alert className="project-create__error" variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertTitle>创建项目失败</AlertTitle>
+          <AlertDescription>
+            <p>{getUserErrorMessage(submitError, "创建项目失败，请重试。")}</p>
+            <ErrorDetails error={submitError} />
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className="project-create__actions">
         <Button type="button" variant="ghost" onClick={onCancel} disabled={submitting}>
           取消

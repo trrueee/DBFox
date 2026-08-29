@@ -23,11 +23,6 @@
 }
 
 .project-create__error {
-  border: 1px solid var(--trust-danger-border);
-  border-radius: var(--radius-control);
-  background: var(--trust-danger-bg);
-  color: var(--trust-danger);
-  font-size: var(--ui-font-control);
   padding: 8px 10px;
 }
 

@@ -4,9 +4,9 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-24
+> 最后核验：2026-08-28
 >
-> 代码边界：`dlcs/dbfox_data/`、`engine/agent/artifact_view.py`、`engine/api/agent_results.py`
+> 代码边界：`dlcs/dbfox_data/`、`engine/representation.py`、`engine/api/agent_results.py`
 
 ## 1. 所有权
 
@@ -42,16 +42,31 @@ model SQL
 
 `sql_validate` 使用 Data DLC 的 SQLGlot parser、bound-parameter fingerprint、只读 guardrail 和 provider-specific EXPLAIN/permission probe。执行端只接受验证 Artifact，不接受原始模型 SQL。跨数据库语法是否可用由具体 Data provider 决定，Core 只知道多个 `(kind, id)` 资源已被授权。
 
-## 4. 结果与 Artifact View
+## 4. Result、Snapshot 与 Representation
 
-完整结果保留在 Data DLC 的 durable result store，模型只拿有界 Observation/Artifact 摘要。Core 的 Artifact View API 按 active Runtime snapshot 调用 capability provider，并返回通用字段：
+普通 `dbfox.data.result_view` 是 reference-only Artifact。它保存已经校验的 SQL Artifact、绑定参数、数据库
+ResourceRef、generation、查询指纹、原始观察时间和有界摘要，不把完整结果行复制进 Core 或 Data 元数据
+库。打开表格、筛选、排序、profile 或导出时，Data DLC 在同一只读安全链上实时重执行来源查询。
 
-- `resourceVersion`：产生结果时冻结的资源版本；
-- `sourceFingerprint`：capability 提供的来源指纹；
-- `consistency`：当前只接受 `durable_snapshot`；
-- columns、rows、pagination 和 export locator 等通用 view envelope。
+用户或 Agent 明确要求冻结值时，Data DLC 创建独立的 `dbfox.data.snapshot` Artifact。Snapshot 才拥有
+耐久值，读取时返回 `durable_snapshot`；普通 Result 返回 `live_reexecution`。来源 generation 或指纹变化
+时读取必须 fail closed，不能静默改读旧 rows，也不能把快照当作 Result 的 fallback。
 
-Data 内部仍可使用 `queryFingerprint` 等领域字段，但只能在 Data → Core view 这一条真实边界单向映射；Core ORM、Evidence 和 API 不保存 Data 专用副本。分页、profile、chart 和 export 都读取已保存结果，不重新执行 SQL。
+Core 只提供通用 Representation（同一 Artifact 的按需结构化表示）路由：
+
+```text
+GET  /api/v1/artifacts/{artifactId}/representations
+POST /api/v1/artifacts/{artifactId}/representations/{representationType}/read
+POST /api/v1/artifacts/{artifactId}/representations/{representationType}/stream
+```
+
+Data 为 Result 和 Snapshot 提供公共 `dbfox.dataframe.v1`。分页、排序、筛选、计数和 CSV 导出由同一
+Provider 处理；返回值包含 `source_version`、`source_fingerprint`、`original_observed_at`、`read_at`、
+`read_id`、`warnings` 和 `notices`。Core 不理解 SQL、列或 DataFrame，也不提供 `/page`、`/chart-data`
+等领域特例。
+
+模型只接收有界 Tool Observation 和 Artifact 引用。需要查看更多值时，通过 Data Tool 或
+Representation 读取；Conversation、RunItem、Evidence 和前端 Store 都不保存完整 Result rows。
 
 ## 5. 备份、凭据与生命周期
 
@@ -68,10 +83,10 @@ Data 内部仍可使用 `queryFingerprint` 等领域字段，但只能在 Data �
 | connection/resource | `connection.py`、`database_selection.py`、`resource_kind.py` |
 | Catalog | `catalog_reflection.py`、`catalog_tools.py`、`inventory.py` |
 | validation/execution | `tools.py`、`sql_admission.py`、`backend/sql/` |
-| durable result/view | `result_tool.py`、`result_view.py`、`result_analysis.py` |
+| Result/Snapshot 与 DataFrame | `result_tool.py`、`result_view.py`、`result_analysis.py`、`backend/sql/sql_backed_view.py` |
 | backup | `backup.py` |
 | Workbench | `workbench.py`、`frontend/` |
-| generic view dispatch | `engine/api/agent_results.py` |
+| generic Representation dispatch | `engine/representation.py`、`engine/api/agent_results.py` |
 
 ## 7. 验证
 

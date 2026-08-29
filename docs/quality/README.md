@@ -4,16 +4,18 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-24
+> 最后核验：2026-08-28
 
 ## 当前整改
 
+- [Artifact、Visualization 与 Dock 重构证据](./2026-08-28-artifact-visualization-dock-refactor.md)：记录正文 Artifact 编排、Representation、SQL Backend、独立 Visualization DLC、View/Tab/Dock 边界、成熟组件采用和聚焦验证结果。
 - [Agent Core、Capability DLC 与 Workbench 深度质量评审](./2026-08-22-agent-core-dlc-workbench-review.md)：记录 Resource authority、多同类资源、Project/Data/Workspace 边界，以及 Dock、Sidebar、Composer 的证据、复用决策和安全施工顺序。
 - [Agent 长任务收尾与证据呈现整改方案](2026-08-15-long-run-evidence-remediation.md)：修复跨 Run Result 引用、硬预算前收尾、受限部分结果和 Evidence/来源呈现。
 - [2026-08-14 系统级工程审查整改计划](2026-08-14-system-review-remediation.md)：记录当前 P1/P2 修复设计、验收标准和 P3 反证核验清单。
 
 - [工程质量门禁](./engineering-gates.md)：本地与 CI 的 Python、前端、Electron Host、迁移、Frozen Sidecar 和依赖策略。
 - [技术调研、方案复用与架构克制](./technical-investigation-and-reuse.md)：实现前先调查、复用优先、避免堆叠中间层、兼容层可退出和决策依据要求。
+- [UI 设计与开发规范](./ui-design-and-development.md)：已完成市场驱动重构后的成熟组件直接采用、替换、视觉所有权和验证规则。
 - [R5.2 GitHub DLC 数据迁移证据](./2026-08-21-r5-github-data-migration.md)：一次性导入、失败保留、幂等重放，以及迁移后 DLC SQLite 唯一读写权威。
 - [R5.3 GitHub Core 运行图移除证据](./2026-08-21-r5-github-core-removal.md)：删除静态 API、ORM、运行时与前端组合，同时保留历史 Alembic 升级能力。
 - [R5.4 GitHub 完整外置 Conformance 证据](./2026-08-21-r5-github-conformance.md)：真实 `dbfox.github` 包的 absence、restart activation/deactivation、数据与 ToolAttempt 身份保留，以及三平台 frozen release 合同。

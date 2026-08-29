@@ -2,7 +2,7 @@
 
 > 文档类型：架构决定与实现合同
 > 状态：已接受
-> 最后核验：2026-08-14
+> 最后核验：2026-08-28
 > 适用范围：Agent Session、Run、Turn、工具、上下文预算、会话档案、工作记忆、历史查找、部分完成与恢复
 
 ## 1. 目标
@@ -262,11 +262,12 @@ Plan objective / summary / steps
 
 该投影是背景，不是自动继续指令。当前用户请求始终拥有更高优先级。
 
-Result Artifact 不因跨 Run 复用而复制。`result_inspect`、`result_profile` 和
-`chart_create` 只能读取同一 Session、同一 datasource generation、来自更早终态
-Run 的 Result Artifact。工具在当前 Run 的 Observation 中记录被引用的 Artifact
-ID；Terminalizer 仅允许这些已观察引用形成当前回答的 Evidence。SQL Validation
-Artifact 和执行授权仍限定在其原 Run，不能跨 Run 重放。
+Result Artifact 不因跨 Run 复用而复制。Data 的 `result_inspect`、`result_profile` 与独立
+Visualization DLC 的 `visualization_create` 只能读取当前 Run 可观察、同一 Session 且仍满足 Resource
+generation 约束的 Artifact。工具在当前 Run 的 Observation 中记录被引用的 Artifact ID；Terminalizer
+仅允许这些已观察引用形成当前回答的 Evidence 或块级 Artifact embed。SQL Validation Artifact 和执行
+授权仍限定在其原 Run，不能跨 Run 重放。Visualization 也可以使用有界的 `model_knowledge` 或
+`user_provided` 数据集，但必须明确事实来源，不能伪装成数据库 Evidence。
 
 `PreviousRunOutcome` 是冻结的 Pydantic 边界模型，`extra="forbid"`。新增字段必须同时修改类型、投影和测试，不能把任意 `result_json` 直接透传给模型。
 
@@ -368,7 +369,7 @@ Artifact 和执行授权仍限定在其原 Run，不能跨 Run 重放。
 
 ```text
 SQL Artifact -> Result Artifact -> 有界 Observation -> Provider output
-                         └-------> Result Gateway 按 ID 回源
+                         └-------> DataFrame Representation 按 ID 回源
 ```
 
 Core Artifact/Evidence 禁止镜像 `rows`、Data fingerprint 或其他 capability payload。当前 Run 可使用瞬时有界 provider payload；恢复或新 Run 需要值时通过 Artifact ID 和当前 snapshot 的 provider 再读取。
@@ -464,7 +465,7 @@ Run；相同工具输入和相同查询指纹的重复次数受独立门禁约�
 10. worker 崩溃后恢复时继续原预算和 fencing token。
 11. 数据源 generation 改变后旧 Artifact 工作集和 Evidence 不进入上下文。
 12. Prompt 超预算时先移除旧完整 Turn，当前请求和系统策略保留。
-13. 大结果行只存在于瞬时有界 payload 或 Result Gateway，不进入耐久控制面。
+13. 大结果行只存在于瞬时有界 payload 或 DataFrame Representation response，不进入耐久控制面。
 14. Memory 更新与 Answer、Evidence 和 Run completion 原子提交。
 15. 删除 Session 后，Message、Memory、FTS 投影和相关运行记录按合同删除或不可访问。
 16. 已完成 Run 的 Result Artifact 可由下一 Run 读取，但跨 Session、跨 generation、未来 Run 或未终态 Run 均拒绝。

@@ -1,14 +1,21 @@
 .dbfox-github {
   display: grid;
   gap: 10px;
-  color: var(--text-primary, #e5e7eb);
-  font-size: 12px;
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-github__bindings,
 .dbfox-github__files {
   display: grid;
   gap: 4px;
+}
+
+.dbfox-github__binding-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 2px;
 }
 
 .dbfox-github__binding,
@@ -30,18 +37,32 @@
 .dbfox-github__binding.is-active,
 .dbfox-github__file:hover,
 .dbfox-github__up:hover {
-  border-color: var(--border-subtle, #374151);
-  background: var(--surface-hover, #1f2937);
+  border-color: var(--line-subtle);
+  background: var(--control-bg-hover);
 }
 
 .dbfox-github__binding small {
   margin-left: auto;
-  color: var(--text-muted, #9ca3af);
+  color: var(--color-text-muted);
 }
 
 .dbfox-github__remove {
-  padding: 0 3px;
-  color: var(--text-muted, #9ca3af);
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.dbfox-github__remove:hover {
+  border-color: var(--line-subtle);
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
 }
 
 .dbfox-github__form {
@@ -51,15 +72,15 @@
 
 .dbfox-github__form input,
 .dbfox-github__form button {
-  border: 1px solid var(--border-subtle, #374151);
+  border: 1px solid var(--line-subtle);
   border-radius: 6px;
-  background: var(--surface-raised, #111827);
+  background: var(--surface-raised);
   color: inherit;
   padding: 7px 8px;
 }
 
 .dbfox-github__error {
-  color: var(--danger, #f87171);
+  color: var(--color-danger);
 }
 
 .dbfox-github-file {
@@ -73,12 +94,12 @@
   display: grid;
   gap: 4px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border-subtle, #374151);
+  border-bottom: 1px solid var(--line-subtle);
 }
 
 .dbfox-github-file header span,
 .dbfox-github-artifact small {
-  color: var(--text-muted, #9ca3af);
+  color: var(--color-text-muted);
 }
 
 .dbfox-github-file pre {

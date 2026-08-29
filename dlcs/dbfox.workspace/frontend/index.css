@@ -4,27 +4,27 @@
   display: grid;
   gap: 6px;
   min-width: 0;
-  color: var(--text-primary);
-  font-size: 12px;
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-caption);
 }
 .dbfox-workspace header { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.dbfox-workspace header > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+.dbfox-workspace header > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-muted); }
 .dbfox-workspace button,
 .dbfox-workspace__empty button { border: 1px solid transparent; border-radius: 5px; background: transparent; color: inherit; padding: 5px 7px; text-align: left; }
-.dbfox-workspace button:hover { background: var(--surface-hover); }
-.dbfox-workspace header button { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
-.dbfox-workspace header button.is-selected { color: var(--accent-fg); }
+.dbfox-workspace button:hover { background: var(--control-bg-hover); }
+.dbfox-workspace header button { color: var(--color-text-muted); font-size: var(--ui-font-micro); white-space: nowrap; }
+.dbfox-workspace header button.is-selected { color: var(--color-primary); }
 .dbfox-workspace__files button { display: flex; gap: 7px; min-width: 0; }
-.dbfox-workspace__files button span { color: var(--text-muted); }
-.dbfox-workspace__error { color: var(--danger); }
+.dbfox-workspace__files button span { color: var(--color-text-muted); }
+.dbfox-workspace__error { color: var(--color-danger); }
 .dbfox-workspace-file { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
 .dbfox-workspace-file header { display: grid; gap: 3px; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); }
-.dbfox-workspace-file small { color: var(--text-muted); }
+.dbfox-workspace-file small { color: var(--color-text-muted); }
 .dbfox-workspace-file pre { overflow: auto; margin: 0; padding: 14px; white-space: pre-wrap; tab-size: 2; }
 .dbfox-workspace-artifact { display: grid; gap: 8px; min-width: 0; padding: 12px 0; }
 .dbfox-workspace-artifact header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .dbfox-workspace-artifact header strong,
 .dbfox-workspace-artifact code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dbfox-workspace-artifact header span,
-.dbfox-workspace-artifact small { color: var(--text-muted); font-size: 11px; }
-.dbfox-workspace-artifact code { color: var(--text-primary); font-size: 12px; }
+.dbfox-workspace-artifact small { color: var(--color-text-muted); font-size: var(--ui-font-micro); }
+.dbfox-workspace-artifact code { color: var(--color-text-primary); font-size: var(--ui-font-caption); }

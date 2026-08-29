@@ -16,7 +16,7 @@ export function ProjectCreateDialog() {
         <DialogHeader>
           <DialogTitle>新建项目</DialogTitle>
           <DialogDescription>
-            项目用于归组数据源和对话。创建后继续为该项目添加数据库连接。
+            项目用于组织长期上下文与 Agent 工作。创建后可继续添加文件、数据和外部服务。
           </DialogDescription>
         </DialogHeader>
         <ProjectCreateForm

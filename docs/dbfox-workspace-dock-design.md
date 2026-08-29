@@ -1,4 +1,11 @@
-# DBFox Workspace Dock 设计草案
+# DBFox Workspace Dock 历史交互草案
+
+> 文档状态：历史
+>
+> 已由 [`architecture/frontend.md`](architecture/frontend.md) 与
+> [`architecture/artifact-representation-visualization.md`](architecture/artifact-representation-visualization.md)
+> 取代。本文只保留 2026-08-15 阶段的交互推演，不是当前模型、类型或实现依据；其中
+> `openArtifactResultTab`、`TableArtifactView(mode)` 等名称均为历史设计。
 
 > 文档类型：产品与交互设计草案
 >
@@ -397,7 +404,7 @@ V3 布局只新增一个语义别名（不产生新色值）：
 ### 15.2 中间对话
 
 - 完全保留现有 `ConversationWorkspace` 的视觉：`--agent-surface` 底、`conv-header`、`conv-message-column`、`--agent-user-bg` 用户气泡、`--agent-focus-ring`；
-- AI 消息继续「不包卡片」；SQL 卡片沿用现有 `SqlArtifactView` / `ArtifactCard` 的 `--agent-border`、`--radius-control` 与 mono 呈现；
+- AI 消息继续「不包卡片」；SQL 卡片由 Data DLC 组合 Host `CodeArtifact` / `ArtifactCard`，沿用 `--agent-border`、`--radius-control` 与 mono 呈现；
 - V3 仅补充：输入框 focus 使用现有 `--focus-ring`；发送按钮保持现有 32px 圆形控制。
 
 ### 15.3 右侧 Dock

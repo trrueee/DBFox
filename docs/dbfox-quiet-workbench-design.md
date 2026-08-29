@@ -355,7 +355,14 @@ icon
 render()
 addLabel?
 onAdd?
+listResources?
+removeResource?
 ```
+
+`listResources` / `removeResource` 是项目资源清单合同（2026-08 扩展）：DLC
+声明它们后，Core 的项目管理页（ProjectOverview）会渲染该 DLC 的已配置
+资源清单并提供移除动作；实现与错误隔离由扩展宿主包装
+（extensionHost.tsx）。未声明清单钩子的 DLC 保持“仅配置入口”形态。
 
 生产 composition 也是：
 

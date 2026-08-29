@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-24
+> 最后核验：2026-08-28
 >
 > 适用范围：当前生产实现与后续合并版本
 
@@ -46,12 +46,13 @@
 ### 修改 Agent、工具或上下文
 
 1. [`architecture/agent-core-capability-dlc-contract.md`](architecture/agent-core-capability-dlc-contract.md)
-2. [`architecture/agent-runtime.md`](architecture/agent-runtime.md)
-3. [`architecture/agent-runtime-item-protocol.md`](architecture/agent-runtime-item-protocol.md)
-4. [`architecture/agent-tool-context-memory-contract.md`](architecture/agent-tool-context-memory-contract.md)
-5. [`architecture/agent-conversation-recall-contract.md`](architecture/agent-conversation-recall-contract.md)
-6. [`specs/agent.md`](specs/agent.md)
-7. [`quality/agent-evaluation-methodology.md`](quality/agent-evaluation-methodology.md)
+2. [`architecture/artifact-representation-visualization.md`](architecture/artifact-representation-visualization.md)（修改 Artifact、Final Answer、Representation、Visualization 或 Dock 时）
+3. [`architecture/agent-runtime.md`](architecture/agent-runtime.md)
+4. [`architecture/agent-runtime-item-protocol.md`](architecture/agent-runtime-item-protocol.md)
+5. [`architecture/agent-tool-context-memory-contract.md`](architecture/agent-tool-context-memory-contract.md)
+6. [`architecture/agent-conversation-recall-contract.md`](architecture/agent-conversation-recall-contract.md)
+7. [`specs/agent.md`](specs/agent.md)
+8. [`quality/agent-evaluation-methodology.md`](quality/agent-evaluation-methodology.md)
 
 ### 修改 SQL、结果或数据源能力
 
@@ -64,12 +65,14 @@
 ### 修改前端工作区布局或右栏 Dock
 
 1. [`architecture/frontend.md`](architecture/frontend.md)（当前 Workbench 与 DLC contribution 边界）
-2. [`dbfox-quiet-workbench-design.md`](dbfox-quiet-workbench-design.md)（Quiet Workbench 视觉规范与 merge gate）
-3. [`archive/designs/workbench-shell-migration-guide.md`](archive/designs/workbench-shell-migration-guide.md)（已完成迁移的历史规范）
-4. [`architecture/frontend.md`](architecture/frontend.md)（当前迁移中实现）
-5. [`dbfox-design-baseline.md`](dbfox-design-baseline.md)（当前设计基线）
-6. [`dbfox-workspace-dock-design.md`](dbfox-workspace-dock-design.md)（历史交互草案，仅补充细节）
-7. [`architecture/implementation-map.md`](architecture/implementation-map.md)
+2. [`architecture/artifact-representation-visualization.md`](architecture/artifact-representation-visualization.md)（Artifact/Dock/多视图目标边界）
+3. [`ui.md`](ui.md)（当前 UI 采用基线和开发入口）
+4. [`quality/ui-design-and-development.md`](quality/ui-design-and-development.md)（成熟实现的直接采用和替换规则）
+5. [`dbfox-quiet-workbench-design.md`](dbfox-quiet-workbench-design.md)（Quiet Workbench 视觉规范与 merge gate）
+6. [`archive/designs/workbench-shell-migration-guide.md`](archive/designs/workbench-shell-migration-guide.md)（已完成迁移的历史规范）
+7. [`dbfox-design-baseline.md`](dbfox-design-baseline.md)（当前设计基线）
+8. [`dbfox-workspace-dock-design.md`](dbfox-workspace-dock-design.md)（历史交互草案，仅补充细节）
+9. [`architecture/implementation-map.md`](architecture/implementation-map.md)
 
 ### 准备提交或发布
 
@@ -86,6 +89,7 @@
 | --- | --- |
 | [`architecture/system-overview.md`](architecture/system-overview.md) | 系统由哪些进程组成，谁拥有状态，哪些是不变量？ |
 | [`architecture/agent-core-capability-dlc-contract.md`](architecture/agent-core-capability-dlc-contract.md) | Project、Conversation intent、Run authority 与 Capability DLC 的终态边界是什么？ |
+| [`architecture/artifact-representation-visualization.md`](architecture/artifact-representation-visualization.md) | AI、Core、Artifact、Representation、Data Result、Visualization DLC 与 Dock 如何协作？ |
 | [`architecture/backend-owner-guide.md`](architecture/backend-owner-guide.md) | 不熟悉代码时，如何从真实入口和代码符号理解后端并安全修改？ |
 | [`backend/README.md`](backend/README.md) | 如何按多卷手册逐层理解后端运行链、事务、失败路径、调试和扩展？ |
 | [`architecture/implementation-map.md`](architecture/implementation-map.md) | 一项功能具体落在哪些代码符号、表和测试中？ |

@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-25
+> 最后核验：2026-08-28
 >
 > 适用范围：启动、Agent Core、Capability DLC、Workbench、工具、事件、取消和恢复链路
 >
@@ -55,7 +55,7 @@ flowchart TB
 | 模块 | 主要职责 | 主要输入 | 主要输出 | 权威状态 | 禁止承担 |
 |---|---|---|---|---|---|
 | Electron Host | sidecar 生命周期、端口/token、窗口与外部导航；解析安全的 `DBFOX_ENGINE_FATAL` 启动诊断 | 安装资源、运行参数 | Engine status/config/failure fingerprint | 进程状态 | Agent 业务状态、向 UI 暴露原始 stderr |
-| App Shell | `activeProjectId`/per-project `projectShell`、Workspace 路由、Dock view presentation/visibility/render registry（`dockViewRegistry`）、主题、命令与全局错误边界；真实 Project list/create 经 `projectsApi`/`useProjectState` | UI command | tab/workspace | UI Store + Project API 投影 | 推断后端终态 |
+| App Shell | `activeProjectId`/per-project `projectShell`、Workspace 路由、主题、命令与全局错误边界；Dock view composition 归 `features/dock`，真实 Project list/create 经 `projectsApi`/`useProjectState` | UI command | tab/workspace | UI Store + Project API 投影 | 推断后端终态 |
 | Conversation Product | Message、Activity、Approval、Question、Artifact Dock | snapshot/events/live | 用户可理解过程 | 后端投影的前端缓存 | 原始调试 trace、结果历史 |
 | Typed API Client | token、错误映射、AbortSignal、SSE | request DTO | response/event DTO | 无 | 静默 fallback、业务重试 |
 | API Middleware | loopback 安全、输入限制、错误边界 | HTTP | 安全 response | 无 | 返回秘密/异常原文 |
@@ -75,20 +75,21 @@ flowchart TB
 
 ### 4.1 Electron Host 与 Engine Startup Gate
 
-入口是 TypeScript Electron Main。它校验打包 sidecar manifest/hash、启动隐藏子进程、等待健康状态并通过 preload 向 Renderer 提供动态 port/token。前端 `EngineStartupGate` 展示正常产品加载、失败原因、重试与诊断日志入口。
+入口是 TypeScript Electron Main。它先取得 Electron single-instance lock，再校验打包 sidecar manifest/hash、启动隐藏子进程、等待健康状态并通过 preload 向 Renderer 提供动态 port/token。开发启动器通过 Node IPC 等待 primary ownership，只有 primary 才以 Vite JavaScript API 持有 strict 5173 server；secondary 只恢复和聚焦旧窗口。前端 `EngineStartupGate` 展示正常产品加载、失败原因、重试与诊断日志入口。
 
 状态边界：
 
 - Electron Main 拥有 sidecar process handle 和 startup state；
+- 开发启动器拥有 Vite server，Electron Main 通过 IPC gate 决定何时创建窗口并启动 Sidecar；
 - Python `/health` 只证明引擎已完成初始化；
 - React 在 ready 前不发送业务请求；
 - Web 开发模式不伪造 Electron 生命周期，只连接开发引擎。
 
-主要失败：端口占用、sidecar 缺失、metadata migration 失败、凭据库不可用、旧进程锁定安装文件。Python 启动失败以 `DBFOX_ENGINE_FATAL {stage, code, fingerprint}` 输出不含异常原文的安全结构；Electron 将完整 stderr 留在 private diagnostics，只向 UI 投影稳定 code/stage/fingerprint。
+主要失败：Renderer port ownership 失败、sidecar 缺失、metadata migration 失败、System DLC bootstrap 失败、凭据库不可用、旧进程锁定安装文件。Python 启动失败以 `DBFOX_ENGINE_FATAL {stage, code, fingerprint}` 输出不含异常原文的安全结构；DLC 错误使用稳定 `DBFOX_DLC_*` code，Electron 将完整 stderr 留在 private diagnostics，只向 UI 投影稳定 code/stage/fingerprint。窗口关闭、Ctrl+C 和开发父进程断开都进入同一 `app.quit → before-quit → EngineSupervisor.stop → marker clear` barrier；Electron 退出后启动器才关闭 Vite。
 
 ### 4.2 App Shell 与 Workspace
 
-App Shell 组织 Project/Conversation、Host-owned resource connector slot、固定 Main Surface、Dock registry、命令面板和设置。Resource tree、SQL/Table Dock 与连接 Dialog 由已激活 DLC 贡献；Shell 只保存 focus/layout/tab identity，不复制领域状态。Workbench 以 Conversation（或 new-conversation draft）的稳定 scope 为唯一事实源，Tabs 与 DLC view state 同 scope 隔离。Dock 折叠态是独立 rail layout，Composer 与消息内容列共用版心。左侧资源 focus 只导航；Workbench `Ask DBFox` 通过 Host typed reference 把 parent authority、object 与 locator 原子交给 Composer，不把 table/file/measure 伪装成 Resource。
+App Shell 组织 Project/Conversation、常驻 Host-owned Resource View Container、固定 Main Surface、Dock registry、命令面板和设置。Resource tree、SQL/Table Dock 与连接 Dialog 由已激活 DLC 贡献；Shell 只保存 focus/layout/tab identity，不复制领域状态。`mainSurfaceByProject` 是活动 Conversation 的唯一事实源，Conversation Store 只保存公共投影。Workbench 以 Conversation（或 new-conversation draft）的稳定 scope 为唯一事实源，Tabs 与 DLC view state 同 scope 隔离。Frontend activation 以 epoch/generation fence 提交，贡献 ID 必须属于 owner namespace，disable 时执行 deactivate 并清除失效 Tab。Dock 折叠态是独立 rail layout，Composer 与消息内容列共用版心。左侧资源 focus 只导航；Workbench `Ask DBFox` 通过 Host typed reference 把 parent authority、object 与 locator 原子交给 Composer，不把 table/file/measure 伪装成 Resource。
 
 本地项目文件链路由 `dbfox.workspace` 使用 Host 的 native picker/credential 等窄 OS boundary 并保持有界：
 
@@ -108,7 +109,7 @@ Conversation Workspace 将同一 Session 投影为：
 - Activity Feed：计划、分析、工具、恢复、等待和完成；
 - ApprovalCard/QuestionCard：正式等待交互；
 - ArtifactEvidencePanel：回答 citation 与来源；
-- ArtifactDock：SQL、安全、Result、Chart、说明等交付物。
+- ArtifactDock：SQL、安全、Result、Visualization、说明等交付物；只投影 canonical Artifact，不保存内容副本。
 
 Activity Feed 只使用公共 summary，不暴露 Provider 私有 reasoning。动态 Plan 以步骤状态显示，但不会强迫所有简单任务生成计划。
 
@@ -120,7 +121,13 @@ Reducer 以 entity ID、event sequence、live revision 和 correlation 幂等更
 
 ### 4.5 Data DLC、Credential 与 Connection Profile
 
-前端 Data Connector 通过 Credential Broker 将秘密写入 OS vault，DLC state 只保存 opaque credential ref。`ConnectionProfile` 更新推进 `connection_generation`；其下多个 `DatabaseResource` 各自拥有 resource generation。普通网络连接、SSH/TLS 和 SQLite file-backed profile 由 Data DLC provider adapter 验证，Core 不保存镜像。
+前端 Data Connector 通过 Credential Broker
+
+项目管理页（ProjectOverview）的资源清单由 connector 的可选 `listResources` /
+`removeResource` 钩子驱动（`sdk/frontend/index.d.ts`）：Core 只渲染框架与动作编排，
+资源数据与移除语义归 DLC；宿主在 `extensionHost.tsx` 包装钩子并隔离错误。
+模型列表页的动态模型获取走 `POST /api/v1/agent/llm/models`（引擎代理访问厂商
+`/models`，凭据经租约机制，原始 Key 不回传渲染层）。 将秘密写入 OS vault，DLC state 只保存 opaque credential ref。`ConnectionProfile` 更新推进 `connection_generation`；其下多个 `DatabaseResource` 各自拥有 resource generation。普通网络连接、SSH/TLS 和 SQLite file-backed profile 由 Data DLC provider adapter 验证，Core 不保存镜像。
 
 若资源清理失败，不能先删除旧 credential，否则仍在运行的旧连接无法被安全收尾。旧 profile 在 generation 更新后即使被并发请求持有，也不能创建新的可复用资源。
 
@@ -136,11 +143,17 @@ Agent 通过 schema 工具按问题检索候选表，再按需 inspect；Context
 
 执行前注册 execution ID，执行后无论成功失败都注销。取消路径：SQLite/DuckDB 调用 interrupt，PostgreSQL 调用 connection cancel，MySQL 使用独立连接 `KILL QUERY`。取消请求已发出不等于数据库立刻停止，所以最终结算仍检查 cancel/deadline。
 
-### 4.8 Data Artifact View Gateway
+### 4.8 Artifact Representation Gateway
 
-Core Artifact API 只接受 Artifact ID 与 page/pageSize/sort/filter/search 等通用视图参数，再把 typed view 调用交给该 Artifact owner。Data DLC 解析来源资源、fingerprint/generation 和有界结果页；Core 不理解 SQL 或表结构。
+Core Artifact API 只接受 Artifact ID、Representation type 和通用 operation request，再把读取交给该
+Artifact owner 在当前 Runtime snapshot 注册的 Provider。Data DLC 为 Result/Snapshot 提供
+`dbfox.dataframe.v1`，负责验证来源资源、fingerprint/generation 和分页、排序、筛选、计数、导出参数；
+Core 不理解 SQL、表结构或图表。
 
-返回 rows 只存在于 HTTP response 和当前组件状态。关闭工件、切换来源或发起新请求会取消并释放旧页面。Chart data 同样按 source Result Artifact 实时加载，Chart Artifact 不复制 series。
+普通 Result 按来源 SQL 实时重执行并标记 `live_reexecution`；显式 Snapshot 返回
+`durable_snapshot`。rows 只存在于 HTTP response 和当前组件状态。关闭工件、切换来源或发起新请求会
+取消并释放旧页面。Visualization DLC 读取兼容 Representation，不依赖 Data DLC 私有服务，也不复制
+Result rows 到 Conversation。
 
 ### 4.9 Session Core 与 Coordinator
 
@@ -194,14 +207,21 @@ Runtime reset 只允许操作 private runtime root 内经过校验的路径，�
 
 ```mermaid
 sequenceDiagram
+    participant Launch as Dev Launcher
     participant Host as Electron Host
     participant Engine as FastAPI Sidecar
     participant Meta as Metadata DB
     participant Coord as SessionCoordinator
     participant UI as React Gate
 
+    Launch->>Host: spawn + IPC instance ownership
+    Host->>Host: requestSingleInstanceLock
+    Host-->>Launch: primary
+    Launch->>Launch: Vite createServer(strict 5173)
+    Launch-->>Host: renderer-ready
     Host->>Engine: spawn with private runtime config
     Engine->>Meta: Alembic upgrade + SQLite pragmas
+    Engine->>Engine: verify/select exact System DLC packages
     Engine->>Meta: prune security audit
     Engine->>Coord: start recovery coordinator
     UI->>Host: read startup state
@@ -209,7 +229,7 @@ sequenceDiagram
     Engine-->>UI: ready
 ```
 
-持久化：migration、恢复扫描产生的状态变更、审计保留。失败：初始化未完成则不进入 ready；UI 显示重试与诊断。并发：Coordinator 在 migration 和 audit prune 后启动。
+持久化：migration、System DLC registry selection、恢复扫描产生的状态变更、审计保留。开发 bundle 使用内容寻址 prerelease version 并只轮换旧开发 package bytes，不删除 capability-owned data。失败：初始化未完成则不进入 ready；UI 显示重试与诊断。并发：Coordinator 在 migration、System DLC bootstrap 和 audit prune 后启动。
 
 ### 5.2 数据源保存与测试管线
 
@@ -283,11 +303,15 @@ flowchart LR
 
 Heartbeat 只保持连接，不表示 Run 活跃。网络断开不取消 Run。重新连接不会重放 token 级 live 内容，而是用 committed Message 和 Activity 恢复产品状态。
 
-### 5.7 Result 分页、图表与导出管线
+### 5.7 Artifact Representation 读取管线
 
-入口：`/artifacts/{artifactId}/page|chart-data|export`。请求不包含 datasource ID、safeSql 或 rows。
+入口：`/artifacts/{artifactId}/representations` 发现能力，随后调用指定 Representation 的 `read` 或
+`stream`。请求不包含 datasource ID、safeSql 或 rows。
 
-后端验证 Artifact 关系、SQL 指纹和 generation；视图编译器只允许已知列和操作符；执行结果标记 original/view time。导出是安全审计动作。generation 变化返回“来源已变化，需要重新执行”，不静默运行旧来源。
+Core 根据完整 Artifact type 和当前 Runtime snapshot 选择唯一 Provider，并限制 JSON/stream 响应预算。
+Data Provider 验证 Artifact 关系、SQL 指纹和 generation，且只允许已知列、操作符与有界参数；响应明确
+标记 original/read time、read ID、一致性和来源指纹。导出是安全审计动作。generation 变化返回安全的
+stale 错误，不静默运行旧来源或回退到历史快照。
 
 ### 5.8 取消与进程恢复管线
 

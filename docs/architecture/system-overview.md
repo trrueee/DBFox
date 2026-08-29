@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-21
+> 最后核验：2026-08-28
 >
 > 适用版本：当前工作分支，产品版本 1.0.3
 >
@@ -72,7 +72,7 @@ Electron Main 负责启动和监督 sidecar、分配本地端口、读取启动�
 
 ### 3.3 FastAPI Sidecar
 
-本地引擎拥有业务规则、元数据库、数据库连接、SQL 安全链、Agent Runtime、事件投影、诊断和备份恢复。API 只监听 loopback，并用运行期高熵 token 校验请求。
+本地 Sidecar 承载 Core 与已启用 DLC：Core 拥有 Agent Runtime、元数据库、事件投影、诊断和备份恢复；数据库连接与 SQL 安全链由 `dbfox.data` DLC 拥有。API 只监听 loopback，并用运行期高熵 token 校验请求。
 
 ### 3.4 远程 Web 边界
 
@@ -105,7 +105,7 @@ flowchart TB
 | Conversation snapshot | Conversation Store | 当前会话缓存 | 否，后端 snapshot 才是权威 |
 | committed event 投影 | Reducer | cursor 之后的增量 | 否，出现 gap 必须重载 snapshot |
 | live token / activity delta | reducer 中短暂投影 | 当前连接 | 否，可丢失、可被 committed event 覆盖 |
-| Result 当前页 rows | `useSqlBackedDataView` 组件状态 | 工件打开期间 | 否，不进入 Conversation Store/localStorage |
+| Result 当前页 rows | `useDataFrameView` 组件状态 | 工件打开期间 | 否，不进入 Conversation Store/localStorage |
 | 表格筛选、排序、分页 | 组件状态 | 当前视图 | 否 |
 
 ### 4.2 对话产品层
@@ -115,7 +115,7 @@ flowchart TB
 - Message：用户输入与最终回答；回答支持 Markdown、GFM、sanitization 和 Evidence citation。
 - Activity Feed：展示用户可理解的计划、分析、工具、恢复和完成过程，不展示原始调试日志或私有 chain-of-thought。
 - Approval/Question：将等待状态作为正式交互，不用 Toast 或隐式重试替代。
-- Artifact Dock：展示 SQL、安全检查、Result、Chart、Markdown 等交付物，并支持选择、折叠和按引用加载。
+- Artifact Dock：展示 SQL、安全检查、Result、Visualization、Markdown 等交付物，并支持选择、折叠和按引用加载；Dock 只保存 Tab/View identity，不保存工件内容副本。
 
 长对话超过阈值后使用虚拟列表。布局位置通过 nonce CSSOM 规则表达，避免 CSP 禁止的动态 inline style。Radix 负责 Dialog/Collapsible 等焦点和键盘交互，Lucide 提供统一图标。
 
@@ -130,7 +130,7 @@ Reducer 拒绝重复 revision；发现跳号或 stream 关闭后，重新获取 
 
 ### 4.4 Result 视图
 
-打开 Result Artifact 后，前端只发送 Artifact ID 和视图参数。`useSqlBackedDataView` 为每次请求创建 AbortController，新请求会取消旧请求；卸载、关闭或禁用视图会释放当前页数据。响应明确显示：
+打开 Result Artifact 后，前端只发送 Artifact ID、Representation type 和视图参数。`useDataFrameView` 为每次请求创建 AbortController，新请求会取消旧请求；卸载、关闭或禁用视图会释放当前页数据。响应明确显示：
 
 - `consistency`；
 - 原始观察时间；
@@ -141,18 +141,23 @@ Reducer 拒绝重复 revision；发现跳号或 stream 关闭后，重新获取 
 
 ```mermaid
 flowchart TB
-    API["FastAPI Routers"] --> APP["Application Services"]
-    APP --> AGENT["Agent Runtime"]
-    APP --> DS["Datasource / Schema Services"]
-    APP --> SQL["SQL Safety + Execution"]
-    APP --> BACKUP["Backup / Restore"]
-    APP --> DIAG["Diagnostics / Security Audit"]
-
-    AGENT --> REPOS["Agent Repositories"]
+    API["FastAPI Routers / HTTP transaction scripts"] --> REPOS["Agent / Project Repositories"]
+    API --> COMPOSE["Runtime Composition Root"]
+    COORD["Session Coordinator"] --> AGENT["Agent Runtime"]
+    COMPOSE --> AGENT
+    COMPOSE --> HOST["DLC Host + frozen contribution snapshot"]
+    AGENT --> REPOS
+    AGENT --> TOOL["Provider-neutral Tool Runtime"]
+    TOOL --> HOST
+    HOST --> DATA["Data DLC"]
+    DATA --> SQL["SQL validation + readonly execution"]
+    DATA --> DS["Datasource / Schema / Result representations"]
     DS --> CONN["Connection Factory / Pool Lifecycle"]
     SQL --> CONN
+    API --> BACKUP["Backup / Restore"]
+    API --> DIAG["Diagnostics / Security Audit"]
     REPOS --> META[("SQLite Metadata")]
-    DS --> META
+    DATA --> META
     BACKUP --> META
     DIAG --> META
 ```
@@ -167,23 +172,33 @@ API 统一挂载于 `/api/v1`。关键横切边界包括：
 - 固定错误码和用户安全消息；
 - 不把数据库、Provider 或异常原文直接返回给前端。
 
-### 5.2 数据源与连接生命周期
+当前没有一层通用的 `Application Services`。Router 在短事务内直接编排
+Repository，并在提交后触发 Coordinator/DLC operation；这是当前明确采用的
+HTTP transaction-script 结构。只有当同一用例出现多个入口、事务编排重复或
+HTTP 耦合阻碍独立测试时，才提取具体应用用例，不建立只转发参数的 Service 层。
+
+### 5.2 Data DLC：数据源与连接生命周期
 
 数据源元数据包含 `connection_generation`。任何影响连接的配置或 credential reference 更新都会推进 generation，并在提交后 fence/释放旧连接池和 SSH tunnel。旧 profile 无法在更新后重新创建可复用连接。
 
 支持 MySQL、PostgreSQL、SQLite 和 DuckDB 的相应路径，但不同驱动的取消、只读和 Explain 能力由各自适配器表达，不假设完全一致。
 
-### 5.3 Schema Catalog
+### 5.3 Data DLC：Schema Catalog
 
 Schema 同步从目标数据库内省表、列、主外键和索引，写入 canonical catalog，再构建搜索文档。Agent Context 只按需搜索/检查相关 Schema，不把全库结构一次性放入 Prompt。
 
-### 5.4 SQL 安全与执行
+### 5.4 Data DLC：SQL 安全与执行
 
-SQL 请求依次经过方言解析、策略、只读/危险语句检查、projection/limit 约束、执行注册和结果序列化。QueryRegistry 为 SQLite、DuckDB、PostgreSQL 和 MySQL 提供各自可用的取消路径；无法硬中断的驱动仍受 deadline 和结算栅栏约束。
+SQL 领域语义属于 `dbfox.data`，不属于 Core。模型 SQL 只有一条执行链：
+`sql_validate` 生成不可变校验/SQL Artifact，`sql_execute_readonly` 只接受该
+Artifact，再执行方言解析、策略、只读/危险语句检查、projection/limit 约束、
+执行注册和结果序列化。Core 只强制通用的 Tool owner、资源、审批、取消、超时、
+幂等和结算合同，不解析 SQL。QueryRegistry 为 SQLite、DuckDB、PostgreSQL 和
+MySQL 提供各自可用的取消路径；无法硬中断的驱动仍受 deadline 和结算栅栏约束。
 
-### 5.5 Result Gateway
+### 5.5 DataFrame Representation
 
-Result Gateway 根据 Result Artifact ID：
+Data DLC 的 `dbfox.dataframe.v1` Provider 根据 Result Artifact ID：
 
 1. 校验 Artifact 所属 Session/数据源；
 2. 沿 `derived_from` 找到 SQL Artifact；
@@ -259,10 +274,10 @@ LiveStreamHub 是进程内低延迟通知通道。它不承诺跨进程保存 to
 ```mermaid
 flowchart LR
     SQL["SQL Artifact"] -->|"derived_from"| RESULT["Result Artifact"]
-    RESULT --> CHART["Chart Artifact"]
+    RESULT -->|"derived_from"| VIZ["Visualization Artifact"]
     RESULT --> EVIDENCE["Observed Evidence"]
     EVIDENCE --> ANSWER["Answer Citation"]
-    RESULT --> GATEWAY["Live Result Gateway"]
+    RESULT --> GATEWAY["DataFrame Representation"]
 ```
 
 Result Artifact 只保存来源 SQL Artifact ID、fingerprint、datasource generation、columns、row count、returned count、latency、executed time 和 truncated。明确禁止 rows、previewRows、任意单元格以及重复 safeSql。
@@ -275,7 +290,18 @@ Evidence 可以保存少量明确结论值、维度 locator、Artifact ID、fing
 
 ### 10.1 Tool capability
 
-工具显式声明 metadata/database/filesystem/network/subprocess capability 和 execution backend。当前 in-process backend 只接受 metadata read/write 与 database read。filesystem、任意 network、subprocess 和 database write 工具在没有 isolated-process backend 时拒绝注册，不能降级到进程内执行。
+工具显式声明 metadata/database/filesystem/network/subprocess capability 和 execution backend。
+Core Tool Registry 对需要隔离的高权限能力 fail closed；安装式 DLC v1 只允许受支持、由
+Manifest 覆盖的 `network` / `filesystem_read` 注册，并且只能来自用户显式信任且重验
+签名成功的 publisher。DLC backend 当前在 Engine 进程内执行，Manifest permission 是
+admission/审计合同，不是 OS 权限沙箱。
+
+R8A 已完成 Windows AppContainer/Job、macOS App Sandbox/XPC、Linux
+Landlock/seccomp/namespaces 等方案调查，正式结论为 NO-GO。普通 child process、当前
+`isolated_process` attempt runner、Electron Renderer sandbox 或 Python module namespace
+都不得被表述为 hostile-code containment。开放不受信第三方 DLC 前必须重新通过
+[R8A Gate](./r8-untrusted-isolation-gate.md) 的三平台、打包、签名和 adversarial tests；
+在此之前产品保持 trusted-publisher-only，不存在静默降级路径。
 
 ### 10.2 Approval
 
@@ -317,7 +343,7 @@ RunControl 统一执行 deadline、turn count、tool invocation count、input/ou
 - 元数据库 WAL 服务并发读取；写事务保持短小。
 - Schema 按需检索，避免 Prompt 随数据库规模线性增长。
 - Result 分页/筛选/导出直接查询来源数据库，不复制大结果到元数据库。
-- 长对话使用虚拟列表，Chart 与重型视图延迟加载。
+- 长对话使用虚拟列表，Visualization 与其他重型 DLC View 延迟加载。
 - 新工具通过 Registry 扩展，新 Provider 通过 Adapter 扩展，新 Artifact 通过描述符与 renderer 扩展；RunLoop 不按工具名硬编码分支。
 
 ## 13. 构建、供应链与发布
@@ -346,7 +372,7 @@ workflow/job 和原始输出；权威命令与分层门禁见 [`quality/engineer
 
 以下项目不能被误写为当前已有能力：
 
-1. 高权限 isolated-process backend：只有加入文件、任意网络、子进程或写库工具时才实现；当前拒绝注册是正确行为。
+1. 不受信 DLC 执行：R8A 当前为 CLOSED / NO-GO。只有完成三平台 backend/frontend 最小权限隔离、broker、打包签名与 adversarial escape 证据后才允许重新提案；当前 trusted-publisher-only 是完成态安全边界，不是临时 fallback。
 2. Provider Route：当前是用户选择的单 OpenAI-compatible adapter；多模型路由、成本优先级和降级披露需要独立领域模型。
 3. 评测纵深：仍需扩展 Prompt Injection corpus、cancel latency、crash point、Evidence coverage 和成本/质量联合评分。
 4. 远程 Web：需要独立服务端架构，不复用本地 token、SQLite 和 LiveStreamHub 假装可扩展。
@@ -356,15 +382,15 @@ workflow/job 和原始输出；权威命令与分层门禁见 [`quality/engineer
 
 | 领域 | 当前入口 |
 |---|---|
-| 桌面生命周期 | `desktop/main/engineSupervisor.ts`、`desktop/main/nodeEngineHost.ts`、`desktop/src/components/EngineStartupGate.tsx` |
+| 桌面生命周期 | `desktop/main/engine.ts`、`desktop/main/nodeEngineHost.ts`、`desktop/src/components/EngineStartupGate.tsx` |
 | 前端对话 | `desktop/src/features/conversation/workspace/ConversationWorkspace.tsx` |
 | 前端状态归并 | `desktop/src/stores/conversationStoreReducer.ts` |
 | Timeline / Artifact | `MessageList.tsx`、`AgentTimeline.tsx`、`ArtifactDock.tsx` |
-| Result 当前页 | `desktop/src/features/workspace/sqlBacked/useSqlBackedDataView.ts` |
+| Result 当前页 | `desktop/src/features/workspace/dataFrame/useDataFrameView.ts` |
 | API | `engine/api/__init__.py`、`engine/api/conversations.py`、`engine/api/agent.py` |
 | Agent Harness | `engine/agent/coordinator.py`、`engine/agent/loop.py` |
 | Agent persistence | `engine/agent/repositories/` |
 | Tool Runtime | `engine/tools/runtime/` |
-| Artifact View Gateway | `engine/api/agent_results.py`、capability `artifact_view_providers` |
+| Artifact Representation Gateway | `engine/representation.py`、`engine/api/agent_results.py`、DLC `artifact_representations` |
 | Security Audit | `engine/security/audit.py` |
 | Metadata schema | `engine/models.py`、`engine/migrations/` |

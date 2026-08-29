@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-12
+> 最后核验：2026-08-28
 >
 > 适用范围：DBFox 产品、桌面端、Python Engine、Agent 和发布文档
 
@@ -50,6 +50,12 @@
 | Memory（工作记忆） | 从已完成事实中提炼、可重新生成的有界会话信息 | 全量消息数据库 |
 | Recall（历史查找） | 在权限、范围和预算限制下搜索并读取较早消息 | 自动注入全部历史 |
 | Evidence（证据） | 支撑回答结论的可追溯结果引用 | 模型自行生成的引用文字 |
+| Representation（表示） | 按 Artifact ID 读取同一成果的一种结构化形式，由 owner DLC 提供 | 第二份 Artifact 或持久 payload 副本 |
+| View（视图） | 使用某个 Representation 的交互呈现和局部状态 | 新的领域事实 |
+| Surface（展示环境） | `inline`、`workspace`、`fullscreen` 等 Artifact 放置环境 | Artifact 类型或 Dock 数据模型 |
+| Visualization Artifact（可视化制品） | 保存分析表达、布局、交互和来源绑定的派生 Artifact | 来源 Result rows 或任意可执行前端代码 |
+| Snapshot Artifact（快照制品） | 明确冻结一组值和捕获时间的派生 Artifact | 默认 Result 读取模式或 SSE snapshot |
+| Dock | 保存 Tab、Target、布局和 View state 的通用容器 | Artifact、Result rows 或 DLC 领域状态的事实源 |
 
 ## 状态、错误与恢复
 

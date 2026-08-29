@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-22
+> 最后核验：2026-08-28
 >
 > 适用范围：`desktop/src/` 的工作区、传输、状态和用户交互
 >
@@ -99,19 +99,19 @@ flowchart LR
   DOCK --> ARTIFACT["工件 Tab"]
 
   ARTIFACTS --> RESULT["Result View"]
-  ARTIFACTS --> CHART["Chart Artifact"]
+  ARTIFACTS --> VIZ["Visualization Artifact"]
   ARTIFACTS --> NOTE["Markdown Artifact"]
 ```
 
 布局原则：
 
-- 左侧是实体导航：顶层「项目/连接」胶囊切换。项目行内是「对话/文件」子胶囊，连接行内是「对话/数据库」子胶囊；下方内容随当前实体子模式直接切换，不再出现“对话列表/文件/数据库对象树”这类分区标题。项目图标使用 Folder 激活/非激活两态，连接使用官方数据库图标，当前数据库节点使用数据源品牌图标。
+- 左侧是常驻 Resource View Container：Core 提供项目与最近工作导航、折叠/焦点/添加资源的统一容器；每个已激活 DLC 贡献自己的资源 View。切换项目概览、新任务或 Conversation 不会把资源树移入中央，也不会卸载左侧容器。
 - 中间只放对话与「新建项目」表单。Project 只创建名称与可选描述；本地目录由 `dbfox.workspace` Connector 在创建后通过通用 DLC operation 建立 binding，不进入 Project API。
 - 新建连接采用 Navicat 式 `Dialog` 弹窗承载 `DataSourcesPage`，不再让数据源管理页占满中间对话区；旧 `centerMode === "datasource"` 分支和 `openDatasourceCenter`/`centerDatasourceMode` Shell 状态已删除，命令面板的「管理连接」动作改为打开该 Dialog。
-- Workspace 资源树由 `dbfox.workspace` frontend contribution 提供；目录选择走 Host 的 `nativeDialogs.pickFolder`，列举/读取走 typed DLC operations，文件 Artifact/Dock renderer 也归该包。Core Shell 只拥有 Connector/Dock/Artifact contribution slots 与焦点、折叠、overflow 规则。
+- Workspace 资源树由 `dbfox.workspace` frontend contribution 提供；目录选择走 Host 的 `nativeDialogs.pickFolder`，列举/读取走 typed DLC operations，文件 Artifact/Dock renderer 也归该包。Core Shell 只拥有常驻 Resource View Container、Connector/Dock/Artifact contribution slots，以及版本化 `host.ui@1.0.0` Tree 的焦点、选择、折叠和键盘视觉语法；路径、文件动作和数据仍归 DLC。
 - 顶部不再显示项目名与连接状态。
 - 右侧 `WorkspaceDock` 是统一 Tab 容器：SQL 控制台、表详情、只读项目文件、工件总览和工件 Tab 都在这里。项目文件 Tab 按 `projectId` 对当前 Project 可见，切换 Project 后其他 Project 的文件 Tab 隐藏。
-- Shell/View 状态已分 owner：`workspaceStore` 只保存 Shell identity/layout 和通用 `openDockTab`/`updateDockTab`；SQL draft/entries 归 `sqlConsoleStore`，表选择/表子页归 `tableWorkspaceStore`，工件/文件 Dock 打开动作归 `artifactDockStore`/`workspaceFileStore`。`WorkspaceDockTabKind` 是开放 string，未知 view 走统一 fallback。
+- Shell/View 状态已分 owner：`workspaceStore.mainSurfaceByProject` 是 Project/Conversation 当前选择的唯一事实源，`conversationStore` 只缓存公共 Conversation 投影，不再维护全局 active ID。`workspaceStore` 还保存 Workbench scope、Dock identity/layout 和通用 `openDockTab`/`updateDockTab`；领域 payload 与临时编辑状态归 DLC。未知 view 走统一 fallback。
 - 对话历史只保留在左侧项目卡内的对话列表；不再提供独立的「历史记录」入口，也不再作为 Dock Tab。
 - 「✦ 工件」Tab 的内容是 `ArtifactDock` 的列表 + 预览结构，工件事实仍属于 Conversation Store 与后端制品，不作为独立事实源。
 - Dock 可展开/收起；窄窗口下保持对话可用，打开或关闭 Dock 不丢失选中 Artifact ID。
@@ -174,20 +174,20 @@ flowchart TB
 - Markdown 不解析通用 raw HTML；GFM、Citation 和安全换行都在 AST 层处理，最终仍经过 sanitize。
 - Live delta 使用稳定的 `item_id + revision + offset` 追加到已开始的 RunItem；断线后以 snapshot 的完整持久内容为准，再从 durable event cursor 继续，避免首段缺失或重复。
 
-## 6. Artifact Dock 与 SQL-backed 数据
+## 6. Artifact Dock 与 DataFrame Representation
 
 ```mermaid
 sequenceDiagram
   participant Dock as Artifact Dock
   participant Store as Conversation Store
-  participant Hook as SQL-backed Hook
-  participant API as Result Gateway
+  participant Hook as DataFrame View Hook
+  participant API as Representation Gateway
   participant DB as 用户数据库
 
   Dock->>Store: 读取 Result Artifact descriptor
   Note over Store: 只有 ID、来源、列和统计
   Dock->>Hook: 打开 Artifact ID
-  Hook->>API: page / filters / sort / search
+  Hook->>API: dbfox.dataframe.v1 page / filters / sort / search
   API->>DB: 校验后按需执行来源 SQL
   DB-->>API: 当前页短暂结果
   API-->>Hook: columns + rows + page metadata
@@ -195,13 +195,13 @@ sequenceDiagram
   Note over Hook,Dock: 关闭或卸载后释放当前页
 ```
 
-Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecutedAt`。UI 必须并列显示“分析取数”和“当前重查”，并说明当前表格不是历史快照；Evidence 的 `observedAt` 仍代表回答当时的最小事实。
+DataFrame Representation 的页面响应同时携带 `originalObservedAt` 与 `readAt`。UI 必须并列显示“分析取数”和“当前重查”，并说明普通 Result 表格不是历史快照；Evidence 的 `observedAt` 仍代表回答当时的最小事实。
 
 禁止进入 Conversation Store、localStorage、IndexedDB 或 SSE Artifact 事件的字段：
 
 - `rows`
 - `previewRows`
-- Chart `series`
+- Visualization 引用来源时复制的 rows/series
 - 任意结果单元格副本
 
 ### 6.1 数据单元格展示合同
@@ -231,25 +231,31 @@ Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecute
 
 | 状态类型 | 所有者 | 示例 |
 |---|---|---|
-| 导航状态 | `workspaceStore` | `activeProjectId`、per-project `projectShell` 与 `mainSurfaceByProject`（ConversationCenter 已消费固定 Main Surface）、中间模式、右栏 Dock 开合与 Tab 顺序、**一个 Project 一个 canonical SQL console state**（`sql-{projectId}`）、Table datasource+table dedup 与 MultiTable canonical sorted set identity、工件区布局；真实 Project list/create 由 `projectsApi` / `useProjectState` 投影 |
+| 导航状态 | `workspaceStore` | `activeProjectId`、唯一的 per-project `mainSurfaceByProject`、Conversation/draft Workbench scope、右栏 Dock 开合与 Tab identity；真实 Project list/create 由 `projectsApi` / `useProjectState` 投影 |
 | 本机外观偏好 | `ThemeProvider` + localStorage | 主题模式、受控色板、分区字号 |
 | 数据源导航状态 | `datasourceStore` | 当前数据源、Schema 树、同步状态 |
 | 会话公共投影 | `conversationStore` | Run、Run Item、Artifact、Approval、Question、Plan |
 | 组合视图 | `useConversationViewModel` | 当前 Run、排序后的消息和工件 |
-| 当前页面数据 | 组件/SQL-backed hook | Result 当前页、Chart 当前序列 |
+| 当前页面数据 | Renderer 组件/DataFrame hook | Result 当前页、Visualization 当前读取页与 Vega View；关闭或卸载即释放 |
 | 服务端事实 | FastAPI + 元数据库 | Run 状态、Approval、Artifact 关系、Event sequence |
 
 ## 8. 扩展边界
 
-- 新工作区类型通过 `WorkspaceDock` 的 Tab kind 与渲染器注册，不向 App 添加业务分支；未来 WebView 等 Tab 只增加 kind。当前 presentation/visibility/render 均已收敛到 `dockViewRegistry.tsx` + `dockViewContent.tsx`（`core.sql-console` / `dbfox.data.table` / `core.artifact` 等），`WorkspaceDock` 只按 contribution 渲染，unknown view 走元数据 fallback。
+- 新工作区类型通过 `WorkspaceDock` 的 Tab kind 与贡献注册，不向 App 添加业务分支。当前 presentation/visibility/render 收敛到 `features/dock/dockViewComposition.ts` + `dockViewContent.tsx`；`WorkspaceDock` 只按 contribution 渲染，unknown view 走元数据 fallback。
 - 新 Artifact 类型通过统一 Artifact model、renderer 和 dock projection 扩展。
 - 新公共事件先定义后端契约和 reducer，再增加视图；视图不得解析原始调试事件。
 - 新流式 channel 必须定义去重身份、持久化替代物和断流恢复语义。
 - 通用视觉能力进入 `components/ui` 或 `components/settings`，业务状态留在 feature 内。
+- Package-free DLC 只能通过版本化 `FrontendExtensionHost.ui` 复用 Host presentation primitive。当前 `ui@1.0.0`
+  暴露 Zag-backed `Tree<T>`：DLC 传原始对象及 id/label/children accessor，Host 提供 keyboard、focus、
+  selection、expansion、async child/loading/error 和 token CSS；action/footer render slot 只呈现 DLC 已有动作，
+  不代理执行。不得把它扩成 UniversalResource DTO、资源 store 或动作代理。
+- Frontend contribution ID 必须等于 DLC owner ID 或使用 `owner_id.*` 命名空间；Core 的 Dock/Artifact View ID 在 admission 前预留。重复、本地重注册和越权命名均使该 DLC 的整批贡献失败关闭。
+- Activation projection 以单调 epoch/generation 提交；旧 fetch 或动态 import 完成后不得覆盖新 snapshot。DLC 可实现 `deactivate()` 清理 listener、缓存、样式和重资源，Host 同步移除失去 owner 的 Dock Tab。
 
 ## 9. 视觉系统与交互语义
 
-前端使用语义 Token 表达 background、panel、border、text、focus、brand 和 status。品牌主色为紫色，数据强调可使用青色；warning/success/danger 只表达状态，狐狸品牌不依赖橙色。
+前端直接使用 Fluent 2 语义 Token 表达 background、panel、border、text、focus、brand 和 status；字体沿用 Fluent/Segoe UI 栈并补离线 CJK fallback。warning/success/danger 只表达状态，不再为单个功能自行创造色板或字体系统。
 
 交互状态必须一致：
 
@@ -275,7 +281,7 @@ Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecute
 - 导入/导出使用同一严格 schema，拒绝未知字段与超大文件；结构上不包含 Token、密码、DSN、SQL、会话或日志。
 - `ThemeProvider` 只把规范偏好投影为根元素的 `data-*` 属性；`tokens.css` 是色彩和字号的唯一视觉事实来源。
 - 设置即时预览并自动保存；重置恢复系统主题、紫色强调、冷灰中性色和标准字号。
-- ECharts 在外观投影提交后重新读取同一组 CSS Token，不维护第二份图表主题配置。
+- Visualization DLC 的 Vega renderer 在渲染时读取同一组语义 CSS Token，不维护第二份图表主题配置。
 
 这个边界参考成熟桌面工具的“用户设置 + 即时预览”模式和主题系统的受控参数设计，
 没有引入新的主题库、任意颜色解析器、兼容 mapper 或组件级持久化。
@@ -292,7 +298,7 @@ Approval/Question 属于阻塞性交互：待处理卡靠近 Composer，并且�
 - 动态虚拟位置写入 nonce CSSOM，不违反 CSP；
 - SSE event 先批处理再进入 reducer，避免 token 级全树重渲染；
 - streaming text 使用平滑展示，但 committed Message 到达后立即归并；
-- Chart/ECharts 和重型 Artifact renderer 延迟加载；
+- DLC Artifact renderer 和其 vendored 重型运行时随 DLC 延迟加载，不进入 Core 初始 bundle；
 - Result 新请求取消旧请求，过期 response 通过 sequence 丢弃；
 - bundle budget 分别约束 initial entry 和 deferred chart chunk。
 
@@ -309,7 +315,7 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 前端测试分为：
 
 - reducer/event contract：去重、gap、correlation、Plan、Approval、Question、Artifact；
-- product interaction：Composer、Agent Timeline、Question、Artifact Dock、SQL-backed table；
+- product interaction：Composer、Agent Timeline、Question、Artifact Dock、DataFrame table；
 - accessibility：焦点、role、label、键盘、reduced motion；
 - security：CSP、sanitize、外部导航、secret-safe error；
 - engineering：TypeScript、ESLint、production build、bundle budget。
@@ -323,17 +329,19 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 |---|---|
 | 启动 | `desktop/src/components/EngineStartupGate.tsx` |
 | Workspace Shell | `desktop/src/stores/workspaceStore.ts`、`desktop/src/features/appShell/WorkspaceDock.tsx` |
-| Dock Registry | `desktop/src/features/appShell/dockViewRegistry.tsx`、`dockViewContent.tsx` |
-| 实体侧栏 | `desktop/src/features/datasource/DataSourceTree.tsx` |
-| 新建项目/本地文件 | `desktop/src/features/projects/ProjectCreateForm.tsx`、`useProjectFolderTree.ts`、`desktop/src/lib/projectFolder.ts`、`desktop/main/nativeCapabilities.ts` |
-| 连接管理 Dialog | `desktop/src/features/datasource/ConnectionDialog.tsx`、`desktop/src/pages/DataSourcesPage.tsx` |
-| 只读项目文件视图 | `desktop/src/features/workspace/WorkspaceFileDock.tsx` |
+| Dock Composition | `desktop/src/features/dock/dockViewComposition.ts`、`dockViewContent.tsx` |
+| Workspace presentation shell | `desktop/src/features/workspace/WorkspaceShell.tsx` |
+| Core 导航与 Project Context | `desktop/src/features/resources/ProjectResourceSidebar.tsx`、`desktop/src/features/projects/ProjectOverview.tsx` |
+| 新建项目/本地文件边界 | `desktop/src/features/projects/ProjectCreateForm.tsx`、`desktop/src/lib/projectFolder.ts`、`desktop/src/lib/desktopHost.ts`、`desktop/main/index.ts` |
+| Data 连接、资源树与 SQL/Table View | `dlcs/dbfox_data/frontend/index.js` |
+| Workspace 文件 Connector、Dock 与 Artifact View | `dlcs/dbfox.workspace/frontend/index.js` |
 | Conversation | `desktop/src/features/conversation/workspace/ConversationWorkspace.tsx` |
 | Reducer | `desktop/src/stores/conversationStoreReducer.ts` |
 | Stream | `desktop/src/features/conversation/conversationStreamRuntime.ts`、`conversationRepository.ts` |
 | Timeline | `desktop/src/features/conversation/workspace/MessageList.tsx`、`AgentTimeline.tsx` |
 | Artifact Dock | `desktop/src/features/conversation/workspace/ArtifactDock.tsx` |
-| Result state | `desktop/src/features/workspace/sqlBacked/useSqlBackedDataView.ts` |
+| Result/DataFrame state | `desktop/src/features/workspace/dataFrame/useDataFrameView.ts` |
+| Artifact embed 与多视图 | `desktop/src/features/workspace/queryResult/remarkDbfoxCitations.ts`、`desktop/src/features/workspace/artifacts/ArtifactViewHost.tsx` |
 | Tokens | `desktop/src/styles/tokens.css` |
 | Appearance contract | `desktop/src/lib/appearance.ts`、`desktop/src/hooks/useTheme.tsx` |
 | Appearance settings | `desktop/src/features/settings/AppearanceSettingsPanel.tsx` |

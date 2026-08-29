@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-06
+> 最后核验：2026-08-28
 >
 > 适用范围：桌面端、Web、Agent Runtime、工具、持久化与评测
 
@@ -48,7 +48,7 @@ DBFox Agent 是面向数据库工作的智能数据分析师。它不以“生�
 - SQL 自动修复；
 - 独立最终答案合成；
 - 多轮结果引用与会话记忆；
-- SQL、Safety、ResultView、Chart 等工件链；
+- SQL、Safety、Result、Visualization 等独立但可追溯的工件链；
 - 用户可见的分析过程。
 
 ### 3.2 来自当前代码的可靠性基础
@@ -552,19 +552,23 @@ Web 与打包桌面端使用相同协议，能够完成输入、流式、工具�
 - 文件、类型和路由没有阶段性命名；
 - System Prompt 的数据分析师核心行为通过评测。
 
-## 24. Reference-only Artifact 数据边界
+## 24. Artifact 与数据边界
 
-Artifact 是可解析的持久引用，不是查询结果缓存。SQL 查询结果的唯一事实来源是数据源本身以及由后端校验、编译和执行的 SQL。
+Artifact 是有身份、类型、来源和血缘的耐久工作成果；payload 归对应 DLC。普通 Data Result 是
+reference-only 查询成果，不是查询结果缓存。SQL 查询值的权威来源是数据源本身以及由后端校验、编译
+和执行的 SQL；需要冻结值时必须创建独立 Snapshot Artifact。
 
 - Result Artifact 只持久化真实 Artifact ID、来源 SQL Artifact ID、查询指纹、datasource generation、列结构、执行统计、时间、关系和 provenance；禁止持久化 `rows`、`previewRows` 或任意单元格值。
-- Chart Artifact payload 固定为 `sourceResultArtifactId`、`chartType`、`x`、`y`、`aggregation`、`title`；其中 `y` 是字段名数组。禁止持久化 `series`、样本行、展示标签或重复统计元数据。
-- Artifact 分页、筛选、排序、导出和图表数据接口只接受目标 Artifact ID 与视图参数。datasource、SQL、generation、权限和来源关系由后端解析，客户端不得作为权威来源回传。
+- Snapshot Artifact 可以在有界、明确保留策略下拥有冻结值，并以 `derived_from` 指向 Result；它不是读取失败时的 fallback。
+- Visualization Artifact 保存声明式 document、布局、交互配置和来源绑定。引用 Artifact 来源时不得复制 Result rows；`model_knowledge` 或 `user_provided` 小数据必须显式标注来源，且不能冒充数据库 Evidence。
+- Artifact Representation 只接受目标 Artifact ID、Representation type 与 typed operation 参数。datasource、SQL、generation、权限和来源关系由 Provider 解析，客户端不得作为权威来源回传。
 - 前端 Conversation Store、事件流和会话快照只保存 Artifact descriptor。按需取得的当前页数据只存在于视图组件生命周期，不进入持久 Store。
 - Tool Result 可以在当前 ReAct 步骤中短暂提供给模型，但 Durable Observation 只保存状态、摘要、Artifact ID、计数、查询指纹和诊断，不保存结果行。
 - Session History、Session Memory、selected Artifact context 和 Turn context snapshot 禁止包含结果行。模型需要具体数据时必须通过 Artifact/SQL 工具重新读取。
 - Evidence 只保存支撑结论的最小事实、locator、Artifact ID、查询指纹和观测时间，不保存任意结果集。
-- Result Gateway 的唯一公开资源接口是 `POST /api/v1/artifacts/{artifactId}/page`、`POST /api/v1/artifacts/{artifactId}/export` 和 `POST /api/v1/artifacts/{artifactId}/chart-data`；请求不得携带 datasource ID 或 SQL。
-- Agent 需要读取已选中或恢复后的结果时必须调用 `artifact.inspect`。该工具只向当前 ReAct 回合暴露最多 50 行，持久 Observation 仅保留计数、耗时、指纹和 Artifact ID。
+- Artifact Representation 的唯一公开接口是 `GET /api/v1/artifacts/{artifactId}/representations`、`POST /api/v1/artifacts/{artifactId}/representations/{representationType}/read` 和对应 `stream`；请求不得携带 datasource ID 或 SQL。
+- Agent 需要读取已选中或恢复后的 Result 时必须调用 Data DLC 的 `result_inspect`/`result_profile`。工具只向当前 ReAct 回合暴露有界数据，持久 Observation 仅保留计数、耗时、指纹和 Artifact ID。
+- Final Answer 可在独立 Markdown 行使用 `{{artifact:artifact_id}}` 嵌入已观察 Artifact。Core 必须校验 ID、Session/Run 范围、可见性和重复引用；该语法不替代 Evidence citation。
 - datasource generation 变化时，旧 Artifact 必须明确变为不可重放或 stale，不能静默查询新连接并冒充旧证据。
 
 验收必须证明：使用唯一敏感测试值执行查询后，该值不存在于 Artifact、Event、Observation、Turn、Memory 和前端 Conversation Store；只有按需结果响应与当前工具调用的瞬时内存可以包含它。

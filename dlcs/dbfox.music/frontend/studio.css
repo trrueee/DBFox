@@ -1,7 +1,7 @@
 .dbfox-music,
 .dbfox-music-studio,
 .dbfox-music-start {
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font: inherit;
 }
 
@@ -19,7 +19,7 @@
 }
 
 .dbfox-music__resource:hover {
-  background: var(--surface-hover);
+  background: var(--control-bg-hover);
 }
 
 .dbfox-music__resource-main,
@@ -48,7 +48,7 @@
 }
 
 .dbfox-music__resource-icon {
-  color: var(--accent-primary);
+  color: var(--color-primary);
 }
 
 .dbfox-music__resource-label {
@@ -60,8 +60,8 @@
 .dbfox-music__resource small,
 .dbfox-music-studio__header span,
 .dbfox-music-artifact small {
-  color: var(--text-muted);
-  font-size: 11px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
   font-variant-numeric: tabular-nums;
 }
 
@@ -71,13 +71,13 @@
   border: 1px dashed var(--border-subtle);
   border-radius: 7px;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
 .dbfox-music__import:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .dbfox-music__status,
@@ -87,13 +87,13 @@
 .dbfox-music-studio__error {
   margin: 0;
   padding: 7px 9px;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-music__error,
 .dbfox-music-studio__error {
-  color: var(--danger-fg);
+  color: var(--color-danger);
 }
 
 .dbfox-music-studio {
@@ -104,37 +104,25 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  background: var(--surface-primary);
+  background: var(--surface-workspace);
   container-type: inline-size;
 }
 
-.dbfox-music-studio__header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+.dbfox-music-studio__meta {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
-  min-height: 38px;
-  padding: 8px 14px;
+  min-height: 32px;
+  padding: 6px 14px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-muted);
-}
-
-.dbfox-music-studio__header strong {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
 }
 
 .dbfox-music-transport {
   position: sticky;
-  top: 38px;
+  top: 0;
   z-index: 9;
   display: flex;
   align-items: center;
@@ -144,7 +132,7 @@
   padding: 4px 12px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-primary);
+  background: var(--surface-workspace);
 }
 
 .dbfox-music-transport button,
@@ -154,36 +142,36 @@
   padding: 4px 8px;
   border-radius: 5px;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
 .dbfox-music-transport button:hover,
 .dbfox-music-ab button:hover,
 .dbfox-music-keyboard header button:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
 }
 
 .dbfox-music-transport button.is-active,
 .dbfox-music-ab button.is-active {
-  background: var(--accent-soft);
-  color: var(--accent-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .dbfox-music-transport span {
   min-width: 78px;
   margin-left: 6px;
-  color: var(--text-muted);
-  font-size: 11px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
   font-variant-numeric: tabular-nums;
 }
 
 .dbfox-music-transport__ask {
   margin-left: 8px;
-  background: color-mix(in srgb, var(--accent-primary) 12%, transparent) !important;
-  color: var(--accent-primary) !important;
-  font-size: 11px !important;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  font-size: var(--ui-font-micro);
   font-weight: 500;
 }
 
@@ -196,42 +184,47 @@
   min-height: min-content;
   padding: 12px;
   overflow: visible;
-  background: color-mix(in srgb, var(--surface-primary) 92%, var(--warning-soft));
+  background: color-mix(in srgb, var(--surface-workspace) 92%, var(--color-warning-soft));
 }
 
 .dbfox-music-measure {
   position: relative;
+  width: 100%;
   min-width: 0;
   min-height: 184px;
+  padding: 0;
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  background: var(--surface-panel, white);
+  background: var(--surface-panel);
+  color: inherit;
   cursor: pointer;
+  font: inherit;
+  text-align: initial;
   transition: all 120ms ease;
 }
 
 .dbfox-music-measure:hover {
-  border-color: var(--accent-primary);
+  border-color: var(--color-primary);
 }
 
 .dbfox-music-measure.is-active {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 28%, transparent);
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
 }
 
 .dbfox-music-measure.is-selected {
-  border-color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-soft) 50%, transparent);
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary-soft) 50%, transparent);
 }
 
 .dbfox-music-measure.is-uncertain::after {
   position: absolute;
   top: 6px;
   right: 7px;
-  color: var(--warning-fg);
+  color: var(--color-warning);
   content: "!";
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--ui-font-micro);
+  font-weight: 600;
 }
 
 .dbfox-music-measure__number {
@@ -239,8 +232,8 @@
   top: 4px;
   left: 7px;
   z-index: 1;
-  color: var(--text-muted);
-  font-size: 10px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
 }
 
 .dbfox-music-measure svg {
@@ -251,7 +244,7 @@
 .dbfox-music-measure svg path,
 .dbfox-music-measure svg line,
 .dbfox-music-measure svg text {
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   fill: currentColor;
   stroke: currentColor;
 }
@@ -259,7 +252,7 @@
 .dbfox-music-keyboard {
   min-width: 0;
   padding: 8px 12px 12px;
-  background: color-mix(in srgb, var(--surface-secondary) 88%, var(--text-primary));
+  background: color-mix(in srgb, var(--surface-auxiliary) 88%, var(--color-text-primary));
 }
 
 .dbfox-music-keyboard header {
@@ -267,8 +260,8 @@
   align-items: center;
   justify-content: space-between;
   min-height: 26px;
-  color: var(--text-muted);
-  font-size: 10px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
   letter-spacing: .12em;
 }
 
@@ -277,8 +270,8 @@
   padding: 2px 7px;
   border-radius: 5px;
   background: transparent;
-  color: var(--text-muted);
-  font-size: 10px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
   letter-spacing: 0;
   cursor: pointer;
 }
@@ -291,47 +284,43 @@
 }
 
 .dbfox-music-keyboard__keys {
-  position: relative;
-  display: flex;
-  min-width: calc(var(--white-count) * 17px);
+  display: block;
+  width: 100%;
+  min-width: 612px;
   height: 112px;
   padding: 0 2px 2px;
   border-radius: 4px;
-  background: var(--text-primary);
+  background: var(--color-text-primary);
 }
 
+.dbfox-music-keyboard__keys.is-full { min-width: 884px; }
+
 .dbfox-music-key {
-  display: block;
-  min-width: 0;
-  padding: 0;
   cursor: pointer;
-  transition: background 80ms ease, transform 80ms ease;
+  stroke: color-mix(in srgb, var(--color-text-primary) 24%, transparent);
+  stroke-width: .04;
+  vector-effect: non-scaling-stroke;
+  transition: fill 80ms ease;
 }
 
 .dbfox-music-key.is-white {
-  position: relative;
-  flex: 1;
-  height: 108px;
-  border-right: 1px solid color-mix(in srgb, var(--text-primary) 24%, transparent);
-  border-radius: 0 0 3px 3px;
-  background: color-mix(in srgb, var(--surface-primary) 94%, var(--warning-soft));
+  fill: color-mix(in srgb, var(--surface-workspace) 94%, var(--color-warning-soft));
 }
 
 .dbfox-music-key.is-black {
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  width: calc(100% / var(--white-count) * .64);
-  height: 67px;
-  border-radius: 0 0 3px 3px;
-  background: color-mix(in srgb, var(--text-primary) 88%, var(--surface-secondary));
+  fill: color-mix(in srgb, var(--color-text-primary) 88%, var(--surface-auxiliary));
 }
 
 .dbfox-music-key.is-active,
 .dbfox-music-key:active {
-  background: color-mix(in srgb, var(--accent-primary) 48%, var(--surface-primary));
-  transform: translateY(2px);
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent-primary) 42%, transparent);
+  fill: color-mix(in srgb, var(--color-primary) 48%, var(--surface-workspace));
+  stroke: var(--color-primary);
+}
+
+.dbfox-music-key:focus-visible {
+  outline: none;
+  stroke: var(--color-primary);
+  stroke-width: .12;
 }
 
 .dbfox-music-waveform {
@@ -340,7 +329,7 @@
   margin: 8px 14px;
   border-radius: 7px;
   overflow: hidden;
-  background: var(--surface-secondary);
+  background: var(--surface-auxiliary);
 }
 
 .dbfox-music-waveform svg {
@@ -351,24 +340,36 @@
 
 .dbfox-music-waveform path {
   fill: none;
-  stroke: var(--accent-primary);
+  stroke: var(--color-primary);
   stroke-width: .7;
   vector-effect: non-scaling-stroke;
 }
 
-.dbfox-music-waveform__playhead {
+.dbfox-music-waveform__progress {
+  appearance: none;
   position: absolute;
+  left: 0;
+  right: 0;
   top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--accent-primary);
+  width: 100%;
+  height: 2px;
+  border: 0;
+  background: transparent;
+}
+
+.dbfox-music-waveform__progress::-webkit-progress-bar {
+  background: transparent;
+}
+
+.dbfox-music-waveform__progress::-webkit-progress-value {
+  background: var(--color-primary);
 }
 
 .dbfox-music-waveform small {
   position: absolute;
   right: 7px;
   bottom: 5px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .dbfox-music-ab {
@@ -385,7 +386,7 @@
   gap: 9px;
   min-height: 150px;
   padding: 20px;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   text-align: center;
 }
 
@@ -393,7 +394,7 @@
 .dbfox-music-confidence p {
   max-width: 520px;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--ui-font-caption);
   line-height: 1.6;
 }
 
@@ -402,8 +403,8 @@
   min-height: 38px;
   padding: 7px 12px;
   border-radius: 7px;
-  background: var(--accent-primary);
-  color: var(--accent-contrast);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
   cursor: pointer;
 }
 
@@ -415,13 +416,13 @@
   height: 100%;
   min-height: 300px;
   padding: 24px;
-  background: var(--surface-primary);
+  background: var(--surface-workspace);
   text-align: center;
 }
 
 .dbfox-music-start > span {
-  color: var(--accent-primary);
-  font-size: 30px;
+  color: var(--color-primary);
+  font-size: var(--ui-font-display);
 }
 
 .dbfox-music-start h2,
@@ -431,14 +432,14 @@
 }
 
 .dbfox-music-start h2 {
-  font-size: 17px;
+  font-size: var(--ui-font-title);
   font-weight: 600;
 }
 
 .dbfox-music-start p,
 .dbfox-music-start blockquote {
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-music-artifact {
@@ -449,7 +450,7 @@
   padding: 10px 12px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: var(--surface-secondary);
+  background: var(--surface-auxiliary);
 }
 
 .dbfox-music-artifact__icon {
@@ -458,8 +459,8 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .dbfox-music-artifact div {
@@ -473,12 +474,12 @@
   padding: 4px 8px;
   border-radius: 6px;
   background: transparent;
-  color: var(--accent-primary);
+  color: var(--color-primary);
   cursor: pointer;
 }
 
 .dbfox-music-artifact button:hover {
-  background: var(--accent-soft);
+  background: var(--color-primary-soft);
 }
 
 @container (max-width: 520px) {

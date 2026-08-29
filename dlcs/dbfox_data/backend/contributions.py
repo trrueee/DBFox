@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from dbfox_dlc_api import (
+    DATAFRAME_REPRESENTATION_TYPE,
     BackendExtensionHost,
     CapabilityGuidanceSpec,
     DlcOperationContext,
@@ -37,12 +38,13 @@ from .contracts import (
 )
 from .resource_kind import DATABASE_RESOURCE_KIND
 from .artifact_contracts import (
-    CHART_ARTIFACT_TYPE,
     RESULT_VIEW_ARTIFACT_TYPE,
+    SNAPSHOT_ARTIFACT_TYPE,
     SAFETY_ARTIFACT_TYPE,
     SQL_ARTIFACT_TYPE,
-    ChartArtifactPayload,
     ResultViewArtifactPayload,
+    SnapshotArtifactPayload,
+    SnapshotBackedResultViewArtifactPayload,
     SafetyArtifactPayload,
     SqlArtifactPayload,
 )
@@ -58,8 +60,8 @@ from .catalog_tools import (
 )
 from .tools import SqlExecuteReadonlyTool, SqlValidateTool
 from .preview_tool import DataPreviewTool
-from .result_tool import ChartCreateTool, ResultInspectTool, ResultProfileTool
-from .result_view import DataChartView, DataResultTableView
+from .result_tool import ResultInspectTool, ResultProfileTool
+from .result_view import DataResultRepresentation
 from .tool_contracts import (
     CatalogOverviewOutput,
     CatalogRefreshOutput,
@@ -111,18 +113,18 @@ def register(host: BackendExtensionHost) -> None:
             kind=kind,
         )
     )
+    result_representation = DataResultRepresentation(store, connection)
     workbench = DataCatalogWorkbench(store, connection)
     host.tools.register(SqlValidateTool(connection))
-    host.tools.register(SqlExecuteReadonlyTool(store, connection))
+    host.tools.register(SqlExecuteReadonlyTool(connection))
     host.tools.register(CatalogOverviewTool(store, connection))
     host.tools.register(CatalogRefreshTool(store, connection))
     host.tools.register(SchemaListTool(store, connection))
     host.tools.register(SchemaSearchTool(store, connection))
     host.tools.register(SchemaInspectTool(store, connection))
     host.tools.register(DataPreviewTool(store, connection))
-    host.tools.register(ResultInspectTool(store))
-    host.tools.register(ResultProfileTool(store))
-    host.tools.register(ChartCreateTool(store))
+    host.tools.register(ResultInspectTool(result_representation))
+    host.tools.register(ResultProfileTool(result_representation))
     host.agent_guidance.register(CapabilityGuidanceSpec(
         id="analytical_work",
         version="1",
@@ -138,23 +140,28 @@ def register(host: BackendExtensionHost) -> None:
         applies_to_artifact_types=(
             SQL_ARTIFACT_TYPE,
             RESULT_VIEW_ARTIFACT_TYPE,
-            CHART_ARTIFACT_TYPE,
+            SNAPSHOT_ARTIFACT_TYPE,
         ),
     ))
 
     for artifact_type, validator in (
         (SQL_ARTIFACT_TYPE, SqlArtifactPayload),
         (SAFETY_ARTIFACT_TYPE, SafetyArtifactPayload),
-        (RESULT_VIEW_ARTIFACT_TYPE, ResultViewArtifactPayload),
-        (CHART_ARTIFACT_TYPE, ChartArtifactPayload),
+        (RESULT_VIEW_ARTIFACT_TYPE, SnapshotBackedResultViewArtifactPayload),
+        (SNAPSHOT_ARTIFACT_TYPE, SnapshotArtifactPayload),
     ):
         host.artifacts.register(artifact_type, 1, validator)
-    table_view = DataResultTableView(store)
-    host.artifacts.register_table_view(
+    host.artifacts.register(RESULT_VIEW_ARTIFACT_TYPE, 2, ResultViewArtifactPayload)
+    host.artifacts.register_representation(
         RESULT_VIEW_ARTIFACT_TYPE,
-        table_view,
+        DATAFRAME_REPRESENTATION_TYPE,
+        result_representation,
     )
-    host.artifacts.register_chart_view(CHART_ARTIFACT_TYPE, DataChartView(table_view))
+    host.artifacts.register_representation(
+        SNAPSHOT_ARTIFACT_TYPE,
+        DATAFRAME_REPRESENTATION_TYPE,
+        result_representation,
+    )
 
     host.completion.register_constraint(
         SemanticCitationConstraint(

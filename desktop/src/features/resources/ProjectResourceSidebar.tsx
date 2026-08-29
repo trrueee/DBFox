@@ -1,375 +1,383 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  ChevronDown,
+  AlertCircle,
+  ChevronRight,
   Folder,
-  FolderOpen,
-  MessageSquare,
+  Home,
+  PackageOpen,
+  PanelLeftClose,
   Plus,
+  Settings2,
   Settings,
 } from "lucide-react";
+
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  ScrollArea,
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarNavRow,
+  Button,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
+  ErrorDetails,
 } from "../../components/ui";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { useConversationStore } from "../../stores/conversationStore";
-import { useProjectState } from "../projects/useProjectState";
 import { getUserErrorMessage } from "../../lib/api/client";
-import type { ResourceConnectorContribution } from "../resources/types";
-import "../datasource/DataSourceTree.css";
+import { useConversationStore } from "../../stores/conversationStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { selectActiveConversationId } from "../../stores/workspaceStore";
+import { useProjectState } from "../projects/useProjectState";
+import type { ConversationSummary } from "../../types/conversation";
+import type { ResourceConnectorContribution } from "./types";
+import { ResourceViewContainer } from "./ResourceViewContainer";
+import "./ProjectResourceSidebar.css";
+
+/** Conversations shown per project before the "show more" overflow. */
+const CONVERSATION_PREVIEW_LIMIT = 5;
 
 interface ProjectResourceSidebarProps {
+  connectors: readonly ResourceConnectorContribution[];
   collapsed: boolean;
   onToggleCollapse: () => void;
   onNewProject: () => void;
   onOpenSettings: () => void;
-  connectors: readonly ResourceConnectorContribution[];
+  onOpenExtensions: () => void;
 }
 
 export function ProjectResourceSidebar({
+  connectors,
   collapsed,
   onToggleCollapse,
   onNewProject,
   onOpenSettings,
-  connectors,
+  onOpenExtensions,
 }: ProjectResourceSidebarProps) {
-  const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
-  const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
-  const showSmartQueryHome = useWorkspaceStore((s) => s.showSmartQueryHome);
-  const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
+  const activeProjectId = useWorkspaceStore((state) => state.activeProjectId);
+  const setActiveProject = useWorkspaceStore((state) => state.setActiveProject);
+  const showSmartQueryHome = useWorkspaceStore((state) => state.showSmartQueryHome);
+  const showProjectOverview = useWorkspaceStore((state) => state.showProjectOverview);
+  const openConversationCenter = useWorkspaceStore((state) => state.openConversationCenter);
+  const mainSurface = useWorkspaceStore((state) => (
+    state.activeProjectId ? state.mainSurfaceByProject[state.activeProjectId] : undefined
+  ));
+  const { projects, loadingProjects, projectError } = useProjectState(activeProjectId);
+  const summaries = useConversationStore((state) => state.summaries);
+  const openConversation = useConversationStore((state) => state.openConversation);
+  const activeConversationId = useWorkspaceStore(selectActiveConversationId);
+  const [navigationError, setNavigationError] = useState<unknown | null>(null);
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
 
-  const { projects, loadingProjects } = useProjectState(activeProjectId);
-
-  const summaries = useConversationStore((s) => s.summaries);
-  const activeConversationId = useConversationStore((s) => s.activeConversationId);
-  const openConversation = useConversationStore((s) => s.openConversation);
-
-  const restoredConversationProjectRef = useRef("");
-  const [conversationError, setConversationError] = useState("");
-  const [connectorAddError, setConnectorAddError] = useState("");
-  const [addingConnectorId, setAddingConnectorId] = useState<string | null>(null);
-  const [expandedConnectors, setExpandedConnectors] = useState<Record<string, boolean>>({});
-
-  // Host owns section chrome (expand/collapse); DLC only contributes content.
-  // Default: first connector expanded, the rest collapsed until the user opens them.
-  const toggleConnector = useCallback((connectorId: string, currentExpanded: boolean) => {
-    setExpandedConnectors((prev) => ({ ...prev, [connectorId]: !currentExpanded }));
-  }, []);
-
-  // Auto-select first project
   useEffect(() => {
     if (activeProjectId || loadingProjects || projects.length === 0) return;
     setActiveProject(projects[0].id);
+    useWorkspaceStore.getState().showSmartQueryHome();
   }, [activeProjectId, loadingProjects, projects, setActiveProject]);
 
-  // Restore conversation for active project
+  // The active project's group follows focus so its conversations stay reachable.
   useEffect(() => {
     if (!activeProjectId) return;
-    if (restoredConversationProjectRef.current === activeProjectId) return;
-    restoredConversationProjectRef.current = activeProjectId;
-    const storedConversationId = useWorkspaceStore.getState().projectShell[activeProjectId]?.activeConversationId;
-    if (!storedConversationId) return;
-    void openConversation(storedConversationId)
-      .then((detail) => {
-        if (activeProjectId === useWorkspaceStore.getState().activeProjectId) {
-          openConversationCenter(detail.id);
-          useWorkspaceStore.getState().setProjectActiveConversation(activeProjectId, detail.id);
-        }
-      })
-      .catch((openError) => {
-        setConversationError(getUserErrorMessage(openError, "对话恢复失败，请重试。"));
-      });
-  }, [activeProjectId, openConversation, openConversationCenter]);
+    setExpandedProjects((current) => (
+      current[activeProjectId] ? current : { ...current, [activeProjectId]: true }
+    ));
+  }, [activeProjectId]);
 
-  const conversationsForProject = useMemo(() => {
-    if (!activeProjectId) return [];
-    return summaries.filter((conversation) => conversation.project_id === activeProjectId);
-  }, [activeProjectId, summaries]);
+  const conversationsByProject = useMemo(() => {
+    const map = new Map<string, ConversationSummary[]>();
+    for (const summary of summaries) {
+      if (!summary.project_id) continue;
+      const list = map.get(summary.project_id);
+      if (list) list.push(summary);
+      else map.set(summary.project_id, [summary]);
+    }
+    return map;
+  }, [summaries]);
 
-  const handleOpenConversation = async (conversationId: string) => {
-    setConversationError("");
+  /** Row click: focus the project and toggle its group. No forced surface change —
+      an untouched project falls back to the new-task home. */
+  const selectProject = (projectId: string) => {
+    if (projectId !== activeProjectId) setActiveProject(projectId);
+    setExpandedProjects((current) => ({ ...current, [projectId]: !(current[projectId] ?? projectId === activeProjectId) }));
+  };
+
+  const openManagement = (projectId: string) => {
+    if (projectId !== activeProjectId) setActiveProject(projectId);
+    showProjectOverview();
+  };
+
+  const openRecent = async (conversationId: string, projectId: string) => {
+    setNavigationError(null);
     try {
+      if (projectId !== activeProjectId) setActiveProject(projectId);
       await openConversation(conversationId);
       openConversationCenter(conversationId);
-      if (activeProjectId) useWorkspaceStore.getState().setProjectActiveConversation(activeProjectId, conversationId);
-    } catch (openError) {
-      setConversationError(getUserErrorMessage(openError, "对话加载失败，请重试。"));
-    }
-  };
-
-  const handleSelectProject = (projectId: string) => {
-    setActiveProject(projectId);
-  };
-
-  const handleNewProjectConversation = (projectId: string) => {
-    setActiveProject(projectId);
-    showSmartQueryHome();
-  };
-
-  const handleAddConnector = async (connector: ResourceConnectorContribution) => {
-    if (!activeProjectId || !connector.onAdd || addingConnectorId) return;
-    setConnectorAddError("");
-    setAddingConnectorId(connector.id);
-    try {
-      await connector.onAdd({ projectId: activeProjectId });
+      useWorkspaceStore.getState().setProjectActiveConversation(projectId, conversationId);
     } catch (error) {
-      setConnectorAddError(getUserErrorMessage(error, "资源操作失败，请重试。"));
-    } finally {
-      setAddingConnectorId(null);
+      setNavigationError(error);
     }
   };
-
-  const addableConnectors = useMemo(
-    () => connectors.filter((c) => c.onAdd && c.addLabel),
-    [connectors],
-  );
-
-  const [chatsCollapsed, setChatsCollapsed] = useState(false);
-  const [showAllChats, setShowAllChats] = useState(false);
-  const RECENT_CHATS_LIMIT = 6;
-
-  const displayedConversations = useMemo(() => {
-    if (showAllChats) return conversationsForProject;
-    return conversationsForProject.slice(0, RECENT_CHATS_LIMIT);
-  }, [conversationsForProject, showAllChats]);
-
-  const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0] ?? null;
 
   if (collapsed) {
     return (
-      <section className="hifi-col hifi-sidebar-col ds-tree-collapsed">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button type="button" onClick={onToggleCollapse} aria-label="展开侧栏" className="ds-tree-expand-btn">
-              <ChevronDown size={14} className="ds-tree-chevron-left" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>展开侧栏</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button type="button" onClick={onOpenSettings} aria-label="打开设置" className="ds-tree-expand-btn ds-tree-collapsed-settings">
-              <Settings size={15} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>设置</TooltipContent>
-        </Tooltip>
-      </section>
+      <Sidebar className="product-sidebar product-sidebar--collapsed" aria-label="主导航">
+        <SidebarHeader>
+          <CollapsedAction label="展开导航" onClick={onToggleCollapse} icon={<ChevronRight />} />
+          <CollapsedAction label="新任务" onClick={() => showSmartQueryHome()} icon={<Plus />} primary />
+        </SidebarHeader>
+        <SidebarFooter>
+          <CollapsedAction label="扩展" onClick={onOpenExtensions} icon={<PackageOpen />} />
+          <CollapsedAction label="设置" onClick={onOpenSettings} icon={<Settings />} />
+        </SidebarFooter>
+      </Sidebar>
     );
   }
 
   return (
-    <section className="hifi-col hifi-sidebar-col ds-tree-main">
-      <div className="hifi-sidebar-panel">
-        <div className="hifi-sidebar-header ds-tree-header-row">
-          {projects.length > 1 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button type="button" className="ds-workspace-identity-trigger" aria-label="切换项目">
-                  <FolderOpen size={14} className="ds-workspace-identity-icon" />
-                  <span className="ds-workspace-identity-name">{activeProject?.name || "工作区"}</span>
-                  <ChevronDown size={12} className="ds-workspace-identity-chevron" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                {projects.map((project) => (
-                  <DropdownMenuItem
-                    key={project.id}
-                    onClick={() => handleSelectProject(project.id)}
-                  >
-                    <Folder size={14} className="ds-project-dropdown-icon" />
-                    <span>{project.name}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <div className="ds-workspace-identity">
-              <FolderOpen size={14} className="ds-workspace-identity-icon" />
-              <span className="ds-workspace-identity-name">{activeProject?.name || "工作区"}</span>
-            </div>
-          )}
-
-          <div className="ds-tree-actions">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={onNewProject}
-                  aria-label="新建项目"
-                  className="ds-tree-icon-btn"
-                >
-                  <Plus size={15} strokeWidth={1.5} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>新建项目</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" onClick={onToggleCollapse} aria-label="收起侧栏" className="ds-tree-icon-btn">
-                  <ChevronDown size={14} className="ds-tree-chevron-right" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>收起侧栏</TooltipContent>
-            </Tooltip>
-          </div>
+    <Sidebar className="product-sidebar" aria-label="主导航">
+      <SidebarHeader>
+        <div className="product-sidebar__topline">
+          <span className="product-sidebar__title">工作</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button type="button" variant="ghost" size="icon-sm" onClick={onToggleCollapse} aria-label="收起导航">
+                <PanelLeftClose size={16} aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>收起导航</TooltipContent>
+          </Tooltip>
         </div>
+        <SidebarNavRow
+          className="product-sidebar__new-task"
+          icon={<Plus />}
+          label="新任务"
+          onClick={() => showSmartQueryHome()}
+        />
+        <SidebarNavRow
+          icon={<Home />}
+          label="主页"
+          active={mainSurface?.kind === "new-conversation"}
+          onClick={() => showSmartQueryHome()}
+        />
+      </SidebarHeader>
 
-        <ScrollArea className="hifi-tree-container ds-tree-scroll-area">
-          {conversationError && <div className="ds-tree-status ds-tree-status--error" role="alert">{conversationError}</div>}
-
-          {/* Conversations (Core) */}
-          {activeProjectId ? (
-            <div className="ds-resource-section">
-              <div className="ds-resource-header ds-resource-header--collapsible">
-                <button
-                  type="button"
-                  className="ds-section-toggle-btn"
-                  onClick={() => setChatsCollapsed((c) => !c)}
-                  aria-expanded={!chatsCollapsed}
-                >
-                  <ChevronDown
-                    size={12}
-                    aria-hidden="true"
-                    className={`ds-section-chevron ${chatsCollapsed ? "is-collapsed" : ""}`}
-                  />
-                  <MessageSquare size={13} aria-hidden="true" />
-                  <span className="ds-resource-header-label">对话</span>
-                </button>
-                {conversationsForProject.length > 0 && (
-                  <span className="ds-conversation-count">{conversationsForProject.length}</span>
-                )}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="ds-tree-icon-btn ds-section-add-btn"
-                      aria-label="新对话"
-                      onClick={() => handleNewProjectConversation(activeProjectId)}
-                    >
-                      <Plus size={13} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>新对话</TooltipContent>
-                </Tooltip>
-              </div>
-
-              {!chatsCollapsed && (
-                <div className="ds-section-content">
-                  {conversationsForProject.length === 0 ? (
-                    <div className="ds-tree-status">暂无对话，点击 + 开始新对话。</div>
-                  ) : (
-                    <>
-                      {displayedConversations.map((conversation) => (
-                        <button
-                          type="button"
-                          key={conversation.id}
-                          className={`hifi-tree-node ds-tree-table-row ${conversation.id === activeConversationId ? "active" : ""}`}
-                          onClick={() => { void handleOpenConversation(conversation.id); }}
-                          aria-current={conversation.id === activeConversationId ? "page" : undefined}
-                          title={conversation.title}
-                        >
-                          <MessageSquare size={13} className="ds-tree-table-icon" />
-                          <span className="ds-tree-table-name">{conversation.title}</span>
-                        </button>
-                      ))}
-                      {conversationsForProject.length > RECENT_CHATS_LIMIT && (
-                        <button
-                          type="button"
-                          className="ds-tree-more-btn"
-                          onClick={() => setShowAllChats((prev) => !prev)}
-                        >
-                          {showAllChats ? "收起" : `查看全部 ${conversationsForProject.length} 个对话`}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel
+            action={(
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon-sm" onClick={onNewProject} aria-label="新建项目">
+                    <Plus size={14} aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>新建项目</TooltipContent>
+              </Tooltip>
+            )}
+          >
+            项目
+          </SidebarGroupLabel>
+          {loadingProjects ? <p className="product-sidebar__status">正在载入项目…</p> : null}
+          {projectError ? (
+              <Alert className="product-sidebar__alert" variant="destructive">
+                <AlertCircle aria-hidden="true" />
+                <AlertTitle>读取项目失败</AlertTitle>
+                <AlertDescription>
+                  <span>{getUserErrorMessage(projectError, "读取项目失败，请重试。")}</span>
+                  <ErrorDetails error={projectError} />
+                </AlertDescription>
+            </Alert>
           ) : null}
-
-          {/* Resources (Host-owned sections; connectors contribute content only) */}
-          {activeProjectId && connectors.length > 0 ? (
-            <div className="ds-resource-section">
-              <div className="ds-resource-header">
-                <span className="ds-resource-header-label">资源</span>
-
-                {/* Add Resource menu */}
-                {addableConnectors.length > 0 ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="ds-tree-icon-btn ds-add-resource-btn"
-                        aria-label="添加资源"
-                      >
-                        <Plus size={13} />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {addableConnectors.map((connector) => (
-                        <DropdownMenuItem
-                          key={connector.id}
-                          onClick={() => void handleAddConnector(connector)}
-                          disabled={addingConnectorId !== null}
-                        >
-                          {addingConnectorId === connector.id ? "正在准备…" : connector.addLabel}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                ) : null}
-              </div>
-
-              <div className="ds-connector-sections">
-                {connectorAddError ? (
-                  <p className="ds-resource-error" role="alert">{connectorAddError}</p>
-                ) : null}
-                {connectors.map((connector, index) => {
-                  const isExpanded = expandedConnectors[connector.id] ?? index === 0;
-                  return (
-                    <div key={connector.id} className="ds-connector-section">
-                      <button
-                        type="button"
-                        className="ds-connector-section__header"
-                        aria-expanded={isExpanded}
-                        onClick={() => toggleConnector(connector.id, isExpanded)}
-                      >
-                        <ChevronDown
-                          size={12}
-                          aria-hidden="true"
-                          className={`ds-connector-section__chevron ${isExpanded ? "" : "is-collapsed"}`}
-                        />
-                        {connector.icon}
-                        <span className="ds-connector-section__title">{connector.title}</span>
-                      </button>
-                      {isExpanded ? (
-                        <div className="ds-connector-section__content">
-                          {connector.render({ projectId: activeProjectId })}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          {navigationError ? (
+              <Alert className="product-sidebar__alert" variant="destructive">
+                <AlertCircle aria-hidden="true" />
+                <AlertTitle>工作加载失败</AlertTitle>
+                <AlertDescription>
+                  <span>{getUserErrorMessage(navigationError, "工作加载失败，请重试。")}</span>
+                  <ErrorDetails error={navigationError} />
+                </AlertDescription>
+            </Alert>
           ) : null}
-        </ScrollArea>
+          {projects.map((project) => (
+            <ProjectGroup
+              key={project.id}
+              project={project}
+              expanded={expandedProjects[project.id] ?? project.id === activeProjectId}
+              conversations={conversationsByProject.get(project.id) ?? []}
+              connectors={connectors}
+              isActive={project.id === activeProjectId}
+              isConversationActive={project.id === activeProjectId
+                && mainSurface?.kind === "conversation"
+                ? activeConversationId
+                : null}
+              onSelect={() => selectProject(project.id)}
+              onOpenManagement={() => openManagement(project.id)}
+              onOpenConversation={(conversationId) => void openRecent(conversationId, project.id)}
+            />
+          ))}
+        </SidebarGroup>
+      </SidebarContent>
 
-        <div className="ds-sidebar-footer">
-          <button type="button" className="ds-settings-entry" onClick={onOpenSettings}>
-            <Settings size={15} aria-hidden="true" />
-            <span>设置</span>
-          </button>
-        </div>
+      <SidebarFooter>
+        <SidebarNavRow icon={<PackageOpen />} label="扩展" onClick={onOpenExtensions} />
+        <SidebarNavRow icon={<Settings />} label="设置" onClick={onOpenSettings} />
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
+
+interface ProjectGroupProps {
+  project: { id: string; name: string };
+  expanded: boolean;
+  conversations: ConversationSummary[];
+  connectors: readonly ResourceConnectorContribution[];
+  isActive: boolean;
+  isConversationActive: string | null;
+  onSelect: () => void;
+  onOpenManagement: () => void;
+  onOpenConversation: (conversationId: string) => void;
+}
+
+/**
+ * One project node: clicking the row focuses the project and toggles the group;
+ * the hover gear opens project management. Conversations (preview + overflow)
+ * and resource sections sit directly under the row. Conversation text aligns
+ * with the project's label through an empty icon column — no conversation icon.
+ */
+function ProjectGroup({
+  project,
+  expanded,
+  conversations,
+  connectors,
+  isActive,
+  isConversationActive,
+  onSelect,
+  onOpenManagement,
+  onOpenConversation,
+}: ProjectGroupProps) {
+  const [showAllConversations, setShowAllConversations] = useState(false);
+
+  const visibleConversations = showAllConversations
+    ? conversations
+    : conversations.slice(0, CONVERSATION_PREVIEW_LIMIT);
+  const hiddenCount = conversations.length - visibleConversations.length;
+
+  return (
+    <div className="project-group">
+      <div className="project-group__header" data-active={isActive || undefined}>
+        <SidebarNavRow
+          className="project-group__name"
+          icon={<Folder />}
+          label={project.name}
+          active={isActive}
+          onClick={onSelect}
+          title={project.name}
+        />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="project-group__manage"
+              aria-label={`管理项目 ${project.name}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenManagement();
+              }}
+            >
+              <Settings2 size={14} aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">项目管理与资源</TooltipContent>
+        </Tooltip>
       </div>
-    </section>
+      {expanded ? (
+        <div className="project-group__body">
+          {visibleConversations.map((conversation) => (
+            <SidebarNavRow
+              key={conversation.id}
+              icon={<span aria-hidden="true" />}
+              label={conversation.title || "未命名任务"}
+              meta={formatRelativeTime(conversation.updated_at)}
+              active={conversation.id === isConversationActive}
+              onClick={() => onOpenConversation(conversation.id)}
+              title={conversation.title}
+            />
+          ))}
+          {hiddenCount > 0 ? (
+            <button
+              type="button"
+              className="project-group__more"
+              onClick={() => setShowAllConversations(true)}
+            >
+              显示更多
+            </button>
+          ) : null}
+          {showAllConversations && conversations.length > CONVERSATION_PREVIEW_LIMIT ? (
+            <button
+              type="button"
+              className="project-group__more"
+              onClick={() => setShowAllConversations(false)}
+            >
+              收起
+            </button>
+          ) : null}
+          {conversations.length === 0 ? (
+            <p className="project-group__empty">这个项目还没有对话。</p>
+          ) : null}
+          <ResourceViewContainer projectId={project.id} connectors={connectors} showGroupLabel={false} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Compact relative time for the sidebar rows: 刚刚 / 5分钟 / 2小时 / 3天 / 8月21日. */
+function formatRelativeTime(value?: string | null): string {
+  if (!value) return "";
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return "";
+  const elapsedMinutes = Math.floor((Date.now() - time) / 60000);
+  if (elapsedMinutes < 1) return "刚刚";
+  if (elapsedMinutes < 60) return `${elapsedMinutes}分钟`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}小时`;
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  if (elapsedDays < 30) return `${elapsedDays}天`;
+  return new Date(value).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+}
+
+function CollapsedAction({
+  label,
+  onClick,
+  icon,
+  primary = false,
+}: {
+  label: string;
+  onClick: () => void;
+  icon: ReactNode;
+  primary?: boolean;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant={primary ? "default" : "ghost"}
+          size="icon-sm"
+          className="product-sidebar__collapsed-action"
+          onClick={onClick}
+          aria-label={label}
+        >
+          {icon}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
   );
 }

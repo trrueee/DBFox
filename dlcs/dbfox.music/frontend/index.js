@@ -71,10 +71,12 @@ function openStudio(projectId, kind, value) {
     projectId,
     stateKey: key,
     target: kind === "empty" ? undefined : {
-      type: "resource",
-      kind: kind === "score" ? SCORE_KIND : AUDIO_KIND,
-      id,
-      version: kind === "score" ? value.head_revision || value.revision : `${value.fingerprint}:${value.analysis_revision}`,
+      type: "object",
+      object: {
+        kind: kind === "score" ? SCORE_KIND : AUDIO_KIND,
+        id,
+        version: kind === "score" ? value.head_revision || value.revision : `${value.fingerprint}:${value.analysis_revision}`,
+      },
     },
   });
 }
@@ -96,10 +98,8 @@ function promoteEmptyStudio(projectId, value) {
       projectId,
       stateKey: key,
       target: {
-        type: "resource",
-        kind: SCORE_KIND,
-        id: value.scoreId,
-        version: value.revision,
+        type: "object",
+        object: { kind: SCORE_KIND, id: value.scoreId, version: value.revision },
       },
     });
     return true;
@@ -191,12 +191,11 @@ function ScoreMeasure({ document, measure, active, uncertain, selected, onSelect
     if (!ref.current) return;
     renderMeasure(ref.current, document, measure);
   }, [document, measure]);
-  return h("section", {
+  return h("button", {
+    type: "button",
     className: `dbfox-music-measure${active ? " is-active" : ""}${uncertain ? " is-uncertain" : ""}${selected ? " is-selected" : ""}`,
     "aria-label": `第 ${measure} 小节${uncertain ? "，低置信度" : ""}`,
     onClick: () => onSelect?.(measure),
-    tabIndex: 0,
-    role: "button",
   }, h("span", { className: "dbfox-music-measure__number" }, measure), h("div", { ref }));
 }
 
@@ -225,20 +224,24 @@ function PianoKeyboard({ document, activeNotes, full, onFull }) {
     if (black) blacks.push({ pitch, left: whiteIndex });
     else { whites.push(pitch); whiteIndex += 1; }
   }
+  const handlePitchKey = (event, pitch) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    void previewPitch(pitch);
+  };
   return h("section", { className: "dbfox-music-keyboard", "aria-label": "钢琴键盘" },
     h("header", null, h("span", null, "PIANO"), h("button", {
       type: "button", onClick: onFull, "aria-pressed": full,
     }, full ? "Adaptive" : "Full 88")),
     h("div", { className: "dbfox-music-keyboard__scroll" },
-      h("div", { className: "dbfox-music-keyboard__keys", style: { "--white-count": whites.length } },
-        whites.map((pitch) => h("button", {
-          key: pitch, type: "button", className: `dbfox-music-key is-white${activeNotes.includes(pitch) ? " is-active" : ""}`,
-          "aria-label": `试听 MIDI 音高 ${pitch}`, onClick: () => void previewPitch(pitch),
+      h("svg", { className: `dbfox-music-keyboard__keys${full ? " is-full" : ""}`, viewBox: `0 0 ${whites.length} 10`, preserveAspectRatio: "none", role: "group", "aria-label": "可试听钢琴键" },
+        whites.map((pitch, index) => h("rect", {
+          key: pitch, x: index, y: 0, width: 1, height: 10, rx: .08, role: "button", tabIndex: 0, className: `dbfox-music-key is-white${activeNotes.includes(pitch) ? " is-active" : ""}`,
+          "aria-label": `试听 MIDI 音高 ${pitch}`, onClick: () => void previewPitch(pitch), onKeyDown: (event) => handlePitchKey(event, pitch),
         })),
-        blacks.map(({ pitch, left }) => h("button", {
-          key: pitch, type: "button", className: `dbfox-music-key is-black${activeNotes.includes(pitch) ? " is-active" : ""}`,
-          style: { left: `calc(${left} * (100% / var(--white-count)) - (100% / var(--white-count) * .32))` },
-          "aria-label": `试听 MIDI 音高 ${pitch}`, onClick: () => void previewPitch(pitch),
+        blacks.map(({ pitch, left }) => h("rect", {
+          key: pitch, x: left - .32, y: 0, width: .64, height: 6.2, rx: .08, role: "button", tabIndex: 0, className: `dbfox-music-key is-black${activeNotes.includes(pitch) ? " is-active" : ""}`,
+          "aria-label": `试听 MIDI 音高 ${pitch}`, onClick: () => void previewPitch(pitch), onKeyDown: (event) => handlePitchKey(event, pitch),
         })))));
 }
 
@@ -320,8 +323,7 @@ function ScoreStudio({ projectId, source, context }) {
   }
 
   return h("article", { className: "dbfox-music-studio" },
-    h("header", { className: "dbfox-music-studio__header" },
-      h("strong", null, document.title),
+    h("div", { className: "dbfox-music-studio__meta" },
       h("span", null, `${document.key.tonic} ${document.key.mode} · ${document.meter.beats}/${document.meter.beat_unit} · ♩${document.tempo} · Rev ${result.revision.revision}`)),
     h(Transport, {
       playing,
@@ -426,10 +428,10 @@ function AudioStudio({ projectId, source, showToast }) {
   const transcription = result?.transcription;
   const uncertain = transcription?.uncertain_ranges || [];
   return h("article", { className: "dbfox-music-studio dbfox-music-studio--audio" },
-    h("header", { className: "dbfox-music-studio__header" }, h("strong", null, effectiveSource.name), h("span", null, transcription ? `Transcription · ${Math.round(transcription.confidence * 100)}% confidence` : "Audio Source")),
+    h("div", { className: "dbfox-music-studio__meta" }, h("span", null, transcription ? `Transcription · ${Math.round(transcription.confidence * 100)}% confidence` : "Audio Source")),
     h("section", { className: "dbfox-music-waveform", "aria-label": "音频波形" },
       h("svg", { viewBox: "0 0 100 48", preserveAspectRatio: "none", "aria-hidden": true }, h("path", { d: waveformPath(buffer) })),
-      h("span", { className: "dbfox-music-waveform__playhead", style: { left: `${Math.min(100, position / effectiveSource.duration_seconds * 100)}%` } }),
+      h("progress", { className: "dbfox-music-waveform__progress", value: Math.min(100, position / effectiveSource.duration_seconds * 100), max: 100, "aria-label": "播放进度" }),
       h("small", null, formatTime(position))),
     transcription ? h("div", { className: "dbfox-music-ab", role: "group", "aria-label": "原音频与转录对照" },
       h("button", { type: "button", onClick: () => void playOriginal() }, "▶ Original"),
@@ -463,8 +465,8 @@ function PianoStudioDock({ view, context }) {
   const state = studioState.get(view.stateKey || "");
   const projectId = view.projectId || context.activeProjectId;
   if (!state) {
-    if (view.target?.kind === SCORE_KIND) return h(ScoreStudio, { projectId, source: { id: view.target.id, revision: view.target.version }, context });
-    if (view.target?.kind === AUDIO_KIND) return h(AudioStudio, { projectId, source: { id: view.target.id, name: view.title, duration_seconds: 1 }, showToast: context.showToast, context });
+    if (view.target?.type === "object" && view.target.object.kind === SCORE_KIND) return h(ScoreStudio, { projectId, source: { id: view.target.object.id, revision: view.target.object.version }, context });
+    if (view.target?.type === "object" && view.target.object.kind === AUDIO_KIND) return h(AudioStudio, { projectId, source: { id: view.target.object.id, name: view.title, duration_seconds: 1 }, showToast: context.showToast, context });
     return h(EmptyStudio, { projectId });
   }
   if (state.kind === "score") return h(ScoreStudio, { projectId, source: state.value, context });
@@ -477,8 +479,7 @@ function parseScoreArtifact(value) {
   return value;
 }
 
-function ScoreArtifactCard({ artifact }) {
-  const payload = parseScoreArtifact(artifact.payload);
+function ScoreArtifactCard({ artifact, payload }) {
   const libraryRef = artifact.resource_refs?.find((ref) => ref.kind === LIBRARY_KIND);
   const projectId = payload.projectId || libraryRef?.id || artifact.provenance?.project_id || "";
   React.useEffect(() => {
@@ -492,9 +493,12 @@ function ScoreArtifactCard({ artifact }) {
     } }, "Open in Piano Studio →"));
 }
 
-function TranscriptionArtifactCard({ artifact }) {
-  const payload = artifact.payload;
-  if (!payload || typeof payload.sourceAudioId !== "string") throw new Error("Invalid transcription Artifact");
+function parseTranscriptionArtifact(value) {
+  if (!value || typeof value !== "object" || typeof value.sourceAudioId !== "string") throw new Error("Invalid transcription Artifact");
+  return value;
+}
+
+function TranscriptionArtifactCard({ artifact, payload }) {
   return h("article", { className: "dbfox-music-artifact" }, h("span", { className: "dbfox-music-artifact__icon", "aria-hidden": true }, "≈"), h("div", null, h("strong", null, artifact.title), h("small", null, `${Math.round(payload.confidence * 100)}% confidence · ${payload.uncertainRanges?.length || 0} uncertain ranges`)));
 }
 
@@ -520,6 +524,16 @@ export function register(extensionHost) {
     isVisible: (view, context) => !view.projectId || view.projectId === context.activeProjectId,
     render: (view, context) => h(PianoStudioDock, { view, context }),
   });
-  host.artifactRenderers.register({ type: SCORE_ARTIFACT, supportedSchemaVersions: [1], parsePayload: parseScoreArtifact, render: (artifact) => h(ScoreArtifactCard, { artifact }) });
-  host.artifactRenderers.register({ type: TRANSCRIPTION_ARTIFACT, supportedSchemaVersions: [1], parsePayload: (value) => value, render: (artifact) => h(TranscriptionArtifactCard, { artifact }) });
+  host.artifactViews.register({ id: "dbfox.music.score", title: "乐谱", priority: 60, surfaces: ["inline", "workspace"], artifactTypes: [{ type: SCORE_ARTIFACT, schemaVersions: [1] }], parsePayload: parseScoreArtifact, render: (artifact, payload) => h(ScoreArtifactCard, { artifact, payload }) });
+  host.artifactViews.register({ id: "dbfox.music.transcription", title: "转录", priority: 60, surfaces: ["inline", "workspace"], artifactTypes: [{ type: TRANSCRIPTION_ARTIFACT, schemaVersions: [1] }], parsePayload: parseTranscriptionArtifact, render: (artifact, payload) => h(TranscriptionArtifactCard, { artifact, payload }) });
+}
+
+export function deactivate() {
+  projectState.clear();
+  studioState.clear();
+  audioBuffers.clear();
+  listeners.clear();
+  if (typeof document !== "undefined") document.querySelectorAll(`link[data-dbfox-dlc="${DLC_ID}"]`).forEach((link) => link.remove());
+  host = undefined;
+  React = undefined;
 }

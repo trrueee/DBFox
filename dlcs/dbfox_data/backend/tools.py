@@ -37,7 +37,6 @@ from .sql.safety_contracts import DatabaseSafetyScope, ExecutionPolicy
 from .sql.row_serializer import serialize_rows
 from .sql.trust_gate import TrustGate
 from .sql_admission import admit_sql_execution, resolve_validated_sql_execution
-from .store import DataStateStore
 from .tool_contracts import (
     QueryResultOutput,
     SqlExecuteReadonlyInput,
@@ -193,10 +192,8 @@ class SqlExecuteReadonlyTool(
 
     def __init__(
         self,
-        store: DataStateStore,
         connection: DataConnectionBoundary,
     ) -> None:
-        self._store = store
         self._connection = connection
 
     def admit(
@@ -261,20 +258,14 @@ class SqlExecuteReadonlyTool(
         fingerprint = str(
             validated.sql_artifact.payload.get("queryFingerprint") or ""
         )
-        result_ref = self._store.save_query_result(
-            database_resource_id=resource_ref.id,
-            resource_version=str(resource_ref.version or ""),
-            query_fingerprint=fingerprint,
-            columns=result.columns,
-            rows=result.rows,
-            source_truncated=result.truncated,
-        )
         durable_result = ArtifactDraft(
             key="result",
             type=RESULT_VIEW_ARTIFACT_TYPE,
+            schema_version=2,
             title="查询结果",
             summary=f"返回 {returned_rows} 行、{len(result.columns)} 列",
             payload={
+                "backend": "sql_reexecution",
                 "sourceSqlArtifactId": validated.sql_artifact.id,
                 "queryFingerprint": fingerprint,
                 "datasourceGeneration": resource_ref.version,
@@ -286,7 +277,6 @@ class SqlExecuteReadonlyTool(
                 "truncated": result.truncated,
                 "evidenceKind": "query_result",
             },
-            payload_ref=result_ref,
             relations=(
                 ArtifactRelationDraft(
                     relation=ArtifactRelationType.DERIVED_FROM,

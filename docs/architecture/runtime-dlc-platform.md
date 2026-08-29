@@ -5,7 +5,7 @@
 > 状态：当前
 
 >
-> 最后核验：2026-08-24
+> 最后核验：2026-08-28
 >
 > 基线：`main@44c1d118` + owner-aware Tool/Resource namespace 收口
 >
@@ -48,7 +48,7 @@ Local file installation is the foundational baseline. Marketplace and remote ind
 
 ## 2. Current DLC Registration Map
 
-Workspace and GitHub are package-owned capabilities. Data is shipped as a verified System DLC but remains default-disabled until its execution family finishes moving; the legacy Data execution family is the only temporary built-in domain contribution. Historical domain SQL is retained solely under Alembic migration boundaries.
+Data, Workspace and Music are verified, default-enabled System DLCs; GitHub remains a package-owned optional capability. Kernel-only startup is an explicit fail-closed state when required packages are unavailable and does not register a legacy domain fallback. Historical domain SQL is retained solely under Alembic migration boundaries.
 
 | Seam | Backend / Frontend | Compile-Time Baseline | Target Dynamic Host Seam |
 |---|---|---|---|
@@ -59,7 +59,7 @@ Workspace and GitHub are package-owned capabilities. Data is shipped as a verifi
 | **Completion Semantics** | Backend snapshot | temporary Data semantic declarations | `host.completion.register_constraint/register_support(...)` |
 | **Artifact Contract** | Backend (`engine/agent/artifact.py`) | Core/Data/Workspace contracts | `host.artifacts.register(...)` |
 | **Operations / API** | Backend (`engine/api/`) | Static Core product routers | `POST /api/v1/dlcs/{dlc_id}/operations/{op}` |
-| **Resource Connector** | Frontend (`desktop/src/features/resources/`) | `productResourceConnectors()` | `host.connectors.register(...)` |
+| **Resource Connector** | Frontend (`desktop/src/features/resources/`) | `productResourceConnectors()` | `host.connectors.register(...)`；可选 `listResources` / `removeResource` 驱动项目管理页资源清单（宿主包装并隔离错误） |
 | **Workbench Reference** | Frontend Host | `authority + object + locator + artifact` | `DockRenderContext.onAsk(...)`；Backend 从 authority 派生并校验本条 Input 的 initial explicit authority |
 | **Dock Views** | Frontend (`desktop/src/features/dock/`) | `productDockViews()` | `host.dockViews.register(...)` |
 | **Artifact Renderers** | Frontend (`desktop/src/features/workspace/artifacts/`) | `productArtifactRenderers` | `host.artifactRenderers.register(...)` |
@@ -203,7 +203,10 @@ To guarantee deterministic signature generation and verification across platform
 ```text
 default-src 'self';
 script-src 'self' dlc-asset:;
-style-src 'self' 'unsafe-inline' dlc-asset:;
+script-src-attr 'none';
+style-src 'self' dlc-asset:;
+style-src-elem 'self' dlc-asset:;
+style-src-attr 'unsafe-inline';
 img-src 'self' data: dlc-asset: https:;
 font-src 'self' dlc-asset:;
 connect-src 'self' http://127.0.0.1:* dlc-asset:;
@@ -212,10 +215,11 @@ object-src 'none';
 form-action 'none';
 frame-ancestors 'none';
 ```
-*Note: Script execution from `http://127.0.0.1:*` is strictly forbidden. Only `'self'` and the constrained `dlc-asset:` scheme can execute scripts.*
+*Note: Script execution from `http://127.0.0.1:*` is strictly forbidden. Only `'self'` and the constrained `dlc-asset:` scheme can execute scripts. Inline style elements are forbidden；style attributes 只供经审计的成熟 renderer（当前为 Vega Canvas/SVG）使用。模型生成 CSS 与 DLC 业务代码的任意 inline layout 仍由 schema 和 UI 合同禁止。*
 
 ### Host SDK Binding & Error Isolation
-- **Host SDK Injection**: DBFox Host initializes `window.__DBFOX_EXTENSION_HOST__` exposing React, ReactDOM, Lucide icons, UI primitives, and contribution registries.
+- **Global Runtime SDK**: DBFox Host initializes `window.__DBFOX_EXTENSION_HOST__` with only React, ReactDOM and runtime version so package-free frontend entrypoints share one renderer realm. It does not expose stores, tokens, native bridges, UI primitives or registries globally.
+- **Transactional Registration Host**: The Host passes a scoped `FrontendExtensionHost` into each DLC `register()` call. That object owns contribution registries, typed operations/native dialogs and versioned `ui` primitives. `ui@1.0.0` exposes the Zag-backed generic `Tree<T>`; DLCs pass their original items and id/label/children accessors, while the Host owns keyboard/focus/selection/expansion and official async-child presentation. Workspace, GitHub and Data use it without a resource DTO or per-DLC Tree runtime; Data keeps catalog refresh/pagination and SQL/Table Dock actions on its existing typed operations.
 - **Single React Instance**: DLC frontend bundles mark `react` and `react-dom` as external, sharing the host React runtime to avoid duplicate instance and Hook ABI mismatch bugs.
 - **Error Boundaries**: Every dynamic Dock view, Connector, and Artifact card is wrapped in a `DlcErrorBoundary`. Render crashes are isolated with a fallback UI and disable action, preventing host white-screens.
 
@@ -350,6 +354,10 @@ When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
 - Electron Main's asset protocol contract serves the selected digest only while it is present in the active
   projection and returns `403` for that same old digest after projection reset. Frontend tests load
   the committed fixture module and stage both visible contribution types through the real Host.
+- The development and final packaged Electron smoke start the real Frozen Sidecar and synchronize the
+  activation projection at the Main authority. They require Extension Host `1.0.0` to load the signed
+  `dbfox.data`, `dbfox.music`, and `dbfox.workspace` frontend entrypoints and styles over `dlc-asset://`;
+  every active asset must return `200`, while an unknown digest must return `403`.
 - `release-platform-contract` runs this proof against the final PyInstaller Sidecar on Linux,
   Windows, and macOS and uploads a host-tuple-bound JSON evidence report beside each installer.
 

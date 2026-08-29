@@ -4,9 +4,9 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-06
+> 最后核验：2026-08-28
 >
-> 适用范围：FastAPI、服务、Repository、持久化与外部系统边界
+> 适用范围：FastAPI、Runtime composition、Repository、DLC 与外部系统边界
 
 第一次进入后端代码，请先看[后端代码导览](./backend-owner-guide.md)建立整体认识；需要逐条实现链、事务与失败路径、调试和扩展说明时，阅读[后端实现手册](../backend/README.md)。本文保持为后端分层、状态所有权和扩展边界的权威架构说明。
 
@@ -24,14 +24,22 @@ flowchart LR
   subgraph Engine["FastAPI Engine"]
     START["Startup / Migration / Runtime Reset"]
     ROUTES["API Routers"]
-    SERVICES["Application Services"]
-    DOMAIN["Domain Runtime"]
+    COMPOSE["Runtime Composition Root"]
+    DOMAIN["Agent + Tool Runtime"]
+    DLC["DLC Host"]
     INFRA["Infrastructure Adapters"]
   end
 
   ELECTRON --> START
   WEB --> ROUTES
-  START --> ROUTES --> SERVICES --> DOMAIN --> INFRA
+  START --> COMPOSE
+  START --> ROUTES
+  ROUTES --> DOMAIN
+  COMPOSE --> DOMAIN
+  COMPOSE --> DLC
+  DOMAIN --> DLC
+  DOMAIN --> INFRA
+  DLC --> INFRA
 ```
 
 ## 2. 后端分层
@@ -49,22 +57,16 @@ flowchart TB
     BACKUP["backup / restore"]
   end
 
-  subgraph Application["Application Services"]
-    DSSVC["Datasource Service"]
-    SCHEMA["Schema Catalog Sync"]
-    AGENTSVC["Agent Service"]
-    RESULT["Result View Service"]
-    QUERY["SQL Execution Services"]
-    BACKUPSVC["Backup Service"]
-    DIAG["Diagnostics Service"]
+  subgraph Orchestration["Host Orchestration"]
+    COMPOSE["Runtime Composition Root"]
+    COORD["Session Coordinator"]
+    LOOP["RunLoop / RunTurnRecorder"]
+    TOOL["Tool Runtime / ToolSettlement"]
   end
 
-  subgraph Domain["Domain and Policy"]
-    SESSION["Session / Run / Turn"]
-    TOOL["Tool Runtime"]
-    SAFETY["SQL Safety / Trust / Confirmation"]
-    ART["Artifact / Evidence"]
-    RESOURCE["Datasource Resource Lifecycle"]
+  subgraph Capabilities["Capability DLCs"]
+    DATA["Data: datasource / schema / SQL / result"]
+    OTHER["Workspace / GitHub / Music / Visualization"]
   end
 
   subgraph Persistence["Persistence"]
@@ -81,15 +83,26 @@ flowchart TB
     FILES["Logs / Export / Backup Paths"]
   end
 
-  API --> Application
-  Application --> Domain
-  Domain --> ORM --> META
+  API --> COORD
+  API --> ORM
+  COMPOSE --> COORD --> LOOP --> TOOL
+  COMPOSE --> DATA
+  COMPOSE --> OTHER
+  TOOL --> DATA
+  TOOL --> OTHER
+  LOOP --> ORM --> META
   ORM --> EVENT
   MIGRATION --> META
-  Domain --> Adapters
+  LOOP --> MODEL
+  DATA --> CONNECT
+  API --> VAULT
+  API --> FILES
 ```
 
-依赖方向必须由外向内：API 可以调用 application/domain；domain 通过接口使用基础设施；Repository 和 Adapter 不反向依赖 FastAPI 或前端协议。
+当前 API Router 是短事务 transaction script，可直接编排 Repository，并在提交后唤醒
+Coordinator 或调用已冻结的 DLC operation；仓库没有一层通用 Application Services。
+依赖方向由 Composition Root 显式构造：Agent、DLC 与 Tool Runtime 不得反向导入
+`engine.runtime_composition`，Repository 和 Adapter 也不得反向依赖 FastAPI 或前端协议。
 
 ## 3. 数据源资源生命周期
 
@@ -127,32 +140,33 @@ flowchart LR
   POLICY -->|"是"| APPROVAL["Durable Approval"]
   APPROVAL --> EXEC["Authorized Leaf Execution"]
   POLICY -->|"否"| EXEC
-  EXEC --> RESULT["Capability-owned Durable Result"]
+  EXEC --> RESULT["Artifact + bounded transient result"]
 ```
 
 核心约束：
 
 - 实际执行只能使用经过 Policy 固化的 `authorized_input`；
 - Approval 展示的 SQL、批准后的 SQL 和叶子执行 SQL 必须具有同一 hash；
-- SQL parser、guardrail、EXPLAIN、执行和结果存储全部属于 `dbfox.data`；Core 只执行通用 Tool admission/approval；
+- SQL parser、guardrail、EXPLAIN、执行、Result/Snapshot 和实时重查全部属于 `dbfox.data`；Core 只执行通用 Tool admission/approval；
 - 导出使用流式执行、边界大小和截止时间，不允许无界 `fetchall`。
 
-## 5. Artifact View Gateway
+## 5. Artifact Representation Gateway
 
 ```mermaid
 flowchart LR
-  REQUEST["Artifact ID + View Query"] --> LOAD["Load Core Artifact envelope"]
-  LOAD --> PROVIDER["Resolve capability view provider from Runtime snapshot"]
+  REQUEST["Artifact ID + Representation request"] --> LOAD["Load Core Artifact envelope"]
+  LOAD --> PROVIDER["Resolve Representation provider from Runtime snapshot"]
   PROVIDER --> CHECK["Validate Artifact/resource ownership"]
-  CHECK --> READ["Read capability-owned durable result"]
-  READ --> RESPONSE["Bounded page/profile/chart/export"]
+  CHECK --> READ["Read source or explicit Snapshot"]
+  READ --> RESPONSE["Bounded JSON read or stream"]
 ```
 
 边界：
 
 - Core 保存通用 Artifact envelope、opaque payload 与 frozen ResourceRefs，不保存 Data 专用 fingerprint 字段；
-- Data DLC 保存有界耐久结果，并通过一次边界映射向 Core API 返回 `resourceVersion` 与 `sourceFingerprint`；
-- 分页、profile、chart 和 export 不重新执行 SQL；模型上下文只得到有界 Observation/Artifact 摘要。
+- Data DLC 的普通 Result 不保存 rows；DataFrame Provider 实时重执行并返回 `live_reexecution`，显式 Snapshot 才返回 `durable_snapshot`；
+- 分页、profile 和 export 共用 Data 的 generation、只读、取消和字段校验边界；模型上下文只得到有界 Observation/Artifact 摘要；
+- Visualization DLC 通过公开 Representation 消费兼容 Artifact，Core 不理解图表语义。
 
 ## 6. 持久化与事务边界
 
@@ -263,7 +277,7 @@ SecurityAuditRecord 与普通诊断日志分离：前者记录安全动作和结
 
 ## 14. 测试与发布证据
 
-后端测试覆盖 migration、SQLite writer 并发、lease、RunControl、ToolExecutor、Provider contract、Artifact 边界、Result Gateway、取消、备份恢复、错误脱敏和审计生命周期。测试数量属于易漂移的运行结果，不在架构文档中固化；以 CI 的分层收集与当次报告为准。
+后端测试覆盖 migration、SQLite writer 并发、lease、RunControl、ToolExecutor、Provider contract、Artifact/Representation 边界、取消、备份恢复、错误脱敏和审计生命周期。测试数量属于易漂移的运行结果，不在架构文档中固化；以 CI 的分层收集与当次报告为准。
 
 发布还需要 Windows MSVC、macOS 和 Linux 候选构建证据。源码架构全绿不等于缺少签名或平台构建时可以发布正式安装包。
 

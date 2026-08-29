@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-16
+> 最后核验：2026-08-28
 >
 > 适用范围：`engine/agent/`、`engine/tools/runtime/` 和 Agent 持久化
 >
@@ -17,15 +17,14 @@
 
 DBFox Agent 使用自有显式 ReAct Harness，不使用 LangGraph 的 Graph、Thread、State 或 Checkpoint。流程由普通领域对象、持久状态机、Repository 和事件协议表达，因此每个中断、工具结算、事务和产品事件都有明确所有者。
 
-参考 OpenCode 的是 Harness 思想：显式循环、工具物化、事件驱动 UI、可中断输入和持久事实；保留 DBFox 自己的数据分析 Prompt、数据库安全链、Evidence、Reference-only Artifact 和 Result Gateway。
+参考 OpenCode 的是 Harness 思想：显式循环、工具物化、事件驱动 UI、可中断输入和持久事实；保留 DBFox 自己的数据分析 Prompt、数据库安全链、Evidence、Artifact 和 Representation Gateway。
 
 ## 2. 模块架构
 
 ```mermaid
 flowchart TB
-  API["Agent / Conversation API"] --> SERVICE["AgentService"]
-  SERVICE --> ADMISSION["SessionRepository / Input Admission"]
-  SERVICE --> COORD["SessionCoordinator"]
+  API["Agent / Conversation API transaction scripts"] --> ADMISSION["SessionRepository / Input Admission"]
+  API --> COORD["SessionCoordinator"]
   COORD --> LOOP["RunLoop"]
 
   LOOP --> DEF["AgentDefinition / PromptAssembler"]
@@ -35,14 +34,16 @@ flowchart TB
   LOOP --> RESPONSE["ResponseComposer"]
 
   MODEL --> STREAM["TurnStreamAssembler"]
-  STREAM --> LOOP
+  STREAM --> RECORDER["RunTurnRecorder"]
+  RECORDER --> LOOP
 
   LOOP --> TOOLS["ToolRegistry + Materialization"]
   TOOLS --> POLICY["PolicyGate"]
   POLICY --> APPROVAL["ApprovalRepository"]
   TOOLS --> RUNTIME["Tool Runtime"]
   RUNTIME --> TRANSIENT["TransientToolResult"]
-  RUNTIME --> OBS["Durable Observation"]
+  RUNTIME --> SETTLE["ToolSettlement"]
+  SETTLE --> OBS["Durable Observation"]
 
   OBS --> ART["ArtifactRepository"]
   RESPONSE --> EVIDENCE["EvidenceRepository"]
@@ -56,6 +57,12 @@ flowchart TB
   EVENT --> PROJECTION["Conversation Projection"]
   LIVE --> PROJECTION
 ```
+
+`RunLoop` 只协调 Run 状态机；产品 Registry、Context contributor、Completion policy、
+Artifact contract/representation 与 snapshot identity 全部由 Composition Root 显式注入。
+`RunTurnRecorder` 独占 Provider message 的 live revision、耐久 flush 和 phase 短事务；
+`ToolSettlement` 独占 ToolResult → Artifact → Observation 的原子结算。两者不建立第二套
+Run/Event 协议。
 
 ## 3. 聚合与状态所有权
 
@@ -237,15 +244,19 @@ flowchart TB
 ```mermaid
 flowchart LR
   SQL["SQL Artifact"] -->|"derived_from"| RESULT["Result Artifact"]
-  RESULT -->|"source"| CHART["Chart Artifact"]
+  RESULT -->|"derived_from"| VIZ["Visualization Artifact"]
   RESULT --> EVIDENCE["Evidence claim + answer offsets"]
   EVIDENCE --> ANSWER["Inline citation in Answer"]
-  ANSWER --> UI["Message + Evidence navigation"]
-  RESULT --> GATEWAY["Result Gateway"]
+  ANSWER --> UI["Message + Evidence + Artifact embed"]
+  VIZ --> ANSWER
+  RESULT --> GATEWAY["DataFrame Representation"]
   GATEWAY --> DB["Live user database"]
 ```
 
-ResponseComposer 只接受当前 Run 产生且可验证的 Result Artifact 引用。最终事务同时提交 Answer Message、Evidence、Memory delta、Run terminal state 和 terminal Events，避免“有回答无证据”或“记忆提前写入”。
+ResponseComposer 只接受当前 Run 产生或已被当前 Run 明确观察、且通过范围与可见性校验的 Artifact 引用。
+最终事务同时提交 Answer Message、Evidence、Memory delta、Run terminal state 和 terminal Events，避免
+“有回答无证据”或“记忆提前写入”。块级 `{{artifact:id}}` 只控制同一 Artifact 的正文投影，不创建新
+Message、Event 或 Artifact。
 
 ## 11. 事件与实时流
 
@@ -271,7 +282,7 @@ flowchart LR
 - 新模型提供商实现统一 Model Adapter，输出规范化 `TurnStreamItem`。
 - 新工具通过 Registry 注册完整定义，不向 RunLoop 增加工具名判断。
 - 完成判断只读取模型输出、待结算动作、持久 Observation、Artifact 引用和运行预算，不从用户文本推断任务类型。
-- 新 Artifact 定义 payload、关系、Evidence 定位和前端 renderer，不保存结果副本。当前核心 SQL/Result/Chart 投影仍集中在 ArtifactRepository；在引入插件工具前，应把它收敛为工具拥有的 typed projector，而不是增加第二份工具名映射。
+- 新 Artifact 由所属 DLC 定义 payload、关系、Evidence 定位和前端 View；Core `ArtifactRepository` 只持久化并校验通用 envelope、关系和草稿引用，不按 SQL/Result/Visualization 类型投影，也不保存结果副本。
 - 新 Activity 必须来自公共事件映射，定义稳定 ID、状态和用户可理解文案。
 - 新恢复能力必须先定义持久状态和事务，再增加实时行为。
 
@@ -375,7 +386,7 @@ Result Artifact 允许字段：
 
 禁止字段：`rows`、`previewRows`、Chart `series`、单元格值和重复 `safeSql`。Durable Event payload 会递归拒绝这类结果字段。
 
-Result Gateway 重新执行时返回 `live_reexecution`、original/view time、view execution ID、generation 和 fingerprint。它表达的是“当前数据库视图”，不是历史快照。Evidence 的 `observedAt` 表达回答当时使用的少量事实，两者必须同时存在，不能互相冒充。
+DataFrame Representation 重新执行时返回 `live_reexecution`、original/read time、read ID、generation 和 fingerprint。它表达的是“当前数据库视图”，不是历史快照。Evidence 的 `observedAt` 表达回答当时使用的少量事实，两者必须同时存在，不能互相冒充。
 
 ## 17. 权限与 Tool capability
 

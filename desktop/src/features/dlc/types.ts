@@ -1,11 +1,13 @@
 import type {
-  ArtifactRendererContribution,
+  ArtifactViewContribution,
   DockViewContribution,
   FrontendExtensionHost,
   ResourceConnectorContribution,
 } from "../../../../sdk/frontend/index";
 
 export type {
+  CredentialEnrollmentBatchResult,
+  CredentialEnrollmentInput,
   DlcOperationInvokeOptions,
   FrontendExtensionHost,
 } from "../../../../sdk/frontend/index";
@@ -25,11 +27,12 @@ export interface RuntimeDlcActivationProjection {
 export interface DlcContributionSet {
   readonly connectors: readonly ResourceConnectorContribution[];
   readonly dockViews: readonly DockViewContribution[];
-  readonly artifactRenderers: readonly ArtifactRendererContribution<unknown>[];
+  readonly artifactViews: readonly ArtifactViewContribution<unknown>[];
 }
 
 export interface DlcModule {
   register?: (host: FrontendExtensionHost) => void | Promise<void>;
+  deactivate?: () => void | Promise<void>;
 }
 
 export type DlcLoadStatus = "unloaded" | "loading" | "loaded" | "error";

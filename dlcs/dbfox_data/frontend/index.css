@@ -4,16 +4,9 @@
   gap: 2px;
 }
 
-.dbfox-data__profile {
-  min-width: 0;
-}
-
-.dbfox-data__profile-row,
-.dbfox-data__database-focus,
 .dbfox-data__context,
 .dbfox-data__refresh,
 .dbfox-data__sql,
-.dbfox-data__table-row,
 .dbfox-data__load-more,
 .dbfox-data__catalog-empty button,
 .dbfox-data__empty button {
@@ -21,16 +14,6 @@
   font: inherit;
 }
 
-.dbfox-data__profile-row,
-.dbfox-data__database-focus {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  min-width: 0;
-  text-align: left;
-}
-
-.dbfox-data__table-row,
 .dbfox-data__refresh,
 .dbfox-data__sql,
 .dbfox-data__load-more,
@@ -42,90 +25,17 @@
   font: inherit;
 }
 
-.dbfox-data__profile-row {
-  display: grid;
-  grid-template-columns: 14px 14px minmax(0, 1fr) auto;
-  align-items: center;
-  width: 100%;
-  min-height: 30px;
-  padding: 3px 8px 3px 6px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.dbfox-data__profile-row:hover,
-.dbfox-data__database-row:hover,
-.dbfox-data__database-row.is-focused {
-  background: var(--surface-hover);
-}
-
-.dbfox-data__chevron {
-  color: var(--text-muted);
-  transform: rotate(0deg);
-  transition: transform 120ms ease;
-}
-
-.dbfox-data__chevron.is-expanded {
-  transform: rotate(90deg);
-}
-
 .dbfox-data__provider {
-  color: #3975e9;
-  font-size: 9px;
+  color: var(--color-primary);
+  font-size: var(--ui-font-micro);
 }
 
 .dbfox-data__provider.is-postgresql {
-  color: #336791;
+  color: var(--agent-chart-2);
 }
 
 .dbfox-data__provider.is-sqlite {
-  color: #0f80cc;
-}
-
-.dbfox-data__label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dbfox-data__count {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.dbfox-data__databases {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  margin-left: 13px;
-  padding-left: 10px;
-}
-
-.dbfox-data__databases::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 1px;
-  background: color-mix(in srgb, currentColor 10%, transparent);
-  content: "";
-}
-
-.dbfox-data__database-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 26px 26px;
-  align-items: center;
-  min-width: 0;
-  border-radius: 6px;
-}
-
-.dbfox-data__database-focus {
-  display: grid;
-  grid-template-columns: 12px 15px minmax(0, 1fr);
-  align-items: center;
-  min-height: 29px;
-  padding: 3px 4px 3px 6px;
-  cursor: pointer;
+  color: var(--color-info);
 }
 
 .dbfox-data__refresh,
@@ -134,62 +44,33 @@
   height: 22px;
   padding: 0;
   border-radius: 5px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
   opacity: 0.62;
 }
 
-.dbfox-data__database-row:hover .dbfox-data__refresh,
-.dbfox-data__database-row:hover .dbfox-data__sql,
+.dbfox-data .dbfox-tree__row-shell:hover .dbfox-data__refresh,
+.dbfox-data .dbfox-tree__row-shell:hover .dbfox-data__sql,
 .dbfox-data__refresh:focus-visible,
 .dbfox-data__sql:focus-visible {
   opacity: 1;
 }
 
 .dbfox-data__refresh:hover,
-.dbfox-data__sql:hover,
-.dbfox-data__table-row:hover {
-  background: var(--surface-hover);
-}
-
-.dbfox-data__tables {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  margin-left: 26px;
-  padding-left: 9px;
-}
-
-.dbfox-data__tables::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 1px;
-  background: color-mix(in srgb, currentColor 9%, transparent);
-  content: "";
-}
-
-.dbfox-data__table-row {
-  display: grid;
-  grid-template-columns: 15px minmax(0, 1fr) auto;
-  align-items: center;
-  min-width: 0;
-  min-height: 27px;
-  padding: 3px 7px 3px 5px;
-  border-radius: 5px;
-  text-align: left;
-  cursor: pointer;
+.dbfox-data__sql:hover {
+  background: var(--control-bg-hover);
 }
 
 .dbfox-data__table-icon {
-  color: var(--text-muted);
-  font-size: 10px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
 }
 
 .dbfox-data__catalog-error {
   margin: 0;
   padding: 6px 8px;
-  color: var(--danger-fg);
-  font-size: 11px;
+  color: var(--color-danger);
+  font-size: var(--ui-font-micro);
 }
 
 .dbfox-data__catalog-empty {
@@ -198,8 +79,8 @@
   justify-content: space-between;
   gap: 8px;
   padding: 6px 8px;
-  color: var(--text-muted);
-  font-size: 11px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
 }
 
 .dbfox-data__catalog-empty button,
@@ -212,37 +93,27 @@
 
 .dbfox-data__catalog-empty button:hover,
 .dbfox-data__load-more:hover {
-  background: var(--surface-hover);
+  background: var(--control-bg-hover);
 }
 
 .dbfox-data__load-more {
   margin: 3px 5px;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   text-align: left;
 }
 
 .dbfox-data__database-icon {
-  color: var(--text-muted);
-  font-size: 8px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
 }
 
 .dbfox-data__status,
 .dbfox-data__empty {
   margin: 0;
   padding: 7px 10px;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
   line-height: 1.5;
-}
-
-.dbfox-data-dialog__backdrop {
-  position: fixed;
-  z-index: 1200;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: color-mix(in srgb, #101318 34%, transparent);
 }
 
 .dbfox-data-table {
@@ -250,7 +121,7 @@
   grid-template-rows: auto auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
 }
 
 .dbfox-data-table__tabs {
@@ -266,19 +137,19 @@
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-table__tabs button:hover {
-  color: var(--text-primary);
+  color: var(--color-text-primary);
 }
 
 .dbfox-data-table__tabs button.is-active {
-  border-bottom-color: var(--accent-fg);
-  color: var(--text-primary);
+  border-bottom-color: var(--color-primary);
+  color: var(--color-text-primary);
 }
 
 .dbfox-data-table__header {
@@ -305,8 +176,8 @@
 
 .dbfox-data-table__header small,
 .dbfox-data-table__header > span {
-  color: var(--text-muted);
-  font-size: 11px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
 }
 
 .dbfox-data-table__scroll {
@@ -317,7 +188,7 @@
 .dbfox-data-table table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-table th,
@@ -333,25 +204,25 @@
   z-index: 1;
   top: 0;
   background: var(--surface-panel);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 550;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
+  font-weight: 600;
 }
 
 .dbfox-data-table code {
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font-family: var(--font-mono);
 }
 
 .dbfox-data-table__status {
   margin: 0;
   padding: 18px;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-table__status.is-error {
-  color: var(--danger-fg);
+  color: var(--color-danger);
 }
 
 .dbfox-data-table__preview {
@@ -363,8 +234,8 @@
   margin: 0;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  font-size: 11px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
 }
 
 /* Navicat / DataGrip Continuous Execution Terminal */
@@ -374,62 +245,30 @@
   height: 100%;
   min-height: 0;
   width: 100%;
-  background: var(--surface-primary);
-  color: var(--text-primary);
+  background: var(--surface-workspace);
+  color: var(--color-text-primary);
   overflow: hidden;
 }
 
-.dbfox-data-console__header {
+.dbfox-data-console__toolbar-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   height: 38px;
   padding: 0 14px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-muted);
+  background: var(--surface-auxiliary);
 }
 
-.dbfox-data-console__identity {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.dbfox-data-console__badge {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent-fg);
-  padding: 1px 5px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--accent-fg) 12%, transparent);
-}
-
-.dbfox-data-console__identity strong {
-  font-size: 13px;
-  font-weight: 600;
+.dbfox-data-console__toolbar-row > small {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.dbfox-data-console__identity small {
-  color: var(--text-muted);
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dbfox-data-console__mode-badge {
-  font-size: 10px;
-  color: var(--text-muted);
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: color-mix(in srgb, currentColor 8%, transparent);
 }
 
 .dbfox-data-console__toolbar {
@@ -448,23 +287,23 @@
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
   background: var(--surface-panel);
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--ui-font-micro);
   font-weight: 500;
   cursor: pointer;
   transition: all 120ms ease;
 }
 
 .dbfox-data-console__btn:hover:not(:disabled) {
-  background: var(--surface-hover);
-  border-color: var(--border-hover);
+  background: var(--control-bg-hover);
+  border-color: var(--control-border-hover);
 }
 
 .dbfox-data-console__btn.is-primary {
-  background: var(--accent-fg);
-  border-color: var(--accent-fg);
-  color: white;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
 .dbfox-data-console__btn.is-primary:hover:not(:disabled) {
@@ -495,7 +334,7 @@
 }
 
 .dbfox-data-block:focus-within {
-  border-color: color-mix(in srgb, var(--accent-fg) 60%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--color-primary) 60%, var(--border-subtle));
 }
 
 .dbfox-data-block__header {
@@ -504,7 +343,7 @@
   justify-content: space-between;
   height: 28px;
   padding: 0 10px;
-  background: var(--surface-muted);
+  background: var(--surface-auxiliary);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -516,14 +355,14 @@
 
 .dbfox-data-block__badge {
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent-fg);
+  font-size: var(--ui-font-micro);
+  font-weight: 600;
+  color: var(--color-primary);
 }
 
 .dbfox-data-block__hint-text {
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: var(--ui-font-micro);
+  color: var(--color-text-muted);
 }
 
 .dbfox-data-block__toolbar {
@@ -541,22 +380,22 @@
   border: 1px solid var(--border-subtle);
   border-radius: 3px;
   background: var(--surface-panel);
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--ui-font-micro);
   font-weight: 500;
   cursor: pointer;
   transition: all 120ms ease;
 }
 
 .dbfox-data-block__btn:hover:not(:disabled) {
-  background: var(--surface-hover);
+  background: var(--control-bg-hover);
 }
 
 .dbfox-data-block__btn.is-primary {
-  background: var(--accent-fg);
-  border-color: var(--accent-fg);
-  color: white;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
 .dbfox-data-block__btn.is-primary:hover:not(:disabled) {
@@ -564,7 +403,7 @@
 }
 
 .dbfox-data-block__btn.is-danger {
-  color: var(--danger-fg);
+  color: var(--color-danger);
 }
 
 .dbfox-data-block__btn:disabled {
@@ -587,10 +426,10 @@
   padding: 7px 6px 7px 0;
   text-align: right;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--ui-font-caption);
   line-height: 1.6;
-  color: var(--text-muted);
-  background: color-mix(in srgb, var(--surface-muted) 50%, transparent);
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--surface-auxiliary) 50%, transparent);
   border-right: 1px solid var(--border-subtle);
   user-select: none;
   flex-shrink: 0;
@@ -604,9 +443,9 @@
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--ui-font-caption);
   line-height: 1.6;
   resize: vertical;
   tab-size: 2;
@@ -620,15 +459,15 @@
   gap: 8px;
   padding: 8px 14px;
   border-top: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--accent-fg) 4%, transparent);
-  color: var(--text-secondary);
-  font-size: 12px;
+  background: color-mix(in srgb, var(--color-primary) 4%, transparent);
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-block__spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid var(--accent-fg);
+  border: 2px solid var(--color-primary);
   border-right-color: transparent;
   border-radius: 50%;
   animation: dbfox-spin 600ms linear infinite;
@@ -641,9 +480,9 @@
 .dbfox-data-block__error {
   padding: 8px 14px;
   border-top: 1px solid var(--border-subtle);
-  background: var(--danger-bg, color-mix(in srgb, red 8%, transparent));
-  color: var(--danger-fg);
-  font-size: 12px;
+  background: var(--color-danger-soft, color-mix(in srgb, red 8%, transparent));
+  color: var(--color-danger);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-block__result {
@@ -659,9 +498,9 @@
   justify-content: space-between;
   height: 26px;
   padding: 0 12px;
-  background: var(--surface-muted);
+  background: var(--surface-auxiliary);
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 11px;
+  font-size: var(--ui-font-micro);
   flex-shrink: 0;
 }
 
@@ -676,27 +515,27 @@
 }
 
 .dbfox-data-block__meta-left span {
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .dbfox-data-block__artifact-badge {
-  color: var(--text-muted);
-  font-size: 10px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
 }
 
 .dbfox-data-block__messages {
   margin: 0;
   padding: 8px 16px;
   overflow: auto;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-block__empty-hint {
   padding: 6px 12px;
   border-top: 1px dashed var(--border-subtle);
-  color: var(--text-muted);
-  font-size: 11px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
 }
 
 .dbfox-data-console__footer-action {
@@ -714,24 +553,24 @@
   border: 1px dashed var(--border-subtle);
   border-radius: 4px;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--ui-font-micro);
   cursor: pointer;
   transition: all 120ms ease;
 }
 
 .dbfox-data-console__add-card-btn:hover {
-  border-color: var(--accent-fg);
-  color: var(--accent-fg);
-  background: color-mix(in srgb, var(--accent-fg) 6%, transparent);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
 }
 
 .dbfox-data-result__scroll table {
   width: max-content;
   min-width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-result__scroll th,
@@ -750,74 +589,70 @@
   position: sticky;
   z-index: 2;
   top: 0;
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-  font-size: 11px;
+  background: var(--surface-auxiliary);
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-micro);
   font-weight: 600;
   cursor: pointer;
   user-select: none;
 }
 
 .dbfox-data-result__scroll th:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
 }
 
 .dbfox-data-result__scroll th.is-sorted {
-  color: var(--accent-fg);
+  color: var(--color-primary);
 }
 
 .dbfox-data-result__row-num {
   width: 38px;
-  text-align: center !important;
-  color: var(--text-muted);
+  text-align: center;
+  color: var(--color-text-muted);
   font-family: var(--font-mono);
-  font-size: 10px;
-  background: color-mix(in srgb, var(--surface-muted) 60%, transparent);
+  font-size: var(--ui-font-micro);
+  background: color-mix(in srgb, var(--surface-auxiliary) 60%, transparent);
 }
 
 .dbfox-data-result__scroll td.is-selected {
-  outline: 2px solid var(--accent-fg);
+  outline: 2px solid var(--color-primary);
   outline-offset: -2px;
-  background: color-mix(in srgb, var(--accent-fg) 10%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 
 .dbfox-data-result__scroll td.is-null {
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   font-style: italic;
-}
-  border-bottom: 1px solid var(--border-subtle);
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dbfox-data-result__scroll th {
-  position: sticky;
-  z-index: 1;
-  top: 0;
-  background: var(--surface-panel);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 550;
 }
 
 .dbfox-data-result__empty {
   margin: 0;
   padding: 18px;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-dialog {
+  box-sizing: border-box;
   width: min(700px, calc(100vw - 48px));
   max-height: min(760px, 84vh);
+  margin: auto;
+  padding: 0;
   overflow: auto;
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
   background: var(--surface-panel);
-  box-shadow: 0 22px 64px rgb(0 0 0 / 24%);
-  color: var(--text-primary);
+  box-shadow: var(--shadow-window);
+  color: var(--color-text-primary);
+}
+
+.dbfox-data-dialog::backdrop {
+  background: var(--overlay-scrim);
+}
+
+.dbfox-data-dialog__form {
+  display: block;
 }
 
 .dbfox-data-dialog__header {
@@ -833,14 +668,14 @@
 }
 
 .dbfox-data-dialog__header h2 {
-  font-size: 17px;
-  font-weight: 620;
+  font-size: var(--ui-font-title);
+  font-weight: 600;
 }
 
 .dbfox-data-dialog__header p {
   margin-top: 5px;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-dialog__close {
@@ -849,16 +684,16 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 20px;
+  font-size: var(--ui-font-display);
 }
 
 .dbfox-data-dialog__close:hover,
 .dbfox-data-dialog__disclosure:hover,
 .dbfox-data-dialog__button:hover {
-  background: var(--surface-hover);
+  background: var(--control-bg-hover);
 }
 
 .dbfox-data-dialog__body {
@@ -871,26 +706,59 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
+  min-width: 0;
+  margin: 0;
   padding: 3px;
+  border: 0;
   border-radius: 9px;
-  background: var(--surface-muted);
+  background: var(--surface-auxiliary);
 }
 
-.dbfox-data-dialog__providers button {
+.dbfox-data-dialog__providers label {
+  position: relative;
+  display: grid;
+}
+
+.dbfox-data-dialog__providers input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.dbfox-data-dialog__providers span {
+  display: grid;
+  place-items: center;
   min-height: 32px;
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   cursor: pointer;
   font: inherit;
 }
 
-.dbfox-data-dialog__providers button.is-selected {
+.dbfox-data-dialog__providers label:has(input:checked) span {
   background: var(--surface-panel);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 10%);
-  color: var(--text-primary);
+  box-shadow: none;
+  color: var(--color-text-primary);
   font-weight: 600;
+}
+
+.dbfox-data-dialog__providers label:has(input:focus-visible) span {
+  box-shadow: var(--focus-ring);
+}
+
+.dbfox-data-dialog__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .dbfox-data-dialog__grid {
@@ -907,8 +775,8 @@
   display: grid;
   gap: 6px;
   min-width: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-dialog__input {
@@ -920,13 +788,13 @@
   border-radius: 8px;
   outline: none;
   background: var(--surface-panel);
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font: inherit;
 }
 
 .dbfox-data-dialog__input:focus {
-  border-color: var(--accent-fg);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-fg) 16%, transparent);
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
 }
 
 .dbfox-data-dialog__disclosure {
@@ -935,7 +803,7 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   cursor: pointer;
   font: inherit;
 }
@@ -947,7 +815,7 @@
   gap: 16px;
   padding: 12px;
   border-radius: 9px;
-  background: var(--surface-muted);
+  background: var(--surface-auxiliary);
 }
 
 .dbfox-data-dialog__check {
@@ -955,8 +823,8 @@
   align-items: center;
   min-height: 36px;
   gap: 7px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-dialog__check .dbfox-data-dialog__input {
@@ -966,8 +834,8 @@
 
 .dbfox-data-dialog__error {
   margin: 0;
-  color: var(--danger-fg);
-  font-size: 12px;
+  color: var(--color-danger);
+  font-size: var(--ui-font-caption);
 }
 
 .dbfox-data-dialog__footer {
@@ -984,15 +852,15 @@
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   cursor: pointer;
   font: inherit;
 }
 
 .dbfox-data-dialog__button.is-primary {
-  border-color: var(--accent-fg);
-  background: var(--accent-fg);
-  color: white;
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
 .dbfox-data-dialog__button:disabled {

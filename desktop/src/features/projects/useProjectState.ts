@@ -39,11 +39,7 @@ export function useProjectState(activeProjectId: string) {
     projects,
     activeProject,
     loadingProjects: projectsQuery.isPending,
-    projectError: projectsQuery.error
-      ? projectsQuery.error instanceof Error
-        ? projectsQuery.error.message
-        : "读取项目失败"
-      : "",
+    projectError: projectsQuery.error ?? null,
     refreshProjects: async () => {
       await projectsQuery.refetch();
     },

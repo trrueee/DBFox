@@ -109,6 +109,32 @@ def build_sql_backed_page_sql(
     return SqlBackedQuery(sql=query.sql(dialect=dialect))
 
 
+def build_sql_backed_count_sql(
+    *,
+    base_sql: str,
+    dialect: str,
+    columns: list[str],
+    filters: list[SqlBackedFilter] | None = None,
+    search: str | None = None,
+    searchable_columns: list[str] | None = None,
+) -> SqlBackedQuery:
+    """Count the same filtered source used by a SQL-backed page."""
+
+    filtered = build_sql_backed_page_sql(
+        base_sql=base_sql,
+        dialect=dialect,
+        columns=columns,
+        filters=filters,
+        search=search,
+        searchable_columns=searchable_columns,
+    )
+    filtered_expr = _parse_select(filtered.sql, dialect)
+    query = sqlglot.select(exp.alias_(exp.Count(this=exp.Star()), "dbfox_count")).from_(
+        filtered_expr.subquery("dbfox_count_source")
+    )
+    return SqlBackedQuery(sql=query.sql(dialect=dialect))
+
+
 def _parse_select(base_sql: str, dialect: str) -> exp.Query:
     try:
         return parse_single_readonly_query(base_sql, dialect)

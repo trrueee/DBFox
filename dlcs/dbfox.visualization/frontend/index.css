@@ -1,0 +1,464 @@
+.dbfox-visualization {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-ui);
+}
+
+.dbfox-visualization--inline {
+  margin-block: 14px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--surface-panel);
+}
+
+.dbfox-visualization--workspace {
+  min-height: 100%;
+  padding: 20px;
+}
+
+.dbfox-visualization__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dbfox-visualization__heading {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dbfox-visualization__eyebrow {
+  color: var(--color-primary);
+  font-size: var(--ui-font-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dbfox-visualization__heading h3,
+.dbfox-visualization__chart-block h4,
+.dbfox-visualization__table-block h4,
+.dbfox-visualization__text h4 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.dbfox-visualization__heading h3 {
+  font-size: var(--ui-font-title);
+  line-height: 1.3;
+}
+
+.dbfox-visualization__heading p,
+.dbfox-visualization__chart-block > p,
+.dbfox-visualization__table-block > p,
+.dbfox-visualization__text p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-body);
+  line-height: 1.55;
+}
+
+.dbfox-visualization__source {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.dbfox-visualization__dataset-count {
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.dbfox-visualization--dataset .dbfox-visualization__data-fallback {
+  margin-block-start: var(--space-3);
+}
+
+.dbfox-visualization__source-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--ui-font-micro);
+  font-weight: 600;
+}
+
+.dbfox-visualization__source-action,
+.dbfox-visualization__chart-actions button,
+.dbfox-visualization__error button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding-inline: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--surface-panel);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--ui-font-caption);
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.dbfox-visualization__source-action:hover,
+.dbfox-visualization__chart-actions button:hover:not(:disabled),
+.dbfox-visualization__error button:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.dbfox-visualization__source-action:focus-visible,
+.dbfox-visualization__chart-actions button:focus-visible,
+.dbfox-visualization__error button:focus-visible,
+.dbfox-visualization__vega:focus-visible,
+.dbfox-visualization__data-fallback summary:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.dbfox-visualization__chart-actions button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.dbfox-visualization__insight {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--color-primary);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  background: var(--color-primary-soft);
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-body);
+  line-height: 1.55;
+}
+
+.dbfox-visualization__insight svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-primary);
+}
+
+.dbfox-visualization__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dbfox-visualization__grid--columns-1 { grid-template-columns: minmax(0, 1fr); }
+.dbfox-visualization__grid--columns-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dbfox-visualization__grid--columns-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.dbfox-visualization__grid--comfortable {
+  gap: 16px;
+}
+
+.dbfox-visualization__metric,
+.dbfox-visualization__text,
+.dbfox-visualization__table-block,
+.dbfox-visualization__chart-block {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--surface-elevated);
+}
+
+.dbfox-visualization__span-1 { grid-column: span 1; }
+.dbfox-visualization__span-2 { grid-column: span 2; }
+.dbfox-visualization__span-3 { grid-column: span 3; }
+.dbfox-visualization__span-4 { grid-column: span 4; }
+
+.dbfox-visualization__metric {
+  display: grid;
+  gap: 4px;
+  min-height: 112px;
+  align-content: center;
+  padding: 16px;
+}
+
+.dbfox-visualization__metric > span {
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-caption);
+  font-weight: 500;
+}
+
+.dbfox-visualization__metric strong {
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-display);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.dbfox-visualization__metric small {
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
+}
+
+.dbfox-visualization__metric--positive { border-top: 3px solid var(--color-success); }
+.dbfox-visualization__metric--negative { border-top: 3px solid var(--color-danger); }
+.dbfox-visualization__metric--warning { border-top: 3px solid var(--color-warning); }
+
+.dbfox-visualization__text {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 16px;
+}
+
+.dbfox-visualization__text--insight { border-left: 3px solid var(--color-info); }
+.dbfox-visualization__text--warning { border-left: 3px solid var(--color-warning); }
+
+.dbfox-visualization__chart-block {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.dbfox-visualization__table-block {
+  overflow: hidden;
+  padding: var(--space-3);
+}
+
+.dbfox-visualization__chart-block h4,
+.dbfox-visualization__table-block h4,
+.dbfox-visualization__text h4 {
+  font-size: var(--ui-font-label);
+}
+
+.dbfox-visualization__figure {
+  position: relative;
+  min-width: 0;
+  margin: 4px 0 0;
+}
+
+.dbfox-visualization__chart-actions {
+  position: absolute;
+  z-index: 2;
+  top: -36px;
+  right: 0;
+  display: flex;
+  gap: 4px;
+}
+
+.dbfox-visualization__chart-actions button {
+  min-height: 28px;
+  padding-inline: 8px;
+  font-size: var(--ui-font-micro);
+}
+
+.dbfox-visualization__vega {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+}
+
+.dbfox-visualization__vega .vega-bindings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-block-end: var(--space-2);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-ui);
+  font-size: var(--ui-font-caption);
+}
+
+.dbfox-visualization__vega .vega-bind {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.dbfox-visualization__vega .vega-bind select,
+.dbfox-visualization__vega .vega-bind input:not([type="checkbox"]):not([type="radio"]) {
+  min-height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--surface-panel);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.dbfox-visualization__vega .vega-bind select:focus-visible,
+.dbfox-visualization__vega .vega-bind input:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
+.dbfox-visualization__vega--sm { min-height: 220px; }
+.dbfox-visualization__vega--md { min-height: 340px; }
+.dbfox-visualization__vega--lg { min-height: 500px; }
+.dbfox-visualization__vega--xl { min-height: 720px; }
+
+.dbfox-visualization__vega canvas,
+.dbfox-visualization__vega svg {
+  display: block;
+  max-width: 100%;
+}
+
+.dbfox-visualization__loading,
+.dbfox-visualization__empty,
+.dbfox-visualization__error,
+.dbfox-visualization__chart-loading,
+.dbfox-visualization__chart-error {
+  display: flex;
+  min-height: 120px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-panel);
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-caption);
+}
+
+.dbfox-visualization__error,
+.dbfox-visualization__empty,
+.dbfox-visualization__chart-error {
+  flex-direction: column;
+  text-align: center;
+}
+
+.dbfox-visualization__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: dbfox-visualization-spin 720ms linear infinite;
+}
+
+.dbfox-visualization__data-fallback {
+  border-top: 1px solid var(--color-border);
+  padding-top: 10px;
+}
+
+.dbfox-visualization__data-fallback summary {
+  width: fit-content;
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-caption);
+  cursor: pointer;
+}
+
+.dbfox-visualization__table-scroll {
+  max-height: 320px;
+  margin-top: 10px;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.dbfox-visualization__table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ui-font-caption);
+}
+
+.dbfox-visualization__table-scroll th,
+.dbfox-visualization__table-scroll td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dbfox-visualization__table-scroll th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-elevated);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.dbfox-visualization__notice {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-micro);
+}
+
+.dbfox-visualization__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.dbfox-visualization__tooltip {
+  display: grid;
+  gap: 6px;
+  max-width: 100%;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-card);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-ui);
+  font-size: var(--ui-font-caption);
+  line-height: 1.45;
+}
+
+.dbfox-visualization__tooltip > strong {
+  font-weight: 600;
+}
+
+.dbfox-visualization__tooltip dl {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  gap: 3px 12px;
+  margin: 0;
+}
+
+.dbfox-visualization__tooltip dl > div {
+  display: contents;
+}
+
+.dbfox-visualization__tooltip dt {
+  color: var(--color-text-secondary);
+}
+
+.dbfox-visualization__tooltip dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-family-data);
+}
+
+@keyframes dbfox-visualization-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 760px) {
+  .dbfox-visualization__grid { grid-template-columns: minmax(0, 1fr); }
+  .dbfox-visualization__metric,
+  .dbfox-visualization__text,
+  .dbfox-visualization__table-block,
+  .dbfox-visualization__chart-block { grid-column: 1; }
+  .dbfox-visualization__header { flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbfox-visualization__spinner { animation-duration: 1.8s; }
+  .dbfox-visualization__source-action,
+  .dbfox-visualization__chart-actions button,
+  .dbfox-visualization__error button { transition: none; }
+}

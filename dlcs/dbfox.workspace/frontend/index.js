@@ -47,7 +47,12 @@ function openFile(projectId, binding, path) {
     closeable: true,
     projectId,
     stateKey,
-    target: { type: "resource", kind: "dbfox.workspace.root", id: binding.id, version: binding.root_digest },
+    target: {
+      type: "object",
+      object: { kind: "dbfox.workspace.file", id: path, version: binding.root_digest },
+      authority: { kind: "dbfox.workspace.root", id: binding.id },
+      locator: path,
+    },
   });
 }
 
@@ -108,6 +113,7 @@ function FileBrowser({ projectId, binding, path }) {
   const [current, setCurrent] = React.useState(path);
   const [entries, setEntries] = React.useState([]);
   const [status, setStatus] = React.useState("loading");
+  const [reloadKey, setReloadKey] = React.useState(0);
   React.useEffect(() => {
     let active = true;
     setStatus("loading");
@@ -115,22 +121,52 @@ function FileBrowser({ projectId, binding, path }) {
       .then((result) => { if (active) { setEntries(result?.entries || []); setStatus("ready"); } })
       .catch(() => active && setStatus("error"));
     return () => { active = false; };
-  }, [projectId, binding.root_digest, current]);
-  return React.createElement("div", { className: "dbfox-workspace__files", role: "tree" },
+  }, [projectId, binding.root_digest, current, reloadKey]);
+  const rootItem = { path: `__root__:${current}`, name: "", is_dir: true, children: entries };
+  return React.createElement("div", { className: "dbfox-workspace__files" },
     current ? React.createElement("button", { type: "button", onClick: () => setCurrent(current.includes("/") ? current.slice(0, current.lastIndexOf("/")) : "") }, "← 上一级") : null,
-    status === "loading" ? React.createElement("p", null, "正在读取…") : null,
-    status === "error" ? React.createElement("p", { className: "dbfox-workspace__error" }, "无法读取这个目录。") : null,
-    entries.map((entry) => React.createElement("button", {
-      key: entry.path,
-      type: "button",
-      role: "treeitem",
-      onClick: () => entry.is_dir ? setCurrent(entry.path) : openFile(projectId, binding, entry.path),
-    }, React.createElement("span", { "aria-hidden": true }, entry.is_dir ? "▸" : "·"), entry.name)),
+    status === "loading" ? React.createElement("p", { className: "dbfox-workspace__status", role: "status" }, "正在读取…") : null,
+    status === "error" ? React.createElement("div", { className: "dbfox-workspace__error", role: "alert" },
+      React.createElement("span", null, "无法读取这个目录。"),
+      React.createElement("button", { type: "button", onClick: () => setReloadKey((value) => value + 1) }, "重试")) : null,
+    status === "ready" && entries.length === 0
+      ? React.createElement("p", { className: "dbfox-workspace__status" }, "这个目录是空的。") : null,
+    status === "ready" && entries.length > 0
+      ? React.createElement(host.ui.Tree, {
+          key: current,
+          rootItem,
+          ariaLabel: current ? `工作区目录 ${current}` : "工作区目录",
+          getItemId: (entry) => entry.path,
+          getItemLabel: (entry) => entry.name,
+          getItemChildren: (entry) => entry.children,
+          onItemSelect: (entry) => entry.is_dir
+            ? setCurrent(entry.path)
+            : openFile(projectId, binding, entry.path),
+        }) : null,
   );
 }
 
 function FileDock({ view }) {
-  const state = fileState.get(view.stateKey || "");
+  const stateKey = view.stateKey || "";
+  let state = fileState.get(stateKey);
+  if (
+    !state
+    && view.target?.type === "object"
+    && view.target.object.kind === "dbfox.workspace.file"
+    && view.target.authority?.kind === "dbfox.workspace.root"
+    && view.target.locator
+    && view.projectId
+  ) {
+    state = {
+      projectId: view.projectId,
+      path: view.target.locator,
+      binding: {
+        id: view.target.authority.id,
+        root_digest: view.target.object.version,
+      },
+    };
+    fileState.set(stateKey, state);
+  }
   const [result, setResult] = React.useState(null);
   const [error, setError] = React.useState("");
   React.useEffect(() => {
@@ -170,10 +206,7 @@ function parseCodePatch(value) {
   return artifactPayload(value, ["relativePath", "newSha256"], "Workspace code patch");
 }
 
-function WorkspaceArtifact({ artifact, kind }) {
-  const payload = kind === "snapshot"
-    ? parseFileSnapshot(artifact.payload)
-    : parseCodePatch(artifact.payload);
+function WorkspaceArtifact({ artifact, payload, kind }) {
   const digest = kind === "snapshot" ? payload.sha256 : payload.newSha256;
   const state = kind === "snapshot"
     ? (payload.truncated ? "snapshot · truncated" : "snapshot")
@@ -198,6 +231,20 @@ export function register(extensionHost) {
     title: "文件",
     icon: React.createElement("span", { "aria-hidden": true }, "▱"),
     addLabel: "选择工作区",
+    listResources: async ({ projectId }) => {
+      const result = await invoke("binding.get", {}, projectId);
+      const binding = result?.binding;
+      if (!binding) return [];
+      return [{
+        kind: "dbfox.workspace.binding",
+        id: binding.id,
+        name: binding.root_path,
+        detail: `目录绑定 · ${binding.updated_at || ""}`,
+      }];
+    },
+    removeResource: async ({ projectId }) => {
+      await invoke("binding.delete", {}, projectId);
+    },
     onAdd: ({ projectId }) => {
       void host.nativeDialogs.pickFolder().then(async (rootPath) => {
         if (!rootPath) return;
@@ -214,16 +261,31 @@ export function register(extensionHost) {
     isVisible: (view, context) => !view.projectId || view.projectId === context.activeProjectId,
     render: (view) => React.createElement(FileDock, { view }),
   });
-  host.artifactRenderers.register({
-    type: FILE_SNAPSHOT_TYPE,
-    supportedSchemaVersions: [1],
+  host.artifactViews.register({
+    id: "dbfox.workspace.file-snapshot",
+    title: "文件快照",
+    priority: 60,
+    surfaces: ["inline", "workspace"],
+    artifactTypes: [{ type: FILE_SNAPSHOT_TYPE, schemaVersions: [1] }],
     parsePayload: parseFileSnapshot,
-    render: (artifact) => React.createElement(WorkspaceArtifact, { artifact, kind: "snapshot" }),
+    render: (artifact, payload) => React.createElement(WorkspaceArtifact, { artifact, payload, kind: "snapshot" }),
   });
-  host.artifactRenderers.register({
-    type: CODE_PATCH_TYPE,
-    supportedSchemaVersions: [1],
+  host.artifactViews.register({
+    id: "dbfox.workspace.code-patch",
+    title: "代码变更",
+    priority: 60,
+    surfaces: ["inline", "workspace"],
+    artifactTypes: [{ type: CODE_PATCH_TYPE, schemaVersions: [1] }],
     parsePayload: parseCodePatch,
-    render: (artifact) => React.createElement(WorkspaceArtifact, { artifact, kind: "patch" }),
+    render: (artifact, payload) => React.createElement(WorkspaceArtifact, { artifact, payload, kind: "patch" }),
   });
+}
+
+export function deactivate() {
+  bindings.clear();
+  fileState.clear();
+  listeners.clear();
+  if (typeof document !== "undefined") document.querySelectorAll(`link[data-dbfox-dlc="${DLC_ID}"]`).forEach((link) => link.remove());
+  host = undefined;
+  React = undefined;
 }

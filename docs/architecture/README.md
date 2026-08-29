@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-24
+> 最后核验：2026-08-28
 >
 > 事实源：当前源码、迁移、锁文件、协议测试和绑定目标 commit 的运行证据
 
@@ -21,10 +21,11 @@
 ## 2. 当前架构合同
 
 1. [Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md)：Project、Conversation intent、Run authority、ResourceKey、System DLC 与 Workbench composition 的权威边界。
-2. [Runtime Extension Contracts](./runtime-extension-contracts.md)：Backend Extension Manifest、Invocation Context、Capability Grant、Effect、Semantic 和 Completion Rule。
-3. [Runtime Extension 安全与兼容规范](./runtime-extension-security-compatibility.md)：trusted publisher、Filesystem/Network/Process/Secret、Artifact envelope 和 wire compatibility。
-4. [前端架构](./frontend.md)：Host-owned Workbench、资源树、Conversation composer、Dock 与 DLC contribution。
-5. [测试与测评系统边界](./verification-system.md)：与产品物理分离但驱动真实 Runtime loop 的验证架构。
+2. [Artifact、Representation、可视化与 Dock 架构](./artifact-representation-visualization.md)：当前 AI 编排、SQL Backend、多视图、Visualization DLC 与 Dock 边界。
+3. [Runtime Extension Contracts](./runtime-extension-contracts.md)：Backend Extension Manifest、Invocation Context、Capability Grant、Effect、Semantic 和 Completion Rule。
+4. [Runtime Extension 安全与兼容规范](./runtime-extension-security-compatibility.md)：trusted publisher、Filesystem/Network/Process/Secret、Artifact envelope 和 wire compatibility。
+5. [前端架构](./frontend.md)：Host-owned Workbench、资源树、Conversation composer、Dock 与 DLC contribution。
+6. [测试与测评系统边界](./verification-system.md)：与产品物理分离但驱动真实 Runtime loop 的验证架构。
 
 已完成的分阶段迁移方案和 Memory v4 候选设计只保留在 [`docs/archive/designs/`](../archive/designs/)；它们不是当前实现合同，也不得成为新增兼容路径的依据。
 

@@ -410,6 +410,31 @@ class DataStateStore:
             ),
         )
 
+    def resolve_artifact_database(
+        self,
+        database_id: str,
+        resource_version: str,
+    ) -> DatabaseHandle:
+        """Resolve the exact database generation already fenced by an Artifact."""
+
+        database = self.get_database(database_id)
+        if database is None:
+            raise KeyError("Database resource is unavailable")
+        profile = self.get_profile(database.connection_profile_id)
+        if profile is None:
+            raise KeyError("Database connection profile is unavailable")
+        current_version = _scope_version(
+            profile.connection_generation,
+            database.resource_generation,
+        )
+        if current_version != str(resource_version):
+            raise ValueError("Database resource generation has changed")
+        return DatabaseHandle(
+            profile=profile,
+            database=database,
+            scope_version=current_version,
+        )
+
     @staticmethod
     def _catalog_table_id(
         database_resource_id: str,

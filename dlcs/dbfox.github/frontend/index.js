@@ -74,7 +74,12 @@ function openFile(projectId, binding, path) {
     closeable: true,
     projectId,
     stateKey,
-    target: { type: "resource", kind: "dbfox.github.repository", id: binding.id, version: binding.resolved_revision },
+    target: {
+      type: "object",
+      object: { kind: "dbfox.github.file", id: path, version: binding.resolved_revision },
+      authority: { kind: "dbfox.github.repository", id: binding.id },
+      locator: path,
+    },
   });
 }
 
@@ -130,21 +135,24 @@ function GithubConnector({ projectId }) {
 
   return React.createElement("section", { className: "dbfox-github" },
     React.createElement("div", { className: "dbfox-github__bindings" },
-      bindings.map((binding) => React.createElement("button", {
+      bindings.map((binding) => React.createElement("div", {
         key: binding.id,
-        type: "button",
-        className: `dbfox-github__binding ${binding.id === selected?.id ? "is-active" : ""}`,
-        onClick: () => { selectedBindingByProject.set(projectId, binding.id); emitChange(); },
+        className: "dbfox-github__binding-row",
       },
-      React.createElement("span", null, `${binding.owner}/${binding.repository}`),
-      React.createElement("small", null, `${binding.ref_name} · ${binding.resolved_revision.slice(0, 7)}`),
-      React.createElement("span", {
-        role: "button",
-        tabIndex: 0,
-        className: "dbfox-github__remove",
-        onClick: (event) => { event.stopPropagation(); void removeBinding(binding); },
-        onKeyDown: (event) => { if (event.key === "Enter") void removeBinding(binding); },
-      }, "×"))),
+        React.createElement("button", {
+          type: "button",
+          className: `dbfox-github__binding ${binding.id === selected?.id ? "is-active" : ""}`,
+          onClick: () => { selectedBindingByProject.set(projectId, binding.id); emitChange(); },
+        },
+        React.createElement("span", null, `${binding.owner}/${binding.repository}`),
+        React.createElement("small", null, `${binding.ref_name} · ${binding.resolved_revision.slice(0, 7)}`)),
+        React.createElement("button", {
+          type: "button",
+          className: "dbfox-github__remove",
+          onClick: () => void removeBinding(binding),
+          "aria-label": `移除 ${binding.owner}/${binding.repository}`,
+          title: "移除仓库",
+        }, "×"))),
     ),
     addFormProjects.has(projectId) || bindings.length === 0
       ? React.createElement("form", { className: "dbfox-github__form", onSubmit: submit },
@@ -174,6 +182,7 @@ function GithubFileBrowser({ projectId, binding }) {
   const [path, setPath] = React.useState("");
   const [entries, setEntries] = React.useState([]);
   const [status, setStatus] = React.useState("loading");
+  const [reloadKey, setReloadKey] = React.useState(0);
 
   React.useEffect(() => {
     let active = true;
@@ -184,27 +193,56 @@ function GithubFileBrowser({ projectId, binding }) {
       })
       .catch(() => active && setStatus("error"));
     return () => { active = false; };
-  }, [projectId, binding.id, binding.resolved_revision, path]);
+  }, [projectId, binding.id, binding.resolved_revision, path, reloadKey]);
 
+  const rootItem = { path: `__root__:${path}`, name: "", type: "dir", children: entries };
   return React.createElement("div", { className: "dbfox-github__files" },
     path ? React.createElement("button", {
       type: "button",
       className: "dbfox-github__up",
       onClick: () => setPath(path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ""),
     }, "← Up") : null,
-    status === "loading" ? React.createElement("p", null, "Loading files…") : null,
-    status === "error" ? React.createElement("p", { className: "dbfox-github__error" }, "Unable to list this directory.") : null,
-    entries.map((entry) => React.createElement("button", {
-      key: entry.path,
-      type: "button",
-      className: "dbfox-github__file",
-      onClick: () => entry.type === "dir" ? setPath(entry.path) : openFile(projectId, binding, entry.path),
-    }, React.createElement("span", null, entry.type === "dir" ? "▸" : "·"), entry.path.split("/").pop() || entry.path)),
+    status === "loading" ? React.createElement("p", { role: "status" }, "Loading files…") : null,
+    status === "error" ? React.createElement("div", { className: "dbfox-github__error", role: "alert" },
+      React.createElement("span", null, "Unable to list this directory."),
+      React.createElement("button", { type: "button", onClick: () => setReloadKey((value) => value + 1) }, "Retry")) : null,
+    status === "ready" && entries.length === 0 ? React.createElement("p", null, "This directory is empty.") : null,
+    status === "ready" && entries.length > 0
+      ? React.createElement(host.ui.Tree, {
+          key: path,
+          rootItem,
+          ariaLabel: path ? `GitHub directory ${path}` : "GitHub repository files",
+          getItemId: (entry) => entry.path,
+          getItemLabel: (entry) => entry.path.split("/").pop() || entry.path,
+          getItemChildren: (entry) => entry.children,
+          onItemSelect: (entry) => entry.type === "dir"
+            ? setPath(entry.path)
+            : openFile(projectId, binding, entry.path),
+        }) : null,
   );
 }
 
 function GithubFileDock({ view }) {
-  const state = fileStateByKey.get(view.stateKey || "");
+  const stateKey = view.stateKey || "";
+  let state = fileStateByKey.get(stateKey);
+  if (
+    !state
+    && view.target?.type === "object"
+    && view.target.object.kind === "dbfox.github.file"
+    && view.target.authority?.kind === "dbfox.github.repository"
+    && view.target.locator
+    && view.projectId
+  ) {
+    state = {
+      projectId: view.projectId,
+      bindingId: view.target.authority.id,
+      owner: "GitHub",
+      repository: view.target.authority.id,
+      revision: view.target.object.version,
+      path: view.target.locator,
+    };
+    fileStateByKey.set(stateKey, state);
+  }
   const [result, setResult] = React.useState(null);
   const [error, setError] = React.useState("");
   React.useEffect(() => {
@@ -235,8 +273,7 @@ function parseArtifactPayload(value) {
   return value;
 }
 
-function GithubArtifact({ artifact }) {
-  const payload = parseArtifactPayload(artifact.payload);
+function GithubArtifact({ artifact, payload }) {
   return React.createElement("article", { className: "dbfox-github-artifact" },
     React.createElement("strong", null, artifact.title || payload.relativePath),
     React.createElement("code", null, payload.relativePath),
@@ -255,6 +292,19 @@ export function register(host) {
     title: "GitHub",
     icon: React.createElement("span", { "aria-hidden": true }, "GH"),
     addLabel: "Add GitHub repository",
+    listResources: async ({ projectId }) => {
+      const bindings = await loadBindings(projectId);
+      return bindings.map((binding) => ({
+        kind: "dbfox.github.binding",
+        id: binding.id,
+        name: binding.repository,
+        detail: binding.ref_name ? `ref ${binding.ref_name}` : undefined,
+      }));
+    },
+    removeResource: async ({ projectId }, resource) => {
+      await invoke("bindings.delete", { binding_id: resource.id }, projectId);
+      await loadBindings(projectId);
+    },
     onAdd: ({ projectId }) => { addFormProjects.add(projectId); emitChange(); },
     render: ({ projectId }) => React.createElement(GithubConnector, { projectId }),
   });
@@ -265,12 +315,27 @@ export function register(host) {
     isVisible: (view, context) => !view.projectId || view.projectId === context.activeProjectId,
     render: (view) => React.createElement(GithubFileDock, { view }),
   });
-  host.artifactRenderers.register({
-    type: FILE_ARTIFACT_TYPE,
-    supportedSchemaVersions: [1],
+  host.artifactViews.register({
+    id: "dbfox.github.file",
+    title: "文件",
+    priority: 60,
+    surfaces: ["inline", "workspace"],
+    artifactTypes: [{ type: FILE_ARTIFACT_TYPE, schemaVersions: [1] }],
     parsePayload: parseArtifactPayload,
-    render: (artifact) => React.createElement(GithubArtifact, { artifact }),
+    render: (artifact, payload) => React.createElement(GithubArtifact, { artifact, payload }),
   });
+}
+
+export function deactivate() {
+  bindingsByProject.clear();
+  selectedBindingByProject.clear();
+  loadedProjects.clear();
+  fileStateByKey.clear();
+  addFormProjects.clear();
+  listeners.clear();
+  if (typeof document !== "undefined") document.querySelectorAll(`link[data-dbfox-dlc="${DLC_ID}"]`).forEach((link) => link.remove());
+  extensionHost = undefined;
+  React = undefined;
 }
 
 export const __testing = Object.freeze({

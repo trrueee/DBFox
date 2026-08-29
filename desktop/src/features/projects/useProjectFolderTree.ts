@@ -8,13 +8,13 @@ import {
 /**
  * Lazy project-folder tree state for the Workbench Shell sidebar.
  *
- * The Rust host exposes one folder level per call; directories are only read
+ * The Electron host exposes one folder level per call; directories are only read
  * after the user expands them, so large workspace roots stay bounded.
  */
 export function useProjectFolderTree() {
   const [listings, setListings] = useState<Record<string, ProjectFolderListing | null>>({});
   const [loadingPaths, setLoadingPaths] = useState<Record<string, boolean>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, unknown>>({});
   const [expandedFolders, setExpandedFolders] = useState<string[]>([]);
   const loadedRef = useRef(new Set<string>());
   const pendingRef = useRef(new Set<string>());
@@ -45,7 +45,7 @@ export function useProjectFolderTree() {
       loadedRef.current.delete(path);
       setErrors((current) => ({
         ...current,
-        [path]: error instanceof Error ? error.message : "读取文件夹失败，请重试。",
+        [path]: error,
       }));
     } finally {
       pendingRef.current.delete(path);

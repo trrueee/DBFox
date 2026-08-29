@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 SQL_ARTIFACT_TYPE = "dbfox.data.sql"
 SAFETY_ARTIFACT_TYPE = "dbfox.data.safety"
 RESULT_VIEW_ARTIFACT_TYPE = "dbfox.data.result_view"
-CHART_ARTIFACT_TYPE = "dbfox.data.chart"
+SNAPSHOT_ARTIFACT_TYPE = "dbfox.data.snapshot"
 
 
 class SqlArtifactPayload(BaseModel):
@@ -40,7 +40,9 @@ class SafetyArtifactPayload(BaseModel):
     scope_state: dict[str, JsonValue] = Field(alias="scopeState")
 
 
-class ResultViewArtifactPayload(BaseModel):
+class SnapshotBackedResultViewArtifactPayload(BaseModel):
+    """Historical Result schema whose rows live in the Data durable store."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     source_sql_artifact_id: str = Field(alias="sourceSqlArtifactId", min_length=1)
@@ -58,12 +60,41 @@ class ResultViewArtifactPayload(BaseModel):
     )
 
 
-class ChartArtifactPayload(BaseModel):
+class ResultViewArtifactPayload(BaseModel):
+    """Reference-only Result schema; current values are read through its SQL source."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    source_result_artifact_id: str = Field(alias="sourceResultArtifactId", min_length=1)
-    chart_type: str = Field(alias="chartType", min_length=1)
-    x: str | None = None
-    y: list[str] = Field(default_factory=list)
-    aggregation: str | None = None
-    title: str | None = None
+    backend: Literal["sql_reexecution"]
+    source_sql_artifact_id: str = Field(alias="sourceSqlArtifactId", min_length=1)
+    query_fingerprint: str = Field(alias="queryFingerprint", min_length=1)
+    datasource_generation: str | int = Field(alias="datasourceGeneration")
+    columns: list[str] = Field(default_factory=list, max_length=256)
+    row_count: int = Field(alias="rowCount", ge=0)
+    returned_rows: int = Field(alias="returnedRows", ge=0)
+    latency_ms: int | float | None = Field(alias="latencyMs", default=None, ge=0)
+    executed_at: str = Field(alias="executedAt", min_length=1)
+    truncated: bool = False
+    evidence_kind: Literal["query_result"] = Field(
+        alias="evidenceKind",
+        default="query_result",
+    )
+
+
+class SnapshotArtifactPayload(BaseModel):
+    """Explicit immutable row snapshot stored by the Data capability."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    backend: Literal["durable_snapshot"]
+    source_sql_artifact_id: str = Field(alias="sourceSqlArtifactId", min_length=1)
+    query_fingerprint: str = Field(alias="queryFingerprint", min_length=1)
+    datasource_generation: str | int = Field(alias="datasourceGeneration")
+    columns: list[str] = Field(default_factory=list, max_length=256)
+    row_count: int = Field(alias="rowCount", ge=0)
+    captured_at: str = Field(alias="capturedAt", min_length=1)
+    truncated: bool = False
+    redacted: bool = False
+    evidence_kind: Literal["sample_rows", "query_snapshot"] = Field(
+        alias="evidenceKind",
+    )

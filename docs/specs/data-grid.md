@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-21
+> 最后核验：2026-08-28
 >
 > 适用范围：表数据预览、SQL 查询结果、Agent Result Artifact 与单元格值查看
 
@@ -16,7 +16,7 @@
 
 ## 1. 背景与问题
 
-DBFox 已有 TanStack Table、SQL Result Gateway、分页、筛选、排序、CSV 导出、JSON 树和图片入口，但值查看能力曾分散在多个位置：
+DBFox 已有 TanStack Table、DataFrame Representation、分页、筛选、排序、CSV 导出、JSON 树和图片入口，但值查看能力曾分散在多个位置：
 
 - 表数据预览自行处理选择、复制、JSON 对话框和日期显示；
 - Result Artifact 在分页 Hook 中把所有值转为字符串；
@@ -138,7 +138,7 @@ null | boolean | number | datetime | json | image-url | url | binary-placeholder
 | 应用内图片预览 | 否 | 否 | 否 | 否 | 是 | 只有未来取得原始字节后才允许 |
 | 保存到文件 | 否 | 可保存文本 | 可保存 `.txt` / `.json` | 否 | 见 7.1 | 只有未来取得原始字节后才允许 |
 
-复制操作复制真实序列化值，而不是视觉摘要。CSV 导出继续由现有 Result Gateway 在后端生成，不读取 DOM，也不从当前页拼接“全量导出”。
+复制操作复制真实序列化值，而不是视觉摘要。CSV 导出继续由 DataFrame Representation Provider 在后端生成，不读取 DOM，也不从当前页拼接“全量导出”。
 
 ### 7.1 远程图片保存
 
@@ -162,7 +162,7 @@ null | boolean | number | datetime | json | image-url | url | binary-placeholder
 - `Ctrl/Cmd+C` 复制选中单元格的真实序列化值。
 - `Enter` 打开可查看值；方向键移动焦点。
 - 表头排序、筛选、隐藏、固定、复制列名走同一交互命名。
-- 筛选和排序由 SQL Result Gateway 在后端编译与执行，不在当前页伪造全量结果。
+- 筛选和排序由 DataFrame Representation Provider 在后端编译与执行，不在当前页伪造全量结果。
 - 搜索、分页和刷新保留上一批结果直到新结果就绪；错误不会清空仍可用数据。
 - CSV 导出使用当前筛选和排序合同，并保留既有公式注入防护和脱敏血缘。
 - 空状态、加载状态、错误状态和截断状态在表格容器内显示，不改变工作区信息架构。
@@ -172,7 +172,7 @@ null | boolean | number | datetime | json | image-url | url | binary-placeholder
 SQL 查询产生的 Result Artifact 在工件区保持一个工件身份，但允许在同一卡片内切换两种只读呈现：
 
 - **表格**：默认视图，继续使用 Result Artifact ID 进行分页、搜索、排序、筛选和 CSV 导出。
-- **SQL**：显示该 Result Artifact 通过 `sourceSqlArtifactId` 明确引用的来源 SQL Artifact，并提供复制和打开 SQL 控制台操作。
+- **SQL**：显示该 Result Artifact 通过 `sourceSqlArtifactId` 明确引用的来源 SQL Artifact，并提供复制和下载；只有具备明确 DatabaseResource/Project scope 的领域 Command 才能打开 SQL Console。
 
 切换只改变前端呈现状态，不创建第二个结果工件、不复制结果数据、不重新执行查询，也不改变 Artifact、Evidence 或 Run 的身份与状态。前端只能按精确的 `sourceSqlArtifactId` 解析来源；引用缺失、类型不符或 SQL 为空时不显示 SQL 切换，禁止回退到“最近一条 SQL”或通过查询指纹猜测。
 
@@ -192,7 +192,7 @@ SQL 查询产生的 Result Artifact 在工件区保持一个工件身份，但�
 
 ### 阶段一：统一只读呈现
 
-1. Result Gateway 保留 `unknown` 标量，不再全量字符串化。
+1. DataFrame Representation 保留规范标量类型，不再全量字符串化。
 2. 建立单一 `classifyCellValue`，由 `CellValuePreview` 和完整 Viewer 共同使用。
 3. 表预览和 Artifact 结果表都传入 `databaseType`。
 4. 统一 NULL、数字、日期、布尔、JSON、长文本、URL、图片和二进制占位显示。
@@ -234,7 +234,7 @@ SQL 查询产生的 Result Artifact 在工件区保持一个工件身份，但�
 
 - 表预览与 Artifact 表均支持选择、方向键、复制和完整查看，不发生点击动作冲突。
 - 内部按钮点击不触发行选择、复制或外部跳转的其他动作。
-- 排序、筛选、搜索、分页、刷新和导出仍由现有 Result Gateway 完成。
+- 排序、筛选、搜索、分页、刷新和导出仍由现有 DataFrame Representation Provider 完成。
 - 失败刷新保留上一批可用数据，错误状态可见。
 - 带有效来源 SQL 的 Result Artifact 默认显示表格，可切换到精确来源 SQL；切换本身不触发新的结果请求或 SQL 执行。
 - 缺失来源 SQL、错误类型引用或空 SQL 时不显示 SQL 视图，且不会展示同一 Run 中的其他 SQL。
@@ -254,8 +254,8 @@ SQL 查询产生的 Result Artifact 在工件区保持一个工件身份，但�
 | 悬浮、对话框和菜单 | 继续使用 Radix UI 封装 | 已在项目中使用，焦点和无障碍边界清晰 |
 | JSON 树 | 复用现有 `JsonTree`，补充有界展示 | 当前只读需求简单，引入大型 JSON 编辑器成本过高 |
 | 值分类 | 在真实 UI 边界自行实现小型纯函数 | 数据库元数据与 DBFox 传输合同是项目特有输入；第三方库无法替代该判断 |
-| CSV | 复用后端 Result Gateway 与现有 CSV 防护 | 避免 DOM 导出、全量内存加载和双轨 SQL |
+| CSV | 复用后端 DataFrame Representation stream 与现有 CSV 防护 | 避免 DOM 导出、全量内存加载和双轨 SQL |
 | 外部打开 | 复用 Electron Main URL 校验 + `shell.openExternal` | 已有前后端双重 HTTPS 合同 |
 | 图片下载 | 使用 Node 标准库 + Electron Dialog 的受控 Main 能力 | Renderer 通用 HTTP/FS 权限不满足安全边界；Main 可集中执行 SSRF、大小和格式校验 |
 
-本设计不新增兼容层、双向 Mapper、第二套 Result Gateway 或第二套表格执行路径。
+本设计不新增兼容层、双向 Mapper、第二套 DataFrame 读取协议或第二套表格执行路径。
