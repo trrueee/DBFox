@@ -1,7 +1,21 @@
 import { ArrowUpDown, Copy, Download, Filter, RefreshCw, Search } from "lucide-react";
 import { useState } from "react";
-import { Button, Input, Popover, PopoverContent, PopoverTrigger, Select, Toolbar, ToolbarGroup } from "../../../../components/ui";
-import type { ArtifactViewFilter, ArtifactViewFilterOperator } from "../../../../lib/api/types";
+import {
+  Button,
+  Input,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Toolbar,
+  ToolbarButton,
+  ToolbarGroup,
+} from "../../../../components/ui";
+import type { DataFrameFilter, DataFrameFilterOperator } from "../../../../lib/api/types";
 import type { SortDirection, SortState } from "./useArtifactTableData";
 
 interface ArtifactTableToolbarProps {
@@ -13,8 +27,8 @@ interface ArtifactTableToolbarProps {
   sort: SortState | null;
   onApplySort: (columnIndex: number, direction: SortDirection) => void;
   onClearSort: () => void;
-  filters: ArtifactViewFilter[];
-  onFiltersChange: (value: ArtifactViewFilter[]) => void;
+  filters: DataFrameFilter[];
+  onFiltersChange: (value: DataFrameFilter[]) => void;
   isLoading: boolean;
   onRefresh: () => void;
   onExport: () => void;
@@ -38,7 +52,7 @@ export function ArtifactTableToolbar({
   onCopy,
 }: ArtifactTableToolbarProps) {
   const [filterColumn, setFilterColumn] = useState(columns[0] ?? "");
-  const [filterOperator, setFilterOperator] = useState<ArtifactViewFilterOperator>("contains");
+  const [filterOperator, setFilterOperator] = useState<DataFrameFilterOperator>("contains");
   const [filterValue, setFilterValue] = useState("");
   const [sortColumn, setSortColumn] = useState(columns[sort?.columnIndex ?? 0] ?? columns[0] ?? "");
   const [sortDirection, setSortDirection] = useState<SortDirection>(sort?.direction ?? "desc");
@@ -49,8 +63,8 @@ export function ArtifactTableToolbar({
 
   const applyFilter = () => {
     if (!selectedFilterColumn) return;
-    const nextFilter: ArtifactViewFilter = {
-      column: selectedFilterColumn,
+    const nextFilter: DataFrameFilter = {
+      field: selectedFilterColumn,
       operator: filterOperator,
       value: filterNeedsValue ? filterValue : undefined,
     };
@@ -73,52 +87,64 @@ export function ArtifactTableToolbar({
       <div className="artifact-table-toolbar-stack">
         <Toolbar className="artifact-table-toolbar">
           <ToolbarGroup className="artifact-table-toolbar-main">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="artifact-table-toolbar-button"
-              onClick={onRefresh}
-              disabled={isLoading}
-            >
-              <RefreshCw size={10} className={isLoading ? "artifact-table-refresh-icon is-spinning" : "artifact-table-refresh-icon"} /> 刷新
-            </Button>
+            <ToolbarButton asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="artifact-table-toolbar-button"
+                onClick={onRefresh}
+                disabled={isLoading}
+              >
+                <RefreshCw size={14} className={isLoading ? "artifact-table-refresh-icon is-spinning" : "artifact-table-refresh-icon"} /> 刷新
+              </Button>
+            </ToolbarButton>
             <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="artifact-table-toolbar-button"
-                >
-                  <Filter size={10} /> 筛选{filters.length > 0 ? ` ${filters.length}` : ""}
-                </Button>
-              </PopoverTrigger>
+              <ToolbarButton asChild>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="artifact-table-toolbar-button"
+                  >
+                    <Filter size={14} /> 筛选{filters.length > 0 ? ` ${filters.length}` : ""}
+                  </Button>
+                </PopoverTrigger>
+              </ToolbarButton>
               <PopoverContent className="artifact-table-popover-content" aria-label="结果筛选设置">
                 <label className="artifact-table-control-field">
                   <span>筛选列</span>
-                  <Select className="artifact-table-control-select" value={selectedFilterColumn} onChange={(event) => setFilterColumn(event.target.value)}>
-                    {columns.map((column) => (
-                      <option key={column} value={column}>
-                        {column}
-                      </option>
-                    ))}
+                  <Select value={selectedFilterColumn} onValueChange={setFilterColumn}>
+                    <SelectTrigger className="artifact-table-control-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {columns.map((column) => (
+                        <SelectItem key={column} value={column}>{column}</SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </label>
                 <label className="artifact-table-control-field">
                   <span>筛选条件</span>
-                  <Select className="artifact-table-control-select" value={filterOperator} onChange={(event) => setFilterOperator(event.target.value as ArtifactViewFilterOperator)}>
-                    <option value="contains">包含</option>
-                    <option value="equals">等于</option>
-                    <option value="not_equals">不等于</option>
-                    <option value="starts_with">开头为</option>
-                    <option value="ends_with">结尾为</option>
-                    <option value="gt">大于</option>
-                    <option value="gte">大于等于</option>
-                    <option value="lt">小于</option>
-                    <option value="lte">小于等于</option>
-                    <option value="is_null">为空</option>
-                    <option value="is_not_null">不为空</option>
+                  <Select value={filterOperator} onValueChange={(value) => setFilterOperator(value as DataFrameFilterOperator)}>
+                    <SelectTrigger className="artifact-table-control-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="contains">包含</SelectItem>
+                      <SelectItem value="equals">等于</SelectItem>
+                      <SelectItem value="not_equals">不等于</SelectItem>
+                      <SelectItem value="starts_with">开头为</SelectItem>
+                      <SelectItem value="ends_with">结尾为</SelectItem>
+                      <SelectItem value="gt">大于</SelectItem>
+                      <SelectItem value="gte">大于等于</SelectItem>
+                      <SelectItem value="lt">小于</SelectItem>
+                      <SelectItem value="lte">小于等于</SelectItem>
+                      <SelectItem value="is_null">为空</SelectItem>
+                      <SelectItem value="is_not_null">不为空</SelectItem>
+                    </SelectContent>
                   </Select>
                 </label>
                 {filterNeedsValue && (
@@ -138,32 +164,42 @@ export function ArtifactTableToolbar({
               </PopoverContent>
             </Popover>
             <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="artifact-table-toolbar-button"
-                >
-                  <ArrowUpDown size={10} /> 排序{sort ? ` ${sort.direction === "asc" ? "↑" : "↓"}` : ""}
-                </Button>
-              </PopoverTrigger>
+              <ToolbarButton asChild>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="artifact-table-toolbar-button"
+                  >
+                    <ArrowUpDown size={14} /> 排序{sort ? ` ${sort.direction === "asc" ? "↑" : "↓"}` : ""}
+                  </Button>
+                </PopoverTrigger>
+              </ToolbarButton>
               <PopoverContent className="artifact-table-popover-content" aria-label="结果排序设置">
                 <label className="artifact-table-control-field">
                   <span>排序列</span>
-                  <Select className="artifact-table-control-select" value={selectedSortColumn} onChange={(event) => setSortColumn(event.target.value)}>
-                    {columns.map((column) => (
-                      <option key={column} value={column}>
-                        {column}
-                      </option>
-                    ))}
+                  <Select value={selectedSortColumn} onValueChange={setSortColumn}>
+                    <SelectTrigger className="artifact-table-control-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {columns.map((column) => (
+                        <SelectItem key={column} value={column}>{column}</SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </label>
                 <label className="artifact-table-control-field">
                   <span>排序方向</span>
-                  <Select className="artifact-table-control-select" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as SortDirection)}>
-                    <option value="desc">降序</option>
-                    <option value="asc">升序</option>
+                  <Select value={sortDirection} onValueChange={(value) => setSortDirection(value as SortDirection)}>
+                    <SelectTrigger className="artifact-table-control-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="desc">降序</SelectItem>
+                      <SelectItem value="asc">升序</SelectItem>
+                    </SelectContent>
                   </Select>
                 </label>
                 <div className="artifact-table-popover-actions">
@@ -176,14 +212,18 @@ export function ArtifactTableToolbar({
                 </div>
               </PopoverContent>
             </Popover>
-            <Button type="button" variant="ghost" size="sm" className="artifact-table-toolbar-button" onClick={onExport}>
-              <Download size={10} /> 导出
-            </Button>
-            <Button type="button" variant="ghost" size="sm" className="artifact-table-toolbar-button" onClick={onCopy}>
-              <Copy size={10} /> 复制
-            </Button>
+            <ToolbarButton asChild>
+              <Button type="button" variant="ghost" size="sm" className="artifact-table-toolbar-button" onClick={onExport}>
+                <Download size={14} /> 导出
+              </Button>
+            </ToolbarButton>
+            <ToolbarButton asChild>
+              <Button type="button" variant="ghost" size="sm" className="artifact-table-toolbar-button" onClick={onCopy}>
+                <Copy size={14} /> 复制
+              </Button>
+            </ToolbarButton>
             <div className="artifact-table-search-shell">
-              <Search size={12} className="artifact-table-search-icon" />
+              <Search size={14} className="artifact-table-search-icon" />
               <Input
                 className="artifact-table-search"
                 value={search}

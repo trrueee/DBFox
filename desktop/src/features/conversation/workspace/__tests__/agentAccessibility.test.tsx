@@ -1,9 +1,9 @@
 import axe from "axe-core";
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { AgentQuestion } from "../../../../components/agent-elements/AgentQuestion";
 import { AgentTimeline } from "../AgentTimeline";
 import { ApprovalCard } from "../ApprovalCard";
-import { QuestionCard } from "../QuestionCard";
 import type {
   ApprovalItem,
   ConversationRun,
@@ -124,7 +124,7 @@ describe("Agent workspace accessibility", () => {
           allow_free_text: true,
         },
       };
-    const { container } = render(<QuestionCard
+    const { container } = render(<AgentQuestion
       question={question}
       onRespond={vi.fn()}
     />);

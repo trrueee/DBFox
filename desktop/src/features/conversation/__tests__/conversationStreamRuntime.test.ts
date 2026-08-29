@@ -4,7 +4,10 @@ import type {
   ConversationStreamEvent,
 } from "../../../types/conversation";
 import { ConversationStreamRuntime } from "../conversationStreamRuntime";
-import { ConversationProtocolError } from "../conversationRepository";
+import {
+  ConversationProtocolError,
+  ConversationStreamHttpError,
+} from "../conversationRepository";
 
 function snapshot(status: "running" | "completed"): ConversationDetail {
   return {
@@ -37,6 +40,7 @@ describe("ConversationStreamRuntime", () => {
       .mockRejectedValueOnce(new TypeError("temporary disconnect"))
       .mockResolvedValueOnce(4);
     const loadSnapshot = vi.fn();
+    const onConnectionState = vi.fn();
     const runtime = new ConversationStreamRuntime({
       stream,
       snapshot: vi.fn()
@@ -48,6 +52,7 @@ describe("ConversationStreamRuntime", () => {
     await runtime.follow("conversation-1", "run-1", 0, {
       applyEvents: vi.fn(),
       loadSnapshot,
+      onConnectionState,
     });
 
     expect(stream).toHaveBeenCalledTimes(2);
@@ -55,6 +60,13 @@ describe("ConversationStreamRuntime", () => {
       expect.objectContaining({ cursor: 4 }),
     );
     expect(runtime.lifecycle.get("conversation-1")).toBeUndefined();
+    expect(onConnectionState.mock.calls.map(([state]) => state)).toEqual([
+      "connecting",
+      "reconnecting",
+      "recovered",
+      "reconnecting",
+      "idle",
+    ]);
   });
 
   it("reconnects after the latest durable event when a stream fails mid-flight", async () => {
@@ -85,10 +97,12 @@ describe("ConversationStreamRuntime", () => {
         .mockResolvedValueOnce(snapshot("completed")),
       wait: vi.fn().mockResolvedValue(undefined),
     });
+    const onConnectionState = vi.fn();
 
     await runtime.follow("conversation-1", "run-1", 0, {
       applyEvents: vi.fn(),
       loadSnapshot: vi.fn(),
+      onConnectionState,
     });
 
     expect(stream).toHaveBeenNthCalledWith(
@@ -96,6 +110,45 @@ describe("ConversationStreamRuntime", () => {
       "conversation-1",
       expect.objectContaining({ afterSequence: 3 }),
     );
+    expect(onConnectionState.mock.calls.map(([state]) => state)).toEqual([
+      "connecting",
+      "live",
+      "reconnecting",
+      "recovered",
+      "reconnecting",
+      "idle",
+    ]);
+  });
+
+  it("recovers an expired event cursor from the authoritative snapshot without replay", async () => {
+    const loadSnapshot = vi.fn();
+    const onConnectionState = vi.fn();
+    const stream = vi.fn()
+      .mockRejectedValueOnce(new ConversationStreamHttpError(409))
+      .mockResolvedValueOnce(4);
+    const runtime = new ConversationStreamRuntime({
+      stream,
+      snapshot: vi.fn()
+        .mockResolvedValueOnce(snapshot("running"))
+        .mockResolvedValueOnce(snapshot("completed")),
+      wait: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await runtime.follow("conversation-1", "run-1", 1, {
+      applyEvents: vi.fn(),
+      loadSnapshot,
+      onConnectionState,
+    });
+
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(loadSnapshot).toHaveBeenCalledWith(expect.objectContaining({ cursor: 4 }));
+    expect(onConnectionState.mock.calls.map(([state]) => state)).toEqual([
+      "connecting",
+      "recovering_snapshot",
+      "recovered",
+      "reconnecting",
+      "idle",
+    ]);
   });
 
   it("aborts the prior transport when another Run starts in the same conversation", () => {
@@ -115,6 +168,7 @@ describe("ConversationStreamRuntime", () => {
     const error = new ConversationProtocolError(new Error("schema detail"));
     const stream = vi.fn().mockRejectedValue(error);
     const onError = vi.fn();
+    const onConnectionState = vi.fn();
     const runtime = new ConversationStreamRuntime({
       stream,
       snapshot: vi.fn(),
@@ -125,10 +179,15 @@ describe("ConversationStreamRuntime", () => {
       applyEvents: vi.fn(),
       loadSnapshot: vi.fn(),
       onError,
+      onConnectionState,
     });
 
     expect(stream).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith(error);
+    expect(onConnectionState.mock.calls.map(([state]) => state)).toEqual([
+      "connecting",
+      "failed",
+    ]);
     expect(runtime.lifecycle.get("conversation-1")).toBeUndefined();
   });
 });

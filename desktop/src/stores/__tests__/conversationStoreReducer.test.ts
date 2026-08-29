@@ -174,7 +174,6 @@ function state(): ConversationStore {
   };
   return {
     summaries: [],
-    activeConversationId: "session-1",
     detailById: { "session-1": detail },
     artifactsById: {},
     liveFieldsById: {},

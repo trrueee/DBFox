@@ -1,0 +1,42 @@
+.dbfox-message {
+  display: flex;
+  width: 100%;
+  max-width: 95%;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dbfox-message--user {
+  margin-left: auto;
+  align-items: flex-end;
+}
+
+.dbfox-message__content {
+  display: flex;
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-body);
+}
+
+.dbfox-message--user .dbfox-message__content {
+  max-width: min(560px, 78%);
+  margin-left: auto;
+  padding: 10px 16px;
+  border-radius: var(--radius-card);
+  background: var(--agent-user-bg);
+}
+
+.dbfox-message--assistant .dbfox-message__content {
+  width: 100%;
+}
+
+.dbfox-message__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

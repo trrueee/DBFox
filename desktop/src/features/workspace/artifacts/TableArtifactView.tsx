@@ -1,10 +1,15 @@
-import { AlertCircle, AlertTriangle, Code2, Copy, Download, ExternalLink, RefreshCw, Table2, Terminal } from "lucide-react";
-import { useState } from "react";
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui";
+import { AlertCircle, AlertTriangle, Copy, Download, ExternalLink, RefreshCw } from "lucide-react";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
+  ErrorDetails,
+} from "../../../components/ui";
 import { classifyCellValue } from "../../../components/data-grid/cellValue";
-import type { ResultViewArtifact, SqlArtifact } from "../../../types/agentArtifact";
+import { getUserErrorMessage } from "../../../lib/api/client";
+import type { ArtifactEnvelope } from "./types";
 import { ArtifactCard } from "./ArtifactCard";
-import { SqlCodeBlock } from "./SqlCodeBlock";
 import { copyText, downloadBlobFile } from "./artifactActions";
 import { ArtifactTableFooter } from "./table/ArtifactTableFooter";
 import { ArtifactTableGrid } from "./table/ArtifactTableGrid";
@@ -13,29 +18,19 @@ import { useArtifactTableData } from "./table/useArtifactTableData";
 import "./table/ArtifactTable.css";
 
 interface TableArtifactViewProps {
-  artifact: ResultViewArtifact;
+  artifact: ArtifactEnvelope<unknown>;
   onToast: (message: string) => void;
-  onOpenResultTab?: (artifact: ResultViewArtifact) => void;
-  sourceSqlArtifact?: SqlArtifact;
-  onOpenSqlConsole?: (sql?: string) => void;
+  onOpenArtifact?: (artifact: ArtifactEnvelope<unknown>) => void;
   mode?: "inline" | "workspace";
 }
 
 export function TableArtifactView({
   artifact,
   onToast,
-  onOpenResultTab,
-  sourceSqlArtifact,
-  onOpenSqlConsole,
+  onOpenArtifact,
   mode = "inline",
 }: TableArtifactViewProps) {
   const table = useArtifactTableData(artifact, mode);
-  const [viewState, setViewState] = useState<{
-    artifactId: string;
-    view: "table" | "sql";
-  }>({ artifactId: artifact.id, view: "table" });
-  const hasSourceSql = Boolean(sourceSqlArtifact?.sql.trim());
-  const activeView = hasSourceSql && viewState.artifactId === artifact.id ? viewState.view : "table";
 
   const handleCopy = async () => {
     const ok = await copyText(table.csv);
@@ -55,12 +50,6 @@ export function TableArtifactView({
   const handleCellCopy = async (value: unknown, dataType?: string) => {
     const ok = await copyText(classifyCellValue(value, { dataType }).copyText);
     onToast(ok ? "已复制单元格" : "复制失败，请手动选择复制");
-  };
-
-  const handleSqlCopy = async () => {
-    if (!sourceSqlArtifact) return;
-    const ok = await copyText(sourceSqlArtifact.sql);
-    onToast(ok ? "已复制 SQL" : "复制失败，请手动选择复制");
   };
 
   const toolbar = (
@@ -88,7 +77,7 @@ export function TableArtifactView({
         {toolbar}
         {table.consistency === "live_reexecution" && table.viewExecutedAt && (
           <div className="artifact-table-alert artifact-table-alert-live">
-            <RefreshCw size={12} className="artifact-table-alert-icon" />
+            <RefreshCw size={14} className="artifact-table-alert-icon" />
             <span>
               {table.originalExecutedAt
                 ? `分析取数 ${formatExecutionTime(table.originalExecutedAt)} · 当前重查 ${formatExecutionTime(table.viewExecutedAt)}`
@@ -97,15 +86,19 @@ export function TableArtifactView({
             </span>
           </div>
         )}
-        {table.fetchError && (
-          <div className="artifact-table-alert artifact-table-alert-error">
-            <AlertCircle size={13} className="artifact-table-alert-icon" />
-            <span>获取分页数据失败: {table.fetchError}</span>
-          </div>
+        {Boolean(table.fetchError) && (
+          <Alert className="artifact-table-alert artifact-table-alert-error" variant="destructive">
+            <AlertCircle size={14} className="artifact-table-alert-icon" />
+            <AlertTitle>分页数据未更新</AlertTitle>
+            <AlertDescription>
+              <p>{getUserErrorMessage(table.fetchError, "获取分页数据失败；已保留上次成功结果。")}</p>
+              <ErrorDetails error={table.fetchError} />
+            </AlertDescription>
+          </Alert>
         )}
         {(table.warnings.length > 0 || table.notices.length > 0) && (
           <div className="artifact-table-alert artifact-table-alert-notice">
-            <AlertTriangle size={11} className="artifact-table-alert-icon" />
+            <AlertTriangle size={14} className="artifact-table-alert-icon" />
             <span>{[...table.warnings, ...table.notices].join("；")}</span>
           </div>
         )}
@@ -130,7 +123,7 @@ export function TableArtifactView({
           visibleRowCount={table.visibleRows.length}
           latencyMs={table.latencyMs}
           totalRows={table.totalRows}
-          truncated={artifact.truncated}
+          truncated={table.sourceTruncated}
           hasNextPage={table.hasNextPage}
           onPageChange={table.setPage}
           onPageSizeChange={(value) => {
@@ -144,78 +137,49 @@ export function TableArtifactView({
 
   const tableActions = (
     <>
-      {onOpenResultTab && (
+      {onOpenArtifact && (
         <Button
           type="button"
           variant="outline"
           size="sm"
           className="artifact-table-action-button"
-          onClick={() => onOpenResultTab(artifact)}
+          onClick={() => onOpenArtifact(artifact)}
         >
-          <ExternalLink size={10} />
+          <ExternalLink size={14} />
           打开为 Tab
         </Button>
       )}
       <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={handleCopy}>
-        <Copy size={10} />
+        <Copy size={14} />
         复制 CSV
       </Button>
       <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={() => void handleExport()}>
-        <Download size={10} />
+        <Download size={14} />
         导出 CSV
       </Button>
     </>
   );
 
-  const sqlActions = sourceSqlArtifact ? (
-    <>
-      <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={() => void handleSqlCopy()}>
-        <Copy size={10} />
-        复制 SQL
-      </Button>
-      {onOpenSqlConsole && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="artifact-table-action-button"
-          onClick={() => onOpenSqlConsole(sourceSqlArtifact.sql)}
-        >
-          <Terminal size={10} />
-          在 SQL 控制台打开
-        </Button>
-      )}
-    </>
-  ) : undefined;
-
   const card = (
     <ArtifactCard
       title={artifact.title}
-      badge={hasSourceSql ? undefined : "结果表"}
-      headerAccessory={hasSourceSql ? (
-        <TabsList className="artifact-result-view-switch" aria-label="查询结果显示方式">
-          <TabsTrigger value="table">
-            <Table2 size={12} aria-hidden="true" />
-            表格
-          </TabsTrigger>
-          <TabsTrigger value="sql">
-            <Code2 size={12} aria-hidden="true" />
-            SQL
-          </TabsTrigger>
-        </TabsList>
-      ) : undefined}
+      badge="结果表"
       tone="table"
-      description={artifact.description}
-      meta={<InlineTableMeta artifact={artifact} table={table} />}
-      actions={activeView === "sql" ? sqlActions : tableActions}
+      description={artifact.summary ?? undefined}
+      meta={<InlineTableMeta table={table} />}
+      actions={tableActions}
     >
-      <TabsContent value="table" className="artifact-result-view-content">
+      <div className="artifact-result-view-content">
         {toolbar}
-        {table.fetchError && (
-          <div className="artifact-table-inline-error">
-            <AlertCircle size={12} className="artifact-table-alert-icon" />
-            获取分页数据失败: {table.fetchError}
-          </div>
+        {Boolean(table.fetchError) && (
+          <Alert className="artifact-table-inline-error" variant="destructive">
+            <AlertCircle size={14} className="artifact-table-alert-icon" />
+            <AlertTitle>分页数据未更新</AlertTitle>
+            <AlertDescription>
+              <p>{getUserErrorMessage(table.fetchError, "获取分页数据失败；已保留上次成功结果。")}</p>
+              <ErrorDetails error={table.fetchError} />
+            </AlertDescription>
+          </Alert>
         )}
         <div className="artifact-table-inline-table">
           <ArtifactTableGrid
@@ -228,40 +192,16 @@ export function TableArtifactView({
             emptyLabel="无匹配结果"
           />
         </div>
-      </TabsContent>
-      {sourceSqlArtifact && (
-        <TabsContent value="sql" className="artifact-result-view-content">
-          <div className="sql-artifact__editor artifact-result-sql">
-            <SqlCodeBlock
-              sql={sourceSqlArtifact.sql}
-              dialect={sourceSqlArtifact.dialect}
-              ariaLabel={`${artifact.title} 来源 SQL`}
-            />
-          </div>
-        </TabsContent>
-      )}
+      </div>
     </ArtifactCard>
   );
 
-  return (
-    <Tabs
-      value={activeView}
-      onValueChange={(value) => setViewState({
-        artifactId: artifact.id,
-        view: value === "sql" ? "sql" : "table",
-      })}
-      className="artifact-result-view"
-    >
-      {card}
-    </Tabs>
-  );
+  return <div className="artifact-result-view">{card}</div>;
 }
 
 function InlineTableMeta({
-  artifact,
   table,
 }: {
-  artifact: ResultViewArtifact;
   table: ReturnType<typeof useArtifactTableData>;
 }) {
   return (
@@ -271,7 +211,7 @@ function InlineTableMeta({
       </span>
       <span className="artifact-pill">{table.columns.length} 列</span>
       {table.latencyMs !== undefined && <span className="artifact-pill">{table.latencyMs}ms</span>}
-      {artifact.truncated && <span className="artifact-pill artifact-pill--warning">结果已截断</span>}
+      {table.sourceTruncated && <span className="artifact-pill artifact-pill--warning">结果已截断</span>}
       {table.consistency === "durable_snapshot" && (
         <span className="artifact-pill">耐久快照</span>
       )}

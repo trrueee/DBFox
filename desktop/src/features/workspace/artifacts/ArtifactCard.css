@@ -2,10 +2,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--agent-border);
+  border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-card);
   background: var(--agent-surface);
-  box-shadow: var(--shadow-card, var(--agent-shadow-soft));
+  box-shadow: var(--shadow-card);
 }
 
 .artifact-card + .artifact-card {
@@ -18,7 +18,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 9px 12px;
-  border-bottom: 1px solid var(--agent-border);
+  border-bottom: 1px solid var(--hairline);
   background: var(--agent-surface-muted);
 }
 
@@ -29,7 +29,7 @@
   gap: 7px;
   color: var(--agent-text);
   font-size: var(--ui-font-label);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .artifact-card-title span {
@@ -53,7 +53,7 @@
   background: var(--agent-accent-soft);
   color: var(--agent-accent);
   font-size: var(--ui-font-micro);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .artifact-card-table .artifact-card-badge {

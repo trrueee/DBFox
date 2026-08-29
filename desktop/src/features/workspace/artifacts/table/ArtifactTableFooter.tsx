@@ -1,4 +1,12 @@
-import { Button, Select } from "../../../../components/ui";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Button,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../../components/ui";
 
 interface ArtifactTableFooterProps {
   page: number;
@@ -44,7 +52,7 @@ export function ArtifactTableFooter({
               disabled={page <= 1 || isLoading}
               onClick={() => onPageChange((current) => Math.max(1, current - 1))}
             >
-              &lt;
+              <ChevronLeft aria-hidden="true" />
             </Button>
             <span className="artifact-table-page-number">{page}</span>
             <Button
@@ -56,18 +64,22 @@ export function ArtifactTableFooter({
               disabled={!hasNextPage || isLoading}
               onClick={() => onPageChange((current) => current + 1)}
             >
-              &gt;
+              <ChevronRight aria-hidden="true" />
             </Button>
         </div>
         <Select
-          className="artifact-table-page-size"
-          value={pageSize}
-          onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          value={String(pageSize)}
+          onValueChange={(value) => onPageSizeChange(Number(value))}
         >
-          <option value="10">10条/页</option>
-          <option value="20">20条/页</option>
-          <option value="50">50条/页</option>
-          <option value="100">100条/页</option>
+          <SelectTrigger className="artifact-table-page-size" aria-label="每页行数">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="10">10 条/页</SelectItem>
+            <SelectItem value="20">20 条/页</SelectItem>
+            <SelectItem value="50">50 条/页</SelectItem>
+            <SelectItem value="100">100 条/页</SelectItem>
+          </SelectContent>
         </Select>
       </div>
     </div>

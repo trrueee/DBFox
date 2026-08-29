@@ -10,7 +10,7 @@ function artifacts(): ConversationArtifact[] {
       session_id: "conv",
       run_id: "run",
       version: 1,
-      type: "sql",
+      type: "dbfox.data.sql",
       visibility: "supporting",
       title: "趋势分析",
       status: "completed",
@@ -24,31 +24,11 @@ function artifacts(): ConversationArtifact[] {
       relations: [],
     },
     {
-      id: "chart-1",
-      session_id: "conv",
-      run_id: "run",
-      version: 1,
-      type: "chart",
-      visibility: "primary",
-      title: "趋势图",
-      status: "completed",
-      payload: {
-        chartType: "bar",
-        sourceResultArtifactId: "result-view-1",
-        x: "day",
-        y: ["gmv"],
-        aggregation: "sum",
-        title: "趋势图",
-      },
-      provenance: {},
-      relations: [{ relation: "visualized_as", artifact_id: "result-view-1" }],
-    },
-    {
       id: "result-view-1",
       session_id: "conv",
       run_id: "run",
       version: 1,
-      type: "result_view",
+      type: "dbfox.data.result_view",
       visibility: "primary",
       title: "分页结果",
       status: "completed",
@@ -74,13 +54,22 @@ describe("DataReferencePanel", () => {
     cleanup();
   });
 
-  it("derives clickable data reference chips from artifacts", () => {
-    render(<DataReferencePanel artifacts={artifacts()} />);
+  it("uses a CSP-safe native disclosure for derived data references", () => {
+    const { container } = render(<DataReferencePanel artifacts={artifacts()} />);
 
     expect(screen.getByText("引用的数据来源")).toBeTruthy();
+    const disclosure = container.querySelector("details");
+    const trigger = container.querySelector("summary");
+    expect(disclosure).toBeTruthy();
+    expect(trigger).toBeTruthy();
+    expect(disclosure?.open).toBe(false);
+    expect(container.querySelector("[style]")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+
+    fireEvent.click(trigger!);
+    expect(disclosure?.open).toBe(true);
     expect(screen.queryByText("SQL: 趋势分析")).toBeNull();
     expect(screen.getByText("分页结果")).toBeTruthy();
-    expect(screen.getByText("趋势图")).toBeTruthy();
     expect(screen.queryByText("orders.amount")).toBeNull();
   });
 
@@ -93,17 +82,16 @@ describe("DataReferencePanel", () => {
 
   it("selects artifact references for the dock when a selector is provided", () => {
     const onSelectArtifact = vi.fn();
-    render(
+    const { container } = render(
       <DataReferencePanel
         artifacts={artifacts()}
         onSelectArtifact={onSelectArtifact}
       />,
     );
 
+    fireEvent.click(container.querySelector("summary")!);
     fireEvent.click(screen.getByText("分页结果"));
     expect(onSelectArtifact).toHaveBeenCalledWith("result-view-1");
 
-    fireEvent.click(screen.getByText("趋势图"));
-    expect(onSelectArtifact).toHaveBeenCalledWith("chart-1");
   });
 });

@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ApprovalItem,
@@ -7,6 +8,7 @@ import type {
   ConversationDetail,
   ConversationRun,
   ConversationRunItem,
+  PlanItem,
 } from "../../../../types/conversation";
 import { ConversationWorkspace } from "../ConversationWorkspace";
 
@@ -40,6 +42,8 @@ describe("ConversationWorkspace", () => {
       artifacts: artifacts(),
       runningRun: null,
       openConversation: vi.fn(),
+      streamState: "idle",
+      streamError: null,
       sendMessage: vi.fn(),
       cancelRun: vi.fn(),
       resolveApproval: vi.fn(),
@@ -66,7 +70,7 @@ describe("ConversationWorkspace", () => {
       items: [approval],
     };
     renderWorkspace();
-    const card = screen.getByRole("region", { name: "需要批准" });
+    const card = screen.getByRole("alert", { name: "需要批准" });
     expect(card.closest(".conv-pinned-action")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "批准执行" }));
     expect(viewModel.current.resolveApproval as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
@@ -74,6 +78,58 @@ describe("ConversationWorkspace", () => {
       "approval-1",
       true,
     );
+  });
+
+  it("shows reconnecting content as stale without turning the run into a failure", () => {
+    viewModel.current = {
+      ...viewModel.current,
+      streamState: "reconnecting",
+    };
+
+    renderWorkspace();
+
+    expect(screen.getByRole("status")).toHaveTextContent("正在恢复实时连接");
+    expect(screen.getByText(/不会重放写操作/)).toBeInTheDocument();
+    expect(screen.queryByText("实时连接已中断")).toBeNull();
+  });
+
+  it("explains cursor recovery without presenting a run failure", () => {
+    viewModel.current = {
+      ...viewModel.current,
+      streamState: "recovering_snapshot",
+    };
+
+    renderWorkspace();
+
+    expect(screen.getByRole("status")).toHaveTextContent("正在读取最新状态");
+    expect(screen.getByText(/历史游标已失效/)).toBeInTheDocument();
+    expect(screen.queryByText("实时连接已中断")).toBeNull();
+  });
+
+  it("confirms when the durable snapshot has restored current content", () => {
+    viewModel.current = {
+      ...viewModel.current,
+      streamState: "recovered",
+    };
+
+    renderWorkspace();
+
+    expect(screen.getByRole("status")).toHaveTextContent("已恢复最新状态");
+    expect(screen.getByText(/耐久快照同步/)).toBeInTheDocument();
+  });
+
+  it("offers a snapshot refresh after a terminal stream failure", () => {
+    viewModel.current = {
+      ...viewModel.current,
+      streamState: "failed",
+      streamError: "实时流协议无法识别。",
+    };
+
+    renderWorkspace();
+    fireEvent.click(screen.getByRole("button", { name: "刷新最新状态" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("实时连接已中断");
+    expect(viewModel.current.openConversation as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("session-1");
   });
 
   it("loads newly referenced artifacts and reveals a result artifact selected from a citation", async () => {
@@ -112,6 +168,47 @@ describe("ConversationWorkspace", () => {
       "session-1",
       "result-1",
     );
+  });
+
+  it("loads artifacts referenced only by a Plan completion step", async () => {
+    const completedRun = run("completed");
+    const plan: PlanItem = {
+      id: "plan-1",
+      type: "plan",
+      session_id: "session-1",
+      run_id: completedRun.id,
+      turn_id: "turn-1",
+      sequence: 1,
+      revision: 1,
+      status: "completed",
+      created_at: "2026-08-27T00:00:00Z",
+      payload: {
+        objective: "核对订单异常",
+        steps: [{
+          id: "step-1",
+          title: "核对查询结果",
+          status: "completed",
+          evidence_required: true,
+          artifact_ids: ["plan-result-1"],
+        }],
+      },
+    };
+    viewModel.current = {
+      ...viewModel.current,
+      items: [plan],
+      runs: [completedRun],
+      artifacts: [],
+    };
+
+    renderWorkspace();
+
+    await waitFor(() => {
+      expect(viewModel.current.loadRunArtifacts as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+        "session-1",
+        completedRun.id,
+        ["plan-result-1"],
+      );
+    });
   });
 });
 
@@ -217,7 +314,7 @@ function artifacts(): ConversationArtifact[] {
       run_id: "run-1",
       semantic_key: "sql",
       version: 1,
-      type: "sql",
+      type: "dbfox.data.sql",
       title: "Revenue SQL",
       status: "completed",
       visibility: "supporting",
@@ -236,7 +333,7 @@ function artifacts(): ConversationArtifact[] {
       run_id: "run-1",
       semantic_key: "result",
       version: 1,
-      type: "result_view",
+      type: "dbfox.data.result_view",
       title: "Revenue Result",
       status: "completed",
       visibility: "primary",

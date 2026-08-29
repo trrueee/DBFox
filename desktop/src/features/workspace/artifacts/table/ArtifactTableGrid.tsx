@@ -136,7 +136,14 @@ export function ArtifactTableGrid({
   };
 
   return (
-    <table ref={tableRef} className="artifact-table-grid" role="grid">
+    <table
+      ref={tableRef}
+      className="artifact-table-grid"
+      role="grid"
+      aria-label="查询结果"
+      aria-colcount={columns.length}
+      aria-rowcount={tableRows.length + 1}
+    >
       <thead>
         {table.getHeaderGroups().map((headerGroup) => (
           <tr key={headerGroup.id} className="artifact-table-row">
@@ -148,6 +155,9 @@ export function ArtifactTableGrid({
                 key={header.id}
                 className={`artifact-table-head ${alignmentClass}`}
                 aria-label={meta.columnType ? `${meta.name} ${meta.columnType}` : meta.name}
+                aria-sort={sort?.columnIndex === meta.columnIndex
+                  ? sort.direction === "asc" ? "ascending" : "descending"
+                  : undefined}
               >
                 {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
               </th>

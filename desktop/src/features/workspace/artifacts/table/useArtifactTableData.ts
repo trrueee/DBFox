@@ -1,13 +1,17 @@
 import { useCallback, useMemo } from "react";
 import { agentApi } from "../../../../lib/api/agent";
-import type { ArtifactViewFilter } from "../../../../lib/api/types";
-import type { ResultViewArtifact } from "../../../../types/agentArtifact";
+import {
+  DATAFRAME_REPRESENTATION_TYPE,
+  parseDataFrameRead,
+} from "../../../../lib/api/representation";
+import type { DataFrameFilter } from "../../../../lib/api/types";
+import type { ArtifactEnvelope } from "../types";
 import type {
-  SqlBackedDataViewSource,
-  SqlBackedExportRequest,
-  SqlBackedPageRequest,
-} from "../../sqlBacked/sqlBackedTypes";
-import { useSqlBackedDataView } from "../../sqlBacked/useSqlBackedDataView";
+  DataFrameViewSource,
+  DataFrameExportRequest,
+  DataFramePageRequest,
+} from "../../dataFrame/dataFrameViewTypes";
+import { useDataFrameView } from "../../dataFrame/useDataFrameView";
 import { toCsv } from "../artifactActions";
 
 export type SortDirection = "asc" | "desc";
@@ -26,8 +30,8 @@ export interface ArtifactTableData {
   setSortColumn: (columnIndex: number) => void;
   setSortState: (columnIndex: number, direction: SortDirection) => void;
   clearSort: () => void;
-  filters: ArtifactViewFilter[];
-  setFilters: (value: ArtifactViewFilter[]) => void;
+  filters: DataFrameFilter[];
+  setFilters: (value: DataFrameFilter[]) => void;
   page: number;
   setPage: (updater: number | ((page: number) => number)) => void;
   pageSize: number;
@@ -38,69 +42,95 @@ export interface ArtifactTableData {
   warnings: string[];
   notices: string[];
   latencyMs: number | undefined;
-  consistency: "durable_snapshot" | "live_reexecution" | "live_query" | undefined;
+  consistency: "durable_snapshot" | "live_reexecution" | undefined;
   originalExecutedAt: string | null | undefined;
   viewExecutedAt: string | undefined;
   isLoading: boolean;
-  fetchError: string | null;
+  fetchError: unknown | null;
   csv: string;
   exportAll: () => Promise<Blob>;
   refresh: () => void;
   hasNextPage: boolean;
+  sourceTruncated: boolean;
 }
 
 export function useArtifactTableData(
-  artifact: ResultViewArtifact,
+  artifact: Pick<ArtifactEnvelope<unknown>, "id">,
   mode: "inline" | "workspace",
 ): ArtifactTableData {
-  const columnMetadata = useMemo(
-    () => artifact.columns
-      .map((column) => ({ name: columnName(column), type: columnType(column) }))
-      .filter((column) => Boolean(column.name)),
-    [artifact.columns],
-  );
-  const descriptorColumns = useMemo(() => columnMetadata.map((column) => column.name), [columnMetadata]);
-  const columnTypes = useMemo(() => columnMetadata.map((column) => column.type), [columnMetadata]);
-  const source = useMemo<SqlBackedDataViewSource>(() => ({
-    kind: "artifact-result",
+  const source = useMemo<DataFrameViewSource>(() => ({
+    kind: "artifact-representation",
     artifactId: artifact.id,
-    columns: descriptorColumns,
-  }), [artifact.id, descriptorColumns]);
+    representationType: DATAFRAME_REPRESENTATION_TYPE,
+  }), [artifact.id]);
 
-  const fetchPage = useCallback(async (request: SqlBackedPageRequest, signal: AbortSignal) => {
-    if (request.source.kind !== "artifact-result") throw new Error("Unsupported Result Gateway source");
-    return agentApi.fetchArtifactPage(request.source.artifactId, {
-      page: request.page,
-      pageSize: request.pageSize,
-      sort: request.sort,
-      filters: request.filters,
-      search: request.search,
-      countMode: request.countMode ?? "estimate",
-    }, signal);
+  const fetchPage = useCallback(async (request: DataFramePageRequest, signal: AbortSignal) => {
+    const represented = await agentApi.readArtifactRepresentation(
+      request.source.artifactId,
+      request.source.representationType,
+      {
+        operation: "page",
+        parameters: {
+          page: request.page,
+          page_size: request.pageSize,
+          sort: request.sort,
+          filters: request.filters,
+          search: request.search,
+          count_mode: request.countMode ?? "none",
+        },
+      },
+      signal,
+    );
+    const read = parseDataFrameRead(represented);
+    return {
+      columns: read.page.fields.map((field) => field.name),
+      columnTypes: read.page.fields.map((field) => field.type),
+      rows: read.rows,
+      page: read.page.page,
+      pageSize: read.page.page_size,
+      rowCount: read.page.row_count,
+      hasNextPage: read.page.has_next_page,
+      latencyMs: read.page.latency_ms,
+      sourceTruncated: read.page.source_truncated,
+      consistency: read.consistency,
+      originalExecutedAt: read.originalObservedAt,
+      viewExecutedAt: read.readAt,
+      viewExecutionId: read.readId,
+      resourceVersion: read.sourceVersion,
+      sourceFingerprint: read.sourceFingerprint,
+      warnings: read.warnings,
+      notices: read.notices,
+    };
   }, []);
 
-  const exportAll = useCallback(async (request: SqlBackedExportRequest) => {
-    if (request.source.kind !== "artifact-result") throw new Error("Unsupported Result Gateway source");
-    return agentApi.exportArtifactCsv(request.source.artifactId, {
-      sort: request.sort,
-      filters: request.filters,
-      search: request.search,
-    });
+  const exportAll = useCallback(async (request: DataFrameExportRequest) => {
+    return agentApi.streamArtifactRepresentation(
+      request.source.artifactId,
+      request.source.representationType,
+      {
+        operation: "export.csv",
+        parameters: {
+          sort: request.sort,
+          filters: request.filters,
+          search: request.search,
+        },
+      },
+    );
   }, []);
 
-  const gateway = useSqlBackedDataView({
+  const gateway = useDataFrameView({
     source,
     fetchPage,
     exportAll,
     initialPageSize: mode === "inline" ? 10 : 50,
-    countMode: "estimate",
+    countMode: mode === "workspace" ? "exact" : "none",
   });
   const columns = gateway.columns;
   const csv = useMemo(() => toCsv(columns, gateway.rows), [columns, gateway.rows]);
   const activeSort = useMemo<SortState | null>(() => {
     const current = gateway.sort[0];
     if (!current) return null;
-    const columnIndex = columns.indexOf(current.column);
+    const columnIndex = columns.indexOf(current.field);
     return columnIndex < 0 ? null : { columnIndex, direction: current.direction };
   }, [columns, gateway.sort]);
 
@@ -108,17 +138,17 @@ export function useArtifactTableData(
     const column = columns[columnIndex];
     if (!column) return;
     const current = gateway.sort[0];
-    const direction = current?.column === column && current.direction === "desc" ? "asc" : "desc";
-    gateway.setSort([{ column, direction }]);
+    const direction = current?.field === column && current.direction === "desc" ? "asc" : "desc";
+    gateway.setSort([{ field: column, direction }]);
   };
   const setSortState = (columnIndex: number, direction: SortDirection) => {
     const column = columns[columnIndex];
-    if (column) gateway.setSort([{ column, direction }]);
+    if (column) gateway.setSort([{ field: column, direction }]);
   };
 
   return {
     columns,
-    columnTypes,
+    columnTypes: gateway.columnTypes,
     search: gateway.search,
     setSearch: gateway.setSearch,
     sort: activeSort,
@@ -132,7 +162,7 @@ export function useArtifactTableData(
     pageSize: gateway.pageSize,
     setPageSize: gateway.setPageSize,
     visibleRows: gateway.rows,
-    totalRows: gateway.rowCount ?? artifact.rowCount,
+    totalRows: gateway.rowCount ?? undefined,
     returnedRows: gateway.rows.length,
     warnings: gateway.warnings,
     notices: gateway.notices,
@@ -146,13 +176,6 @@ export function useArtifactTableData(
     exportAll: gateway.exportAll,
     refresh: gateway.refresh,
     hasNextPage: gateway.hasNextPage,
+    sourceTruncated: Boolean(gateway.data?.sourceTruncated),
   };
-}
-
-function columnName(column: ResultViewArtifact["columns"][number]): string {
-  return typeof column === "string" ? column : column.name;
-}
-
-function columnType(column: ResultViewArtifact["columns"][number]): string | undefined {
-  return typeof column === "string" ? undefined : column.type;
 }

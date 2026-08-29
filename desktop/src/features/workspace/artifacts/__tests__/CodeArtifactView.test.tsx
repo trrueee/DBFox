@@ -1,9 +1,8 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SqlArtifact } from "../../../../types/agentArtifact";
-import { SqlArtifactView } from "../SqlArtifactView";
+import { CodeArtifactView } from "../CodeArtifactView";
 
-function makeSqlArtifact(): SqlArtifact {
+function makeSqlArtifact() {
   return {
     id: "sql-1",
     type: "sql",
@@ -19,13 +18,22 @@ function makeSqlArtifact(): SqlArtifact {
   };
 }
 
-describe("SqlArtifactView", () => {
+describe("CodeArtifactView", () => {
   beforeEach(() => cleanup());
 
   it("renders SQL metadata chips", () => {
     const artifact = makeSqlArtifact();
 
-    const { container } = render(<SqlArtifactView artifact={artifact} onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />);
+    const { container } = render(
+      <CodeArtifactView
+        title={artifact.title}
+        code={artifact.sql}
+        language="sql"
+        fileName={`${artifact.id}.sql`}
+        metadata={["分析查询", "orders", "校验 passed", "执行 completed", "12 行", "42ms"]}
+        onToast={vi.fn()}
+      />,
+    );
     const meta = container.querySelector(".artifact-card-meta");
 
     expect(screen.getByText("分析查询")).toBeTruthy();
@@ -37,7 +45,8 @@ describe("SqlArtifactView", () => {
   });
 
   it("renders SQL in a synchronous highlighted preview instead of Monaco", () => {
-    const { container } = render(<SqlArtifactView artifact={makeSqlArtifact()} onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />);
+    const artifact = makeSqlArtifact();
+    const { container } = render(<CodeArtifactView title={artifact.title} code={artifact.sql} language="sql" fileName={`${artifact.id}.sql`} onToast={vi.fn()} />);
 
     expect(screen.queryByText("Loading...")).toBeNull();
     expect(container.querySelector(".sql-code-block")).toBeTruthy();

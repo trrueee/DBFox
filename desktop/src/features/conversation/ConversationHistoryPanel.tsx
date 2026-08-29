@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, ChevronUp, FolderOpen, MessageSquare, Trash2 } from "lucide-react";
 import { Button, EmptyState } from "../../components/ui";
-import { WorkspaceShell } from "../appShell/WorkspaceShell";
+import { WorkspaceShell } from "../workspace/WorkspaceShell";
 import type { ConversationSummary } from "../../types/conversation";
 import "./ConversationHistoryPanel.css";
 
@@ -39,7 +39,7 @@ export function ConversationHistoryPanel({
       {conversations.length === 0 ? (
         <EmptyState
           title="暂无历史记录"
-          description="提交问数后，会话会自动保存。"
+          description="开始任务后，工作记录会自动保存。"
         />
       ) : (
         <div className="conversation-history__groups">
@@ -56,7 +56,7 @@ export function ConversationHistoryPanel({
               <section className="conversation-history__group" key={group.projectId}>
               <div className="conversation-history__group-heading">
                 <span className="conversation-history__group-icon" aria-hidden="true">
-                  <FolderOpen size={15} />
+                  <FolderOpen size={16} />
                 </span>
                 <strong>{group.label}</strong>
                 <span className="conversation-history__group-count">
@@ -100,7 +100,7 @@ export function ConversationHistoryPanel({
                         >
                           {formatTime(conversation.updated_at)}
                         </time>
-                        <ChevronRight size={12} className="conversation-history__chevron" aria-hidden="true" />
+                        <ChevronRight size={14} className="conversation-history__chevron" aria-hidden="true" />
                       </button>
                       <Button
                         className="conversation-history__delete"

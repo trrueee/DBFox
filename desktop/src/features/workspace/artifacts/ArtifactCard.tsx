@@ -13,7 +13,7 @@ interface ArtifactCardProps {
   description?: string;
   meta?: ReactNode;
   actions?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   compact?: boolean;
 }
 
@@ -51,7 +51,7 @@ export function ArtifactCard({
       </header>
       {description && <p className="artifact-card-desc">{description}</p>}
       {meta && <div className="artifact-card-meta">{meta}</div>}
-      <div className="artifact-card-body">{children}</div>
+      {children ? <div className="artifact-card-body">{children}</div> : null}
       {actions && <footer className="artifact-card-actions">{actions}</footer>}
     </section>
   );

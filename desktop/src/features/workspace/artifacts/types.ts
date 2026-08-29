@@ -1,7 +1,12 @@
 export type {
   ArtifactEnvelope,
-  ArtifactRendererContext,
-  ArtifactRendererContribution,
+  ArtifactRepresentationAccess,
+  ArtifactRepresentationDescriptor,
+  ArtifactRepresentationRequest,
+  ArtifactRepresentationResult,
+  ArtifactViewContext,
+  ArtifactViewContribution,
+  ArtifactViewSurface,
 } from "../../../../../sdk/frontend/index";
 
 export function asRecord(value: unknown): Record<string, unknown> {

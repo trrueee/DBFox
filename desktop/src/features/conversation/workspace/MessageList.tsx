@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useId, useInsertionEffect, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { Button, ErrorDetails } from "../../../components/ui";
 import { clearCspVirtualLayout, setCspVirtualLayout } from "../../../lib/cspVirtualLayout";
+import { getUserErrorMessage } from "../../../lib/api/client";
 import type {
   ConversationArtifact,
   ConversationRun,
@@ -15,10 +17,15 @@ interface MessageListProps {
   items: ConversationRunItem[];
   runs: ConversationRun[];
   artifacts: ConversationArtifact[];
+  hasOlderHistory?: boolean;
+  loadingOlderHistory?: boolean;
+  olderHistoryLoaded?: boolean;
+  historyLoadError?: unknown;
+  onLoadOlderHistory?: () => Promise<unknown> | void;
   onOpenSqlConsole?: (sql?: string) => void;
   onSelectArtifact?: (artifactId: string) => void;
   resolvingQuestionId?: string | null;
-  questionError?: string | null;
+  questionError?: unknown;
   onResolveQuestion?: (
     runId: string,
     questionId: string,
@@ -31,6 +38,11 @@ export function MessageList({
   items,
   runs,
   artifacts,
+  hasOlderHistory = false,
+  loadingOlderHistory = false,
+  olderHistoryLoaded = false,
+  historyLoadError,
+  onLoadOlderHistory,
   onOpenSqlConsole,
   onSelectArtifact,
   resolvingQuestionId,
@@ -41,7 +53,6 @@ export function MessageList({
   const ref = useRef<HTMLDivElement>(null);
   const virtualLayoutId = `messages-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const pinnedToBottomRef = useRef(true);
-  const previousRunCountRef = useRef(0);
   const scrolledStateRef = useRef(false);
   const orderedRuns = useMemo(
     () => [...runs].sort((left, right) => left.session_sequence - right.session_sequence),
@@ -71,10 +82,18 @@ export function MessageList({
     estimateSize: () => 260,
     overscan: 5,
     initialRect: { width: 800, height: 720 },
+    anchorTo: "end",
+    followOnAppend: "auto",
+    scrollEndThreshold: BOTTOM_THRESHOLD_PX,
+    useFlushSync: false,
   });
   const virtualRuns = virtualizer.getVirtualItems();
+  const historyStatusId = `${virtualLayoutId}-history-status`;
+  const showHistoryControl = hasOlderHistory || Boolean(historyLoadError) || olderHistoryLoaded;
 
-  useLayoutEffect(() => {
+  // CSSOM sizing must land before TanStack Virtual's layout effect synchronizes
+  // an end-anchored prepend to the browser scroll position.
+  useInsertionEffect(() => {
     if (!shouldVirtualize) {
       clearCspVirtualLayout(virtualLayoutId);
       return;
@@ -91,7 +110,7 @@ export function MessageList({
     const node = ref.current;
     if (!node || orderedRuns.length === 0) return;
     if (shouldVirtualize) {
-      virtualizer.scrollToIndex(orderedRuns.length - 1, { align: "end", behavior });
+      virtualizer.scrollToEnd({ behavior });
     } else if (typeof node.scrollTo === "function") {
       node.scrollTo({ top: node.scrollHeight, behavior });
     } else {
@@ -100,11 +119,8 @@ export function MessageList({
   }, [orderedRuns.length, shouldVirtualize, virtualizer]);
 
   useEffect(() => {
-    const addedRun = orderedRuns.length > previousRunCountRef.current;
-    previousRunCountRef.current = orderedRuns.length;
-    if (addedRun) pinnedToBottomRef.current = true;
     if (!pinnedToBottomRef.current) return;
-    const frame = requestAnimationFrame(() => scrollToBottom(addedRun ? "auto" : "smooth"));
+    const frame = requestAnimationFrame(() => scrollToBottom("auto"));
     return () => cancelAnimationFrame(frame);
   }, [artifacts.length, latestRenderKey, orderedRuns.length, scrollToBottom]);
 
@@ -157,6 +173,38 @@ export function MessageList({
 
   return (
     <div className="conv-message-scroll" ref={ref}>
+      {showHistoryControl && (
+        <div className="conv-history-control">
+          {hasOlderHistory || historyLoadError ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={loadingOlderHistory || !onLoadOlderHistory}
+              aria-describedby={historyLoadError ? historyStatusId : undefined}
+              onClick={() => {
+                void Promise.resolve(onLoadOlderHistory?.()).catch(() => undefined);
+              }}
+            >
+              {loadingOlderHistory
+                ? "正在载入更早消息…"
+                : historyLoadError
+                  ? "重试载入更早消息"
+                  : "载入更早消息"}
+            </Button>
+          ) : (
+            <span role="status">已载入全部消息</span>
+          )}
+          {Boolean(historyLoadError) && (
+            <div id={historyStatusId} role="alert" className="conv-history-error">
+              <span>{typeof historyLoadError === "string"
+                ? historyLoadError
+                : getUserErrorMessage(historyLoadError, "更早的对话记录载入失败，请重试。")}</span>
+              <ErrorDetails error={historyLoadError} />
+            </div>
+          )}
+        </div>
+      )}
       <div
         className={`conv-message-column ${shouldVirtualize ? "is-virtualized" : ""}`}
         data-virtual-layout={shouldVirtualize ? virtualLayoutId : undefined}

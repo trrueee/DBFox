@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AssistantMessageItem,
@@ -7,6 +7,7 @@ import type {
   ConversationRunItem,
   FunctionCallItem,
   FunctionCallOutputItem,
+  PlanItem,
   UserMessageItem,
 } from "../../../../types/conversation";
 import { AgentTimeline } from "../AgentTimeline";
@@ -25,6 +26,20 @@ describe("AgentTimeline", () => {
     cleanup();
     useDlcStore.getState().reset();
   });
+
+  it("accepts a distinct landmark name when multiple timelines share a page", () => {
+    render(
+      <AgentTimeline
+        ariaLabel="流式回答时间线"
+        run={run()}
+        items={[]}
+        artifacts={[]}
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "流式回答时间线" })).toBeTruthy();
+  });
+
   it("keeps messages, calls, outputs, and the final answer in canonical sequence", () => {
     const items: ConversationRunItem[] = [
       user("检查订单", 1),
@@ -46,8 +61,9 @@ describe("AgentTimeline", () => {
     renderTimeline([call(1), output(2)]);
 
     fireEvent.click(screen.getByText("读取订单结构"));
-    expect(screen.getByTitle("探索数据")).toBeTruthy();
-    expect(screen.getByText("已完成")).toBeTruthy();
+    expect(screen.getByTitle("查找信息")).toBeTruthy();
+    // Terminal tool rows are icon-only: no "已完成" word on the quiet row.
+    expect(screen.queryByText("已完成")).toBeNull();
     expect(screen.getByText("schema_describe_table")).toBeTruthy();
     expect(screen.getByText(/orders/)).toBeTruthy();
     expect(screen.getByText("已读取 12 个字段")).toBeTruthy();
@@ -75,7 +91,8 @@ describe("AgentTimeline", () => {
     const { container, rerender } = renderTimeline([streaming], { status: "running" });
 
     const streamingArticle = container.querySelector(".conv-agent-message");
-    expect(streamingArticle?.className).toBe("conv-agent-message conv-answer-document");
+    expect(streamingArticle?.classList.contains("dbfox-message--assistant")).toBe(true);
+    expect(streamingArticle?.querySelector(".conv-answer-document")).toBeTruthy();
     expect(streamingArticle?.getAttribute("data-streaming-reveal")).toBe("true");
 
     const completed = {
@@ -94,7 +111,8 @@ describe("AgentTimeline", () => {
     );
 
     const completedArticle = container.querySelector(".conv-agent-message");
-    expect(completedArticle?.className).toBe("conv-agent-message conv-answer-document");
+    expect(completedArticle?.classList.contains("dbfox-message--assistant")).toBe(true);
+    expect(completedArticle?.querySelector(".conv-answer-document")).toBeTruthy();
     expect(completedArticle?.hasAttribute("data-streaming-reveal")).toBe(false);
     expect(screen.getByRole("heading", { name: "分析结果" })).toBeTruthy();
   });
@@ -136,13 +154,82 @@ describe("AgentTimeline", () => {
       onSelectArtifact,
     );
 
-    expect(
-      screen.getByText("分析未完成，但已保留 3 个查询结果，可在工件区查看。"),
-    ).toBeTruthy();
+    const failureAlert = screen.getByRole("alert");
+    expect(failureAlert.textContent).toContain("任务未完成，已有结果仍可使用");
+    expect(failureAlert.textContent).toContain("本次分析未完成，请重试。");
+    // Plan progress is the plan card's job — the outcome stays one line + a way back.
+    expect(failureAlert.textContent).not.toContain("步骤完成");
+    fireEvent.click(screen.getByRole("button", { name: "打开已保留工件：查询结果 result-1" }));
+    expect(onSelectArtifact).toHaveBeenCalledWith("result-1");
     expect(screen.getByText("已保存结果")).toBeTruthy();
     expect(screen.queryByText("引用的数据来源")).toBeNull();
-    fireEvent.click(screen.getByText("查询结果 result-1"));
+    fireEvent.click(screen.getByText("已保存结果").closest("summary")!);
+    const savedPanel = screen.getByText("已保存结果").closest("details")!;
+    fireEvent.click(within(savedPanel).getByText("查询结果 result-1"));
     expect(onSelectArtifact).toHaveBeenCalledWith("result-1");
+  });
+
+  it("coordinates failed Plan progress, blocked work, recovery, and safe technical details", () => {
+    const failedPlan = planItem("result-1");
+    failedPlan.status = "failed";
+    failedPlan.payload.steps = [
+      { id: "step-1", title: "读取订单", status: "completed", artifact_ids: ["result-1"] },
+      { id: "step-2", title: "核对联盟渠道", status: "blocked", note: "缺少联盟渠道读取权限。" },
+      { id: "step-3", title: "整理结论", status: "skipped" },
+    ];
+
+    renderTimeline(
+      [failedPlan],
+      {
+        status: "failed",
+        error: { code: "AGENT_RUNTIME_ERROR", message: "本次分析未完成，请调整权限后继续。" },
+      },
+      [resultArtifact("result-1")],
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("任务未完成");
+    expect(alert.textContent).toContain("本次分析未完成，请调整权限后继续。");
+    // Blocked/skipped step detail lives in the plan checklist, not the outcome.
+    expect(alert.textContent).not.toContain("受阻步骤");
+    fireEvent.click(screen.getByText("技术详情"));
+    expect(screen.getByText("AGENT_RUNTIME_ERROR")).toBeTruthy();
+  });
+
+  it("renders bounded partial as a non-destructive terminal outcome with preserved work", () => {
+    const partialAnswer = assistant("当前结论仅覆盖已验证渠道。", "final_answer", 2);
+    partialAnswer.payload.completion_disposition = "bounded_partial";
+    partialAnswer.payload.limitation_codes = ["TOOL_BUDGET_REACHED", "INSUFFICIENT_EVIDENCE"];
+    const partialPlan = planItem("result-1");
+    partialPlan.payload.steps = [
+      { id: "step-1", title: "读取订单", status: "completed", artifact_ids: ["result-1"] },
+      { id: "step-2", title: "核对联盟渠道", status: "blocked" },
+      { id: "step-3", title: "整理结论", status: "skipped" },
+    ];
+
+    const { container } = renderTimeline(
+      [partialPlan, partialAnswer],
+      { status: "completed" },
+      [resultArtifact("result-1")],
+    );
+
+    const outcome = screen.getByText("分析部分完成，已有结果仍可使用").closest('[role="status"]')!;
+    expect(outcome.textContent).toContain("分析部分完成，已有结果仍可使用");
+    expect(outcome.textContent).toContain("停止原因：已达到工具调用上限；现有证据不足以完成全部判断。");
+    expect(container.querySelector(".conv-completion-limitation")).toBeNull();
+    expect(screen.queryByText("已完成当前可验证的工作")).toBeNull();
+  });
+
+  it("keeps cancellation neutral and explains that stopped steps do not resume", () => {
+    renderTimeline(
+      [],
+      { status: "cancelled" },
+      [resultArtifact("result-1")],
+    );
+
+    const outcome = screen.getByText("任务已停止，已有结果仍可使用").closest('[role="status"]')!;
+    expect(outcome.textContent).toContain("任务已停止，已有结果仍可使用");
+    expect(outcome.getAttribute("data-outcome")).toBe("cancelled");
   });
 
   it("shows only explicitly cited artifacts as data sources", () => {
@@ -165,9 +252,21 @@ describe("AgentTimeline", () => {
     );
 
     expect(screen.getByText("引用的数据来源")).toBeTruthy();
+    fireEvent.click(screen.getByText("引用的数据来源").closest("summary")!);
     expect(screen.getByText("查询结果 result-2")).toBeTruthy();
     expect(screen.queryByText("查询结果 result-1")).toBeNull();
     expect(screen.queryByText("已保存结果")).toBeNull();
+  });
+
+  it("routes Plan step evidence through the existing artifact selection action", () => {
+    const onSelectArtifact = vi.fn();
+    const artifact = resultArtifact("result-1");
+    renderTimeline([planItem("result-1")], {}, [artifact], onSelectArtifact);
+
+    fireEvent.click(screen.getByRole("button", { name: /核对订单异常/ }));
+    fireEvent.click(screen.getByRole("button", { name: `打开完成证据：${artifact.title}` }));
+
+    expect(onSelectArtifact).toHaveBeenCalledWith("result-1");
   });
 
   it("groups consecutive function calls with the same title into a quiet group", () => {
@@ -178,17 +277,30 @@ describe("AgentTimeline", () => {
     renderTimeline([call1, call2, call3]);
 
     expect(screen.getByText("读取订单结构")).toBeTruthy();
-    expect(screen.getByText("(3)")).toBeTruthy();
-    expect(screen.queryByText("(2)")).toBeNull();
+    expect(screen.getByText(/3 次调用/)).toBeTruthy();
+    expect(screen.queryByText(/2 次调用/)).toBeNull();
+  });
+
+  it("opens an in-progress tool disclosure so live status is not hidden", () => {
+    const runningCall = call(1);
+    runningCall.status = "in_progress";
+    const { container } = renderTimeline([runningCall], { status: "running" });
+
+    expect(screen.getByRole("button", { name: /读取订单结构/ }).getAttribute("aria-expanded")).toBe("true");
+    // Live state is the spinner glyph itself, not a word.
+    expect(container.querySelector(".animate-spin")).toBeTruthy();
+    expect(screen.queryByText("运行中")).toBeNull();
   });
 
   it("renders a registered namespaced capability artifact in the conversation", () => {
     useDlcStore.getState().setProjectionResult("snapshot-1", {}, {
       connectors: [],
       dockViews: [],
-      artifactRenderers: [{
-        type: "dbfox.music.score_revision",
-        supportedSchemaVersions: [1],
+      artifactViews: [{
+        id: "dbfox.music.score",
+        title: "乐谱",
+        surfaces: ["inline", "workspace"],
+        artifactTypes: [{ type: "dbfox.music.score_revision", schemaVersions: [1] }],
         parsePayload: (value) => value,
         render: (artifact) => <p>乐谱工件：{artifact.title}</p>,
       }],
@@ -212,6 +324,50 @@ describe("AgentTimeline", () => {
     renderTimeline([], {}, [artifact]);
 
     expect(screen.getByText("乐谱工件：Warm Light")).toBeTruthy();
+  });
+
+  it("renders an embedded Artifact in the answer and omits the automatic duplicate", () => {
+    useDlcStore.getState().setProjectionResult("snapshot-embed", {}, {
+      connectors: [],
+      dockViews: [],
+      artifactViews: [{
+        id: "dbfox.music.score",
+        title: "乐谱",
+        surfaces: ["inline", "workspace"],
+        artifactTypes: [{ type: "dbfox.music.score_revision", schemaVersions: [1] }],
+        parsePayload: (value) => value,
+        render: (artifact) => <p>嵌入乐谱：{artifact.title}</p>,
+      }],
+    });
+    const artifact: ConversationArtifact = {
+      id: "artifact_score_1",
+      session_id: "session-1",
+      run_id: "run-1",
+      version: 1,
+      schema_version: 1,
+      type: "dbfox.music.score_revision",
+      title: "Warm Light",
+      summary: null,
+      payload: { scoreId: "score-1" },
+      payload_ref: null,
+      visibility: "primary",
+      status: "completed",
+      resource_refs: [],
+      provenance: {},
+      relations: [],
+    };
+    const answer = assistant(
+      "先解释。\n\n{{artifact:artifact_score_1}}\n\n再总结。",
+      "final_answer",
+      1,
+    );
+    answer.payload.artifact_refs = [{ artifact_id: artifact.id }];
+
+    renderTimeline([answer], { status: "completed" }, [artifact]);
+
+    expect(screen.getByText("先解释。")).toBeTruthy();
+    expect(screen.getByText("再总结。")).toBeTruthy();
+    expect(screen.getAllByText("嵌入乐谱：Warm Light")).toHaveLength(1);
   });
 });
 
@@ -239,7 +395,7 @@ function resultArtifact(id: string): ConversationArtifact {
     run_id: "run-1",
     turn_id: "turn-1",
     version: 1,
-    type: "result_view",
+    type: "dbfox.data.result_view",
     title: `查询结果 ${id}`,
     status: "completed",
     visibility: "primary",
@@ -256,6 +412,26 @@ function resultArtifact(id: string): ConversationArtifact {
     },
     provenance: {},
     relations: [],
+  };
+}
+
+function planItem(artifactId: string): PlanItem {
+  return {
+    ...base,
+    id: "plan-1",
+    type: "plan",
+    sequence: 1,
+    status: "completed",
+    payload: {
+      objective: "核对订单异常",
+      steps: [{
+        id: "step-1",
+        title: "核对查询结果",
+        status: "completed",
+        evidence_required: true,
+        artifact_ids: [artifactId],
+      }],
+    },
   };
 }
 

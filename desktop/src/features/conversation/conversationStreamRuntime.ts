@@ -3,6 +3,7 @@ import type {
   ConversationStreamEvent,
 } from "../../types/conversation";
 import {
+  ConversationStreamHttpError,
   getConversation,
   isRetryableConversationTransportError,
   streamConversation,
@@ -17,7 +18,17 @@ export interface ConversationStreamAdapter {
   applyEvents: (events: ConversationStreamEvent[]) => void;
   loadSnapshot: (snapshot: ConversationDetail) => void;
   onError?: (error: unknown) => void;
+  onConnectionState?: (state: ConversationStreamState) => void;
 }
+
+export type ConversationStreamState =
+  | "idle"
+  | "connecting"
+  | "live"
+  | "reconnecting"
+  | "recovering_snapshot"
+  | "recovered"
+  | "failed";
 
 export interface ConversationStreamDependencies {
   stream: typeof streamConversation;
@@ -59,6 +70,14 @@ export class ConversationStreamRuntime {
     const batcher = createStreamEventBatcher<ConversationStreamEvent>(adapter.applyEvents);
     let cursor = afterSequence;
     let attempt = 0;
+    let connectionFailed = false;
+    let connectionState: ConversationStreamState = "idle";
+    const reportConnectionState = (next: ConversationStreamState) => {
+      if (connectionState === next) return;
+      connectionState = next;
+      adapter.onConnectionState?.(next);
+    };
+    reportConnectionState("connecting");
     try {
       while (this.lifecycle.isCurrent(active)) {
         try {
@@ -67,6 +86,7 @@ export class ConversationStreamRuntime {
             targetRunId: runId,
             signal: active.controller.signal,
             onEvent: (event) => {
+              reportConnectionState("live");
               if (event.kind === "event") {
                 cursor = Math.max(cursor, event.event.sequence);
               }
@@ -74,13 +94,21 @@ export class ConversationStreamRuntime {
             },
           });
           attempt = 0;
+          reportConnectionState("reconnecting");
         } catch (error) {
           if (!this.lifecycle.isCurrent(active) || isAbortError(error)) return;
           if (!isRetryableConversationTransportError(error)) {
+            connectionFailed = true;
+            reportConnectionState("failed");
             adapter.onError?.(error);
             return;
           }
           attempt += 1;
+          reportConnectionState(
+            error instanceof ConversationStreamHttpError && error.status === 409
+              ? "recovering_snapshot"
+              : "reconnecting",
+          );
         }
 
         // Apply every live event before the authoritative snapshot so a queued
@@ -94,6 +122,8 @@ export class ConversationStreamRuntime {
         } catch (error) {
           if (!this.lifecycle.isCurrent(active)) return;
           if (!isRetryableConversationTransportError(error)) {
+            connectionFailed = true;
+            reportConnectionState("failed");
             adapter.onError?.(error);
             return;
           }
@@ -106,7 +136,11 @@ export class ConversationStreamRuntime {
         }
         cursor = Math.max(cursor, snapshot.cursor || 0);
         const run = snapshot.runs.find((item) => item.id === runId);
-        if (!run || !isFollowableRun(run.status)) return;
+        if (!run || !isFollowableRun(run.status)) {
+          reportConnectionState("idle");
+          return;
+        }
+        reportConnectionState("recovered");
         await this.dependencies.wait(
           Math.min(4_000, 250 * (2 ** Math.min(attempt, 4))),
           active.controller.signal,
@@ -114,6 +148,9 @@ export class ConversationStreamRuntime {
       }
     } finally {
       batcher.cancel();
+      if (this.lifecycle.isCurrent(active) && !connectionFailed) {
+        reportConnectionState("idle");
+      }
       this.lifecycle.finish(active);
     }
   }

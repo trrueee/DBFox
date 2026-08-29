@@ -4,6 +4,8 @@ import type { ConversationArtifact, ConversationDetail } from "../../types/conve
 const mocks = vi.hoisted(() => ({
   admit: vi.fn(),
   create: vi.fn(),
+  get: vi.fn(),
+  history: vi.fn(),
   getRunArtifacts: vi.fn(),
   follow: vi.fn(),
 }));
@@ -13,8 +15,8 @@ vi.mock("../../features/conversation/conversationRepository", () => ({
   cancelConversationRun: vi.fn(),
   createConversation: mocks.create,
   deleteConversation: vi.fn(),
-  getConversation: vi.fn(),
-  getConversationHistory: vi.fn(),
+  getConversation: mocks.get,
+  getConversationHistory: mocks.history,
   getConversationRunArtifacts: mocks.getRunArtifacts,
   listConversations: vi.fn(),
   resolveConversationApproval: vi.fn(),
@@ -63,15 +65,32 @@ describe("conversationStore admission projection", () => {
   beforeEach(() => {
     mocks.admit.mockReset();
     mocks.create.mockReset();
+    mocks.get.mockReset();
+    mocks.history.mockReset();
     mocks.getRunArtifacts.mockReset();
     mocks.follow.mockReset().mockResolvedValue(undefined);
     useConversationStore.setState({
       summaries: [],
-      activeConversationId: initialDetail.id,
       detailById: { [initialDetail.id]: initialDetail },
       artifactsById: {},
       liveFieldsById: {},
+      streamErrorById: {},
+      streamStateById: {},
     });
+  });
+
+  it("clears a stale stream failure after refreshing a terminal snapshot", async () => {
+    mocks.get.mockResolvedValue(initialDetail);
+    useConversationStore.setState({
+      streamErrorById: { [initialDetail.id]: "实时流协议无法继续" },
+      streamStateById: { [initialDetail.id]: "failed" },
+    });
+
+    await useConversationStore.getState().openConversation(initialDetail.id);
+
+    expect(useConversationStore.getState().streamErrorById[initialDetail.id]).toBeUndefined();
+    expect(useConversationStore.getState().streamStateById[initialDetail.id]).toBe("idle");
+    expect(mocks.follow).not.toHaveBeenCalled();
   });
 
   it("creates a conversation without the removed manual table context", async () => {
@@ -290,6 +309,82 @@ describe("conversationStore admission projection", () => {
     expect(items.map((item) => item.id)).toEqual(["message-user-old", message.id]);
     const liveMessage = items.find((item) => item.id === message.id);
     expect(liveMessage?.type === "message" ? liveMessage.payload.content : "").toBe("正在核验订单趋势");
+  });
+
+  it("prepends an authoritative bounded history page and advances both cursors", async () => {
+    const makeRun = (id: string, sequence: number): ConversationDetail["runs"][number] => ({
+      id,
+      session_id: initialDetail.id,
+      input_id: `input-${sequence}`,
+      session_sequence: sequence,
+      user_message_id: `user-${sequence}`,
+      question: `问题 ${sequence}`,
+      status: "completed",
+      version: 1,
+      current_turn_id: null,
+      cancel_requested: false,
+      result: {},
+      error: null,
+    });
+    const makeMessage = (
+      runId: string,
+      id: string,
+      sequence: number,
+      content: string,
+    ): ConversationDetail["items"][number] => ({
+      id,
+      type: "message",
+      session_id: initialDetail.id,
+      run_id: runId,
+      sequence,
+      revision: 1,
+      status: "completed",
+      created_at: `2026-07-26T00:00:${String(sequence).padStart(2, "0")}Z`,
+      completed_at: `2026-07-26T00:00:${String(sequence).padStart(2, "0")}Z`,
+      payload: {
+        role: "user",
+        content,
+        evidence: [],
+        artifact_refs: [],
+        limitation_codes: [],
+      },
+    });
+    const current: ConversationDetail = {
+      ...initialDetail,
+      runs: [makeRun("run-2", 2)],
+      items: [makeMessage("run-2", "user-2", 3, "当前问题")],
+      pagination: {
+        items: { has_more: true, next_before_sequence: 3 },
+        runs: { has_more: true, next_before_sequence: 2 },
+      },
+    };
+    const olderPage: ConversationDetail = {
+      ...initialDetail,
+      runs: [makeRun("run-1", 1)],
+      items: [makeMessage("run-1", "user-1", 1, "更早问题")],
+      pagination: {
+        items: { has_more: false, next_before_sequence: null },
+        runs: { has_more: false, next_before_sequence: null },
+      },
+      cursor: 8,
+    };
+    useConversationStore.setState({
+      detailById: { [initialDetail.id]: current },
+    });
+    mocks.history.mockResolvedValue(olderPage);
+
+    const hasMore = await useConversationStore.getState().loadOlderHistory(initialDetail.id);
+
+    expect(mocks.history).toHaveBeenCalledWith(initialDetail.id, {
+      beforeItemSequence: 3,
+      beforeRunSequence: 2,
+    });
+    const merged = useConversationStore.getState().detailById[initialDetail.id];
+    expect(merged.runs.map((run) => run.id)).toEqual(["run-1", "run-2"]);
+    expect(merged.items.map((item) => item.id)).toEqual(["user-1", "user-2"]);
+    expect(merged.pagination).toEqual(olderPage.pagination);
+    expect(merged.cursor).toBe(10);
+    expect(hasMore).toBe(false);
   });
 
   it("reloads a run when a newly referenced artifact was produced after an earlier fetch", async () => {

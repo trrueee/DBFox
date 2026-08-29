@@ -1,7 +1,6 @@
 import { useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { getUserErrorMessage } from "../../../lib/api/client";
-import type { WorkbenchReference } from "../../../../../sdk/frontend/index";
+import type { WorkbenchReference } from "../../../types/workspace";
 import { useConversationStore } from "../../../stores/conversationStore";
 import { isTerminalRun } from "../conversationState";
 import type {
@@ -22,7 +21,9 @@ export function useConversationViewModel(conversationId: string) {
   const detail = useConversationStore((state) => state.detailById[conversationId]);
   const artifactsById = useConversationStore((state) => state.artifactsById);
   const streamError = useConversationStore((state) => state.streamErrorById[conversationId]);
+  const streamState = useConversationStore((state) => state.streamStateById[conversationId]);
   const openConversationAction = useConversationStore((state) => state.openConversation);
+  const loadOlderHistoryAction = useConversationStore((state) => state.loadOlderHistory);
   const sendMessageAction = useConversationStore((state) => state.sendMessage);
   const cancelRunAction = useConversationStore((state) => state.cancelRun);
   const resolveApprovalAction = useConversationStore((state) => state.resolveApproval);
@@ -31,6 +32,10 @@ export function useConversationViewModel(conversationId: string) {
   const loadRunArtifacts = useConversationStore((state) => state.loadRunArtifacts);
   const openMutation = useMutation({
     mutationFn: openConversationAction,
+  });
+  const historyMutation = useMutation({
+    mutationKey: ["conversation-history", conversationId],
+    mutationFn: () => loadOlderHistoryAction(conversationId),
   });
   const sendMutation = useMutation({
     mutationFn: ({
@@ -66,6 +71,9 @@ export function useConversationViewModel(conversationId: string) {
       approvalId: string;
       approved: boolean;
     }) => resolveApprovalAction(runId, approvalId, approved),
+    onError: async () => {
+      await openConversationAction(conversationId).catch(() => undefined);
+    },
   });
   const questionMutation = useMutation({
     mutationFn: ({
@@ -77,6 +85,9 @@ export function useConversationViewModel(conversationId: string) {
       questionId: string;
       response: { selected_value?: string; text?: string };
     }) => resolveQuestionAction(runId, questionId, response),
+    onError: async () => {
+      await openConversationAction(conversationId).catch(() => undefined);
+    },
   });
 
   const items = useMemo<ConversationRunItem[]>(
@@ -105,10 +116,16 @@ export function useConversationViewModel(conversationId: string) {
     artifacts,
     runningRun,
     openConversation: openMutation.mutateAsync,
-    conversationLoadError: openMutation.error
-      ? getUserErrorMessage(openMutation.error, "对话载入失败，请重试。")
-      : null,
+    conversationLoadError: openMutation.error ?? null,
+    hasOlderHistory: Boolean(
+      detail?.pagination?.items.has_more || detail?.pagination?.runs.has_more,
+    ),
+    loadOlderHistory: historyMutation.mutateAsync,
+    loadingOlderHistory: historyMutation.isPending,
+    olderHistoryLoaded: historyMutation.isSuccess,
+    historyLoadError: historyMutation.error ?? null,
     streamError: streamError ?? null,
+    streamState: streamState ?? "idle",
     sendMessage: async (
       targetConversationId: string,
       content: string,
@@ -142,9 +159,7 @@ export function useConversationViewModel(conversationId: string) {
       if (pendingSendIntent.current === intent) pendingSendIntent.current = null;
     },
     sending: sendMutation.isPending,
-    sendError: sendMutation.error
-      ? getUserErrorMessage(sendMutation.error, "消息发送失败，请重试。")
-      : null,
+    sendError: sendMutation.error ?? null,
     cancelRun: (runId: string) => cancelMutation.mutateAsync(runId),
     cancelling: cancelMutation.isPending,
     resolveApproval: (runId: string, approvalId: string, approved: boolean) =>
@@ -152,9 +167,7 @@ export function useConversationViewModel(conversationId: string) {
     resolvingApprovalId: approvalMutation.isPending
       ? approvalMutation.variables?.approvalId ?? null
       : null,
-    approvalError: approvalMutation.error
-      ? getUserErrorMessage(approvalMutation.error, "审批提交失败，请重试。")
-      : null,
+    approvalError: approvalMutation.error ?? null,
     resolveQuestion: (
       runId: string,
       questionId: string,
@@ -163,9 +176,7 @@ export function useConversationViewModel(conversationId: string) {
     resolvingQuestionId: questionMutation.isPending
       ? questionMutation.variables?.questionId ?? null
       : null,
-    questionError: questionMutation.error
-      ? getUserErrorMessage(questionMutation.error, "回答提交失败，请重试。")
-      : null,
+    questionError: questionMutation.error ?? null,
     selectArtifact,
     loadRunArtifacts,
   };

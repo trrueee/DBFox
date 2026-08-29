@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AssistantMessageItem,
@@ -68,7 +68,10 @@ function answer(runId: string, sequence: number): AssistantMessageItem {
 }
 
 describe("MessageList", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
   it("projects each run's user input and answer without cross-run leakage", () => {
     const runs = [run("run-1", 1), run("run-2", 2)];
     render(
@@ -119,5 +122,97 @@ describe("MessageList", () => {
     );
     expect(screen.getByText("正在准备工具调用")).toBeTruthy();
     expect(screen.getByText("模型正在生成结构化参数")).toBeTruthy();
+  });
+
+  it("exposes bounded history loading, pending, exhausted, and retry states", async () => {
+    const onLoadOlderHistory = vi.fn().mockResolvedValue(false);
+    const { rerender } = render(
+      <MessageList
+        runs={[run("run-2", 2)]}
+        items={[user("run-2", 2), answer("run-2", 2)]}
+        artifacts={[]}
+        hasOlderHistory
+        onLoadOlderHistory={onLoadOlderHistory}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "载入更早消息" }));
+    expect(onLoadOlderHistory).toHaveBeenCalledOnce();
+
+    rerender(
+      <MessageList
+        runs={[run("run-2", 2)]}
+        items={[user("run-2", 2), answer("run-2", 2)]}
+        artifacts={[]}
+        hasOlderHistory
+        loadingOlderHistory
+        onLoadOlderHistory={onLoadOlderHistory}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "正在载入更早消息…" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+
+    rerender(
+      <MessageList
+        runs={[run("run-1", 1), run("run-2", 2)]}
+        items={[
+          user("run-1", 1),
+          answer("run-1", 1),
+          user("run-2", 2),
+          answer("run-2", 2),
+        ]}
+        artifacts={[]}
+        olderHistoryLoaded
+        onLoadOlderHistory={onLoadOlderHistory}
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toContain("已载入全部消息");
+
+    rerender(
+      <MessageList
+        runs={[run("run-1", 1), run("run-2", 2)]}
+        items={[
+          user("run-1", 1),
+          answer("run-1", 1),
+          user("run-2", 2),
+          answer("run-2", 2),
+        ]}
+        artifacts={[]}
+        hasOlderHistory
+        historyLoadError="网络连接中断"
+        onLoadOlderHistory={onLoadOlderHistory}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toContain("网络连接中断");
+    expect(screen.getByRole("button", { name: "重试载入更早消息" })).toBeTruthy();
+  });
+
+  it("virtualizes long conversation history by Run instead of mounting every timeline", async () => {
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(720);
+    const runs = Array.from({ length: 80 }, (_, index) => run(`run-${index + 1}`, index + 1));
+    const items = runs.flatMap((item, index) => [
+      user(item.id, index + 1),
+      answer(item.id, index + 1),
+    ]);
+    const { container } = render(
+      <MessageList
+        runs={runs}
+        items={items}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+      />,
+    );
+
+    const column = container.querySelector(".conv-message-column");
+    expect(column?.classList.contains("is-virtualized")).toBe(true);
+    await waitFor(() => {
+      const mountedRuns = container.querySelectorAll(".conv-message-virtual-row");
+      expect(mountedRuns.length).toBeGreaterThan(0);
+      expect(mountedRuns.length).toBeLessThan(runs.length);
+    });
+    expect(column?.getAttribute("data-virtual-layout")).toMatch(/^messages-/);
   });
 });

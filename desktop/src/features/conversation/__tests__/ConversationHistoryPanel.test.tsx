@@ -108,6 +108,6 @@ describe("ConversationHistoryPanel", () => {
     );
 
     expect(screen.getByText("暂无历史记录")).toBeTruthy();
-    expect(screen.getByText("提交问数后，会话会自动保存。")).toBeTruthy();
+    expect(screen.getByText("开始任务后，工作记录会自动保存。")).toBeTruthy();
   });
 });

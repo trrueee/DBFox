@@ -1,6 +1,5 @@
-import type { DataReference } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
-import { isSqlBackedResultViewArtifact } from "./conversationArtifactModels";
+import { isDataFrameResultArtifact } from "./conversationArtifactSelectors";
 
 export function buildDataReferences(artifacts: ConversationArtifact[]): DataReference[] {
   const references: DataReference[] = [];
@@ -10,12 +9,9 @@ export function buildDataReferences(artifacts: ConversationArtifact[]): DataRefe
     if (!seen.has(key)) { seen.add(key); references.push(reference); }
   };
   for (const artifact of artifacts) {
-    if (isSqlBackedResultViewArtifact(artifact)) {
+    if (isDataFrameResultArtifact(artifact)) {
       const rowCount = numberValue((artifact.payload as Record<string, unknown>).rowCount);
       add({ type: "result", artifactId: artifact.id, rowCount, label: artifact.title || "结果表" });
-    }
-    if (artifact.type === "chart") {
-      add({ type: "chart", artifactId: artifact.id, label: artifact.title || "图表" });
     }
   }
   return references;
@@ -37,3 +33,8 @@ function numberValue(value: unknown): number | undefined {
   if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
   return undefined;
 }
+export type DataReference =
+  | { type: "table"; datasourceId?: string; schema?: string; table: string; label: string }
+  | { type: "column"; datasourceId?: string; schema?: string; table?: string; column: string; label: string }
+  | { type: "sql"; artifactId: string; label: string; sql?: string }
+  | { type: "result"; artifactId: string; rowCount?: number; label: string };

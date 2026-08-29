@@ -1,7 +1,16 @@
-import { BarChart2, Braces, Database, Table2 } from "lucide-react";
+import { BookOpen, Braces, ChevronDown, Database, Table2 } from "lucide-react";
+import {
+  Sources,
+  SourcesContent,
+  SourcesTrigger,
+} from "../../../components/ai-elements/sources";
 import type { ConversationArtifact } from "../../../types/conversation";
-import type { DataReference } from "../../../types/agentArtifact";
-import { buildDataReferences, referenceKey, referenceTitle } from "./dataReferences";
+import {
+  buildDataReferences,
+  referenceKey,
+  referenceTitle,
+  type DataReference,
+} from "./dataReferences";
 
 interface DataReferencePanelProps {
   artifacts: ConversationArtifact[];
@@ -19,34 +28,49 @@ export function DataReferencePanel({
   const label = kind === "evidence" ? "引用的数据来源" : "已保存结果";
 
   return (
-    <div className="conv-data-refs" aria-label={label} data-reference-kind={kind}>
-      <span className="conv-data-refs-label">{label}</span>
-      <div className="conv-data-ref-list">
-        {references.map((reference) => (
-          <button
-            key={referenceKey(reference)}
-            type="button"
-            className={`conv-data-ref conv-data-ref-${reference.type}`}
-            onClick={() => {
-              if ("artifactId" in reference && reference.artifactId && onSelectArtifact) {
-                onSelectArtifact(reference.artifactId);
-                return;
-              }
-            }}
-            title={referenceTitle(reference)}
-          >
-            {referenceIcon(reference.type)}
-            <span>{reference.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
+    <Sources className="conv-data-refs" data-reference-kind={kind}>
+      <SourcesTrigger count={references.length} aria-label={`${label}，${references.length} 项`}>
+        <BookOpen size={14} aria-hidden="true" />
+        <span className="conv-data-refs-label">{label}</span>
+        <span className="conv-data-refs-count">{references.length}</span>
+        <ChevronDown className="dbfox-sources__chevron" size={14} aria-hidden="true" />
+      </SourcesTrigger>
+      <SourcesContent className="conv-data-ref-list">
+        {references.map((reference) => {
+          const content = (
+            <>
+              {referenceIcon(reference.type)}
+              <span>{reference.label}</span>
+            </>
+          );
+          const className = `conv-data-ref conv-data-ref-${reference.type}`;
+          const title = referenceTitle(reference);
+          if ("artifactId" in reference && reference.artifactId && onSelectArtifact) {
+            return (
+              <button
+                key={referenceKey(reference)}
+                type="button"
+                className={className}
+                onClick={() => onSelectArtifact(reference.artifactId!)}
+                title={title}
+              >
+                {content}
+              </button>
+            );
+          }
+          return (
+            <span key={referenceKey(reference)} className={className} title={title}>
+              {content}
+            </span>
+          );
+        })}
+      </SourcesContent>
+    </Sources>
   );
 }
 
 function referenceIcon(type: DataReference["type"]) {
-  if (type === "table") return <Database size={12} />;
-  if (type === "column") return <Braces size={12} />;
-  if (type === "chart") return <BarChart2 size={12} />;
-  return <Table2 size={12} />;
+  if (type === "table") return <Database size={14} aria-hidden="true" />;
+  if (type === "column") return <Braces size={14} aria-hidden="true" />;
+  return <Table2 size={14} aria-hidden="true" />;
 }

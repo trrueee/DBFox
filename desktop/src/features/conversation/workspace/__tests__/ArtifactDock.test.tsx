@@ -1,26 +1,17 @@
-import type { CSSProperties } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationArtifact } from "../../../../types/conversation";
 import { agentApi } from "../../../../lib/api/agent";
+import {
+  DATAFRAME_REPRESENTATION_TYPE,
+} from "../../../../lib/api/representation";
 import { ArtifactDock } from "../ArtifactDock";
 
 vi.mock("../../../../lib/api/agent", () => ({
   agentApi: {
-    fetchArtifactPage: vi.fn(),
-    fetchArtifactChartData: vi.fn(),
-    exportArtifactCsv: vi.fn(),
-  },
-}));
-
-const echartsMock = vi.hoisted(() => ({
-  options: [] as unknown[],
-}));
-
-vi.mock("echarts-for-react/esm/core", () => ({
-  default: ({ option, style }: { option: unknown; style?: CSSProperties }) => {
-    echartsMock.options.push(option);
-    return <div data-testid="echarts-mock" style={style} />;
+    listArtifactRepresentations: vi.fn(),
+    readArtifactRepresentation: vi.fn(),
+    streamArtifactRepresentation: vi.fn(),
   },
 }));
 
@@ -32,7 +23,8 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
       session_id: "conv",
       run_id: "run",
       version: 1,
-      type: "sql",
+      type: "dbfox.data.sql",
+      schema_version: 1,
       visibility: "supporting",
       title: "SQL",
       status: "completed",
@@ -51,7 +43,8 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
       session_id: "conv",
       run_id: "run",
       version: 1,
-      type: "safety",
+      type: "dbfox.data.safety",
+      schema_version: 1,
       visibility: "internal",
       title: "Safety",
       status: "completed",
@@ -72,7 +65,8 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
       session_id: "conv",
       run_id: "run",
       version: 1,
-      type: "result_view",
+      type: "dbfox.data.result_view",
+      schema_version: 2,
       visibility: "primary",
       title: "Order result",
       status: "completed",
@@ -85,42 +79,43 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
       provenance: {},
       relations: [{ relation: "executed_as", artifact_id: "artifact-sql" }],
     },
-    {
-      id: "artifact-chart",
-      semantic_key: "chart_1",
-      session_id: "conv",
-      run_id: "run",
-      version: 1,
-      type: "chart",
-      visibility: "primary",
-      title: "Amount chart",
-      status: "completed",
-      payload: { chartType: "bar", sourceResultArtifactId: "artifact-result", x: "id", y: "amount", aggregation: "none" },
-      provenance: {},
-      relations: [{ relation: "visualized_as", artifact_id: "artifact-result" }],
-    },
   ];
 }
 
 describe("ArtifactDock", () => {
   beforeEach(() => {
     cleanup();
-    echartsMock.options = [];
-    vi.mocked(agentApi.fetchArtifactPage).mockReset();
-    vi.mocked(agentApi.fetchArtifactChartData).mockReset();
-    vi.mocked(agentApi.fetchArtifactPage).mockResolvedValue({
-      columns: ["id", "amount"], rows: [{ id: 1, amount: 20 }],
-      page: 1, pageSize: 10, rowCount: 1, hasNextPage: false,
-      latencyMs: 1, consistency: "durable_snapshot",
-      originalExecutedAt: "2026-07-20T00:00:00Z", viewExecutedAt: "2026-07-20T00:00:01Z",
-      viewExecutionId: "view-dock", resourceVersion: 1, sourceFingerprint: "query-dock",
-    });
-    vi.mocked(agentApi.fetchArtifactChartData).mockResolvedValue({
-      series: [{ label: "1", value: 20 }], sampleSize: 1, truncated: false,
-      consistency: "durable_snapshot", originalExecutedAt: "2026-07-20T00:00:00Z",
-      viewExecutedAt: "2026-07-20T00:00:01Z", viewExecutionId: "view-chart-dock",
-      resourceVersion: 1, sourceFingerprint: "query-chart-dock",
-    });
+    vi.mocked(agentApi.listArtifactRepresentations).mockReset();
+    vi.mocked(agentApi.listArtifactRepresentations).mockImplementation(async (artifactId) => (
+      artifactId.includes("result")
+        ? [{
+            representation_type: DATAFRAME_REPRESENTATION_TYPE,
+            version: 1,
+            operations: [{ name: "page", result_kind: "json" }],
+          }]
+        : []
+    ));
+    vi.mocked(agentApi.readArtifactRepresentation).mockReset();
+    vi.mocked(agentApi.readArtifactRepresentation).mockImplementation(async () => ({
+            representation_type: DATAFRAME_REPRESENTATION_TYPE,
+            representation_version: 1,
+            operation: "page",
+            payload: {
+              fields: [
+                { key: "field_0", name: "id", type: "integer", nullable: false, values: [1] },
+                { key: "field_1", name: "amount", type: "integer", nullable: false, values: [20] },
+              ],
+              page: 1, page_size: 10, row_count: 1, has_next_page: false,
+              latency_ms: 1, source_truncated: false,
+            },
+            consistency: "durable_snapshot",
+            original_observed_at: "2026-07-20T00:00:00Z",
+            read_at: "2026-07-20T00:00:01Z",
+            read_id: "view-dock",
+            source_version: "1",
+            source_fingerprint: "query-dock",
+            warnings: [], notices: [],
+          }));
   });
 
   it("renders only core user-facing artifacts and keeps audit artifacts hidden", async () => {
@@ -129,24 +124,20 @@ describe("ArtifactDock", () => {
       <ArtifactDock
         artifacts={trustedQueryArtifacts()}
         selectedArtifactId="artifact-result"
-        onOpenResultTab={vi.fn()}
+        onOpenArtifact={vi.fn()}
         onSelectArtifact={onSelectArtifact}
       />,
     );
 
     expect(screen.getByRole("complementary", { name: "Artifact dock" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "SQL SQL" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Safety Safety" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Order result Result" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: "Amount chart Chart" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "SQL sql" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Safety safety" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Order result result view" }).getAttribute("aria-pressed")).toBe("true");
     expect(await screen.findByText("本页 1 / 共 1 行")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Amount chart Chart" }));
-
-    expect(onSelectArtifact).toHaveBeenCalledWith("artifact-chart");
+    expect(onSelectArtifact).not.toHaveBeenCalled();
   });
 
-  it("resolves a result SQL view only through its recorded source artifact id", async () => {
+  it("keeps workspace-only source SQL out of the inline Artifact preview", async () => {
     const artifacts = trustedQueryArtifacts();
     artifacts.push({
       ...artifacts[0],
@@ -159,29 +150,20 @@ describe("ArtifactDock", () => {
         queryFingerprint: "sql-unrelated",
       },
     });
-    const onOpenSqlConsole = vi.fn();
     render(
       <ArtifactDock
         artifacts={artifacts}
         selectedArtifactId="artifact-result"
-        onOpenResultTab={vi.fn()}
-        onOpenSqlConsole={onOpenSqlConsole}
+        onOpenArtifact={vi.fn()}
       />,
     );
 
     await screen.findByText("本页 1 / 共 1 行");
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "SQL" }), { button: 0, ctrlKey: false });
-
-    const sql = screen.getByLabelText("Order result 来源 SQL");
-    expect(sql.textContent?.replace(/\s+/g, " ").trim()).toBe(
-      "SELECT id, amount FROM orders",
-    );
-    expect(sql.textContent).not.toContain("unrelated");
-    fireEvent.click(screen.getByRole("button", { name: "在 SQL 控制台打开" }));
-    expect(onOpenSqlConsole).toHaveBeenCalledWith("SELECT id, amount FROM orders");
+    expect(screen.queryByRole("tab", { name: "来源 SQL" })).toBeNull();
+    expect(document.body.textContent).not.toContain("unrelated");
   });
 
-  it("falls back to the latest primary artifact when selection points to supporting material", () => {
+  it("falls back to the latest primary artifact when selection points to supporting material", async () => {
     const artifacts = trustedQueryArtifacts();
     const latestSql: ConversationArtifact = {
       ...artifacts[0],
@@ -217,18 +199,19 @@ describe("ArtifactDock", () => {
       <ArtifactDock
         artifacts={artifacts}
         selectedArtifactId="artifact-sql-latest"
-        onOpenResultTab={vi.fn()}
+        onOpenArtifact={vi.fn()}
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Latest SQL SQL" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Latest result Result" }).getAttribute("aria-pressed"))
+    expect(screen.queryByRole("button", { name: "Latest SQL sql" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Latest result result view" }).getAttribute("aria-pressed"))
       .toBe("true");
-    expect(agentApi.fetchArtifactPage).toHaveBeenCalledWith(
-      "artifact-result-latest",
-      expect.objectContaining({ page: 1 }),
-      expect.any(AbortSignal),
-    );
+    await waitFor(() => expect(agentApi.readArtifactRepresentation).toHaveBeenCalledWith(
+        "artifact-result-latest",
+        DATAFRAME_REPRESENTATION_TYPE,
+        expect.objectContaining({ parameters: expect.objectContaining({ page: 1 }) }),
+        expect.any(AbortSignal),
+      ));
   });
 
   it("never promotes an internal safety record into the artifact dock", () => {
@@ -236,19 +219,19 @@ describe("ArtifactDock", () => {
       <ArtifactDock
         artifacts={trustedQueryArtifacts()}
         selectedArtifactId="artifact-safety"
-        onOpenResultTab={vi.fn()}
+        onOpenArtifact={vi.fn()}
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Safety Safety" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Order result Result" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("button", { name: "Safety safety" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Order result result view" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("renders dock content without owning split pane resize state", () => {
     render(
         <ArtifactDock
           artifacts={trustedQueryArtifacts()}
-          onOpenResultTab={vi.fn()}
+          onOpenArtifact={vi.fn()}
       />,
     );
 

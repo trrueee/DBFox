@@ -1,13 +1,20 @@
 import { Copy } from "lucide-react";
 import { Button } from "../../../components/ui";
-import type { MarkdownArtifact } from "../../../types/agentArtifact";
 import { MarkdownContent } from "../queryResult/MarkdownContent";
 import { ArtifactCard } from "./ArtifactCard";
 import { copyText } from "./artifactActions";
 import "./ArtifactViews.css";
 
+export interface MarkdownArtifactViewModel {
+  id: string;
+  type: "markdown";
+  title: string;
+  content: string;
+  description?: string;
+}
+
 interface MarkdownArtifactViewProps {
-  artifact: MarkdownArtifact;
+  artifact: MarkdownArtifactViewModel;
   onToast: (message: string) => void;
 }
 
@@ -25,7 +32,7 @@ export function MarkdownArtifactView({ artifact, onToast }: MarkdownArtifactView
       description={artifact.description}
       actions={
         <Button type="button" variant="outline" size="sm" className="artifact-action-button" onClick={handleCopy}>
-          <Copy size={10} />
+          <Copy size={14} />
           复制
         </Button>
       }

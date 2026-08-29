@@ -1,13 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { agentApi } from "../../../../lib/api/agent";
-import type { ResultViewArtifact, SqlArtifact } from "../../../../types/agentArtifact";
+import type { ArtifactRepresentationResult } from "../../../../lib/api/generated/types.gen";
+import { DATAFRAME_REPRESENTATION_TYPE } from "../../../../lib/api/representation";
+import { ApiError } from "../../../../lib/api/client";
 import { TableArtifactView } from "../TableArtifactView";
 
 vi.mock("../../../../lib/api/agent", () => ({
   agentApi: {
-    fetchArtifactPage: vi.fn(),
-    exportArtifactCsv: vi.fn(),
+    readArtifactRepresentation: vi.fn(),
+    streamArtifactRepresentation: vi.fn(),
   },
 }));
 
@@ -20,7 +22,54 @@ const liveMetadata = {
   sourceFingerprint: "query-test",
 };
 
-function makeArtifact(): ResultViewArtifact {
+type LegacyPage = typeof liveMetadata & {
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  page: number;
+  pageSize: number;
+  rowCount: number | null;
+  hasNextPage: boolean;
+  latencyMs: number;
+  columnTypes?: string[];
+  sourceTruncated?: boolean;
+  warnings?: string[];
+  notices?: string[];
+};
+
+function dataframeResult(value: LegacyPage): ArtifactRepresentationResult {
+  return {
+    representation_type: DATAFRAME_REPRESENTATION_TYPE,
+    representation_version: 1,
+    operation: "page",
+    payload: {
+      fields: value.columns.map((name, index) => ({
+        key: `field_${index}`,
+        name,
+        type: value.columnTypes?.[index] ?? "string",
+        nullable: true,
+        semantic_type: null,
+        unit: null,
+        values: value.rows.map((row) => row[name] ?? null),
+      })),
+      page: value.page,
+      page_size: value.pageSize,
+      row_count: value.rowCount,
+      has_next_page: value.hasNextPage,
+      latency_ms: value.latencyMs,
+      source_truncated: value.sourceTruncated ?? false,
+    },
+    consistency: value.consistency,
+    original_observed_at: value.originalExecutedAt,
+    read_at: value.viewExecutedAt,
+    read_id: value.viewExecutionId,
+    source_version: String(value.resourceVersion),
+    source_fingerprint: value.sourceFingerprint,
+    warnings: value.warnings ?? [],
+    notices: value.notices ?? [],
+  };
+}
+
+function makeArtifact() {
   return {
     id: "result-view-payload-1",
     type: "result_view",
@@ -36,7 +85,7 @@ function makeArtifact(): ResultViewArtifact {
   };
 }
 
-function makeSqlBackedArtifact(): ResultViewArtifact {
+function makeSqlBackedArtifact() {
   return {
     id: "result-view-1",
     type: "result_view",
@@ -52,19 +101,7 @@ function makeSqlBackedArtifact(): ResultViewArtifact {
   };
 }
 
-function makeSourceSqlArtifact(): SqlArtifact {
-  return {
-    id: "sql-artifact-1",
-    type: "sql",
-    title: "来源 SQL",
-    sql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
-    dialect: "mysql",
-    validationStatus: "passed",
-    executionStatus: "completed",
-  };
-}
-
-function makeTypedSqlBackedArtifact(): ResultViewArtifact {
+function makeTypedSqlBackedArtifact() {
   return {
     ...makeSqlBackedArtifact(),
     columns: [
@@ -78,9 +115,9 @@ function makeTypedSqlBackedArtifact(): ResultViewArtifact {
 describe("TableArtifactView", () => {
   beforeEach(() => {
     cleanup();
-    vi.mocked(agentApi.fetchArtifactPage).mockReset();
-    vi.mocked(agentApi.exportArtifactCsv).mockReset();
-    vi.mocked(agentApi.fetchArtifactPage).mockResolvedValue({
+    vi.mocked(agentApi.readArtifactRepresentation).mockReset();
+    vi.mocked(agentApi.streamArtifactRepresentation).mockReset();
+    vi.mocked(agentApi.readArtifactRepresentation).mockResolvedValue(dataframeResult({
       columns: ["day", "order_count", "note"],
       rows: Array.from({ length: 10 }, (_, index) => ({
         day: `2026-06-${String(index + 1).padStart(2, "0")}`,
@@ -92,11 +129,13 @@ describe("TableArtifactView", () => {
       rowCount: 128,
       hasNextPage: true,
       latencyMs: 38,
+      columnTypes: ["date", "integer", "string"],
+      sourceTruncated: true,
       ...liveMetadata,
       warnings: ["仅展示前 10 行"],
       notices: ["可继续筛选"],
-    });
-    vi.mocked(agentApi.exportArtifactCsv).mockResolvedValue(new Blob(["day,order_count\n2026-06-01,10\n"]));
+    }));
+    vi.mocked(agentApi.streamArtifactRepresentation).mockResolvedValue(new Blob(["day,order_count\n2026-06-01,10\n"]));
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn().mockResolvedValue(undefined),
@@ -112,9 +151,10 @@ describe("TableArtifactView", () => {
     render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
 
     await screen.findByText("2026-06-10");
-    expect(agentApi.fetchArtifactPage).toHaveBeenCalledWith(
+    expect(agentApi.readArtifactRepresentation).toHaveBeenCalledWith(
       "result-view-payload-1",
-      expect.objectContaining({ page: 1, pageSize: 10 }),
+      DATAFRAME_REPRESENTATION_TYPE,
+      expect.objectContaining({ parameters: expect.objectContaining({ page: 1, page_size: 10 }) }),
       expect.any(AbortSignal),
     );
     expect(screen.getByText("本页 10 / 共 128 行")).toBeTruthy();
@@ -136,39 +176,6 @@ describe("TableArtifactView", () => {
     const nullCell = screen.getByText("NULL").closest("td");
     expect(nullCell?.className).toContain("is-null");
     expect(nullCell?.querySelector(".dbfox-cell-null")).toBeTruthy();
-  });
-
-  it("switches one result artifact between its table and exact source SQL views", async () => {
-    const onToast = vi.fn();
-    const onOpenSqlConsole = vi.fn();
-    render(
-      <TableArtifactView
-        artifact={makeSqlBackedArtifact()}
-        sourceSqlArtifact={makeSourceSqlArtifact()}
-        onOpenSqlConsole={onOpenSqlConsole}
-        onToast={onToast}
-      />,
-    );
-
-    await screen.findByText("2026-06-01");
-    expect(screen.getByRole("tab", { name: "表格" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.queryByLabelText("SQL-backed result 来源 SQL")).toBeNull();
-
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "SQL" }), { button: 0, ctrlKey: false });
-
-    const sql = screen.getByLabelText("SQL-backed result 来源 SQL");
-    expect(sql.textContent).toContain("SELECT\n  day,\n  COUNT(*) AS order_count\nFROM\n  orders\nGROUP BY\n  day");
-    expect(screen.queryByPlaceholderText("搜索结果")).toBeNull();
-    expect(agentApi.fetchArtifactPage).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "复制 SQL" }));
-    await waitFor(() => expect(onToast).toHaveBeenCalledWith("已复制 SQL"));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(makeSourceSqlArtifact().sql);
-    fireEvent.click(screen.getByRole("button", { name: "在 SQL 控制台打开" }));
-    expect(onOpenSqlConsole).toHaveBeenCalledWith(makeSourceSqlArtifact().sql);
-
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "表格" }), { button: 0, ctrlKey: false });
-    expect(screen.getByPlaceholderText("搜索结果")).toBeTruthy();
   });
 
   it("does not offer a SQL view when the result source artifact is unavailable", async () => {
@@ -215,10 +222,10 @@ describe("TableArtifactView", () => {
 
   it("uses the shared long-cell viewer and copies through its explicit action", async () => {
     const longValue = "payload=" + "segment-".repeat(14);
-    vi.mocked(agentApi.fetchArtifactPage).mockResolvedValueOnce({
+    vi.mocked(agentApi.readArtifactRepresentation).mockResolvedValueOnce(dataframeResult({
       columns: ["note"], rows: [{ note: longValue }], page: 1, pageSize: 10,
       rowCount: 1, hasNextPage: false, latencyMs: 1, ...liveMetadata,
-    });
+    }));
     const artifact = {
       ...makeArtifact(),
       columns: ["note"],
@@ -262,17 +269,18 @@ describe("TableArtifactView", () => {
     render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
 
     await screen.findByText("2026-06-01");
-    vi.mocked(agentApi.fetchArtifactPage).mockResolvedValueOnce({
+    vi.mocked(agentApi.readArtifactRepresentation).mockResolvedValueOnce(dataframeResult({
       columns: ["day", "order_count", "note"],
       rows: [{ day: "2026-06-12", order_count: 120, note: "row-12" }],
       page: 1, pageSize: 10, rowCount: 1, hasNextPage: false,
       latencyMs: 1, ...liveMetadata,
-    });
+    }));
     fireEvent.change(screen.getByPlaceholderText("搜索结果"), { target: { value: "row-12" } });
 
-    await waitFor(() => expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+    await waitFor(() => expect(agentApi.readArtifactRepresentation).toHaveBeenLastCalledWith(
       "result-view-payload-1",
-      expect.objectContaining({ search: "row-12" }),
+      DATAFRAME_REPRESENTATION_TYPE,
+      expect.objectContaining({ parameters: expect.objectContaining({ search: "row-12" }) }),
       expect.any(AbortSignal),
     ));
     expect(await screen.findByText("2026-06-12")).toBeTruthy();
@@ -284,21 +292,77 @@ describe("TableArtifactView", () => {
     await screen.findByText("2026-06-01");
     fireEvent.click(screen.getByRole("button", { name: "order_count" }));
 
-    await waitFor(() => expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+    await waitFor(() => expect(agentApi.readArtifactRepresentation).toHaveBeenLastCalledWith(
       "result-view-payload-1",
-      expect.objectContaining({ sort: [{ column: "order_count", direction: "desc" }] }),
+      DATAFRAME_REPRESENTATION_TYPE,
+      expect.objectContaining({ parameters: expect.objectContaining({ sort: [{ field: "order_count", direction: "desc" }] }) }),
       expect.any(AbortSignal),
     ));
+    expect(screen.getByRole("columnheader", { name: /order_count integer/ }).getAttribute("aria-sort")).toBe("descending");
+  });
+
+  it("preserves old table content and discloses safe Problem Details metadata after a page failure", async () => {
+    vi.mocked(agentApi.readArtifactRepresentation)
+      .mockResolvedValueOnce(dataframeResult({
+        columns: ["day"],
+        rows: [{ day: "2026-06-01" }],
+        page: 1,
+        pageSize: 10,
+        rowCount: 2,
+        hasNextPage: true,
+        latencyMs: 4,
+        ...liveMetadata,
+      }))
+      .mockRejectedValueOnce(new ApiError(
+        "private database message",
+        503,
+        "RESULT_VIEW_UNAVAILABLE",
+        [],
+        { request_id: "result-request-3", password: "must-not-render" },
+      ));
+
+    render(
+      <TableArtifactView
+        artifact={makeArtifact()}
+        onToast={vi.fn()}
+        mode="workspace"
+      />,
+    );
+    expect(await screen.findByText("2026-06-01")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+
+    expect(await screen.findByText("分页数据未更新")).toBeTruthy();
+    expect(screen.getByText("2026-06-01")).toBeTruthy();
+    fireEvent.click(screen.getByText("技术详情"));
+    expect(screen.getByText("RESULT_VIEW_UNAVAILABLE")).toBeTruthy();
+    expect(screen.getByText("result-request-3")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("private database message");
+    expect(document.body.textContent).not.toContain("must-not-render");
+  });
+
+  it("exposes the TanStack table as a counted keyboard grid", async () => {
+    render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
+
+    await screen.findByText("2026-06-10");
+    const grid = screen.getByRole("grid", { name: "查询结果" });
+    expect(grid.getAttribute("aria-colcount")).toBe("3");
+    expect(grid.getAttribute("aria-rowcount")).toBe("11");
+
+    const firstCell = screen.getByText("2026-06-01").closest("td");
+    if (!firstCell) throw new Error("Expected first result cell");
+    firstCell.focus();
+    fireEvent.keyDown(firstCell, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(screen.getByText("10").closest("td"));
   });
 
   it("opens the loaded result as a workspace tab", () => {
     const artifact = makeArtifact();
-    const onOpenResultTab = vi.fn();
-    render(<TableArtifactView artifact={artifact} onToast={vi.fn()} onOpenResultTab={onOpenResultTab} />);
+    const onOpenArtifact = vi.fn();
+    render(<TableArtifactView artifact={artifact} onToast={vi.fn()} onOpenArtifact={onOpenArtifact} />);
 
     fireEvent.click(screen.getByRole("button", { name: "打开为 Tab" }));
 
-    expect(onOpenResultTab).toHaveBeenCalledWith(artifact);
+    expect(onOpenArtifact).toHaveBeenCalledWith(artifact);
   });
 
   it("exports sql-backed workspace results through the result export API", async () => {
@@ -312,11 +376,13 @@ describe("TableArtifactView", () => {
     fireEvent.click(screen.getByRole("button", { name: "order_count" }));
 
     await waitFor(() =>
-      expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+      expect(agentApi.readArtifactRepresentation).toHaveBeenLastCalledWith(
         "result-view-1",
-        expect.objectContaining({
+        DATAFRAME_REPRESENTATION_TYPE,
+        expect.objectContaining({ parameters: expect.objectContaining({
           search: "daily",
-          sort: [{ column: "order_count", direction: "desc" }],
+          sort: [{ field: "order_count", direction: "desc" }],
+        })
         }),
         expect.any(AbortSignal),
       ),
@@ -325,10 +391,14 @@ describe("TableArtifactView", () => {
     fireEvent.click(screen.getByRole("button", { name: "导出" }));
 
     await waitFor(() =>
-      expect(agentApi.exportArtifactCsv).toHaveBeenCalledWith("result-view-1", {
-        search: "daily",
-        sort: [{ column: "order_count", direction: "desc" }],
-      }),
+      expect(agentApi.streamArtifactRepresentation).toHaveBeenCalledWith(
+        "result-view-1",
+        DATAFRAME_REPRESENTATION_TYPE,
+        expect.objectContaining({ parameters: expect.objectContaining({
+          search: "daily",
+          sort: [{ field: "order_count", direction: "desc" }],
+        }) }),
+      ),
     );
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已导出 CSV"));
   });
@@ -337,12 +407,13 @@ describe("TableArtifactView", () => {
     render(<TableArtifactView artifact={makeSqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
 
     await waitFor(() =>
-      expect(agentApi.fetchArtifactPage).toHaveBeenCalledWith(
+      expect(agentApi.readArtifactRepresentation).toHaveBeenCalledWith(
         "result-view-1",
-        expect.objectContaining({
+        DATAFRAME_REPRESENTATION_TYPE,
+        expect.objectContaining({ parameters: expect.objectContaining({
           page: 1,
-          pageSize: 50,
-        }),
+          page_size: 50,
+        }) }),
         expect.any(AbortSignal),
       ),
     );
@@ -370,11 +441,12 @@ describe("TableArtifactView", () => {
     fireEvent.click(screen.getByRole("button", { name: "应用筛选" }));
 
     await waitFor(() =>
-      expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+      expect(agentApi.readArtifactRepresentation).toHaveBeenLastCalledWith(
         "result-view-1",
-        expect.objectContaining({
-          filters: [{ column: "day", operator: "contains", value: "2026-06" }],
-        }),
+        DATAFRAME_REPRESENTATION_TYPE,
+        expect.objectContaining({ parameters: expect.objectContaining({
+          filters: [{ field: "day", operator: "contains", value: "2026-06" }],
+        }) }),
         expect.any(AbortSignal),
       ),
     );
@@ -390,11 +462,12 @@ describe("TableArtifactView", () => {
     fireEvent.click(screen.getByRole("button", { name: "应用排序" }));
 
     await waitFor(() =>
-      expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+      expect(agentApi.readArtifactRepresentation).toHaveBeenLastCalledWith(
         "result-view-1",
-        expect.objectContaining({
-          sort: [{ column: "order_count", direction: "asc" }],
-        }),
+        DATAFRAME_REPRESENTATION_TYPE,
+        expect.objectContaining({ parameters: expect.objectContaining({
+          sort: [{ field: "order_count", direction: "asc" }],
+        }) }),
         expect.any(AbortSignal),
       ),
     );
@@ -407,11 +480,12 @@ describe("TableArtifactView", () => {
     fireEvent.click(screen.getByRole("button", { name: "order_count" }));
 
     await waitFor(() =>
-      expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+      expect(agentApi.readArtifactRepresentation).toHaveBeenLastCalledWith(
         "result-view-1",
-        expect.objectContaining({
-          sort: [{ column: "order_count", direction: "desc" }],
-        }),
+        DATAFRAME_REPRESENTATION_TYPE,
+        expect.objectContaining({ parameters: expect.objectContaining({
+          sort: [{ field: "order_count", direction: "desc" }],
+        }) }),
         expect.any(AbortSignal),
       ),
     );

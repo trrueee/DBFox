@@ -18,6 +18,7 @@ const TERMINAL_ITEM_STATUSES: ReadonlySet<RunItemStatus> = new Set([
   "completed",
   "failed",
   "cancelled",
+  "expired",
 ]);
 
 export const isTerminalRun = (status: AgentRunStatus): boolean =>

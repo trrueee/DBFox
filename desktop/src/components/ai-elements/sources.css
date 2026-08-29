@@ -1,0 +1,67 @@
+.dbfox-sources {
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-caption);
+}
+
+.dbfox-sources__trigger {
+  display: inline-flex;
+  min-height: var(--density-control-height-sm);
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.dbfox-sources__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.dbfox-sources__trigger:hover {
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.dbfox-sources__trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.dbfox-sources__chevron {
+  transition: transform var(--motion-fast) ease-out;
+}
+
+.dbfox-sources[open] > .dbfox-sources__trigger .dbfox-sources__chevron {
+  transform: rotate(180deg);
+}
+
+.dbfox-sources__content {
+  margin-top: 4px;
+  outline: none;
+}
+
+.dbfox-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.dbfox-source:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbfox-sources__chevron {
+    transition: none;
+  }
+}

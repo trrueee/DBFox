@@ -1,20 +1,4 @@
 import { useMemo } from "react";
-import {
-  AlertTriangle,
-  ArrowUpRight,
-  BarChart3,
-  Check,
-  ChevronRight,
-  Circle,
-  CircleStop,
-  Database,
-  FileOutput,
-  ListChecks,
-  Loader2,
-  Search,
-  Settings2,
-  X,
-} from "lucide-react";
 import type {
   AssistantMessageItem,
   ConversationArtifact,
@@ -22,33 +6,34 @@ import type {
   ConversationRunItem,
   FunctionCallItem,
   FunctionCallOutputItem,
-  PlanItem,
   UserMessageItem,
 } from "../../../types/conversation";
-import { getUserErrorMessage } from "../../../lib/api/client";
-import { completionLimitationLabel } from "../../../lib/presentation";
+import { AgentPlan } from "../../../components/agent-elements/AgentPlan";
+import { AgentQuestion } from "../../../components/agent-elements/AgentQuestion";
+import { AgentTool, AgentToolGroup } from "../../../components/agent-elements/AgentToolGroup";
+import { Message, MessageContent } from "../../../components/ai-elements/message";
+import { Alert, AlertDescription, AlertTitle, Spinner } from "../../../components/ui";
 import { MarkdownContent } from "../../workspace/queryResult/MarkdownContent";
-import {
-  getArtifactRenderer,
-  renderArtifact,
-} from "../../workspace/artifacts/artifactRendererRegistry";
-import type { ArtifactEnvelope } from "../../workspace/artifacts/types";
+import { artifactEmbedIds } from "../../workspace/queryResult/remarkDbfoxCitations";
+import { ArtifactViewHost } from "../../workspace/artifacts/ArtifactViewHost";
+import { toArtifactEnvelope } from "../../workspace/artifacts/artifactEnvelope";
 import { ApprovalAuditCard } from "./ApprovalCard";
 import {
   isPrimaryConversationArtifact,
-  isSqlBackedResultViewArtifact,
-} from "./conversationArtifactModels";
+  isDataFrameResultArtifact,
+} from "./conversationArtifactSelectors";
 import { DataReferencePanel } from "./DataReferencePanel";
-import { QuestionCard } from "./QuestionCard";
+import { RunOutcome } from "./RunOutcome";
 
 interface AgentTimelineProps {
   run: ConversationRun;
   items: ConversationRunItem[];
   artifacts: ConversationArtifact[];
+  ariaLabel?: string;
   onOpenSqlConsole?: (sql?: string) => void;
   onSelectArtifact?: (artifactId: string) => void;
   resolvingQuestionId?: string | null;
-  questionError?: string | null;
+  questionError?: unknown;
   onResolveQuestion?: (
     runId: string,
     questionId: string,
@@ -70,6 +55,7 @@ export function AgentTimeline({
   run,
   items,
   artifacts,
+  ariaLabel = "Agent 时间线",
   onOpenSqlConsole,
   onSelectArtifact,
   resolvingQuestionId,
@@ -86,14 +72,23 @@ export function AgentTimeline({
     return map;
   }, [items]);
 
+  const finalAnswer = items.findLast(
+    (item): item is AssistantMessageItem => item.type === "message"
+      && item.payload.role === "assistant"
+      && item.payload.completion_disposition != null
+      && item.status !== "cancelled",
+  );
+  const embeddedArtifactIds = new Set(
+    finalAnswer ? artifactEmbedIds(finalAnswer.payload.content) : [],
+  );
   const primaryArtifacts = artifacts.filter(isPrimaryConversationArtifact);
   const capabilityArtifacts = primaryArtifacts.filter((artifact) => (
     artifact.status === "completed"
     && artifact.type.includes(".")
-    && getArtifactRenderer(artifact.type, artifact.schema_version ?? 1) !== null
+    && !embeddedArtifactIds.has(artifact.id)
   ));
   const preservedResults = primaryArtifacts.filter(
-    (artifact) => artifact.status === "completed" && isSqlBackedResultViewArtifact(artifact),
+    (artifact) => artifact.status === "completed" && isDataFrameResultArtifact(artifact),
   );
   const evidenceArtifactIds = new Set(
     items
@@ -107,22 +102,15 @@ export function AgentTimeline({
     evidenceArtifactIds.has(artifact.id),
   );
   const currentItem = activeItem(items);
-  const hasFinalAnswer = items.some(
-    (item) => item.type === "message"
-      && item.payload.role === "assistant"
-      && item.payload.completion_disposition != null
-      && item.status !== "cancelled",
-  );
-
   const renderableItems = useMemo(() => groupTimelineItems(items), [items]);
   const workingStatus = runWorkingStatus(run.phase ?? null, items.length);
 
   return (
-    <section className="conv-agent-timeline" aria-label="Agent 时间线">
+    <section className="conv-agent-timeline" aria-label={ariaLabel}>
       {renderableItems.map((entry) => {
         if (entry.kind === "function_group") {
           return (
-            <FunctionCallGroup
+            <AgentToolGroup
               key={entry.id}
               group={entry}
               outputs={outputs}
@@ -140,13 +128,14 @@ export function AgentTimeline({
             <AssistantMessage
               key={item.id}
               item={item as AssistantMessageItem}
+              artifacts={artifacts}
               onSelectArtifact={onSelectArtifact}
             />
           );
         }
         if (item.type === "function_call") {
           return (
-            <FunctionCall
+            <AgentTool
               key={item.id}
               item={item}
               output={outputs.get(item.payload.call_id)}
@@ -155,7 +144,16 @@ export function AgentTimeline({
             />
           );
         }
-        if (item.type === "plan") return <Plan key={item.id} item={item} />;
+        if (item.type === "plan") {
+          return (
+            <AgentPlan
+              key={item.id}
+              item={item}
+              artifacts={artifacts}
+              onSelectArtifact={onSelectArtifact}
+            />
+          );
+        }
         if (item.type === "approval") {
           return (
             <ApprovalAuditCard
@@ -167,7 +165,7 @@ export function AgentTimeline({
         }
         if (item.type === "question") {
           return (
-            <QuestionCard
+            <AgentQuestion
               key={item.id}
               question={item}
               submitting={resolvingQuestionId === item.id}
@@ -180,36 +178,20 @@ export function AgentTimeline({
         return null;
       })}
 
-      {run.error && (
-        <div className="conv-error-card" role="alert">
-          {preservedResults.length > 0 ? (
-            <>
-              <strong>
-                分析未完成，但已保留 {preservedResults.length} 个查询结果，可在工件区查看。
-              </strong>
-              <span>{getUserErrorMessage(run.error.message, "本次分析未完成，请重试。")}</span>
-            </>
-          ) : (
-            getUserErrorMessage(run.error.message, "本次分析未完成，请重试。")
-          )}
-        </div>
-      )}
-      {run.status === "cancelled" && (
-        <div className="conv-run-cancelled" role="status">
-          <CircleStop size={15} aria-hidden="true" />
-          <span>任务已停止</span>
-        </div>
-      )}
+      <RunOutcome
+        run={run}
+        finalAnswer={finalAnswer}
+        artifacts={artifacts}
+        onSelectArtifact={onSelectArtifact}
+      />
       {["created", "queued", "running"].includes(run.status) && !currentItem && (
-        <div className="conv-agent-working" role="status" aria-live="polite">
-          <span className="conv-agent-working-dot" aria-hidden="true" />
-          <span className="conv-agent-working-copy">
-            <strong>{workingStatus.title}</strong>
-            <span>{workingStatus.detail}</span>
-          </span>
-        </div>
+        <Alert className="conv-run-alert" role="status" aria-live="polite">
+          <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />
+          <AlertTitle>{workingStatus.title}</AlertTitle>
+          <AlertDescription>{workingStatus.detail}</AlertDescription>
+        </Alert>
       )}
-      {hasFinalAnswer && evidenceArtifacts.length > 0 && (
+      {finalAnswer && evidenceArtifacts.length > 0 && (
         <DataReferencePanel
           artifacts={evidenceArtifacts}
           onSelectArtifact={onSelectArtifact}
@@ -219,11 +201,17 @@ export function AgentTimeline({
         <div className="conv-agent-capability-artifacts">
           {capabilityArtifacts.map((artifact) => (
             <div key={artifact.id}>
-              {renderArtifact(toArtifactEnvelope(artifact), {
-                onToast: () => undefined,
-                compact: true,
-                mode: "inline",
-              })}
+              <ArtifactViewHost
+                artifact={toArtifactEnvelope(artifact)}
+                surface="inline"
+                onToast={() => undefined}
+                compact
+                resolveArtifact={(artifactId) => {
+                  const resolved = artifacts.find((candidate) => candidate.id === artifactId);
+                  return resolved ? toArtifactEnvelope(resolved) : null;
+                }}
+                openArtifact={(value) => onSelectArtifact?.(value.id)}
+              />
             </div>
           ))}
         </div>
@@ -237,24 +225,6 @@ export function AgentTimeline({
       )}
     </section>
   );
-}
-
-function toArtifactEnvelope(artifact: ConversationArtifact): ArtifactEnvelope {
-  return {
-    id: artifact.id,
-    type: artifact.type,
-    schema_version: artifact.schema_version ?? 1,
-    title: artifact.title,
-    summary: artifact.summary,
-    payload: artifact.payload as Record<string, unknown>,
-    payload_ref: artifact.payload_ref,
-    resource_refs: artifact.resource_refs,
-    provenance: artifact.provenance,
-    relations: artifact.relations,
-    status: artifact.status,
-    visibility: artifact.visibility,
-    version: artifact.version,
-  };
 }
 
 function runWorkingStatus(
@@ -283,324 +253,64 @@ function runWorkingStatus(
 
 function UserMessage({ item }: { item: UserMessageItem }) {
   return (
-    <article className="conv-message conv-message-user">
-      <div className="conv-message-body"><p>{item.payload.content}</p></div>
-    </article>
+    <Message from="user" className="conv-message">
+      <MessageContent className="conv-message-body"><p>{item.payload.content}</p></MessageContent>
+    </Message>
   );
 }
 
 function AssistantMessage({
   item,
+  artifacts,
   onSelectArtifact,
 }: {
   item: AssistantMessageItem;
+  artifacts: ConversationArtifact[];
   onSelectArtifact?: (artifactId: string) => void;
 }) {
   if (item.status === "cancelled" || !item.payload.content) return null;
-  const finalAnswer = item.payload.completion_disposition != null;
+  const renderArtifact = (artifactId: string) => {
+    const artifact = artifacts.find((candidate) => candidate.id === artifactId);
+    if (!artifact) {
+      return (
+        <Alert className="conv-run-alert" variant="destructive" role="alert">
+          <AlertTitle>嵌入工件暂不可用</AlertTitle>
+          <AlertDescription>回答保留了工件引用，但当前投影未包含该工件。</AlertDescription>
+        </Alert>
+      );
+    }
+    return (
+      <ArtifactViewHost
+        artifact={toArtifactEnvelope(artifact)}
+        surface="inline"
+        onToast={() => undefined}
+        compact
+        resolveArtifact={(candidateId) => {
+          const resolved = artifacts.find((candidate) => candidate.id === candidateId);
+          return resolved ? toArtifactEnvelope(resolved) : null;
+        }}
+        openArtifact={(value) => onSelectArtifact?.(value.id)}
+      />
+    );
+  };
   return (
-    <article
-      className="conv-agent-message conv-answer-document"
+    <Message
+      from="assistant"
+      className="conv-agent-message"
       data-streaming-reveal={item.status === "in_progress" ? "true" : undefined}
       aria-live={item.status === "in_progress" ? "polite" : undefined}
     >
-      {finalAnswer && item.payload.completion_disposition === "bounded_partial" && (
-        <div className="conv-completion-limitation" role="status">
-          <AlertTriangle size={15} aria-hidden="true" />
-          <div>
-            <strong>已完成当前可验证的分析</strong>
-            <span>{item.payload.limitation_codes.map(completionLimitationLabel).join("；")}</span>
-          </div>
-        </div>
-      )}
-      <MarkdownContent
-        content={item.payload.content}
-        citations={item.payload.evidence}
-        onCitation={onSelectArtifact}
-      />
-    </article>
+      <MessageContent className="conv-answer-document">
+        <MarkdownContent
+          content={item.payload.content}
+          citations={item.payload.evidence}
+          artifactRefs={item.payload.artifact_refs}
+          onCitation={onSelectArtifact}
+          renderArtifact={renderArtifact}
+        />
+      </MessageContent>
+    </Message>
   );
-}
-
-function FunctionCall({
-  item,
-  output,
-  runStatus,
-  onSelectArtifact,
-}: {
-  item: FunctionCallItem;
-  output?: FunctionCallOutputItem;
-  runStatus: ConversationRun["status"];
-  onSelectArtifact?: (artifactId: string) => void;
-}) {
-  if (item.payload.presentation.visibility === "developer") return null;
-  const status = output?.status || item.status;
-  const detailId = `tool-detail-${item.id}`;
-  const isCompleted = status === "completed";
-
-  return (
-    <details className={`conv-agent-tool is-${status} is-${item.payload.presentation.category}`}>
-      <summary aria-controls={detailId}>
-        <span
-          className="conv-agent-tool-kind"
-          title={toolCategoryLabel(item.payload.presentation.category)}
-          aria-hidden="true"
-        >
-          <ToolCategoryIcon category={item.payload.presentation.category} />
-        </span>
-        <span className="conv-agent-tool-copy">
-          <span className="conv-agent-tool-title">
-            <span>{item.payload.presentation.title}</span>
-            {!isCompleted && (
-              <span className={`conv-agent-tool-status is-${status}`}>
-                {toolStatusLabel(status, runStatus)}
-              </span>
-            )}
-          </span>
-        </span>
-        <ChevronRight className="conv-agent-tool-chevron" size={14} aria-hidden="true" />
-      </summary>
-      <div id={detailId} className="conv-agent-tool-detail">
-        <div className="conv-agent-tool-call">
-          <span>调用</span>
-          <code>{item.payload.name}</code>
-          {item.payload.attempt > 1 && <span>第 {item.payload.attempt} 次尝试</span>}
-          {isCompleted && (
-            <span className={`conv-agent-tool-status is-${status}`}>
-              {toolStatusLabel(status, runStatus)}
-            </span>
-          )}
-        </div>
-        {Object.keys(item.payload.arguments).length > 0 && (
-          <ToolArguments arguments={item.payload.arguments} />
-        )}
-        {output?.payload.summary && (
-          <div className="conv-agent-tool-outcome">
-            <strong>结果</strong>
-            <p>{output.payload.summary}</p>
-          </div>
-        )}
-        {(output?.payload.error_message || output?.payload.error_code) && (
-          <p className="conv-agent-tool-error" role="alert">
-            {output.payload.error_message || output.payload.error_code}
-          </p>
-        )}
-        {output?.payload.artifact_refs.length ? (
-          <div className="conv-agent-tool-artifacts">
-            {output.payload.artifact_refs.map((reference, index) => (
-              <button
-                key={reference.artifact_id}
-                type="button"
-                onClick={() => onSelectArtifact?.(reference.artifact_id)}
-              >
-                <FileOutput size={14} aria-hidden="true" />
-                <span>{reference.label || `查看结果 ${index + 1}`}</span>
-                <ArrowUpRight size={13} aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </details>
-  );
-}
-
-function FunctionCallGroup({
-  group,
-  outputs,
-  runStatus,
-  onSelectArtifact,
-}: {
-  group: {
-    id: string;
-    title: string;
-    category: FunctionCallItem["payload"]["presentation"]["category"];
-    items: FunctionCallItem[];
-  };
-  outputs: Map<string, FunctionCallOutputItem>;
-  runStatus: ConversationRun["status"];
-  onSelectArtifact?: (artifactId: string) => void;
-}) {
-  const hasInProgress = group.items.some((i) => i.status === "in_progress" || i.status === "pending");
-  const hasFailed = group.items.some((i) => (outputs.get(i.payload.call_id)?.status || i.status) === "failed");
-  const groupStatus = hasFailed ? "failed" : hasInProgress ? "in_progress" : "completed";
-  const detailId = `tool-detail-${group.id}`;
-
-  return (
-    <details className={`conv-agent-tool is-${groupStatus} is-${group.category}`}>
-      <summary aria-controls={detailId}>
-        <span
-          className="conv-agent-tool-kind"
-          title={toolCategoryLabel(group.category)}
-          aria-hidden="true"
-        >
-          <ToolCategoryIcon category={group.category} />
-        </span>
-        <span className="conv-agent-tool-copy">
-          <span className="conv-agent-tool-title">
-            <span>{group.title}</span>
-            <span className="conv-agent-tool-count">({group.items.length})</span>
-            {groupStatus !== "completed" && (
-              <span className={`conv-agent-tool-status is-${groupStatus}`}>
-                {toolStatusLabel(groupStatus, runStatus)}
-              </span>
-            )}
-          </span>
-        </span>
-        <ChevronRight className="conv-agent-tool-chevron" size={14} aria-hidden="true" />
-      </summary>
-      <div id={detailId} className="conv-agent-tool-detail conv-agent-tool-group-detail">
-        {group.items.map((item, index) => {
-          const output = outputs.get(item.payload.call_id);
-          const status = output?.status || item.status;
-          return (
-            <div key={item.id} className="conv-agent-tool-group-item">
-              <div className="conv-agent-tool-call">
-                <span>#{index + 1} 调用</span>
-                <code>{item.payload.name}</code>
-                {item.payload.attempt > 1 && <span>第 {item.payload.attempt} 次尝试</span>}
-                {status === "completed" && (
-                  <span className={`conv-agent-tool-status is-${status}`}>
-                    {toolStatusLabel(status, runStatus)}
-                  </span>
-                )}
-              </div>
-              {Object.keys(item.payload.arguments).length > 0 && (
-                <ToolArguments arguments={item.payload.arguments} />
-              )}
-              {output?.payload.summary && (
-                <div className="conv-agent-tool-outcome">
-                  <strong>结果</strong>
-                  <p>{output.payload.summary}</p>
-                </div>
-              )}
-              {(output?.payload.error_message || output?.payload.error_code) && (
-                <p className="conv-agent-tool-error" role="alert">
-                  {output.payload.error_message || output.payload.error_code}
-                </p>
-              )}
-              {output?.payload.artifact_refs.length ? (
-                <div className="conv-agent-tool-artifacts">
-                  {output.payload.artifact_refs.map((reference, refIdx) => (
-                    <button
-                      key={reference.artifact_id}
-                      type="button"
-                      onClick={() => onSelectArtifact?.(reference.artifact_id)}
-                    >
-                      <FileOutput size={14} aria-hidden="true" />
-                      <span>{reference.label || `查看结果 ${refIdx + 1}`}</span>
-                      <ArrowUpRight size={13} aria-hidden="true" />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </details>
-  );
-}
-
-function Plan({ item }: { item: PlanItem }) {
-  const completedCount = completedPlanSteps(item);
-  const totalCount = item.payload.steps.length;
-  const isFailed = item.status === "failed";
-
-  return (
-    <details className={`conv-agent-plan is-${item.status}`}>
-      <summary>
-        <span className="conv-agent-tool-kind is-plan" aria-hidden="true">
-          <ListChecks size={15} />
-        </span>
-        <span className="conv-agent-plan-copy">
-          <span className="conv-agent-plan-title">分析计划</span>
-          <span className="conv-agent-plan-progress">
-            {isFailed ? "计划已中止" : `${completedCount}/${totalCount} 阶段`}
-          </span>
-        </span>
-        <ChevronRight className="conv-agent-plan-chevron" size={14} aria-hidden="true" />
-      </summary>
-      <ol className="conv-agent-plan-steps">
-        {item.payload.steps.map((step) => (
-          <li key={step.id} className={`is-${step.status}`}>
-            <PlanStepIcon status={step.status} />
-            <span className="conv-agent-plan-step-content">
-              <span className="conv-agent-plan-step-title">{step.title}</span>
-              {step.note && <small className="conv-agent-plan-step-note">{step.note}</small>}
-            </span>
-          </li>
-        ))}
-      </ol>
-    </details>
-  );
-}
-
-function ToolCategoryIcon({
-  category,
-}: {
-  category: FunctionCallItem["payload"]["presentation"]["category"];
-}) {
-  if (category === "explore") return <Search size={14} />;
-  if (category === "query") return <Database size={14} />;
-  if (category === "visualize") return <BarChart3 size={14} />;
-  return <Settings2 size={14} />;
-}
-
-function ToolArguments({ arguments: values }: { arguments: Record<string, unknown> }) {
-  return (
-    <dl className="conv-agent-tool-arguments">
-      {Object.entries(values).map(([key, value]) => (
-        <div key={key}>
-          <dt>{key}</dt>
-          <dd>{formatArgument(value)}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function PlanStepIcon({ status }: { status: PlanItem["payload"]["steps"][number]["status"] }) {
-  if (status === "in_progress") {
-    return <Loader2 className="is-spinning" size={14} aria-label="进行中" />;
-  }
-  if (status === "completed") return <Check size={14} aria-label="已完成" />;
-  if (status === "blocked") return <AlertTriangle size={14} aria-label="受阻" />;
-  if (status === "skipped") return <X size={14} aria-label="已跳过" />;
-  return <Circle size={13} aria-label="待处理" />;
-}
-
-function toolStatusLabel(
-  status: ConversationRunItem["status"],
-  runStatus?: ConversationRun["status"],
-): string {
-  if (status === "in_progress" || status === "pending") return "运行中";
-  if (status === "failed") return "失败";
-  if (status === "cancelled" && runStatus === "failed") return "因任务失败终止";
-  if (status === "cancelled") return "已取消";
-  if (status === "waiting") return "等待授权";
-  return "已完成";
-}
-
-function toolCategoryLabel(
-  category: FunctionCallItem["payload"]["presentation"]["category"],
-): string {
-  if (category === "explore") return "探索数据";
-  if (category === "query") return "分析查询";
-  if (category === "visualize") return "生成可视化";
-  return "流程控制";
-}
-
-function formatArgument(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean" || value === null) {
-    return String(value);
-  }
-  return JSON.stringify(value, null, 2) ?? String(value);
-}
-
-function completedPlanSteps(item: PlanItem): number {
-  return item.payload.steps.filter((step) => step.status === "completed").length;
 }
 
 function activeItem(items: ConversationRunItem[]): ConversationRunItem | undefined {

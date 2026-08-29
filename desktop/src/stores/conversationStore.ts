@@ -14,6 +14,7 @@ import {
 } from "../features/conversation/conversationRepository";
 import {
   conversationStreamRuntime,
+  type ConversationStreamState,
 } from "../features/conversation/conversationStreamRuntime";
 import {
   isFollowableRun,
@@ -37,21 +38,22 @@ import type {
   ConversationSummary,
   QuestionItem,
 } from "../types/conversation";
-import type { WorkbenchReference } from "../../../sdk/frontend/index";
+import type { WorkbenchReference } from "../types/workspace";
 import {
   reduceStreamEvent,
   removeConversationState,
   upsertArtifacts,
   upsertRun,
 } from "./conversationStoreReducer";
+import { useWorkspaceStore } from "./workspaceStore";
 
 export interface ConversationState {
   summaries: ConversationSummary[];
-  activeConversationId: string | null;
   detailById: Record<string, ConversationDetail>;
   artifactsById: Record<string, ConversationArtifact>;
   liveFieldsById: Record<string, { revision: number; offset: number }>;
   streamErrorById: Record<string, string | undefined>;
+  streamStateById: Record<string, ConversationStreamState | undefined>;
 }
 
 export interface ConversationActions {
@@ -91,11 +93,11 @@ const artifactLoadRequests = new Map<string, Promise<void>>();
 
 export const useConversationStore = create<ConversationStore>()((set, get) => ({
   summaries: [],
-  activeConversationId: null,
   detailById: {},
   artifactsById: {},
   liveFieldsById: {},
   streamErrorById: {},
+  streamStateById: {},
 
   initConversations: async () => {
     set({ summaries: await listConversations() });
@@ -105,7 +107,14 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     const detail = await getConversation(conversationId);
     get().loadConversation(detail);
     const activeRun = detail.runs.findLast((run) => isFollowableRun(run.status));
-    if (activeRun) void followRun(get, conversationId, activeRun.id, detail.cursor || 0);
+    if (activeRun) {
+      void followRun(get, conversationId, activeRun.id, detail.cursor || 0);
+    } else {
+      set((state) => ({
+        streamErrorById: { ...state.streamErrorById, [conversationId]: undefined },
+        streamStateById: { ...state.streamStateById, [conversationId]: "idle" },
+      }));
+    }
     return detail;
   },
 
@@ -131,7 +140,6 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
 
   createAndOpenConversation: async (question) => {
     requireConversationLlmPayload();
-    const { useWorkspaceStore } = await import("../stores/workspaceStore");
     const projectId = useWorkspaceStore.getState().activeProjectId;
     if (!projectId) throw new Error("Please select a project first.");
     const detail = await createConversation({
@@ -156,6 +164,13 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     conversationStreamRuntime.stop(conversationId);
     await deleteConversation(conversationId);
     set((state) => removeConversationState(state, conversationId));
+    const workspace = useWorkspaceStore.getState();
+    const surface = workspace.activeProjectId
+      ? workspace.mainSurfaceByProject[workspace.activeProjectId]
+      : undefined;
+    if (surface?.kind === "conversation" && surface.conversationId === conversationId) {
+      workspace.showSmartQueryHome();
+    }
   },
 
   loadConversation: (detail) => {
@@ -165,7 +180,6 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         .map((item) => item.id),
     );
     set((state) => ({
-      activeConversationId: detail.id,
       detailById: {
         ...state.detailById,
         [detail.id]: preserveLiveProjection(
@@ -335,6 +349,12 @@ async function followRun(
           error,
           "智能分析连接异常，请刷新后重试。",
         ),
+      },
+    })),
+    onConnectionState: (connectionState) => useConversationStore.setState((state) => ({
+      streamStateById: {
+        ...state.streamStateById,
+        [conversationId]: connectionState,
       },
     })),
   });

@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApprovalItem } from "../../../types/conversation";
+import { ErrorState, LoadingState } from "../../../components/ui";
+import { getUserErrorMessage } from "../../../lib/api/client";
 import { Composer } from "./Composer";
 import { ApprovalCard } from "./ApprovalCard";
 import { ConversationHeader } from "./ConversationHeader";
+import { ConversationStreamNotice } from "./ConversationStreamNotice";
 import { MessageList } from "./MessageList";
 import { useConversationViewModel } from "./useConversationViewModel";
 import {
-  selectActiveWorkbenchReference,
+  selectActiveWorkbenchReferences,
   useWorkspaceStore,
 } from "../../../stores/workspaceStore";
 import "./conversationWorkspace.css";
+import { openArtifactDock } from "../../../stores/artifactDockStore";
 
 export function ConversationWorkspace({
   conversationId,
@@ -26,7 +30,13 @@ export function ConversationWorkspace({
     runningRun,
     openConversation,
     conversationLoadError,
+    hasOlderHistory,
+    loadOlderHistory,
+    loadingOlderHistory,
+    olderHistoryLoaded,
+    historyLoadError,
     streamError,
+    streamState,
     sendMessage,
     sending,
     sendError,
@@ -42,8 +52,9 @@ export function ConversationWorkspace({
     loadRunArtifacts,
   } = useConversationViewModel(conversationId);
   const [contentScrolled, setContentScrolled] = useState(false);
-  const reference = useWorkspaceStore(selectActiveWorkbenchReference);
-  const setWorkbenchReference = useWorkspaceStore((state) => state.setWorkbenchReference);
+  const references = useWorkspaceStore(selectActiveWorkbenchReferences);
+  const removeWorkbenchReference = useWorkspaceStore((state) => state.removeWorkbenchReference);
+  const clearWorkbenchReferences = useWorkspaceStore((state) => state.clearWorkbenchReferences);
 
   useEffect(() => {
     if (!detail && conversationId) void openConversation(conversationId);
@@ -52,14 +63,16 @@ export function ConversationWorkspace({
   const artifactRefsByRun = useMemo(() => {
     const refsByRun = new Map<string, Set<string>>();
     for (const item of items) {
-      if (
-        item.type !== "function_call_output"
-        && !(item.type === "message" && item.payload.role === "assistant")
-      ) continue;
-      if (item.payload.artifact_refs.length === 0) continue;
+      const referencedArtifactIds = item.type === "plan"
+        ? item.payload.steps.flatMap((step) => step.artifact_ids ?? [])
+        : item.type === "function_call_output"
+          || (item.type === "message" && item.payload.role === "assistant")
+          ? item.payload.artifact_refs.map((reference) => reference.artifact_id)
+          : [];
+      if (referencedArtifactIds.length === 0) continue;
       const artifactIds = refsByRun.get(item.run_id) ?? new Set<string>();
-      for (const artifactRef of item.payload.artifact_refs) {
-        artifactIds.add(artifactRef.artifact_id);
+      for (const artifactId of referencedArtifactIds) {
+        artifactIds.add(artifactId);
       }
       refsByRun.set(item.run_id, artifactIds);
     }
@@ -76,16 +89,23 @@ export function ConversationWorkspace({
 
   const handleSelectArtifact = useCallback((artifactId: string) => {
     void selectArtifact(conversationId, artifactId);
-  }, [conversationId, selectArtifact]);
+    const artifact = artifacts.find((candidate) => candidate.id === artifactId);
+    if (artifact) openArtifactDock(artifact);
+  }, [artifacts, conversationId, selectArtifact]);
 
   if (!detail) {
     return (
-      <div className="conv-workspace" role={conversationLoadError ? "alert" : "status"}>
-        <span>{conversationLoadError || "正在载入对话…"}</span>
-        {conversationLoadError && (
-          <button type="button" onClick={() => void openConversation(conversationId)}>
-            重新载入
-          </button>
+      <div className="conv-workspace">
+        {conversationLoadError ? (
+          <ErrorState
+            title="对话载入失败"
+            description={getUserErrorMessage(conversationLoadError, "对话载入失败，请重试。")}
+            error={conversationLoadError}
+            onRetry={() => void openConversation(conversationId)}
+            retryLabel="重新载入"
+          />
+        ) : (
+          <LoadingState label="正在载入对话" />
         )}
       </div>
     );
@@ -101,10 +121,20 @@ export function ConversationWorkspace({
       data-content-scrolled={contentScrolled ? "true" : undefined}
     >
       <ConversationHeader detail={detail} />
+      <ConversationStreamNotice
+        state={streamState}
+        error={streamError}
+        onRefresh={() => openConversation(conversationId)}
+      />
       <MessageList
         items={items}
         runs={runs}
         artifacts={artifacts}
+        hasOlderHistory={hasOlderHistory}
+        loadingOlderHistory={loadingOlderHistory}
+        olderHistoryLoaded={olderHistoryLoaded}
+        historyLoadError={historyLoadError}
+        onLoadOlderHistory={loadOlderHistory}
         onOpenSqlConsole={onOpenSqlConsole}
         onSelectArtifact={handleSelectArtifact}
         resolvingQuestionId={resolvingQuestionId}
@@ -127,9 +157,10 @@ export function ConversationWorkspace({
         running={Boolean(runningRun)}
         submitting={sending}
         cancelling={cancelling}
-        error={sendError || streamError}
-        reference={reference}
-        onClearReference={() => setWorkbenchReference(null)}
+        error={sendError}
+        references={references}
+        onRemoveReference={removeWorkbenchReference}
+        onClearReferences={clearWorkbenchReferences}
         onSend={async (text, mode, references) => {
           await sendMessage(
             conversationId,
