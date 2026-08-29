@@ -42,7 +42,10 @@ export class DlcAssetAuthority {
     this.#projection = parseProjection(projection);
   }
 
-  async synchronize(config: EngineConfig, rendererOrigin: string): Promise<void> {
+  async synchronize(
+    config: EngineConfig,
+    rendererOrigin: string,
+  ): Promise<RuntimeDlcActivationProjection> {
     const epoch = ++this.#epoch;
     this.#projection = null;
     const response = await fetch(`http://127.0.0.1:${config.port}/api/v1/dlcs/activation`, {
@@ -53,6 +56,7 @@ export class DlcAssetAuthority {
     if (!response.ok) throw new Error(`DLC activation projection returned HTTP ${response.status}`);
     const projection = parseProjection(JSON.parse(new TextDecoder().decode(bytes)));
     if (epoch === this.#epoch) this.#projection = projection;
+    return projection;
   }
 }
 

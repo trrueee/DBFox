@@ -27,6 +27,9 @@ const rendererUrl = app.isPackaged
 // serializes our privileged standard scheme as this concrete origin.
 const rendererOrigin = app.isPackaged ? "dbfox-app://localhost" : rendererUrl.origin;
 const smokeMode = process.env.DBFOX_ELECTRON_SMOKE === "1";
+const developmentParentManaged = !app.isPackaged
+  && process.env.DBFOX_ELECTRON_DEV_PARENT === "1"
+  && typeof process.send === "function";
 const smokeRuntimeRoot = smokeMode && process.env.DBFOX_RUNTIME_DIR
   ? resolve(process.env.DBFOX_RUNTIME_DIR)
   : null;
@@ -59,9 +62,41 @@ let appUpdates: AppUpdateService | null = null;
 let shutdownStarted = false;
 let shutdownComplete = false;
 let updateInstallPrepared = false;
+let developmentRendererGateSettled = !developmentParentManaged;
+let releaseDevelopmentRendererGate: ((ready: boolean) => void) | null = null;
+const developmentRendererGate = developmentParentManaged
+  ? new Promise<boolean>((resolveGate) => {
+    releaseDevelopmentRendererGate = resolveGate;
+  })
+  : Promise.resolve(true);
 const pickedFiles = new Map<string, { sizeBytes: number; modifiedAtUnix: number; maxBytes: number }>();
 const MAX_PICKED_FILE_BYTES = 128 * 1024 * 1024;
 const MAX_ENGINE_STDERR_BYTES = 2 * 1024 * 1024;
+
+function settleDevelopmentRendererGate(ready: boolean): void {
+  if (developmentRendererGateSettled) return;
+  developmentRendererGateSettled = true;
+  releaseDevelopmentRendererGate?.(ready);
+  releaseDevelopmentRendererGate = null;
+}
+
+function requestDevelopmentShutdown(): void {
+  settleDevelopmentRendererGate(false);
+  app.quit();
+}
+
+if (developmentParentManaged) {
+  process.on("message", (message: unknown) => {
+    if (message === null || typeof message !== "object") return;
+    const type = (message as { type?: unknown }).type;
+    if (type === "dbfox-electron-renderer-ready") {
+      settleDevelopmentRendererGate(true);
+    } else if (type === "dbfox-electron-shutdown") {
+      requestDevelopmentShutdown();
+    }
+  });
+  process.once("disconnect", requestDevelopmentShutdown);
+}
 
 function recordEngineStderr(chunk: Buffer): void {
   const path = engineStderrLogPath;
@@ -290,7 +325,14 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
-if (!app.requestSingleInstanceLock()) {
+const primaryInstance = app.requestSingleInstanceLock();
+if (developmentParentManaged) {
+  process.send?.({
+    type: "dbfox-electron-instance",
+    primary: primaryInstance,
+  });
+}
+if (!primaryInstance) {
   app.quit();
 } else {
   app.on("second-instance", () => {
@@ -299,6 +341,7 @@ if (!app.requestSingleInstanceLock()) {
     mainWindow.focus();
   });
   app.whenReady().then(async () => {
+    if (!await developmentRendererGate) return;
     app.setAppUserModelId("com.dbfox.app");
     logDirectory = app.getPath("logs");
     await mkdir(logDirectory, { recursive: true, mode: 0o700 });
@@ -330,27 +373,89 @@ if (!app.requestSingleInstanceLock()) {
     await supervisor.start();
     if (smokeMode) {
       await waitForRendererLoad(mainWindow);
-      const rendererProof = await mainWindow.webContents.executeJavaScript(
-        `(async () => ({
-          runtime: window.dbfoxDesktop?.runtime,
-          generation: (await window.dbfoxDesktop?.engine.getConfig())?.generation,
-          inactiveDlcAssetStatus: await fetch(
-            "dlc-asset://localhost/${"0".repeat(64)}/index.js"
-          ).then((response) => response.status)
-        }))()`,
-        true,
-      ) as { runtime?: unknown; generation?: unknown; inactiveDlcAssetStatus?: unknown };
-      if (rendererProof.runtime !== "electron" || rendererProof.generation !== 1
-        || rendererProof.inactiveDlcAssetStatus !== 403) {
-        throw new Error("Electron preload/asset boundary did not expose the expected fail-closed contract");
-      }
       const config = supervisor.config();
+      const activation = await dlcAssetAuthority.synchronize(config, rendererOrigin);
+      const frontendTargets = activation.active_dlcs
+        .filter((item) => item.frontend_entrypoint?.trim())
+        .map((item) => ({
+          dlcId: item.dlc_id,
+          assetUrl: `dlc-asset://localhost/${item.package_digest.replace(/^sha256[:-]/i, "")}/frontend/${item.frontend_entrypoint?.replace(/^\/+/, "").replace(/^frontend\//, "")}`,
+        }));
+      const requiredSystemDlcs = [
+        "dbfox.data",
+        "dbfox.music",
+        "dbfox.visualization",
+        "dbfox.workspace",
+      ];
+      if (!requiredSystemDlcs.every((dlcId) => frontendTargets.some((item) => item.dlcId === dlcId))) {
+        throw new Error("Packaged runtime did not activate every required system DLC frontend");
+      }
+      const rendererProof = await mainWindow.webContents.executeJavaScript(
+        `(async () => {
+          const targets = ${JSON.stringify(frontendTargets)};
+          const expectedIds = new Set(targets.map((item) => item.dlcId));
+          const deadline = Date.now() + 10000;
+          let loadedLinks = [];
+          do {
+            loadedLinks = [...document.querySelectorAll("link[data-dbfox-dlc]")]
+              .filter((link) => expectedIds.has(link.dataset.dbfoxDlc));
+            if (loadedLinks.length === expectedIds.size) break;
+            await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+          } while (Date.now() < deadline);
+          const activeDlcAssetStatuses = Object.fromEntries(await Promise.all(
+            targets.map(async (item) => [item.dlcId, await fetch(item.assetUrl).then((response) => response.status)])
+          ));
+          const stylesheetStatuses = Object.fromEntries(await Promise.all(
+            loadedLinks.map(async (link) => [
+              link.dataset.dbfoxDlc,
+              await fetch(link.href).then((response) => response.status)
+            ])
+          ));
+          return {
+            runtime: window.dbfoxDesktop?.runtime,
+            generation: (await window.dbfoxDesktop?.engine.getConfig())?.generation,
+            inactiveDlcAssetStatus: await fetch(
+              "dlc-asset://localhost/${"0".repeat(64)}/index.js"
+            ).then((response) => response.status),
+            extensionHostVersion: window.__DBFOX_EXTENSION_HOST__?.version,
+            activeDlcIds: targets.map((item) => item.dlcId).sort(),
+            loadedFrontendDlcIds: loadedLinks.map((link) => link.dataset.dbfoxDlc).sort(),
+            activeDlcAssetStatuses,
+            stylesheetStatuses
+          };
+        })()`,
+        true,
+      ) as {
+        runtime?: unknown;
+        generation?: unknown;
+        inactiveDlcAssetStatus?: unknown;
+        extensionHostVersion?: unknown;
+        activeDlcIds?: unknown;
+        loadedFrontendDlcIds?: unknown;
+        activeDlcAssetStatuses?: unknown;
+        stylesheetStatuses?: unknown;
+      };
+      const expectedDlcIds = frontendTargets.map((item) => item.dlcId).sort();
+      if (rendererProof.runtime !== "electron" || rendererProof.generation !== 1
+        || rendererProof.inactiveDlcAssetStatus !== 403
+        || rendererProof.extensionHostVersion !== "1.0.0"
+        || JSON.stringify(rendererProof.activeDlcIds) !== JSON.stringify(expectedDlcIds)
+        || JSON.stringify(rendererProof.loadedFrontendDlcIds) !== JSON.stringify(expectedDlcIds)
+        || !hasOnlySuccessfulStatuses(rendererProof.activeDlcAssetStatuses, expectedDlcIds)
+        || !hasOnlySuccessfulStatuses(rendererProof.stylesheetStatuses, expectedDlcIds)) {
+        throw new Error("Electron preload/DLC runtime boundary did not expose the expected fail-closed contract");
+      }
       const smokeProof = {
         marker: "DBFOX_ELECTRON_HOST_READY",
         runtime: rendererProof.runtime,
         generation: config.generation,
         protocolVersion: config.protocolVersion,
         inactiveDlcAssetStatus: rendererProof.inactiveDlcAssetStatus,
+        extensionHostVersion: rendererProof.extensionHostVersion,
+        activeDlcIds: rendererProof.activeDlcIds,
+        loadedFrontendDlcIds: rendererProof.loadedFrontendDlcIds,
+        activeDlcAssetStatuses: rendererProof.activeDlcAssetStatuses,
+        stylesheetStatuses: rendererProof.stylesheetStatuses,
         packaged: app.isPackaged,
       };
       console.log(JSON.stringify(smokeProof));
@@ -368,6 +473,13 @@ if (!app.requestSingleInstanceLock()) {
     console.error("[Electron Host] Startup failed", error);
     app.quit();
   });
+}
+
+function hasOnlySuccessfulStatuses(value: unknown, expectedIds: readonly string[]): boolean {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const entries = Object.entries(value as Record<string, unknown>);
+  return entries.length === expectedIds.length
+    && expectedIds.every((id) => (value as Record<string, unknown>)[id] === 200);
 }
 
 app.on("before-quit", (event) => {

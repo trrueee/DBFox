@@ -7,6 +7,7 @@ const execFileAsync = promisify(execFile);
 const runtimeRoot = await mkdtemp(join(process.cwd(), ".electron-packaged-smoke-"));
 const executable = await findExecutable();
 const resultPath = join(runtimeRoot, "electron-smoke-result.json");
+const requiredSystemDlcIds = ["dbfox.data", "dbfox.music", "dbfox.workspace"];
 let capturedOutput = "";
 let child;
 let succeeded = false;
@@ -43,6 +44,11 @@ try {
     || proof.runtime !== "electron"
     || proof.generation !== 1
     || proof.inactiveDlcAssetStatus !== 403
+    || proof.extensionHostVersion !== "1.0.0"
+    || !sameValues(proof.activeDlcIds, requiredSystemDlcIds)
+    || !sameValues(proof.loadedFrontendDlcIds, requiredSystemDlcIds)
+    || !successfulStatuses(proof.activeDlcAssetStatuses, requiredSystemDlcIds)
+    || !successfulStatuses(proof.stylesheetStatuses, requiredSystemDlcIds)
     || proof.packaged !== true) {
     throw new Error(`Unexpected packaged Electron proof: ${JSON.stringify(proof)}`);
   }
@@ -62,6 +68,19 @@ try {
       retryDelay: 250,
     });
   }
+}
+
+function sameValues(actual, expected) {
+  return Array.isArray(actual)
+    && JSON.stringify([...actual].sort()) === JSON.stringify([...expected].sort());
+}
+
+function successfulStatuses(value, expectedIds) {
+  return value !== null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.keys(value).length === expectedIds.length
+    && expectedIds.every((id) => value[id] === 200);
 }
 
 async function findExecutable() {

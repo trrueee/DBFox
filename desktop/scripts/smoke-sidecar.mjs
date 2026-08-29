@@ -859,12 +859,16 @@ async function verifyFrozenDataContract(databasePath) {
   if (!sessionId || !first.result_artifact_id || !first.run_id) {
     throw new Error("Frozen console query omitted its durable Session/Run/Artifact chain");
   }
-  const page = await apiJson(`/api/v1/artifacts/${first.result_artifact_id}/page`, {
+  const page = await apiJson(`/api/v1/artifacts/${first.result_artifact_id}/representations/dbfox.dataframe.v1/read`, {
     method: "POST",
-    body: { page: 1, pageSize: 10, countMode: "exact" },
+    body: {
+      operation: "page",
+      parameters: { page: 1, page_size: 10, count_mode: "exact" },
+    },
   });
-  if (page.rowCount !== 2 || page.rows?.[0]?.name !== "alpha") {
-    throw new Error(`Frozen result artifact could not be replayed: ${JSON.stringify(page)}`);
+  const nameField = page.payload?.fields?.find((field) => field.name === "name");
+  if (page.payload?.row_count !== 2 || nameField?.values?.[0] !== "alpha") {
+    throw new Error(`Frozen Result representation could not be read: ${JSON.stringify(page)}`);
   }
 
   const second = await apiJson(

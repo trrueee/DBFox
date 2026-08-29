@@ -288,6 +288,35 @@ describe("local engine startup coordination", () => {
     expect(invokeMock).toHaveBeenCalledTimes(1);
   });
 
+  it("does not refresh or replay a non-idempotent request rejected by a rotated token", async () => {
+    enableDesktopRuntime();
+    invokeMock.mockResolvedValueOnce(engineConfig(18731, "stale-write-token", 12));
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      type: "urn:dbfox:problem:unauthorized-engine-access",
+      title: "Unauthorized",
+      status: 401,
+      detail: "The local engine generation changed while the command was in flight.",
+      instance: "/api/v1/conversations",
+      code: "UNAUTHORIZED_ENGINE_ACCESS",
+      request_id: "request-write-1",
+    }), {
+      status: 401,
+      headers: { "Content-Type": "application/problem+json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await initEngineConfig();
+    const response = await fetchEnginePath("/conversations", {
+      method: "POST",
+      body: JSON.stringify({ title: "do not replay after token rotation" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(response.status).toBe(401);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+  });
+
   it("parses Problem Details as the only formal error contract", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(JSON.stringify({

@@ -1,8 +1,9 @@
 /**
  * Position short-lived overlays without a style attribute.  The values are
  * normalized before being written to a constructable stylesheet, so event
- * data cannot become arbitrary CSS.  This keeps a strict `style-src-attr
- * 'none'` CSP while retaining pixel-accurate context menus.
+ * data cannot become arbitrary CSS. This keeps application positioning on a
+ * reviewed CSSOM path instead of expanding the audited renderer exception for
+ * style attributes.
  */
 const MAX_VIEWPORT_COORDINATE = 100_000;
 

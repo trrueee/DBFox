@@ -1,7 +1,7 @@
 /**
  * Publish layout geometry through a constructable stylesheet.
  *
- * DBFox rejects style attributes (`style-src-attr 'none'`). Layouts that need
+ * DBFox application code rejects ad-hoc style attributes. Layouts that need
  * imperative pixel geometry use this approved boundary: a CSSOM sheet whose
  * selectors and numeric values are fully normalized here.
  */
@@ -13,6 +13,8 @@ export interface VirtualLayoutItem {
   index: number;
   start: number;
 }
+
+export type VirtualLayoutKind = "conversation" | "tree";
 
 function normalizedToken(value: string): string {
   const token = value.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
@@ -61,6 +63,7 @@ export function setCspVirtualLayout(
   rawToken: string,
   totalSize: number,
   items: readonly VirtualLayoutItem[],
+  kind: VirtualLayoutKind = "conversation",
 ): void {
   const sheet = getVirtualLayoutSheet();
   if (!sheet) return;
@@ -68,15 +71,14 @@ export function setCspVirtualLayout(
   const token = normalizedToken(rawToken);
   const marker = layoutMarker(token);
   deleteMarkerRules(sheet, layoutMarker(token));
-  sheet.insertRule(
-    `.conv-message-column${marker}{height:${normalizedPixel(totalSize)}px;}`,
-    sheet.cssRules.length,
-  );
+  const containerSelector = kind === "tree" ? ".dbfox-tree__virtual-canvas" : ".conv-message-column";
+  const rowSelector = kind === "tree" ? ".dbfox-tree__virtual-row" : ".conv-message-virtual-row";
+  sheet.insertRule(`${containerSelector}${marker}{height:${normalizedPixel(totalSize)}px;}`, sheet.cssRules.length);
   for (const item of items) {
     const index = normalizedIndex(item.index);
     const start = normalizedPixel(item.start);
     sheet.insertRule(
-      `.conv-message-virtual-row${marker}[data-index="${index}"]{transform:translateY(${start}px);}`,
+      `${rowSelector}${marker}[data-index="${index}"]{transform:translateY(${start}px);}`,
       sheet.cssRules.length,
     );
   }

@@ -1,0 +1,3 @@
+# Historical design/review material is intentionally outside default code search.
+# Search it explicitly with: rg --no-ignore <pattern> docs/archive
+docs/archive/**

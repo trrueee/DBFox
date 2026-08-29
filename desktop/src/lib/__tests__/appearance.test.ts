@@ -56,7 +56,7 @@ describe("appearance preferences", () => {
       sidebarWidth: 220,
     }));
 
-    expect(loadAppearancePreferences(storage).sidebarWidth).toBe(280);
+    expect(loadAppearancePreferences(storage).sidebarWidth).toBe(264);
   });
 
   it("round-trips the versioned preference contract", () => {

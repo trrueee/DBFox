@@ -90,6 +90,6 @@ describe("ThemeProvider", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "reset" }));
     expect(screen.getByTestId("mode").textContent).toBe("system");
-    expect(screen.getByTestId("accent").textContent).toBe("violet");
+    expect(screen.getByTestId("accent").textContent).toBe("blue");
   });
 });

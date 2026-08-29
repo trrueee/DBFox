@@ -12,7 +12,11 @@ export const CONTENT_SECURITY_POLICY = [
   "frame-ancestors 'none'",
   "script-src 'self' dlc-asset:",
   "script-src-attr 'none'",
-  "style-src 'self' dlc-asset: 'unsafe-inline'",
+  "style-src 'self' dlc-asset:",
+  "style-src-elem 'self' dlc-asset:",
+  // Vega's audited Canvas/SVG renderers set bounded presentation attributes.
+  // Model-authored CSS and inline <style> elements remain forbidden.
+  "style-src-attr 'unsafe-inline'",
   "connect-src 'self' http://127.0.0.1:* dlc-asset:",
   "img-src 'self' data: https: dlc-asset:",
   "font-src 'self' dlc-asset:",

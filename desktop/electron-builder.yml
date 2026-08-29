@@ -30,6 +30,8 @@ extraResources:
       - system-dlcs.json
       - dbfox.data.dbfox-dlc
       - dbfox.workspace.dbfox-dlc
+      - dbfox.music.dbfox-dlc
+      - dbfox.visualization.dbfox-dlc
 
 artifactName: DBFox-${version}-${os}-${arch}.${ext}
 
