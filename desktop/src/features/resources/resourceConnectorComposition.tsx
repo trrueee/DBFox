@@ -1,8 +1,6 @@
 import type { ResourceConnectorContribution } from "./types";
 import { useDlcStore } from "../dlc/extensionStore";
 
-const DATA_CONNECTOR_ID = "dbfox.data";
-
 export function productResourceConnectors(
   _toast: (message: string) => void,
   extraConnectors?: readonly ResourceConnectorContribution[],
@@ -13,5 +11,3 @@ export function productResourceConnectors(
 export function ResourceConnectorDialog() {
   return null;
 }
-
-export { DATA_CONNECTOR_ID };

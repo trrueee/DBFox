@@ -1,5 +1,5 @@
 import type { ConversationArtifact } from "../../../types/conversation";
-import { isDataFrameResultArtifact } from "./conversationArtifactSelectors";
+import { hasDataFramePayload } from "./conversationArtifactSelectors";
 
 export function buildDataReferences(artifacts: ConversationArtifact[]): DataReference[] {
   const references: DataReference[] = [];
@@ -9,7 +9,7 @@ export function buildDataReferences(artifacts: ConversationArtifact[]): DataRefe
     if (!seen.has(key)) { seen.add(key); references.push(reference); }
   };
   for (const artifact of artifacts) {
-    if (isDataFrameResultArtifact(artifact)) {
+    if (hasDataFramePayload(artifact)) {
       const rowCount = numberValue((artifact.payload as Record<string, unknown>).rowCount);
       add({ type: "result", artifactId: artifact.id, rowCount, label: artifact.title || "结果表" });
     }

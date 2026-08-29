@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ConnectorContext, ConnectorProjectResource } from "../../../../../sdk/frontend/index";
+import type { ConnectorProjectResource } from "../../../../../sdk/frontend/index";
 import { ProjectOverview } from "../ProjectOverview";
 
 vi.mock("../useProjectState", () => ({
@@ -34,7 +34,7 @@ describe("ProjectOverview resource inventory", () => {
     const entries: ConnectorProjectResource[] = [
       { kind: "dbfox.data.database", id: "db-1", name: "CreatorHub 主库", detail: "PostgreSQL · creatorhub · 主连接" },
     ];
-    const listResources = vi.fn(async (_context: ConnectorContext) => entries);
+    const listResources = vi.fn(async () => entries);
     const removeResource = vi.fn(async () => undefined);
     registerTestConnector({ id: "dbfox.data", listResources, removeResource });
 

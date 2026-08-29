@@ -60,6 +60,7 @@ Data, Workspace and Music are verified, default-enabled System DLCs; GitHub rema
 | **Artifact Contract** | Backend (`engine/agent/artifact.py`) | Core/Data/Workspace contracts | `host.artifacts.register(...)` |
 | **Operations / API** | Backend (`engine/api/`) | Static Core product routers | `POST /api/v1/dlcs/{dlc_id}/operations/{op}` |
 | **Resource Connector** | Frontend (`desktop/src/features/resources/`) | `productResourceConnectors()` | `host.connectors.register(...)`；可选 `listResources` / `removeResource` 驱动项目管理页资源清单（宿主包装并隔离错误） |
+| **Evidence Semantic** | Backend artifact projection | `artifact.visibility = "primary"`（由产出 DLC 在创建工件时声明） | Harness 的时间线/结果保留仅按 visibility 与载荷形状（`rowCount`）过滤，不枚举能力私有类型名 |
 | **Workbench Reference** | Frontend Host | `authority + object + locator + artifact` | `DockRenderContext.onAsk(...)`；Backend 从 authority 派生并校验本条 Input 的 initial explicit authority |
 | **Dock Views** | Frontend (`desktop/src/features/dock/`) | `productDockViews()` | `host.dockViews.register(...)` |
 | **Artifact Renderers** | Frontend (`desktop/src/features/workspace/artifacts/`) | `productArtifactRenderers` | `host.artifactRenderers.register(...)` |

@@ -20,7 +20,6 @@ import { toArtifactEnvelope } from "../../workspace/artifacts/artifactEnvelope";
 import { ApprovalAuditCard } from "./ApprovalCard";
 import {
   isPrimaryConversationArtifact,
-  isDataFrameResultArtifact,
 } from "./conversationArtifactSelectors";
 import { DataReferencePanel } from "./DataReferencePanel";
 import { RunOutcome } from "./RunOutcome";
@@ -87,8 +86,8 @@ export function AgentTimeline({
     && artifact.type.includes(".")
     && !embeddedArtifactIds.has(artifact.id)
   ));
-  const preservedResults = primaryArtifacts.filter(
-    (artifact) => artifact.status === "completed" && isDataFrameResultArtifact(artifact),
+  const preservedArtifacts = primaryArtifacts.filter(
+    (artifact) => artifact.status === "completed",
   );
   const evidenceArtifactIds = new Set(
     items
@@ -216,9 +215,9 @@ export function AgentTimeline({
           ))}
         </div>
       )}
-      {evidenceArtifacts.length === 0 && preservedResults.length > 0 && (
+      {evidenceArtifacts.length === 0 && preservedArtifacts.length > 0 && (
         <DataReferencePanel
-          artifacts={preservedResults}
+          artifacts={preservedArtifacts}
           kind="saved"
           onSelectArtifact={onSelectArtifact}
         />

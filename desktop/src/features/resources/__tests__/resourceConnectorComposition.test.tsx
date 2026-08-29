@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ResourceConnectorContribution } from "../types";
-import {
-  DATA_CONNECTOR_ID,
-  productResourceConnectors,
-} from "../resourceConnectorComposition";
+import { productResourceConnectors } from "../resourceConnectorComposition";
 
 function connector(id: string): ResourceConnectorContribution {
   return {
@@ -15,13 +12,13 @@ function connector(id: string): ResourceConnectorContribution {
 }
 
 describe("productResourceConnectors", () => {
-  it("uses the signed Data DLC connector as the single Data resource tree", () => {
-    const contributions = [connector("acme.notes"), connector(DATA_CONNECTOR_ID)];
+  it("passes the signed DLC connectors through as the resource composition", () => {
+    const contributions = [connector("dbfox.data"), connector("acme.notes")];
 
     const result = productResourceConnectors(vi.fn(), contributions);
 
     expect(result).toBe(contributions);
-    expect(result.filter((item) => item.id === DATA_CONNECTOR_ID)).toHaveLength(1);
+    expect(result.filter((item) => item.id === "dbfox.data")).toHaveLength(1);
   });
 
   it("does not invent a source fallback when the signed Data DLC is unavailable", () => {
