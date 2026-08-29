@@ -4,6 +4,7 @@ import json
 
 from sqlalchemy.orm import sessionmaker
 
+from engine.agent.completion import CompletionGate
 from engine.agent.events import LiveStreamHub
 from engine.agent.loop import RunLoop
 from engine.agent.repositories.session import SessionRepository
@@ -15,6 +16,11 @@ from engine.models import (
     AgentRun,
     AgentSession,
     AgentToolInvocation,
+)
+from engine.runtime_composition import (
+    build_default_completion_policy,
+    build_product_tool_registry,
+    default_context_contributors,
 )
 
 
@@ -197,6 +203,9 @@ def test_invalid_tool_arguments_have_a_distinct_durable_classification(
     RunLoop(
         session_factory=factory,
         model_factory=model_factory,
+        registry=build_product_tool_registry(),
+        context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
         live_stream=LiveStreamHub(),
     ).execute(lease=lease, run_id=admission.run_id)
 
@@ -259,6 +268,9 @@ def test_control_command_domain_input_error_does_not_fail_the_run(
     RunLoop(
         session_factory=factory,
         model_factory=model_factory,
+        registry=build_product_tool_registry(),
+        context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
         live_stream=LiveStreamHub(),
     ).execute(lease=lease, run_id=admission.run_id)
 

@@ -12,6 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.agent.control import LeaseAwareRunControl
+from engine.agent.artifact import (
+    Artifact,
+    ArtifactPayloadContractResolver,
+    ArtifactRelationType,
+)
 from engine.agent.definition import AgentDefinition
 from engine.agent.execution_authority import (
     ApprovalAuthorityError,
@@ -20,7 +25,6 @@ from engine.agent.execution_authority import (
 from engine.agent.observation import (
     Observation,
     ObservationStatus,
-    serialize_model_observation,
 )
 from engine.agent.repositories.approval import ApprovalRepository
 from engine.agent.repositories.artifact import (
@@ -37,10 +41,19 @@ from engine.agent.resource_refs import (
 )
 from engine.agent.session import SessionLease
 from engine.agent.tool import ToolInvocation
+from engine.agent.tool_settlement import ToolSettlement, TransientToolOutput
 from engine.agent.turn import ModelToolCall
 from engine.agent.working_state import RunWorkingStateAssembler
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.errors import ToolInputError
+from engine.representation import (
+    ArtifactRepresentationContext,
+    ArtifactRepresentationError,
+    ArtifactRepresentationProvider,
+    ArtifactRepresentationRequest,
+    ArtifactRepresentationResult,
+    execute_artifact_representation,
+)
 from engine.models import AgentApproval, AgentRun, AgentSession, AgentToolInvocation, AgentTurn
 from engine.policy.authority import ExecutionAuthority
 from engine.policy.gate import PolicyGate
@@ -70,13 +83,17 @@ from engine.tools.runtime.base import (
     ToolRecoveryPolicy,
 )
 from engine.tools.runtime.executor import ToolExecutionControl
-from engine.tools.runtime.observation import ToolObservationProjection
 from engine.tools.runtime.result import ToolResult
+
+
+ArtifactRepresentationProviderResolver = Callable[
+    [str, str],
+    ArtifactRepresentationProvider | None,
+]
 
 
 logger = logging.getLogger("dbfox.agent.tool_dispatcher")
 _OUTPUT_CONTRACT_ERROR = "Tool output did not match its declared contract."
-_OUTPUT_CONTRACT_SUMMARY = "工具输出未通过合同校验。"
 
 
 class ToolRequest(BaseModel):
@@ -94,14 +111,6 @@ class ToolDispatchOutcome(StrEnum):
     SETTLED = "settled"
     WAITING_APPROVAL = "waiting_approval"
     WAITING_INPUT = "waiting_input"
-
-
-@dataclass(frozen=True)
-class TransientToolOutput:
-    """Provider input retained only in RunLoop memory for the current Run."""
-
-    call_id: str
-    output: str
 
 
 @dataclass(frozen=True)
@@ -157,13 +166,30 @@ class ToolDispatcher:
         isolated_worker_command: tuple[str, ...] | None = None,
         resource_resolver: CompositeResourceResolver | None = None,
         resource_providers: tuple[ProjectResourceProvider, ...] = (),
+        artifact_representation_provider_resolver: (
+            ArtifactRepresentationProviderResolver | None
+        ) = None,
+        artifact_payload_contract_resolver: (
+            ArtifactPayloadContractResolver | None
+        ) = None,
+        runtime_snapshot_id: str = "",
     ) -> None:
         self.session_factory = session_factory
         self.registry = registry
         self.definition = definition
         self.executor = executor
-        self.resource_resolver = resource_resolver
+        self.resource_resolver = (
+            resource_resolver or CompositeResourceResolver().freeze()
+        )
         self.resource_providers = resource_providers
+        self.artifact_representation_provider_resolver = (
+            artifact_representation_provider_resolver
+        )
+        self.runtime_snapshot_id = str(runtime_snapshot_id)
+        self.settlement = ToolSettlement(
+            session_factory=self.session_factory,
+            artifact_payload_contract_resolver=artifact_payload_contract_resolver,
+        )
         self.isolated_runner = IsolatedProcessAttemptRunner(isolated_worker_command)
         self.attempt_handler = ToolAttemptHandler(
             registry=registry,
@@ -510,7 +536,7 @@ class ToolDispatcher:
     ) -> TransientToolOutput:
         """Persist a completed attempt. Callers control ordering across a batch."""
         try:
-            provider_output = self._settle_execution_result(
+            provider_output = self.settlement.settle(
                 lease,
                 invocation,
                 tool=completed.tool,
@@ -528,7 +554,7 @@ class ToolDispatcher:
                     "error_type": type(exc).__name__,
                 },
             )
-            provider_output = self._settle_execution_result(
+            provider_output = self.settlement.settle(
                 lease,
                 invocation,
                 tool=completed.tool,
@@ -650,18 +676,11 @@ class ToolDispatcher:
         request = prepared.request
         execution_authority = prepared.execution_authority
 
-        active_snap_id = ""
-        try:
-            from engine.runtime_composition import get_active_runtime_snapshot
-            active_snap_id = get_active_runtime_snapshot().snapshot_id
-        except Exception:
-            pass
-
         frozen_impl = (
             ToolImplementationIdentity(
                 owner_id=invocation.owner_id,
                 package_digest=invocation.package_digest,
-                runtime_snapshot_id=active_snap_id,
+                runtime_snapshot_id=self.runtime_snapshot_id,
             )
             if invocation.owner_id is not None
             else None
@@ -710,6 +729,60 @@ class ToolDispatcher:
                     tool,
                     self.resource_resolver,
                 )
+                artifacts = ArtifactRepository(leaf_db)
+
+                def load_artifact(artifact_id: str) -> Artifact | None:
+                    return artifacts.available_artifact(
+                        session_id=request.session_id,
+                        current_run_id=request.run_id,
+                        artifact_id=artifact_id,
+                    )
+
+                def load_artifact_relations(
+                    artifact_id: str,
+                    relation: ArtifactRelationType,
+                ) -> tuple[Artifact, ...]:
+                    return artifacts.artifacts_relating_to_for_run(
+                        session_id=request.session_id,
+                        run_id=request.run_id,
+                        artifact_id=artifact_id,
+                        relation=relation,
+                    )
+
+                def read_artifact_representation(
+                    artifact_id: str,
+                    representation_type: str,
+                    representation_request: ArtifactRepresentationRequest,
+                ) -> ArtifactRepresentationResult:
+                    artifact = load_artifact(artifact_id)
+                    resolver = self.artifact_representation_provider_resolver
+                    if artifact is None:
+                        raise ArtifactRepresentationError(
+                            "NOT_FOUND",
+                            "The requested Artifact is unavailable in this Run.",
+                            status_code=404,
+                        )
+                    provider = resolver(artifact.type, representation_type) if resolver else None
+                    if provider is None:
+                        raise ArtifactRepresentationError(
+                            "UNSUPPORTED_REPRESENTATION",
+                            "The Artifact does not provide the requested representation.",
+                            status_code=409,
+                        )
+                    _, result = execute_artifact_representation(
+                        artifact=artifact,
+                        representation_type=representation_type,
+                        request=representation_request,
+                        provider=provider,
+                        context=ArtifactRepresentationContext(
+                            artifact_loader=load_artifact,
+                        ),
+                        expected_kind="json",
+                    )
+                    if not isinstance(result, ArtifactRepresentationResult):
+                        raise TypeError("Canonical JSON representation dispatch returned a stream")
+                    return result
+
                 result = self.attempt_handler.run_with_resources(
                     attempt_request("execute", scope_refs),
                     resources,
@@ -717,20 +790,12 @@ class ToolDispatcher:
                     deadline=tool_control.deadline,
                     execution_authority=execution_authority,
                     metadata_session=leaf_db,
-                    artifact_loader=lambda artifact_id: ArtifactRepository(
-                        leaf_db
-                    ).get_for_run(
-                        session_id=request.session_id,
-                        run_id=request.run_id,
-                        artifact_id=artifact_id,
-                    ),
-                    artifact_relation_loader=lambda artifact_id, relation: (
-                        ArtifactRepository(leaf_db).artifacts_relating_to_for_run(
-                            session_id=request.session_id,
-                            run_id=request.run_id,
-                            artifact_id=artifact_id,
-                            relation=relation,
-                        )
+                    artifact_loader=load_artifact,
+                    artifact_relation_loader=load_artifact_relations,
+                    artifact_representation_reader=(
+                        read_artifact_representation
+                        if self.artifact_representation_provider_resolver is not None
+                        else None
                     ),
                 )
                 if result.status == "success" and not tool_control.is_cancelled():
@@ -790,9 +855,9 @@ class ToolDispatcher:
                         metadata_session=leaf_db,
                         artifact_loader=lambda artifact_id: ArtifactRepository(
                             leaf_db
-                        ).get_for_run(
+                        ).available_artifact(
                             session_id=request.session_id,
-                            run_id=request.run_id,
+                            current_run_id=request.run_id,
                             artifact_id=artifact_id,
                         ),
                         artifact_relation_loader=lambda artifact_id, relation: (
@@ -871,110 +936,6 @@ class ToolDispatcher:
 
         return result
 
-    def _settle_execution_result(
-        self,
-        lease: SessionLease,
-        invocation: ToolInvocation,
-        *,
-        tool: BaseTool,
-        result: ToolResult,
-        needs_reconciliation: bool,
-    ) -> TransientToolOutput:
-        with self.session_factory() as db:
-            artifacts = []
-            output = result.output or {}
-            if result.status == "success":
-                try:
-                    artifacts = ArtifactRepository(db).persist_drafts(
-                        lease=lease,
-                        run_id=invocation.run_id,
-                        turn_id=invocation.turn_id,
-                        invocation_id=invocation.id,
-                        tool_name=invocation.tool_name,
-                        drafts=result.artifact_drafts,
-                    )
-                except ArtifactDraftContractError:
-                    db.rollback()
-                    raise
-            artifact_ids = [item.id for item in artifacts]
-            if (
-                tool.spec.semantics.publishes_artifact_references
-                and result.status == "success"
-            ):
-                for referenced_id in output.get("referenced_artifact_ids") or []:
-                    value = str(referenced_id).strip()
-                    if value and value not in artifact_ids:
-                        artifact_ids.append(value)
-            observation = (
-                ToolObservationProjection(summary=_OUTPUT_CONTRACT_SUMMARY)
-                if result.error_code == "TOOL_OUTPUT_CONTRACT_FAILED"
-                else tool.project_observation(
-                    status=result.status,
-                    output=output,
-                    artifacts=artifacts,
-                )
-            )
-            status = self._observation_status(
-                result,
-                needs_reconciliation=needs_reconciliation,
-            )
-            succeeded = status is ObservationStatus.SUCCEEDED
-            retryable = (
-                result.status != "success"
-                and tool.execution.recovery is ToolRecoveryPolicy.RETRY_SAFE
-                and tool.execution.retryable
-                and result.error_code
-                not in {
-                    "TOOL_CANCELLED",
-                    "TOOL_TIMEOUT",
-                    "TOOL_OUTPUT_CONTRACT_FAILED",
-                }
-            )
-            error_code = (
-                None
-                if result.status == "success"
-                else (result.error_code or "TOOL_EXECUTION_FAILED")
-            )
-            ToolInvocationRepository(db).settle(
-                lease=lease,
-                invocation_id=invocation.id,
-                status=status,
-                model_visible_summary=observation.summary,
-                artifact_ids=artifact_ids,
-                facts=observation.facts,
-                capabilities=(
-                    tuple(
-                        str(capability) for capability in tool.spec.semantics.produces
-                    )
-                    if succeeded
-                    else ()
-                ),
-                contributes_progress=(
-                    succeeded and tool.spec.semantics.contributes_progress
-                ),
-                error_code=error_code,
-                error_message=result.error,
-                retryable=retryable,
-            )
-            db.commit()
-            provider_facts = (
-                observation.provider_payload
-                if succeeded and observation.provider_payload
-                else observation.facts
-            )
-            return TransientToolOutput(
-                call_id=str(invocation.provider_call_id),
-                output=serialize_model_observation(
-                    status=status.value,
-                    summary=observation.summary,
-                    facts=provider_facts,
-                    artifact_ids=artifact_ids,
-                    retryable=retryable,
-                    error_code=error_code,
-                    error_message=result.error,
-                ),
-            )
-
     @staticmethod
     def _settled_result(
         call_id: str,
@@ -987,24 +948,6 @@ class ToolDispatcher:
                 output=observation.model_output,
             ),
         )
-
-    @staticmethod
-    def _observation_status(
-        result: ToolResult,
-        *,
-        needs_reconciliation: bool,
-    ) -> ObservationStatus:
-        if result.status == "success":
-            return ObservationStatus.SUCCEEDED
-        if result.error_code == "TOOL_CANCELLED":
-            return ObservationStatus.CANCELLED
-        outcome_unknown = result.error_code in {
-            "TOOL_OUTCOME_UNKNOWN",
-            "TOOL_TIMEOUT",
-        }
-        if outcome_unknown and needs_reconciliation:
-            return ObservationStatus.UNKNOWN
-        return ObservationStatus.FAILED
 
     def _authorize_and_mark_running(
         self,

@@ -47,6 +47,7 @@ from engine.app.safe_errors import (
     fixed_error_detail,
 )
 from engine.diagnostics.logs import configure_diagnostic_logging
+from engine.dlc.errors import DlcError
 from engine.errors import DBFoxError, NotFoundError
 from engine.engine_runtime.credentials import RuntimeCredentialPolicy
 from engine.problem_details import REQUEST_ID_HEADER, new_request_id, problem_response
@@ -71,6 +72,8 @@ def _emit_startup_stage(stage: str) -> None:
 def _startup_failure_code(exc: Exception) -> str:
     if isinstance(exc, DBFoxError):
         return exc.code
+    if isinstance(exc, DlcError):
+        return f"DBFOX_DLC_{exc.code.value.upper()}"
     message = str(exc)
     if message.startswith("DBFOX_ALEMBIC_SQLITE_FOREIGN_KEY_VIOLATIONS"):
         return "DBFOX_METADATA_FOREIGN_KEY_VIOLATION"
@@ -119,6 +122,8 @@ async def lifespan(application: FastAPI) -> Any:
 
         from engine.security.credential_lease import reconcile_credential_leases
 
+        startup_stage = "bootstrapping"
+        _emit_startup_stage(startup_stage)
         runtime_snapshot = get_active_runtime_snapshot()
         reconcile_credential_leases(
             SessionLocal,

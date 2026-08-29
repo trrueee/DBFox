@@ -54,7 +54,13 @@ Work in a model/tool loop:
 - Lead with conclusions; include limitations or next actions only when useful.
 - Stop calling functions once the request is adequately supported.
 - Follow any active capability citation constraint for concrete claims derived from verified Artifact data.
-- Typed observations may support factual answers without inventing an Artifact citation."""
+- Typed observations may support factual answers without inventing an Artifact citation.
+- When an already-observed Artifact materially improves the explanation, you may embed that
+  same durable Artifact at the exact position where it should appear by placing
+  `{{artifact:artifact_abc123}}` on its own Markdown line (substituting the exact observed ID). Embed an
+  Artifact at most once, and do not embed merely to repeat what the surrounding text says.
+- Artifact embedding controls answer composition only. It does not make the Artifact evidence;
+  use the separate citation syntax when an active capability citation constraint requires it."""
 
 
 def build_system_prompt() -> str:

@@ -5,6 +5,7 @@ import time
 
 from sqlalchemy.orm import sessionmaker
 
+from engine.agent.completion import CompletionGate
 from engine.agent.events import LiveStreamHub
 from engine.agent.loop import RunLoop
 from engine.agent.repositories.run import RunRepository
@@ -20,6 +21,11 @@ from engine.tools.runtime.base import (
     ToolPresentation,
 )
 from engine.tools.runtime.semantics import ToolSemanticSpec
+from engine.runtime_composition import (
+    build_default_completion_policy,
+    build_product_tool_registry,
+    default_context_contributors,
+)
 
 
 def _final_turn(content: str):
@@ -187,6 +193,9 @@ def test_retryable_provider_failure_recovers_through_the_real_run_loop(
     RunLoop(
         session_factory=factory,
         model_factory=lambda _settings: Provider(),
+        registry=build_product_tool_registry(),
+        context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
         live_stream=LiveStreamHub(),
     ).execute(lease=lease, run_id=admission.run_id)
     db_session.expire_all()
@@ -228,6 +237,9 @@ def test_partial_stream_failure_never_commits_partial_text(
     RunLoop(
         session_factory=factory,
         model_factory=lambda _settings: Provider(),
+        registry=build_product_tool_registry(),
+        context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
         live_stream=LiveStreamHub(),
     ).execute(lease=lease, run_id=admission.run_id)
     db_session.expire_all()
@@ -253,6 +265,9 @@ def test_durable_cancel_before_provider_call_is_terminal_and_model_is_not_called
     RunLoop(
         session_factory=factory,
         model_factory=model_factory,
+        registry=build_product_tool_registry(),
+        context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
         live_stream=LiveStreamHub(),
     ).execute(lease=lease, run_id=admission.run_id)
     db_session.expire_all()
@@ -283,6 +298,8 @@ def test_tool_timeout_is_visible_to_the_next_model_turn_and_never_late_commits(
         session_factory=factory,
         model_factory=lambda _settings: Provider(),
         registry=registry,
+        context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
         live_stream=LiveStreamHub(),
     )
     loop.execute(lease=lease, run_id=admission.run_id)
@@ -315,6 +332,8 @@ def test_repeated_identical_empty_observations_stop_within_the_tool_budget(
         session_factory=factory,
         model_factory=lambda _settings: Provider(),
         registry=registry,
+        context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
         live_stream=LiveStreamHub(),
     )
     loop.execute(lease=lease, run_id=admission.run_id)

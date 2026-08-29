@@ -7,7 +7,12 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-from engine.dlc.package_builder import build_dlc_package_from_source
+from engine.dlc.package_builder import (
+    build_dlc_package,
+    build_dlc_package_from_source,
+    collect_payload_files,
+    read_manifest_template,
+)
 from engine.dlc.registry import InstalledDlcRegistry
 from engine.dlc.system_bundle import (
     SystemDlcBundleManifest,
@@ -16,7 +21,10 @@ from engine.dlc.system_bundle import (
 )
 from engine.dlc.trust import DlcTrustStore, public_key_to_base64
 from engine.runtime_composition import initialize_runtime_snapshot, set_active_runtime_snapshot
-from scripts.build_system_dlc_bundle import build_system_dlc_bundle
+from scripts.build_system_dlc_bundle import (
+    _development_version,
+    build_system_dlc_bundle,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 WORKSPACE_DLC_SOURCE = REPOSITORY_ROOT / "dlcs" / "dbfox.workspace"
@@ -68,6 +76,44 @@ def _workspace_bundle(tmp_path: Path) -> tuple[Path, Path]:
     return package_root, manifest_path
 
 
+def _versioned_workspace_bundle(
+    tmp_path: Path,
+    private_key: ed25519.Ed25519PrivateKey,
+    version: str,
+    *,
+    development: bool,
+) -> tuple[Path, Path, str]:
+    manifest_data = read_manifest_template(WORKSPACE_DLC_SOURCE)
+    manifest_data["version"] = version
+    built = build_dlc_package(
+        manifest_data,
+        collect_payload_files(WORKSPACE_DLC_SOURCE),
+        private_key=private_key,
+    )
+    package_root = tmp_path / "system-dlcs"
+    package_root.mkdir(parents=True)
+    filename = "dbfox.workspace.dbfox-dlc"
+    (package_root / filename).write_bytes(built.archive_bytes)
+    manifest = SystemDlcBundleManifest(
+        development=development,
+        publisher_public_key=public_key_to_base64(private_key.public_key()),
+        packages=(
+            SystemDlcPackagePin(
+                dlc_id=built.manifest.id,
+                version=built.manifest.version,
+                filename=filename,
+                package_digest=built.package_digest,
+            ),
+        ),
+    )
+    manifest_path = tmp_path / "embedded-system-dlcs.json"
+    manifest_path.write_text(
+        json.dumps(manifest.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    return package_root, manifest_path, built.package_digest
+
+
 def test_bootstrap_installs_enables_and_preserves_explicit_disable(tmp_path: Path) -> None:
     package_root, manifest_path = _workspace_bundle(tmp_path)
     storage_root = tmp_path / "installed"
@@ -94,6 +140,54 @@ def test_bootstrap_installs_enables_and_preserves_explicit_disable(tmp_path: Pat
     preserved = registry.get_installed_dlc("dbfox.workspace")
     assert preserved is not None
     assert preserved.desired_enabled is False
+
+
+def test_development_bootstrap_rotates_package_bytes_and_preserves_owned_data(
+    tmp_path: Path,
+) -> None:
+    private_key = ed25519.Ed25519PrivateKey.generate()
+    first_root, first_manifest, first_digest = _versioned_workspace_bundle(
+        tmp_path / "first",
+        private_key,
+        "2.1.0-dev.000000000001",
+        development=True,
+    )
+    storage_root = tmp_path / "installed"
+    bootstrap_system_dlcs(storage_root, first_root, manifest_path=first_manifest)
+    registry = InstalledDlcRegistry(storage_root)
+    registry.set_desired_enabled("dbfox.workspace", False)
+    owned_data = storage_root / "data" / "dbfox.workspace" / "sentinel.txt"
+    owned_data.parent.mkdir(parents=True)
+    owned_data.write_text("preserved", encoding="utf-8")
+
+    second_root, second_manifest, second_digest = _versioned_workspace_bundle(
+        tmp_path / "second",
+        private_key,
+        "2.1.0-dev.000000000002",
+        development=True,
+    )
+    bootstrap_system_dlcs(storage_root, second_root, manifest_path=second_manifest)
+
+    installed = registry.get_installed_dlc("dbfox.workspace")
+    assert installed is not None
+    assert installed.selected_digest == second_digest
+    assert installed.desired_enabled is False
+    assert [item.package_digest for item in installed.installed_versions] == [
+        second_digest
+    ]
+    assert first_digest != second_digest
+    assert owned_data.read_text(encoding="utf-8") == "preserved"
+
+
+def test_development_version_is_reproducible_and_content_addressed() -> None:
+    manifest = {"version": "2.1.0", "id": "dbfox.probe"}
+    first = _development_version(manifest, {"backend/entry.py": b"one"})
+    repeated = _development_version(manifest, {"backend/entry.py": b"one"})
+    changed = _development_version(manifest, {"backend/entry.py": b"two"})
+
+    assert first == repeated
+    assert first.startswith("2.1.0-dev.")
+    assert changed != first
 
 
 def test_bootstrap_rejects_package_bytes_outside_the_embedded_digest(tmp_path: Path) -> None:
@@ -163,12 +257,14 @@ def test_release_builder_emits_exact_first_party_capability_package_pins(
         manifest_path.read_text(encoding="utf-8")
     )
 
+    assert manifest.development is False
     assert [item.dlc_id for item in manifest.packages] == [
         "dbfox.data",
         "dbfox.workspace",
         "dbfox.music",
+        "dbfox.visualization",
     ]
-    assert [item.default_enabled for item in manifest.packages] == [True, True, True]
+    assert [item.default_enabled for item in manifest.packages] == [True, True, True, True]
     assert all((output_dir / item.filename).is_file() for item in manifest.packages)
 
     storage_root = tmp_path / "installed-release-bundle"
@@ -188,12 +284,15 @@ def test_release_builder_emits_exact_first_party_capability_package_pins(
     assert installed["dbfox.data"].desired_enabled is True
     assert installed["dbfox.workspace"].desired_enabled is True
     assert installed["dbfox.music"].desired_enabled is True
+    assert installed["dbfox.visualization"].desired_enabled is True
     assert [item.dlc_id for item in snapshot.active_dlcs] == [
         "dbfox.data",
         "dbfox.music",
+        "dbfox.visualization",
         "dbfox.workspace",
     ]
     assert snapshot.activation_failures == ()
     assert "sql_validate" in {item.tool.name for item in snapshot.tools}
     assert "file_read" in {item.tool.name for item in snapshot.tools}
     assert "music_compose_piano" in {item.tool.name for item in snapshot.tools}
+    assert "visualization_create" in {item.tool.name for item in snapshot.tools}

@@ -4,6 +4,7 @@ import json
 
 from sqlalchemy.orm import sessionmaker
 
+from engine.agent.completion import CompletionGate
 from engine.agent.events import LiveStreamHub
 from engine.agent.loop import RunLoop
 from engine.agent.repositories.session import SessionRepository
@@ -15,6 +16,10 @@ from engine.tools.builtin.conversation import (
     ConversationSearchTool,
 )
 from engine.tools.runtime import ToolRegistry
+from engine.runtime_composition import (
+    build_default_completion_policy,
+    default_context_contributors,
+)
 
 
 EARLY_DECISION = "最早决策：发布代号是苍穹协议，预算为内部机密。"
@@ -200,6 +205,8 @@ def test_long_conversation_recalls_evicted_message_through_the_real_run_loop(
         session_factory=factory,
         model_factory=model_factory,
         registry=registry,
+        context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
         live_stream=LiveStreamHub(),
     ).execute(lease=lease, run_id=admission.run_id)
 

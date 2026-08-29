@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from enum import StrEnum
 import re
 from typing import Any
@@ -112,7 +112,13 @@ class ArtifactDraft(BaseModel):
     schema_version: int = Field(default=1, ge=1)
     title: str = Field(min_length=1, max_length=200)
     payload: dict[str, Any] = Field(default_factory=dict)
-    payload_draft_refs: dict[str, str] = Field(default_factory=dict)
+    payload_draft_refs: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Map a top-level payload key or RFC 6901 JSON Pointer to an earlier "
+            "draft key in the same ToolOutcome."
+        ),
+    )
     summary: str | None = Field(default=None, max_length=2_000)
     semantic_key: str | None = Field(default=None, max_length=1_000)
     payload_ref: str | None = Field(default=None, max_length=1_000)
@@ -204,6 +210,10 @@ class ArtifactPayloadContractRegistry:
 
 
 artifact_payload_contracts = ArtifactPayloadContractRegistry()
+ArtifactPayloadContractResolver = Callable[
+    [str, int],
+    type[BaseModel] | None,
+]
 
 
 class _AnalysisPlanPayload(BaseModel):
@@ -271,6 +281,7 @@ def validate_artifact_payload(
     *,
     schema_version: int = 1,
     allow_unknown: bool = False,
+    contract_resolver: ArtifactPayloadContractResolver | None = None,
 ) -> dict[str, Any]:
     """Validate the durable Artifact boundary.
 
@@ -282,17 +293,12 @@ def validate_artifact_payload(
     _reject_result_values(payload)
     candidate = str(artifact_type)
     model = artifact_payload_contracts.get(candidate, int(schema_version))
-    if model is None and candidate not in _KNOWN_ARTIFACT_TYPES:
-        from engine.runtime_composition import active_runtime_snapshot
-
-        snapshot = active_runtime_snapshot()
-        if snapshot is not None:
-            contribution = snapshot.get_artifact_contract(
-                candidate,
-                int(schema_version),
-            )
-            if contribution is not None:
-                model = contribution.validator
+    if (
+        model is None
+        and candidate not in _KNOWN_ARTIFACT_TYPES
+        and contract_resolver is not None
+    ):
+        model = contract_resolver(candidate, int(schema_version))
     if model is not None:
         return model.model_validate(payload).model_dump(
             mode="json",

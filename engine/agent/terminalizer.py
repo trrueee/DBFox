@@ -11,6 +11,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.agent.artifact import ArtifactSelectionSuggestion, ArtifactVisibility
+from engine.agent.artifact_embed import (
+    MAX_ARTIFACT_EMBEDS,
+    artifact_embed_ids,
+    has_duplicate_artifact_embeds,
+    has_invalid_artifact_embed_syntax,
+)
 from engine.agent.evidence import (
     CITATION_PATTERN,
     Evidence,
@@ -69,10 +75,10 @@ class Terminalizer:
             current_primary_artifacts = [
                 item for item in artifacts if item.visibility is ArtifactVisibility.PRIMARY
             ]
-            evidence_artifacts = [
+            answer_artifacts = [
                 item
                 for item in [*artifacts, *referenced_artifacts]
-                if item.visibility is ArtifactVisibility.PRIMARY
+                if item.visibility is not ArtifactVisibility.INTERNAL
             ]
             final_text = (
                 result.answer_text if result.has_completed_answer_candidate else ""
@@ -81,7 +87,7 @@ class Terminalizer:
                 _bounded_partial_summary(
                     db,
                     run_id=run_id,
-                    result_artifact_count=len(evidence_artifacts),
+                    result_artifact_count=len(answer_artifacts),
                     limitation_codes=limitation_codes,
                 )
                 if partial
@@ -91,7 +97,20 @@ class Terminalizer:
                 raise ValueError(
                     "Terminal answer contains malformed DBFox citation markup"
                 )
-            result_by_id = {item.id: item for item in evidence_artifacts}
+            if (
+                has_invalid_artifact_embed_syntax(text)
+                or has_duplicate_artifact_embeds(text)
+                or len(artifact_embed_ids(text)) > MAX_ARTIFACT_EMBEDS
+            ):
+                raise ValueError(
+                    "Terminal answer contains invalid DBFox Artifact embed markup"
+                )
+            result_by_id = {item.id: item for item in answer_artifacts}
+            embedded_artifact_ids = artifact_embed_ids(text)
+            if any(artifact_id not in result_by_id for artifact_id in embedded_artifact_ids):
+                raise ValueError(
+                    "Terminal answer embeds an unavailable Artifact ID"
+                )
             references = citation_references(text)
             bound_artifact_ids = [
                 artifact_id
@@ -171,6 +190,7 @@ class Terminalizer:
                 answer=answer,
                 artifacts=artifacts,
                 evidence_artifacts=referenced_artifacts,
+                answer_artifact_ids=embedded_artifact_ids,
                 selection_suggestion=suggestion,
             )
             completed = self.complete_in_session(

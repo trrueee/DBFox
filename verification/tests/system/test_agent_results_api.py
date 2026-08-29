@@ -7,23 +7,31 @@ from pydantic import ValidationError
 
 import engine.api.agent_results as result_module
 from engine.agent.resource_refs import dump_resource_refs
-from engine.agent.artifact_view import (
-    ArtifactCsvStream,
-    ArtifactTablePage,
-    ArtifactViewFilter as ResultFilter,
-    ArtifactViewSort as ResultSort,
+from engine.representation import (
+    DATAFRAME_REPRESENTATION_TYPE,
+    ArtifactRepresentationDescriptor,
+    ArtifactRepresentationOperation,
+    ArtifactRepresentationRequest,
+    ArtifactRepresentationResult,
+    ArtifactRepresentationStream,
+    DataFrameField,
+    DataFrameFilter,
+    DataFramePage,
+    DataFramePageRequest,
+    DataFrameSort,
 )
 from engine.dlc.snapshot import (
     ArtifactContractContribution,
-    ArtifactTableViewContribution,
+    ArtifactRepresentationContribution,
     RuntimeContributionSnapshot,
 )
 from engine.runtime_composition import (
     active_runtime_snapshot,
     set_active_runtime_snapshot,
 )
-from dlcs.dbfox_data.backend.artifact_contracts import ResultViewArtifactPayload
-from engine.api.agent_results import ResultPageRequest
+from dlcs.dbfox_data.backend.artifact_contracts import (
+    SnapshotBackedResultViewArtifactPayload,
+)
 from engine.resource import ResourceScopeRef
 from engine.models import (
     AgentArtifactRecord,
@@ -45,7 +53,7 @@ def _add_pagination_source(
     db_session,
     *,
     artifact_id: str = "artifact-sql-page",
-    artifact_type: str = "sql",
+    artifact_type: str = "dbfox.data.sql",
     safe_sql: str = "SELECT id, amount FROM orders",
     columns: list[str] | None = None,
 ) -> str:
@@ -149,39 +157,62 @@ def _add_pagination_source(
     return result_id
 
 
-class _CapturedDurableTableView:
+class _CapturedDataFrameRepresentation:
     def __init__(self) -> None:
         self.page_request = None
         self.export_request = None
 
-    def page(self, artifact, request):
-        self.page_request = request
-        return ArtifactTablePage(
-            columns=["id", "amount"],
-            rows=[{"id": "2", "amount": "40"}],
-            page=request.page,
-            page_size=request.page_size,
+    def describe(self, _artifact):
+        return ArtifactRepresentationDescriptor(
+            representation_type=DATAFRAME_REPRESENTATION_TYPE,
+            version=1,
+            operations=(
+                ArtifactRepresentationOperation(name="page"),
+                ArtifactRepresentationOperation(
+                    name="export.csv",
+                    result_kind="stream",
+                    media_type="text/csv",
+                ),
+            ),
+        )
+
+    def execute(self, artifact, request, _context):
+        if request.operation == "export.csv":
+            self.export_request = request.parameters
+            return ArtifactRepresentationStream(
+                chunks=iter(("id,amount\n", "2,40\n")),
+                media_type="text/csv",
+                file_name="orders.csv",
+                metadata={"row-count": "1", "source-truncated": "false"},
+            )
+        self.page_request = DataFramePageRequest.model_validate(request.parameters)
+        page = DataFramePage(
+            fields=[
+                DataFrameField(key="field_0", name="id", values=["2"]),
+                DataFrameField(key="field_1", name="amount", values=["40"]),
+            ],
+            page=self.page_request.page,
+            page_size=self.page_request.page_size,
             row_count=1,
             has_next_page=False,
             latency_ms=0,
-            original_executed_at="2026-08-23T08:00:00Z",
+        )
+        return ArtifactRepresentationResult(
+            representation_type=DATAFRAME_REPRESENTATION_TYPE,
+            representation_version=1,
+            operation="page",
+            payload=page.model_dump(mode="json"),
+            consistency="durable_snapshot",
+            original_observed_at="2026-08-23T08:00:00Z",
             read_at="2026-08-23T08:01:00Z",
             read_id="read-api",
-            resource_version=str(artifact.resource_refs[0].version),
+            source_version=str(artifact.resource_refs[0].version),
             source_fingerprint=str(artifact.payload["queryFingerprint"]),
-            notices=["durable"],
-        )
-
-    def export_csv(self, _artifact, request):
-        self.export_request = request
-        return ArtifactCsvStream(
-            chunks=iter(("id,amount\n", "2,40\n")),
-            row_count=1,
-            source_truncated=False,
+            notices=("durable",),
         )
 
 
-def _durable_table_snapshot(provider) -> RuntimeContributionSnapshot:
+def _dataframe_snapshot(provider) -> RuntimeContributionSnapshot:
     return RuntimeContributionSnapshot(
         snapshot_id="snapshot-artifact-table-api",
         active_dlcs=(),
@@ -195,14 +226,15 @@ def _durable_table_snapshot(provider) -> RuntimeContributionSnapshot:
             ArtifactContractContribution(
                 artifact_type="dbfox.data.result_view",
                 schema_version=1,
-                validator=ResultViewArtifactPayload,
+                validator=SnapshotBackedResultViewArtifactPayload,
                 owner_id="dbfox.data",
             ),
         ),
         operations=(),
-        artifact_table_views=(
-            ArtifactTableViewContribution(
+        artifact_representations=(
+            ArtifactRepresentationContribution(
                 artifact_type="dbfox.data.result_view",
+                representation_type=DATAFRAME_REPRESENTATION_TYPE,
                 provider=provider,
                 owner_id="dbfox.data",
             ),
@@ -210,7 +242,7 @@ def _durable_table_snapshot(provider) -> RuntimeContributionSnapshot:
     )
 
 
-def test_artifact_page_and_export_dispatch_to_durable_capability_view(
+def test_artifact_read_and_stream_dispatch_to_capability_representation(
     db_session,
 ) -> None:
     result_id = _add_pagination_source(db_session)
@@ -239,40 +271,52 @@ def test_artifact_page_and_export_dispatch_to_durable_capability_view(
     )
     db_session.commit()
 
-    provider = _CapturedDurableTableView()
+    provider = _CapturedDataFrameRepresentation()
     previous = active_runtime_snapshot()
-    set_active_runtime_snapshot(_durable_table_snapshot(provider))
+    set_active_runtime_snapshot(_dataframe_snapshot(provider))
     try:
-        page = result_module.api_agent_result_page(
+        descriptors = result_module.api_artifact_representations(result_id, db_session)
+        page = result_module.api_artifact_representation_read(
             result_id,
-            ResultPageRequest(
-                page=1,
-                pageSize=50,
-                filters=[ResultFilter(column="amount", operator="gte", value=25)],
-                sort=[ResultSort(column="amount", direction="desc")],
+            DATAFRAME_REPRESENTATION_TYPE,
+            ArtifactRepresentationRequest(
+                operation="page",
+                parameters={
+                    "page": 1,
+                    "page_size": 50,
+                    "filters": [
+                        {"field": "amount", "operator": "gte", "value": 25}
+                    ],
+                    "sort": [{"field": "amount", "direction": "desc"}],
+                },
             ),
             db_session,
         )
-        exported = result_module.api_agent_result_export(
+        exported = result_module.api_artifact_representation_stream(
             result_id,
-            result_module.ResultExportRequest(search="40"),
+            DATAFRAME_REPRESENTATION_TYPE,
+            ArtifactRepresentationRequest(
+                operation="export.csv",
+                parameters={"search": "40"},
+            ),
             db_session,
         )
         body = asyncio.run(_streaming_response_text(exported))
     finally:
         set_active_runtime_snapshot(previous)
 
+    assert descriptors[0].representation_type == DATAFRAME_REPRESENTATION_TYPE
     assert page.consistency == "durable_snapshot"
-    assert page.rows == [{"id": "2", "amount": "40"}]
-    assert page.resourceVersion == "1"
-    assert page.sourceFingerprint == _query_fingerprint(
+    assert page.payload["fields"][1]["values"] == ["40"]
+    assert page.source_version == "1"
+    assert page.source_fingerprint == _query_fingerprint(
         "SELECT id, amount FROM orders"
     )
-    assert provider.page_request.filters[0].column == "amount"
+    assert provider.page_request.filters[0].field == "amount"
     assert provider.page_request.sort[0].direction == "desc"
-    assert provider.export_request.search == "40"
+    assert provider.export_request["search"] == "40"
     assert body == "id,amount\n2,40\n"
-    assert exported.headers["x-dbfox-export-row-count"] == "1"
+    assert exported.headers["x-dbfox-representation-row-count"] == "1"
 
 
 @pytest.mark.parametrize(
@@ -284,41 +328,41 @@ def test_artifact_page_and_export_dispatch_to_durable_capability_view(
         (1, 501),
     ],
 )
-def test_result_page_request_rejects_invalid_pagination_bounds(page, page_size):
+def test_dataframe_page_request_rejects_invalid_pagination_bounds(page, page_size):
     with pytest.raises(ValidationError):
-        ResultPageRequest(
+        DataFramePageRequest(
             page=page,
-            pageSize=page_size,
+            page_size=page_size,
         )
 
 
 @pytest.mark.parametrize(
     "payload",
     [
-        {"page": 1, "pageSize": 20, "search": "x" * 513},
+        {"page": 1, "page_size": 20, "search": "x" * 513},
         {
             "page": 1,
-            "pageSize": 20,
-            "filters": [{"column": "status", "operator": "equals", "value": "paid"}]
+            "page_size": 20,
+            "filters": [{"field": "status", "operator": "equals", "value": "paid"}]
             * 17,
         },
         {
             "page": 1,
-            "pageSize": 20,
+            "page_size": 20,
             "filters": [
-                {"column": "status", "operator": "equals", "value": "x" * 4097}
+                {"field": "status", "operator": "equals", "value": "x" * 16_385}
             ],
         },
         {
             "page": 1,
-            "pageSize": 20,
-            "filters": [{"column": "status", "operator": "unknown", "value": "paid"}],
+            "page_size": 20,
+            "filters": [{"field": "status", "operator": "unknown", "value": "paid"}],
         },
     ],
 )
-def test_result_page_request_rejects_unbounded_query_inputs(payload):
+def test_dataframe_page_request_rejects_unbounded_query_inputs(payload):
     with pytest.raises(ValidationError):
-        ResultPageRequest.model_validate(payload)
+        DataFramePageRequest.model_validate(payload)
 
 
 async def _streaming_response_text(response) -> str:

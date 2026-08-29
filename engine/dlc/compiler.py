@@ -34,8 +34,7 @@ from engine.dlc.registry import InstalledDlcRecord, InstalledDlcRegistry
 from engine.dlc.snapshot import (
     ActivatedDlcIdentity,
     ArtifactContractContribution,
-    ArtifactChartViewContribution,
-    ArtifactTableViewContribution,
+    ArtifactRepresentationContribution,
     BuiltinContributionSet,
     CompletionConstraintContribution,
     CompletionSupportContribution,
@@ -214,9 +213,12 @@ class ContributionCompiler:
             )
 
         known_resolver_kinds: set[str] = {rc.kind for rc in seed.resource_resolvers}
+        known_artifact_contract_keys = set(artifact_payload_contracts.snapshot())
         known_artifact_types: set[str] = set(_KNOWN_ARTIFACT_TYPES) | {
-            artifact_type
-            for artifact_type, _schema_version in artifact_payload_contracts.snapshot()
+            artifact_type for artifact_type, _schema_version in known_artifact_contract_keys
+        }
+        known_artifact_type_owners = {
+            artifact_type: "dbfox.core" for artifact_type in known_artifact_types
         }
         known_operations: set[tuple[str, str]] = set()
         known_completion_constraint_ids = {
@@ -241,10 +243,8 @@ class ContributionCompiler:
             item.owner_id for item in all_credential_reference_probes
         }
         all_artifact_contracts: list[ArtifactContractContribution] = []
-        all_artifact_table_views: list[ArtifactTableViewContribution] = []
-        known_artifact_table_view_types: set[str] = set()
-        all_artifact_chart_views: list[ArtifactChartViewContribution] = []
-        known_artifact_chart_view_types: set[str] = set()
+        all_artifact_representations: list[ArtifactRepresentationContribution] = []
+        known_artifact_representation_keys: set[tuple[str, str]] = set()
         all_operations: list[DlcOperationContribution] = []
 
         def _clone_tool_registry(base: ToolRegistry) -> ToolRegistry:
@@ -450,13 +450,21 @@ class ContributionCompiler:
                 # 5. Validate candidate artifact contracts
                 candidate_artifacts: list[ArtifactContractContribution] = []
                 candidate_artifact_types: set[str] = set()
+                candidate_artifact_contract_keys: set[tuple[str, int]] = set()
                 for art_type, schema_ver, validator in staging.artifact_contracts:
-                    if art_type in known_artifact_types or art_type in candidate_artifact_types:
+                    artifact_contract_key = (art_type, schema_ver)
+                    existing_owner = known_artifact_type_owners.get(art_type)
+                    if (
+                        artifact_contract_key in known_artifact_contract_keys
+                        or artifact_contract_key in candidate_artifact_contract_keys
+                        or (existing_owner is not None and existing_owner != dlc_id)
+                    ):
                         raise DlcError(
                             DlcErrorCode.REGISTRATION_CONFLICT,
-                            f"Artifact type '{art_type}' from DLC '{dlc_id}' conflicts with an existing artifact type",
+                            f"Artifact contract '{art_type}' v{schema_ver} from DLC '{dlc_id}' conflicts with an existing contract",
                         )
                     candidate_artifact_types.add(art_type)
+                    candidate_artifact_contract_keys.add(artifact_contract_key)
                     candidate_artifacts.append(
                         ArtifactContractContribution(
                             artifact_type=art_type,
@@ -466,52 +474,37 @@ class ContributionCompiler:
                         )
                     )
 
-                candidate_artifact_table_views: list[ArtifactTableViewContribution] = []
-                candidate_artifact_table_view_types: set[str] = set()
-                for art_type, table_provider in staging.artifact_table_views:
+                candidate_artifact_representations: list[
+                    ArtifactRepresentationContribution
+                ] = []
+                candidate_artifact_representation_keys: set[tuple[str, str]] = set()
+                for (
+                    art_type,
+                    representation_type,
+                    representation_provider,
+                ) in staging.artifact_representations:
                     if art_type not in candidate_artifact_types:
                         raise DlcError(
                             DlcErrorCode.REGISTRATION_CONFLICT,
-                            f"Artifact table view '{art_type}' from DLC '{dlc_id}' must target an Artifact contract registered by the same DLC",
+                            f"Artifact representation '{representation_type}' for '{art_type}' "
+                            f"from DLC '{dlc_id}' must target an Artifact contract registered by the same DLC",
                         )
+                    representation_key = (art_type, representation_type)
                     if (
-                        art_type in known_artifact_table_view_types
-                        or art_type in candidate_artifact_table_view_types
+                        representation_key in known_artifact_representation_keys
+                        or representation_key in candidate_artifact_representation_keys
                     ):
                         raise DlcError(
                             DlcErrorCode.REGISTRATION_CONFLICT,
-                            f"Artifact table view '{art_type}' from DLC '{dlc_id}' conflicts with an existing provider",
+                            f"Artifact representation '{representation_type}' for '{art_type}' "
+                            f"from DLC '{dlc_id}' conflicts with an existing provider",
                         )
-                    candidate_artifact_table_view_types.add(art_type)
-                    candidate_artifact_table_views.append(
-                        ArtifactTableViewContribution(
+                    candidate_artifact_representation_keys.add(representation_key)
+                    candidate_artifact_representations.append(
+                        ArtifactRepresentationContribution(
                             artifact_type=art_type,
-                            provider=table_provider,
-                            owner_id=dlc_id,
-                        )
-                    )
-
-                candidate_artifact_chart_views: list[ArtifactChartViewContribution] = []
-                candidate_artifact_chart_view_types: set[str] = set()
-                for art_type, chart_provider in staging.artifact_chart_views:
-                    if art_type not in candidate_artifact_types:
-                        raise DlcError(
-                            DlcErrorCode.REGISTRATION_CONFLICT,
-                            f"Artifact chart view '{art_type}' from DLC '{dlc_id}' must target an Artifact contract registered by the same DLC",
-                        )
-                    if (
-                        art_type in known_artifact_chart_view_types
-                        or art_type in candidate_artifact_chart_view_types
-                    ):
-                        raise DlcError(
-                            DlcErrorCode.REGISTRATION_CONFLICT,
-                            f"Artifact chart view '{art_type}' from DLC '{dlc_id}' conflicts with an existing provider",
-                        )
-                    candidate_artifact_chart_view_types.add(art_type)
-                    candidate_artifact_chart_views.append(
-                        ArtifactChartViewContribution(
-                            artifact_type=art_type,
-                            provider=chart_provider,
+                            representation_type=representation_type,
+                            provider=representation_provider,
                             owner_id=dlc_id,
                         )
                     )
@@ -634,15 +627,15 @@ class ContributionCompiler:
 
                 # Promote artifacts
                 known_artifact_types.update(candidate_artifact_types)
+                known_artifact_contract_keys.update(candidate_artifact_contract_keys)
+                known_artifact_type_owners.update(
+                    {artifact_type: dlc_id for artifact_type in candidate_artifact_types}
+                )
                 all_artifact_contracts.extend(candidate_artifacts)
-                known_artifact_table_view_types.update(
-                    candidate_artifact_table_view_types
+                known_artifact_representation_keys.update(
+                    candidate_artifact_representation_keys
                 )
-                all_artifact_table_views.extend(candidate_artifact_table_views)
-                known_artifact_chart_view_types.update(
-                    candidate_artifact_chart_view_types
-                )
-                all_artifact_chart_views.extend(candidate_artifact_chart_views)
+                all_artifact_representations.extend(candidate_artifact_representations)
 
                 # Promote operations
                 known_operations.update(candidate_op_keys)
@@ -698,8 +691,7 @@ class ContributionCompiler:
             completion_supports=tuple(all_completion_supports),
             capability_guidance=tuple(all_capability_guidance),
             artifact_contracts=tuple(all_artifact_contracts),
-            artifact_table_views=tuple(all_artifact_table_views),
-            artifact_chart_views=tuple(all_artifact_chart_views),
+            artifact_representations=tuple(all_artifact_representations),
             operations=tuple(all_operations),
             credential_reference_probes=tuple(all_credential_reference_probes),
             activation_failures=tuple(activation_failures),

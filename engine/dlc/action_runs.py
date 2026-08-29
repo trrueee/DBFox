@@ -30,10 +30,12 @@ from engine.dlc.api import (
 from engine.dlc.snapshot import RuntimeContributionSnapshot
 from engine.models import AgentRun, AgentSession
 from engine.tools.materialization import ToolMaterialization, materialize_tools
-from engine.tools.runtime import ToolExecutor
+from engine.tools.runtime import ToolExecutor, ToolRegistry
+from engine.tools.runtime.attempt import CompositeResourceResolver
 
 
 SessionFactory = Callable[[], Session]
+ProjectResourceAuthorizer = Callable[[Session, str, tuple[Any, ...]], tuple[Any, ...]]
 
 
 class DlcActionRunsHostImpl:
@@ -46,11 +48,17 @@ class DlcActionRunsHostImpl:
         project_id: str | None,
         snapshot: RuntimeContributionSnapshot,
         session_factory: SessionFactory,
+        registry: ToolRegistry,
+        resource_resolver: CompositeResourceResolver,
+        resource_authorizer: ProjectResourceAuthorizer,
     ) -> None:
         self._dlc_id = dlc_id
         self._project_id = project_id
         self._snapshot = snapshot
         self._session_factory = session_factory
+        self._registry = registry
+        self._resource_resolver = resource_resolver
+        self._resource_authorizer = resource_authorizer
 
     def start(
         self,
@@ -68,13 +76,7 @@ class DlcActionRunsHostImpl:
                 message="This Workbench action requires a Project.",
             )
 
-        from engine.runtime_composition import (
-            authorize_project_resources,
-            build_attempt_resource_resolver,
-            build_product_tool_registry,
-        )
-
-        registry = build_product_tool_registry(self._snapshot)
+        registry = self._registry
         owner_tools = {
             registry.key_of(registry.require(name)).local_name: name
             for name in registry.tool_names()
@@ -110,11 +112,10 @@ class DlcActionRunsHostImpl:
             )
 
         with self._session_factory() as db:
-            resource_refs = authorize_project_resources(
+            resource_refs = self._resource_authorizer(
                 db,
                 project_id,
                 requested_resources,
-                snapshot=self._snapshot,
             )
             sessions = SessionRepository(db)
             normalized_session_id = str(session_id or "").strip()
@@ -188,13 +189,31 @@ class DlcActionRunsHostImpl:
             db.commit()
 
         executor = ToolExecutor(max_workers=1)
+
+        def representation_provider(artifact_type: str, representation_type: str):
+            contribution = self._snapshot.get_artifact_representation(
+                artifact_type,
+                representation_type,
+            )
+            return contribution.provider if contribution is not None else None
+
+        def artifact_payload_contract(artifact_type: str, schema_version: int):
+            contribution = self._snapshot.get_artifact_contract(
+                artifact_type,
+                schema_version,
+            )
+            return contribution.validator if contribution is not None else None
+
         dispatcher = ToolDispatcher(
             session_factory=self._session_factory,
             registry=registry,
             definition=definition,
             executor=executor,
-            resource_resolver=build_attempt_resource_resolver(snapshot=self._snapshot),
+            resource_resolver=self._resource_resolver,
             resource_providers=self._snapshot.resource_providers,
+            artifact_representation_provider_resolver=representation_provider,
+            artifact_payload_contract_resolver=artifact_payload_contract,
+            runtime_snapshot_id=self._snapshot.snapshot_id,
         )
         return _DlcActionRunImpl(
             dlc_id=self._dlc_id,

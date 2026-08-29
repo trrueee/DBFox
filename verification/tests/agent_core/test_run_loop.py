@@ -12,6 +12,7 @@ import time
 
 from sqlalchemy.orm import sessionmaker
 
+from engine.agent.completion import CompletionGate
 from engine.agent.definition import AgentDefinition
 from engine.agent.events import LiveStreamHub
 from engine.agent.loop import RunLoop
@@ -37,6 +38,10 @@ from engine.tools.runtime import (
     ToolRegistry,
 )
 from engine.tools.runtime.attempt import CompositeResourceResolver
+from engine.runtime_composition import (
+    build_default_completion_policy,
+    default_context_contributors,
+)
 from verification.testkit.synthetic_resources import (
     SYNTHETIC_RESOURCE_KIND,
     ResourceProbeTool,
@@ -205,6 +210,8 @@ def _execute(
         session_factory=sessionmaker(bind=db_session.get_bind(), expire_on_commit=False),
         model_factory=model_factory,
         registry=registry,
+        context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
         definition=AgentDefinition(allowed_tool_groups=("verification",)),
         live_stream=LiveStreamHub(),
         resource_providers=resource_providers,

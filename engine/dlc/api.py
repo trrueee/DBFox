@@ -34,18 +34,6 @@ from engine.agent.artifact import (
     ArtifactRelationType,
     ArtifactVisibility,
 )
-from engine.agent.artifact_view import (
-    ArtifactChartData,
-    ArtifactChartViewProvider,
-    ArtifactCsvStream,
-    ArtifactTableExportRequest,
-    ArtifactTablePage,
-    ArtifactTablePageRequest,
-    ArtifactTableViewProvider,
-    ArtifactViewError,
-    ArtifactViewFilter,
-    ArtifactViewSort,
-)
 from engine.agent.completion import (
     CompletionConstraint,
     CompletionSupport,
@@ -59,6 +47,23 @@ from engine.json_codec import dumps as json_dumps
 from engine.agent.resource_refs import (
     ProjectResourceDescriptor,
     RequestedResourceRef,
+)
+from engine.representation import (
+    DATAFRAME_REPRESENTATION_TYPE,
+    ArtifactRepresentationContext,
+    ArtifactRepresentationDescriptor,
+    ArtifactRepresentationError,
+    ArtifactRepresentationOperation,
+    ArtifactRepresentationProvider,
+    ArtifactRepresentationRequest,
+    ArtifactRepresentationResult,
+    ArtifactRepresentationStream,
+    DataFrameExportRequest,
+    DataFrameField,
+    DataFrameFilter,
+    DataFramePage,
+    DataFramePageRequest,
+    DataFrameSort,
 )
 from engine.tools.runtime.attempt import ResourceKey, ResourceScopeRef, ScopedResourceResolver
 from engine.tools.runtime.registry import ToolKey
@@ -129,6 +134,15 @@ class ExtensionToolRunContext(Protocol):
         relation: ArtifactRelationType,
     ) -> tuple[Artifact, ...]:
         """Return current-Run Artifacts relating to one immutable source."""
+        ...
+
+    def read_artifact_representation(
+        self,
+        artifact_id: str,
+        representation_type: str,
+        request: ArtifactRepresentationRequest,
+    ) -> ArtifactRepresentationResult:
+        """Read one JSON Representation through the invoking Run's frozen snapshot."""
         ...
 
     def approval_authorizes(
@@ -317,20 +331,13 @@ class ExtensionArtifactsHost(Protocol):
         """Register a concrete Artifact payload write validation schema."""
         ...
 
-    def register_table_view(
+    def register_representation(
         self,
         artifact_type: str,
-        provider: ArtifactTableViewProvider,
+        representation_type: str,
+        provider: ArtifactRepresentationProvider,
     ) -> None:
-        """Register the durable table reader for one owned Artifact type."""
-        ...
-
-    def register_chart_view(
-        self,
-        artifact_type: str,
-        provider: ArtifactChartViewProvider,
-    ) -> None:
-        """Register the durable chart reader for one owned Artifact type."""
+        """Register one namespaced read-only representation for an Artifact type."""
         ...
 
 
@@ -446,16 +453,21 @@ __all__ = [
     "ArtifactRelationDraft",
     "ArtifactRelationType",
     "ArtifactVisibility",
-    "ArtifactCsvStream",
-    "ArtifactChartData",
-    "ArtifactChartViewProvider",
-    "ArtifactTableExportRequest",
-    "ArtifactTablePage",
-    "ArtifactTablePageRequest",
-    "ArtifactTableViewProvider",
-    "ArtifactViewError",
-    "ArtifactViewFilter",
-    "ArtifactViewSort",
+    "DATAFRAME_REPRESENTATION_TYPE",
+    "ArtifactRepresentationContext",
+    "ArtifactRepresentationDescriptor",
+    "ArtifactRepresentationError",
+    "ArtifactRepresentationOperation",
+    "ArtifactRepresentationProvider",
+    "ArtifactRepresentationRequest",
+    "ArtifactRepresentationResult",
+    "ArtifactRepresentationStream",
+    "DataFrameExportRequest",
+    "DataFrameField",
+    "DataFrameFilter",
+    "DataFramePage",
+    "DataFramePageRequest",
+    "DataFrameSort",
     "CompletionConstraint",
     "CompletionSupport",
     "SemanticArtifactCompletionSupport",

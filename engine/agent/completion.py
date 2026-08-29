@@ -10,6 +10,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from engine.agent.context import ContextSnapshot
 from typing import Literal, Protocol
 
+from engine.agent.artifact_embed import (
+    MAX_ARTIFACT_EMBEDS,
+    artifact_embed_ids,
+    has_duplicate_artifact_embeds,
+    has_invalid_artifact_embed_syntax,
+)
 from engine.agent.evidence import citation_references, has_invalid_citation_syntax
 from engine.agent.turn import ModelTurnResult
 
@@ -192,6 +198,7 @@ class CompletionPolicy:
             artifact_id
             for artifact_id, _, _ in citation_references(model_result.answer_text)
         }
+        embedded_artifact_ids = artifact_embed_ids(model_result.answer_text)
 
         turn_budget_reached = turn_count >= max_turns
 
@@ -233,6 +240,20 @@ class CompletionPolicy:
                 missing=["valid_inline_evidence"],
             )
 
+        if (
+            has_invalid_artifact_embed_syntax(model_result.answer_text)
+            or has_duplicate_artifact_embeds(model_result.answer_text)
+            or len(embedded_artifact_ids) > MAX_ARTIFACT_EMBEDS
+        ):
+            return CompletionDecision(
+                kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
+                reason=(
+                    "The answer contains malformed, repeated, or excessive DBFox "
+                    "Artifact embed markup."
+                ),
+                missing=["valid_artifact_embeds"],
+            )
+
         observed_artifact_ids = {
             artifact_id
             for observation in successes
@@ -243,6 +264,15 @@ class CompletionPolicy:
                 kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
                 reason="The answer cites an Artifact that is not present in the durable observations.",
                 missing=["valid_inline_evidence"],
+            )
+        if set(embedded_artifact_ids) - observed_artifact_ids:
+            return CompletionDecision(
+                kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
+                reason=(
+                    "The answer embeds an Artifact that is not present in the durable "
+                    "observations."
+                ),
+                missing=["valid_artifact_embeds"],
             )
 
         if turn_budget_reached:

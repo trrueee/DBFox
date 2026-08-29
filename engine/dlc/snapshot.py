@@ -13,11 +13,11 @@ from sqlalchemy.orm import Session
 from engine.agent.context_fragment import ContextContributor
 from engine.agent.completion import CompletionConstraint, CompletionSupport
 from engine.agent.guidance import CapabilityGuidanceContribution
-from engine.agent.artifact_view import ArtifactChartViewProvider, ArtifactTableViewProvider
 from engine.agent.resource_refs import ProjectResourceProvider
 from engine.dlc.api import DlcOperationSpec
 from engine.dlc.compat import CURRENT_DBFOX_VERSION
 from engine.dlc.integrity import canonical_json_bytes
+from engine.representation import ArtifactRepresentationProvider
 from engine.dlc.trust import DlcTrustStatus
 from engine.tools.runtime.base import BaseTool
 
@@ -66,20 +66,12 @@ class ArtifactContractContribution:
 
 
 @dataclass(frozen=True)
-class ArtifactTableViewContribution:
-    """A durable tabular Artifact reader bound to its capability owner."""
+class ArtifactRepresentationContribution:
+    """A namespaced Artifact representation bound to its capability owner."""
 
     artifact_type: str
-    provider: ArtifactTableViewProvider
-    owner_id: str
-
-
-@dataclass(frozen=True)
-class ArtifactChartViewContribution:
-    """A durable chart Artifact reader bound to its capability owner."""
-
-    artifact_type: str
-    provider: ArtifactChartViewProvider
+    representation_type: str
+    provider: ArtifactRepresentationProvider
     owner_id: str
 
 
@@ -170,8 +162,7 @@ class RuntimeContributionSnapshot:
     artifact_contracts: tuple[ArtifactContractContribution, ...]
     operations: tuple[DlcOperationContribution, ...]
     capability_guidance: tuple[CapabilityGuidanceContribution, ...] = ()
-    artifact_table_views: tuple[ArtifactTableViewContribution, ...] = ()
-    artifact_chart_views: tuple[ArtifactChartViewContribution, ...] = ()
+    artifact_representations: tuple[ArtifactRepresentationContribution, ...] = ()
     credential_reference_probes: tuple[CredentialReferenceProbeContribution, ...] = ()
     activation_failures: tuple[DlcActivationFailure, ...] = ()
 
@@ -211,23 +202,28 @@ class RuntimeContributionSnapshot:
                 return contribution
         return None
 
-    def get_artifact_table_view(
+    def get_artifact_representation(
         self,
         artifact_type: str,
-    ) -> ArtifactTableViewContribution | None:
-        for contribution in self.artifact_table_views:
-            if contribution.artifact_type == artifact_type:
+        representation_type: str,
+    ) -> ArtifactRepresentationContribution | None:
+        for contribution in self.artifact_representations:
+            if (
+                contribution.artifact_type == artifact_type
+                and contribution.representation_type == representation_type
+            ):
                 return contribution
         return None
 
-    def get_artifact_chart_view(
+    def artifact_representations_for(
         self,
         artifact_type: str,
-    ) -> ArtifactChartViewContribution | None:
-        for contribution in self.artifact_chart_views:
-            if contribution.artifact_type == artifact_type:
-                return contribution
-        return None
+    ) -> tuple[ArtifactRepresentationContribution, ...]:
+        return tuple(
+            contribution
+            for contribution in self.artifact_representations
+            if contribution.artifact_type == artifact_type
+        )
 
 
 def compute_snapshot_id(

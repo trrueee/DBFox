@@ -58,6 +58,7 @@ class EvidenceReference(BaseModel):
     observed_at: datetime
     locator: dict[str, Any] = Field(default_factory=dict)
     value: Any | None = None
+    query_fingerprint: str = ""
 
     @field_validator("observed_at")
     @classmethod

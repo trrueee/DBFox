@@ -74,6 +74,26 @@ def test_verification_is_a_one_way_repository_boundary() -> None:
     ]
 
 
+def test_low_level_engine_modules_do_not_import_the_composition_root() -> None:
+    """Composition dependencies flow inward through explicit construction only."""
+
+    low_level_roots = (
+        ROOT / "engine" / "agent",
+        ROOT / "engine" / "dlc",
+        ROOT / "engine" / "tools" / "runtime",
+        ROOT / "engine" / "policy",
+        ROOT / "engine" / "security",
+    )
+    violations = [
+        path.relative_to(ROOT).as_posix()
+        for package_root in low_level_roots
+        for path in package_root.rglob("*.py")
+        if "engine.runtime_composition" in _python_imports(path)
+    ]
+
+    assert violations == []
+
+
 def test_data_capability_bench_uses_current_project_resource_authority() -> None:
     runner = (
         ROOT
@@ -156,6 +176,8 @@ def test_frozen_builds_bind_system_dlc_packages_to_explicit_signing_keys() -> No
     assert "DBFOX_SYSTEM_DLC_SIGNING_KEY_PATH" in release
     assert "dbfox.data.dbfox-dlc" in electron_builder
     assert "dbfox.workspace.dbfox-dlc" in electron_builder
+    assert "dbfox.music.dbfox-dlc" in electron_builder
+    assert "dbfox.visualization.dbfox-dlc" in electron_builder
 
 
 def test_migration_archaeology_uses_a_committed_fixture_not_git_history() -> None:
@@ -636,7 +658,7 @@ def test_r5_core_product_graph_has_no_static_github_domain() -> None:
         / "features"
         / "workspace"
         / "artifacts"
-        / "artifactRendererRegistry.tsx",
+        / "artifactViewRegistry.ts",
     )
     forbidden = re.compile(
         r"engine\.github|GithubRepositoryBinding|builtin\.github|"
@@ -759,3 +781,37 @@ def test_readme_architecture_diagram_is_static_svg() -> None:
     assert "本地 SQLite" in diagram
     assert "用户数据库" in diagram
     assert "模型服务" in diagram
+
+
+def test_visualization_vendor_is_reproducible_offline_and_csp_safe() -> None:
+    """The signed Visualization DLC ships one pinned, locally built Vega runtime."""
+
+    package = json.loads(NPM_MANIFEST.read_text(encoding="utf-8"))
+    dependencies = package["dependencies"]
+    assert dependencies["vega"] == "6.4.0"
+    assert dependencies["vega-lite"] == "6.4.3"
+    assert dependencies["vega-interpreter"] == "2.3.2"
+    assert "vega-tooltip" not in dependencies
+    assert "npm run build:visualization-vendor" in package["scripts"]["build"]
+
+    frontend = ROOT / "dlcs" / "dbfox.visualization" / "frontend"
+    bundle = frontend / "vendor" / "vega-runtime.js"
+    manifest = json.loads(
+        (frontend / "vendor" / "bundle-manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest == {"schemaVersion": 1, "bytes": bundle.stat().st_size}
+    for license_name in (
+        "vega-BSD-3-Clause.txt",
+        "vega-lite-BSD-3-Clause.txt",
+        "vega-interpreter-BSD-3-Clause.txt",
+    ):
+        assert (frontend / "vendor" / "licenses" / license_name).is_file()
+
+    renderer = (frontend / "index.js").read_text(encoding="utf-8")
+    assert "{ ast: true }" in renderer
+    assert "expr: expressionInterpreter" in renderer
+    assert "loader: deniedLoader()" in renderer
+    assert "External visualization assets are disabled" in renderer
+    assert "view.tooltip(" in renderer
+    assert "TooltipHandler" not in renderer
+    assert b"vg-tooltip-element" not in bundle.read_bytes()

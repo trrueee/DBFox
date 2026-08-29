@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from engine.agent.artifact import (
     Artifact,
     ArtifactDraft,
+    ArtifactPayloadContractResolver,
     ArtifactRelation,
     ArtifactRelationType,
     ArtifactStatus,
@@ -57,9 +58,15 @@ class _PreparedArtifactDraft:
 
 
 class ArtifactRepository:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        payload_contract_resolver: ArtifactPayloadContractResolver | None = None,
+    ) -> None:
         self.session = session
         self.sessions = SessionRepository(session)
+        self.payload_contract_resolver = payload_contract_resolver
 
     def get_for_run(
         self,
@@ -150,6 +157,7 @@ class ArtifactRepository:
             artifact_type,
             payload,
             schema_version=schema_version,
+            contract_resolver=self.payload_contract_resolver,
         )
         visibility = visibility or default_artifact_visibility(artifact_type)
         version = 1
@@ -296,7 +304,7 @@ class ArtifactRepository:
                         raise ArtifactDraftContractError(
                             "Artifact payload references an unknown draft key"
                         )
-                    payload[field_name] = target_id
+                    _set_payload_draft_ref(payload, field_name, target_id)
 
                 relations: list[ArtifactRelation] = []
                 for relation in draft.relations:
@@ -333,6 +341,7 @@ class ArtifactRepository:
                             draft.type,
                             payload,
                             schema_version=draft.schema_version,
+                            contract_resolver=self.payload_contract_resolver,
                         ),
                         relations=tuple(relations),
                     )
@@ -363,7 +372,6 @@ class ArtifactRepository:
         # Run ownership is enforced by the lease on writes. Relation targets may
         # intentionally refer to earlier Artifacts in the same Session.
         return tuple(prepared)
-
     def list_for_run(self, run_id: str) -> list[Artifact]:
         rows = self.session.execute(
             select(AgentArtifactRecord).where(AgentArtifactRecord.run_id == run_id)
@@ -412,15 +420,21 @@ class ArtifactRepository:
             or any(ref not in owner_refs for ref in artifact_refs)
         ):
             return None
+        artifact = self._domain(row)
         if str(owner_run.id) == str(current_run.id):
-            return self._domain(row)
+            return artifact
+        # Internal Artifacts are execution details of their owning Run. They may
+        # be consumed by later tools in that same Run, but must never become
+        # cross-Run context merely because the resource fence still matches.
+        if artifact.visibility == ArtifactVisibility.INTERNAL:
+            return None
         if (
             int(owner_run.session_sequence or 0)
             >= int(current_run.session_sequence or 0)
             or str(owner_run.status) not in {"completed", "failed", "cancelled"}
         ):
             return None
-        return self._domain(row)
+        return artifact
 
     def referenced_artifacts_for_run(self, run_id: str) -> list[Artifact]:
         """Return prior Artifacts explicitly observed by this Run."""
@@ -490,3 +504,74 @@ class ArtifactRepository:
             provenance=_loads(str(row.provenance_json or "{}"), {}),
             relations=[ArtifactRelation.model_validate(item) for item in _loads(str(row.relations_json or "[]"), [])],
         )
+
+
+def _set_payload_draft_ref(
+    payload: dict[str, Any],
+    field_or_pointer: str,
+    artifact_id: str,
+) -> None:
+    """Resolve a same-outcome Artifact ID at a top-level key or JSON Pointer.
+
+    Existing top-level field names remain valid. A leading slash opts into the
+    RFC 6901 path syntax so a DLC can atomically relate nested, typed payloads
+    without copying a generated Artifact ID through a second write.
+    """
+
+    if not field_or_pointer.startswith("/"):
+        payload[field_or_pointer] = artifact_id
+        return
+
+    tokens = [
+        token.replace("~1", "/").replace("~0", "~")
+        for token in field_or_pointer[1:].split("/")
+    ]
+    if not tokens:
+        raise ArtifactDraftContractError("Artifact payload reference path is empty")
+
+    current: Any = payload
+    for token in tokens[:-1]:
+        if isinstance(current, dict):
+            if token not in current:
+                raise ArtifactDraftContractError(
+                    "Artifact payload reference path does not exist"
+                )
+            current = current[token]
+            continue
+        if isinstance(current, list):
+            try:
+                index = int(token)
+            except ValueError as exc:
+                raise ArtifactDraftContractError(
+                    "Artifact payload reference array index is invalid"
+                ) from exc
+            if index < 0 or index >= len(current):
+                raise ArtifactDraftContractError(
+                    "Artifact payload reference array index is out of range"
+                )
+            current = current[index]
+            continue
+        raise ArtifactDraftContractError(
+            "Artifact payload reference path crosses a scalar value"
+        )
+
+    leaf = tokens[-1]
+    if isinstance(current, dict):
+        current[leaf] = artifact_id
+        return
+    if isinstance(current, list):
+        try:
+            index = int(leaf)
+        except ValueError as exc:
+            raise ArtifactDraftContractError(
+                "Artifact payload reference array index is invalid"
+            ) from exc
+        if index < 0 or index >= len(current):
+            raise ArtifactDraftContractError(
+                "Artifact payload reference array index is out of range"
+            )
+        current[index] = artifact_id
+        return
+    raise ArtifactDraftContractError(
+        "Artifact payload reference path targets a scalar value"
+    )

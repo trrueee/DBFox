@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,7 +15,9 @@ from engine.agent.run_item import (
     MessagePayload,
     RunItemStatus,
     RunItemType,
+    approval_item,
     dump_run_item,
+    question_item,
 )
 from engine.schemas.api_responses import ConversationSnapshotResponse
 from engine.models import SecurityAuditRecord, utcnow
@@ -77,6 +80,44 @@ def test_run_items_restore_utc_on_naive_sqlite_timestamps() -> None:
 
     assert serialized["created_at"] == "2026-08-04T10:00:00Z"
     assert serialized["completed_at"] == "2026-08-04T10:00:00Z"
+
+
+def test_expired_approval_and_question_remain_distinct_public_item_states() -> None:
+    timestamp = datetime(2026, 8, 27, 10, 0, 0)
+    approval = approval_item(SimpleNamespace(
+        id="approval-1",
+        session_id="session-1",
+        run_id="run-1",
+        turn_id="turn-1",
+        status="expired",
+        version=2,
+        created_at=timestamp,
+        decided_at=timestamp,
+        tool_invocation_id="invocation-1",
+        risk_level="warning",
+        reason="Confirm operation",
+        requested_action_json='{"name":"workspace.write_file"}',
+        decision_note=None,
+    ))
+    question = question_item(SimpleNamespace(
+        id="question-1",
+        session_id="session-1",
+        run_id="run-1",
+        turn_id="turn-1",
+        status="expired",
+        version=2,
+        created_at=timestamp,
+        answered_at=None,
+        question="Which period?",
+        reason="The result depends on the period.",
+        options_json="[]",
+        allow_free_text=True,
+        response_json=None,
+    ))
+
+    assert approval.status == RunItemStatus.EXPIRED
+    assert approval.payload.decision == "expired"
+    assert question.status == RunItemStatus.EXPIRED
 
 
 def test_public_events_reject_result_rows_and_chart_series() -> None:

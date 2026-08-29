@@ -10,7 +10,6 @@ from typing import Any
 from pydantic import BaseModel
 from engine.agent.completion import CompletionConstraint, CompletionSupport
 from engine.agent.guidance import CapabilityGuidanceSpec
-from engine.agent.artifact_view import ArtifactChartViewProvider, ArtifactTableViewProvider
 from engine.dlc.api import (
     BackendExtensionHost as IBackendExtensionHost,
     DlcOperationSpec,
@@ -29,6 +28,10 @@ from engine.dlc.api import (
 )
 from engine.dlc.errors import DlcError, DlcErrorCode
 from engine.dlc.manifest import DlcManifest
+from engine.representation import (
+    REPRESENTATION_TYPE_PATTERN,
+    ArtifactRepresentationProvider,
+)
 from engine.tools.runtime.attempt import ScopedResourceResolver
 from engine.tools.runtime.base import BaseTool
 from engine.security.credential_vault import CredentialKind, get_credential_vault
@@ -55,10 +58,9 @@ class StagedDlcContributions:
     ] = field(default_factory=list)
     agent_guidance: list[CapabilityGuidanceSpec] = field(default_factory=list)
     artifact_contracts: list[tuple[str, int, type[BaseModel]]] = field(default_factory=list)
-    artifact_table_views: list[tuple[str, ArtifactTableViewProvider]] = field(
-        default_factory=list
-    )
-    artifact_chart_views: list[tuple[str, ArtifactChartViewProvider]] = field(
+    artifact_representations: list[
+        tuple[str, str, ArtifactRepresentationProvider]
+    ] = field(
         default_factory=list
     )
     completion_constraints: list[CompletionConstraint] = field(default_factory=list)
@@ -227,51 +229,46 @@ class _StagedArtifactsHost:
                 )
         self._staging.artifact_contracts.append((artifact_type, schema_version, validator))
 
-    def register_table_view(
+    def register_representation(
         self,
         artifact_type: str,
-        provider: ArtifactTableViewProvider,
+        representation_type: str,
+        provider: ArtifactRepresentationProvider,
     ) -> None:
         if not isinstance(artifact_type, str) or not _ARTIFACT_TYPE_PATTERN.fullmatch(artifact_type):
             raise DlcError(
                 DlcErrorCode.REGISTRATION_CONFLICT,
-                f"DLC '{self._staging.dlc_id}' registered an invalid table-view Artifact type '{artifact_type}'",
+                f"DLC '{self._staging.dlc_id}' registered an invalid representation Artifact type '{artifact_type}'",
             )
-        if not callable(getattr(provider, "page", None)) or not callable(
-            getattr(provider, "export_csv", None)
+        if not isinstance(representation_type, str) or re.fullmatch(
+            REPRESENTATION_TYPE_PATTERN,
+            representation_type,
+        ) is None:
+            raise DlcError(
+                DlcErrorCode.REGISTRATION_CONFLICT,
+                f"DLC '{self._staging.dlc_id}' registered an invalid representation type '{representation_type}'",
+            )
+        if not callable(getattr(provider, "describe", None)) or not callable(
+            getattr(provider, "execute", None)
         ):
             raise DlcError(
                 DlcErrorCode.REGISTRATION_CONFLICT,
-                f"DLC '{self._staging.dlc_id}' registered an invalid Artifact table-view provider",
+                f"DLC '{self._staging.dlc_id}' registered an invalid Artifact representation provider",
             )
-        if any(existing_type == artifact_type for existing_type, _ in self._staging.artifact_table_views):
+        key = (artifact_type, representation_type)
+        if any(
+            (existing_artifact_type, existing_representation_type) == key
+            for existing_artifact_type, existing_representation_type, _ in
+            self._staging.artifact_representations
+        ):
             raise DlcError(
                 DlcErrorCode.REGISTRATION_CONFLICT,
-                f"DLC '{self._staging.dlc_id}' registered duplicate table view for '{artifact_type}'",
+                f"DLC '{self._staging.dlc_id}' registered duplicate representation "
+                f"'{representation_type}' for '{artifact_type}'",
             )
-        self._staging.artifact_table_views.append((artifact_type, provider))
-
-    def register_chart_view(
-        self,
-        artifact_type: str,
-        provider: ArtifactChartViewProvider,
-    ) -> None:
-        if not isinstance(artifact_type, str) or not _ARTIFACT_TYPE_PATTERN.fullmatch(artifact_type):
-            raise DlcError(
-                DlcErrorCode.REGISTRATION_CONFLICT,
-                f"DLC '{self._staging.dlc_id}' registered an invalid chart-view Artifact type '{artifact_type}'",
-            )
-        if not callable(getattr(provider, "data", None)):
-            raise DlcError(
-                DlcErrorCode.REGISTRATION_CONFLICT,
-                f"DLC '{self._staging.dlc_id}' registered an invalid Artifact chart-view provider",
-            )
-        if any(existing_type == artifact_type for existing_type, _ in self._staging.artifact_chart_views):
-            raise DlcError(
-                DlcErrorCode.REGISTRATION_CONFLICT,
-                f"DLC '{self._staging.dlc_id}' registered duplicate chart view for '{artifact_type}'",
-            )
-        self._staging.artifact_chart_views.append((artifact_type, provider))
+        self._staging.artifact_representations.append(
+            (artifact_type, representation_type, provider)
+        )
 
 
 class _StagedCompletionHost:

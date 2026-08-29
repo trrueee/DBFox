@@ -8,6 +8,10 @@ from inspect import signature
 import pytest
 
 from engine.agent.artifact import Artifact
+from engine.representation import (
+    ArtifactRepresentationRequest,
+    ArtifactRepresentationResult,
+)
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
     ResourceScopeRef,
@@ -45,6 +49,47 @@ def test_tool_context_artifact_access_is_explicit_and_fail_closed() -> None:
             request=None,
             idempotency_key="no-artifact-access",
         ).artifact("artifact-1")
+
+
+def test_tool_context_representation_access_is_explicit_and_frozen() -> None:
+    expected = ArtifactRepresentationResult(
+        representation_type="acme.table.v1",
+        representation_version=1,
+        operation="page",
+        payload={"fields": []},
+        consistency="durable_snapshot",
+        read_at="2026-08-28T00:00:00Z",
+        read_id="read-1",
+        source_version="1",
+        source_fingerprint="sha256:test",
+    )
+    calls: list[tuple[str, str, str]] = []
+    context = ToolRunContext.for_invocation(
+        request=None,
+        idempotency_key="representation-access",
+        artifact_representation_reader=lambda artifact_id, representation_type, request: (
+            calls.append((artifact_id, representation_type, request.operation))
+            or expected
+        ),
+    )
+
+    result = context.read_artifact_representation(
+        "artifact-1",
+        "acme.table.v1",
+        ArtifactRepresentationRequest(operation="page"),
+    )
+    assert result is expected
+    assert calls == [("artifact-1", "acme.table.v1", "page")]
+
+    with pytest.raises(RuntimeError, match="cannot read"):
+        ToolRunContext.for_invocation(
+            request=None,
+            idempotency_key="no-representation-access",
+        ).read_artifact_representation(
+            "artifact-1",
+            "acme.table.v1",
+            ArtifactRepresentationRequest(operation="page"),
+        )
 
 
 def test_tool_invocation_context_requires_unique_scope_identity() -> None:

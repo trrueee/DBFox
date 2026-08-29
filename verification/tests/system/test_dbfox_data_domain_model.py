@@ -10,19 +10,21 @@ from sqlalchemy.orm import sessionmaker
 
 from engine.dlc import BuiltinContributionSet, ContributionCompiler, DlcPackageService
 from engine.dlc.api import (
-    ArtifactTableExportRequest,
-    ArtifactTablePageRequest,
-    ArtifactViewFilter,
-    ArtifactViewSort,
+    DATAFRAME_REPRESENTATION_TYPE,
+    ArtifactRepresentationContext,
+    ArtifactRepresentationRequest,
+    DataFrameFilter,
+    DataFramePage,
+    DataFrameSort,
     DlcOperationContext,
     ResourceScopeRef,
 )
-from engine.dlc.action_runs import DlcActionRunsHostImpl
 from engine.agent.artifact import Artifact, ArtifactRelation, ArtifactRelationType
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.models import AgentRun, CredentialLeaseRecord, Project
 from engine.runtime_composition import (
     build_attempt_resource_resolver,
+    build_dlc_action_runs_host,
     build_product_tool_registry,
     set_active_runtime_snapshot,
 )
@@ -108,14 +110,16 @@ def test_data_package_owns_namespaced_artifact_payload_contracts(tmp_path: Path)
         ("dbfox.data", "dbfox.data.sql", 1),
         ("dbfox.data", "dbfox.data.safety", 1),
         ("dbfox.data", "dbfox.data.result_view", 1),
-        ("dbfox.data", "dbfox.data.chart", 1),
+        ("dbfox.data", "dbfox.data.snapshot", 1),
+        ("dbfox.data", "dbfox.data.result_view", 2),
     ]
-    table_view = snapshot.get_artifact_table_view("dbfox.data.result_view")
-    assert table_view is not None
-    assert table_view.owner_id == "dbfox.data"
-    chart_view = snapshot.get_artifact_chart_view("dbfox.data.chart")
-    assert chart_view is not None
-    assert chart_view.owner_id == "dbfox.data"
+    dataframe = snapshot.get_artifact_representation(
+        "dbfox.data.result_view",
+        DATAFRAME_REPRESENTATION_TYPE,
+    )
+    assert dataframe is not None
+    assert dataframe.owner_id == "dbfox.data"
+    assert all(item.tool.name != "chart_create" for item in snapshot.tools)
 
 
 def test_data_sql_validate_uses_authorized_database_handle_and_emits_fenced_artifacts(
@@ -295,7 +299,8 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
     ]
     assert outcome.output.returned_rows == 2
     assert outcome.artifacts[0].type == "dbfox.data.result_view"
-    assert outcome.artifacts[0].payload_ref is not None
+    assert outcome.artifacts[0].schema_version == 2
+    assert outcome.artifacts[0].payload_ref is None
     assert outcome.artifacts[0].relations[0].artifact_id == sql_artifact.id
 
     result_draft = outcome.artifacts[0]
@@ -304,41 +309,82 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
         session_id="session-data",
         run_id="run-data",
         type=result_draft.type,
+        schema_version=result_draft.schema_version,
         title=result_draft.title,
         payload=result_draft.payload,
         payload_ref=result_draft.payload_ref,
         resource_refs=result_draft.resource_refs,
+        relations=[
+            ArtifactRelation(
+                relation=ArtifactRelationType.DERIVED_FROM,
+                artifact_id=sql_artifact.id,
+            )
+        ],
     )
 
-    table_view = snapshot.get_artifact_table_view(result_artifact.type)
-    assert table_view is not None
-    page = table_view.provider.page(
+    dataframe = snapshot.get_artifact_representation(
+        result_artifact.type,
+        DATAFRAME_REPRESENTATION_TYPE,
+    )
+    assert dataframe is not None
+    page_result = dataframe.provider.execute(
         result_artifact,
-        ArtifactTablePageRequest(
-            page=1,
-            page_size=1,
-            filters=(
-                ArtifactViewFilter(column="total", operator="gte", value=25),
-            ),
-            sort=(ArtifactViewSort(column="total", direction="desc"),),
-            search="",
-            count_mode="exact",
+        ArtifactRepresentationRequest(
+            operation="page",
+            parameters={
+                "page": 1,
+                "page_size": 1,
+                "filters": [
+                    DataFrameFilter(
+                        field="total",
+                        operator="gte",
+                        value=25,
+                    ).model_dump(mode="json")
+                ],
+                "sort": [
+                    DataFrameSort(
+                        field="total",
+                        direction="desc",
+                    ).model_dump(mode="json")
+                ],
+                "search": "",
+                "count_mode": "exact",
+            },
+        ),
+        ArtifactRepresentationContext(
+            artifact_loader=lambda artifact_id: (
+                sql_artifact if artifact_id == sql_artifact.id else None
+            )
         ),
     )
-    assert page.consistency == "durable_snapshot"
-    assert page.rows == [{"id": "2", "total": "40"}]
+    page = DataFramePage.model_validate(page_result.payload)
+    assert page_result.consistency == "live_reexecution"
+    assert page.fields[0].values == ["2"]
+    assert page.fields[1].values == ["40"]
     assert page.row_count == 2
     assert page.has_next_page is True
-    assert "without SQL reexecution" in page.notices[0]
-    exported = table_view.provider.export_csv(
+    assert "Re-executed" in page_result.notices[0]
+    exported = dataframe.provider.execute(
         result_artifact,
-        ArtifactTableExportRequest(
-            filters=(
-                ArtifactViewFilter(column="total", operator="gt", value=25),
-            ),
+        ArtifactRepresentationRequest(
+            operation="export.csv",
+            parameters={
+                "filters": [
+                    DataFrameFilter(
+                        field="total",
+                        operator="gt",
+                        value=25,
+                    ).model_dump(mode="json")
+                ]
+            },
+        ),
+        ArtifactRepresentationContext(
+            artifact_loader=lambda artifact_id: (
+                sql_artifact if artifact_id == sql_artifact.id else None
+            )
         ),
     )
-    assert exported.row_count == 1
+    assert exported.metadata["row-count"] == "1"
     assert "".join(exported.chunks) == "id,total\n2,40\n"
 
     def result_context(tool_name: str) -> ToolRunContext:
@@ -350,7 +396,11 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
             scope_refs=(ref,),
             resources=resolved,
             artifact_loader=lambda artifact_id: (
-                result_artifact if artifact_id == result_artifact.id else None
+                result_artifact
+                if artifact_id == result_artifact.id
+                else sql_artifact
+                if artifact_id == sql_artifact.id
+                else None
             ),
         )
 
@@ -367,47 +417,6 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
     )
     assert profiled.profiles[0]["kind"] == "number"
     assert profiled.profiles[0]["numeric"]["mean"] == 32.5
-
-    chart_tool = _data_tool(registry, "chart_create")
-    charted = chart_tool.run(
-        chart_tool.input_model.model_validate(
-            {
-                "result_artifact_id": result_artifact.id,
-                "x": "id",
-                "y": "total",
-            }
-        ),
-        result_context("chart_create"),
-    )
-    assert charted.output.chartable is True
-    assert charted.output.chart_type == "scatter"
-    assert charted.artifacts[0].type == "dbfox.data.chart"
-    assert charted.artifacts[0].resource_refs == (ref,)
-    assert charted.artifacts[0].relations[0].artifact_id == result_artifact.id
-    chart_view = snapshot.get_artifact_chart_view(charted.artifacts[0].type)
-    assert chart_view is not None
-    chart_artifact = Artifact(
-        id="artifact-chart-result",
-        session_id="session-data",
-        run_id="run-data",
-        type=charted.artifacts[0].type,
-        title=charted.artifacts[0].title,
-        payload=charted.artifacts[0].payload,
-        resource_refs=charted.artifacts[0].resource_refs,
-        relations=[
-            ArtifactRelation(
-                relation=ArtifactRelationType.DERIVED_FROM,
-                artifact_id=result_artifact.id,
-            )
-        ],
-    )
-    chart_data = chart_view.provider.data(chart_artifact, result_artifact)
-    assert chart_data.consistency == "durable_snapshot"
-    assert chart_data.series == [
-        {"label": "1", "value": 25.0},
-        {"label": "2", "value": 40.0},
-    ]
-
 
 def test_data_console_operation_uses_durable_action_run_and_owned_tool_chain(
     tmp_path: Path,
@@ -443,7 +452,7 @@ def test_data_console_operation_uses_durable_action_run_and_owned_tool_chain(
     contribution = snapshot.get_operation("dbfox.data", "console.execute")
     assert contribution is not None
     factory = sessionmaker(bind=db_session.get_bind())
-    action_runs = DlcActionRunsHostImpl(
+    action_runs = build_dlc_action_runs_host(
         dlc_id="dbfox.data",
         project_id="project-console",
         snapshot=snapshot,
@@ -765,7 +774,7 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
     assert previewed.output.column_summaries[1]["sensitive"] is True
     assert [draft.type for draft in previewed.artifacts] == [
         "dbfox.data.sql",
-        "dbfox.data.result_view",
+        "dbfox.data.snapshot",
     ]
     first_ref = next(ref for ref in refs if ref.id == first.id)
     assert all(draft.resource_refs == (first_ref,) for draft in previewed.artifacts)
@@ -830,13 +839,13 @@ def test_data_catalog_refresh_browse_search_and_inspect_are_database_scoped(
     assert first_page.row_count == 2
     assert first_page.has_next_page is True
     assert second_page.has_next_page is False
-    assert "without SQL reexecution" in first_page.notices[0]
+    assert "immutable Data snapshot" in first_page.notices[0]
 
     second_ref = next(ref for ref in refs if ref.id == second.id)
     forged = result_artifact.model_copy(
         update={"id": "artifact-forged-database", "resource_refs": (second_ref,)}
     )
-    with pytest.raises(Exception, match="does not match its durable payload"):
+    with pytest.raises(Exception, match="DataFrame page is unavailable"):
         inspect_result_tool.run(
             inspect_result_tool.input_model.model_validate(
                 {"result_artifact_id": forged.id}
@@ -1005,30 +1014,35 @@ def test_network_backup_fails_closed_without_pinned_official_client(
         )
 
 
-def test_data_artifact_contracts_remain_snapshot_scoped_after_core_freeze(
+def test_data_artifact_contracts_are_explicitly_resolved_after_core_freeze(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from engine.agent.artifact import artifact_payload_contracts, validate_artifact_payload
-    from engine.runtime_composition import set_active_runtime_snapshot
-
     monkeypatch.setattr(artifact_payload_contracts, "_frozen", True)
     _service, snapshot = _snapshot(tmp_path)
-    set_active_runtime_snapshot(snapshot)
-    try:
-        assert validate_artifact_payload(
-            "dbfox.data.sql",
-            {
-                "sql": "SELECT 1",
-                "safeSql": "SELECT 1",
-                "dialect": "sqlite",
-                "queryFingerprint": "fingerprint",
-                "parameters": {},
-            },
-            schema_version=1,
-        )["safeSql"] == "SELECT 1"
-    finally:
-        set_active_runtime_snapshot(None)
+    assert validate_artifact_payload(
+        "dbfox.data.sql",
+        {
+            "sql": "SELECT 1",
+            "safeSql": "SELECT 1",
+            "dialect": "sqlite",
+            "queryFingerprint": "fingerprint",
+            "parameters": {},
+        },
+        schema_version=1,
+        contract_resolver=lambda artifact_type, schema_version: (
+            contribution.validator
+            if (
+                contribution := snapshot.get_artifact_contract(
+                    artifact_type,
+                    schema_version,
+                )
+            )
+            is not None
+            else None
+        ),
+    )["safeSql"] == "SELECT 1"
 
 
 def test_data_package_owns_credential_reference_recovery_probe(

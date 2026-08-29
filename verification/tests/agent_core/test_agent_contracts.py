@@ -205,6 +205,35 @@ def test_response_composer_accepts_only_real_artifact_ids() -> None:
     assert response.limitation_codes == []
 
 
+def test_response_composer_tracks_embedded_artifact_without_making_it_evidence() -> None:
+    artifact = _artifact("artifact_visualization")
+    response = ResponseComposer().compose(
+        session_id="session_1",
+        run_id="run_1",
+        completion_disposition=CompletionDisposition.COMPLETE,
+        limitation_codes=[],
+        answer=AnswerCandidate(
+            text="趋势如下。\n\n{{artifact:artifact_visualization}}\n\n结论。"
+        ),
+        artifacts=[artifact],
+        answer_artifact_ids=[artifact.id],
+    )
+
+    assert response.referenced_artifact_ids == [artifact.id]
+    assert response.answer.evidence == []
+
+    with pytest.raises(ResponseCompositionError, match="embeds an unknown Artifact ID"):
+        ResponseComposer().compose(
+            session_id="session_1",
+            run_id="run_1",
+            completion_disposition=CompletionDisposition.COMPLETE,
+            limitation_codes=[],
+            answer=AnswerCandidate(text="{{artifact:artifact_fake}}"),
+            artifacts=[artifact],
+            answer_artifact_ids=["artifact_fake"],
+        )
+
+
 def test_bounded_partial_response_requires_machine_readable_limitations() -> None:
     response = ResponseComposer().compose(
         session_id="session_1",

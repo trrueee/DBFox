@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from engine import __version__
+from engine.dlc.errors import DlcError, DlcErrorCode
 from engine.main import LOCAL_SECURE_TOKEN, app
 import engine.main as main_module
 from engine.dev_server import _RELOAD_EXCLUDES
@@ -90,6 +91,23 @@ def test_startup_fatal_emits_only_safe_structured_diagnostics(capsys) -> None:
     assert payload["code"] == "DBFOX_METADATA_FOREIGN_KEY_VIOLATION"
     assert len(payload["fingerprint"]) == 24
     assert "secret-local-database-shape" not in line
+
+
+def test_startup_fatal_projects_typed_dlc_failure_code(capsys) -> None:
+    main_module._emit_startup_fatal(
+        "bootstrapping",
+        DlcError(
+            DlcErrorCode.CONFLICTING_DIGEST,
+            "private package detail",
+        ),
+    )
+
+    line = capsys.readouterr().out.strip()
+    marker = "DBFOX_ENGINE_FATAL "
+    payload = json.loads(line[len(marker):])
+    assert payload["stage"] == "bootstrapping"
+    assert payload["code"] == "DBFOX_DLC_CONFLICTING_DIGEST"
+    assert "private package detail" not in line
 
 
 def test_frozen_engine_allows_only_known_desktop_origins(monkeypatch) -> None:

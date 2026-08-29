@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from functools import partial
 from threading import Event
-from typing import Any, Literal, Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
@@ -42,8 +41,13 @@ from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.response import CompletionDisposition, CompletionLimitationCode
 from engine.agent.session import SessionLease
-from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
-from engine.agent.run_item import RunItemDelta, RunItemStatus, RunItemType
+from engine.agent.tool_dispatcher import (
+    ArtifactRepresentationProviderResolver,
+    ToolDispatchOutcome,
+    ToolDispatcher,
+)
+from engine.agent.artifact import Artifact, ArtifactPayloadContractResolver
+from engine.representation import ArtifactRepresentationDescriptor
 from engine.agent.run import RunPhase
 from engine.agent.turn import (
     ModelTurnResult,
@@ -51,7 +55,6 @@ from engine.agent.turn import (
     TurnStreamCancelled,
     TurnStreamError,
     TurnStreamItem,
-    TurnStreamKind,
     ModelStreamTimeouts,
 )
 from engine.app.safe_errors import fixed_error_detail
@@ -66,6 +69,7 @@ from engine.tools.materialization import ToolMaterialization, materialize_tools
 from engine.tools.runtime import ToolExecutionTask, ToolExecutor, ToolRegistry
 from engine.tools.runtime.attempt import CompositeResourceResolver
 from engine.agent.terminalizer import Terminalizer
+from engine.agent.turn_recorder import RunTurnRecorder
 from engine.agent.working_state import RunWorkingStateAssembler
 
 
@@ -96,18 +100,6 @@ class _PreparedTurn:
     messages: list[dict[str, Any]]
     tools: ToolMaterialization
     provider_settings: ProviderSettings
-
-
-@dataclass
-class _StreamingMessageState:
-    output_index: int
-    phase: Literal["commentary", "final_answer"] | None
-    text: str = ""
-    live_revision: int = 0
-    persisted_revision: int = 0
-    flushed_bytes: int = 0
-    last_flush: float = field(default_factory=time.monotonic)
-    ended: bool = False
 
 
 @dataclass
@@ -176,50 +168,47 @@ class RunLoop:
         model_factory: Callable[
             [ProviderSettings], ModelAdapter
         ] = _default_model_factory,
-        registry: ToolRegistry | None = None,
-        context_contributors: tuple[Callable[[Session], ContextContributor], ...] | None = None,
+        registry: ToolRegistry,
+        context_contributors: tuple[Callable[[Session], ContextContributor], ...],
         capability_guidance: tuple[CapabilityGuidanceContribution, ...] | None = None,
-        completion: CompletionGate | None = None,
+        completion: CompletionGate,
         definition: AgentDefinition = DEFAULT_AGENT_DEFINITION,
         live_stream: LiveStreamHub = LIVE_STREAM_HUB,
         tool_executor: ToolExecutor | None = None,
         resource_resolver: CompositeResourceResolver | None = None,
         resource_providers: tuple[ProjectResourceProvider, ...] = (),
+        artifact_representation_provider_resolver: (
+            ArtifactRepresentationProviderResolver | None
+        ) = None,
+        artifact_representation_describer: (
+            Callable[[Artifact], tuple[ArtifactRepresentationDescriptor, ...]] | None
+        ) = None,
+        artifact_payload_contract_resolver: (
+            ArtifactPayloadContractResolver | None
+        ) = None,
+        runtime_snapshot_id: str = "",
         pricing_resolver: (
             Callable[[ProviderSettings], ModelPricing | None] | None
         ) = None,
     ) -> None:
         self.session_factory = session_factory
         self.model_factory = model_factory
-        if registry is None or context_contributors is None or completion is None:
-            # This fallback keeps direct test construction ergonomic. Production
-            # startup injects all three values from runtime_composition.
-            from engine.runtime_composition import (
-                build_default_completion_policy,
-                build_product_tool_registry,
-                default_context_contributors,
-                default_capability_guidance,
-            )
-
-            if registry is None:
-                registry = build_product_tool_registry()
-            if context_contributors is None:
-                context_contributors = default_context_contributors()
-            if completion is None:
-                completion = CompletionGate(build_default_completion_policy())
-            if capability_guidance is None:
-                capability_guidance = default_capability_guidance()
         self.registry = registry
         if not self.registry.frozen:
             self.registry.freeze()
         self.definition = definition
         self.live_stream = live_stream
+        self.turn_recorder = RunTurnRecorder(
+            session_factory=self.session_factory,
+            live_stream=self.live_stream,
+        )
         self._owns_tool_executor = tool_executor is None
         self.tool_executor = tool_executor or ToolExecutor()
         self.pricing_resolver = pricing_resolver or (lambda _settings: None)
         self.prompts = PromptAssembler()
         self.context_contributors = context_contributors
         self.resource_providers = resource_providers
+        self.artifact_representation_describer = artifact_representation_describer
         self.capability_guidance = capability_guidance or ()
         self.completion = completion
         self.tool_dispatcher = ToolDispatcher(
@@ -229,6 +218,11 @@ class RunLoop:
             executor=self.tool_executor,
             resource_resolver=resource_resolver,
             resource_providers=resource_providers,
+            artifact_representation_provider_resolver=(
+                artifact_representation_provider_resolver
+            ),
+            artifact_payload_contract_resolver=artifact_payload_contract_resolver,
+            runtime_snapshot_id=runtime_snapshot_id,
         )
         self.terminalizer = Terminalizer(session_factory=self.session_factory)
 
@@ -465,7 +459,7 @@ class RunLoop:
             adapter = self.model_factory(prepared.provider_settings)
             state.control.checkpoint()
             result = TurnStreamAssembler().consume(
-                self._publish_stream(
+                self.turn_recorder.publish(
                     lease=lease,
                     run_id=run_id,
                     turn_id=prepared.turn_id,
@@ -607,7 +601,7 @@ class RunLoop:
         state: _ExecutionState,
     ) -> bool:
         if result.tool_calls:
-            self._set_run_phase(lease, run_id, RunPhase.EXECUTING_TOOL)
+            self.turn_recorder.set_phase(lease, run_id, RunPhase.EXECUTING_TOOL)
         planned_calls: list[_PlannedToolCall] = []
         next_tool_count = state.tool_count
         next_stopper: ToolDispatchOutcome | None = None
@@ -818,6 +812,7 @@ class RunLoop:
                 db,
                 contributors=self.context_contributors,
                 resource_providers=self.resource_providers,
+                artifact_representation_describer=self.artifact_representation_describer,
             ).build(run_id)
             state = RunWorkingStateAssembler(
                 db,
@@ -892,155 +887,6 @@ class RunLoop:
                 tools=tools,
                 provider_settings=settings,
             )
-
-    def _publish_stream(
-        self,
-        *,
-        lease: SessionLease,
-        run_id: str,
-        turn_id: str,
-        items: Iterable[TurnStreamItem],
-        control: LeaseAwareRunControl,
-    ) -> Iterable[TurnStreamItem]:
-        messages: dict[str, _StreamingMessageState] = {}
-        stream_completed = False
-        try:
-            for item in items:
-                control.checkpoint()
-                if item.kind is TurnStreamKind.ANSWER_START:
-                    self._set_run_phase(lease, run_id, RunPhase.STREAMING_ANSWER)
-                    if item.output_index is None:
-                        raise TurnStreamError(
-                            "Answer stream item is missing its output index"
-                        )
-                    state = _StreamingMessageState(
-                        output_index=item.output_index,
-                        phase=item.phase,
-                    )
-                    messages[item.item_id] = state
-                    state.persisted_revision = 1
-                    self._persist_turn_message(
-                        lease=lease,
-                        run_id=run_id,
-                        turn_id=turn_id,
-                        state=state,
-                        status=RunItemStatus.IN_PROGRESS,
-                    )
-                elif item.kind is TurnStreamKind.TOOL_CALL_START:
-                    self._set_run_phase(lease, run_id, RunPhase.PREPARING_TOOL_CALL)
-                elif item.kind is TurnStreamKind.ANSWER_DELTA:
-                    delta_state = messages.get(item.item_id)
-                    if delta_state is None or delta_state.ended:
-                        raise TurnStreamError(
-                            "Answer delta is outside its persisted message lifecycle"
-                        )
-                    content = item.content or ""
-                    offset = len(delta_state.text)
-                    delta_state.text += content
-                    delta_state.live_revision += 1
-                    durable_item_id = (
-                        f"message:{run_id}:{turn_id}:{delta_state.output_index}"
-                    )
-                    self.live_stream.publish(
-                        RunItemDelta(
-                            session_id=lease.session_id,
-                            run_id=run_id,
-                            turn_id=turn_id,
-                            item_id=durable_item_id,
-                            item_type=RunItemType.MESSAGE,
-                            field="content",
-                            revision=delta_state.live_revision,
-                            offset=offset,
-                            content=content,
-                        )
-                    )
-                    current_bytes = len(delta_state.text.encode("utf-8"))
-                    if delta_state.text and (
-                        current_bytes - delta_state.flushed_bytes >= 1024
-                        or time.monotonic() - delta_state.last_flush >= 0.25
-                    ):
-                        delta_state.persisted_revision += 1
-                        self._persist_turn_message(
-                            lease=lease,
-                            run_id=run_id,
-                            turn_id=turn_id,
-                            state=delta_state,
-                            status=RunItemStatus.IN_PROGRESS,
-                        )
-                        delta_state.flushed_bytes = current_bytes
-                        delta_state.last_flush = time.monotonic()
-                elif item.kind is TurnStreamKind.ANSWER_END:
-                    ended_state = messages.get(item.item_id)
-                    if ended_state is None or ended_state.ended:
-                        raise TurnStreamError(
-                            "Answer end is outside its persisted message lifecycle"
-                        )
-                    if item.message_status not in {"completed", "incomplete"}:
-                        raise TurnStreamError(
-                            "Answer end is missing its completed status"
-                        )
-                    ended_state.phase = item.phase
-                    ended_state.ended = True
-                    ended_state.persisted_revision += 1
-                    self._persist_turn_message(
-                        lease=lease,
-                        run_id=run_id,
-                        turn_id=turn_id,
-                        state=ended_state,
-                        status=(
-                            RunItemStatus.COMPLETED
-                            if item.message_status == "completed"
-                            else RunItemStatus.FAILED
-                        ),
-                    )
-                yield item
-            stream_completed = True
-        finally:
-            if not stream_completed:
-                for state in messages.values():
-                    if state.ended:
-                        continue
-                    state.ended = True
-                    state.persisted_revision += 1
-                    self._persist_turn_message(
-                        lease=lease,
-                        run_id=run_id,
-                        turn_id=turn_id,
-                        state=state,
-                        status=RunItemStatus.CANCELLED,
-                    )
-
-    def _set_run_phase(
-        self,
-        lease: SessionLease,
-        run_id: str,
-        phase: RunPhase,
-    ) -> None:
-        with self.session_factory() as db:
-            RunRepository(db).set_phase(lease=lease, run_id=run_id, phase=phase)
-            db.commit()
-
-    def _persist_turn_message(
-        self,
-        *,
-        lease: SessionLease,
-        run_id: str,
-        turn_id: str,
-        state: _StreamingMessageState,
-        status: RunItemStatus,
-    ) -> None:
-        with self.session_factory() as db:
-            RunRepository(db).persist_turn_message(
-                lease=lease,
-                run_id=run_id,
-                turn_id=turn_id,
-                output_index=state.output_index,
-                revision=state.persisted_revision,
-                phase=state.phase,
-                content=state.text,
-                status=status,
-            )
-            db.commit()
 
     def _complete(
         self,
@@ -1137,6 +983,7 @@ class RunLoop:
             snapshot = context or ContextAssembler(
                 db,
                 contributors=self.context_contributors,
+                artifact_representation_describer=self.artifact_representation_describer,
             ).build(run_id)
             decision = self.completion.evaluate_bounded_partial(
                 context=snapshot,
@@ -1196,6 +1043,7 @@ class RunLoop:
             snapshot = context or ContextAssembler(
                 db,
                 contributors=self.context_contributors,
+                artifact_representation_describer=self.artifact_representation_describer,
             ).build(run_id)
             decision = self.completion.evaluate_bounded_partial(
                 context=snapshot,

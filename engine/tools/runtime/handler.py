@@ -15,6 +15,7 @@ from engine.tools.runtime.base import BaseTool, ToolRecoveryPolicy
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.result import ToolResult
 from engine.tools.runtime.runtime import ToolRuntime
+from engine.tools.runtime.context import ArtifactRepresentationReader
 
 if TYPE_CHECKING:
     from engine.agent.artifact import Artifact, ArtifactRelationType
@@ -64,6 +65,7 @@ class ToolAttemptHandler:
             [str, ArtifactRelationType],
             tuple[Artifact, ...],
         ] | None = None,
+        artifact_representation_reader: ArtifactRepresentationReader | None = None,
     ) -> ToolResult:
         tool = self._resolve_tool(request)
         if isinstance(tool, ToolResult):
@@ -79,6 +81,7 @@ class ToolAttemptHandler:
             metadata_session=metadata_session,
             artifact_loader=artifact_loader,
             artifact_relation_loader=artifact_relation_loader,
+            artifact_representation_reader=artifact_representation_reader,
         )
 
     def run_with_resources(
@@ -95,6 +98,7 @@ class ToolAttemptHandler:
             [str, ArtifactRelationType],
             tuple[Artifact, ...],
         ] | None = None,
+        artifact_representation_reader: ArtifactRepresentationReader | None = None,
     ) -> ToolResult:
         tool = self._resolve_tool(request)
         if isinstance(tool, ToolResult):
@@ -109,6 +113,7 @@ class ToolAttemptHandler:
             metadata_session=metadata_session,
             artifact_loader=artifact_loader,
             artifact_relation_loader=artifact_relation_loader,
+            artifact_representation_reader=artifact_representation_reader,
         )
 
     def _resolve_tool(self, request: ToolAttemptRequest) -> BaseTool | ToolResult:
@@ -179,6 +184,7 @@ class ToolAttemptHandler:
             [str, ArtifactRelationType],
             tuple[Artifact, ...],
         ] | None = None,
+        artifact_representation_reader: ArtifactRepresentationReader | None = None,
     ) -> ToolResult:
         invocation_request = _invocation_request(request)
         runtime = ToolRuntime(self.registry)
@@ -197,6 +203,7 @@ class ToolAttemptHandler:
                 metadata_session=metadata_session,
                 artifact_loader=artifact_loader,
                 artifact_relation_loader=artifact_relation_loader,
+                artifact_representation_reader=artifact_representation_reader,
             )
         return runtime.invoke(
             tool_name=request.tool_name,
@@ -212,4 +219,5 @@ class ToolAttemptHandler:
             metadata_session=metadata_session,
             artifact_loader=artifact_loader,
             artifact_relation_loader=artifact_relation_loader,
+            artifact_representation_reader=artifact_representation_reader,
         )

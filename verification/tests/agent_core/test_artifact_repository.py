@@ -5,8 +5,13 @@ from engine.agent.artifact import (
     ArtifactRelation,
     ArtifactRelationType,
     ArtifactType,
+    ArtifactVisibility,
 )
-from engine.agent.repositories.artifact import ArtifactDraftContractError, ArtifactRepository
+from engine.agent.repositories.artifact import (
+    ArtifactDraftContractError,
+    ArtifactRepository,
+    _set_payload_draft_ref,
+)
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.resource_refs import dump_resource_refs
 from engine.models import AgentRun, AgentSession, AgentSessionInput
@@ -49,7 +54,16 @@ def _active_run(db_session, session_id: str):
     return admission, lease, turn
 
 
-def _markdown(repository, *, lease, run_id, turn_id, title="Work product", relations=None):
+def _markdown(
+    repository,
+    *,
+    lease,
+    run_id,
+    turn_id,
+    title="Work product",
+    relations=None,
+    visibility=None,
+):
     return repository.create(
         lease=lease,
         run_id=run_id,
@@ -59,6 +73,7 @@ def _markdown(repository, *, lease, run_id, turn_id, title="Work product", relat
         payload={"content": title},
         resource_refs=(RESOURCE,),
         relations=relations or [],
+        visibility=visibility,
     )
 
 
@@ -152,6 +167,55 @@ def test_previous_artifact_is_fenced_by_session_resource_and_order(db_session):
     ) is None
 
 
+def test_internal_artifact_is_available_only_inside_its_own_run(db_session):
+    admission, lease, turn = _active_run(db_session, "internal-artifact-availability")
+    repository = ArtifactRepository(db_session)
+    artifact = _markdown(
+        repository,
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(turn.id),
+        visibility=ArtifactVisibility.INTERNAL,
+    )
+    assert repository.available_artifact(
+        current_run_id=admission.run_id,
+        artifact_id=artifact.id,
+        session_id=artifact.session_id,
+    ) == artifact
+
+    owner_run = db_session.get(AgentRun, admission.run_id)
+    assert owner_run is not None
+    owner_run.status = "completed"
+    current_input = AgentSessionInput(
+        id="internal-artifact-consumer-input",
+        session_id=artifact.session_id,
+        run_id="internal-artifact-consumer-run",
+        sequence=2,
+        idempotency_key="internal-artifact-consumer",
+        content="Continue",
+        resource_refs_json=dump_resource_refs((RESOURCE,)),
+    )
+    current_run = AgentRun(
+        id="internal-artifact-consumer-run",
+        session_id=artifact.session_id,
+        input_id=current_input.id,
+        session_sequence=2,
+        question="Continue",
+        status="running",
+        request_json="{}",
+    )
+    db_session.add(current_input)
+    db_session.flush()
+    db_session.add(current_run)
+    db_session.commit()
+
+    assert repository.available_artifact(
+        current_run_id=current_run.id,
+        artifact_id=artifact.id,
+        session_id=artifact.session_id,
+    ) is None
+
+
 def test_artifact_draft_cannot_expand_run_resource_authority(db_session):
     admission, lease, turn = _active_run(db_session, "artifact-authority")
     unauthorized = ResourceScopeRef(kind="verification.resource", id="resource-2", version=1)
@@ -177,3 +241,29 @@ def test_artifact_draft_cannot_expand_run_resource_authority(db_session):
         assert "subset of the Run authority" in str(exc)
     else:
         raise AssertionError("Artifact draft expanded frozen Run authority")
+
+
+def test_payload_draft_reference_supports_rfc6901_nested_paths():
+    payload = {
+        "source": {"artifactId": "pending"},
+        "escaped/key": {"~identity": "pending"},
+    }
+
+    _set_payload_draft_ref(payload, "/source/artifactId", "artifact_source")
+    _set_payload_draft_ref(
+        payload,
+        "/escaped~1key/~0identity",
+        "artifact_escaped",
+    )
+
+    assert payload["source"]["artifactId"] == "artifact_source"
+    assert payload["escaped/key"]["~identity"] == "artifact_escaped"
+
+
+def test_payload_draft_reference_rejects_missing_nested_parent():
+    try:
+        _set_payload_draft_ref({}, "/source/artifactId", "artifact_source")
+    except ArtifactDraftContractError as exc:
+        assert "path does not exist" in str(exc)
+    else:
+        raise AssertionError("Missing JSON Pointer parent was accepted")

@@ -1,5 +1,8 @@
 import json
 import logging
+import os
+import subprocess
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -12,6 +15,29 @@ REDACTION_CONTRACT = json.loads(
     (Path(__file__).resolve().parents[3] / "test-fixtures" / "redaction-contract.json")
     .read_text(encoding="utf-8")
 )
+
+
+def test_diagnostics_module_is_importable_at_process_start(
+    tmp_path: Path,
+) -> None:
+    environment = os.environ.copy()
+    environment["DBFOX_RUNTIME_DIR"] = str(tmp_path / "runtime")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from engine.diagnostics.logs import diagnostic_log_paths; "
+            "assert diagnostic_log_paths()",
+        ],
+        cwd=Path(__file__).resolve().parents[3],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_redact_sensitive_text_masks_tokens_passwords_and_connection_strings() -> None:

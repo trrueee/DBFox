@@ -12,9 +12,11 @@ from starlette.concurrency import run_in_threadpool
 
 from engine.db import SessionLocal
 from engine.dlc.api import DlcOperationContext, DlcOperationError
-from engine.dlc.action_runs import DlcActionRunsHostImpl
 from engine.models import Project
-from engine.runtime_composition import get_active_runtime_snapshot
+from engine.runtime_composition import (
+    build_dlc_action_runs_host,
+    get_active_runtime_snapshot,
+)
 from engine.security.credential_lease import CredentialLeaseSaga
 
 logger = logging.getLogger(__name__)
@@ -227,7 +229,7 @@ async def invoke_dlc_operation(
         operation_name=operation_name,
         project_id=project_id,
         action_runs=(
-            DlcActionRunsHostImpl(
+            build_dlc_action_runs_host(
                 dlc_id=dlc_id,
                 project_id=project_id,
                 snapshot=snapshot,

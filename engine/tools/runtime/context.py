@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Protocol, cast
 
@@ -9,6 +10,16 @@ from engine.tools.runtime.attempt import ResourceKey, ResourceScopeRef
 from sqlalchemy.orm import Session
 
 from engine.agent.artifact import Artifact, ArtifactRelationType
+from engine.representation import (
+    ArtifactRepresentationRequest,
+    ArtifactRepresentationResult,
+)
+
+
+ArtifactRepresentationReader = Callable[
+    [str, str, ArtifactRepresentationRequest],
+    ArtifactRepresentationResult,
+]
 
 
 class ToolInvocationRequest(Protocol):
@@ -41,6 +52,10 @@ class ToolRunContext(BaseModel):
         [str, ArtifactRelationType],
         tuple[Artifact, ...],
     ] | None = Field(default=None, exclude=True)
+    artifact_representation_reader: ArtifactRepresentationReader | None = Field(
+        default=None,
+        exclude=True,
+    )
 
     @property
     def execution_mode(self) -> str:
@@ -99,7 +114,7 @@ class ToolRunContext(BaseModel):
         return cast(ToolInvocationRequest, self.request)
 
     def artifact(self, artifact_id: str) -> Artifact:
-        """Load one immutable Artifact scoped to the current invoking Run."""
+        """Load one immutable Artifact inside the invoking Run's resource fence."""
 
         normalized = str(artifact_id).strip()
         if not normalized or self.artifact_loader is None:
@@ -118,6 +133,35 @@ class ToolRunContext(BaseModel):
         if not normalized or self.artifact_relation_loader is None:
             return ()
         return self.artifact_relation_loader(normalized, relation)
+
+    def read_artifact_representation(
+        self,
+        artifact_id: str,
+        representation_type: str,
+        request: ArtifactRepresentationRequest,
+    ) -> ArtifactRepresentationResult:
+        """Read one JSON Representation through this Run's frozen DLC snapshot."""
+
+        if self.is_cancelled():
+            raise RuntimeError("The Artifact representation read was cancelled")
+        if self.deadline is not None and time.monotonic() >= self.deadline:
+            raise RuntimeError("The Artifact representation read exceeded its deadline")
+        normalized_id = str(artifact_id).strip()
+        normalized_type = str(representation_type).strip()
+        if (
+            not normalized_id
+            or not normalized_type
+            or self.artifact_representation_reader is None
+        ):
+            raise RuntimeError("This tool cannot read the requested Artifact representation")
+        result = self.artifact_representation_reader(
+            normalized_id,
+            normalized_type,
+            ArtifactRepresentationRequest.model_validate(request),
+        )
+        if self.is_cancelled():
+            raise RuntimeError("The Artifact representation read was cancelled")
+        return result
 
     def approval_authorizes(
         self,
@@ -154,6 +198,7 @@ class ToolRunContext(BaseModel):
             [str, ArtifactRelationType],
             tuple[Artifact, ...],
         ] | None = None,
+        artifact_representation_reader: ArtifactRepresentationReader | None = None,
     ) -> "ToolRunContext":
         thread_id = str(getattr(request, "session_id", "") or "")
         return cls(
@@ -171,6 +216,7 @@ class ToolRunContext(BaseModel):
             metadata_session=metadata_session,
             artifact_loader=artifact_loader,
             artifact_relation_loader=artifact_relation_loader,
+            artifact_representation_reader=artifact_representation_reader,
         )
 
 

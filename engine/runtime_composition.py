@@ -301,11 +301,80 @@ def build_product_run_loop(
     from engine.agent.loop import RunLoop
 
     snap = snapshot or get_active_runtime_snapshot()
+
+    def representation_provider(artifact_type: str, representation_type: str):
+        contribution = snap.get_artifact_representation(
+            artifact_type,
+            representation_type,
+        )
+        return contribution.provider if contribution is not None else None
+
+    def artifact_payload_contract(artifact_type: str, schema_version: int):
+        contribution = snap.get_artifact_contract(artifact_type, schema_version)
+        return contribution.validator if contribution is not None else None
+
+    def describe_representations(artifact):
+        descriptors = []
+        for contribution in snap.artifact_representations_for(artifact.type):
+            try:
+                descriptor = contribution.provider.describe(artifact)
+            except Exception as exc:
+                # One optional view capability must not prevent the Agent Turn
+                # from receiving the durable Artifact envelope.
+                logger.warning(
+                    "Artifact representation descriptor failed for owner=%s type=%s error=%s",
+                    contribution.owner_id,
+                    artifact.type,
+                    type(exc).__name__,
+                )
+                continue
+            if descriptor.representation_type == contribution.representation_type:
+                descriptors.append(descriptor)
+        return tuple(descriptors)
+
     return RunLoop(
         session_factory=session_factory,
         registry=build_product_tool_registry(snap),
         context_contributors=default_context_contributors(snap),
         capability_guidance=default_capability_guidance(snap),
         resource_providers=snap.resource_providers,
+        artifact_representation_provider_resolver=representation_provider,
+        artifact_representation_describer=describe_representations,
+        artifact_payload_contract_resolver=artifact_payload_contract,
+        runtime_snapshot_id=snap.snapshot_id,
         completion=CompletionGate(build_default_completion_policy(snap)),
+    )
+
+
+def build_dlc_action_runs_host(
+    *,
+    dlc_id: str,
+    project_id: str | None,
+    snapshot: RuntimeContributionSnapshot,
+    session_factory: Callable[[], Session],
+):
+    """Compose one DLC Workbench action host without leaking product lookup into DLC code."""
+
+    from engine.dlc.action_runs import DlcActionRunsHostImpl
+
+    def authorize_resources(
+        db: Session,
+        target_project_id: str,
+        requested_resources: tuple[Any, ...],
+    ):
+        return authorize_project_resources(
+            db,
+            target_project_id,
+            requested_resources,
+            snapshot=snapshot,
+        )
+
+    return DlcActionRunsHostImpl(
+        dlc_id=dlc_id,
+        project_id=project_id,
+        snapshot=snapshot,
+        session_factory=session_factory,
+        registry=build_product_tool_registry(snapshot),
+        resource_resolver=build_attempt_resource_resolver(snapshot=snapshot),
+        resource_authorizer=authorize_resources,
     )

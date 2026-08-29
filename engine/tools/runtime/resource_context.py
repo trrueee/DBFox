@@ -19,14 +19,9 @@ def build_tool_scope_context(
     db: Session,
     request: Any,
     tool: BaseTool[Any, Any],
-    resolver: CompositeResourceResolver | None = None,
+    resolver: CompositeResourceResolver,
 ) -> tuple[tuple[ResourceScopeRef, ...], dict[ResourceKey, Any]]:
     scope_refs: list[ResourceScopeRef] = []
-
-    if resolver is None:
-        from engine.runtime_composition import build_attempt_resource_resolver
-
-        resolver = build_attempt_resource_resolver(metadata_session=db)
 
     frozen_refs = tuple(getattr(request, "frozen_resource_refs", None) or ())
 

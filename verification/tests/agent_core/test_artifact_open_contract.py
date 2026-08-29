@@ -114,6 +114,27 @@ def test_unknown_new_write_is_rejected_but_historical_read_is_soft() -> None:
     ) == payload
 
 
+def test_extension_payload_contract_is_supplied_by_the_composition_boundary() -> None:
+    class FutureObjectPayload(BaseModel):
+        path: str = Field(min_length=1)
+
+    resolved: list[tuple[str, int]] = []
+
+    def resolve(artifact_type: str, schema_version: int):
+        resolved.append((artifact_type, schema_version))
+        if (artifact_type, schema_version) == ("dbfox.workspace.future_object", 1):
+            return FutureObjectPayload
+        return None
+
+    assert validate_artifact_payload(
+        "dbfox.workspace.future_object",
+        {"path": "src/app.py"},
+        schema_version=1,
+        contract_resolver=resolve,
+    ) == {"path": "src/app.py"}
+    assert resolved == [("dbfox.workspace.future_object", 1)]
+
+
 def test_artifact_draft_accepts_namespaced_type_and_schema_version() -> None:
     draft = ArtifactDraft(
         key="file",

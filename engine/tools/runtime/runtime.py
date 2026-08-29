@@ -14,7 +14,7 @@ from engine.app.safe_errors import (
     log_unexpected_exception,
 )
 from engine.tools.runtime.attempt import ResourceKey, ResourceScopeRef
-from engine.tools.runtime.context import ToolRunContext
+from engine.tools.runtime.context import ArtifactRepresentationReader, ToolRunContext
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.base import BaseTool
 
@@ -68,6 +68,7 @@ class ToolRuntime:
             [str, ArtifactRelationType],
             tuple[Artifact, ...],
         ] | None = None,
+        artifact_representation_reader: ArtifactRepresentationReader | None = None,
     ) -> ToolResult:
         tool = self.registry.require(tool_name)
         if not isinstance(tool, BaseTool):
@@ -116,6 +117,7 @@ class ToolRuntime:
                     metadata_session=metadata_session,
                     artifact_loader=artifact_loader,
                     artifact_relation_loader=artifact_relation_loader,
+                    artifact_representation_reader=artifact_representation_reader,
                 ),
             )
             if isinstance(outcome, ToolOutcome):
@@ -230,6 +232,7 @@ class ToolRuntime:
             [str, ArtifactRelationType],
             tuple[Artifact, ...],
         ] | None = None,
+        artifact_representation_reader: ArtifactRepresentationReader | None = None,
     ) -> ToolResult:
         """Resolve an interrupted action by its stable invocation key."""
 
@@ -266,6 +269,7 @@ class ToolRuntime:
                         metadata_session=metadata_session,
                         artifact_loader=artifact_loader,
                         artifact_relation_loader=artifact_relation_loader,
+                        artifact_representation_reader=artifact_representation_reader,
                     ),
                 )
             )

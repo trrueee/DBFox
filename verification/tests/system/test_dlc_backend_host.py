@@ -753,10 +753,6 @@ def test_full_dlc_contribution_suite(
 
     compiler = ContributionCompiler(dlc_service.storage_root, trust_store=dlc_service.trust_store)
     snapshot = compiler.compile()
-    from engine.runtime_composition import set_active_runtime_snapshot
-
-    set_active_runtime_snapshot(snapshot)
-
     # 1. Test Resource Discovery & Authorization
     descriptors = discover_project_resources(None, "p1", snapshot=snapshot)
     assert any(d.kind == "acme.analytics.report" and d.id == "rep_1" for d in descriptors)
@@ -776,7 +772,22 @@ def test_full_dlc_contribution_suite(
     assert resolved[authorized[0].canonical()] == {"report_data": "metrics_123"}
 
     # 3. Test Artifact Validation
-    validated_payload = validate_artifact_payload("acme.report", {"metrics": ["cpu", "memory"]}, schema_version=1)
+    validated_payload = validate_artifact_payload(
+        "acme.report",
+        {"metrics": ["cpu", "memory"]},
+        schema_version=1,
+        contract_resolver=lambda artifact_type, schema_version: (
+            contribution.validator
+            if (
+                contribution := snapshot.get_artifact_contract(
+                    artifact_type,
+                    schema_version,
+                )
+            )
+            is not None
+            else None
+        ),
+    )
     assert validated_payload == {"metrics": ["cpu", "memory"]}
 
     # 4. Test Operation

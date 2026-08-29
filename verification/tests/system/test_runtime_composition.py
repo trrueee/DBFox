@@ -92,6 +92,7 @@ def test_run_loop_preserves_explicit_empty_context_contributors() -> None:
         session_factory=lambda: None,  # type: ignore[arg-type]
         registry=build_product_tool_registry(),
         context_contributors=(),
+        completion=CompletionGate(build_default_completion_policy()),
     )
     try:
         assert loop.context_contributors == ()
@@ -104,6 +105,8 @@ def test_run_loop_preserves_explicit_empty_frozen_registry() -> None:
     loop = RunLoop(
         session_factory=lambda: None,  # type: ignore[arg-type]
         registry=registry,
+        context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
     )
     try:
         assert loop.registry is registry
@@ -116,6 +119,8 @@ def test_run_loop_preserves_explicit_completion_gate() -> None:
     completion = CompletionGate(build_default_completion_policy())
     loop = RunLoop(
         session_factory=lambda: None,  # type: ignore[arg-type]
+        registry=build_product_tool_registry(),
+        context_contributors=default_context_contributors(),
         completion=completion,
     )
     try:
@@ -124,14 +129,9 @@ def test_run_loop_preserves_explicit_completion_gate() -> None:
         loop.tool_executor.close()
 
 
-def test_run_loop_fallback_receives_product_defaults() -> None:
-    loop = RunLoop(session_factory=lambda: None)  # type: ignore[arg-type]
-    try:
-        assert loop.registry.tool_names() == build_product_tool_registry().tool_names()
-        assert loop.context_contributors == default_context_contributors()
-        assert isinstance(loop.completion, CompletionGate)
-    finally:
-        loop.tool_executor.close()
+def test_run_loop_requires_explicit_product_composition() -> None:
+    with pytest.raises(TypeError, match="registry"):
+        RunLoop(session_factory=lambda: None)  # type: ignore[call-arg,arg-type]
 
 
 def test_kernel_modules_do_not_own_concrete_dlc_composition() -> None:
@@ -141,6 +141,7 @@ def test_kernel_modules_do_not_own_concrete_dlc_composition() -> None:
     completion_source = (root / "agent" / "completion.py").read_text(encoding="utf-8")
 
     assert "engine.tools.builtin" not in loop_source
+    assert "engine.runtime_composition" not in loop_source
     assert "WorkspaceContextContributor" not in context_source
     assert "completion_data" not in completion_source
     assert "completion_defaults" not in completion_source

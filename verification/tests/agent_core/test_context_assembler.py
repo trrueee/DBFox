@@ -3,10 +3,15 @@ from __future__ import annotations
 import json
 
 from engine.agent.context import ContextAssembler
+from engine.agent.references import ConversationInputReference
 from engine.agent.resource_refs import ProjectResourceDescriptor
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.session import DeliveryMode
 from engine.tools.runtime.attempt import ResourceScopeRef
+from engine.representation import (
+    ArtifactRepresentationDescriptor,
+    ArtifactRepresentationOperation,
+)
 from engine.models import (
     AgentArtifactRecord,
     AgentMessage,
@@ -143,6 +148,8 @@ def test_next_run_reads_durable_history_and_selected_artifact(
     }
     assert snapshot.selected_artifacts[0].id == artifact.id
     assert snapshot.selected_artifacts[0].descriptor == {}
+    assert snapshot.selected_artifacts[0].schema_version == 1
+    assert snapshot.selected_artifacts[0].version == 1
     assert snapshot.previous_run_outcome is None
     assert "sensitive-cell-value" not in json.dumps(snapshot.model_dump(mode="json"))
     assert snapshot.hash == ContextAssembler(db_session).build(second.run_id).hash
@@ -201,6 +208,75 @@ def test_context_never_resolves_artifact_from_another_session(
     db_session.commit()
 
     assert ContextAssembler(db_session).build(local.run_id).selected_artifacts == []
+
+
+def test_attached_artifact_reference_is_projected_as_selected_context(
+    db_session, test_resource
+) -> None:
+    db_session.add(AgentSession(id="session_attached_artifact", title="Attached"))
+    db_session.commit()
+    repository = SessionRepository(db_session)
+    first = repository.admit(
+        session_id="session_attached_artifact",
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
+        content="Create a result",
+        idempotency_key="attached-first",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+    )
+    artifact = AgentArtifactRecord(
+        id="artifact_attached",
+        run_id=first.run_id,
+        session_id="session_attached_artifact",
+        type="verification.result",
+        title="Attached result",
+        payload_json="{}",
+        presentation_json='{"visibility":"primary"}',
+        refs_json="{}",
+        provenance_json="{}",
+        relations_json="[]",
+        status="completed",
+        sequence=1,
+    )
+    db_session.add(artifact)
+    db_session.commit()
+
+    second = repository.admit(
+        session_id="session_attached_artifact",
+        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
+        content="Explain this artifact",
+        idempotency_key="attached-second",
+        llm_credential_id="credential",
+        api_base=None,
+        model_name="model",
+        request_payload={},
+        references=(
+            ConversationInputReference(
+                label="Attached result",
+                artifact_id=artifact.id,
+            ),
+        ),
+    )
+    db_session.commit()
+
+    snapshot = ContextAssembler(
+        db_session,
+        artifact_representation_describer=lambda value: (
+            ArtifactRepresentationDescriptor(
+                representation_type="verification.frame.v1",
+                version=1,
+                operations=(ArtifactRepresentationOperation(name="page"),),
+            ),
+        ) if value.id == artifact.id else (),
+    ).build(second.run_id)
+
+    assert [item.id for item in snapshot.selected_artifacts] == [artifact.id]
+    assert snapshot.selected_artifacts[0].representations[0].representation_type == (
+        "verification.frame.v1"
+    )
+    assert snapshot.input_references[0].artifact_id == artifact.id
 
 
 def test_context_includes_consumed_steer_without_leaking_queued_input(

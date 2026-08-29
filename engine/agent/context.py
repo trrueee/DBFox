@@ -48,6 +48,9 @@ from engine.agent.references import (
     ConversationInputReference,
     load_input_references,
 )
+from engine.agent.artifact import Artifact
+from engine.agent.repositories.artifact import ArtifactRepository
+from engine.representation import ArtifactRepresentationDescriptor
 from engine.app.safe_errors import fixed_error_detail
 from engine.json_codec import (
     JsonCodecError,
@@ -114,10 +117,15 @@ class ContextArtifact(BaseModel):
 
     id: str
     type: str
+    schema_version: int = 1
+    version: int = 1
     title: str
     summary: str | None = None
     descriptor: dict[str, Any] = Field(default_factory=dict)
     payload_ref: str | None = None
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    relations: list[dict[str, str]] = Field(default_factory=list)
+    representations: list[ArtifactRepresentationDescriptor] = Field(default_factory=list)
 
 
 class ContextObservation(BaseModel):
@@ -458,10 +466,14 @@ class ContextAssembler:
         *,
         contributors: tuple[Callable[[Session], ContextContributor], ...] = (),
         resource_providers: tuple[ProjectResourceProvider, ...] = (),
+        artifact_representation_describer: (
+            Callable[[Artifact], tuple[ArtifactRepresentationDescriptor, ...]] | None
+        ) = None,
     ) -> None:
         self.session = session
         self.contributors = contributors
         self.resource_providers = resource_providers
+        self.artifact_representation_describer = artifact_representation_describer
 
     def build(self, run_id: str) -> ContextSnapshot:
         run = self.session.get(AgentRun, run_id)
@@ -1140,6 +1152,12 @@ class ContextAssembler:
                 if aggregate.selected_artifact_id
                 else []
             )
+        attached_artifact_ids = [
+            str(reference.artifact_id)
+            for reference in load_input_references(str(admitted.references_json))
+            if reference.artifact_id
+        ]
+        selected_ids = list(dict.fromkeys([*selected_ids, *attached_artifact_ids]))
         selected_ids = selected_ids[:MAX_SELECTED_ARTIFACTS]
         if not selected_ids:
             sources.append(
@@ -1165,20 +1183,41 @@ class ContextAssembler:
         )
         by_id = {str(row.id): row for row in rows}
         artifacts: list[ContextArtifact] = []
+        artifact_repository = ArtifactRepository(self.session)
         for artifact_id in selected_ids:
             row = by_id.get(artifact_id)
             if row is None:
                 continue
             payload = _json_object(row.payload_json)
+            artifact = artifact_repository.get(artifact_id)
+            if artifact is None:
+                continue
+            representations = (
+                self.artifact_representation_describer(artifact)
+                if self.artifact_representation_describer is not None
+                else ()
+            )
             descriptor = _context_artifact_descriptor(str(row.type), payload)
             artifacts.append(
                 ContextArtifact(
                     id=str(row.id),
                     type=str(row.type),
+                    schema_version=int(row.schema_version or 1),
+                    version=int(row.version or 1),
                     title=str(row.title),
                     summary=str(row.summary) if row.summary else None,
                     descriptor=descriptor,
                     payload_ref=str(row.payload_ref) if row.payload_ref else None,
+                    provenance={
+                        key: value
+                        for key, value in artifact.provenance.items()
+                        if key in {"tool_name", "tool_invocation_id"}
+                    },
+                    relations=[
+                        relation.model_dump(mode="json")
+                        for relation in artifact.relations[:20]
+                    ],
+                    representations=list(representations[:16]),
                 )
             )
         sources.append(

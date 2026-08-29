@@ -252,6 +252,7 @@ class EvidenceResponse(BaseModel):
     observed_at: str
     locator: dict[str, Any]
     value: Any | None = None
+    query_fingerprint: str = ""
 
 
 class RunCancelledResponse(BaseModel):

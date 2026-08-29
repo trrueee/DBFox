@@ -1,3 +1,5 @@
+import pytest
+
 from engine.agent.completion import (
     CompletionKind,
     CompletionPolicy,
@@ -74,6 +76,8 @@ def test_prompt_keeps_user_context_out_of_system_role():
     assert "authorized Resource" in bundle.system_prompt
     assert "Prior assistant text and prior Artifact metadata are context" in bundle.system_prompt
     assert "use an available capability tool to re-observe it" in bundle.system_prompt
+    assert "{{artifact:artifact_abc123}}" in bundle.system_prompt
+    assert "Artifact embedding controls answer composition only" in bundle.system_prompt
 
 
 def test_prompt_isolates_the_only_active_request_from_prior_history():
@@ -259,6 +263,64 @@ def test_task_rejects_fabricated_inline_evidence():
     )
     assert decision.kind is CompletionKind.CONTINUE
     assert decision.missing == ["valid_inline_evidence"]
+
+
+def test_observed_artifact_can_be_embedded_in_final_answer():
+    observation = ContextObservation(
+        id="obs-visualization",
+        tool_name="visualization_create",
+        status="succeeded",
+        summary="Created a visual explanation.",
+        artifact_ids=["artifact_visualization"],
+        capabilities=(METADATA_CAPABILITY,),
+    )
+    decision = _policy().evaluate(
+        context=_context(observations=[observation]),
+        model_result=_final(
+            "趋势如下。\n\n{{artifact:artifact_visualization}}\n\n随后是结论。"
+        ),
+        turn_count=2,
+        max_turns=8,
+    )
+    assert decision.kind is CompletionKind.SYNTHESIZE
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "正文内 {{artifact:artifact_visualization}} 不是独立块。",
+        "{{artifact:artifact_visualization_???}}",
+        "{{artifact:artifact_visualization}}\n\n{{artifact:artifact_visualization}}",
+    ],
+)
+def test_invalid_artifact_embed_requests_a_repair(answer: str):
+    observation = ContextObservation(
+        id="obs-visualization",
+        tool_name="visualization_create",
+        status="succeeded",
+        summary="Created a visual explanation.",
+        artifact_ids=["artifact_visualization"],
+        capabilities=(METADATA_CAPABILITY,),
+    )
+    decision = _policy().evaluate(
+        context=_context(observations=[observation]),
+        model_result=_final(answer),
+        turn_count=2,
+        max_turns=8,
+    )
+    assert decision.kind is CompletionKind.CONTINUE
+    assert decision.missing == ["valid_artifact_embeds"]
+
+
+def test_unobserved_artifact_embed_requests_a_repair():
+    decision = _policy().evaluate(
+        context=_context(),
+        model_result=_final("{{artifact:artifact_fabricated}}"),
+        turn_count=2,
+        max_turns=8,
+    )
+    assert decision.kind is CompletionKind.CONTINUE
+    assert decision.missing == ["valid_artifact_embeds"]
 
 
 def test_task_rejects_malformed_placeholder_citation():

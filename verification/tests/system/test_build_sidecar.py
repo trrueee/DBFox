@@ -313,7 +313,7 @@ def test_frozen_smoke_covers_schema_result_artifact_and_restart_contracts() -> N
     for contract in (
         "/api/v1/dlcs/dbfox.data/operations/catalog.refresh",
         "/api/v1/dlcs/dbfox.data/operations/console.execute",
-        "/api/v1/artifacts/${first.result_artifact_id}/page",
+        "/api/v1/artifacts/${first.result_artifact_id}/representations/dbfox.dataframe.v1/read",
         "/api/v1/conversations/${sessionId}",
         "stale_token_rejected",
         "restart_reload",

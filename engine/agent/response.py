@@ -76,6 +76,7 @@ class ResponseComposer:
         answer: AnswerCandidate,
         artifacts: list[Artifact],
         evidence_artifacts: list[Artifact] | None = None,
+        answer_artifact_ids: list[str] | None = None,
         selection_suggestion: ArtifactSelectionSuggestion | None = None,
     ) -> ComposedResponse:
         artifact_by_id = {artifact.id: artifact for artifact in artifacts}
@@ -93,6 +94,13 @@ class ResponseComposer:
             evidence_artifact_by_id[artifact.id] = artifact
 
         referenced: list[str] = []
+        for artifact_id in answer_artifact_ids or []:
+            if artifact_id not in evidence_artifact_by_id:
+                raise ResponseCompositionError(
+                    f"Answer embeds an unknown Artifact ID: {artifact_id}"
+                )
+            if artifact_id not in referenced:
+                referenced.append(artifact_id)
         for evidence in answer.evidence:
             if evidence.session_id != session_id or evidence.run_id != run_id:
                 raise ResponseCompositionError("Evidence is outside the response aggregate")

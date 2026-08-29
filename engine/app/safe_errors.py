@@ -19,6 +19,15 @@ from typing import Final, Literal
 class FixedErrorCode(str, Enum):
     INTERNAL_ERROR = "INTERNAL_ERROR"
     NOT_FOUND = "NOT_FOUND"
+    FORBIDDEN = "FORBIDDEN"
+    UNSUPPORTED_REPRESENTATION = "UNSUPPORTED_REPRESENTATION"
+    SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
+    SOURCE_CHANGED = "SOURCE_CHANGED"
+    STALE = "STALE"
+    INVALID_REQUEST = "INVALID_REQUEST"
+    DEADLINE_EXCEEDED = "DEADLINE_EXCEEDED"
+    CANCELLED = "CANCELLED"
+    PROVIDER_FAILURE = "PROVIDER_FAILURE"
     RESULT_PAGE_ERROR = "RESULT_PAGE_ERROR"
     RESULT_EXPORT_ERROR = "RESULT_EXPORT_ERROR"
     AGENT_REQUEST_ERROR = "AGENT_REQUEST_ERROR"
@@ -68,6 +77,15 @@ class FixedErrorCode(str, Enum):
 _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
     FixedErrorCode.INTERNAL_ERROR: "The request could not be completed.",
     FixedErrorCode.NOT_FOUND: "The requested resource was not found.",
+    FixedErrorCode.FORBIDDEN: "This Artifact representation is not available in the current scope.",
+    FixedErrorCode.UNSUPPORTED_REPRESENTATION: "The requested Artifact representation or operation is not supported.",
+    FixedErrorCode.SOURCE_UNAVAILABLE: "The source required by this Artifact representation is unavailable.",
+    FixedErrorCode.SOURCE_CHANGED: "The source no longer matches this Artifact representation.",
+    FixedErrorCode.STALE: "This Artifact representation is stale and must be refreshed.",
+    FixedErrorCode.INVALID_REQUEST: "The Artifact representation request is invalid.",
+    FixedErrorCode.DEADLINE_EXCEEDED: "The Artifact representation read exceeded its time limit.",
+    FixedErrorCode.CANCELLED: "The Artifact representation read was cancelled.",
+    FixedErrorCode.PROVIDER_FAILURE: "The Artifact representation provider could not complete the request.",
     FixedErrorCode.RESULT_PAGE_ERROR: "The Artifact page could not be retrieved.",
     FixedErrorCode.RESULT_EXPORT_ERROR: "The Artifact export could not be generated.",
     FixedErrorCode.AGENT_REQUEST_ERROR: "The agent request could not be completed.",
@@ -120,6 +138,8 @@ class SafeLogOperation(str, Enum):
     AGENT_MODEL_PROVIDER_STREAM = "agent_model_provider_stream"
     AGENT_RESULT_PAGE = "agent_result_page"
     AGENT_RESULT_EXPORT = "agent_result_export"
+    ARTIFACT_REPRESENTATION_READ = "artifact_representation_read"
+    ARTIFACT_REPRESENTATION_STREAM = "artifact_representation_stream"
     TOOL_RUNTIME_INPUT_CONTRACT_FAILED = "tool_runtime_tool_input_contract_failed"
     TOOL_RUNTIME_OUTPUT_CONTRACT_FAILED = "tool_runtime_tool_output_contract_failed"
     TOOL_RUNTIME_EXECUTION_FAILED = "tool_runtime_tool_execution_failed"

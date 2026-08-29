@@ -11,7 +11,6 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Iterable
 
-from engine.policy.redactor import DataRedactor
 from engine.runtime_paths import private_runtime_dir, private_runtime_file
 
 LOG_FILE_NAME = "dbfox-engine.log"
@@ -51,6 +50,10 @@ def diagnostic_log_paths() -> list[tuple[str, Path]]:
 def redact_sensitive_text(text: str) -> str:
     if not text:
         return text
+
+    # Keep diagnostics importable during early startup.  SecurityAudit imports
+    # this function while the policy package is still initializing.
+    from engine.policy.redactor import DataRedactor
 
     redacted = _URL_PASSWORD_RE.sub(r"\1[REDACTED]\3", text)
     redacted = _AUTHORIZATION_RE.sub(

@@ -40,6 +40,28 @@ class LlmTestResponse(BaseModel):
     error_message: str | None = None
 
 
+class LlmModelsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    llm_credential_id: str = Field(min_length=1, max_length=256)
+    api_base: str = Field(min_length=1, max_length=2_048)
+
+
+class LlmModelOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=256)
+    owned_by: str | None = None
+
+
+class LlmModelsResponse(BaseModel):
+    ok: bool
+    api_base: str
+    models: list[LlmModelOption] = Field(default_factory=list, max_length=1_000)
+    error_code: str | None = None
+    error_message: str | None = None
+
+
 def _probe_llm_service(*, client: Any, model_name: str) -> None:
     """Probe the configured LLM endpoint with legacy-compatible fallback.
 
@@ -107,6 +129,50 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
             latency_ms=latency_ms,
             error_code="LLM_CONNECTION_FAILED",
             error_message="模型连接测试未通过，请检查服务地址、凭据和模型名称。",
+        )
+
+@router.post("/agent/llm/models", response_model=LlmModelsResponse)
+def api_llm_models(req: LlmModelsRequest) -> LlmModelsResponse:
+    """List the models an OpenAI-compatible endpoint currently exposes.
+
+    Resolves the credential through the local OS vault, then queries the
+    provider's ``/models`` route with the same client stack as the Agent
+    runtime. Gateways without a model route return ``ok=False``; the client
+    falls back to its bundled catalog.
+    """
+    try:
+        config = resolve_product_llm_config_from_credential(
+            llm_credential_id=req.llm_credential_id,
+            api_base=req.api_base,
+            model_name=DEFAULT_LLM_MODEL_NAME,
+        )
+        client = create_openai_responses_client(
+            api_key=config.api_key,
+            api_base=config.api_base,
+            timeout=10.0,
+        )
+        page = client.models.list()
+        options: list[LlmModelOption] = []
+        seen: set[str] = set()
+        for model in page.data:
+            model_id = (model.id or "").strip()
+            if not model_id or model_id in seen:
+                continue
+            seen.add(model_id)
+            options.append(LlmModelOption(id=model_id, owned_by=model.owned_by or None))
+        options.sort(key=lambda option: option.id)
+        return LlmModelsResponse(ok=True, api_base=config.api_base, models=options)
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.UNEXPECTED,
+            exc=exc,
+        )
+        return LlmModelsResponse(
+            ok=False,
+            api_base=req.api_base,
+            error_code="LLM_MODEL_LIST_FAILED",
+            error_message="无法从该服务获取模型列表，请检查服务地址与凭据。",
         )
 
 router.include_router(result_router)

@@ -1,328 +1,292 @@
-"""Artifact and table result-view endpoints."""
+"""Generic Artifact representation discovery and read endpoints."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 import logging
-from typing import Any, Literal
+import re
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from engine.agent.artifact import Artifact, ArtifactStatus
+from engine.agent.repositories.artifact import ArtifactRepository
 from engine.app.safe_errors import (
-    FixedErrorCode,
     SafeLogOperation,
     fixed_error_detail,
     log_unexpected_exception,
 )
 from engine.db import get_db
-from engine.errors import DBFoxError
-from engine.agent.artifact_view import (
-    ArtifactTableExportRequest,
-    ArtifactTablePageRequest,
-    ArtifactViewError,
-    ArtifactViewFilter,
-    ArtifactViewSort,
+from engine.representation import (
+    ArtifactRepresentationContext,
+    ArtifactRepresentationDescriptor,
+    ArtifactRepresentationError,
+    ArtifactRepresentationRequest,
+    ArtifactRepresentationResult,
+    ArtifactRepresentationStream,
+    execute_artifact_representation,
 )
-from engine.agent.repositories.artifact import ArtifactRepository
+from engine.errors import DBFoxError
+from engine.json_codec import dumps
 from engine.runtime_composition import get_active_runtime_snapshot
-from engine.models import AgentArtifactRecord
 from engine.security.audit import SecurityAuditService
 
 
-logger = logging.getLogger("dbfox.api.agent.results")
+logger = logging.getLogger("dbfox.api.agent.representations")
 router = APIRouter()
 
-
-class ResultPageRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    page: int = Field(ge=1)
-    pageSize: int = Field(ge=1, le=500)
-    sort: list[ArtifactViewSort] | None = Field(default=None, max_length=16)
-    filters: list[ArtifactViewFilter] | None = Field(default=None, max_length=16)
-    search: str | None = Field(default=None, max_length=512)
-    countMode: Literal["none", "exact", "estimate"] = "none"
+_MAX_JSON_RESULT_BYTES = 8 * 1024 * 1024
+_MAX_STREAM_BYTES = 64 * 1024 * 1024
+_SAFE_FILE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
+_SAFE_METADATA_KEY = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 
 
-class ResultExportRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    sort: list[ArtifactViewSort] | None = Field(default=None, max_length=16)
-    filters: list[ArtifactViewFilter] | None = Field(default=None, max_length=16)
-    search: str | None = Field(default=None, max_length=512)
-
-
-class ResultPageResponse(BaseModel):
-    columns: list[str]
-    rows: list[dict[str, Any]]
-    page: int
-    pageSize: int
-    rowCount: int | None = None
-    hasNextPage: bool
-    latencyMs: int
-    consistency: Literal["durable_snapshot", "live_reexecution", "live_query"]
-    originalExecutedAt: str | None = None
-    viewExecutedAt: str
-    viewExecutionId: str
-    resourceVersion: str | int
-    sourceFingerprint: str
-    warnings: list[str] | None = None
-    notices: list[str] | None = None
-
-
-class ChartPointResponse(BaseModel):
-    label: str
-    value: float
-
-
-class ChartDataResponse(BaseModel):
-    series: list[ChartPointResponse]
-    sampleSize: int
-    truncated: bool
-    consistency: Literal["durable_snapshot", "live_reexecution"]
-    originalExecutedAt: str | None = None
-    viewExecutedAt: str
-    viewExecutionId: str
-    resourceVersion: str | int
-    sourceFingerprint: str
-
-
-def _result_filters(
-    filters: list[ArtifactViewFilter] | None,
-) -> list[ArtifactViewFilter]:
-    return list(filters or [])
-
-
-def _result_sorts(
-    sorts: list[ArtifactViewSort] | None,
-) -> list[ArtifactViewSort]:
-    return list(sorts or [])
-
-
-def _http_detail(_error: DBFoxError) -> dict[str, str]:
-    return fixed_error_detail(FixedErrorCode.AGENT_REQUEST_ERROR)
-
-
-def _page_response(result: Any) -> ResultPageResponse:
-    return ResultPageResponse(
-        columns=result.columns,
-        rows=result.rows,
-        page=result.page,
-        pageSize=result.page_size,
-        rowCount=result.row_count,
-        hasNextPage=result.has_next_page,
-        latencyMs=result.latency_ms,
-        consistency=result.consistency,
-        originalExecutedAt=result.original_executed_at,
-        viewExecutedAt=result.read_at,
-        viewExecutionId=result.read_id,
-        resourceVersion=result.resource_version,
-        sourceFingerprint=result.source_fingerprint,
-        warnings=result.warnings,
-        notices=result.notices,
+def _representation_error(code: str, *, status_code: int) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail=fixed_error_detail(code),
     )
 
 
-@router.post("/artifacts/{artifact_id}/page", response_model=ResultPageResponse)
-def api_agent_result_page(
-    artifact_id: str,
-    request: ResultPageRequest,
-    db: Session = Depends(get_db),
-) -> ResultPageResponse:
-    try:
-        artifact_row = db.get(AgentArtifactRecord, artifact_id)
-        if artifact_row is None:
-            raise ArtifactViewError("Artifact was not found.", status_code=404)
-        contribution = get_active_runtime_snapshot().get_artifact_table_view(
-            str(artifact_row.type)
-        )
-        if contribution is None:
-            raise ArtifactViewError(
-                "Artifact type has no durable table-view provider.", status_code=409
-            )
-        artifact = ArtifactRepository(db).get(artifact_id)
-        if artifact is None:
-            raise ArtifactViewError("Artifact was not found.", status_code=404)
-        result = contribution.provider.page(
-            artifact,
-            ArtifactTablePageRequest(
-                filters=tuple(
-                    ArtifactViewFilter.model_validate(item.model_dump())
-                    for item in _result_filters(request.filters)
-                ),
-                sort=tuple(
-                    ArtifactViewSort.model_validate(item.model_dump())
-                    for item in _result_sorts(request.sort)
-                ),
-                search=request.search,
-                page=request.page,
-                page_size=request.pageSize,
-                count_mode=request.countMode,
-            ),
-        )
-    except ArtifactViewError as error:
-        raise HTTPException(
-            status_code=error.status_code,
-            detail=fixed_error_detail(FixedErrorCode.RESULT_PAGE_ERROR),
-        ) from None
-    except DBFoxError as error:
-        raise HTTPException(status_code=400, detail=_http_detail(error))
-    except Exception as error:
-        log_unexpected_exception(
-            logger,
-            operation=SafeLogOperation.AGENT_RESULT_PAGE,
-            exc=error,
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=fixed_error_detail(FixedErrorCode.RESULT_PAGE_ERROR),
-        ) from None
-    return _page_response(result)
-
-
-@router.post("/artifacts/{artifact_id}/chart-data", response_model=ChartDataResponse)
-def api_agent_chart_data(
-    artifact_id: str,
-    db: Session = Depends(get_db),
-) -> ChartDataResponse:
-    try:
-        artifact_row = db.get(AgentArtifactRecord, artifact_id)
-        if artifact_row is None:
-            raise ArtifactViewError("Artifact was not found.", status_code=404)
-        contribution = get_active_runtime_snapshot().get_artifact_chart_view(
-            str(artifact_row.type)
-        )
-        if contribution is None:
-            raise ArtifactViewError(
-                "Artifact type has no durable chart-view provider.", status_code=409
-            )
-        artifacts = ArtifactRepository(db)
-        artifact = artifacts.get(artifact_id)
-        if artifact is None:
-            raise ArtifactViewError("Artifact was not found.", status_code=404)
-        source_ids = tuple(
-            relation.artifact_id
-            for relation in artifact.relations
-            if relation.relation.value == "derived_from"
-        )
-        if len(source_ids) != 1:
-            raise ArtifactViewError(
-                "Chart Artifact has no unambiguous durable source.", status_code=409
-            )
-        source = artifacts.get(source_ids[0])
-        if source is None or source.session_id != artifact.session_id:
-            raise ArtifactViewError(
-                "Chart source Artifact is unavailable.", status_code=404
-            )
-        result = contribution.provider.data(artifact, source)
-    except ArtifactViewError as error:
-        raise HTTPException(
-            status_code=error.status_code,
-            detail=fixed_error_detail(FixedErrorCode.RESULT_PAGE_ERROR),
-        ) from None
-    except DBFoxError as error:
-        raise HTTPException(status_code=400, detail=_http_detail(error))
-    except Exception as error:
-        log_unexpected_exception(
-            logger,
-            operation=SafeLogOperation.AGENT_RESULT_PAGE,
-            exc=error,
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=fixed_error_detail(FixedErrorCode.RESULT_PAGE_ERROR),
-        ) from None
-    return ChartDataResponse(
-        series=[ChartPointResponse.model_validate(point) for point in result.series],
-        sampleSize=result.sample_size,
-        truncated=result.truncated,
-        consistency=result.consistency,
-        originalExecutedAt=result.original_executed_at,
-        viewExecutedAt=result.read_at,
-        viewExecutionId=result.read_id,
-        resourceVersion=result.resource_version,
-        sourceFingerprint=result.source_fingerprint,
+def _provider_failure(*, stream: bool, error: Exception) -> HTTPException:
+    log_unexpected_exception(
+        logger,
+        operation=(
+            SafeLogOperation.ARTIFACT_REPRESENTATION_STREAM
+            if stream
+            else SafeLogOperation.ARTIFACT_REPRESENTATION_READ
+        ),
+        exc=error,
     )
+    return _representation_error("PROVIDER_FAILURE", status_code=500)
+
+
+def _root_artifact(artifacts: ArtifactRepository, artifact_id: str) -> Artifact:
+    artifact = artifacts.get(artifact_id)
+    if artifact is None or artifact.status is not ArtifactStatus.COMPLETED:
+        raise ArtifactRepresentationError(
+            "NOT_FOUND",
+            "The requested Artifact is unavailable.",
+            status_code=404,
+        )
+    return artifact
+
+
+def _context_for(
+    artifacts: ArtifactRepository,
+    root: Artifact,
+) -> ArtifactRepresentationContext:
+    allowed: dict[str, Artifact] = {root.id: root}
+    pending = [relation.artifact_id for relation in root.relations]
+    while pending and len(allowed) < 64:
+        related_id = pending.pop()
+        if related_id in allowed:
+            continue
+        related = artifacts.get(related_id)
+        if (
+            related is None
+            or related.status is not ArtifactStatus.COMPLETED
+            or related.session_id != root.session_id
+        ):
+            continue
+        allowed[related.id] = related
+        pending.extend(relation.artifact_id for relation in related.relations)
+
+    def load_related(artifact_id: str) -> Artifact | None:
+        return allowed.get(artifact_id)
+
+    return ArtifactRepresentationContext(artifact_loader=load_related)
+
+
+def _resolve(
+    db: Session,
+    artifact_id: str,
+    representation_type: str,
+    request: ArtifactRepresentationRequest,
+    *,
+    expected_kind: Literal["json", "stream"],
+) -> tuple[Artifact, ArtifactRepresentationDescriptor, object]:
+    artifacts = ArtifactRepository(db)
+    artifact = _root_artifact(artifacts, artifact_id)
+    contribution = get_active_runtime_snapshot().get_artifact_representation(
+        artifact.type,
+        representation_type,
+    )
+    if contribution is None:
+        raise ArtifactRepresentationError(
+            "UNSUPPORTED_REPRESENTATION",
+            "The Artifact does not provide the requested representation.",
+            status_code=409,
+        )
+    descriptor, result = execute_artifact_representation(
+        artifact=artifact,
+        representation_type=representation_type,
+        request=request,
+        provider=contribution.provider,
+        context=_context_for(artifacts, artifact),
+        expected_kind=expected_kind,
+    )
+    return artifact, descriptor, result
+
+
+def _safe_file_name(value: str) -> str:
+    candidate = _SAFE_FILE_NAME.sub("-", str(value).strip()).strip(".-")
+    return candidate[:128] or "dbfox-artifact.bin"
+
+
+def _stream_headers(result: ArtifactRepresentationStream) -> dict[str, str]:
+    headers = {
+        "Content-Disposition": f'attachment; filename="{_safe_file_name(result.file_name)}"'
+    }
+    for key, value in result.metadata.items():
+        normalized_key = str(key).strip().lower()
+        normalized_value = str(value).strip()
+        if (
+            _SAFE_METADATA_KEY.fullmatch(normalized_key) is not None
+            and len(normalized_value) <= 256
+            and "\r" not in normalized_value
+            and "\n" not in normalized_value
+        ):
+            headers[f"X-DBFox-Representation-{normalized_key}"] = normalized_value
+    return headers
+
+
+def _bounded_chunks(chunks: Iterator[str | bytes]) -> Iterator[str | bytes]:
+    total = 0
+    for chunk in chunks:
+        if not isinstance(chunk, (str, bytes)):
+            raise TypeError("Representation stream chunks must be text or bytes")
+        total += len(chunk.encode("utf-8") if isinstance(chunk, str) else chunk)
+        if total > _MAX_STREAM_BYTES:
+            raise RuntimeError("Representation stream exceeded its response budget")
+        yield chunk
+
+
+@router.get(
+    "/artifacts/{artifact_id}/representations",
+    response_model=list[ArtifactRepresentationDescriptor],
+)
+def api_artifact_representations(
+    artifact_id: str,
+    db: Session = Depends(get_db),
+) -> list[ArtifactRepresentationDescriptor]:
+    try:
+        artifact = _root_artifact(ArtifactRepository(db), artifact_id)
+        contributions = (
+            get_active_runtime_snapshot().artifact_representations_for(artifact.type)
+        )
+        descriptors = [
+            contribution.provider.describe(artifact)
+            for contribution in contributions
+        ]
+        for contribution, descriptor in zip(contributions, descriptors, strict=True):
+            if descriptor.representation_type != contribution.representation_type:
+                raise RuntimeError(
+                    "Representation provider descriptor does not match registration"
+                )
+        return descriptors
+    except ArtifactRepresentationError as error:
+        raise _representation_error(error.code, status_code=error.status_code) from None
+    except (DBFoxError, ValidationError) as error:
+        raise _provider_failure(stream=False, error=error) from None
+    except Exception as error:
+        raise _provider_failure(stream=False, error=error) from None
 
 
 @router.post(
-    "/artifacts/{artifact_id}/export",
-    responses={
-        200: {
-            "content": {"text/csv": {"schema": {"type": "string", "format": "binary"}}},
-            "description": "CSV export",
-        }
-    },
+    "/artifacts/{artifact_id}/representations/{representation_type}/read",
+    response_model=ArtifactRepresentationResult,
 )
-def api_agent_result_export(
+def api_artifact_representation_read(
     artifact_id: str,
-    request: ResultExportRequest,
+    representation_type: str,
+    request: ArtifactRepresentationRequest,
+    db: Session = Depends(get_db),
+) -> ArtifactRepresentationResult:
+    try:
+        _, descriptor, untrusted_result = _resolve(
+            db,
+            artifact_id,
+            representation_type,
+            request,
+            expected_kind="json",
+        )
+        if not isinstance(untrusted_result, ArtifactRepresentationResult):
+            raise TypeError("Canonical JSON representation dispatch returned a stream")
+        result = untrusted_result
+        encoded = dumps(result.model_dump(mode="json")).encode("utf-8")
+        if len(encoded) > _MAX_JSON_RESULT_BYTES:
+            raise RuntimeError("Representation result exceeded its response budget")
+        return result
+    except ArtifactRepresentationError as error:
+        raise _representation_error(error.code, status_code=error.status_code) from None
+    except ValidationError as error:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.ARTIFACT_REPRESENTATION_READ,
+            exc=error,
+        )
+        raise _representation_error("INVALID_REQUEST", status_code=422) from None
+    except DBFoxError as error:
+        raise _provider_failure(stream=False, error=error) from None
+    except Exception as error:
+        raise _provider_failure(stream=False, error=error) from None
+
+
+@router.post(
+    "/artifacts/{artifact_id}/representations/{representation_type}/stream",
+    response_class=StreamingResponse,
+)
+def api_artifact_representation_stream(
+    artifact_id: str,
+    representation_type: str,
+    request: ArtifactRepresentationRequest,
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     try:
-        artifact_row = db.get(AgentArtifactRecord, artifact_id)
-        if artifact_row is None:
-            raise ArtifactViewError("Artifact was not found.", status_code=404)
-        contribution = get_active_runtime_snapshot().get_artifact_table_view(
-            str(artifact_row.type)
+        artifact, descriptor, untrusted_result = _resolve(
+            db,
+            artifact_id,
+            representation_type,
+            request,
+            expected_kind="stream",
         )
-        if contribution is None:
-            raise ArtifactViewError(
-                "Artifact type has no durable table-view provider.", status_code=409
-            )
-        artifact = ArtifactRepository(db).get(artifact_id)
-        if artifact is None:
-            raise ArtifactViewError("Artifact was not found.", status_code=404)
-        exported = contribution.provider.export_csv(
-            artifact,
-            ArtifactTableExportRequest(
-                filters=tuple(
-                    ArtifactViewFilter.model_validate(item.model_dump())
-                    for item in _result_filters(request.filters)
-                ),
-                sort=tuple(
-                    ArtifactViewSort.model_validate(item.model_dump())
-                    for item in _result_sorts(request.sort)
-                ),
-                search=request.search,
-            ),
-        )
-    except ArtifactViewError as error:
-        raise HTTPException(
-            status_code=error.status_code,
-            detail=fixed_error_detail(FixedErrorCode.RESULT_EXPORT_ERROR),
-        ) from None
-    except DBFoxError as error:
-        raise HTTPException(status_code=400, detail=_http_detail(error))
-    except Exception as error:
+        if not isinstance(untrusted_result, ArtifactRepresentationStream):
+            raise TypeError("Canonical stream representation dispatch returned JSON")
+        headers = _stream_headers(untrusted_result)
+        stream = _bounded_chunks(untrusted_result.chunks)
+    except ArtifactRepresentationError as error:
+        raise _representation_error(error.code, status_code=error.status_code) from None
+    except ValidationError as error:
         log_unexpected_exception(
             logger,
-            operation=SafeLogOperation.AGENT_RESULT_EXPORT,
+            operation=SafeLogOperation.ARTIFACT_REPRESENTATION_STREAM,
             exc=error,
         )
-        raise HTTPException(
-            status_code=500,
-            detail=fixed_error_detail(FixedErrorCode.RESULT_EXPORT_ERROR),
-        ) from None
+        raise _representation_error("INVALID_REQUEST", status_code=422) from None
+    except DBFoxError as error:
+        raise _provider_failure(stream=True, error=error) from None
+    except Exception as error:
+        raise _provider_failure(stream=True, error=error) from None
 
     SecurityAuditService(db).record(
-        action="artifact.result.export",
+        action="artifact.representation.stream",
         outcome="requested",
         resource_type="agent_artifact",
-        resource_id=artifact_id,
-        correlation_id=f"export:{artifact_id}:{uuid4().hex}",
-        details={"format": "csv"},
+        resource_id=artifact.id,
+        correlation_id=f"representation:{artifact.id}:{uuid4().hex}",
+        details={
+            "representation_type": descriptor.representation_type,
+            "operation": request.operation,
+        },
     )
     db.commit()
     return StreamingResponse(
-        exported.chunks,
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": 'attachment; filename="dbfox-result.csv"',
-            "X-DBFox-Export-Row-Count": str(exported.row_count),
-            "X-DBFox-Source-Truncated": str(exported.source_truncated).lower(),
-        },
+        stream,
+        media_type=untrusted_result.media_type,
+        headers=headers,
     )
