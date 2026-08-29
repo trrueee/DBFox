@@ -100,6 +100,58 @@ export const zArtifactRelation = z.object({
 });
 
 /**
+ * ArtifactRepresentationOperation
+ *
+ * One operation exposed by a representation provider.
+ */
+export const zArtifactRepresentationOperation = z.object({
+    media_type: z.string().min(1).max(128).nullish(),
+    name: z.string().regex(/^[a-z][a-z0-9_.-]{0,63}$/),
+    result_kind: z.enum(['json', 'stream']).optional().default('json')
+});
+
+/**
+ * ArtifactRepresentationDescriptor
+ *
+ * Wire-safe description of one representation available for an Artifact.
+ */
+export const zArtifactRepresentationDescriptor = z.object({
+    operations: z.array(zArtifactRepresentationOperation).min(1).max(32),
+    representation_type: z.string().regex(/^[a-z][a-z0-9_.-]{2,127}$/),
+    version: z.int().gte(1)
+});
+
+/**
+ * ArtifactRepresentationRequest
+ *
+ * Generic wire request; the provider validates operation parameters.
+ */
+export const zArtifactRepresentationRequest = z.object({
+    operation: z.string().regex(/^[a-z][a-z0-9_.-]{0,63}$/),
+    parameters: z.record(z.string(), z.unknown()).optional()
+});
+
+/**
+ * ArtifactRepresentationResult
+ *
+ * Bounded JSON result returned by a representation provider.
+ */
+export const zArtifactRepresentationResult = z.object({
+    consistency: z.enum(['durable_snapshot', 'live_reexecution']),
+    notices: z.array(z.string()).max(32).optional().default([]),
+    operation: z.string().regex(/^[a-z][a-z0-9_.-]{0,63}$/),
+    original_observed_at: z.string().max(64).nullish(),
+    payload: z.record(z.string(), z.unknown()),
+    read_at: z.string().min(1).max(64),
+    read_id: z.string().min(1).max(128),
+    representation_type: z.string().regex(/^[a-z][a-z0-9_.-]{2,127}$/),
+    representation_version: z.int().gte(1),
+    source_fingerprint: z.string().min(1).max(256),
+    source_version: z.string().min(1).max(256),
+    warnings: z.array(z.string()).max(32).optional().default([])
+});
+
+/**
  * ArtifactSelectionRequest
  */
 export const zArtifactSelectionRequest = z.object({
@@ -125,49 +177,6 @@ export const zArtifactStatus = z.enum([
 ]);
 
 /**
- * ArtifactViewFilter
- */
-export const zArtifactViewFilter = z.object({
-    column: z.string().min(1).max(256),
-    operator: z.enum([
-        'equals',
-        'not_equals',
-        'contains',
-        'starts_with',
-        'ends_with',
-        'gt',
-        'gte',
-        'lt',
-        'lte',
-        'is_null',
-        'is_not_null',
-        'in',
-        'not_in'
-    ]),
-    value: z.union([
-        z.string().max(4096),
-        z.int(),
-        z.number(),
-        z.boolean(),
-        z.array(z.union([
-            z.string().max(4096),
-            z.int(),
-            z.number(),
-            z.boolean(),
-            z.null()
-        ])).max(100)
-    ]).nullish()
-});
-
-/**
- * ArtifactViewSort
- */
-export const zArtifactViewSort = z.object({
-    column: z.string().min(1).max(256),
-    direction: z.enum(['asc', 'desc'])
-});
-
-/**
  * ArtifactVisibility
  *
  * Product presentation tier, independent from durable audit retention.
@@ -183,32 +192,6 @@ export const zArtifactVisibility = z.enum([
  */
 export const zBodyClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPost = z.object({
     confirm_text: z.string()
-});
-
-/**
- * ChartPointResponse
- */
-export const zChartPointResponse = z.object({
-    label: z.string(),
-    value: z.number()
-});
-
-/**
- * ChartDataResponse
- */
-export const zChartDataResponse = z.object({
-    consistency: z.enum(['durable_snapshot', 'live_reexecution']),
-    originalExecutedAt: z.string().nullish(),
-    resourceVersion: z.union([
-        z.string(),
-        z.int()
-    ]),
-    sampleSize: z.int(),
-    series: z.array(zChartPointResponse),
-    sourceFingerprint: z.string(),
-    truncated: z.boolean(),
-    viewExecutedAt: z.string(),
-    viewExecutionId: z.string()
 });
 
 /**
@@ -517,6 +500,7 @@ export const zEvidenceReference = z.object({
     label: z.string(),
     locator: z.record(z.string(), z.unknown()).optional(),
     observed_at: z.iso.datetime(),
+    query_fingerprint: z.string().optional().default(''),
     value: z.unknown().nullish()
 });
 
@@ -530,6 +514,7 @@ export const zEvidenceResponse = z.object({
     label: z.string(),
     locator: z.record(z.string(), z.unknown()),
     observed_at: z.string(),
+    query_fingerprint: z.string().optional().default(''),
     run_id: z.string(),
     session_id: z.string(),
     value: z.unknown().nullish()
@@ -545,6 +530,33 @@ export const zFunctionCallOutputPayload = z.object({
     error_message: z.string().nullish(),
     output: z.string().optional().default(''),
     summary: z.string().optional().default('')
+});
+
+/**
+ * LlmModelOption
+ */
+export const zLlmModelOption = z.object({
+    id: z.string().min(1).max(256),
+    owned_by: z.string().nullish()
+});
+
+/**
+ * LlmModelsRequest
+ */
+export const zLlmModelsRequest = z.object({
+    api_base: z.string().min(1).max(2048),
+    llm_credential_id: z.string().min(1).max(256)
+});
+
+/**
+ * LlmModelsResponse
+ */
+export const zLlmModelsResponse = z.object({
+    api_base: z.string(),
+    error_code: z.string().nullish(),
+    error_message: z.string().nullish(),
+    models: z.array(zLlmModelOption).max(1000).optional(),
+    ok: z.boolean()
 });
 
 /**
@@ -867,59 +879,6 @@ export const zArtifact = z.object({
     type: z.string().min(1).max(128),
     version: z.int().gte(1).optional().default(1),
     visibility: zArtifactVisibility.optional().default('primary')
-});
-
-/**
- * ResultExportRequest
- */
-export const zResultExportRequest = z.object({
-    filters: z.array(zArtifactViewFilter).max(16).nullish(),
-    search: z.string().max(512).nullish(),
-    sort: z.array(zArtifactViewSort).max(16).nullish()
-});
-
-/**
- * ResultPageRequest
- */
-export const zResultPageRequest = z.object({
-    countMode: z.enum([
-        'none',
-        'exact',
-        'estimate'
-    ]).optional().default('none'),
-    filters: z.array(zArtifactViewFilter).max(16).nullish(),
-    page: z.int().gte(1),
-    pageSize: z.int().gte(1).lte(500),
-    search: z.string().max(512).nullish(),
-    sort: z.array(zArtifactViewSort).max(16).nullish()
-});
-
-/**
- * ResultPageResponse
- */
-export const zResultPageResponse = z.object({
-    columns: z.array(z.string()),
-    consistency: z.enum([
-        'durable_snapshot',
-        'live_reexecution',
-        'live_query'
-    ]),
-    hasNextPage: z.boolean(),
-    latencyMs: z.int(),
-    notices: z.array(z.string()).nullish(),
-    originalExecutedAt: z.string().nullish(),
-    page: z.int(),
-    pageSize: z.int(),
-    resourceVersion: z.union([
-        z.string(),
-        z.int()
-    ]),
-    rowCount: z.int().nullish(),
-    rows: z.array(z.record(z.string(), z.unknown())),
-    sourceFingerprint: z.string(),
-    viewExecutedAt: z.string(),
-    viewExecutionId: z.string(),
-    warnings: z.array(z.string()).nullish()
 });
 
 /**
@@ -1310,6 +1269,13 @@ export const zCredentialEnrollmentBatchRequestWritable = z.object({
  */
 export const zReadRootGetResponse = z.record(z.string(), z.string());
 
+export const zApiLlmModelsApiV1AgentLlmModelsPostBody = zLlmModelsRequest;
+
+/**
+ * Successful Response
+ */
+export const zApiLlmModelsApiV1AgentLlmModelsPostResponse = zLlmModelsResponse;
+
 export const zApiLlmTestApiV1AgentLlmTestPostBody = zLlmTestRequest;
 
 /**
@@ -1328,31 +1294,35 @@ export const zResolveApprovalApiV1ApprovalsApprovalIdResolvePostPath = z.object(
  */
 export const zResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponse = zApproval;
 
-export const zApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostPath = z.object({
+export const zApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetPath = z.object({
     artifact_id: z.string()
+});
+
+/**
+ * Response Api Artifact Representations Api V1 Artifacts  Artifact Id  Representations Get
+ *
+ * Successful Response
+ */
+export const zApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetResponse = z.array(zArtifactRepresentationDescriptor);
+
+export const zApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostBody = zArtifactRepresentationRequest;
+
+export const zApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostPath = z.object({
+    artifact_id: z.string(),
+    representation_type: z.string()
 });
 
 /**
  * Successful Response
  */
-export const zApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostResponse = zChartDataResponse;
+export const zApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostResponse = zArtifactRepresentationResult;
 
-export const zApiAgentResultExportApiV1ArtifactsArtifactIdExportPostBody = zResultExportRequest;
+export const zApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPostBody = zArtifactRepresentationRequest;
 
-export const zApiAgentResultExportApiV1ArtifactsArtifactIdExportPostPath = z.object({
-    artifact_id: z.string()
+export const zApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPostPath = z.object({
+    artifact_id: z.string(),
+    representation_type: z.string()
 });
-
-export const zApiAgentResultPageApiV1ArtifactsArtifactIdPagePostBody = zResultPageRequest;
-
-export const zApiAgentResultPageApiV1ArtifactsArtifactIdPagePostPath = z.object({
-    artifact_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zApiAgentResultPageApiV1ArtifactsArtifactIdPagePostResponse = zResultPageResponse;
 
 export const zListConversationsApiV1ConversationsGetQuery = z.object({
     limit: z.int().gte(1).lte(100).optional().default(50),

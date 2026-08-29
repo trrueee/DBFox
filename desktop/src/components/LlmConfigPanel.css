@@ -7,7 +7,7 @@
 }
 
 .hifi-settings-input--mono {
-  font-family: var(--font-mono, "Fira Code", "JetBrains Mono", monospace);
+  font-family: var(--font-family-code);
 }
 
 .hifi-settings-input[aria-invalid="true"] {
@@ -89,6 +89,76 @@
   justify-content: space-between;
   border-radius: 9px;
   font-size: var(--ui-font-control);
+}
+
+/* Provider + model rows inside selects: brand glyph left, label right. */
+.llm-provider-option {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+}
+
+.llm-provider-option > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.llm-provider-option__badge {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-nano);
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Model row: select + fetch button share one line. */
+.llm-model-control > .dbfox-select-trigger {
+  flex: 1 1 auto;
+}
+
+.llm-model-fetch-btn {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.llm-fetch-hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
+  line-height: 1.45;
+}
+
+.llm-model-custom-input {
+  margin-top: 9px;
+}
+
+/* Model row becomes a single line on wide settings panes. */
+@media (min-width: 640px) {
+  .llm-model-control {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .llm-model-select.dbfox-select-trigger {
+    flex: 1 1 auto;
+  }
+
+  .llm-model-custom-input {
+    margin-top: 0;
+    flex: 1 1 auto;
+    height: 40px;
+  }
 }
 
 .hifi-settings-eye-btn {

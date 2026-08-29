@@ -307,6 +307,122 @@ export type ArtifactRelation = {
 export type ArtifactRelationType = 'validated_by' | 'executed_as' | 'visualized_as' | 'derived_from' | 'supports';
 
 /**
+ * ArtifactRepresentationDescriptor
+ *
+ * Wire-safe description of one representation available for an Artifact.
+ */
+export type ArtifactRepresentationDescriptor = {
+    /**
+     * Operations
+     */
+    operations: Array<ArtifactRepresentationOperation>;
+    /**
+     * Representation Type
+     */
+    representation_type: string;
+    /**
+     * Version
+     */
+    version: number;
+};
+
+/**
+ * ArtifactRepresentationOperation
+ *
+ * One operation exposed by a representation provider.
+ */
+export type ArtifactRepresentationOperation = {
+    /**
+     * Media Type
+     */
+    media_type?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Result Kind
+     */
+    result_kind?: 'json' | 'stream';
+};
+
+/**
+ * ArtifactRepresentationRequest
+ *
+ * Generic wire request; the provider validates operation parameters.
+ */
+export type ArtifactRepresentationRequest = {
+    /**
+     * Operation
+     */
+    operation: string;
+    /**
+     * Parameters
+     */
+    parameters?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * ArtifactRepresentationResult
+ *
+ * Bounded JSON result returned by a representation provider.
+ */
+export type ArtifactRepresentationResult = {
+    /**
+     * Consistency
+     */
+    consistency: 'durable_snapshot' | 'live_reexecution';
+    /**
+     * Notices
+     */
+    notices?: Array<string>;
+    /**
+     * Operation
+     */
+    operation: string;
+    /**
+     * Original Observed At
+     */
+    original_observed_at?: string | null;
+    /**
+     * Payload
+     */
+    payload: {
+        [key: string]: unknown;
+    };
+    /**
+     * Read At
+     */
+    read_at: string;
+    /**
+     * Read Id
+     */
+    read_id: string;
+    /**
+     * Representation Type
+     */
+    representation_type: string;
+    /**
+     * Representation Version
+     */
+    representation_version: number;
+    /**
+     * Source Fingerprint
+     */
+    source_fingerprint: string;
+    /**
+     * Source Version
+     */
+    source_version: string;
+    /**
+     * Warnings
+     */
+    warnings?: Array<string>;
+};
+
+/**
  * ArtifactSelectionRequest
  */
 export type ArtifactSelectionRequest = {
@@ -336,38 +452,6 @@ export type ArtifactSelectionResponse = {
 export type ArtifactStatus = 'creating' | 'completed' | 'failed' | 'stale';
 
 /**
- * ArtifactViewFilter
- */
-export type ArtifactViewFilter = {
-    /**
-     * Column
-     */
-    column: string;
-    /**
-     * Operator
-     */
-    operator: 'equals' | 'not_equals' | 'contains' | 'starts_with' | 'ends_with' | 'gt' | 'gte' | 'lt' | 'lte' | 'is_null' | 'is_not_null' | 'in' | 'not_in';
-    /**
-     * Value
-     */
-    value?: string | number | number | boolean | Array<string | number | number | boolean | null> | null;
-};
-
-/**
- * ArtifactViewSort
- */
-export type ArtifactViewSort = {
-    /**
-     * Column
-     */
-    column: string;
-    /**
-     * Direction
-     */
-    direction: 'asc' | 'desc';
-};
-
-/**
  * ArtifactVisibility
  *
  * Product presentation tier, independent from durable audit retention.
@@ -382,62 +466,6 @@ export type BodyClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPost = {
      * Confirm Text
      */
     confirm_text: string;
-};
-
-/**
- * ChartDataResponse
- */
-export type ChartDataResponse = {
-    /**
-     * Consistency
-     */
-    consistency: 'durable_snapshot' | 'live_reexecution';
-    /**
-     * Originalexecutedat
-     */
-    originalExecutedAt?: string | null;
-    /**
-     * Resourceversion
-     */
-    resourceVersion: string | number;
-    /**
-     * Samplesize
-     */
-    sampleSize: number;
-    /**
-     * Series
-     */
-    series: Array<ChartPointResponse>;
-    /**
-     * Sourcefingerprint
-     */
-    sourceFingerprint: string;
-    /**
-     * Truncated
-     */
-    truncated: boolean;
-    /**
-     * Viewexecutedat
-     */
-    viewExecutedAt: string;
-    /**
-     * Viewexecutionid
-     */
-    viewExecutionId: string;
-};
-
-/**
- * ChartPointResponse
- */
-export type ChartPointResponse = {
-    /**
-     * Label
-     */
-    label: string;
-    /**
-     * Value
-     */
-    value: number;
 };
 
 /**
@@ -1211,6 +1239,10 @@ export type EvidenceReference = {
      */
     observed_at: string;
     /**
+     * Query Fingerprint
+     */
+    query_fingerprint?: string;
+    /**
      * Value
      */
     value?: unknown | null;
@@ -1246,6 +1278,10 @@ export type EvidenceResponse = {
      * Observed At
      */
     observed_at: string;
+    /**
+     * Query Fingerprint
+     */
+    query_fingerprint?: string;
     /**
      * Run Id
      */
@@ -1405,6 +1441,60 @@ export type FunctionCallPayload = {
      * Tool Version
      */
     tool_version: string;
+};
+
+/**
+ * LlmModelOption
+ */
+export type LlmModelOption = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Owned By
+     */
+    owned_by?: string | null;
+};
+
+/**
+ * LlmModelsRequest
+ */
+export type LlmModelsRequest = {
+    /**
+     * Api Base
+     */
+    api_base: string;
+    /**
+     * Llm Credential Id
+     */
+    llm_credential_id: string;
+};
+
+/**
+ * LlmModelsResponse
+ */
+export type LlmModelsResponse = {
+    /**
+     * Api Base
+     */
+    api_base: string;
+    /**
+     * Error Code
+     */
+    error_code?: string | null;
+    /**
+     * Error Message
+     */
+    error_message?: string | null;
+    /**
+     * Models
+     */
+    models?: Array<LlmModelOption>;
+    /**
+     * Ok
+     */
+    ok: boolean;
 };
 
 /**
@@ -2003,122 +2093,6 @@ export type ResourceScopeRef = {
 };
 
 /**
- * ResultExportRequest
- */
-export type ResultExportRequest = {
-    /**
-     * Filters
-     */
-    filters?: Array<ArtifactViewFilter> | null;
-    /**
-     * Search
-     */
-    search?: string | null;
-    /**
-     * Sort
-     */
-    sort?: Array<ArtifactViewSort> | null;
-};
-
-/**
- * ResultPageRequest
- */
-export type ResultPageRequest = {
-    /**
-     * Countmode
-     */
-    countMode?: 'none' | 'exact' | 'estimate';
-    /**
-     * Filters
-     */
-    filters?: Array<ArtifactViewFilter> | null;
-    /**
-     * Page
-     */
-    page: number;
-    /**
-     * Pagesize
-     */
-    pageSize: number;
-    /**
-     * Search
-     */
-    search?: string | null;
-    /**
-     * Sort
-     */
-    sort?: Array<ArtifactViewSort> | null;
-};
-
-/**
- * ResultPageResponse
- */
-export type ResultPageResponse = {
-    /**
-     * Columns
-     */
-    columns: Array<string>;
-    /**
-     * Consistency
-     */
-    consistency: 'durable_snapshot' | 'live_reexecution' | 'live_query';
-    /**
-     * Hasnextpage
-     */
-    hasNextPage: boolean;
-    /**
-     * Latencyms
-     */
-    latencyMs: number;
-    /**
-     * Notices
-     */
-    notices?: Array<string> | null;
-    /**
-     * Originalexecutedat
-     */
-    originalExecutedAt?: string | null;
-    /**
-     * Page
-     */
-    page: number;
-    /**
-     * Pagesize
-     */
-    pageSize: number;
-    /**
-     * Resourceversion
-     */
-    resourceVersion: string | number;
-    /**
-     * Rowcount
-     */
-    rowCount?: number | null;
-    /**
-     * Rows
-     */
-    rows: Array<{
-        [key: string]: unknown;
-    }>;
-    /**
-     * Sourcefingerprint
-     */
-    sourceFingerprint: string;
-    /**
-     * Viewexecutedat
-     */
-    viewExecutedAt: string;
-    /**
-     * Viewexecutionid
-     */
-    viewExecutionId: string;
-    /**
-     * Warnings
-     */
-    warnings?: Array<string> | null;
-};
-
-/**
  * RunCancelledResponse
  */
 export type RunCancelledResponse = {
@@ -2480,6 +2454,59 @@ export type ReadRootGetResponses = {
 
 export type ReadRootGetResponse = ReadRootGetResponses[keyof ReadRootGetResponses];
 
+export type ApiLlmModelsApiV1AgentLlmModelsPostData = {
+    body: LlmModelsRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/agent/llm/models';
+};
+
+export type ApiLlmModelsApiV1AgentLlmModelsPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ApiLlmModelsApiV1AgentLlmModelsPostError = ApiLlmModelsApiV1AgentLlmModelsPostErrors[keyof ApiLlmModelsApiV1AgentLlmModelsPostErrors];
+
+export type ApiLlmModelsApiV1AgentLlmModelsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: LlmModelsResponse;
+};
+
+export type ApiLlmModelsApiV1AgentLlmModelsPostResponse = ApiLlmModelsApiV1AgentLlmModelsPostResponses[keyof ApiLlmModelsApiV1AgentLlmModelsPostResponses];
+
 export type ApiLlmTestApiV1AgentLlmTestPostData = {
     body: LlmTestRequest;
     path?: never;
@@ -2591,7 +2618,7 @@ export type ResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponses = {
 
 export type ResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponse = ResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponses[keyof ResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponses];
 
-export type ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostData = {
+export type ApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetData = {
     body?: never;
     path: {
         /**
@@ -2600,10 +2627,10 @@ export type ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostData = {
         artifact_id: string;
     };
     query?: never;
-    url: '/api/v1/artifacts/{artifact_id}/chart-data';
+    url: '/api/v1/artifacts/{artifact_id}/representations';
 };
 
-export type ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostErrors = {
+export type ApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetErrors = {
     /**
      * RFC 9457 error response (400)
      */
@@ -2638,30 +2665,36 @@ export type ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostErrors = {
     503: ProblemDetails;
 };
 
-export type ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostError = ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostErrors[keyof ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostErrors];
+export type ApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetError = ApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetErrors[keyof ApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetErrors];
 
-export type ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostResponses = {
+export type ApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetResponses = {
     /**
+     * Response Api Artifact Representations Api V1 Artifacts  Artifact Id  Representations Get
+     *
      * Successful Response
      */
-    200: ChartDataResponse;
+    200: Array<ArtifactRepresentationDescriptor>;
 };
 
-export type ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostResponse = ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostResponses[keyof ApiAgentChartDataApiV1ArtifactsArtifactIdChartDataPostResponses];
+export type ApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetResponse = ApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetResponses[keyof ApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetResponses];
 
-export type ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostData = {
-    body: ResultExportRequest;
+export type ApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostData = {
+    body: ArtifactRepresentationRequest;
     path: {
         /**
          * Artifact Id
          */
         artifact_id: string;
+        /**
+         * Representation Type
+         */
+        representation_type: string;
     };
     query?: never;
-    url: '/api/v1/artifacts/{artifact_id}/export';
+    url: '/api/v1/artifacts/{artifact_id}/representations/{representation_type}/read';
 };
 
-export type ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostErrors = {
+export type ApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostErrors = {
     /**
      * RFC 9457 error response (400)
      */
@@ -2696,72 +2729,76 @@ export type ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostErrors = {
     503: ProblemDetails;
 };
 
-export type ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostError = ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostErrors[keyof ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostErrors];
+export type ApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostError = ApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostErrors[keyof ApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostErrors];
 
-export type ApiAgentResultExportApiV1ArtifactsArtifactIdExportPostResponses = {
+export type ApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostResponses = {
     /**
-     * CSV export
+     * Successful Response
+     */
+    200: ArtifactRepresentationResult;
+};
+
+export type ApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostResponse = ApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostResponses[keyof ApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostResponses];
+
+export type ApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPostData = {
+    body: ArtifactRepresentationRequest;
+    path: {
+        /**
+         * Artifact Id
+         */
+        artifact_id: string;
+        /**
+         * Representation Type
+         */
+        representation_type: string;
+    };
+    query?: never;
+    url: '/api/v1/artifacts/{artifact_id}/representations/{representation_type}/stream';
+};
+
+export type ApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPostError = ApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPostErrors[keyof ApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPostErrors];
+
+export type ApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPostResponses = {
+    /**
+     * Successful Response
      */
     200: unknown;
 };
-
-export type ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostData = {
-    body: ResultPageRequest;
-    path: {
-        /**
-         * Artifact Id
-         */
-        artifact_id: string;
-    };
-    query?: never;
-    url: '/api/v1/artifacts/{artifact_id}/page';
-};
-
-export type ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostErrors = {
-    /**
-     * RFC 9457 error response (400)
-     */
-    400: ProblemDetails;
-    /**
-     * RFC 9457 error response (401)
-     */
-    401: ProblemDetails;
-    /**
-     * RFC 9457 error response (403)
-     */
-    403: ProblemDetails;
-    /**
-     * RFC 9457 error response (404)
-     */
-    404: ProblemDetails;
-    /**
-     * RFC 9457 error response (409)
-     */
-    409: ProblemDetails;
-    /**
-     * RFC 9457 error response (422)
-     */
-    422: ProblemDetails;
-    /**
-     * RFC 9457 error response (500)
-     */
-    500: ProblemDetails;
-    /**
-     * RFC 9457 error response (503)
-     */
-    503: ProblemDetails;
-};
-
-export type ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostError = ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostErrors[keyof ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostErrors];
-
-export type ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostResponses = {
-    /**
-     * Successful Response
-     */
-    200: ResultPageResponse;
-};
-
-export type ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostResponse = ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostResponses[keyof ApiAgentResultPageApiV1ArtifactsArtifactIdPagePostResponses];
 
 export type ListConversationsApiV1ConversationsGetData = {
     body?: never;

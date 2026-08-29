@@ -1,13 +1,14 @@
 import {
-  apiAgentChartDataApiV1ArtifactsArtifactIdChartDataPost,
+  apiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPost,
+  apiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGet,
+  apiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPost,
+  apiLlmModelsApiV1AgentLlmModelsPost,
   apiLlmTestApiV1AgentLlmTestPost,
-  apiAgentResultExportApiV1ArtifactsArtifactIdExportPost,
-  apiAgentResultPageApiV1ArtifactsArtifactIdPagePost,
 } from "./generated/sdk.gen";
 import type {
+  ArtifactRepresentationRequest,
+  LlmModelsResponse,
   LlmTestResponse,
-  ResultExportRequest,
-  ResultPageRequest,
 } from "./generated/types.gen";
 
 const requireBlob = (value: unknown): Blob => {
@@ -18,13 +19,29 @@ const requireBlob = (value: unknown): Blob => {
 };
 
 export const agentApi = {
-  async fetchArtifactPage(
+  async listArtifactRepresentations(
     artifactId: string,
-    value: ResultPageRequest,
     signal?: AbortSignal,
   ) {
-    const { data } = await apiAgentResultPageApiV1ArtifactsArtifactIdPagePost({
+    const { data } = await apiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGet({
       path: { artifact_id: artifactId },
+      signal,
+      throwOnError: true,
+    });
+    return data;
+  },
+
+  async readArtifactRepresentation(
+    artifactId: string,
+    representationType: string,
+    value: ArtifactRepresentationRequest,
+    signal?: AbortSignal,
+  ) {
+    const { data } = await apiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPost({
+      path: {
+        artifact_id: artifactId,
+        representation_type: representationType,
+      },
       body: value,
       signal,
       throwOnError: true,
@@ -32,22 +49,20 @@ export const agentApi = {
     return data;
   },
 
-  async fetchArtifactChartData(artifactId: string) {
-    const { data } = await apiAgentChartDataApiV1ArtifactsArtifactIdChartDataPost({
-      path: { artifact_id: artifactId },
-      throwOnError: true,
-    });
-    return data;
-  },
-
-  async exportArtifactCsv(
+  async streamArtifactRepresentation(
     artifactId: string,
-    value: ResultExportRequest,
+    representationType: string,
+    value: ArtifactRepresentationRequest,
+    signal?: AbortSignal,
   ): Promise<Blob> {
-    const { data } = await apiAgentResultExportApiV1ArtifactsArtifactIdExportPost({
-      path: { artifact_id: artifactId },
+    const { data } = await apiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPost({
+      path: {
+        artifact_id: artifactId,
+        representation_type: representationType,
+      },
       body: value,
       parseAs: "blob",
+      signal,
       throwOnError: true,
     });
     return requireBlob(data);
@@ -67,6 +82,20 @@ export async function testLlmConnection(
       llm_credential_id: llmCredentialId,
       api_base: apiBase,
       model_name: modelName,
+    },
+    throwOnError: true,
+  });
+  return data;
+}
+
+export async function listLlmModels(
+  llmCredentialId: string,
+  apiBase: string,
+): Promise<LlmModelsResponse> {
+  const { data } = await apiLlmModelsApiV1AgentLlmModelsPost({
+    body: {
+      llm_credential_id: llmCredentialId,
+      api_base: apiBase,
     },
     throwOnError: true,
   });

@@ -1,6 +1,6 @@
 import type { ApiConfig, LlmConfigDraft } from "./api/types";
 import { validateApiConfig } from "./api/types";
-import { DEFAULT_LLM_API_BASE } from "./llmPresets";
+import { DEFAULT_LLM_API_BASE } from "./llmProviders";
 
 export const API_CONFIG_STORAGE_KEY = "dbfox-api-config";
 
