@@ -4,7 +4,7 @@
 >
 > 状态：已接受
 >
-> 最后核验：2026-08-21
+> 最后核验：2026-08-30
 >
 > 适用范围：`desktop/src` React 工作区的视觉层——Workbench Shell、Resource Sidebar、Conversation、Dock、Settings、Motion、DLC 视觉契约。不改变信息架构、Agent Runtime、DLC Runtime、状态模型与后端 API。
 >
@@ -34,7 +34,7 @@
 | `.app-main` 是 `margin + border-radius + box-shadow` 的 raised card | `desktop/src/App.css`（`.app-main`），且被 `__tests__/appShell.test.ts` 断言固化 |
 | 结构背景存在装饰性 radial gradient | `desktop/src/App.css` |
 | `ConversationCenter` 以 `!activeDatasource` 作为会话前置 gate，显示“连接一个数据库”空态 | `desktop/src/features/appShell/ConversationCenter.tsx` |
-| Sidebar 使用 connector selector tabs 承载 Data / Workspace / DLC connectors | `desktop/src/features/resources/ProjectResourceSidebar.tsx` |
+| Sidebar 已改为项目分组树（项目 → 对话预览 + 各 DLC 资源 section），行尾齿轮进入项目管理页 | `desktop/src/features/resources/ProjectResourceSidebar.tsx` |
 | Dock 为 border + radius 独立容器，CSS 采用 browser-style tabs | `desktop/src/features/appShell/WorkspaceDock` 及其样式 |
 | `ResourceConnectorContribution`（id/title/icon/render/addLabel/onAdd）已存在并被 Host 组合 | `desktop/src/features/resources/types.ts`、`resourceConnectorComposition.tsx` |
 

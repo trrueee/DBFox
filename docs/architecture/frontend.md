@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-28
+> 最后核验：2026-08-30
 >
 > 适用范围：`desktop/src/` 的工作区、传输、状态和用户交互
 >
@@ -81,7 +81,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-  APP["App Shell"] --> TREE["实体侧栏（项目/连接）"]
+  APP["App Shell"] --> TREE["项目侧栏（项目 → 对话/资源）"]
   APP --> CENTER["ConversationCenter"]
   APP --> DOCK["WorkspaceDock"]
   APP --> MODAL["连接管理 Dialog"]
@@ -105,7 +105,7 @@ flowchart LR
 
 布局原则：
 
-- 左侧是常驻 Resource View Container：Core 提供项目与最近工作导航、折叠/焦点/添加资源的统一容器；每个已激活 DLC 贡献自己的资源 View。切换项目概览、新任务或 Conversation 不会把资源树移入中央，也不会卸载左侧容器。
+- 左侧是项目分组树：每个项目一行（点击聚焦并展开），行内直接列出该项目对话（预览 5 条 + 显示更多）与各 DLC 资源 section；行尾 hover 齿轮进入项目管理页。切换项目不会卸载左侧容器，资源 View 仍由已激活 DLC 贡献并内嵌在所属项目分组下。
 - 中间只放对话与「新建项目」表单。Project 只创建名称与可选描述；本地目录由 `dbfox.workspace` Connector 在创建后通过通用 DLC operation 建立 binding，不进入 Project API。
 - 新建连接采用 Navicat 式 `Dialog` 弹窗承载 `DataSourcesPage`，不再让数据源管理页占满中间对话区；旧 `centerMode === "datasource"` 分支和 `openDatasourceCenter`/`centerDatasourceMode` Shell 状态已删除，命令面板的「管理连接」动作改为打开该 Dialog。
 - Workspace 资源树由 `dbfox.workspace` frontend contribution 提供；目录选择走 Host 的 `nativeDialogs.pickFolder`，列举/读取走 typed DLC operations，文件 Artifact/Dock renderer 也归该包。Core Shell 只拥有常驻 Resource View Container、Connector/Dock/Artifact contribution slots，以及版本化 `host.ui@1.0.0` Tree 的焦点、选择、折叠和键盘视觉语法；路径、文件动作和数据仍归 DLC。
@@ -233,7 +233,7 @@ DataFrame Representation 的页面响应同时携带 `originalObservedAt` 与 `r
 |---|---|---|
 | 导航状态 | `workspaceStore` | `activeProjectId`、唯一的 per-project `mainSurfaceByProject`、Conversation/draft Workbench scope、右栏 Dock 开合与 Tab identity；真实 Project list/create 由 `projectsApi` / `useProjectState` 投影 |
 | 本机外观偏好 | `ThemeProvider` + localStorage | 主题模式、受控色板、分区字号 |
-| 数据源导航状态 | `datasourceStore` | 当前数据源、Schema 树、同步状态 |
+| 数据源状态 | `dbfox.data` 前端扩展自持 | 连接分组、目录与刷新状态由 DLC 前端自持，不进入 Core store |
 | 会话公共投影 | `conversationStore` | Run、Run Item、Artifact、Approval、Question、Plan |
 | 组合视图 | `useConversationViewModel` | 当前 Run、排序后的消息和工件 |
 | 当前页面数据 | Renderer 组件/DataFrame hook | Result 当前页、Visualization 当前读取页与 Vega View；关闭或卸载即释放 |

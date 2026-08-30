@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-28
+> 最后核验：2026-08-30
 >
 > 适用范围：当前生产实现与后续合并版本
 
@@ -71,7 +71,7 @@
 5. [`dbfox-quiet-workbench-design.md`](dbfox-quiet-workbench-design.md)（Quiet Workbench 视觉规范与 merge gate）
 6. [`archive/designs/workbench-shell-migration-guide.md`](archive/designs/workbench-shell-migration-guide.md)（已完成迁移的历史规范）
 7. [`dbfox-design-baseline.md`](dbfox-design-baseline.md)（当前设计基线）
-8. [`dbfox-workspace-dock-design.md`](dbfox-workspace-dock-design.md)（历史交互草案，仅补充细节）
+8. [`archive/designs/2026-08-15-workspace-dock-design.md`](archive/designs/2026-08-15-workspace-dock-design.md)（历史交互草案，仅补充细节）
 9. [`architecture/implementation-map.md`](architecture/implementation-map.md)
 
 ### 准备提交或发布
@@ -112,7 +112,7 @@
 | 文档 | 主要问题 |
 | --- | --- |
 | [`dbfox-quiet-workbench-design.md`](dbfox-quiet-workbench-design.md) | Quiet Workbench 视觉架构与实现规范：Surface/Border/Radius/Shadow/Motion 合同、DLC Visual Contract、P0–P8 实施顺序与 merge gate 禁止清单。 |
-| [`dbfox-workspace-dock-design.md`](dbfox-workspace-dock-design.md) | 历史交互草案；当前边界见 [`architecture/frontend.md`](architecture/frontend.md)，本文只保留交互与视觉细节。 |
+| [`archive/designs/2026-08-15-workspace-dock-design.md`](archive/designs/2026-08-15-workspace-dock-design.md) | 历史交互草案；当前边界见 [`architecture/frontend.md`](architecture/frontend.md)，本文只保留交互与视觉细节。 |
 
 ## 文档优先级
 

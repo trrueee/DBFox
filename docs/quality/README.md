@@ -4,10 +4,11 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-28
+> 最后核验：2026-08-30
 
 ## 当前整改
 
+- [桌面 UI 全面改造与 Harness 边界审计证据](./2026-08-30-ui-overhaul-and-boundary-audit.md)：记录视觉系统、项目分组侧栏、动态模型目录、资源清单合同与边界审计的提交区间、门禁结果和边界决定。
 - [Artifact、Visualization 与 Dock 重构证据](./2026-08-28-artifact-visualization-dock-refactor.md)：记录正文 Artifact 编排、Representation、SQL Backend、独立 Visualization DLC、View/Tab/Dock 边界、成熟组件采用和聚焦验证结果。
 - [Agent Core、Capability DLC 与 Workbench 深度质量评审](./2026-08-22-agent-core-dlc-workbench-review.md)：记录 Resource authority、多同类资源、Project/Data/Workspace 边界，以及 Dock、Sidebar、Composer 的证据、复用决策和安全施工顺序。
 - [Agent 长任务收尾与证据呈现整改方案](2026-08-15-long-run-evidence-remediation.md)：修复跨 Run Result 引用、硬预算前收尾、受限部分结果和 Evidence/来源呈现。

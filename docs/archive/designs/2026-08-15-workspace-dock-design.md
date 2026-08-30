@@ -1,6 +1,6 @@
 # DBFox Workspace Dock 历史交互草案
 
-> 文档状态：历史
+> 文档状态：历史（当前边界见 `architecture/frontend.md`）
 >
 > 已由 [`architecture/frontend.md`](architecture/frontend.md) 与
 > [`architecture/artifact-representation-visualization.md`](architecture/artifact-representation-visualization.md)

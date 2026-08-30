@@ -818,4 +818,4 @@ sendToAi(datasourceId, payload):   // payload 见 §11：SQL / ERROR / Result �
 | 核心模式快捷键 | 各组件自理 vs App 全局注册 | App 全局 keydown 注册 Ctrl+1/2/3；Tab 上 hover 淡入 kbd 提示（aria-hidden） | 快捷键是应用级合同，集中注册避免冲突 |
 | 对话区表面 | 真实 `conversationWorkspace.css` 约定 | 白色 `--agent-surface` 根背景、用户气泡 `--agent-user-bg`；SQL 工件由 Data DLC 组合 Host `CodeArtifact`（复制/下载） | 与真实产品一致，不另起第二套配色 |
 
-已知偏差与后续项：侧栏快速导航（智能问数/对话历史/数据源管理）暂保留作为次级入口，待命令面板与顶栏完全覆盖后按 §21 移除；「发送到控制台」后自动聚焦 Live Prompt 与「控制台 hover 分组高亮」列入后续打磨。
+已知偏差与后续项：~~侧栏快速导航（智能问数/对话历史/数据源管理）暂保留作为次级入口~~（已解决：2026-08-30 侧栏重构为项目分组树，快速导航已移除）；「发送到控制台」后自动聚焦 Live Prompt 与「控制台 hover 分组高亮」列入后续打磨。

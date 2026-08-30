@@ -135,7 +135,7 @@ Set-Location desktop
 npm run electron:dev
 ```
 
-首次使用模型能力时，请在应用设置中配置模型服务凭据。API Key 由系统凭据库保存，不应写入仓库、前端 `localStorage` 或 `.env` 文件。
+首次使用模型能力时，请在应用设置的「模型服务」中配置凭据并选择服务商；默认模型列表从所连服务实时获取，也支持内置精选与自定义名称。API Key 由系统凭据库保存，不应写入仓库、前端 `localStorage` 或 `.env` 文件。
 
 详细的环境配置、Sidecar 构建、安装包生成和故障排查命令见[贡献指南](CONTRIBUTING.md)。
 
