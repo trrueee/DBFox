@@ -8,6 +8,8 @@ const worldByProject = new Map();
 const entitiesByProject = new Map();
 const edgesByProject = new Map();
 const revisionsByProject = new Map();
+const chaptersByProject = new Map();
+const treeModeByProject = new Map();
 const loadedProjects = new Set();
 const posByProject = new Map();
 let selectedEntityByProject = new Map();
@@ -29,9 +31,39 @@ function useDlcState(projectId) {
     entities: entitiesByProject.get(projectId) || [],
     edges: edgesByProject.get(projectId) || [],
     revisions: revisionsByProject.get(projectId) || [],
+    chapters: chaptersByProject.get(projectId) || [],
+    treeMode: treeModeByProject.get(projectId) || "logical",
     selectedId: selectedEntityByProject.get(projectId) || null,
     error: lastError,
   };
+}
+
+async function loadChapters(projectId) {
+  const chapters = await invoke("chapters.list", {}, projectId);
+  chaptersByProject.set(projectId, chapters?.chapters || []);
+  emit();
+}
+
+async function createChapter(projectId, title, content) {
+  const chapter = await invoke("chapters.create", { title, content }, projectId);
+  await loadChapters(projectId);
+  return chapter;
+}
+
+async function updateChapter(projectId, chapterId, title, content) {
+  const chapter = await invoke("chapters.update", { chapter_id: chapterId, title, content }, projectId);
+  await loadChapters(projectId);
+  return chapter;
+}
+
+async function deleteChapter(projectId, chapterId) {
+  await invoke("chapters.delete", { chapter_id: chapterId }, projectId);
+  await loadChapters(projectId);
+}
+
+async function moveChapter(projectId, chapterId, direction) {
+  await invoke("chapters.move", { chapter_id: chapterId, direction }, projectId);
+  await loadChapters(projectId);
 }
 
 async function invoke(operation, input, projectId) {
@@ -42,14 +74,16 @@ async function loadAll(projectId) {
   try {
     const world = await invoke("worlds.get", {}, projectId);
     worldByProject.set(projectId, world || null);
-    const [entities, edgeList, revisions] = await Promise.all([
+    const [entities, edgeList, revisions, chapters] = await Promise.all([
       invoke("entities.list", {}, projectId),
       invoke("relations.list", {}, projectId),
       invoke("revisions.list", {}, projectId),
+      invoke("chapters.list", {}, projectId),
     ]);
     entitiesByProject.set(projectId, entities?.entities || []);
     edgesByProject.set(projectId, edgeList?.edges || []);
     revisionsByProject.set(projectId, revisions?.revisions || []);
+    chaptersByProject.set(projectId, chapters?.chapters || []);
     lastError = null;
     loadedProjects.add(projectId);
   } catch (error) {
@@ -285,14 +319,42 @@ function StoryWorkbench({ projectId }) {
   const rootItem = items.get("story-root");
   const resolveItem = (id) => items.get(id);
 
+  const treeMode = state.treeMode;
+
   return React.createElement(
     "div",
     { className: "story-workbench" },
     React.createElement(
       "div",
       { className: "story-workbench__tree" },
+      React.createElement(
+        "div",
+        { className: "story-mode-toggle", role: "tablist", "aria-label": "目录形态" },
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            className: treeMode === "logical" ? "story-mode is-active" : "story-mode",
+            onClick: () => { treeModeByProject.set(projectId, "logical"); emit(); },
+          },
+          "逻辑",
+        ),
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            className: treeMode === "chapters" ? "story-mode is-active" : "story-mode",
+            onClick: () => {
+              treeModeByProject.set(projectId, "chapters");
+              if (!loadedProjects.has(projectId)) void loadAll(projectId);
+              emit();
+            },
+          },
+          "章节",
+        ),
+      ),
       state.error ? React.createElement("p", { className: "story-workbench__error" }, state.error) : null,
-      rootItem && host.ui?.Tree
+      treeMode === "logical" && rootItem && host.ui?.Tree
         ? React.createElement(host.ui.Tree, {
             ariaLabel: "故事实体",
             rootItem,
@@ -353,7 +415,26 @@ function StoryWorkbench({ projectId }) {
           "新增实体",
         ),
       ),
-      selected
+      treeMode === "chapters"
+        ? React.createElement(ChapterTree, {
+            projectId,
+            chapters: state.chapters,
+            busy,
+            onCreate: async (title, content) => {
+              setBusy(true);
+              try { await createChapter(projectId, title, content); } finally { setBusy(false); }
+            },
+            onDelete: async (chapterId) => {
+              setBusy(true);
+              try { await deleteChapter(projectId, chapterId); } finally { setBusy(false); }
+            },
+            onMove: async (chapterId, direction) => {
+              setBusy(true);
+              try { await moveChapter(projectId, chapterId, direction); } finally { setBusy(false); }
+            },
+          })
+        : null,
+      treeMode === "logical" && selected
         ? React.createElement(
             "div",
             { className: "story-entity-detail" },
@@ -370,7 +451,25 @@ function StoryWorkbench({ projectId }) {
           )
         : null,
     ),
-    React.createElement(
+    treeMode === "chapters"
+      ? React.createElement(ChapterReader, {
+          projectId,
+          chapters: state.chapters,
+          busy,
+          onUpdate: async (chapterId, title, content) => {
+            setBusy(true);
+            try { await updateChapter(projectId, chapterId, title, content); } finally { setBusy(false); }
+          },
+          onDelete: async (chapterId) => {
+            setBusy(true);
+            try { await deleteChapter(projectId, chapterId); } finally { setBusy(false); }
+          },
+          onMove: async (chapterId, direction) => {
+            setBusy(true);
+            try { await moveChapter(projectId, chapterId, direction); } finally { setBusy(false); }
+          },
+        })
+      : React.createElement(
       "div",
       { className: "story-workbench__main" },
       React.createElement(
@@ -626,6 +725,171 @@ function StoryWorkbench({ projectId }) {
         ),
       ),
     ),
+  );
+}
+
+function ChapterTree({ projectId, chapters, busy, onCreate, onDelete, onMove }) {
+  const [draft, setDraft] = React.useState({ title: "", content: "" });
+  const items = new Map();
+  const root = { id: "chapters-root", label: state_label(projectId), children: chapters.map((chapter) => chapter.id) };
+  items.set(root.id, root);
+  for (const chapter of chapters) {
+    items.set(chapter.id, { id: chapter.id, label: `${chapter.seq}. ${chapter.title}`, chapter });
+  }
+  return React.createElement(
+    "div",
+    { className: "story-chapter-tree" },
+    root && host.ui?.Tree
+      ? React.createElement(host.ui.Tree, {
+          ariaLabel: "章节目录",
+          rootItem: root,
+          getItemId: (item) => item.id,
+          getItemLabel: (item) => item.label,
+          getItemChildren: (item) =>
+            item.children ? item.children.map((id) => items.get(id)).filter(Boolean) : undefined,
+          getItemChildrenCount: (item) => (item.children ? item.children.length : undefined),
+          renderItemActions: (item) =>
+            item.chapter
+              ? React.createElement(
+                  "span",
+                  { className: "story-chapter-actions" },
+                  React.createElement("button", {
+                    type: "button",
+                    title: "上移",
+                    disabled: busy || item.chapter.seq === 1,
+                    onClick: () => void onMove(item.chapter.id, "up"),
+                  }, "↑"),
+                  React.createElement("button", {
+                    type: "button",
+                    title: "下移",
+                    disabled: busy,
+                    onClick: () => void onMove(item.chapter.id, "down"),
+                  }, "↓"),
+                  React.createElement("button", {
+                    type: "button",
+                    title: "删除",
+                    disabled: busy,
+                    onClick: () => void onDelete(item.chapter.id),
+                  }, "×"),
+                )
+              : null,
+          renderBranchFooter: () =>
+            React.createElement(
+              "button",
+              { type: "button", className: "story-tree__add", onClick: () => setDraft({ title: `第${chapters.length + 1}章`, content: "" }) },
+              "+ 新增章节",
+            ),
+        })
+      : null,
+    React.createElement(
+      "form",
+      { className: "story-entity-form", onSubmit: (event) => {
+          event.preventDefault();
+          if (!draft.title.trim()) return;
+          void onCreate(draft.title.trim(), draft.content).then(() => setDraft({ title: "", content: "" }));
+        } },
+      React.createElement("input", {
+        value: draft.title,
+        onChange: (event) => setDraft({ ...draft, title: event.target.value }),
+        placeholder: "章节标题",
+        "aria-label": "章节标题",
+      }),
+      React.createElement("input", {
+        value: draft.content,
+        onChange: (event) => setDraft({ ...draft, content: event.target.value }),
+        placeholder: "正文（可留空由 AI 续写）",
+        "aria-label": "章节正文",
+      }),
+      React.createElement("button", { type: "submit", disabled: busy || !draft.title.trim() }, "新增章节"),
+    ),
+  );
+}
+
+function state_label(projectId) {
+  const world = worldByProject.get(projectId);
+  return world?.title || "故事世界";
+}
+
+function ChapterReader({ projectId, chapters, busy, onUpdate, onDelete, onMove }) {
+  const [selectedId, setSelectedId] = React.useState(chapters[0]?.id || null);
+  const chapter = chapters.find((item) => item.id === selectedId) || chapters[0] || null;
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(null);
+
+  React.useEffect(() => {
+    if (chapters.length && !chapters.some((item) => item.id === selectedId)) {
+      setSelectedId(chapters[0].id);
+    }
+  }, [chapters, selectedId]);
+
+  if (!chapter) {
+    return React.createElement(
+      "div",
+      { className: "story-reader" },
+      React.createElement("p", { className: "story-review__empty" }, "还没有章节。在左侧目录新增，或让 AI 用 story_write_chapter 写第一章。"),
+    );
+  }
+
+  return React.createElement(
+    "div",
+    { className: "story-reader" },
+    React.createElement(
+      "div",
+      { className: "story-reader__toolbar" },
+      React.createElement("strong", { className: "story-reader__title" }, `${chapter.seq}. ${chapter.title}`),
+      React.createElement("span", { className: "story-reader__meta" }, `更新于 ${chapter.updated_at || "—"}`),
+      React.createElement(
+        "button",
+        { type: "button", disabled: busy, onClick: () => void onMove(chapter.id, "up") },
+        "上移",
+      ),
+      React.createElement(
+        "button",
+        { type: "button", disabled: busy, onClick: () => void onMove(chapter.id, "down") },
+        "下移",
+      ),
+      React.createElement(
+        "button",
+        { type: "button", disabled: busy, onClick: () => void onDelete(chapter.id) },
+        "删除",
+      ),
+      editing
+        ? React.createElement(
+            "button",
+            {
+              type: "button",
+              onClick: () => {
+                void onUpdate(chapter.id, chapter.title, draft ?? chapter.content).then(() => setEditing(false));
+              },
+              disabled: busy,
+            },
+            "保存",
+          )
+        : React.createElement(
+            "button",
+            {
+              type: "button",
+              onClick: () => { setDraft(chapter.content); setEditing(true); },
+            },
+            "编辑",
+          ),
+    ),
+    editing
+      ? React.createElement("textarea", {
+          className: "story-reader__editor",
+          value: draft ?? chapter.content,
+          onChange: (event) => setDraft(event.target.value),
+          "aria-label": "章节正文编辑",
+        })
+      : React.createElement(
+          "div",
+          { className: "story-reader__content" },
+          chapter.content
+            ? chapter.content.split("\n\n").map((paragraph, index) =>
+                React.createElement("p", { key: index }, paragraph),
+              )
+            : React.createElement("p", { className: "story-review__empty" }, "本章还没有正文。让 AI 用 story_write_chapter 写入，或直接编辑。"),
+        ),
   );
 }
 

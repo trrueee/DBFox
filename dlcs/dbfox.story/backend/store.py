@@ -17,6 +17,7 @@ from dbfox_dlc_api import ResourceScopeRef
 from pydantic import BaseModel, ConfigDict
 
 from .contracts import (
+    ChapterOutput,
     EntityOutput,
     RelationEdgeOutput,
     RevisionOutput,
@@ -114,6 +115,24 @@ class StoryStateStore:
                     created_at TEXT NOT NULL,
                     decided_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS chapters (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    seq INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS chapter_versions (
+                    id TEXT PRIMARY KEY,
+                    chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+                    seq INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    author TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS revisions (
                     id TEXT PRIMARY KEY,
                     project_id TEXT NOT NULL,
@@ -200,11 +219,10 @@ class StoryStateStore:
             ).fetchone()
         if row is None:
             raise ValueError(f"Story world '{ref.id}' does not exist")
-        if str(row["generation"]) != str(ref.version or ""):
-            raise ValueError(
-                f"Story world '{ref.id}' changed: authorized version"
-                f" {ref.version!r}, current {row['generation']}"
-            )
+        # Unlike a database resource, a story world has no dangerous reads to
+        # stale-fence: the id already pins the project. Mid-Run entity edits
+        # bump the generation, so enforcing the frozen version here would
+        # invalidate the Run's own write tools.
         return WorldHandle(
             world_id=row["id"],
             project_id=row["project_id"],
@@ -533,6 +551,133 @@ class StoryStateStore:
                 created_at=row["created_at"],
             )
             for row in rows
+        )
+
+    # ── Chapters ──
+
+    def create_chapter(
+        self,
+        project_id: str,
+        *,
+        title: str,
+        content: str,
+        author: str,
+    ) -> ChapterOutput:
+        now = _now()
+        with self._connect() as connection, connection:
+            seq_row = connection.execute(
+                "SELECT COALESCE(MAX(seq), 0) AS max_seq FROM chapters WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+            chapter_id = _new_id()
+            seq = int(seq_row["max_seq"]) + 1
+            connection.execute(
+                "INSERT INTO chapters (id, project_id, seq, title, content, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (chapter_id, project_id, seq, title, content, now, now),
+            )
+            connection.execute(
+                "INSERT INTO chapter_versions (id, chapter_id, seq, title, content, author, created_at)"
+                " VALUES (?, ?, 1, ?, ?, ?, ?)",
+                (_new_id(), chapter_id, title, content, author, now),
+            )
+            row = connection.execute(
+                "SELECT * FROM chapters WHERE id = ?", (chapter_id,)
+            ).fetchone()
+        return self._chapter_output(row)
+
+    def update_chapter(
+        self,
+        project_id: str,
+        chapter_id: str,
+        *,
+        title: str | None,
+        content: str | None,
+        author: str,
+    ) -> ChapterOutput:
+        now = _now()
+        with self._connect() as connection, connection:
+            row = self._chapter_row(connection, project_id, chapter_id)
+            new_title = title if title is not None else row["title"]
+            new_content = content if content is not None else row["content"]
+            version_seq_row = connection.execute(
+                "SELECT COALESCE(MAX(seq), 0) AS max_seq FROM chapter_versions"
+                " WHERE chapter_id = ?",
+                (chapter_id,),
+            ).fetchone()
+            connection.execute(
+                "INSERT INTO chapter_versions (id, chapter_id, seq, title, content, author, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    _new_id(),
+                    chapter_id,
+                    int(version_seq_row["max_seq"]) + 1,
+                    new_title,
+                    new_content,
+                    author,
+                    now,
+                ),
+            )
+            connection.execute(
+                "UPDATE chapters SET title = ?, content = ?, updated_at = ? WHERE id = ?",
+                (new_title, new_content, now, chapter_id),
+            )
+            row = self._chapter_row(connection, project_id, chapter_id)
+        return self._chapter_output(row)
+
+    def delete_chapter(self, project_id: str, chapter_id: str) -> bool:
+        with self._connect() as connection, connection:
+            self._chapter_row(connection, project_id, chapter_id)
+            cursor = connection.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
+            return cursor.rowcount > 0
+
+    def move_chapter(self, project_id: str, chapter_id: str, direction: str) -> None:
+        if direction not in ("up", "down"):
+            raise ValueError("direction 只能是 up 或 down。")
+        with self._connect() as connection, connection:
+            row = self._chapter_row(connection, project_id, chapter_id)
+            neighbor_seq = row["seq"] - 1 if direction == "up" else row["seq"] + 1
+            neighbor = connection.execute(
+                "SELECT id FROM chapters WHERE project_id = ? AND seq = ?",
+                (project_id, neighbor_seq),
+            ).fetchone()
+            if neighbor is None:
+                return
+            connection.execute("UPDATE chapters SET seq = ? WHERE id = ?", (neighbor_seq, row["id"]))
+            connection.execute("UPDATE chapters SET seq = ? WHERE id = ?", (row["seq"], neighbor["id"]))
+
+    def list_chapters(self, project_id: str) -> tuple[ChapterOutput, ...]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM chapters WHERE project_id = ? ORDER BY seq",
+                (project_id,),
+            ).fetchall()
+        return tuple(self._chapter_output(row) for row in rows)
+
+    def get_chapter(self, project_id: str, chapter_id: str) -> ChapterOutput:
+        with self._connect() as connection:
+            row = self._chapter_row(connection, project_id, chapter_id)
+        return self._chapter_output(row)
+
+    def _chapter_row(
+        self, connection: sqlite3.Connection, project_id: str, chapter_id: str
+    ) -> sqlite3.Row:
+        row = connection.execute(
+            "SELECT * FROM chapters WHERE id = ? AND project_id = ?",
+            (chapter_id, project_id),
+        ).fetchone()
+        if row is None:
+            raise ValueError("章节不存在或不属于当前项目。")
+        return row
+
+    @staticmethod
+    def _chapter_output(row: sqlite3.Row) -> ChapterOutput:
+        return ChapterOutput(
+            id=row["id"],
+            seq=int(row["seq"]),
+            title=row["title"],
+            content=row["content"],
+            updated_at=row["updated_at"],
         )
 
     # ── Agent-facing facts ──

@@ -6,6 +6,12 @@ from dbfox_dlc_api import DlcOperationSpec
 
 from .store import StoryStateStore
 from .contracts import (
+    ChapterCreateInput,
+    ChapterIdInput,
+    ChapterListOutput,
+    ChapterMoveInput,
+    ChapterOutput,
+    ChapterUpdateInput,
     DeleteOutput,
     EntityCreateInput,
     EntityIdInput,
@@ -25,6 +31,12 @@ from .contracts import (
     WorldOutput,
 )
 from .resource_kind import STORY_WORLD_KIND
+from .chapter_tools import (
+    StoryChapterReadTool,
+    StoryChaptersListTool,
+    StoryUpsertEntityTool,
+    StoryWriteChapterTool,
+)
 from .tools import (
     StoryGraphQueryTool,
     StoryProposeRelationsTool,
@@ -132,6 +144,30 @@ def _register_operations(host, store: StoryStateStore) -> None:
     def revisions_list(_input, context) -> RevisionListOutput:
         return RevisionListOutput(revisions=store.list_revisions(_project_id(context)))
 
+    def chapters_list(_input, context) -> ChapterListOutput:
+        return ChapterListOutput(chapters=store.list_chapters(_project_id(context)))
+
+    def chapters_create(input: ChapterCreateInput, context) -> ChapterOutput:
+        return store.create_chapter(
+            _project_id(context), title=input.title, content=input.content, author="author"
+        )
+
+    def chapters_update(input: ChapterUpdateInput, context) -> ChapterOutput:
+        return store.update_chapter(
+            _project_id(context),
+            input.chapter_id,
+            title=input.title,
+            content=input.content,
+            author="author",
+        )
+
+    def chapters_delete(input: ChapterIdInput, context) -> DeleteOutput:
+        return DeleteOutput(deleted=store.delete_chapter(_project_id(context), input.chapter_id))
+
+    def chapters_move(input: ChapterMoveInput, context) -> ChapterListOutput:
+        store.move_chapter(_project_id(context), input.chapter_id, input.direction)
+        return ChapterListOutput(chapters=store.list_chapters(_project_id(context)))
+
     specs = (
         DlcOperationSpec(name="worlds.ensure", input_model=WorldEnsureInput, output_model=WorldOutput, handler=worlds_ensure, scope="project"),
         DlcOperationSpec(name="worlds.get", input_model=WorldEnsureInput, output_model=WorldOutput, handler=worlds_get, scope="project"),
@@ -146,6 +182,13 @@ def _register_operations(host, store: StoryStateStore) -> None:
         DlcOperationSpec(name="revisions.commit", input_model=RevisionCommitInput, output_model=RevisionOutput, handler=revisions_commit, scope="project"),
         DlcOperationSpec(name="revisions.list", input_model=StoryEmptyInput, output_model=RevisionListOutput, handler=revisions_list, scope="project"),
     )
+    specs = specs + (
+        DlcOperationSpec(name="chapters.list", input_model=StoryEmptyInput, output_model=ChapterListOutput, handler=chapters_list, scope="project"),
+        DlcOperationSpec(name="chapters.create", input_model=ChapterCreateInput, output_model=ChapterOutput, handler=chapters_create, scope="project"),
+        DlcOperationSpec(name="chapters.update", input_model=ChapterUpdateInput, output_model=ChapterOutput, handler=chapters_update, scope="project"),
+        DlcOperationSpec(name="chapters.delete", input_model=ChapterIdInput, output_model=DeleteOutput, handler=chapters_delete, scope="project"),
+        DlcOperationSpec(name="chapters.move", input_model=ChapterMoveInput, output_model=ChapterListOutput, handler=chapters_move, scope="project"),
+    )
     for spec in specs:
         host.operations.register(spec)
 
@@ -154,3 +197,7 @@ def _register_tools(host, store: StoryStateStore) -> None:
     host.tools.register(StoryGraphQueryTool(store))
     host.tools.register(StoryProposeRelationsTool(store))
     host.tools.register(StoryRevisionsTool(store))
+    host.tools.register(StoryUpsertEntityTool(store))
+    host.tools.register(StoryChaptersListTool(store))
+    host.tools.register(StoryChapterReadTool(store))
+    host.tools.register(StoryWriteChapterTool(store))

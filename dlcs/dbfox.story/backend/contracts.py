@@ -175,6 +175,109 @@ class StoryEmptyInput(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
+class ChapterOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str
+    seq: int
+    title: str
+    content: str
+    updated_at: str
+
+
+class ChapterListOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    chapters: tuple[ChapterOutput, ...] = ()
+
+
+class ChapterCreateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    title: str = Field(min_length=1, max_length=160)
+    content: str = Field(default="", max_length=100_000)
+
+
+class ChapterUpdateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    chapter_id: str = Field(min_length=1, max_length=64)
+    title: str | None = Field(default=None, min_length=1, max_length=160)
+    content: str | None = Field(default=None, max_length=100_000)
+
+
+class ChapterIdInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    chapter_id: str = Field(min_length=1, max_length=64)
+
+
+class ChapterMoveInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    chapter_id: str = Field(min_length=1, max_length=64)
+    direction: Literal["up", "down"]
+
+
+class StoryUpsertEntityInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    world_id: str | None = Field(default=None, min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=120)
+    kind: Literal["character", "scene", "plotline"] = "character"
+    summary: str = Field(default="", max_length=2_000)
+
+
+class StoryChaptersListInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    world_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class EntityUpsertOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    op: Literal["created", "updated"]
+    name: str
+    kind: str
+    summary: str
+
+
+class ChapterReadOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str
+    title: str
+    content: str
+    updated_at: str
+
+
+class ChapterWriteOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    op: Literal["created", "updated"]
+    chapter_id: str
+    title: str
+    length: int
+
+
+class StoryChapterReadInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    world_id: str | None = Field(default=None, min_length=1, max_length=64)
+    chapter_id: str | None = Field(default=None, min_length=1, max_length=64)
+    title: str | None = Field(default=None, min_length=1, max_length=160)
+
+
+class StoryWriteChapterInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    world_id: str | None = Field(default=None, min_length=1, max_length=64)
+    chapter_id: str | None = Field(default=None, min_length=1, max_length=64)
+    title: str = Field(min_length=1, max_length=160)
+    content: str = Field(min_length=1, max_length=100_000)
+
+
 class StoryGraphQueryInput(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
