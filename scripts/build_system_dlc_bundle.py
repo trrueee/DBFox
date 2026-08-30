@@ -24,6 +24,7 @@ SYSTEM_DLC_SOURCES = (
     REPOSITORY_ROOT / "dlcs" / "dbfox.workspace",
     REPOSITORY_ROOT / "dlcs" / "dbfox.music",
     REPOSITORY_ROOT / "dlcs" / "dbfox.visualization",
+    REPOSITORY_ROOT / "dlcs" / "dbfox.story",
 )
 SYSTEM_DLC_BUNDLE_INDEX = "system-dlcs.json"
 SYSTEM_DLC_DEFAULT_ENABLED = {
@@ -31,6 +32,7 @@ SYSTEM_DLC_DEFAULT_ENABLED = {
     "dbfox.workspace": True,
     "dbfox.music": True,
     "dbfox.visualization": True,
+    "dbfox.story": True,
 }
 _RELEASE_VERSION_PATTERN = re.compile(r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
 
