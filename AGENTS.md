@@ -1,6 +1,6 @@
 # DBFox — Agent 指南
 
-本地优先的 AI 数据分析桌面应用：Electron Host 管理 Frozen FastAPI Sidecar 的生命周期，
+本地优先的 AI Agent 工作空间（Core 最小运行时 + DLC 扩展的 Agent Harness）：Electron Host 管理 Frozen FastAPI Sidecar 的生命周期，
 React 工作区通过带短期令牌的 HTTP/SSE 访问 Sidecar。修改前先读
 [`CONTRIBUTING.md`](CONTRIBUTING.md)；功能→代码→测试索引见
 [`docs/architecture/implementation-map.md`](docs/architecture/implementation-map.md)。

@@ -4,10 +4,11 @@
 
 <h1 align="center">DBFox</h1>
 
-<p align="center"><strong>本地优先、结果可追溯的 AI 数据分析桌面客户端</strong></p>
+<p align="center"><strong>本地优先、结果可追溯的 AI Agent 工作空间</strong></p>
 
 <p align="center">
-  在一个可恢复的桌面工作区中完成数据库浏览、SQL 查询、Agent 分析、结果查看与会话追溯。
+  Core 提供最小可信运行时，能力由 DLC 扩展：把目标交给 Agent，它规划步骤、调用工具、
+  引用证据并给出可追溯的结果——数据分析是第一个内置能力，而不是全部。
 </p>
 
 <p align="center">
@@ -30,9 +31,15 @@
 
 ## 项目定位
 
-DBFox 面向需要直接使用真实数据库开展分析工作的开发者和数据人员。它将传统数据库客户端的浏览、查询和结果查看能力，与具备工具调用、证据引用和持久化上下文的 AI Agent 结合在同一桌面工作区中。
+DBFox 采用 **Core + DLC** 的 Agent Harness 架构：Core 只保留最小可信运行时（会话与
+Run 生命周期、工具与审批合同、持久化事实源、SSE 恢复、桌面壳），其余能力——数据连接、
+SQL 工作台、目录绑定、可视化、GitHub、音乐作曲——都由签名 DLC 以统一合同
+（资源视图、Dock 视图、工件渲染器、领域操作）扩展进来。换一句话说：Core 负责
+“可信地完成一次 Agent 运行”，DLC 负责“运行能做什么”。
 
-模型不会直接获得数据库连接，也不会将整张表无边界地放入上下文。Agent 只能通过经过授权的工具访问数据；SQL 在执行前经过方言解析、安全校验和策略检查，查询结果以可追溯的 Result Artifact（结果制品）保存和引用。
+模型不会直接获得数据库连接，也不会将整张表无边界地放入上下文。Agent 只能通过经过
+授权的工具访问资源；SQL 在执行前经过方言解析、安全校验和策略检查，查询结果以可追溯
+的 Result Artifact（结果制品）保存和引用。
 
 ## 项目状态
 
@@ -52,13 +59,15 @@ DBFox 目前处于持续开发阶段。Windows x64、macOS arm64 与 Ubuntu x64 
 
 | 能力 | 当前实现 |
 | --- | --- |
-| 数据源管理 | 管理 MySQL、PostgreSQL、SQLite 和 DuckDB 数据源，浏览 schema、表、字段、索引与关系。 |
-| SQL 工作区 | 提供多标签编辑、语法与安全校验、只读执行、分页结果、导出和查询历史。 |
-| AI 数据分析 | 基于 OpenAI Responses 工具调用合同执行多轮 Agent Turn，支持计划、工具、审批、取消和最终回答。 |
-| 结果与证据 | 将安全 SQL、查询结果、图表和分析结论组织为 Artifact 与 Evidence，保留来源关系。 |
-| 会话与记忆 | 持久化消息、运行、工具调用和事件；按需召回历史内容，避免无边界扩张模型上下文。 |
-| 桌面运行时 | 由 Electron Main 管理 Python Sidecar 生命周期、运行时令牌、窗口状态和系统能力。 |
-| 安全与诊断 | 使用系统凭据库、SQL 策略、公开错误合同、共享脱敏规则和受控诊断包。 |
+| Agent 运行时（Core） | 基于 OpenAI Responses 工具调用合同执行多轮 Agent Turn：计划、工具调用、审批、取消、部分完成与最终回答；事件持久化并支持 SSE 恢复。 |
+| 项目工作区（Core） | 项目分组侧栏：每个项目聚合自己的对话与资源，项目管理页盘点各 DLC 配置的资源和移除入口。 |
+| 模型服务（Core） | 连接 OpenAI 兼容服务；模型列表从所连服务实时获取，内置中外厂商目录与自定义名称兜底，凭据只进系统凭据库。 |
+| 数据能力（Data DLC） | 管理 MySQL、PostgreSQL、SQLite 和 DuckDB 连接，浏览 schema 与目录，多标签 SQL 工作台（安全校验、只读执行、分页、导出），结果以可追溯 Artifact 呈现。 |
+| 工作区绑定（Workspace DLC） | 将本地目录绑定到项目，提供文件列举与读取能力。 |
+| 更多 DLC | 音乐作曲（Music）、可视化（Visualization）、GitHub 仓库绑定等，按同一扩展合同接入。 |
+| 扩展系统 | DLC SDK 定义资源视图、Dock 视图、工件渲染器、领域操作与凭据租约合同；扩展包签名后由桌面壳按摘要装载。 |
+| 桌面运行时（Core） | 由 Electron Main 管理 Python Sidecar 生命周期、运行时令牌、窗口状态和系统能力。 |
+| 安全与诊断（Core） | 使用系统凭据库、SQL 策略、公开错误合同、共享脱敏规则和受控诊断包。 |
 
 ## 系统架构
 
@@ -71,6 +80,7 @@ DBFox 目前处于持续开发阶段。Windows x64、macOS arm64 与 Ubuntu x64 
 | React 工作区 | 页面、交互、当前视图投影和流式内容展示 | Sidecar 生命周期、业务事实持久化、数据库凭据 |
 | Electron Main | 桌面窗口、系统能力、Sidecar 启停与监控、运行时配置 | Agent 决策、SQL 业务规则、会话内容 |
 | FastAPI Sidecar | API、鉴权、Agent Runtime、工具策略、SQL 与 Result 服务 | 桌面窗口和操作系统界面 |
+| DLC 扩展 | 领域资源、视图、操作与领域事实（数据、工作区、GitHub 等） | Core 运行时决策、其他 DLC 的资源与凭据 |
 | 本地 SQLite | DBFox 会话、事件、工具状态、Artifact 和配置元数据 | 用户业务数据库的事实数据 |
 | 用户数据库 | 用户业务数据的事实来源 | DBFox 自身的运行状态 |
 
@@ -170,8 +180,8 @@ Agent 质量不只通过单元测试判断。仓库同时维护确定性场景�
 | `engine/api/` | FastAPI 路由、请求合同和 HTTP 边界 |
 | `engine/agent/` | Coordinator、Run Loop、上下文、Provider、Completion 和持久化仓库 |
 | `engine/tools/` | 工具注册、输入合同、策略、审批和执行运行时 |
-| `dlcs/dbfox_data/` | Data System DLC：连接、数据库资源、Catalog、SQL 与结果视图 |
-| `dlcs/dbfox.workspace/` | Workspace System DLC：项目目录绑定与文件能力 |
+| `dlcs/` | 系统 DLC：Data（连接、Catalog、SQL 与结果视图）、Workspace（目录绑定）、GitHub、Music、Visualization |
+| `sdk/frontend/` | DLC 前端扩展合同（资源视图、Dock 视图、工件渲染器、操作调用）的类型与清单 Schema |
 | `engine/migrations/` | DBFox 本地元数据库的 Alembic 迁移 |
 | `verification/tests/` | 与产品物理分离的 Agent Core、System、Integration 与 Bench 验证 |
 | `verification/bench/` | 与产品分离的 Core/Capability/Composition Bench、通用测量合同与 suite-owned scorer |

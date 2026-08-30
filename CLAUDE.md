@@ -1,6 +1,6 @@
-# DBFox — Local-First AI Database Workbench
+# DBFox — Local-First AI Agent Workspace
 
-DBFox 是本地优先、结果可追溯的 AI 数据分析桌面应用：Electron/TypeScript Host 管理
+DBFox 是本地优先、结果可追溯的 AI Agent 工作空间：Electron/TypeScript Host 管理
 Frozen FastAPI Sidecar 的生命周期，React 工作区通过带短期令牌的 HTTP/SSE 与
 Sidecar 通信；Agent 工具调用与 SQL 只读执行都经过正式合同。
 
