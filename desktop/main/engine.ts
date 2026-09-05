@@ -386,6 +386,10 @@ function waitForEngineReady(
       signal.removeEventListener("abort", onAbort);
       lines.removeListener("line", onLine);
       lines.close();
+      // readline.close() pauses its input. Keep draining the child's pipe after
+      // the handshake so later stdout cannot block the Sidecar event loop.
+      // Discard these bytes; raw child output is not a public diagnostics channel.
+      stdout.resume();
       if (error !== null) reject(error);
       else if (ready !== undefined) resolve(ready);
     };
