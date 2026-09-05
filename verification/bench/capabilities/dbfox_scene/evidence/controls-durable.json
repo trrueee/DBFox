@@ -1,0 +1,56 @@
+{
+  "run": {
+    "id": "run_05949e9deb9f49399024f7549c8c1712",
+    "session_id": "ce46808b-edbe-429f-ba70-46e11044f7f6",
+    "status": "completed"
+  },
+  "invocations": [
+    {
+      "id": "invocation_b6e836e135a14afc8bc33025a2bf0eb0",
+      "run_id": "run_05949e9deb9f49399024f7549c8c1712",
+      "session_id": "ce46808b-edbe-429f-ba70-46e11044f7f6",
+      "tool_name": "dbfox_scene_c870271c__scene_export",
+      "owner_id": "dbfox.scene",
+      "package_digest": "c7ba73d64ac318d4cbbf2b11f20145fdc648ba0b97ab0bb2d8262f236786426b",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "resource_refs": [
+        {
+          "id": "ea4584b8e45b43cd97df114f2865c652",
+          "kind": "dbfox.scene.document",
+          "version": 5
+        }
+      ]
+    }
+  ],
+  "artifact": {
+    "id": "artifact_45be034b067446c2b6c18aaa4b543b5b",
+    "run_id": "run_05949e9deb9f49399024f7549c8c1712",
+    "session_id": "ce46808b-edbe-429f-ba70-46e11044f7f6",
+    "type": "dbfox.scene.revision",
+    "version": 1,
+    "status": "completed",
+    "payload": {
+      "content_hash": "09890f0f2a22550a5c001d28a7ae9baf65d0e8e1c6c4183db27a1f886803b490",
+      "material_count": 0,
+      "object_count": 2,
+      "project_id": "scene-controls-project",
+      "scene_id": "ea4584b8e45b43cd97df114f2865c652",
+      "title": "Controls Regression",
+      "version": 5
+    },
+    "provenance": {
+      "tool_invocation_id": "invocation_b6e836e135a14afc8bc33025a2bf0eb0",
+      "tool_name": "dbfox_scene_c870271c__scene_export"
+    },
+    "resource_refs": [
+      {
+        "id": "ea4584b8e45b43cd97df114f2865c652",
+        "kind": "dbfox.scene.document",
+        "version": 5
+      }
+    ]
+  },
+  "primitive_unchanged_from_parent": true,
+  "upstream_node_modules_unmodified": true
+}

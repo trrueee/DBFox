@@ -1,0 +1,1075 @@
+{
+  "orbitPixelsChanged": true,
+  "orbitMutationCount": 0,
+  "picked": "Controls Cube",
+  "inspector": {
+    "status": 200,
+    "result": {
+      "scene": {
+        "id": "ea4584b8e45b43cd97df114f2865c652",
+        "project_id": "scene-controls-project",
+        "title": "Controls Regression",
+        "version": 3,
+        "content_hash": "19828e469a9beb04d632ee0b8c50de7e0846be61012cdce8bb2ab1a9467b5b7f",
+        "status": "active",
+        "object_count": 2,
+        "material_count": 0,
+        "created_at": "2026-09-05T15:37:16.353103+00:00",
+        "updated_at": "2026-09-05T15:50:54.779437+00:00"
+      },
+      "changed": true,
+      "changed_ids": [
+        "controls-cube"
+      ],
+      "truncated": false
+    },
+    "requests": [
+      null
+    ]
+  },
+  "probe": {
+    "listeners": [
+      {
+        "id": 1,
+        "name": "document",
+        "type": "visibilitychange",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": false,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 2,
+        "name": "document",
+        "type": "visibilitychange",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": false,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 3,
+        "name": "canvas",
+        "type": "webglcontextlost",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 4,
+        "name": "canvas",
+        "type": "webglcontextrestored",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 5,
+        "name": "canvas",
+        "type": "webglcontextcreationerror",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 7,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 8,
+        "name": "canvas",
+        "type": "pointercancel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 9,
+        "name": "canvas",
+        "type": "contextmenu",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 10,
+        "name": "canvas",
+        "type": "wheel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 11,
+        "name": "document",
+        "type": "keydown",
+        "capture": true,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 12,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 13,
+        "name": "canvas",
+        "type": "pointermove",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 14,
+        "name": "canvas",
+        "type": "pointerup",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 15,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 16,
+        "name": "canvas",
+        "type": "pointerup",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 17,
+        "name": "canvas",
+        "type": "pointercancel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 18,
+        "name": "canvas",
+        "type": "keydown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 19,
+        "name": "canvas",
+        "type": "webglcontextlost",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 20,
+        "name": "window",
+        "type": "blur",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 21,
+        "name": "document",
+        "type": "visibilitychange",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": false,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 22,
+        "name": "document",
+        "type": "visibilitychange",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": false,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 23,
+        "name": "canvas",
+        "type": "webglcontextlost",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 24,
+        "name": "canvas",
+        "type": "webglcontextrestored",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 25,
+        "name": "canvas",
+        "type": "webglcontextcreationerror",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 27,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 28,
+        "name": "canvas",
+        "type": "pointercancel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 29,
+        "name": "canvas",
+        "type": "contextmenu",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 30,
+        "name": "canvas",
+        "type": "wheel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 31,
+        "name": "document",
+        "type": "keydown",
+        "capture": true,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 32,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 33,
+        "name": "canvas",
+        "type": "pointermove",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 34,
+        "name": "canvas",
+        "type": "pointerup",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 35,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 36,
+        "name": "canvas",
+        "type": "pointerup",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 37,
+        "name": "canvas",
+        "type": "pointercancel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 38,
+        "name": "canvas",
+        "type": "keydown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 39,
+        "name": "canvas",
+        "type": "webglcontextlost",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 40,
+        "name": "window",
+        "type": "blur",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 41,
+        "name": "document",
+        "type": "keyup",
+        "capture": true,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 42,
+        "name": "document",
+        "type": "visibilitychange",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": false,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 43,
+        "name": "document",
+        "type": "visibilitychange",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": false,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 44,
+        "name": "canvas",
+        "type": "webglcontextlost",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 45,
+        "name": "canvas",
+        "type": "webglcontextrestored",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 46,
+        "name": "canvas",
+        "type": "webglcontextcreationerror",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 48,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 49,
+        "name": "canvas",
+        "type": "pointercancel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 50,
+        "name": "canvas",
+        "type": "contextmenu",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 51,
+        "name": "canvas",
+        "type": "wheel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 52,
+        "name": "document",
+        "type": "keydown",
+        "capture": true,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 53,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 54,
+        "name": "canvas",
+        "type": "pointermove",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 55,
+        "name": "canvas",
+        "type": "pointerup",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 56,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 57,
+        "name": "canvas",
+        "type": "pointerup",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 58,
+        "name": "canvas",
+        "type": "pointercancel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 59,
+        "name": "canvas",
+        "type": "keydown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 60,
+        "name": "canvas",
+        "type": "webglcontextlost",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 61,
+        "name": "window",
+        "type": "blur",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 62,
+        "name": "document",
+        "type": "visibilitychange",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": false,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 63,
+        "name": "document",
+        "type": "visibilitychange",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": false,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 64,
+        "name": "canvas",
+        "type": "webglcontextlost",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 65,
+        "name": "canvas",
+        "type": "webglcontextrestored",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 66,
+        "name": "canvas",
+        "type": "webglcontextcreationerror",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 68,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 69,
+        "name": "canvas",
+        "type": "pointercancel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 70,
+        "name": "canvas",
+        "type": "contextmenu",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 71,
+        "name": "canvas",
+        "type": "wheel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 72,
+        "name": "document",
+        "type": "keydown",
+        "capture": true,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 73,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 74,
+        "name": "canvas",
+        "type": "pointermove",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 75,
+        "name": "canvas",
+        "type": "pointerup",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 76,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 77,
+        "name": "canvas",
+        "type": "pointerup",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 78,
+        "name": "canvas",
+        "type": "pointercancel",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 79,
+        "name": "canvas",
+        "type": "keydown",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 80,
+        "name": "canvas",
+        "type": "webglcontextlost",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 81,
+        "name": "window",
+        "type": "blur",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 82,
+        "name": "document",
+        "type": "keyup",
+        "capture": true,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 83,
+        "name": "document",
+        "type": "visibilitychange",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": false,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 84,
+        "name": "document",
+        "type": "visibilitychange",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 85,
+        "name": "canvas",
+        "type": "webglcontextlost",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 86,
+        "name": "canvas",
+        "type": "webglcontextrestored",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 87,
+        "name": "canvas",
+        "type": "webglcontextcreationerror",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 89,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 90,
+        "name": "canvas",
+        "type": "pointercancel",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 91,
+        "name": "canvas",
+        "type": "contextmenu",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 92,
+        "name": "canvas",
+        "type": "wheel",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 93,
+        "name": "document",
+        "type": "keydown",
+        "capture": true,
+        "active": true
+      },
+      {
+        "id": 94,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 95,
+        "name": "canvas",
+        "type": "pointermove",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 96,
+        "name": "canvas",
+        "type": "pointerup",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 97,
+        "name": "canvas",
+        "type": "pointerdown",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 98,
+        "name": "canvas",
+        "type": "pointerup",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 99,
+        "name": "canvas",
+        "type": "pointercancel",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 100,
+        "name": "canvas",
+        "type": "keydown",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 101,
+        "name": "canvas",
+        "type": "webglcontextlost",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 102,
+        "name": "window",
+        "type": "blur",
+        "capture": false,
+        "active": true
+      },
+      {
+        "id": 103,
+        "name": "document",
+        "type": "pointermove",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 104,
+        "name": "document",
+        "type": "pointerup",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 105,
+        "name": "canvas",
+        "type": "pointermove",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 106,
+        "name": "document",
+        "type": "pointermove",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 107,
+        "name": "document",
+        "type": "pointerup",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 108,
+        "name": "canvas",
+        "type": "pointermove",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 109,
+        "name": "document",
+        "type": "pointermove",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 110,
+        "name": "document",
+        "type": "pointerup",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      },
+      {
+        "id": 111,
+        "name": "canvas",
+        "type": "pointermove",
+        "capture": false,
+        "active": false,
+        "removedWithCanvasAttached": true,
+        "targetConnectedOnRemove": true
+      }
+    ],
+    "raf": {
+      "total": 36,
+      "active": 0,
+      "ran": 36
+    },
+    "timers": {
+      "total": 31,
+      "active": 1,
+      "delays": [
+        5000
+      ]
+    },
+    "observers": [
+      {
+        "name": "IntersectionObserver",
+        "active": false,
+        "calls": 0
+      },
+      {
+        "name": "IntersectionObserver",
+        "active": false,
+        "calls": 1
+      },
+      {
+        "name": "ResizeObserver",
+        "active": false,
+        "calls": 1
+      },
+      {
+        "name": "IntersectionObserver",
+        "active": false,
+        "calls": 0
+      },
+      {
+        "name": "IntersectionObserver",
+        "active": false,
+        "calls": 1
+      },
+      {
+        "name": "ResizeObserver",
+        "active": false,
+        "calls": 1
+      },
+      {
+        "name": "IntersectionObserver",
+        "active": false,
+        "calls": 0
+      },
+      {
+        "name": "IntersectionObserver",
+        "active": false,
+        "calls": 1
+      },
+      {
+        "name": "ResizeObserver",
+        "active": false,
+        "calls": 1
+      },
+      {
+        "name": "IntersectionObserver",
+        "active": false,
+        "calls": 0
+      },
+      {
+        "name": "IntersectionObserver",
+        "active": false,
+        "calls": 1
+      },
+      {
+        "name": "ResizeObserver",
+        "active": false,
+        "calls": 1
+      },
+      {
+        "name": "IntersectionObserver",
+        "active": false,
+        "calls": 0
+      },
+      {
+        "name": "IntersectionObserver",
+        "active": true,
+        "calls": 1
+      },
+      {
+        "name": "ResizeObserver",
+        "active": true,
+        "calls": 5
+      }
+    ],
+    "canvases": [
+      {
+        "id": 6,
+        "connected": false,
+        "lost": true,
+        "version": null
+      },
+      {
+        "id": 26,
+        "connected": false,
+        "lost": true,
+        "version": null
+      },
+      {
+        "id": 47,
+        "connected": false,
+        "lost": true,
+        "version": null
+      },
+      {
+        "id": 67,
+        "connected": false,
+        "lost": true,
+        "version": null
+      },
+      {
+        "id": 88,
+        "connected": true,
+        "lost": false,
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+      }
+    ],
+    "domCanvases": 1,
+    "stylesheets": 1
+  }
+}

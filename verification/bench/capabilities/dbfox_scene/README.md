@@ -33,3 +33,30 @@ D:/Project/DBFox/.venv/Scripts/python.exe -m verification.bench run capability.d
 下载验证在启动器增加 `--accept-downloads`，然后运行 `browser-export.cjs` 和 `browser-download.cjs`。后者使用 CDP default；bootstrap 只在此 opt-in 下用官方 DownloadItem `setSavePath` 将原生保存选择限定到本树 `output/playwright/interactive-scene.glb` 与 `.gltf`。字节仍由 Electron 下载，不从 Blob 代写文件。两次 Native done 后 hook 自动移除；测试必须检查 done=completed、接收长度、磁盘 hash 与官方 validator，不能只检查 toast/HTTP 200。这个边界不代表自动化了原生对话框点击，详见 [最终浏览器记录](evidence/browser-final-checks.json)。默认 bootstrap 只记录白名单 DownloadItem 诊断事件到隔离 Runtime。
 
 下载后关闭进程，再不带 `--accept-downloads` 重启，用 `browser-scope-cancel.cjs` 在真实 Session GET 200 后延迟交付，实际切换项目并释放原响应，验证晚到结果不打开页签；finally 撤销 route。停用/激活必须从正式 DLC 设置界面执行并按 UI 重启 Engine，`browser-disabled.cjs` 检查清理，`browser-open.cjs` 检查恢复。结束时从应用关闭按钮退出实际 Electron，并 detach 本次命名 Playwright session；不要关闭其他用户浏览器。
+
+## 独立 controls 生命周期回归
+
+这组有状态浏览器脚本只针对 `5cdc6242` 的控件清理修复；不重跑原 10k 或创作 bench。先在 `desktop` 执行 `npm.cmd run build:electron-host`，然后在仓库根创建尚不存在的隔离目录：
+
+```powershell
+D:/Project/DBFox/.venv/Scripts/python.exe -m verification.bench.capabilities.dbfox_scene.controls_fixture C:/Users/Lenovo/AppData/Local/Temp/dbfox-scene-controls-NEW
+node verification/bench/capabilities/dbfox_scene/browser-launch.mjs C:/Users/Lenovo/AppData/Local/Temp/dbfox-scene-controls-NEW D:/Project/DBFox/.venv/Scripts/python.exe --reuse
+```
+
+第二个终端从同一 worktree 根 attach。确认实际 Scene Controls QA 项目已选中、尚未打开工作台；不要用 reload 替代下面的真实 tab 关闭。测试保留 native WebGL，并记录真实原生监听器。
+
+```powershell
+npx.cmd --yes --package @playwright/cli playwright-cli -s=scene-controls attach --cdp=http://127.0.0.1:19223
+npx.cmd --yes --package @playwright/cli playwright-cli -s=scene-controls run-code --filename verification/bench/capabilities/dbfox_scene/browser-controls-instrument.cjs
+foreach ($sceneCase in @('close','interact','gizmo','abort-drag','reactivate','finish')) {
+    npx.cmd --yes --package @playwright/cli playwright-cli -s=scene-controls run-code --filename "verification/bench/capabilities/dbfox_scene/browser-controls-$sceneCase.cjs" | Out-File -Encoding utf8 "output/playwright/scene-controls-$sceneCase.txt"
+    if ($LASTEXITCODE -ne 0) { throw "Scene controls scenario failed: $sceneCase" }
+    D:/Project/DBFox/.venv/Scripts/python.exe -m verification.bench.capabilities.dbfox_scene.controls_capture $sceneCase
+    if ($LASTEXITCODE -ne 0) { throw "Scene controls evidence capture failed: $sceneCase" }
+}
+D:/Project/DBFox/.venv/Scripts/python.exe -m verification.bench.capabilities.dbfox_scene.controls_audit C:/Users/Lenovo/AppData/Local/Temp/dbfox-scene-controls-NEW
+```
+
+`close` 运行普通/Control-held 各两轮，收集 CDP 原生 callback identity；`interact` 验证重开旋转/拾取/Inspector；`gizmo` 为当前 1440×902 CSS 窗口的实际 X handle 手势，其他窗口尺寸须先依据真实截图更新手势坐标；`abort-drag` 用实际 Space 激活关闭按钮，随后 mouseup 不写入；`reactivate` 通过正式设置停用、重启、启用，迟到的真实 Session 200 不导航；`finish` 再次核对所有历史 native listener 并恢复全部探针。首次证据中的 v5 是修正 Ctrl+Enter 夹具误操作后保留的真实状态，新的干净复现通常保持 v4，两者都比较本次操作前捕获的版本。
+
+`browser-controls-reset.cjs` 仅用于诊断后的干净卸载及撤销探针，正常顺序不需要。最后从实际窗口关闭按钮退出，检查 launcher exit、记录的子进程和 5177/19223 监听端口退出，再关闭本次命名 Playwright session。保留仓库外 runtime，不提交 SQLite/日志/CLI 原始输出。结果与夹具纠正说明见 [独立生命周期记录](../../../../docs/quality/scene-controls-lifecycle-regression.md)。

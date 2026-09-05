@@ -1,0 +1,30 @@
+{
+  "scope": "Initial viewport-only probe; entry-module polling/IntersectionObserver were not captured. Superseded by controls-close.json with dlc-asset digest attribution.",
+  "passed_native_cycles": 4,
+  "cases": [
+    {
+      "control_held": false,
+      "native_before": 17,
+      "native_after": 0,
+      "late_requests": []
+    },
+    {
+      "control_held": true,
+      "native_before": 18,
+      "native_after": 0,
+      "late_requests": []
+    },
+    {
+      "control_held": false,
+      "native_before": 17,
+      "native_after": 0,
+      "late_requests": []
+    },
+    {
+      "control_held": true,
+      "native_before": 18,
+      "native_after": 0,
+      "late_requests": []
+    }
+  ]
+}
