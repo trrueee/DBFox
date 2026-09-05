@@ -1,0 +1,146 @@
+.dbfox-shader {
+  color: var(--color-text-primary);
+  background: var(--surface-panel);
+  font-family: var(--font-family-ui);
+  font-size: var(--ui-font-body);
+  line-height: 1.5;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.dbfox-shader *, .dbfox-shader *::before, .dbfox-shader *::after { box-sizing: inherit; }
+.dbfox-shader h1, .dbfox-shader h2, .dbfox-shader h3, .dbfox-shader h4, .dbfox-shader p { margin: 0; }
+.dbfox-shader h1 { font-size: var(--ui-font-display); line-height: 1.2; letter-spacing: -.5px; font-weight: 600; }
+.dbfox-shader h2 { font-size: var(--ui-font-section-title); font-weight: 600; }
+.dbfox-shader h3 { font-size: var(--ui-font-body); font-weight: 600; }
+.dbfox-shader h4 { font-size: var(--ui-font-body); }
+.dbfox-shader button, .dbfox-shader input, .dbfox-shader select {
+  font: inherit; color: var(--color-text-primary); border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm); min-height: var(--density-control-height-sm);
+  padding: var(--space-1) var(--space-2); background: var(--control-bg-subtle); max-width: 100%;
+}
+.dbfox-shader input, .dbfox-shader select { width: 100%; min-width: 0; }
+.dbfox-shader input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; accent-color: var(--color-primary); }
+.dbfox-shader input[type="color"] { height: 36px; padding: 3px; cursor: pointer; }
+.dbfox-shader button { cursor: pointer; white-space: normal; }
+.dbfox-shader button:hover:not(:disabled) { border-color: var(--control-border-hover); background: var(--surface-card-hover); }
+.dbfox-shader button:focus-visible, .dbfox-shader input:focus-visible, .dbfox-shader select:focus-visible, .dbfox-shader summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.dbfox-shader button:disabled, .dbfox-shader input:disabled, .dbfox-shader select:disabled { opacity: .55; cursor: default; }
+.dbfox-shader .shader-primary { background: var(--color-primary-fill); border-color: var(--color-primary-fill); color: var(--color-on-primary); }
+.dbfox-shader .shader-primary:hover:not(:disabled) { background: var(--color-primary-fill-hover); border-color: var(--color-primary-fill-hover); }
+.dbfox-shader .shader-danger { color: var(--color-danger); }
+.dbfox-shader.shader-studio { display: flex; flex-direction: column; height: 100%; min-height: 580px; overflow: auto; }
+.dbfox-shader .shader-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-5) var(--space-5) var(--space-4); border-bottom: 1px solid var(--color-border); }
+.dbfox-shader .shader-eyebrow { display: block; color: var(--color-text-muted); font-size: var(--ui-font-nano); font-weight: 600; letter-spacing: 1.6px; margin-bottom: var(--space-1); }
+.dbfox-shader .shader-executor-status { max-width: 370px; font-size: var(--ui-font-nano); color: var(--color-text-muted); display: flex; align-items: center; gap: var(--space-2); }
+.dbfox-shader .shader-executor-status[data-state="ready"] { color: var(--color-success); }
+.dbfox-shader .shader-executor-status[data-state="computing"] { color: var(--color-primary); }
+.dbfox-shader .shader-document-bar, .dbfox-shader .shader-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--color-border); }
+.dbfox-shader .shader-document-bar > .shader-field { flex: 1 1 250px; max-width: 390px; }
+.dbfox-shader .shader-document-bar > .shader-field > span { display: none; }
+.dbfox-shader .shader-create-form { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.dbfox-shader .shader-create-form input { flex: 1 1 150px; width: 180px; }
+.dbfox-shader .shader-create-form select { width: auto; }
+.dbfox-shader .shader-toolbar { background: var(--surface-panel-muted); }
+.dbfox-shader .shader-toolbar > strong { margin-right: var(--space-1); }
+.dbfox-shader .shader-badge { display: inline-flex; align-items: center; padding: 2px 6px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text-secondary); font-size: var(--ui-font-nano); letter-spacing: .4px; white-space: nowrap; }
+.dbfox-shader .shader-muted { color: var(--color-text-muted); }
+.dbfox-shader .shader-notices:empty { display: none; }
+.dbfox-shader .shader-notices p { padding: var(--space-2) var(--space-5); }
+.dbfox-shader .shader-success { color: var(--color-success); }
+.dbfox-shader .shader-error { color: var(--color-danger); overflow-wrap: anywhere; }
+.dbfox-shader .shader-conflict { padding: var(--space-4); margin: var(--space-3) var(--space-5); border: 1px solid var(--color-warning); border-radius: var(--radius-md); background: var(--color-warning-soft); display: grid; gap: var(--space-3); }
+.dbfox-shader .shader-conflict article { display: grid; gap: var(--space-2); }
+.dbfox-shader .shader-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.dbfox-shader .shader-compare .shader-code { height: 260px; min-height: 260px; }
+.dbfox-shader .shader-section-tabs { display: flex; gap: var(--space-1); padding: 0 var(--space-5); border-bottom: 1px solid var(--color-border); overflow-x: auto; flex-shrink: 0; }
+.dbfox-shader .shader-section-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; min-height: 42px; padding: var(--space-2) var(--space-3); color: var(--color-text-muted); }
+.dbfox-shader .shader-section-tabs button[aria-current="page"] { border-bottom-color: var(--color-primary); color: var(--color-primary); }
+.dbfox-shader .shader-work-area { display: grid; grid-template-columns: minmax(340px, 1fr) minmax(270px, 330px); flex: 1; min-height: 440px; }
+.dbfox-shader .shader-main-panel { display: flex; flex-direction: column; min-width: 0; overflow: auto; }
+.dbfox-shader .shader-stage-tabs { display: flex; align-items: center; overflow-x: auto; flex-shrink: 0; gap: var(--space-1); padding: var(--space-2) var(--space-3); background: var(--surface-panel-muted); }
+.dbfox-shader .shader-stage-tabs button { border-color: transparent; background: transparent; white-space: nowrap; font-size: var(--ui-font-caption); }
+.dbfox-shader .shader-stage-tabs button[aria-selected="true"] { border-color: var(--color-border); background: var(--surface-panel); }
+.dbfox-shader .shader-code { flex: 1; min-height: 320px; overflow: hidden; background: var(--surface-canvas); }
+.dbfox-shader .shader-editor-footer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-top: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--ui-font-nano); }
+.dbfox-shader .shader-editor-footer button { margin-left: auto; font-size: var(--ui-font-nano); }
+.dbfox-shader .shader-stage-management { border-top: 1px solid var(--color-border); padding: var(--space-3); }
+.dbfox-shader .shader-stage-management summary { cursor: pointer; color: var(--color-text-secondary); }
+.dbfox-shader .shader-preview-panel { padding: var(--space-4); border-left: 1px solid var(--color-border); display: flex; flex-direction: column; gap: var(--space-3); background: var(--surface-panel-muted); overflow: auto; }
+.dbfox-shader .shader-panel-title { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+.dbfox-shader .shader-preview-canvas { flex: 0 0 auto; display: grid; place-items: center; min-height: 220px; padding: var(--space-3); background-color: var(--surface-canvas); background-image: conic-gradient(var(--color-border-subtle) 25%, transparent 0 50%, var(--color-border-subtle) 0 75%, transparent 0); background-size: 20px 20px; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.dbfox-shader .shader-preview-canvas canvas { display: block; max-width: 100%; width: 256px; height: auto; image-rendering: pixelated; box-shadow: var(--shadow-card); }
+.dbfox-shader .shader-preview-empty { display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-4); color: var(--color-text-muted); text-align: center; }
+.dbfox-shader .shader-preview-empty strong { color: var(--color-text-secondary); }
+.dbfox-shader .shader-inspector { padding: var(--space-5); display: grid; gap: var(--space-4); align-content: start; }
+.dbfox-shader .shader-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.dbfox-shader .shader-field { display: grid; gap: var(--space-1); min-width: 0; color: var(--color-text-secondary); font-size: var(--ui-font-caption); }
+.dbfox-shader .shader-fieldset { margin: 0; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); display: grid; gap: var(--space-3); min-width: 0; }
+.dbfox-shader .shader-fieldset legend { color: var(--color-text-secondary); padding: 0 var(--space-1); font-weight: 600; }
+.dbfox-shader .shader-form { display: grid; gap: var(--space-3); }
+.dbfox-shader .shader-form > button { justify-self: start; }
+.dbfox-shader .shader-grid-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.dbfox-shader .shader-grid-four { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.dbfox-shader .shader-matrix { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.dbfox-shader .shader-matrix[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dbfox-shader .shader-matrix[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dbfox-shader .shader-matrix .shader-field { font-size: var(--ui-font-nano); }
+.dbfox-shader .shader-uniform + .shader-uniform { border-top: 1px solid var(--color-border); padding-top: var(--space-4); }
+.dbfox-shader .shader-pass-list { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+.dbfox-shader .shader-pass-list li { border-left: 2px solid var(--color-primary); padding-left: var(--space-3); display: grid; gap: var(--space-1); }
+.dbfox-shader .shader-pass-list button { text-align: left; display: flex; justify-content: space-between; gap: var(--space-3); }
+.dbfox-shader .shader-pass-list button[aria-pressed="true"] { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.dbfox-shader .shader-pass-list small { color: var(--color-text-muted); }
+.dbfox-shader .shader-binding { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.dbfox-shader .shader-binding button { margin-left: auto; }
+.dbfox-shader .shader-textures { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: var(--space-3); }
+.dbfox-shader .shader-texture-card { display: grid; gap: var(--space-2); align-content: start; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.dbfox-shader .shader-texture-image { width: 100%; max-height: 130px; object-fit: contain; image-rendering: pixelated; }
+.dbfox-shader .shader-texture-card small { color: var(--color-text-muted); overflow-wrap: anywhere; }
+.dbfox-shader .shader-diagnostics { display: grid; gap: var(--space-2); border-top: 1px solid var(--color-border); padding-top: var(--space-3); }
+.dbfox-shader .shader-diagnostics ul { padding: 0; margin: 0; list-style: none; display: grid; gap: var(--space-2); }
+.dbfox-shader .shader-diagnostics li { border-left: 2px solid var(--color-border); padding-left: var(--space-2); display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); overflow-wrap: anywhere; }
+.dbfox-shader .shader-diagnostics li > span, .dbfox-shader .shader-diagnostics li > small { flex-basis: 100%; }
+.dbfox-shader .shader-diagnostics li > strong { font-size: var(--ui-font-nano); text-transform: uppercase; }
+.dbfox-shader .shader-diagnostics li[data-severity="error"] { border-color: var(--color-danger); }
+.dbfox-shader .shader-diagnostics li[data-severity="error"] > strong { color: var(--color-danger); }
+.dbfox-shader .shader-diagnostics li[data-severity="warning"] { border-color: var(--color-warning); }
+.dbfox-shader .shader-diagnostics small { color: var(--color-text-muted); font-size: var(--ui-font-nano); }
+.dbfox-shader .shader-diagnostics button { min-height: 24px; font-size: var(--ui-font-nano); padding: 0 var(--space-1); }
+.dbfox-shader .shader-diff pre { margin: var(--space-2) 0; max-height: 340px; overflow: auto; background: var(--surface-canvas); padding: var(--space-3); font-family: var(--font-mono); font-size: var(--ui-font-caption); }
+.dbfox-shader .shader-diff ul { overflow-wrap: anywhere; }
+.dbfox-shader .shader-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--space-3); padding: var(--space-8); min-height: 320px; color: var(--color-text-muted); text-align: center; }
+.dbfox-shader .shader-empty h2 { color: var(--color-text-primary); font-size: var(--ui-font-display); }
+.dbfox-shader .shader-empty p { max-width: 470px; }
+.dbfox-shader.shader-connector { padding: var(--space-2); display: grid; gap: var(--space-2); }
+.dbfox-shader.shader-artifact { padding: var(--space-4); display: grid; gap: var(--space-3); }
+.dbfox-shader.shader-artifact .shader-preview-canvas { max-width: 600px; }
+.dbfox-shader .shader-artifact-source { min-width: 0; display: grid; gap: var(--space-2); }
+.dbfox-shader .shader-artifact-source .shader-code { height: 360px; }
+.dbfox-shader .shader-facts { display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-4); margin: 0; }
+.dbfox-shader .shader-facts dt { color: var(--color-text-muted); }
+.dbfox-shader .shader-facts dd { margin: 0; }
+@media (max-width: 800px) {
+  .dbfox-shader .shader-work-area { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .dbfox-shader .shader-main-panel { overflow: visible; }
+  .dbfox-shader .shader-preview-panel { border-left: 0; border-top: 1px solid var(--color-border); overflow: visible; }
+  .dbfox-shader .shader-preview-canvas { min-height: 220px; }
+  .dbfox-shader .shader-code { height: 380px; flex: none; }
+  .dbfox-shader .shader-executor-status { max-width: 240px; }
+}
+@media (max-width: 480px) {
+  .dbfox-shader .shader-header { align-items: flex-start; flex-direction: column; padding: var(--space-4); }
+  .dbfox-shader .shader-document-bar, .dbfox-shader .shader-toolbar { padding: var(--space-3); }
+  .dbfox-shader .shader-section-tabs { padding: 0 var(--space-2); }
+  .dbfox-shader .shader-inspector { padding: var(--space-3); }
+  .dbfox-shader .shader-create-form { width: 100%; }
+  .dbfox-shader .shader-compare { grid-template-columns: 1fr; }
+  .dbfox-shader .shader-conflict { margin: var(--space-3); }
+  .dbfox-shader .shader-grid-four, .dbfox-shader .shader-matrix[data-columns="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dbfox-shader .shader-pass-list button { flex-direction: column; gap: 0; }
+  .dbfox-shader button { min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dbfox-shader * { scroll-behavior: auto; }
+}
+
+.dbfox-shader .shader-actions > .shader-field:has(input[type="checkbox"]) { display: flex; flex-direction: row-reverse; align-items: center; gap: var(--space-2); min-height: var(--density-control-height); }

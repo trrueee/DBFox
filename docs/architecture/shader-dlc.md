@@ -6,7 +6,7 @@
 >
 > 最后核验：2026-09-05
 >
-> 适用范围：`dbfox.shader`；独立 Domain Architect 已完成实现前合同复核。后端候选已有作者验证，真实工作台/GPU 与独立交付门禁仍未完成。第 7 节是冻结合同。
+> 适用范围：`dbfox.shader`；独立 Domain Architect 已完成实现前合同复核。后端与完整工作台已有作者验证，真实 Chrome GPU 作者探针通过；生产 Electron 联合闭环与独立交付门禁待完成。第 7 节是冻结合同。
 
 ## 1. 调查结论
 
@@ -291,3 +291,11 @@ Director 在后端实施阶段确认：既存纹理 bytes 只在 Tool compute sn
 Human get 必须携带 `document_id`、固定 `version` 和该 revision 内的 `texture_id`；Representation 从不可变 Artifact 取得 Project/document/version，参数只能指定 texture_id。offset 是原始 RGBA 字节，严格整数非负；limit 1–16384，完整返回 ≤ 32 KiB。返回外层 offset/next_offset/total/has_more，以及 `texture_bytes:{texture_id,content_hash,total_bytes,rgba_base64}`。末页允许为空；超过 total 的 offset 拒绝。逐页均读取并验证已有 immutable BLOB 的 hash/layout，客户端完整重组再校验 content_hash。不同 Project、不同 revision 无此 texture、显式 null、bool 数值、hash/path/URL override 均拒绝。
 
 读取不建 snapshot/Run/receipt、不修改文档。历史 texture 删除后旧 revision 仍可读。`shader_inspect`、自动 Context 和耐久 ToolObservation 不加入纹理 base64；人类 get 与明确请求的 Composition Representation 共用同一纯读取实现。公开 operation/Representation context 没有取消 probe，Host/前端 AbortSignal 负责丢弃停止的读取；本领域纯读取函数也接受取消 probe 并在读取前后检查，不能宣称 HTTP abort 抢占了已开始的 SQLite read。
+
+### 7.8 已接受的 Workbench 编译适配
+
+实现复用实际 WebGL2 编译器处理 GLSL；WebGL2 仍可能接受 ESSL 100，不能只凭 context 名称宣称源码符合 300。因此 Director 批准在送入 shaderSource 时给原文追加先换行的固定 `#if __VERSION__ != 300` / `#error DBFOX_REQUIRES_GLSL_ES_300` / `#endif` 后缀，要求由驱动诊断版本不符。它只属于执行适配，不改 canonical source、内容 hash 或 Tool frozen snapshot；diagnostic 只有实际驱动行号落在原 source 范围内才给用户定位。末尾行注释不能吞掉检查；未闭合块注释/条件编译仍是实际失败，不自动修复源。
+
+Workbench 与 activation executor 共用这一 renderer。前者可以编译明确标为 unpublished 的内存草稿；后者只读取原 Tool 领取的 frozen snapshot 和 exact proof，不能用本地预览产物代替正式 receipt。CodeMirror 用官方 GLSL stream mode、ShadowRoot 和 constructable stylesheet，未增加 CSP 例外。PNG 导入通过既有 Host nativeFiles 与浏览器标准 codec，先检查文件/尺寸预算，再把 RGBA 交现有 typed operation；immutable PNG 下载仍读取原 Representation。
+
+历史 diagnostic 链接的 Dock 固定到 Artifact version 并禁写，不因轮询转成当前文档。所有固定版本读取（包括首个 metadata 页）必须与要求版本相等。当前文档的外部修改检测、内存草稿与显式冲突选择仅为 UI 状态；没有新 canonical store、GPU 队列、自动重放或 SDK 变化。具体作者证据与剩余独立门禁见 [质量页](../quality/shader-dlc-evidence.md)。

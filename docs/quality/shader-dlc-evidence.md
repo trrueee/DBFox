@@ -1,23 +1,23 @@
-# Shader DLC 调查与独立合同审议证据
+# Shader DLC 架构审议与作者验证证据
 
 > 文档类型：验证证据
 >
-> 状态：草案
+> 状态：当前
 >
 > 最后核验：2026-09-05
 >
-> 适用范围：Shader DLC 编译路径可行性与独立 Domain Architect 审议；不是实现验收报告。
+> 适用范围：Shader DLC 前期调查、独立 Domain Architect 审议和 Backend/Workbench 作者验证；不是独立最终验收报告。
 
 架构提案见 [Shader DLC](../architecture/shader-dlc.md)，机器状态见 [program-status.json](../../dlcs/dbfox.shader/program-status.json)。
 
-## 当前结果
+## 前期调查记录
 
 - 已完整阅读 Director 实例化的 Shader Lead 模板，并按当前任务逐项研究 canonical model、正式 DLC boundary、编译器与浏览器执行路线。
 - `.codegraph/` 不存在于本工作树，按 AGENTS 指令跳过 CodeGraph；使用源码检索。
-- 独立 worktree `creative/shader` 中原有用户未提交基线未修改或提交。只新增 Shader 专属文档与状态。
+- 调查阶段只新增 Shader 专属文档与状态；独立 worktree `creative/shader` 中原有用户未提交基线未修改或提交。
 - Khronos glslang 是成熟 GLSL/ESSL validator；其官方 Web binding 走 Vulkan/SPIR-V，不作为 WebGL ESSL 编译成功替代。
 - 生产 CSP 没有 eval/WASM 许可；native packages 被现有 package contract 禁止；不添加这些依赖、不改 Core/SDK。
-- Director 复核后允许优先验证现有 machine operations + activation 隐藏 Canvas 的 DLC-local 派生计算路径。尚无真实执行验证结果。
+- Director 复核后允许优先验证现有 machine operations + activation 隐藏 Canvas 的 DLC-local 派生计算路径；当时尚无真实执行结果，后续作者证据见本页末节。
 - Music 的 Basic Pitch 在 UI 操作后上报后端，但 Agent 仍要求先在 Studio 转录；不能把它描述为无人值守闭环的已验证先例。
 
 ## 必须如实保留的验证缺口
@@ -108,3 +108,68 @@ pytest **44 passed**，最终以 `a349c89b`（已含共享 Context 消费授权�
 测试范围的限制：尚无真实 Electron WebGL compile/link/reflection/FBO/KHR/context-loss/CSP/Dock-closed 证据；没有真实驱动性能或立即抢占保证；Workbench、12 类 benchmark、10 类连续 stress 和未参与实现者的 Adversarial Review 均待后续角色。项目删除公开 hook 当前不存在，未假装实现。共享 Context 对 selected/recent/previous Artifact 的当前消费授权补充已由 Director 单独集成；本 owner 未改 Core 或扩大 authority。
 
 本 DLC `.gitattributes` 将 vendored png.py 与 PyPNG-LICENSE 标为 `-text`，避免 Windows autocrlf 改写已审阅上游字节；工作区、Git index 及 index checkout 的 SHA-256 一致，源码与许可证分别保持上述 provenance 的原始 hash。其他用户改动不进入本提交。
+
+## Workbench 作者阶段：2026-09-05
+
+状态：当前。Director 将 `/root/scene_lead/domain_architect` 从已完成 Backend 转任 Workbench Engineer；这是同一实现作者，不是独立架构复审、Verification 或红队。冻结基线 `69563a79` 已含 Director 独立合入的 Artifact authority/navigation、Loader、Tree 重开和 stdout drain 修复。本轮未修改 Core、SDK、backend、共享锁或其他 DLC 产品代码；生产 build 按既有脚本重建的 Music/Visualization vendor 噪声保持在提交范围之外。
+
+实现范围：CodeMirror Source 工作台、Passes/Uniforms/Textures/History typed forms、当前版本/CAS/未保存草稿/显式冲突选择、当前与历史只读 Dock、正式 Agent references、3 个 immutable Artifact 视图、公共 Representation 导出、独立于 Dock 的 activation executor，以及共用的真实 WebGL2 compile/link/reflection/FBO/pass/render/readPixels 实现。能力字段仍取 [冻结 schema](../../dlcs/dbfox.shader/contracts.schema.json)。Human publication 捕获原 workbench scope 与 AbortSignal；卸载后不跳转，缺 navigation 不启动新 ActionRun，未知结果不重放。
+
+复用证据：CodeMirror 6.0.2 与各官方精确依赖使用 DLC 自有 npm 锁，`npm ci --ignore-scripts` 在官方 registry 成功，audit 0 vulnerabilities；重新构建字节相同。产物 415700 bytes，SHA-256 `418c6c4622c8e9413977a829b9ac91ac7850ca143da727d36aa411b156c811f6`，16 份上游 MIT 许可证见 `frontend/vendor/LICENSES.txt`。CodeMirror 使用官方 `@codemirror/legacy-modes/mode/clike` shader mode、HighlightStyle 和上游 constructable stylesheet；没有手写编辑器/GLSL parser、运行时 CDN、新 renderer 库或 CSP 放宽。前端 PNG codec 是浏览器标准能力，后端 PNG Writer 不变。
+
+提交前另验三个 frontend vendor 文件的工作区、Git index 和独立 index checkout 字节 hash 相同；`.gitattributes -text` 生效。组合 LICENSES 只由 build 脚本生成，保留原许可证正文；源码 bundle/provenance 不因 Windows autocrlf 改写。
+
+### 自动作者验证
+
+从工作树 `desktop/` 执行：
+
+```powershell
+npm.cmd test -- --run src/features/dlc/__tests__/dbfoxShaderFixture.test.ts --maxWorkers=1
+npm.cmd run typecheck:test
+npm.cmd run lint
+npm.cmd run build
+```
+
+结果：**13 passed，最后一次 4.00 s**；测试类型检查通过；lint/design-contracts 0 errors、5 个既存共享文件 warnings，无新增 owner warnings；完整生产 build 包括 tsc、Main/Preload、Vite、production token 和 entry budget 通过，entry 619609 raw bytes / 186162 gzip bytes。另用既有 desktop ESLint API、`@eslint/js` recommended 和 browser/node globals 对 owner 的 10 个 JS/build 模块单独检查通过，因为 desktop 默认 ESLint 只检查 TS/TSX。两个 control-regex 局部允许用于 driver 文本清理，保留了明确解释，没有全局关闭规则。
+
+Fixtures 直接从真实 owner ESM 源码构建，通过现有 staged Host 测试边界验证贡献注册/清理、asset digest、分页固定版本与 source/texture hash、首 metadata 版本不符拒绝、读取消、draft rebase 的改变/删除冲突、实际 CodeMirror DOM 与 typed uniform CAS、正式行引用、历史只读/不轮询、不匹配 Artifact fingerprint 拒绝、Representation 卸载取消、缺 navigation 与晚到 navigation。executor fixtures 注入 device stub，覆盖 late attach、lease 在异步编译期间续期、exact completion proof、unknown handoff 不重放、hidden 后丢弃旧像素/visible 新 epoch；这些仅为协议证据，不是 GPU 证据。
+
+Workbench 源码落盘后的 system suite 已跑 **44 passed，15.26 s**，实际 frontend + backend 的 Ed25519 完整签名包安装/启用/禁用/再启用成立。原后端 Tool/RunLoop/ActionRun 门禁保留，GPU receipt 仍为模拟协议回执。本阶段未因后续纯样式/历史读前端修改重复 44 项无关后端检查。
+
+### 真实浏览器作者检查
+
+使用命名 Playwright CLI 会话 `shader-workbench` 和任务专属 Chrome，载入实际 `renderer.js` / CodeMirror / Studio；HTTP 测试页使用从 production appProtocol 读取的等价严格 CSP。未开启 unsafe-inline/unsafe-eval 或关闭 WebGL 安全限制。探针显示 `WebGL 2.0 (OpenGL ES 3.0 Chromium)`、`WebGL GLSL ES 3.00`，KHR_parallel_shader_compile=true；没有读取 unmasked renderer 指纹。它验证实际 Chrome/驱动行为，**不等同打包 Electron 的 dlc-asset 协议、Main/Preload/Sidecar 或正式 Tool authority 链路**。
+
+| 实际输入/交互 | 实测结果 |
+| --- | --- |
+| 2×2 gl_FragCoord gradient | compiled/rendered=true；bottom-left RGBA `[64,64,127,255,191,64,127,255,64,191,127,255,191,191,127,255]` |
+| 原文第 3 行 NOT_VALID | 实际 GLSL syntax error、stage/link failure，compiled/rendered=false，行号为 3 |
+| ESSL 100 | 驱动产生 DBFOX_REQUIRES_GLSL_ES_300 错误；不把追加检查行映射为用户源码行 |
+| ESSL 300 尾部 `//` 无终止换行 | 编译成功，固定后缀前的换行有效 |
+| 未闭合 `/*` 或 `#if 0` | 实际 EOF/conditional driver failure；没有伪修复或虚构定位 |
+| 活跃 gain 未配置 | UNIFORM_MISSING，compiled=false |
+| 2×2 red/green/blue/white top-left texture | upload/readPixels 翻转后逐字节与原 RGBA 相同 |
+| 后续 pass 采样前一 pass | 两 pass 真实绘制，最终像素与首 pass 逐字节相同 |
+| CodeMirror ShadowRoot/CSP | 0 个 style elements，1 个 adopted stylesheet，无 CSP 错误 |
+| Studio 挂载前 executor 领取 compile | 真实编译返回成功；这里的 compute operation 为内存测试边界，不是 production Tool 结算 |
+| 实际键盘错误→诊断跳转→修复→Ctrl+S | dirty draft 显示、真实 Line 22 错误、跳回 fragment，修复以 expected_version=1 保存 v2，恢复实际像素 |
+| uniform gain 改为 0.65 | 明确 typed uniform_update，保存 v3 |
+| v3 草稿期间模拟外部 v4 | 保存禁用且本地文本保留；明确比较两版源码，再选择保留草稿和 Save 才成为 v5，无自动重放 |
+| 390×844 窄窗 | 修复过矮嵌套滚动后 source 380 px、preview 805 px，工作台 scrollWidth=clientWidth=359，编辑区自身可横向读长行，页面无横向溢出 |
+
+UI 页持续显示 “AUTHOR BROWSER HARNESS … memory operation boundary, not production HTTP”。外部修改是测试页明确的 fault injection；导航仅记录返回 identity，没有把 memory ActionRun 当作真实 Artifact 发布。截图为实际页面，不是 mockup：[桌面](shader-studio-desktop.png)、[窄窗源码](shader-studio-narrow.png)、[窄窗预览](shader-studio-narrow-preview.png)。桌面截图保留 v2，窄窗最终截图为重载后 v1；它们不是同一事务的 before/after 对照。
+
+本机可复查的非提交探针位于 `D:/Project/DBFox-worktrees/creative-shader/output/playwright/shader-probe/`：`server.py`、`probe.js`、`ui.js`、`ui.html`、`ui.bundle.js`、`interactions.cjs`、`layout.cjs` 与 `real-webgl-results.txt`；完整 build 输出为 `production-build.log`。这些为作者临时测试资产，按仓库规则不提交，也不是 suite-owned benchmark。运行时实际使用的 CLI 命令为：
+
+```powershell
+# 工作目录为本工作树根；server.py 使用本机测试端口 18831
+npx.cmd --offline --package @playwright/cli playwright-cli --session shader-workbench run-code --filename output/playwright/shader-probe/interactions.cjs
+npx.cmd --offline --package @playwright/cli playwright-cli --session shader-workbench run-code --filename output/playwright/shader-probe/layout.cjs
+npx.cmd --offline --package @playwright/cli playwright-cli --session shader-workbench eval window.probeResults
+```
+
+interactions 脚本从已产生冲突的浏览器状态继续；完整键盘操作与先前截图路径记录于该会话输出。独立验收应使用正式已安装包重新建立全链路证据，而非依赖作者 memory harness 状态。
+
+### 交接与明确剩余项
+
+作者实现候选可冻结，`program-status.json` 记录当前角色与验证。Director 已另行接手 `verification/bench/capabilities/dbfox_shader` 与对应 suite test，未将作者临时探针复制到 Core。后续非作者需完成生产 Electron/CSP 与关闭 Dock 的正式 RunLoop → 真正 compile error → inspect → repair → render/PNG，确认已安装包 digest/epoch/claim/deadline、FBO 不完整、真实 context loss、同步驱动阻塞/取消边界、最大 pass/source/texture 预算、benchmark/stress 和独立 Adversarial Review。作者未承诺 GPU 即时抢占或恶意 publisher attestation，DLC 全量完成状态仍为 false。

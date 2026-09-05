@@ -1,6 +1,6 @@
 {
   "dlc_id": "dbfox.shader",
-  "status": "backend_candidate",
+  "status": "implementation_candidate",
   "branch": "creative/shader",
   "worktree": "D:/Project/DBFox-worktrees/creative-shader",
   "lead": "/root/shader_lead",
@@ -43,15 +43,15 @@
     "dbfox.shader.preview-png.v1"
   ],
   "frontend_views": [
-    "Shader Studio code editor",
-    "live WebGL2 preview",
-    "uniform controls",
-    "pass and stage selection",
-    "compile diagnostics",
-    "undo and Agent reference handoff"
+    "Shader Studio: CodeMirror Source, Passes, Uniforms, Textures, History",
+    "local unpublished WebGL2 preview and actual diagnostics",
+    "fixed-revision read-only Studio",
+    "immutable document source and JSON export",
+    "immutable compile diagnostics",
+    "immutable preview and PNG export"
   ],
   "tests": {
-    "status": "backend_author_44_passed_frontend_pending",
+    "status": "backend_44_frontend_13_author_passed",
     "backend_path": "verification/tests/system/test_shader_dlc.py",
     "frontend_path": "desktop/src/features/dlc/__tests__/dbfoxShaderFixture.test.ts",
     "required": [
@@ -67,10 +67,14 @@
       "packaged Electron/CSP"
     ],
     "backend_count": 44,
-    "gpu_evidence": "simulated bridge receipts only; real GPU unverified"
+    "gpu_evidence": "Real Chrome WebGL2 author probes: compile/link/error/GLSL 300 guard/texture readback/two passes; UI and executor operation transport is a memory harness. Backend GPU receipt tests simulate protocol only. Production Electron Tool/GPU joined validation pending.",
+    "frontend_count": 13,
+    "frontend_typecheck": "passed",
+    "frontend_lint": "0 errors; 5 preexisting shared warnings; owner 10 JS modules clean",
+    "production_build": "passed on 69563a79"
   },
   "bench": {
-    "status": "not_implemented",
+    "status": "director_implementation_in_progress",
     "path": "verification/bench/capabilities/dbfox_shader",
     "required_scenarios": [
       "simple_creation",
@@ -109,8 +113,9 @@
       },
       {
         "role": "Workbench Engineer",
-        "agent": null,
-        "status": "pending_slot"
+        "agent": "/root/scene_lead/domain_architect",
+        "status": "completed_author_verification",
+        "independent_review": false
       },
       {
         "role": "Verification Engineer",
@@ -124,7 +129,7 @@
         "must_not_implement": true
       }
     ],
-    "concurrency_note": "Director plus Shader Lead plus Scene Backend plus Voxel Backend occupied the four slots during research. No specialist work is falsely claimed. Director will schedule distinct roles; completed-child slot retention may require explicitly recorded thread reuse.",
+    "concurrency_note": "Director explicitly reused this thread from Shader Backend to Workbench after capacity interruptions; both are author roles. Domain Architect was /root/shader_architect. Verification and Adversarial require a non-author; slot availability never counts as evidence.",
     "agent": "/root/shader_architect"
   },
   "known_blockers": [
@@ -150,7 +155,7 @@
     "Shader document/preview representation consumer when a real joint-resource task is proven"
   ],
   "compute_path": {
-    "state": "approved_in_principle_for_verification",
+    "state": "implemented_author_chrome_verified_production_gate_pending",
     "runtime": "Bundled Electron Chromium WebGL2; GLSL ES 3.00",
     "scope": "machine",
     "creation": "Only a running authorized production Tool creates transient request",
@@ -192,13 +197,52 @@
     }
   },
   "next_steps": [
-    "Director schedules independent Shader Workbench Engineer using contracts.schema.json",
-    "Verify real installed Chromium WebGL2 with Dock closed",
-    "Run independent Verification/benchmark/stress",
-    "Run independent Adversarial Review and resolve confirmed defects",
-    "Director assesses complete integration candidate"
+    "Director integrates exact author candidate",
+    "Non-author validates installed Electron CSP and production Tool compile/repair/preview with Shader Dock closed",
+    "Complete capability benchmark and continuous stress through production RunLoop",
+    "Independent Adversarial Review and confirmed fixes",
+    "Director assesses DLC/composition integration"
   ],
   "completion_claimed": false,
   "integrated_by": null,
-  "phase": "backend_candidate_workbench_pending"
+  "phase": "workbench_author_verified_independent_gates_pending",
+  "operations": [
+    "documents.list",
+    "documents.get",
+    "documents.head",
+    "documents.create",
+    "documents.apply",
+    "documents.undo",
+    "documents.delete",
+    "documents.revisions",
+    "documents.diff",
+    "documents.compile",
+    "documents.preview",
+    "documents.export",
+    "compute.attach",
+    "compute.next",
+    "compute.complete",
+    "compute.detach"
+  ],
+  "author_candidate": {
+    "role": "Shader Workbench Engineer",
+    "agent": "/root/scene_lead/domain_architect",
+    "baseline": "69563a79",
+    "evidence": "docs/quality/shader-dlc-evidence.md",
+    "vendor": {
+      "bytes": 415700,
+      "sha256": "418c6c4622c8e9413977a829b9ac91ac7850ca143da727d36aa411b156c811f6",
+      "reproducible_npm_ci": true,
+      "upstream_licenses": 16
+    },
+    "screenshots": [
+      "docs/quality/shader-studio-desktop.png",
+      "docs/quality/shader-studio-narrow.png",
+      "docs/quality/shader-studio-narrow-preview.png"
+    ],
+    "core_changes": [],
+    "sdk_changes": [],
+    "backend_changes": [],
+    "independent_verification": false
+  }
 }
