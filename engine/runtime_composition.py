@@ -338,6 +338,7 @@ def build_product_run_loop(
         context_contributors=default_context_contributors(snap),
         capability_guidance=default_capability_guidance(snap),
         resource_providers=snap.resource_providers,
+        resource_resolver=build_attempt_resource_resolver(snapshot=snap),
         artifact_representation_provider_resolver=representation_provider,
         artifact_representation_describer=describe_representations,
         artifact_payload_contract_resolver=artifact_payload_contract,
