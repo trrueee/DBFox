@@ -83,6 +83,12 @@ digest 重新 register，旧 Host 也不会复活。activate/revoke 只交给 Lo
 工作区订阅发现 Project/scope 变化后单向取消；切走再切回不恢复请求。订阅在成功或失败后
 释放。Host 不缓存 token，也不重新实现 Engine generation。
 
+模块导入可以并行；register、失效后的清理和贡献提交复用 Loader 既有 lifecycle barrier
+串行执行。开始注册前及每个 DLC 之间检查 epoch，过期导入不再调用 register。原因是同一
+ESM 可能在模块变量中保存 Host：仅在最终投影处拒绝过期结果，仍会让迟到的 register
+覆盖当前 Host。正在执行的异步 register 完成并清理后才可进行下一次注册；同一 ESM 的
+有效重注册保留既有复用语义，不通过停用仍挂载的组件来掩盖竞争。
+
 正式 `creating/failed/stale` 工件仍可由已有视图呈现其状态；它们与 HTTP 失败、缺失工件
 不同。缺失或归属错误不投影、不创建页签。Host 返回有界错误信息，取消保留 `AbortError`。
 导航失败不撤销已经完成的导出，也不重放写操作；调用方应保留正式结果身份。

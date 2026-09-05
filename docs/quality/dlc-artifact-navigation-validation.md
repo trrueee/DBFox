@@ -64,10 +64,28 @@ vendor 生成脚本后恢复合同，复验 45 项通过。未手改 manifest �
 来自此前同一实现的运行；最终仅收紧解析/传输错误消息，未改变成功路径。Host 新增导航
 测试共 39 项。错误隔离与失败加载测试主动输出的 stderr 为预期断言场景。
 
+## 真实 Scene 验证后的 Loader 修复
+
+Scene 独立验证员在正式签名包、真实 Electron 和持久 Action Run 中复现：导出已成功，
+工作台的 scope 与调用方 signal 有效，但模块保存的 Host navigation lease 已被撤销。
+只读调试显示迟到注册覆盖了同一 ESM 保存的 Host；先前仅保护最终投影的检查不足以防止
+register 的模块级副作用。详细证据位于 Scene 工作区的
+`docs/quality/scene-dlc-independent-verification.md`。
+
+Director 修复既有 Loader：导入可重叠，注册/清理/提交统一进入已有 lifecycle barrier；
+注册前及每个 DLC 之间检查 epoch。串行阶段直接完成清理，避免把清理排在自身 promise
+之后产生死锁。没有增加新的调度器、状态源、SDK 方法或依赖。此实现由 Director 完成，
+独立验证员仍负责真实 Scene 复测。
+
+新增三项回归验证迟到导入不会覆盖当前 Host、异步 register 必须先完成过期清理再进行
+同 ESM 注册、注册中失效会跳过其余 DLC。最终代码验证结果：Host 导航 42 项与 Loader
+8 项通过；前端全量 96 文件、511 项通过（136.92 秒）；lint 0 errors、5 个既有 warnings；
+测试类型检查和生产构建通过，含生产 Token 与 bundle 预算检查（入口 gzip 186,002 B）。
+
 ## 尚待集成验收
 
 本工作区未安装新的 Scene/Voxel capability change set，因此以上通用 Host 测试不代表
-两个实际工作台已完成成果导航、Representation 下载或用户流程验收。Director 后续合入
-领域调用方，确认导出等待前捕获 scope、贯穿卸载/切换取消 signal、缺能力明确报错，并
-进行 Scene/Voxel fixture 或浏览器验证及独立红队检查。本报告不构成整个 Creative Program
+两个实际工作台已完成成果导航、Representation 下载或用户流程验收。领域工作区已接入
+调用方并验证导出等待前捕获 Host、scope 和 signal、卸载/切换取消、缺能力明确报错；
+Loader 修复后仍需真实 Electron 复测、Representation 下载及独立红队检查。本报告不构成整个 Creative Program
 完成或发布通过的结论。

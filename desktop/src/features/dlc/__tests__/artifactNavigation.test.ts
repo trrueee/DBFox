@@ -300,6 +300,74 @@ describe("Host Artifact navigation through the canonical repository and store", 
     expect(selectActiveDockTabs(useWorkspaceStore.getState())[0].title).toBe(artifact.title);
   });
 
+  it("does not let a late import overwrite the Host retained by the current ESM", async () => {
+    let retained!: FrontendExtensionHost;
+    const register = vi.fn((host: FrontendExtensionHost) => { retained = host; });
+    const module: DlcModule = { register };
+    const pending = deferred<DlcModule>();
+    const old = loadActiveFrontendExtensions(projection, () => pending.promise);
+    await loadActiveFrontendExtensions({ ...projection, snapshot_id: "current" }, async () => module);
+    const current = retained;
+    pending.resolve(module);
+    await old;
+    expect(register).toHaveBeenCalledOnce();
+    expect(retained).toBe(current);
+    expect(useDlcStore.getState().activeSnapshotId).toBe("current");
+    await retained.workbench.openArtifact!(target, options());
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(1);
+  });
+
+  it("finishes stale async registration and its cleanup before registering the same ESM again", async () => {
+    const pending = deferred<void>();
+    const order: string[] = [];
+    let count = 0;
+    let retained!: FrontendExtensionHost;
+    const hosts: FrontendExtensionHost[] = [];
+    const module: DlcModule = {
+      async register(host) {
+        const number = ++count;
+        order.push(`start-${number}`);
+        hosts.push(host);
+        if (number === 1) await pending.promise;
+        retained = host;
+        order.push(`finish-${number}`);
+      },
+      deactivate() { order.push("deactivate"); },
+    };
+    const old = loadActiveFrontendExtensions(projection, async () => module);
+    await vi.waitFor(() => expect(count).toBe(1));
+    const current = loadActiveFrontendExtensions({ ...projection, snapshot_id: "current" }, async () => module);
+    await Promise.resolve();
+    expect(count).toBe(1);
+    pending.resolve();
+    await Promise.all([old, current]);
+    expect(order).toEqual(["start-1", "finish-1", "deactivate", "start-2", "finish-2"]);
+    expect(retained).toBe(hosts[1]);
+    await expect(hosts[0].workbench.openArtifact!(target, options())).rejects.toThrow();
+    await retained.workbench.openArtifact!(target, options());
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())).toHaveLength(1);
+  });
+
+  it("skips remaining registrations after invalidation during an async register", async () => {
+    const pending = deferred<void>();
+    const first = vi.fn(async () => { await pending.promise; });
+    const second = vi.fn();
+    const deactivate = vi.fn();
+    const two = { ...projection, active_dlcs: [...projection.active_dlcs, {
+      ...projection.active_dlcs[0], dlc_id: "example.other", package_digest: "b".repeat(64),
+    }] };
+    const loading = loadActiveFrontendExtensions(two, async (url) => url.includes("b".repeat(64))
+      ? { register: second } : { register: first, deactivate });
+    await vi.waitFor(() => expect(first).toHaveBeenCalledOnce());
+    invalidateActiveFrontendExtensions();
+    pending.resolve();
+    await loading;
+    expect(second).not.toHaveBeenCalled();
+    expect(deactivate).toHaveBeenCalledOnce();
+    expect(useDlcStore.getState().activeSnapshotId).toBeNull();
+    expectNoNavigation();
+  });
+
   it("never activates staging, failed registration, or explicitly revoked hosts", async () => {
     const staged = createStagedExtensionHost("example.navigation");
     await expect(staged.host.workbench.openArtifact!(target, options())).rejects.toThrow();

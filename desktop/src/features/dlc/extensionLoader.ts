@@ -64,12 +64,12 @@ async function deactivateModule(dlcId: string, module: DlcModule): Promise<void>
 }
 
 function retireModules(modules: ReadonlyMap<string, ActiveFrontendModule>): Promise<void> {
-  lifecycleBarrier = lifecycleBarrier.then(async () => {
-    for (const [dlcId, active] of modules) {
-      await deactivateModule(dlcId, active.module);
-    }
-  });
+  lifecycleBarrier = lifecycleBarrier.then(() => deactivateModules(modules));
   return lifecycleBarrier;
+}
+
+async function deactivateModules(modules: ReadonlyMap<string, ActiveFrontendModule>): Promise<void> {
+  for (const [dlcId, active] of modules) await deactivateModule(dlcId, active.module);
 }
 
 /** Invalidates every in-flight projection before clearing its committed projection. */
@@ -105,9 +105,31 @@ async function loadFrontendProjection(
   records: Record<string, DlcRegistrationRecord>;
   contributions: DlcContributionSet;
 }> {
-  await lifecycleBarrier;
   initExtensionHostGlobalSdk();
+  // Imports may overlap without allowing an older registration to overwrite
+  // the module-global Host retained by a newer registration of the same ESM.
+  const imports = await Promise.allSettled(projection.active_dlcs.map(async (dlc) => (
+    dlc.frontend_entrypoint
+      ? dynamicImport(buildDlcAssetUrl(dlc.package_digest, dlc.frontend_entrypoint))
+      : null
+  )));
+  const loading = lifecycleBarrier.then(() => applyFrontendProjection(projection, imports, epoch));
+  lifecycleBarrier = loading.then(() => undefined, () => undefined);
+  return loading;
+}
 
+async function applyFrontendProjection(
+  projection: RuntimeDlcActivationProjection,
+  imports: PromiseSettledResult<DlcModule | null>[],
+  epoch: number,
+): Promise<{
+  snapshotId: string;
+  records: Record<string, DlcRegistrationRecord>;
+  contributions: DlcContributionSet;
+}> {
+  if (epoch !== projectionEpoch) {
+    return { snapshotId: projection.snapshot_id, records: {}, contributions: EMPTY_CONTRIBUTIONS };
+  }
   const store = useDlcStore.getState();
   store.setLoading(true);
 
@@ -121,7 +143,8 @@ async function loadFrontendProjection(
   const artifactViewIds = new Set<string>(CORE_ARTIFACT_IDS);
   const stagedModules = new Map<string, ActiveFrontendModule>();
 
-  for (const dlc of projection.active_dlcs) {
+  for (const [index, dlc] of projection.active_dlcs.entries()) {
+    if (epoch !== projectionEpoch) break;
     const dlcId = dlc.dlc_id;
     const digest = dlc.package_digest;
     let importedModule: DlcModule | null = null;
@@ -138,8 +161,10 @@ async function loadFrontendProjection(
     }
 
     try {
-      const assetUrl = buildDlcAssetUrl(digest, dlc.frontend_entrypoint);
-      const module = await dynamicImport(assetUrl);
+      const imported = imports[index];
+      if (imported.status === "rejected") throw imported.reason;
+      const module = imported.value;
+      if (!module) throw new Error("DLC frontend module is unavailable.");
       importedModule = module;
       if (typeof module.register === "function") {
         await module.register(staged.host);
@@ -235,7 +260,9 @@ async function loadFrontendProjection(
         staleModules.set(dlcId, staged);
       }
     }
-    await retireModules(staleModules);
+    // Already inside the lifecycle barrier: complete old cleanup before the
+    // next registration, without scheduling a task behind our own promise.
+    await deactivateModules(staleModules);
     return {
       snapshotId: projection.snapshot_id,
       records,
@@ -253,10 +280,12 @@ async function loadFrontendProjection(
     records,
     mergedContributions,
   );
-  useWorkspaceStore.getState().reconcileDockViewTypes([
-    ...CORE_DOCK_TYPES,
-    ...mergedContributions.dockViews.map((view) => view.viewType),
-  ]);
+  if (epoch === projectionEpoch) {
+    useWorkspaceStore.getState().reconcileDockViewTypes([
+      ...CORE_DOCK_TYPES,
+      ...mergedContributions.dockViews.map((view) => view.viewType),
+    ]);
+  }
 
   const deactivated = new Map<string, ActiveFrontendModule>();
   for (const [dlcId, active] of retired) {
@@ -265,7 +294,7 @@ async function loadFrontendProjection(
       deactivated.set(dlcId, active);
     }
   }
-  await retireModules(deactivated);
+  await deactivateModules(deactivated);
 
   return {
     snapshotId: projection.snapshot_id,
