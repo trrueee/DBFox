@@ -549,7 +549,9 @@
           "narrow_dock": "003eb7ec;13fixture passed;real narrow Dock recheck pending",
           "precommit_cancellation": "ad83881d;independent actual receipt fence original1fail,2branches pass7.11s"
         },
-        "observed": "Real ActionRuns compile,error,repair,preview;2x2 texture through two passes byte-exact;native256x256PNG65536pixels independently decoded. Full same-Sidecar Agent flow recheck pending."
+        "observed": "Real ActionRuns compile,error,repair,preview;2x2 texture through two passes byte-exact;native256x256PNG65536pixels independently decoded. Full same-Sidecar Agent flow recheck pending.",
+        "native_agent": "Independent coldad83881d package:10nativeTools/8Artifacts/4.65s,allDockclosed;actualcompileerror→inspect→repair→compiletrue→previewtrue→export. FinalUI/CAS/stress/lifecycle closure pending.",
+        "large_call": "Director09d2d3a2 actualfactory438254byte singlemodify:expectednativeTurneviction preservesledger;publicinspect→export recovers completedRun,no replay,v2,62stages exact;1passed5.70s,no productchange."
       }
     },
     {
@@ -747,7 +749,9 @@
       "worktree": "D:/Project/DBFox-worktrees/creative-animation",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-animation.md",
       "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
-      "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md"
+      "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
+      "preflight": "docs/architecture/animation-dlc-preflight.md",
+      "engine_investigation": "Read-only pinnedThree0.185.1 Node probe:1001keys,exact0/2/4/6/8/0 seek;pausedAction/timeScale semantics;Bezier tangents omitted by nativeclone/toJSON. Product/UI/GPU/independent gates not started."
     },
     {
       "dlc_id": "dbfox.map",

@@ -42,6 +42,8 @@ Replicad提供OpenCascade.js上的建模接口，包括fillet和STEP相关API。
 
 ## Animation
 
+[Animation时间与曲线调查](animation-dlc-preflight.md)补充实际固定Three0.185.1探针：1001-key显式seek、暂停和末尾Action状态、原生Bézier求值，以及clone/toJSON丢失自定义tangent的边界。仅Node标量探针，未宣称UI/GPU或完整DLC通过。
+
 可调查Three的AnimationClip、KeyframeTrack与Mixer作为派生播放引擎，轨道/关键帧/曲线/片段仍由Animation自己的规范文档拥有。现有Scene固定Three版本需与被采用API逐项核对，不能把当前在线文档里的新插值选项假设成已固定版本支持。[KeyframeTrack](https://threejs.org/docs/pages/KeyframeTrack.html)。
 
 先独立完成时间线、曲线编辑、播放、Marker和千级关键帧预算。Scene的对象身份和固定版本通过正式表示消费；Scene↔Animation是否需要自有联合状态留到真实八秒镜头任务验证，不能把Timeline提前抽进Core。
