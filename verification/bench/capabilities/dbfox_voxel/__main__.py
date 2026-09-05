@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 # Match pytest's verified process isolation before importing any engine module.
-importlib.import_module("conftest")
+importlib.import_module("verification.conftest")
 
 from .runtime import run_voxel_bench
 

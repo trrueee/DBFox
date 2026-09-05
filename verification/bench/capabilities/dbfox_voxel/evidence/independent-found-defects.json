@@ -1,0 +1,12 @@
+{
+  "stage": "independent-verification",
+  "product_before_cleanup_fix": "e587edd62cff1f9c647c45d42152d93e0dafe277",
+  "findings": [
+    {"id": "navigation-preflight", "observation": "Missing optional Host navigation still executed one worlds.snapshot; independent assertion requires zero durable export calls.", "resolution": "Director moved navigation availability check before snapshot."},
+    {"id": "receipt-outcome-integrity", "observation": "Initial malformed receipt rejected, but five valid-JSON altered outcomes were accepted as success (world/project/version/hash/count). Expanded checks also found false changed_voxel_count accepted.", "resolution": "Director validates request identity, receipt columns, pinned summary and actual base/result chunk byte differences."},
+    {"id": "historical-workbench-and-picking", "observation": "Actual Electron initially had no 3D cell picking, immutable historical 3D or public representation download.", "resolution": "Director added instance Raycaster picking and fixed Artifact representation viewer with native download."},
+    {"id": "native-keyboard-cleanup", "command": "npm test -- src/features/dlc/__tests__/dbfoxVoxelFixture.test.ts --maxWorkers=1 -t 'removes native keyboard listeners'", "original_result": {"failed": 2, "skipped": 24}, "ordinary_unmount_remaining": [{"target": "canvas", "type": "keydown"}], "control_held_unmount_remaining": [{"target": "canvas", "type": "keydown"}, {"target": "document", "type": "keyup"}], "real_electron_original_evidence": "electron-cleanup.json", "resolution": "Director mounts canvas before controls connect, uses layout cleanup before DOM removal, and patches pinned upstream disconnect to remove its dynamic keyup listener."},
+    {"id": "design-contract", "command": "node desktop/scripts/check-design-contracts.mjs", "original_result": "Voxel CSS failed namespace, typography, important and semantic-token requirements.", "resolution": "Director corrected source selectors and shared-token usage."}
+  ],
+  "test_correction": {"case": "actual executor timeout/cancel before commit", "owner_reconcile_status": "not_applied", "public_tool_result": {"status": "failed", "error_code": "TOOL_RECONCILIATION_NOT_APPLIED"}, "authority": "engine/tools/runtime/runtime.py maps owner reconcile to the public ToolResult. Initial independent expected status not_applied was incorrect; product was unchanged for this correction."}
+}

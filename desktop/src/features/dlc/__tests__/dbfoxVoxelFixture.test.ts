@@ -12,6 +12,8 @@ type Snapshot = { world: World; chunks: Map<string, Omit<Chunk, "values"> & { va
 type Projection = { size: number[]; values: Uint8Array };
 type Invoke = (name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>;
 interface DataModule {
+  loadSnapshot(access: { read: (...args: unknown[]) => Promise<unknown> }, id: string, payload: World, signal?: AbortSignal): Promise<Snapshot>;
+  snapshotFile(snapshot: Snapshot, id: string): Blob;
   chunkOffset(x: number, y: number, z: number): number;
   volumeOffset(x: number, y: number, z: number, size: number[]): number;
   loadWorld(invoke: Invoke, id: string, options?: { previous?: Snapshot; signal?: AbortSignal }): Promise<Snapshot>;
@@ -145,6 +147,56 @@ function drag(canvas: HTMLElement) {
 }
 
 describe("Voxel fixed-version projection", () => {
+  it("independently loads an Artifact through only its fixed representation and exports all layers", async () => {
+    const world = makeWorld(4);
+    world.chunk_count = 2;
+    const read = vi.fn(async (_id: unknown, _type: unknown, request: unknown) => {
+      const operation = (request as { operation: string }).operation;
+      return { representation_type: "dbfox.voxel.world.v1", representation_version: 1, operation,
+        consistency: "durable_snapshot", source_version: "4", source_fingerprint: world.content_hash,
+        payload: operation === "manifest" ? world : page(world, [chunk(), chunk("roof", [1, 2, 3], 2)]) };
+    });
+    const snapshot = await data.loadSnapshot({ read }, "artifact-fixed", world);
+    expect(read.mock.calls.map((call) => (call[2] as { operation: string }).operation)).toEqual(["manifest", "chunks"]);
+    expect(read.mock.calls.every((call) => call[0] === "artifact-fixed" && call[1] === "dbfox.voxel.world.v1")).toBe(true);
+    expect(snapshot.world.version).toBe(4);
+    await data.composeVisible(snapshot, new Set(["roof"]));
+    const blob = data.snapshotFile(snapshot, "artifact-fixed");
+    const content = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsText(blob); });
+    const exported = JSON.parse(content);
+    expect(exported.artifact_id).toBe("artifact-fixed");
+    expect(exported.manifest.version).toBe(4);
+    expect(exported.chunks).toHaveLength(2);
+    expect(exported.chunks[1].values[561]).toBe(2);
+  });
+  it.each(["source_version", "source_fingerprint", "representation_type", "consistency", "project_id", "missing_chunks"])("rejects inconsistent immutable representation %s", async (fault) => {
+    const world = makeWorld(4);
+    const read = async (_id: unknown, _type: unknown, request: unknown) => {
+      const operation = (request as { operation: string }).operation;
+      const result: Record<string, unknown> = { representation_type: "dbfox.voxel.world.v1", representation_version: 1, operation,
+        consistency: "durable_snapshot", source_version: "4", source_fingerprint: world.content_hash,
+        payload: operation === "manifest" ? {...world, ...(fault === "project_id" ? {project_id:"other-project"} : {})} : page(world, fault === "missing_chunks" ? [] : [chunk()]) };
+      if (!["project_id", "missing_chunks"].includes(fault)) result[fault] = "invalid";
+      return result;
+    };
+    await expect(data.loadSnapshot({ read }, "artifact-fixed", world)).rejects.toThrow();
+  });
+  it("rejects a late immutable chunk response after cancellation without publishing a snapshot", async () => {
+    const world=makeWorld(4); const controller=new AbortController();
+    let release: ((value: unknown) => void) | undefined;
+    const envelope=(operation: string, payload: unknown)=>({representation_type:"dbfox.voxel.world.v1",representation_version:1,operation,
+      consistency:"durable_snapshot",source_version:"4",source_fingerprint:world.content_hash,payload});
+    const read=vi.fn(async (_id:unknown,_type:unknown,request:unknown)=>{
+      const operation=(request as {operation:string}).operation;
+      if(operation==="manifest")return envelope(operation,world);
+      return new Promise(resolve=>{release=resolve;});
+    });
+    const pending=data.loadSnapshot({read},"artifact-fixed",world,controller.signal);
+    const rejected=expect(pending).rejects.toMatchObject({name:"AbortError"});
+    await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));
+    controller.abort(); release?.(envelope("chunks",page(world,[chunk()])));
+    await rejected;
+  });
   it("decodes x + 16*z + 256*y and composes visible layers bottom to top", async () => {
     const world = makeWorld();
     const result = await data.loadWorld(async (name) => name === "worlds.get" ? world : page(world, [chunk(), chunk("roof", [1, 2, 3], 2)]), world.world_id);
@@ -270,12 +322,12 @@ describe("Voxel Studio official Host fixture", () => {
     expect(fixture.openArtifact.mock.calls[0]).toEqual([{ projectId: "p1", sessionId: "s1", runId: "run1", artifactId: "a1" },
       { workbenchScopeId: "scope1", signal: snapshotCall?.options?.signal }]);
   });
-  it("states the Host navigation limitation without private Artifact loading or replay", async () => {
+  it("rejects missing Host navigation before creating any durable snapshot", async () => {
     const fixture = await setup({ navigation: false });
     fireEvent.click(screen.getByRole("button", { name: "保存快照" }));
-    await screen.findByText("快照已保存。当前 Host 尚不支持从工作台打开成果。");
+    await screen.findByText(/当前 Host 尚不支持从工作台打开成果/);
     expect(fixture.openArtifact).not.toHaveBeenCalled();
-    expect(fixture.calls.filter((call) => call.name === "worlds.snapshot")).toHaveLength(1);
+    expect(fixture.calls.filter((call) => call.name === "worlds.snapshot")).toHaveLength(0);
   });
   it.each(["unmount", "scope"])("cancels snapshot navigation after %s even when export responds late", async (change) => {
     const fixture = await setup({ holdSnapshot: true });
@@ -324,5 +376,30 @@ describe("Voxel Studio official Host fixture", () => {
     fireEvent(window, new Event("focus"));
     expect(fixture.calls).toHaveLength(count);
     expect(fixture.calls.filter((call) => call.options?.signal).every((call) => call.options?.signal?.aborted)).toBe(true);
+  });
+  it.each([false, true])("removes native keyboard listeners on view unmount (Control held: %s)", async (controlHeld) => {
+    const listeners: { target: EventTarget; type: string; listener: EventListenerOrEventListenerObject | null; capture: boolean }[] = [];
+    const add = EventTarget.prototype.addEventListener;
+    const remove = EventTarget.prototype.removeEventListener;
+    const capture = (options?: boolean | EventListenerOptions) => typeof options === "boolean" ? options : Boolean(options?.capture);
+    vi.spyOn(EventTarget.prototype, "addEventListener").mockImplementation(function (this: EventTarget, type, listener, options) {
+      if (["keydown", "keyup"].includes(type) && (this instanceof HTMLCanvasElement || this instanceof Document)) {
+        listeners.push({ target: this, type, listener, capture: capture(options) });
+      }
+      add.call(this, type, listener, options);
+    });
+    vi.spyOn(EventTarget.prototype, "removeEventListener").mockImplementation(function (this: EventTarget, type, listener, options) {
+      const index = listeners.findIndex((entry) => entry.target === this && entry.type === type && entry.listener === listener && entry.capture === capture(options));
+      if (index >= 0) listeners.splice(index, 1);
+      remove.call(this, type, listener, options);
+    });
+    const fixture = await setup();
+    const canvas = screen.getByLabelText(/^体素三维视口/);
+    if (controlHeld) fireEvent.keyDown(canvas, { key: "Control" });
+    fixture.rendered.unmount();
+    const remaining = listeners.map(({ target, type }) => ({ target: target instanceof Document ? "document" : "canvas", type }));
+    // Remove failed-run listeners so this regression does not pollute later tests.
+    for (const entry of listeners) remove.call(entry.target, entry.type, entry.listener, entry.capture);
+    expect(remaining).toEqual([]);
   });
 });

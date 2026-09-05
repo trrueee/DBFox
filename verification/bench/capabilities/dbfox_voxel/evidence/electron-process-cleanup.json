@@ -1,0 +1,44 @@
+{
+  "owned_before": [
+    {
+      "ProcessId": 69128,
+      "ParentProcessId": 53632,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 76068,
+      "ParentProcessId": 69128,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 76256,
+      "ParentProcessId": 69128,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 72524,
+      "ParentProcessId": 69128,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 26808,
+      "ParentProcessId": 69128,
+      "Name": "python.exe"
+    },
+    {
+      "ProcessId": 72740,
+      "ParentProcessId": 26808,
+      "Name": "conhost.exe"
+    },
+    {
+      "ProcessId": 73824,
+      "ParentProcessId": 26808,
+      "Name": "python.exe"
+    }
+  ],
+  "remaining_ports": [],
+  "product_commit": "e6267551ae0d8f0ed66764c8422638fc0ddf77ee",
+  "remaining": [],
+  "package_digest": "50b8e47c15254435af8bc616216eae7e467bd5687c1b63aa2d8bfb36579e91b1",
+  "close_boundary": "real window.close public IPC after releasing task routes and CDP object groups"
+}

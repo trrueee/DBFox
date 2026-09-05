@@ -1,0 +1,678 @@
+{
+  "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+  "session_id": "voxel-browser-agent-06ed8b903193411cb089beb9491f25b8",
+  "run_id": "run_9aab419b2ae446b397ebecf5fcb9f31c",
+  "run_status": "completed",
+  "answer": "Voxel verification complete; no additional changes requested.",
+  "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+  "invocations": [
+    {
+      "id": "invocation_04307ab6c6924cffbe91cf532a827438",
+      "call_id": "observe-human",
+      "tool": "dbfox_voxel_fe30d8d5__voxel_inspect",
+      "run_id": "run_9aab419b2ae446b397ebecf5fcb9f31c",
+      "session_id": "voxel-browser-agent-06ed8b903193411cb089beb9491f25b8",
+      "owner": "dbfox.voxel",
+      "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+      "status": "succeeded",
+      "attempts": 1,
+      "error_code": null,
+      "error_message": null,
+      "resource_refs": [
+        {
+          "id": "world_c653aa199f7841aaa72bf1dcddc14629",
+          "kind": "dbfox.voxel.world",
+          "version": 10
+        }
+      ],
+      "input": {
+        "object_limit": 16,
+        "object_offset": 0,
+        "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+      }
+    },
+    {
+      "id": "invocation_08b27dbf5fae4982967f8e5d97695645",
+      "call_id": "agent-add",
+      "tool": "dbfox_voxel_fe30d8d5__voxel_fill",
+      "run_id": "run_9aab419b2ae446b397ebecf5fcb9f31c",
+      "session_id": "voxel-browser-agent-06ed8b903193411cb089beb9491f25b8",
+      "owner": "dbfox.voxel",
+      "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+      "status": "succeeded",
+      "attempts": 1,
+      "error_code": null,
+      "error_message": null,
+      "resource_refs": [
+        {
+          "id": "world_c653aa199f7841aaa72bf1dcddc14629",
+          "kind": "dbfox.voxel.world",
+          "version": 10
+        }
+      ],
+      "input": {
+        "expected_version": 10,
+        "operation": {
+          "bounds": {
+            "max": [
+              30,
+              30,
+              30
+            ],
+            "min": [
+              29,
+              29,
+              29
+            ]
+          },
+          "kind": "fill",
+          "layer_id": "base",
+          "palette_index": 3
+        },
+        "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+      }
+    },
+    {
+      "id": "invocation_3825cce15b264704819883613afc0165",
+      "call_id": "verify-current",
+      "tool": "dbfox_voxel_fe30d8d5__voxel_inspect",
+      "run_id": "run_9aab419b2ae446b397ebecf5fcb9f31c",
+      "session_id": "voxel-browser-agent-06ed8b903193411cb089beb9491f25b8",
+      "owner": "dbfox.voxel",
+      "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+      "status": "succeeded",
+      "attempts": 1,
+      "error_code": null,
+      "error_message": null,
+      "resource_refs": [
+        {
+          "id": "world_c653aa199f7841aaa72bf1dcddc14629",
+          "kind": "dbfox.voxel.world",
+          "version": 11
+        }
+      ],
+      "input": {
+        "object_limit": 16,
+        "object_offset": 0,
+        "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+      }
+    }
+  ],
+  "observations": [
+    {
+      "call_id": "observe-human",
+      "status": "succeeded",
+      "facts": {
+        "chunk_count": 6,
+        "content_hash": "sha256:e07dcf29bcaf7fe76b16c2fe8d54f17aeb9f2555670ab078b095e14f2da415b9",
+        "layer_count": 1,
+        "layers": [
+          {
+            "id": "base",
+            "locked": false,
+            "name": "Base"
+          }
+        ],
+        "next_object_offset": null,
+        "nonzero_count": 1137,
+        "object_offset": 0,
+        "palette": [
+          {
+            "color": "#000000",
+            "index": 0,
+            "name": "Air"
+          },
+          {
+            "color": "#64748b",
+            "index": 1,
+            "name": "Stone"
+          },
+          {
+            "color": "#f472b6",
+            "index": 2,
+            "name": "Neon pink"
+          },
+          {
+            "color": "#22d3ee",
+            "index": 3,
+            "name": "Neon cyan"
+          },
+          {
+            "color": "#fbbf24",
+            "index": 4,
+            "name": "Gold"
+          }
+        ],
+        "palette_count": 5,
+        "parent_version": 9,
+        "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+        "region_count": 0,
+        "regions": [],
+        "selected_nonzero_count": null,
+        "size": [
+          32,
+          32,
+          32
+        ],
+        "status": "active",
+        "title": "Interactive Voxel",
+        "truncated": false,
+        "version": 10,
+        "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+      },
+      "model_output": {
+        "artifact_ids": [],
+        "facts": {
+          "chunk_count": 6,
+          "content_hash": "sha256:e07dcf29bcaf7fe76b16c2fe8d54f17aeb9f2555670ab078b095e14f2da415b9",
+          "layer_count": 1,
+          "layers": [
+            {
+              "id": "base",
+              "locked": false,
+              "name": "Base"
+            }
+          ],
+          "next_object_offset": null,
+          "nonzero_count": 1137,
+          "object_offset": 0,
+          "palette": [
+            {
+              "color": "#000000",
+              "index": 0,
+              "name": "Air"
+            },
+            {
+              "color": "#64748b",
+              "index": 1,
+              "name": "Stone"
+            },
+            {
+              "color": "#f472b6",
+              "index": 2,
+              "name": "Neon pink"
+            },
+            {
+              "color": "#22d3ee",
+              "index": 3,
+              "name": "Neon cyan"
+            },
+            {
+              "color": "#fbbf24",
+              "index": 4,
+              "name": "Gold"
+            }
+          ],
+          "palette_count": 5,
+          "parent_version": 9,
+          "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+          "region_count": 0,
+          "regions": [],
+          "selected_nonzero_count": null,
+          "size": [
+            32,
+            32,
+            32
+          ],
+          "status": "active",
+          "title": "Interactive Voxel",
+          "truncated": false,
+          "version": 10,
+          "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Inspected voxel world world_c653aa199f7841aaa72bf1dcddc14629 v10; 1137 layer voxels."
+      },
+      "artifacts": []
+    },
+    {
+      "call_id": "agent-add",
+      "status": "succeeded",
+      "facts": {
+        "changed": true,
+        "changed_chunk_count": 1,
+        "changed_voxel_count": 1,
+        "chunk_count": 6,
+        "content_hash": "sha256:7c579f54b45c8988c42b7f3530c7da437ebf11a51e734c38b325e4911ffbdf97",
+        "layer_count": 1,
+        "nonzero_count": 1138,
+        "operation_kind": "fill",
+        "palette_count": 5,
+        "parent_version": 10,
+        "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+        "region_count": 0,
+        "size": [
+          32,
+          32,
+          32
+        ],
+        "status": "active",
+        "title": "Interactive Voxel",
+        "version": 11,
+        "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+      },
+      "model_output": {
+        "artifact_ids": [
+          "artifact_851d970c1f404b16a32a9d75a5c0eeca"
+        ],
+        "facts": {
+          "changed": true,
+          "changed_chunk_count": 1,
+          "changed_voxel_count": 1,
+          "chunk_count": 6,
+          "content_hash": "sha256:7c579f54b45c8988c42b7f3530c7da437ebf11a51e734c38b325e4911ffbdf97",
+          "layer_count": 1,
+          "nonzero_count": 1138,
+          "operation_kind": "fill",
+          "palette_count": 5,
+          "parent_version": 10,
+          "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+          "region_count": 0,
+          "size": [
+            32,
+            32,
+            32
+          ],
+          "status": "active",
+          "title": "Interactive Voxel",
+          "version": 11,
+          "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Voxel fill: world world_c653aa199f7841aaa72bf1dcddc14629 v11; changed=True, 1 changed layer voxels."
+      },
+      "artifacts": [
+        "artifact_851d970c1f404b16a32a9d75a5c0eeca"
+      ]
+    },
+    {
+      "call_id": "verify-current",
+      "status": "succeeded",
+      "facts": {
+        "chunk_count": 6,
+        "content_hash": "sha256:7c579f54b45c8988c42b7f3530c7da437ebf11a51e734c38b325e4911ffbdf97",
+        "layer_count": 1,
+        "layers": [
+          {
+            "id": "base",
+            "locked": false,
+            "name": "Base"
+          }
+        ],
+        "next_object_offset": null,
+        "nonzero_count": 1138,
+        "object_offset": 0,
+        "palette": [
+          {
+            "color": "#000000",
+            "index": 0,
+            "name": "Air"
+          },
+          {
+            "color": "#64748b",
+            "index": 1,
+            "name": "Stone"
+          },
+          {
+            "color": "#f472b6",
+            "index": 2,
+            "name": "Neon pink"
+          },
+          {
+            "color": "#22d3ee",
+            "index": 3,
+            "name": "Neon cyan"
+          },
+          {
+            "color": "#fbbf24",
+            "index": 4,
+            "name": "Gold"
+          }
+        ],
+        "palette_count": 5,
+        "parent_version": 10,
+        "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+        "region_count": 0,
+        "regions": [],
+        "selected_nonzero_count": null,
+        "size": [
+          32,
+          32,
+          32
+        ],
+        "status": "active",
+        "title": "Interactive Voxel",
+        "truncated": false,
+        "version": 11,
+        "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+      },
+      "model_output": {
+        "artifact_ids": [],
+        "facts": {
+          "chunk_count": 6,
+          "content_hash": "sha256:7c579f54b45c8988c42b7f3530c7da437ebf11a51e734c38b325e4911ffbdf97",
+          "layer_count": 1,
+          "layers": [
+            {
+              "id": "base",
+              "locked": false,
+              "name": "Base"
+            }
+          ],
+          "next_object_offset": null,
+          "nonzero_count": 1138,
+          "object_offset": 0,
+          "palette": [
+            {
+              "color": "#000000",
+              "index": 0,
+              "name": "Air"
+            },
+            {
+              "color": "#64748b",
+              "index": 1,
+              "name": "Stone"
+            },
+            {
+              "color": "#f472b6",
+              "index": 2,
+              "name": "Neon pink"
+            },
+            {
+              "color": "#22d3ee",
+              "index": 3,
+              "name": "Neon cyan"
+            },
+            {
+              "color": "#fbbf24",
+              "index": 4,
+              "name": "Gold"
+            }
+          ],
+          "palette_count": 5,
+          "parent_version": 10,
+          "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+          "region_count": 0,
+          "regions": [],
+          "selected_nonzero_count": null,
+          "size": [
+            32,
+            32,
+            32
+          ],
+          "status": "active",
+          "title": "Interactive Voxel",
+          "truncated": false,
+          "version": 11,
+          "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Inspected voxel world world_c653aa199f7841aaa72bf1dcddc14629 v11; 1138 layer voxels."
+      },
+      "artifacts": []
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "artifact_851d970c1f404b16a32a9d75a5c0eeca",
+      "run_id": "run_9aab419b2ae446b397ebecf5fcb9f31c",
+      "session_id": "voxel-browser-agent-06ed8b903193411cb089beb9491f25b8",
+      "type": "dbfox.voxel.snapshot",
+      "version": 1,
+      "payload": {
+        "chunk_count": 6,
+        "content_hash": "sha256:7c579f54b45c8988c42b7f3530c7da437ebf11a51e734c38b325e4911ffbdf97",
+        "layer_count": 1,
+        "nonzero_count": 1138,
+        "palette_count": 5,
+        "parent_version": 10,
+        "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+        "region_count": 0,
+        "size": [
+          32,
+          32,
+          32
+        ],
+        "status": "active",
+        "title": "Interactive Voxel",
+        "version": 11,
+        "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+      },
+      "provenance": {
+        "tool_invocation_id": "invocation_08b27dbf5fae4982967f8e5d97695645",
+        "tool_name": "dbfox_voxel_fe30d8d5__voxel_fill"
+      },
+      "resource_refs": [
+        {
+          "kind": "dbfox.voxel.world",
+          "id": "world_c653aa199f7841aaa72bf1dcddc14629",
+          "version": 10
+        }
+      ]
+    }
+  ],
+  "human_edits": [],
+  "provider_observations": {
+    "observe-human": {
+      "artifact_ids": [],
+      "facts": {
+        "chunk_count": 6,
+        "content_hash": "sha256:e07dcf29bcaf7fe76b16c2fe8d54f17aeb9f2555670ab078b095e14f2da415b9",
+        "layer_count": 1,
+        "layers": [
+          {
+            "id": "base",
+            "locked": false,
+            "name": "Base"
+          }
+        ],
+        "next_object_offset": null,
+        "nonzero_count": 1137,
+        "object_offset": 0,
+        "palette": [
+          {
+            "color": "#000000",
+            "index": 0,
+            "name": "Air"
+          },
+          {
+            "color": "#64748b",
+            "index": 1,
+            "name": "Stone"
+          },
+          {
+            "color": "#f472b6",
+            "index": 2,
+            "name": "Neon pink"
+          },
+          {
+            "color": "#22d3ee",
+            "index": 3,
+            "name": "Neon cyan"
+          },
+          {
+            "color": "#fbbf24",
+            "index": 4,
+            "name": "Gold"
+          }
+        ],
+        "palette_count": 5,
+        "parent_version": 9,
+        "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+        "region_count": 0,
+        "regions": [],
+        "selected_nonzero_count": null,
+        "size": [
+          32,
+          32,
+          32
+        ],
+        "status": "active",
+        "title": "Interactive Voxel",
+        "truncated": false,
+        "version": 10,
+        "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+      },
+      "retryable": false,
+      "status": "succeeded",
+      "summary": "Inspected voxel world world_c653aa199f7841aaa72bf1dcddc14629 v10; 1137 layer voxels."
+    },
+    "agent-add": {
+      "artifact_ids": [
+        "artifact_851d970c1f404b16a32a9d75a5c0eeca"
+      ],
+      "facts": {
+        "changed": true,
+        "changed_chunk_count": 1,
+        "changed_voxel_count": 1,
+        "chunk_count": 6,
+        "content_hash": "sha256:7c579f54b45c8988c42b7f3530c7da437ebf11a51e734c38b325e4911ffbdf97",
+        "layer_count": 1,
+        "nonzero_count": 1138,
+        "operation_kind": "fill",
+        "palette_count": 5,
+        "parent_version": 10,
+        "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+        "region_count": 0,
+        "size": [
+          32,
+          32,
+          32
+        ],
+        "status": "active",
+        "title": "Interactive Voxel",
+        "version": 11,
+        "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+      },
+      "retryable": false,
+      "status": "succeeded",
+      "summary": "Voxel fill: world world_c653aa199f7841aaa72bf1dcddc14629 v11; changed=True, 1 changed layer voxels."
+    },
+    "verify-current": {
+      "artifact_ids": [],
+      "facts": {
+        "chunk_count": 6,
+        "content_hash": "sha256:7c579f54b45c8988c42b7f3530c7da437ebf11a51e734c38b325e4911ffbdf97",
+        "layer_count": 1,
+        "layers": [
+          {
+            "id": "base",
+            "locked": false,
+            "name": "Base"
+          }
+        ],
+        "next_object_offset": null,
+        "nonzero_count": 1138,
+        "object_offset": 0,
+        "palette": [
+          {
+            "color": "#000000",
+            "index": 0,
+            "name": "Air"
+          },
+          {
+            "color": "#64748b",
+            "index": 1,
+            "name": "Stone"
+          },
+          {
+            "color": "#f472b6",
+            "index": 2,
+            "name": "Neon pink"
+          },
+          {
+            "color": "#22d3ee",
+            "index": 3,
+            "name": "Neon cyan"
+          },
+          {
+            "color": "#fbbf24",
+            "index": 4,
+            "name": "Gold"
+          }
+        ],
+        "palette_count": 5,
+        "parent_version": 10,
+        "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+        "region_count": 0,
+        "regions": [],
+        "selected_nonzero_count": null,
+        "size": [
+          32,
+          32,
+          32
+        ],
+        "status": "active",
+        "title": "Interactive Voxel",
+        "truncated": false,
+        "version": 11,
+        "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+      },
+      "retryable": false,
+      "status": "succeeded",
+      "summary": "Inspected voxel world world_c653aa199f7841aaa72bf1dcddc14629 v11; 1138 layer voxels."
+    }
+  },
+  "max_observation_bytes": 952,
+  "max_prompt_bytes": 15241,
+  "turns": 4,
+  "voxel_contexts": [
+    [
+      {
+        "content": "{\"layers\":[{\"id\":\"base\",\"locked\":false,\"name\":\"Base\"}],\"nonzero_count\":1137,\"palette\":[{\"index\":0,\"name\":\"Air\"},{\"index\":1,\"name\":\"Stone\"},{\"index\":2,\"name\":\"Neon pink\"},{\"index\":3,\"name\":\"Neon cyan\"},{\"index\":4,\"name\":\"Gold\"}],\"regions\":[],\"size\":[32,32,32],\"title\":\"Interactive Voxel\",\"truncated\":false,\"version\":10,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}\nInspect complete objects with voxel_inspect using this world_id, version and object_offset=0. Geometry is bounded to 2,097,152 candidate cells per call. Use fresh expected_version; do not regenerate a whole world.",
+        "lane": "resource",
+        "provenance": {
+          "content_hash": "sha256:e07dcf29bcaf7fe76b16c2fe8d54f17aeb9f2555670ab078b095e14f2da415b9",
+          "version": 10,
+          "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+        },
+        "source_id": "dbfox.voxel",
+        "source_version": "10"
+      }
+    ],
+    [
+      {
+        "content": "{\"layers\":[{\"id\":\"base\",\"locked\":false,\"name\":\"Base\"}],\"nonzero_count\":1137,\"palette\":[{\"index\":0,\"name\":\"Air\"},{\"index\":1,\"name\":\"Stone\"},{\"index\":2,\"name\":\"Neon pink\"},{\"index\":3,\"name\":\"Neon cyan\"},{\"index\":4,\"name\":\"Gold\"}],\"regions\":[],\"size\":[32,32,32],\"title\":\"Interactive Voxel\",\"truncated\":false,\"version\":10,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}\nInspect complete objects with voxel_inspect using this world_id, version and object_offset=0. Geometry is bounded to 2,097,152 candidate cells per call. Use fresh expected_version; do not regenerate a whole world.",
+        "lane": "resource",
+        "provenance": {
+          "content_hash": "sha256:e07dcf29bcaf7fe76b16c2fe8d54f17aeb9f2555670ab078b095e14f2da415b9",
+          "version": 10,
+          "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+        },
+        "source_id": "dbfox.voxel",
+        "source_version": "10"
+      }
+    ],
+    [
+      {
+        "content": "{\"layers\":[{\"id\":\"base\",\"locked\":false,\"name\":\"Base\"}],\"nonzero_count\":1137,\"palette\":[{\"index\":0,\"name\":\"Air\"},{\"index\":1,\"name\":\"Stone\"},{\"index\":2,\"name\":\"Neon pink\"},{\"index\":3,\"name\":\"Neon cyan\"},{\"index\":4,\"name\":\"Gold\"}],\"regions\":[],\"size\":[32,32,32],\"title\":\"Interactive Voxel\",\"truncated\":false,\"version\":10,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}\nInspect complete objects with voxel_inspect using this world_id, version and object_offset=0. Geometry is bounded to 2,097,152 candidate cells per call. Use fresh expected_version; do not regenerate a whole world.",
+        "lane": "resource",
+        "provenance": {
+          "content_hash": "sha256:e07dcf29bcaf7fe76b16c2fe8d54f17aeb9f2555670ab078b095e14f2da415b9",
+          "version": 10,
+          "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+        },
+        "source_id": "dbfox.voxel",
+        "source_version": "10"
+      }
+    ],
+    [
+      {
+        "content": "{\"layers\":[{\"id\":\"base\",\"locked\":false,\"name\":\"Base\"}],\"nonzero_count\":1137,\"palette\":[{\"index\":0,\"name\":\"Air\"},{\"index\":1,\"name\":\"Stone\"},{\"index\":2,\"name\":\"Neon pink\"},{\"index\":3,\"name\":\"Neon cyan\"},{\"index\":4,\"name\":\"Gold\"}],\"regions\":[],\"size\":[32,32,32],\"title\":\"Interactive Voxel\",\"truncated\":false,\"version\":10,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}\nInspect complete objects with voxel_inspect using this world_id, version and object_offset=0. Geometry is bounded to 2,097,152 candidate cells per call. Use fresh expected_version; do not regenerate a whole world.",
+        "lane": "resource",
+        "provenance": {
+          "content_hash": "sha256:e07dcf29bcaf7fe76b16c2fe8d54f17aeb9f2555670ab078b095e14f2da415b9",
+          "version": 10,
+          "world_id": "world_c653aa199f7841aaa72bf1dcddc14629"
+        },
+        "source_id": "dbfox.voxel",
+        "source_version": "10"
+      }
+    ]
+  ],
+  "latency_ms": 402.7661000145599,
+  "boundary": "Production RunLoop, actual installed signed owner and shared metadata/store; scripted Responses only"
+}

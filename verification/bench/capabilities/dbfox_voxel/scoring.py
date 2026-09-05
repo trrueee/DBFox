@@ -64,7 +64,18 @@ def score_case(runtime, case, evidence, repetition):
         "context_budget": all(len(fragment["content"]) <= 4000 for group in evidence["voxel_contexts"] for fragment in group),
         "context_no_cells": all('"values"' not in fragment["content"] and '"chunks"' not in fragment["content"] for group in evidence["voxel_contexts"] for fragment in group),
         "observation_budget": evidence["max_observation_bytes"] <= 18000,
+        "unique_invocation_ids": len(invocations) == len(evidence["invocations"]) == len({row["id"] for row in invocations.values()}),
+        "exact_persisted_observation_set": len(observations) == len(evidence["observations"]) and set(observations) == set(invocations),
+        "unique_artifact_ids": len({row["id"] for row in evidence["artifacts"]}) == len(evidence["artifacts"]),
     }
+    by_invocation = {row["id"]: row for row in invocations.values()}
+    for artifact in evidence["artifacts"]:
+        producer = by_invocation.get(artifact["provenance"].get("tool_invocation_id"))
+        checks[f"artifact_producer.{artifact['id']}"] = bool(producer and producer["status"] == "succeeded"
+            and producer["run_id"] == artifact["run_id"] and producer["session_id"] == artifact["session_id"]
+            and producer["resource_refs"] == artifact["resource_refs"]
+            and artifact["provenance"].get("tool_name") == producer["tool"]
+            and artifact["id"] in observations[producer["call_id"]]["artifacts"])
     observed = [row["facts"] for row in observations.values() if all(k in row["facts"] for k in ("world_id", "version", "content_hash"))]
     checks["world_observed"] = bool(observed)
     final = None
