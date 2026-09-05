@@ -550,7 +550,7 @@
           "precommit_cancellation": "ad83881d;independent actual receipt fence original1fail,2branches pass7.11s"
         },
         "observed": "Real ActionRuns compile,error,repair,preview;2x2 texture through two passes byte-exact;native256x256PNG65536pixels independently decoded. Full same-Sidecar Agent flow recheck pending.",
-        "native_agent": "Independent coldad83881d package:10nativeTools/8Artifacts/4.65s,allDockclosed;actualcompileerror→inspect→repair→compiletrue→previewtrue→export. FinalUI/CAS/stress/lifecycle closure pending.",
+        "native_agent": "Independent coldad83881d package:9nativeTools/8Artifacts/4.65s,allDockclosed;actualcompileerror→inspect→repair→compiletrue→previewtrue→export. FinalUI/CAS/stress/lifecycle closure pending.",
         "large_call": "Director09d2d3a2 actualfactory438254byte singlemodify:expectednativeTurneviction preservesledger;publicinspect→export recovers completedRun,no replay,v2,62stages exact;1passed5.70s,no productchange."
       }
     },
