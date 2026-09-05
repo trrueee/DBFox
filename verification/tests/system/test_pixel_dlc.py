@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
 
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from PIL import Image
@@ -372,15 +373,17 @@ def test_export_reserves_result_capacity_before_starting_action_run(store, monke
 
 
 def test_backend_signed_package_activation_disable_reactivate(tmp_path):
-    # Isolated frontend fixture validates Backend packaging only. No product
-    # frontend placeholder is created or presented as a Pixel Workbench.
+    # Include the delivered frontend bytes; this proves package activation,
+    # while actual Canvas/Electron execution remains a separate UI gate.
     fixture = tmp_path / "source"
     shutil.copytree(SOURCE / "backend", fixture / "backend", ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copyfile(SOURCE / "manifest.template.json", fixture / "manifest.template.json")
-    (fixture / "frontend").mkdir()
-    (fixture / "frontend" / "index.js").write_text("export function register() {}", encoding="utf-8")
+    shutil.copytree(SOURCE / "frontend", fixture / "frontend")
     private = ed25519.Ed25519PrivateKey.from_private_bytes(hashlib.sha256(b"Pixel test-only publisher key").digest())
     built = build_dlc_package_from_source(fixture, private_key=private)
+    with zipfile.ZipFile(BytesIO(built.archive_bytes)) as package:
+        for filename in ("index.js", "model.js", "index.css"):
+            assert package.read(f"frontend/{filename}") == (SOURCE / "frontend" / filename).read_bytes()
     archive = tmp_path / "pixel.dbfox-dlc"
     archive.write_bytes(built.archive_bytes)
     service = DlcPackageService(tmp_path / "runtime")
@@ -531,8 +534,7 @@ def test_signed_package_same_run_incremental_and_actual_observation(tmp_path):
     fixture = tmp_path / "source"
     shutil.copytree(SOURCE / "backend", fixture / "backend", ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copyfile(SOURCE / "manifest.template.json", fixture / "manifest.template.json")
-    (fixture / "frontend").mkdir()
-    (fixture / "frontend/index.js").write_text("export function register() {}", encoding="utf-8")
+    shutil.copytree(SOURCE / "frontend", fixture / "frontend")
     key = ed25519.Ed25519PrivateKey.from_private_bytes(hashlib.sha256(b"Pixel author RunLoop test key").digest())
     built = build_dlc_package_from_source(fixture, private_key=key)
     archive = tmp_path / "pixel.dbfox-dlc"

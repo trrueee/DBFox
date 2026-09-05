@@ -6,9 +6,9 @@
 >
 > 最后核验：2026-09-05
 >
-> 适用范围：`dbfox.pixel` 0.1.0 后端，Extension API v2
+> 适用范围：`dbfox.pixel` 0.1.0 后端与 Canvas 工作台，Extension API v2
 
-Pixel 提供可增量编辑的像素画与 Sprite 动画文档。当前后端已实现并通过作者验证；Canvas Workbench、独立 capability benchmark、持续创作 stress 与红队尚待完成，不能据此声明 DLC 已完成。
+Pixel 提供可增量编辑的像素画与 Sprite 动画文档。后端与 Canvas Workbench 已实现并通过各自作者验证。独立 capability benchmark、持续创作 stress、完整签名 Electron 验收与红队仍待完成，不能据此声明 DLC 已完成。
 
 完整权威合同见 [Pixel 架构](../../docs/architecture/pixel-dlc.md)，实际验证与限制见 [质量记录](../../docs/quality/pixel-dlc-evidence.md)。Backend 只通过 `dbfox_dlc_api` 接入 Host，自有 SQLite 位于 Host 分配的 `data_path/state.sqlite3`，不读取 Core 元数据库。
 
@@ -53,7 +53,7 @@ Tool输出≤16KiB，目录工具每页≤8；Human目录每页≤32。Inspect/d
 
 ## 导出与依赖
 
-`documents.export` 必须经 Host ActionRun 调用 `pixel_export` 并完成正式 Artifact。返回 `{run_id,session_id,artifact_ids}`；同一 `mutation_id` 由 owner reservation/receipt 查重，开始Run前预留完整16KiB结果额度。如果上次结果未知，明确拒绝重放，不创建另一个 Run。Workbench 应在导出开始前捕获 scope，并用原 AbortSignal 调用 Host 可选 `openArtifact` 导航；当前后端不实现导航或下载路径。
+`documents.export` 必须经 Host ActionRun 调用 `pixel_export` 并完成正式 Artifact。返回 `{run_id,session_id,artifact_ids}`；同一 `mutation_id` 由 owner reservation/receipt 查重，开始Run前预留完整16KiB结果额度。如果上次结果未知，明确拒绝重放，不创建另一个 Run。Workbench 在导出开始前捕获 Host、scope 和 AbortController，并用同一 AbortSignal 调用 operation 与可选 `openArtifact`。缺失导航方法时不会创建 Run；已知成果的导航失败可重新打开原成果，未知导出会停用当前工作台的新导出并显示原 mutation ID，禁止自动创建替代 Run。
 
 `dbfox.pixel.revision` 保存有界 summary；`dbfox.pixel.sprite.v1` 从固定修订提供 `metadata`、最大32×32合成 `frame` RGBA、`sheet_layout` JSON，以及 `png`、`sheet` 的 `image/png` 字节流。Sheet按文档帧顺序或tag显式顺序横向拼接。所有读核对文档/Project/revision/hash与Artifact provenance，拒绝路径、URL或任意编码器参数。
 
@@ -67,4 +67,29 @@ PNG由原样 vendored PyPNG 0.20220715.0 Writer 编码，见 [许可证](backend
 D:/Project/DBFox/.venv/Scripts/python.exe -m pytest verification/tests/system/test_pixel_dlc.py -q --tb=short
 ```
 
-签名激活与真实RunLoop作者测试在临时目录放置明确的 frontend stub，用于隔离 Backend；产品目录没有伪工作台。正式分发必须等 Workbench 实现后，用仓库 `build_dlc_package_from_source`/DLC CLI 打包真实前后端并重新验证。不要将临时测试包或 SQLite 数据提交。
+签名激活与真实RunLoop测试现使用完整后端和真实 Canvas 工作台，逐字节核对签名包中的三个前端文件；不再使用后端阶段的隔离 frontend stub。当前33项后端/完整包测试和27项工作台fixture通过；完整包被信任、激活及执行后端并不证明真实Electron交互已通过，该门禁仍由独立Verification负责。不要将临时测试包或SQLite数据提交。
+
+## Canvas 工作台
+
+从项目资源进入 Pixel Studio，创建或打开作品。左侧提供透明槽、调色板、图层栈，中央为整数缩放 Canvas，底部为帧时间线，右侧提供选区、动画预览与标签。小窗口按顺序滚动；适应画布自动选整数缩放，手动缩放保持到当前文档视图结束。
+
+- B 画笔、E 橡皮、F 四邻接填充、R 矩形、V 选区；矩形可选空心。拖动临时笔迹标为未提交，松开后以最多128段的一次 `documents.apply` 保存；超限整笔取消，不截断。方向键定位、Enter 绘制一格、Esc 取消。输入框内不会截获快捷键。
+- 时间线可新建、复制、重排、删除帧，修改20..2000ms时长。删除标签中的帧必须明确勾选移除引用；有锁层时禁止删帧。图层支持添加、隐藏、锁定、改名、排序和删除；调色板支持命名、改色与追加，透明槽固定。
+- V拖选或填写选区范围；可水平/垂直镜像、顺时针旋转、移动或复制。越界默认拒绝；显式裁剪会提示移动可能丢弃目标外像素。历史面板可选明确修订，撤销追加恢复修订。
+- 标签保存显式帧顺序与循环选项，可调整顺序。播放仅使用同一修订的帧缓存，按各帧时长播放；不写回播放状态。选区交给 Agent 时只授权父document，并携带frame/layer/rect/revision定位。
+
+读取缓存严格绑定 document/revision/hash/palette；首次先读选中帧，再以最多两个并发只读请求加载剩余缩略图。活跃可见视图每秒检查 `documents.head`，绘制、写入或输入框编辑时不覆盖草稿。CAS冲突清除草稿并读取已提交状态，写请求从不自动重发。scope/Project/document/epoch变化及deactivate会取消请求、指针捕获、播放RAF、ResizeObserver、可见性监听和样式；旧结果不能导航或发起Agent引用。
+
+导出的固定修订成果通过公开 `dbfox.pixel.sprite.v1` 显示PNG预览，并下载单帧PNG或按标签顺序的Sprite Sheet。修改当前作品不会改变旧成果。下载使用正常浏览器/Electron下载流程，无文件路径输入、私有Filesystem或外部图像URL。
+
+前端作者验证：
+
+```powershell
+cd desktop
+npm.cmd test -- --maxWorkers=1 src/features/dlc/__tests__/dbfoxPixelFixture.test.ts
+npm.cmd run typecheck:test
+npm.cmd run lint
+npm.cmd run build
+```
+
+27项组件fixture通过；真实浏览器作者视觉检查使用受控operation transport与真实Canvas，包含32×32/10帧预览、真实指针r1→r2、375px滚动布局、浅/深主题和严格self CSP。它不替代签名包、SQLite、人类→Agent往返或真实Electron下载验证；详细证据与剩余门禁见质量记录。

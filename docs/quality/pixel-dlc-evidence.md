@@ -8,7 +8,7 @@
 >
 > 适用范围：`dbfox.pixel` 实施与集成门禁
 
-当前完成 **Lead调查、独立Domain Architect核验及Backend实施/作者验证**。33项后端作者测试通过，包含签名包、真实同Run、Human ActionRun及PNG独立解码。Workbench、独立benchmark/stress和红队仍待执行。架构与接口唯一方案见 [Pixel DLC](../architecture/pixel-dlc.md)。本文不能作为完整DLC完成或发布证据。
+当前完成 **Lead调查、独立Domain Architect核验、Backend与Workbench实施/作者验证**。33项后端作者测试、27项前端组件fixture通过；真实浏览器Canvas与窄窗口作者检查见第8节。独立benchmark/stress、完整签名Electron验收和红队仍待执行。架构与接口唯一方案见 [Pixel DLC](../architecture/pixel-dlc.md)。本文不能作为完整DLC完成或发布证据。
 
 ## 1. 工作区和基线
 
@@ -16,7 +16,7 @@
 | --- | --- |
 | worktree | `D:/Project/DBFox-worktrees/creative-pixel` |
 | branch | `creative/pixel` |
-| HEAD | `2dc626534fe542ad532dca66a10a23e715b5feb4` |
+| Lead调查基线 HEAD | `2dc626534fe542ad532dca66a10a23e715b5feb4` |
 | Python | `D:/Project/DBFox/.venv/Scripts/python.exe` |
 | node_modules | 共享只读 junction，不安装或改共享锁 |
 | CodeGraph | 此 worktree 无 `.codegraph/`，已跳过 |
@@ -33,7 +33,7 @@ Pixel 允许修改：`dlcs/dbfox.pixel/`、`verification/tests/system/test_pixel
 | Pixel Lead | `/root/pixel_lead`，阶段交接 | 原模板完整读取、Host/codec 调查、canonical/API 方案 |
 | Domain Architect | `/root/scene_lead/domain_architect`，Director调度转任、逻辑归属`/root/pixel_lead`；本阶段完成 | 首次参与Pixel，只读核验并修正权威架构页；未写Pixel backend/frontend/tests |
 | Backend Engineer | `/root/pixel_backend`，Director独立分配，本阶段完成 | canonical、Store、18Tools、12operations、PNG Representation、30作者测试；不自称独立红队 |
-| Workbench Engineer | 未分配 | 待后端合同稳定后实施真实 Canvas 直接编辑与动画 |
+| Workbench Engineer | `/root/pixel_workbench`，Director独立分配，本阶段完成 | Canvas、图层/帧/标签与选区编辑、固定成果表示、27项fixture及作者视觉检查；不自称独立红队 |
 | Verification Engineer | 未分配 | 待最小实现可运行后添加独立确定性测试、bench 和 stress |
 | Adversarial Reviewer | 未分配 | 必须由未参与相应实现的作者以外 Agent 执行；不得作者自审 |
 
@@ -45,19 +45,19 @@ Pixel 允许修改：`dlcs/dbfox.pixel/`、`verification/tests/system/test_pixel
   "logical_lead": "/root/pixel_lead",
   "worktree": "D:/Project/DBFox-worktrees/creative-pixel",
   "branch": "creative/pixel",
-  "phase": "backend_implemented_author_verified",
+  "phase": "workbench_implemented_author_verified",
   "integrated": false,
   "implementation_started": true,
   "specialists_created": 1,
-  "specialist_roles_completed": ["domain_architect", "backend_engineer"],
-  "assigned_specialist_threads": ["/root/scene_lead/domain_architect", "/root/pixel_backend"],
+  "specialist_roles_completed": ["domain_architect", "backend_engineer", "workbench_engineer"],
+  "assigned_specialist_threads": ["/root/scene_lead/domain_architect", "/root/pixel_backend", "/root/pixel_workbench"],
   "specialist_schedule": ["domain_architect", "backend_engineer", "workbench_engineer", "verification_engineer", "adversarial_reviewer"],
-  "next_action": "Workbench uses frozen contracts; independent Verification and Adversarial Review follow",
+  "next_action": "Independent Verification uses the complete frontend/backend package, then capability bench/stress and Adversarial Review",
   "core_changes": [],
   "proposed_dependency": "PyPNG 0.20220715.0, unmodified pure Python vendor, MIT",
   "dependency_downloaded": true,
   "dependency_in_product": true,
-  "tests_passed": ["33 backend author tests, 9.10 seconds", "pyflakes", "mypy: 5 authored source files"],
+  "tests_passed": ["33 backend author tests, 9.10 seconds", "27 frontend author fixtures, 6.72 seconds", "typecheck:test", "lint: 0 errors, 5 preexisting warnings", "production build + token/bundle checks", "pyflakes", "mypy: 5 authored source files"],
   "review_completed": false,
   "architecture_review_completed": true,
   "known_constraints": ["No public Project deletion hook", "No owner state subscription in public frontend SDK", "Package forbids native binaries", "Author tests are not independent review or full DLC completion", "Backend package tests use an isolated temporary frontend stub"]
@@ -171,3 +171,38 @@ D:/Project/DBFox/.venv/Scripts/python.exe -m pytest verification/tests/system/te
 依赖决策落实：PyPNG 0.20220715.0原样png.py与LICENCE已vendored，逐字节SHA验证通过；provenance保留官方归档和单文件hash。DLC内 `.gitattributes` 禁止对已核验upstream字节做换行转换。只调用Writer内存RGBA输出，产品没有Pillow依赖、图片Reader入口或native包。未声称全量供应链漏洞审计。
 
 仍未关闭：真实完整前后端包/Canvas交互、独立12类能力bench、狐狸骑士4idle+6attack持续10类生产Tool编辑、独立adversarial review以及Composition验证。作者测试没有借用别的DLC的bench或scorer，不将scripted模型解释为真实LLM创造力证明。33项通过只允许交接Workbench，integrated仍为false。
+
+## 8. Workbench实施与作者验证（2026-09-05）
+
+实施者 `/root/pixel_workbench` 在已接受架构和后端提交 `113f5334` 后单独承担前端实施，不是Pixel独立Reviewer。过程中Director合入共享Context修复，交付前HEAD为 `7ff6b369`。本阶段自有文件只有frontend三文件、对应fixture及Pixel README/架构/本质量页。无Core/SDK/后端/manifest合同/共享依赖修改；manifest原有entrypoint直接指向现有真实工作台。
+
+已实现功能与操作说明只维护在 [Pixel README](../../dlcs/dbfox.pixel/README.md)。技术调查读取完整Lead模板、规范、严格后端contracts、SDK、Scene/Voxel/Music工作台模式，并采用仓库UI/UX skill的键盘、焦点、清理和窄窗口要求；不采用其建议的外部像素字体/主题，继续使用Host语义令牌。平台依据为 [MDN Pointer Capture](https://developer.mozilla.org/en-US/docs/Web/API/Element/setPointerCapture)、[Canvas插值控制](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/imageSmoothingEnabled)、[requestAnimationFrame](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame)。不引入绘图依赖、兼容层或迁移。
+
+Windows作者检查：
+
+| 命令/边界 | 实际结果 |
+| --- | --- |
+| `npm.cmd test -- --maxWorkers=1 src/features/dlc/__tests__/dbfoxPixelFixture.test.ts` | 27 passed，6.72s；实际产品组件，仅typed transport/Canvas设备测试边界控制 |
+| `npm.cmd run typecheck:test` | 通过，包含fixture对公开SDK的静态类型检查 |
+| `npm.cmd run lint` | 通过，0 errors / 5个原有共享组件warnings；设计令牌合同通过 |
+| `npm.cmd run build` | 通过，Electron构建、生产Token检查与bundle预算通过；入口gzip186032B |
+| `node --check frontend/index.js`、`model.js` | 语法通过 |
+
+27项fixture覆盖：同修订帧/palette/cel核对；真实组件创建入口；整数坐标与一次批量笔迹；cancel/lost capture/超128段整笔取消；橡皮/flood/矩形；锁层与父document onAsk；区域translate/rotate及显式clip；palette/layer/frame/tag编辑；顺序/时长/非循环播放；输入框快捷键隔离与键盘一格绘制；历史undo；CAS冲突读回且不自动重发；可见head同步；262144slots结构上限；导出缺失Host方法先失败；同signal操作与导航；unmount/scope/deactivate的迟到导出与写入隔离；未知导出不创建替代Run、已知成果仅重试导航；deactivate即刻释放指针及停止旧onAsk；迟到初始读取不再读取帧；重复注册只保留一个样式；公开不可变PNG/sheet读取及URL释放。
+
+作者真实浏览器检查使用Codex in-app浏览器和任务私有的本地页面，产品模块/Host React/设计令牌原样运行；operation transport和32×32/10帧狐狸骑士示例为明确的内存视觉fixture。真实Canvas、指针捕获、ResizeObserver、RAF和CSP运行，不用jsdom Canvas替代。记录：
+
+- 1280×720浅色、1280×800深色：完整狐狸角色、调色板、图层、动画预览、10帧时间线可见。真实拖动经 `documents.apply` 将r1推进r2，并读回显示已保存。
+- 初始12×导致短窗口裁掉部分画布；修正为ResizeObserver计算整数适配级别，并提供“适应画布”，手动缩放不被后续自动覆盖。修正后浅色6×、深色8×完整显示。
+- 375×812：第一轮发现侧栏超出flex基础高度，时间线覆盖后续内容；修正窄容器为自然高度，Canvas先显示，其他面板与时间线按顺序滚动。修正后根无横向溢出，timeline top与body bottom均约1928.33px（浮点差<0.001px），无实际覆盖。
+- 本地页面CSP为 `default-src self; script-src self; style-src self; img-src self blob:`；只加载本地模块/样式，预览PNG来源为公开Blob；浏览器日志无error/warn。未添加unsafe-eval、远程图像或样式例外。
+
+视觉fixture的10帧只有用于观察的相同角色图案，不冒充4idle+6attack生产Tool创作压力任务。未用它证明SQLite、Agent/Human往返、签名Frontend Loader或Electron下载落盘。未执行独立benchmark/stress或红队，integrated仍为false。后续Verification必须打包真实frontend三文件，替代Backend隔离stub进行完整验收。
+
+构建脚本重新生成Music/Visualization vendor的Windows换行，保留为未暂存的非Pixel文件；未纳入本阶段提交。临时浏览器页面/示例不进产品或Git，任务结束关闭浏览器、恢复viewport并停止专用本地server。
+
+## Director接续核验（2026-09-05）
+
+Workbench Agent因账户额度停止在提交前，既有实现与记录保留。Director原样重跑工作台fixture：**27 passed，6.64秒**。随后将两处签名fixture改为复制真实frontend目录，并逐字节比较包内index.js/model.js/index.css与产品文件；完整后端、签名包激活和生产RunLoop集合 **33 passed，11.48秒**，测试Pyflakes通过。第7节的stub说明属于后端早期阶段，现行测试不再使用它。
+
+这属于Director接续检查，不是独立Verification或红队；真实Electron、12类benchmark、4idle+6attack的生产Tool压力作品和独立终审仍未完成。由于三个子Agent均报告账户usage limit，下一独立角色暂未启动；不据作者检查改变integrated=false。

@@ -6,9 +6,9 @@
 >
 > 最后核验：2026-09-05
 >
-> 适用范围：`dbfox.pixel` Capability DLC 后端与后续 Workbench
+> 适用范围：`dbfox.pixel` Capability DLC 后端与 Canvas Workbench
 
-本文是 Pixel 首轮实施的唯一合同。独立 Domain Architect 已核验并修正严格类型、事务查重、锁层、历史容量和表示边界，结论为 **accepted（接受本页修正后的方案）**。后端现已实现，33项作者测试通过，包括签名包激活、真实同Run增量编辑和Human ActionRun导出。Workbench、独立 benchmark/stress与红队尚未完成；作者验证不代替最终独立评审。实际证据见 [Pixel 验证证据](../quality/pixel-dlc-evidence.md)。
+本文是 Pixel 首轮实施的唯一合同。独立 Domain Architect 已核验并修正严格类型、事务查重、锁层、历史容量和表示边界，结论为 **accepted（接受本页修正后的方案）**。后端现已实现，33项作者测试通过，包括签名包激活、真实同Run增量编辑和Human ActionRun导出。Canvas Workbench已实现并通过27项前端作者fixture及真实浏览器视觉检查；独立 benchmark/stress、签名Electron验收与红队尚未完成；作者验证不代替最终独立评审。实际证据见 [Pixel 验证证据](../quality/pixel-dlc-evidence.md)。
 
 目标作品为 **32×32 狐狸骑士，4 帧待机、6 帧攻击**。用户和 Agent 必须能增量修改同一作品；Workbench 必须包含画布直接绘制、颜色板、图层、帧时间线、标签播放和撤销。
 
@@ -226,6 +226,12 @@ Pointer down 固定 document/frame/layer/expected version，使用 pointer captu
 
 动画以 frame 的 duration 与 tag 的有序 frame IDs 播放；播放暂停不改 canonical。缩略图和 preview 由已读取的指定 revision 派生，不维护另一份可写动画模型。空白状态允许直接创建；用户可创建/复制/删除帧，编辑时长与标签，添加/隐藏/锁定/删除图层，修改 palette，移动/镜像选区和撤销。
 
+实现入口为 `frontend/index.js`、`model.js`、`index.css`。前端复用Host注入React、语义设计令牌和原生有标签表单；SDK当前仅提供Tree/CodeArtifact，它们不适配像素编辑表单，因此没有自建另一套通用UI框架或引入第三方绘图依赖。Canvas 2D负责呈现，Pointer Events负责捕获，ResizeObserver选择整数适配缩放，requestAnimationFrame只负责播放；所有像素与结构编辑仍进入后端typed operations。
+
+同一修订的帧只读缓存最大受262144slots约束，先读选中帧，再以2个并发读取剩余帧；读取会核对document/revision/hash/canvas/palette和cel身份，拒绝混合版本。正常显示、绘制前后的canonical数据没有第二份可写状态。Deactivation主动释放指针捕获，即使Host尚未移除组件；scope变化的React key重新初始化视图。
+
+导出在一个被捕获的scope和AbortSignal内完成。缺少Host可选导航方法在创建ActionRun前失败。已知导出身份可只重试导航；未知导出停用当前工作台的新导出并提示原mutation ID，禁止自动发起另一个Run。Artifact视图通过公开stream下载，至多保留当前预览与上一次下载的Blob URL，替换/卸载/deactivate时释放。
+
 ## 7. 验证与退出门禁
 
 必须有单元、真实 Runtime/Tool、Workbench 和独立 adversarial evidence，详见 [验证证据](../quality/pixel-dlc-evidence.md)。至少覆盖：
@@ -238,7 +244,7 @@ Pointer down 固定 document/frame/layer/expected version，使用 pointer captu
 - PNG 由成熟库交叉解码核对像素，Artifact 固定修订，Representation 不跨 owner/resource；
 - 生产 Tool path 创建目标作品，再执行至少10类持续修改，包括模糊/冲突指令拒绝和人类编辑后的 Agent 修改。
 
-没有以上证据不得声明 DLC 完成。只有 Program Director 可以标记 integrated。Domain Architect方案核验与Backend实施/作者验证已完成；Workbench、独立Verification与Adversarial Reviewer仍待执行。
+没有以上证据不得声明 DLC 完成。只有 Program Director 可以标记 integrated。Domain Architect方案核验、Backend与Workbench实施/作者验证已完成；独立Verification与Adversarial Reviewer仍待执行。
 
 Director曾报告同Run创建document后的通用Artifact authority错配。Pixel实际RunLoop测试先复现 `TOOL_OUTPUT_CONTRACT_FAILED / ArtifactDraftContractError`，随后Director把独立Host修复 `8ba14f69` 合入本worktree（对应提交 `8b70c89c`）。同一个测试不作放宽即通过 create→rect→inspect→line→export 五个Invocation、单Run、最终revision3，动态ID/version仅来自正式function_call_output。没有清空refs、私自扩权或每次新建Run。该后端集成证据不代表完整Workbench或独立stress已经通过。
 
