@@ -1,6 +1,6 @@
 {
   "dlc_id": "dbfox.scene",
-  "status": "implementation",
+  "status": "integration_candidate",
   "branch": "creative/scene",
   "lead": "/root/scene_lead",
   "canonical_model": "SceneDocument schema 1",
@@ -75,7 +75,6 @@
   "known_blockers": [
     "Public Host has no project deletion hook; automatic private-state purge cannot currently be wired.",
     "Full 10000-object UI read remains 102 pages / 19.60 seconds; collapsed DOM is fixed and independently verified.",
-    "Full RunLoop suite awaits generic Artifact Invocation authority fix; independent adversarial review remains pending.",
     "Real export navigation/download awaits independent retest of project-visible Artifact tabs."
   ],
   "composition_candidates": [
@@ -104,7 +103,7 @@
       "scope": "Direct child of Director, logically assigned to Scene Lead because nested completed workers retain the global agent slots"
     }
   ],
-  "next_stage": "Resume independent reviewer for final Artifact Context/Host reference fix audit; Director candidate is saved, integration remains gated.",
+  "next_stage": "Director isolated three-owner production RunLoop/authority/representation checks, then integration decision; no gate waived.",
   "architecture_document": "docs/architecture/scene-dlc.md",
   "completed_work": [
     "Full Lead Template read",
@@ -130,7 +129,7 @@
     "Signed backend activation test uses an isolated frontend stub; it is not evidence of Workbench product functionality",
     "Director independently reported four glTF/GLB outputs passing Khronos validator with zero errors, warnings and infos; independent full feature verification remains pending"
   ],
-  "phase": "independent_adversarial_review_interrupted_by_usage_limit",
+  "phase": "independent_adversarial_pass_cross_dlc_verification_pending",
   "completion_claimed": false,
   "browser_verification": {
     "agent": "/root/voxel_lead/domain_architect",
@@ -165,7 +164,9 @@
     "director_artifact_after_fix": "31 passed in68.54s; remaining91 already passed in combined run",
     "shared_context_fix": "c4f0b7fe",
     "shared_reference_fix": "c4d24b25",
-    "independent_final_verdict": "pending usage availability",
-    "evidence": "docs/quality/scene-dlc-adversarial-review.md"
-  }
+    "independent_final_verdict": "passed: 68 cases (35 domain, 33 Artifact) in 133.03s; confirmed A1-A6 closed; actual Electron canonical Artifact-only reference admitted",
+    "evidence": "docs/quality/scene-dlc-adversarial-review.md",
+    "independent_commit": "37d9f8bf71bb608253e9271eb45397e8df981e2c"
+  },
+  "integrated": false
 }
