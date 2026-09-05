@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "capability.dbfox-shader.scripted",
+  "suite_version": "1.0.0",
+  "description": "Signed full Shader DLC and production RunLoop: exact domain edits, CAS, public immutable artifacts and unavailable-GPU honesty. No simulated successful compilation; not real-LLM or GPU visual scoring.",
+  "subject": {
+    "kind": "capability",
+    "components": [
+      "dbfox.shader"
+    ],
+    "supporting_fixtures": [
+      "scripted-provider",
+      "migrated-metadata",
+      "signed-package"
+    ]
+  },
+  "execution": {
+    "provider_modes": [
+      "scripted"
+    ],
+    "default_repetitions": 1,
+    "max_repetitions": 5
+  },
+  "dataset": "cases.json",
+  "metrics": [
+    {
+      "name": "task.success_rate",
+      "direction": "higher_is_better",
+      "unit": "ratio",
+      "description": "task.success_rate"
+    },
+    {
+      "name": "runtime.tool_calls",
+      "direction": "lower_is_better",
+      "unit": "count",
+      "description": "runtime.tool_calls"
+    },
+    {
+      "name": "runtime.turns",
+      "direction": "lower_is_better",
+      "unit": "count",
+      "description": "runtime.turns"
+    },
+    {
+      "name": "observation.max_bytes",
+      "direction": "informational",
+      "unit": "bytes",
+      "description": "observation.max_bytes"
+    }
+  ]
+}

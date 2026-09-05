@@ -29,6 +29,8 @@ from verification.bench.composition.data_workspace.runtime import (
 from verification.bench.composition.data_workspace.schema import (
     load_cases as load_data_workspace_cases,
 )
+from verification.bench.capabilities.dbfox_shader.runtime import run_shader_bench
+from verification.bench.capabilities.dbfox_shader.schema import load_cases as load_shader_cases
 from verification.bench.core.authority.runtime import run_core_authority_bench
 from verification.bench.core.authority.schema import load_cases as load_authority_cases
 from verification.bench.core.context.runtime import run_core_context_bench
@@ -75,6 +77,11 @@ SUITES: dict[str, SuiteRegistration] = {
         HERE / "capabilities" / "dbfox_voxel" / "suite.json",
         _count(load_voxel_cases),
         runner=run_voxel_bench,
+    ),
+    "capability.dbfox-shader.scripted": SuiteRegistration(
+        HERE / "capabilities" / "dbfox_shader" / "suite.json",
+        _count(load_shader_cases),
+        runner=run_shader_bench,
     ),
     "core.loop.scripted": SuiteRegistration(
         HERE / "core" / "loop" / "suite.json",
