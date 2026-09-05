@@ -61,6 +61,12 @@ engine generation、DLC activation、workbench scope 或 Project 改变后，不
 activation 实例，包含同 package digest 再激活后旧 Host 引用失效。校验在投影提交前完成；
 读操作可中止，创建导出的写操作仍由原 Action Run 执行一次，导航不重放它。
 
+通过归属验证后，Host 在现有 Dock tab 的 projectId 字段保存该已验证项目。单个工件视图
+对这一显式导航入口按当前 Project 显示；其 tab 仍只存在于原 workbench scope，支持草稿
+工作台和当前聊天之外的 Action Run。没有此字段的 timeline 入口保留原会话显示语义；
+工件集合仍绑定当前聊天。该字段是显示元数据，不授予 Resource/Artifact 后端读取权限，
+不会切换聊天、复制会话状态或建立另一份工件投影。
+
 导航方法只负责查看已存在结果，不改变 Resource authority，不创建 Run，不执行领域导出，
 也不提供私有 API client。Artifact 自己注册的 Representation 决定内容和下载格式。
 

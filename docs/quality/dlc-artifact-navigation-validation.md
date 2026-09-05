@@ -84,6 +84,20 @@ Director 修复既有 Loader：导入可重叠，注册/清理/提交统一进�
 
 ## 尚待集成验收
 
+Loader 修复后的独立 Electron 冷启动复测确认旧 lease 失败消失，正式 Session/RunArtifacts
+读取均200；但发现第二个实际显示问题：core.artifact 的旧可见规则只接受当前聊天的工件，
+因此导航 resolve 且tab已写入，草稿工作台仍看不到Action Run结果。Director采用独立验证员
+审议接受的最小方案：只给已验证Project归属的新Host导航填充现有tab.projectId，Core按其
+项目显示；普通timeline单工件和集合保留会话语义。不通过切换用户会话解决。
+
+导航回归现已实际渲染WorkspaceDock及ArtifactViewHost，覆盖draft和另一个聊天：断言选中
+页签和领域工件视图可见、当前主界面不变，切换Project隐藏并在返回原scope后恢复；另测
+跨Project/空白projectId/错误target拒绝及旧会话规则。仅API传输边界受控，Host与Dock使用
+生产实现。四文件定向验证60项通过（最后新增的可见规则测试纳入随后全量运行）；最终全量
+96文件、516项通过（142.20秒），包含44项导航回归；类型检查和lint通过（0 errors、5个
+既有warnings）。生产构建通过，含Token和bundle预算检查（入口gzip 186,032 B）；独立
+真实Electron再复测仍未完成。
+
 本工作区未安装新的 Scene/Voxel capability change set，因此以上通用 Host 测试不代表
 两个实际工作台已完成成果导航、Representation 下载或用户流程验收。领域工作区已接入
 调用方并验证导出等待前捕获 Host、scope 和 signal、卸载/切换取消、缺能力明确报错；

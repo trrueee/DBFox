@@ -390,7 +390,7 @@ export function createStagedExtensionHost(
                 || artifact.session_id !== sessionId || artifact.run_id !== runId) {
                 throw new Error("Artifact does not belong to the requested run.");
               }
-              openArtifactDock(artifact);
+              openArtifactDock(artifact, { projectId });
             },
           });
         } catch {

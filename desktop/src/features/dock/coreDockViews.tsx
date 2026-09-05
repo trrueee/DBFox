@@ -32,6 +32,10 @@ export const coreDockViews: readonly DockViewContribution[] = [
     icon: () => <FileText {...iconProps} />,
     resolveTitle: (view) => view.title,
     isVisible: (view, context) => {
+      if (view.target?.type !== "artifact") return false;
+      // Explicit Host navigation verifies the artifact's Project before adding
+      // this existing tab metadata. Action Runs need not be the active chat.
+      if (view.projectId) return view.projectId === context.activeProjectId;
       const artifactId = view.target?.type === "artifact" ? view.target.id : "";
       const convId = useConversationStore.getState().artifactsById[artifactId]?.session_id;
       return (

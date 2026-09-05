@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createElement } from "react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import type { ArtifactNavigationTarget, FrontendExtensionHost } from "../../../../../sdk/frontend/index";
 import type { ConversationArtifact } from "../../../types/conversation";
 import * as apiClient from "../../../lib/api/client";
@@ -8,6 +10,9 @@ import { createStagedExtensionHost } from "../extensionHost";
 import { invalidateActiveFrontendExtensions, loadActiveFrontendExtensions } from "../extensionLoader";
 import { useDlcStore } from "../extensionStore";
 import type { DlcModule } from "../types";
+import { TooltipProvider } from "../../../components/ui";
+import { WorkspaceDock } from "../../appShell/WorkspaceDock";
+import { agentApi } from "../../../lib/api/agent";
 
 const reads = vi.hoisted(() => ({ session: vi.fn(), artifacts: vi.fn() }));
 vi.mock("../../../lib/api/generated/sdk.gen", async (importOriginal) => ({
@@ -78,7 +83,35 @@ describe("Host Artifact navigation through the canonical repository and store", 
     useConversationStore.setState({ detailById: {}, artifactsById: {} });
   });
 
-  afterEach(() => { invalidateActiveFrontendExtensions(); vi.restoreAllMocks(); });
+  afterEach(() => { cleanup(); invalidateActiveFrontendExtensions(); vi.restoreAllMocks(); });
+
+  it.each([null, "chat-session"])("renders the actual Action Run artifact view from scope %s", async (conversationId) => {
+    if (!conversationId) useWorkspaceStore.getState().setProjectMainSurface(target.projectId, { kind: "new-conversation" });
+    vi.spyOn(agentApi, "listArtifactRepresentations").mockResolvedValue([]);
+    let host!: FrontendExtensionHost;
+    await activate({ register(value) {
+      host = value;
+      value.artifactViews.register({
+        id: "example.navigation.result", title: "Result viewer", surfaces: ["workspace"],
+        artifactTypes: [{ type: artifact.type, schemaVersions: [1] }],
+        parsePayload: (payload) => payload,
+        render: (envelope) => createElement("div", { "data-testid": "actual-result-view" }, envelope.title),
+      });
+    } });
+    const initialSurface = useWorkspaceStore.getState().mainSurfaceByProject[target.projectId];
+    await host.workbench.openArtifact!(target, options());
+    render(createElement(TooltipProvider, null,
+      createElement(WorkspaceDock, { activeConversationId: conversationId, showToast: vi.fn() })));
+    expect((await screen.findByRole("tab", { name: artifact.title })).getAttribute("aria-selected")).toBe("true");
+    expect(await screen.findByTestId("actual-result-view")).toBeTruthy();
+    expect(useWorkspaceStore.getState().mainSurfaceByProject[target.projectId]).toEqual(initialSurface);
+    act(() => { useWorkspaceStore.getState().setActiveProject("another-project"); });
+    expect(screen.queryByRole("tab", { name: artifact.title })).toBeNull();
+    expect(screen.queryByTestId("actual-result-view")).toBeNull();
+    act(() => { useWorkspaceStore.getState().setActiveProject(target.projectId); });
+    expect(await screen.findByRole("tab", { name: artifact.title })).toBeTruthy();
+    expect(await screen.findByTestId("actual-result-view")).toBeTruthy();
+  });
 
   it("opens an older Action Run from another session with the server's identity and payload", async () => {
     const host = await activate();

@@ -21,7 +21,7 @@ export function openArtifactsDock(conversationId: string, activate = true): void
 
 export function openArtifactDock(
   artifact: ConversationArtifact,
-  options: { activate?: boolean; selectedViewId?: string } = {},
+  options: { activate?: boolean; selectedViewId?: string; projectId?: string } = {},
 ): void {
     const viewKey = `core.artifact:${artifact.id}`;
     useWorkspaceStore.getState().openDockTab(
@@ -30,6 +30,7 @@ export function openArtifactDock(
         viewType: "core.artifact",
         title: artifact.title,
         closeable: true,
+        ...(options.projectId ? { projectId: options.projectId } : {}),
         target: {
           type: "artifact",
           id: artifact.id,
