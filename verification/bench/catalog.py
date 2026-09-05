@@ -33,6 +33,8 @@ from verification.bench.core.context.runtime import run_core_context_bench
 from verification.bench.core.context.schema import load_cases as load_context_cases
 from verification.bench.core.loop.runtime import run_core_loop_bench
 from verification.bench.core.loop.schema import load_cases as load_loop_cases
+from verification.bench.capabilities.dbfox_voxel.runtime import run_voxel_bench
+from verification.bench.capabilities.dbfox_voxel.schema import load_cases as load_voxel_cases
 
 
 HERE = Path(__file__).resolve().parent
@@ -61,6 +63,11 @@ SUITES: dict[str, SuiteRegistration] = {
         HERE / "capabilities" / "dbfox_scene" / "suite.json",
         _count(load_scene_cases),
         runner=run_scene_bench,
+    ),
+    "capability.dbfox-voxel.scripted": SuiteRegistration(
+        HERE / "capabilities" / "dbfox_voxel" / "suite.json",
+        _count(load_voxel_cases),
+        runner=run_voxel_bench,
     ),
     "core.loop.scripted": SuiteRegistration(
         HERE / "core" / "loop" / "suite.json",

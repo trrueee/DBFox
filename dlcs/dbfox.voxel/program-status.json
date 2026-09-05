@@ -1,0 +1,91 @@
+{
+  "dlc_id": "dbfox.voxel",
+  "status": "implementation",
+  "branch": "creative/voxel",
+  "lead": "/root/voxel_lead",
+  "canonical_model": "VoxelWorld: 16-cubed palette-indexed chunks, ordered layers, named regions, metadata",
+  "resource_kinds": [
+    "dbfox.voxel.library",
+    "dbfox.voxel.world"
+  ],
+  "tools": [
+    "voxel_create",
+    "voxel_inspect",
+    "voxel_fill",
+    "voxel_box",
+    "voxel_sphere",
+    "voxel_extrude",
+    "voxel_replace",
+    "voxel_copy_region",
+    "voxel_mirror",
+    "voxel_boolean",
+    "voxel_configure",
+    "voxel_undo",
+    "voxel_delete",
+    "voxel_export",
+    "voxel_diff"
+  ],
+  "artifacts": [
+    "dbfox.voxel.snapshot"
+  ],
+  "representations": [
+    "dbfox.voxel.world.v1"
+  ],
+  "frontend_views": [
+    "dbfox.voxel.workbench",
+    "dbfox.voxel.snapshot"
+  ],
+  "tests": {
+    "status": "backend_and_fixture_pass_independent_verification_pending",
+    "paths": [
+      "verification/tests/system/test_voxel_dlc.py",
+      "desktop/src/features/dlc/__tests__/dbfoxVoxelFixture.test.ts"
+    ],
+    "backend": "47 backend + 14 capability bench: 61 passed in 39.45s; no exclusions or xfail",
+    "frontend": "16 passed; real GPU probe used fixture-backed operations and is not production Host proof",
+    "typecheck": "passed"
+  },
+  "bench": {
+    "status": "director_authored_pass_independent_review_pending",
+    "path": "verification/bench/capabilities/dbfox_voxel",
+    "suite": "capability.dbfox-voxel.scripted",
+    "cases": 14,
+    "cli": "14/14",
+    "max_context_chars": 1573,
+    "max_observation_bytes": 1942,
+    "stress": {
+      "tool_calls": 44,
+      "turns": 46,
+      "version": 38,
+      "nonzero_layer_voxels": 23386,
+      "chunks": 60,
+      "layers": 4,
+      "palette_slots": 8,
+      "regions": 3
+    }
+  },
+  "architecture_review": {
+    "status": "accepted_with_host_correction",
+    "specialists": [
+      {
+        "agent": "/root/voxel_lead/domain_architect",
+        "role": "Domain Architect",
+        "status": "completed",
+        "evidence": "docs/architecture/voxel-dlc.md",
+        "correction": "Per-invocation canonical resource binding allows same-Run incremental editing; reject proposed new-Run requirement."
+      },
+      {
+        "agent": "/root/voxel_lead/domain_architect",
+        "role": "Backend Engineer",
+        "status": "implementation_completed_independent_verification_pending",
+        "staffing": "Reused completed specialist thread because global thread limit counts completed agents; independent final review must use a non-author."
+      }
+    ]
+  },
+  "known_blockers": [],
+  "composition_candidates": [
+    "dbfox.voxel-game",
+    "dbfox.voxel-scene"
+  ],
+  "phase": "independent_bench_review_production_workbench_and_red_team_pending"
+}
