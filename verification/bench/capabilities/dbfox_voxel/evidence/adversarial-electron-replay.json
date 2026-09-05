@@ -1,0 +1,46 @@
+{
+  "boundary": "real signed Electron/EngineSupervisor; read-only HTTP replay copies an observed management read, never prints credentials",
+  "treeReopen": {
+    "selectedAfterClose": "true",
+    "before": "Interactive Voxel\n\n32 × 32 × 32 · 1,139 个方块 · v12\n\n已同步",
+    "after": "Interactive Voxel\n\n32 × 32 × 32 · 1,139 个方块 · v12\n\n已同步"
+  },
+  "readStress": [
+    {
+      "reads": 100,
+      "elapsedMs": 604,
+      "version": 12
+    },
+    {
+      "reads": 200,
+      "elapsedMs": 1120,
+      "version": 12
+    },
+    {
+      "reads": 300,
+      "elapsedMs": 1649,
+      "version": 12
+    },
+    {
+      "reads": 400,
+      "elapsedMs": 2155,
+      "version": 12
+    },
+    {
+      "reads": 500,
+      "elapsedMs": 2692,
+      "version": 12
+    },
+    {
+      "reads": 600,
+      "elapsedMs": 3239,
+      "version": 12
+    }
+  ],
+  "lateRead": {
+    "held": 1,
+    "abandonedStudioCount": 0,
+    "destination": "Voxel Empty QA"
+  },
+  "reopened": "Interactive Voxel\n\n32 × 32 × 32 · 1,139 个方块 · v12\n\n已同步"
+}

@@ -1,0 +1,8 @@
+{
+  "before":{"generation":1,"state":"ready"},
+  "listenersBefore":["webglcontextlost","webglcontextlost","webglcontextrestored","webglcontextrestored","webglcontextcreationerror","pointerdown","pointerdown","pointercancel","pointercancel","contextmenu","wheel","keydown","pointermove","pointerup"],
+  "afterUnmount":{"connected":false,"lost":true,"listeners":[]},
+  "disabled":{"engine":{"generation":2,"state":"ready"},"styles":0,"canvases":0,"resources":0},
+  "enabled":{"engine":{"generation":3,"state":"ready"},"styles":1,"header":"Interactive Voxel\n\n32 × 32 × 32 · 1,139 个方块 · v12\n\n已同步"},
+  "boundary":"real historical GPU teardown with Control held, formal disable/restart/enable/restart; durable world preserved"
+}

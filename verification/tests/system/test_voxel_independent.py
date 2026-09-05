@@ -187,7 +187,9 @@ def test_actual_executor_termination_reconciles_without_replaying_write(harness,
     try:
         result = executor.execute(tool=tool, scope_key=world.world_id, operation=operation,
             should_cancel=entered.is_set if termination == "cancel" else None,
-            deadline=time.monotonic() + (0.35 if termination == "timeout" else 3))
+            # Allow reaching the named boundary under concurrent test load; the
+            # boundary remains held until the real executor deadline expires.
+            deadline=time.monotonic() + (2 if termination == "timeout" else 3))
         assert entered.is_set() and result.status != "success" and result.attempts == 1
         assert result.error_code == ("TOOL_TIMEOUT" if termination == "timeout" else "TOOL_CANCELLED")
         release.set()

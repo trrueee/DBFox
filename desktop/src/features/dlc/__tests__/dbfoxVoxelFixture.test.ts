@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { createHash, webcrypto } from "node:crypto";
 import { resolve } from "node:path";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -29,8 +30,24 @@ let module: DlcModule;
 let data: DataModule;
 let evidence: RendererEvidence;
 
+// Independent fixture encoding of the published canonical JSON/hash contract.
+// Never import a product fingerprint implementation to create expected bytes.
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+function pin<T extends { document: unknown; content_hash: string; chunk_count: number; nonzero_count: number }>(world: T, chunks: Chunk[]): T {
+  const live = chunks.filter(chunk => chunk.values !== null).sort((a, b) => a.layer_id < b.layer_id ? -1 : a.layer_id > b.layer_id ? 1
+    : a.coord[0] - b.coord[0] || a.coord[1] - b.coord[1] || a.coord[2] - b.coord[2]);
+  const hash = createHash("sha256").update(canonical(world.document));
+  for (const chunk of live) hash.update(`\n${canonical([chunk.layer_id, ...chunk.coord, chunk.hash])}`);
+  return { ...world, content_hash: `sha256:${hash.digest("hex")}`, chunk_count: live.length,
+    nonzero_count: live.reduce((sum, chunk) => sum + chunk.values!.filter(Boolean).length, 0) };
+}
+
 function makeWorld(version = 1) {
-  return {
+  return pin({
     world_id: "world_fixture", project_id: "p1", version, parent_version: version > 1 ? version - 1 : null,
     title: "狐狸神社", status: "active", size: [16, 16, 16], content_hash: `hash-${version}`,
     chunk_count: 1, nonzero_count: 1, layer_count: 2, palette_count: 3, region_count: 0,
@@ -38,12 +55,12 @@ function makeWorld(version = 1) {
       layers: [{ id: "base", name: "Base", locked: false }, { id: "roof", name: "Roof", locked: false }],
       palette: [{ index: 0, name: "Air", color: "#000000" }, { index: 1, name: "Stone", color: "#64748b" }, { index: 2, name: "Pink", color: "#f472b6" }],
       regions: [] as { id: string; name: string; bounds: Bounds }[], metadata: { description: "", tags: [] as string[] } },
-  };
+  }, [chunk()]);
 }
 function chunk(layer = "base", point = [1, 2, 3], color = 1): Chunk {
   const values = Array<number>(4096).fill(0);
   values[point[0] + 16 * point[2] + 256 * point[1]] = color;
-  return { layer_id: layer, coord: [0, 0, 0], hash: "chunk", values };
+  return { layer_id: layer, coord: [0, 0, 0], hash: `sha256:${createHash("sha256").update(Uint8Array.from(values)).digest("hex")}`, values };
 }
 function page(world: World, chunks: Chunk[], since: unknown = null, after: string | null = null) {
   return { world_id: world.world_id, version: world.version, since_version: since, chunks, next_after: after, metadata_changed: false };
@@ -70,6 +87,7 @@ beforeAll(async () => {
   module = await import(/* @vite-ignore */ entryUrl) as DlcModule;
 });
 beforeEach(() => {
+  vi.stubGlobal("crypto", webcrypto);
   evidence = { created: 0, disposed: 0, lost: 0, renders: 0 };
   vi.stubGlobal("__voxelRendererEvidence", evidence);
   vi.stubGlobal("PointerEvent", MouseEvent);
@@ -88,6 +106,7 @@ async function setup({ empty = false, locked = false, reject = false, hold = fal
   let current = makeWorld();
   let readFailure = false;
   current.document.layers[0].locked = locked;
+  current = pin(current, [chunk()]);
   const calls: { name: string; input: Record<string, unknown>; options?: DlcOperationInvokeOptions }[] = [];
   let release: (() => void) | undefined;
   const invokeOperation = async <TOutput,>(_owner: string, name: string, input: unknown, options?: DlcOperationInvokeOptions): Promise<TOutput> => {
@@ -109,7 +128,7 @@ async function setup({ empty = false, locked = false, reject = false, hold = fal
       next.document = structuredClone(current.document);
       const operation = request.operation as { kind?: string; layer?: World["document"]["layers"][number] } | undefined;
       if (operation?.kind === "layer_put" && operation.layer) next.document.layers = next.document.layers.map((layer) => layer.id === operation.layer?.id ? operation.layer : layer);
-      current = next;
+      current = pin(next, [chunk()]);
       return { ...current, changed: true } as TOutput;
     }
     throw new Error(`Unexpected ${name}`);
@@ -148,8 +167,7 @@ function drag(canvas: HTMLElement) {
 
 describe("Voxel fixed-version projection", () => {
   it("independently loads an Artifact through only its fixed representation and exports all layers", async () => {
-    const world = makeWorld(4);
-    world.chunk_count = 2;
+    const world = pin(makeWorld(4), [chunk(), chunk("roof", [1, 2, 3], 2)]);
     const read = vi.fn(async (_id: unknown, _type: unknown, request: unknown) => {
       const operation = (request as { operation: string }).operation;
       return { representation_type: "dbfox.voxel.world.v1", representation_version: 1, operation,
@@ -198,7 +216,7 @@ describe("Voxel fixed-version projection", () => {
     await rejected;
   });
   it("decodes x + 16*z + 256*y and composes visible layers bottom to top", async () => {
-    const world = makeWorld();
+    const world = pin(makeWorld(), [chunk(), chunk("roof", [1, 2, 3], 2)]);
     const result = await data.loadWorld(async (name) => name === "worlds.get" ? world : page(world, [chunk(), chunk("roof", [1, 2, 3], 2)]), world.world_id);
     expect(data.chunkOffset(1, 2, 3)).toBe(561);
     expect(data.voxelAt(result.chunks, "base", [1, 2, 3])).toBe(1);
@@ -212,9 +230,9 @@ describe("Voxel fixed-version projection", () => {
   it("reads all delta pages at one version, applies tombstones, and keeps previous state immutable", async () => {
     const world = makeWorld();
     const previous = await data.loadWorld(async (name) => name === "worlds.get" ? world : page(world, [chunk()]), world.world_id);
-    const current = makeWorld(2);
+    const current = pin(makeWorld(2), [chunk("roof", [3, 2, 1], 2)]);
     const invoke = vi.fn<Invoke>(async (name, input) => name === "worlds.get" ? current : input.after
-      ? page(current, [chunk("roof", [3, 2, 1], 2)], 1) : page(current, [{ ...chunk(), values: null }], 1, "opaque-next"));
+      ? page(current, [chunk("roof", [3, 2, 1], 2)], 1) : page(current, [{ ...chunk(), hash: `sha256:${createHash("sha256").update(new Uint8Array(4096)).digest("hex")}`, values: null }], 1, "opaque-next"));
     const result = await data.loadWorld(invoke, world.world_id, { previous });
     expect(previous.chunks.has("base:0,0,0")).toBe(true);
     expect(result.chunks.has("base:0,0,0")).toBe(false);
@@ -401,5 +419,31 @@ describe("Voxel Studio official Host fixture", () => {
     // Remove failed-run listeners so this regression does not pollute later tests.
     for (const entry of listeners) remove.call(entry.target, entry.type, entry.listener, entry.capture);
     expect(remaining).toEqual([]);
+  });
+});
+
+describe("Independent final adversarial generation crossover", () => {
+  it.each(["write", "snapshot"])("drops a late %s across scope change, deactivation and registration", async kind => {
+    const old = await setup({ hold: kind === "write", holdSnapshot: kind === "snapshot" });
+    fireEvent.click(screen.getByRole("button", { name: kind === "write" ? "应用到选区" : "保存快照" }));
+    const operation = kind === "write" ? "worlds.apply" : "worlds.snapshot";
+    await waitFor(() => expect(old.calls.filter(call => call.name === operation)).toHaveLength(1));
+    const signal = old.calls.find(call => call.name === operation)!.options!.signal!;
+    old.changeScope("replacement-scope");
+    old.rendered.unmount();
+    await module.deactivate?.();
+    const oldCalls = old.calls.length;
+    const fresh = await setup();
+    expect(signal.aborted).toBe(true);
+    const freshCalls = fresh.calls.length;
+    await act(async () => old.release());
+    expect(old.calls).toHaveLength(oldCalls);
+    expect(fresh.calls).toHaveLength(freshCalls);
+    expect(old.openArtifact).not.toHaveBeenCalled();
+    expect(fresh.openArtifact).not.toHaveBeenCalled();
+    expect(fresh.calls.some(call => ["worlds.apply", "worlds.snapshot"].includes(call.name))).toBe(false);
+    expect(screen.getByText(/16 × 16 × 16.*v1/)).not.toBeNull();
+    expect(evidence.disposed).toBe(1);
+    expect(evidence.lost).toBe(1);
   });
 });

@@ -81,3 +81,17 @@ npx.cmd --no-install --package @playwright/cli playwright-cli -s=voxel-verificat
 `--accept-downloads` 只允许 `world_<32hex>-vN.voxel.json` 保存到此 suite 的 evidence，由正常 Electron DownloadItem 写盘；verification-only listener 只调用 setSavePath，在 done 后自行移除。CDP只是观察下载事件，不替换写盘。未自动点击原生保存对话框；此限制必须随下载证据一起报告。
 
 开发中源代码变化但包版本未变时，禁止直接覆盖已激活包。仅在专用Electron停止、CDP19227无监听之后，运行 `python -m verification.bench.capabilities.dbfox_voxel.browser_fixture <目录> --upgrade`，走正式停用/卸载保留数据/重签安装，然后 `browser-launch.mjs <目录> --reuse --accept-downloads`。`--record-installed` 是只读审计入口，用于重新记录已安装digest和公开world，不替换包或修改世界。私有runtime目录的SQLite、包密钥、日志和profile均不提交。
+
+## 最终独立对抗阶段
+
+这是 `6467337c` 后正式独立授权的另一阶段，见 [对抗报告](../../../../docs/quality/voxel-adversarial-review.md)。新增 `test_voxel_adversarial.py` 使用真实签名安装、生产 RunLoop、ToolRuntime/ToolExecutor 和独立 `adversarial_worker.py` 子进程故障注入；旧36个 fault 仅为回归。
+
+```powershell
+D:/Project/DBFox/.venv/Scripts/python.exe -m pytest verification/tests/system/test_voxel_adversarial.py verification/tests/system/test_voxel_independent.py -q --tb=short --show-capture=no
+# desktop 目录，仍串行
+npm.cmd test -- src/features/dlc/__tests__/dbfoxVoxelAdversarial.test.ts src/features/dlc/__tests__/dbfoxVoxelFixture.test.ts --maxWorkers=1
+```
+
+真实桌面使用完成上面 v2→v12 验证链的独占目录，重新签名冷启动。命名 CLI session 改为 `voxel-adversarial`；保留原 evidence，新增结果以 `adversarial-*` 命名。按序运行 `browser-adversarial.cjs`（实际选中树重开、600次正式只读、跨Project迟到chunk）、`browser-adversarial-large.cjs`（64³/128³完整hash读取成本、局部/窄布局）、原 `browser-cleanup-held.cjs`（原始真实监听器断言）、`browser-adversarial-history.cjs`（旧v8会话表示与原生下载）、`browser-adversarial-lifecycle.cjs`（历史视图Control-held卸载、正式停用/重启/启用/重启）。每步先用 snapshot 确认可见状态。
+
+`browser_audit <运行目录> <evidence目录> adversarial-durable-audit.json` 保留逐块与人/Agent哨兵断言，第三个参数仅选报告文件名；下载文件内容与此前相同。完成后仍使用 `browser-close.cjs` 和实际PID/专用端口检查。真实下载保存路径控制、脚本化模型与本机单次性能的限制适用于本阶段。

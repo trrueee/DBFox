@@ -11,7 +11,9 @@ from dbfox_dlc_api import DlcOperationContext
 from engine.runtime_composition import initialize_runtime_snapshot
 
 
-def audit(directory: Path, evidence: Path) -> None:
+def audit(directory: Path, evidence: Path, report_name: str = "electron-durable-audit.json") -> None:
+    if Path(report_name).name != report_name or not report_name.endswith(".json"):
+        raise ValueError("The evidence report must be a JSON filename")
     fixture = json.loads((directory / "browser-fixture.json").read_text(encoding="utf-8"))
     snapshot = initialize_runtime_snapshot(storage_root=directory / "dlcs")
     def operation(name, payload):
@@ -52,11 +54,11 @@ def audit(directory: Path, evidence: Path) -> None:
         "current":current,"sentinel_cells":{"first_agent_28":cell([28]*3),"second_agent_29":cell([29]*3),"conflict_agent_30":cell([30]*3),"human_gold_0_30_0":cell([0,30,0])},
         "download":{"filename":downloaded.name,"bytes":len(content),"sha256":hashlib.sha256(content).hexdigest(),
             "manifest_matches_public_history":True,"every_chunk_matches_public_history":True,"chunk_hashes_verified":True,"nonzero_count":cells,
-            "all_layers_despite_hidden_preview":True},
+            "all_layers_match_pinned_public_pages":True},
         "native_download_events":[json.loads(line) for line in (directory / "voxel-download-events.jsonl").read_text().splitlines()]}
-    (evidence / "electron-durable-audit.json").write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
+    (evidence / report_name).write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
     print(json.dumps({"current_version":current["version"],"download":result["download"],"runs":len(runs)},ensure_ascii=False))
 
 
 if __name__ == "__main__":
-    audit(Path(sys.argv[1]).resolve(),Path(sys.argv[2]).resolve())
+    audit(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve(), sys.argv[3] if len(sys.argv) > 3 else "electron-durable-audit.json")

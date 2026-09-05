@@ -1,0 +1,33 @@
+{
+  "title": "Interactive Voxel\n\n不可变快照 · v8 · 32 × 32 × 32",
+  "reads": [
+    {
+      "status": 200,
+      "operation": "manifest",
+      "version": "8",
+      "fingerprint": "sha256:f011d4f3db26c9dcd1e0b46f28d50f96711fb474a35f30348f7b6941c74e6b0a"
+    },
+    {
+      "status": 200,
+      "operation": "chunks",
+      "version": "8",
+      "fingerprint": "sha256:f011d4f3db26c9dcd1e0b46f28d50f96711fb474a35f30348f7b6941c74e6b0a",
+      "chunkCount": 4
+    }
+  ],
+  "starts": [
+    {
+      "guid": "2dbb52a0-4a64-48b4-872b-88c517678b0c",
+      "filename": "world_c653aa199f7841aaa72bf1dcddc14629-v8.voxel.json"
+    }
+  ],
+  "native": {
+    "guid": "2dbb52a0-4a64-48b4-872b-88c517678b0c",
+    "totalBytes": 34256,
+    "receivedBytes": 34256,
+    "state": "completed",
+    "filePath": "D:\\Project\\DBFox-worktrees\\creative-voxel\\verification\\bench\\capabilities\\dbfox_voxel\\evidence\\world_c653aa199f7841aaa72bf1dcddc14629-v8.voxel.json"
+  },
+  "editableSlices": 0,
+  "boundary": "v8 Artifact re-read through new verified frontend while live world is v12; real native DownloadItem with verifier-controlled save path"
+}
