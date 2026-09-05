@@ -13,6 +13,7 @@ LIBRARY_KIND = OWNER + ".library"
 ARTIFACT_TYPE = OWNER + ".revision"
 REPRESENTATION_TYPE = OWNER + ".sprite.v1"
 MAX_SLOTS = 262144
+MAX_FRAMES = 256
 MAX_DOCUMENT_BYTES = 2 * 1024 * 1024
 MAX_INPUT_BYTES = 65536
 MAX_OUTPUT_BYTES = 16384
@@ -90,7 +91,7 @@ class Frame(Contract):
 class Tag(Contract):
     id: Id
     name: Name
-    frame_ids: list[Id] = Field(min_length=1, max_length=64)
+    frame_ids: list[Id] = Field(min_length=1, max_length=MAX_FRAMES)
     loop: bool
 
 
@@ -100,7 +101,7 @@ class PixelDocument(Contract):
     canvas: Canvas
     palette: list[PaletteEntry] = Field(min_length=1, max_length=256)
     layers: list[Layer] = Field(min_length=1, max_length=16)
-    frames: list[Frame] = Field(min_length=1, max_length=64)
+    frames: list[Frame] = Field(min_length=1, max_length=MAX_FRAMES)
     tags: list[Tag] = Field(max_length=16)
 
     @model_validator(mode="after")
@@ -204,7 +205,7 @@ class PaletteSet(Input):
 class FrameCreate(Input):
     kind: Literal["frame_create"]
     frame_id: Id
-    position: int = Field(strict=True, ge=0, le=63)
+    position: int = Field(strict=True, ge=0, le=MAX_FRAMES - 1)
     duration_ms: Duration = 100
 
 
@@ -212,14 +213,14 @@ class FrameDuplicate(Input):
     kind: Literal["frame_duplicate"]
     source_frame_id: Id
     frame_id: Id
-    position: int = Field(strict=True, ge=0, le=63)
+    position: int = Field(strict=True, ge=0, le=MAX_FRAMES - 1)
 
 
 class FrameUpdate(Input):
     kind: Literal["frame_update"]
     frame_id: Id
     duration_ms: Duration | None = None
-    position: Annotated[int, Field(strict=True, ge=0, le=63)] | None = None
+    position: Annotated[int, Field(strict=True, ge=0, le=MAX_FRAMES - 1)] | None = None
 
     @model_validator(mode="after")
     def update_required(self):
@@ -265,7 +266,7 @@ class TagSet(Input):
     kind: Literal["tag_set"]
     tag_id: Id
     name: Name
-    frame_ids: list[Id] = Field(min_length=1, max_length=64)
+    frame_ids: list[Id] = Field(min_length=1, max_length=MAX_FRAMES)
     loop: bool = True
 
 
@@ -410,7 +411,7 @@ class DocumentSummary(Contract):
     title: str = Field(min_length=1, max_length=160)
     width: int = Field(strict=True, ge=1, le=128)
     height: int = Field(strict=True, ge=1, le=128)
-    frame_count: int = Field(strict=True, ge=1, le=64)
+    frame_count: int = Field(strict=True, ge=1, le=MAX_FRAMES)
     layer_count: int = Field(strict=True, ge=1, le=16)
     palette_count: int = Field(strict=True, ge=1, le=256)
     tag_count: int = Field(strict=True, ge=0, le=16)
@@ -421,6 +422,7 @@ class MutationResult(DocumentSummary):
     changed: bool
     changed_pixel_count: int = Field(strict=True, ge=0)
     changed_frame_ids: list[Id] = Field(max_length=128)
+    changed_frame_ids_truncated: bool = False
     changed_layer_ids: list[Id] = Field(max_length=32)
 
 

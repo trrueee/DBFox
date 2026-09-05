@@ -30,27 +30,40 @@ class SheetInput(c.Input):
     tag_id: c.Id | None = None
 
 
+def sheet_dimensions(document, count):
+    # Preserve frame order without exceeding the existing PNG dimension or pixel
+    # budgets. Exact rows avoid allocating padding beyond the canonical slots.
+    columns = min(count, 8192 // document.canvas.width)
+    while count % columns:
+        columns -= 1
+    width = document.canvas.width * columns
+    height = document.canvas.height * (count // columns)
+    require(0 < width <= 8192 and 0 < height <= 8192 and width * height <= c.MAX_SLOTS,
+            "Sprite sheet exceeds its pixel or dimension budget.", "LIMIT")
+    return columns, width, height
+
+
 def sheet_layout(document, tag_id):
     ids = [frame.id for frame in document.frames]
     if tag_id is not None:
         tag = next((tag for tag in document.tags if tag.id == tag_id), None)
         require(tag is not None, "Pixel animation tag does not exist.", "NOT_FOUND")
         ids = tag.frame_ids
-    width, height = document.canvas.width * len(ids), document.canvas.height
-    require(width <= 8192 and height <= 8192 and width * height <= c.MAX_SLOTS,
-            "Sprite sheet exceeds its pixel or dimension budget.", "LIMIT")
+    columns, width, height = sheet_dimensions(document, len(ids))
     frames = {frame.id: frame for frame in document.frames}
-    return {"width": width, "height": height, "frames": [{"frame_id": identity, "x": index * document.canvas.width,
-        "y": 0, "width": document.canvas.width, "height": height, "duration_ms": frames[identity].duration_ms}
+    return {"width": width, "height": height, "frames": [{"frame_id": identity, "x": (index % columns) * document.canvas.width,
+        "y": (index // columns) * document.canvas.height, "width": document.canvas.width,
+        "height": document.canvas.height, "duration_ms": frames[identity].duration_ms}
         for index, identity in enumerate(ids)]}
 
 
 def encode_png(document, frame_ids):
-    width, height = document.canvas.width * len(frame_ids), document.canvas.height
-    require(0 < width <= 8192 and height * width <= c.MAX_SLOTS, "PNG exceeds its pixel budget.", "LIMIT")
+    columns, width, height = sheet_dimensions(document, len(frame_ids))
     frames = [rgba(document, identity) for identity in frame_ids]
     stride = document.canvas.width * 4
-    rows = (b"".join(frame[y * stride:(y + 1) * stride] for frame in frames) for y in range(height))
+    rows = (b"".join(frame[(y % document.canvas.height) * stride:((y % document.canvas.height) + 1) * stride]
+                    for frame in frames[(y // document.canvas.height) * columns:(y // document.canvas.height + 1) * columns])
+            for y in range(height))
     output = BytesIO()
     png.Writer(width, height, greyscale=False, alpha=True, bitdepth=8, interlace=False).write(output, rows)
     encoded = output.getvalue()

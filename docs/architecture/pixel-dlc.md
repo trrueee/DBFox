@@ -67,7 +67,7 @@ palette: ordered PaletteEntry[1..256]
   PaletteEntry = {name: string <=80, color: #RRGGBBAA}
 layers: ordered Layer[1..16], bottom to top
   Layer = {id, name, visible: bool, locked: bool}
-frames: ordered Frame[1..64]
+frames: ordered Frame[1..256]
   Frame = {id, duration_ms: 20..2000, cels: Cel[one per layer]}
   Cel = {layer_id, pixels: palette-index[width * height]}
 tags: AnimationTag[0..16]
@@ -78,7 +78,7 @@ tags: AnimationTag[0..16]
 
 Canonical 全字段非 null。操作可选项明确分两类：默认参数的省略/null 归一为声明默认（如 filled=true、clip=false、transparent_mode=replace）；局部 update 参数的省略/null 都表示不修改，不能擦掉字段，至少提供一个实际 update 字段。required ID、version、index、坐标、布尔标志不可 null。归一化只在该严格输入模型完成一次，发生于 input hash 与领域计算之前；不新建 Human/Agent 两套操作模型。规范 JSON 使用 UTF-8、排序键、紧凑分隔符、`ensure_ascii=False, allow_nan=False`。64KiB 输入预算指经过解析/归一化的规范 JSON，不能虚称 owner 已限制 Host 解析前的 HTTP 字节流。
 
-每帧恰有每图层一个 cel；frame/layer/tag ID 分别唯一，标签引用必须存在。像素是行优先索引，不能包含未定义调色板项。总像素槽 `width * height * frame_count * layer_count <= 262144`，canonical JSON UTF-8 不超过 2 MiB。128×128、64 帧、16 图层是单轴上限，不承诺它们可同时达到。32×32、10 帧、8 图层只占 81920 槽。
+每帧恰有每图层一个 cel；frame/layer/tag ID 分别唯一，标签引用必须存在。像素是行优先索引，不能包含未定义调色板项。总像素槽 `width * height * frame_count * layer_count <= 262144`，canonical JSON UTF-8 不超过 2 MiB。128×128、256 帧、16 图层是单轴上限，不承诺它们可同时达到。32×32、10 帧、8 图层只占 81920 槽。
 
 为防止隐式破坏对象关系：删除标签引用的帧默认拒绝；显式 `remove_from_tags=true` 才移除相关引用，并删除变空的标签。最后一帧或最后一图层不能删除。调色板修改保留索引身份，不提供重排/隐式删除。
 
@@ -162,9 +162,9 @@ Human mutation ID 每次用户手势生成一次；网络断开后保留已提�
 
 后端最小字段合同：
 
-- `DocumentSummary={project_id,document_id,revision:int,parent_revision:int|null,content_hash,title,width,height,frame_count,layer_count,palette_count,tag_count,status}`；`MutationResult` 在此基础加 `changed:boolean,changed_pixel_count:int,changed_frame_ids,changed_layer_ids`，变化 ID 总数受规范文档上限约束，不附全 pixels。
+- `DocumentSummary={project_id,document_id,revision:int,parent_revision:int|null,content_hash,title,width,height,frame_count,layer_count,palette_count,tag_count,status}`；`MutationResult` 在此基础加 `changed:boolean,changed_pixel_count:int,changed_frame_ids,changed_frame_ids_truncated:boolean,changed_layer_ids`；变化frame ID最多128个，超出时显式truncated=true，其余通过分页diff读取，不附全 pixels。
 - `documents.get={document_id,revision:int|null}` 返回 `{summary,document}`，document 为第2节 metadata（frames只含id/duration，无cels）；`documents.head` 返回 `{document_id,revision,content_hash,status}`。
-- `frames.read={document_id,revision,frame_id}` 返回 `{document_id,revision,content_hash,canvas,palette,frame}`，frame 含该帧全部 cels；读取同一完整 revision 行，不能另查最新 palette。显式把 `DlcOperationSpec.max_output_bytes` 设为2MiB，不能沿用Host默认1MiB。metadata get 上限256KiB。
+- `frames.read={document_id,revision,frame_id}` 返回 `{document_id,revision,content_hash,canvas,palette,frame}`，frame 含该帧全部 cels；读取同一完整 revision 行，不能另查最新 palette。显式把 `DlcOperationSpec.max_output_bytes` 设为2MiB，不能沿用Host默认1MiB。metadata get 上限512KiB。
 - `documents.apply={document_id,expected_version,mutation_id,operations:[1..128]}`；单工具写输入为 `{document_id,expected_version,operation:<同一模型>}`。Human IDs≤128字符，Agent直接用context.invocation_id。undo使用 `restore_revision`；delete/restore无附加业务参数。`documents.revisions={document_id,before_revision:null,limit:16}` 返回 `revisions` 摘要与 `next_before_revision`；`documents.diff`/`pixel_diff` 用 `from_revision,to_revision,kind,page,page_size`。
 
 所有 operation 的 `kind` 必填；frame/layer字段统一为 `frame_id,layer_id`，palette字段为 `palette_index`。矩形统一 `rect={x,y,width,height}`（width/height正整数，右下边界不包含）。不得加入同义字段适配层。
@@ -205,7 +205,7 @@ region transform 先读取整个 source snapshot；move 清除原source，再将
 | `metadata` | 尺寸、frame ID/duration、tag ID/frame IDs、palette 摘要；有界分页 |
 | `frame` | 指定 frame、region（最大32×32）的合成 RGBA 数组与坐标；JSON，有界消费 |
 | `png` | 指定 frame 的 PNG byte stream，`image/png` |
-| `sheet` | `{tag_id:null}`；按tag顺序或document frames顺序横向排列的PNG byte stream |
+| `sheet` | `{tag_id:null}`；按tag顺序或document frames顺序排列的PNG byte stream；优先横向，超过8192宽时按行排成无padding网格，坐标由sheet_layout给出 |
 | `sheet_layout` | 与sheet相同参数，JSON返回frame_id、x/y/width/height、duration、总尺寸；最多64项 |
 
 每次读取验证 Artifact type/schema、payload、document/project/revision、hash，固定 `consistency="durable_snapshot"`。不能根据当前 head 替换历史内容；错误参数、hash 不匹配、缺失或损坏修订 fail closed。输出只允许 owner 内存字节流和安全文件名，不接受本地输出路径、远程 URL 或外部程序。
@@ -283,3 +283,12 @@ Director曾报告同Run创建document后的通用Artifact authority错配。Pixe
 ## 当前历史索引完整性
 
 `PixelStore._document_index` 为 `_revision` 与 `documents.head` 共同检查owner head、最大已存revision、head父行/状态/hash形状。`_revision` 同时要求所读固定历史版本的父行存在，并保留canonical字节、hash与对象出生记录检查。目录读取通过 `_revision`，不能把回退head伪装成旧作品；损坏状态直接报错，不自动重建或修复。head轮询只查索引列，完整正文仍在后续固定版本读取时校验。没有添加第二份耐久事实源。
+
+
+## 数百帧规模修正
+
+原64帧单轴限制没有满足数百帧目标；独立生产合同200帧回归先失败于position<=63。沿用唯一规范文档、既有分页inspect/diff、PyPNG与单帧固定revision读取，把frame/position/tag/summary统一为最多256帧。262144slots、2MiB canonical、64KiB输入、16KiB Agent输出与128MiB历史配额保持不变；32×32×256×1正好达到像素槽上限，不承诺256帧与16图层可同时达到。
+
+超过128个变化帧ID时，MutationResult的changed_frame_ids_truncated=true，不能把其前128项解释为全部变化；完整变化走原分页diff。该字段默认false准确覆盖旧64帧版本至多128个前后ID的回执，无需改写旧SQLite行。Renderer metadata上限512KiB仅容纳256长ID帧及16个完整标签，Agent的inspect/Context预算没有变化。PNG复用PyPNG，layout与编码使用同一无padding行列计算，边长8192和总像素槽预算不提高。
+
+Workbench时间线每页最多32个缩略图，提供页跳转；选中身份跨刷新保留，跳页不写耐久状态。已选帧优先读，剩余帧保持最多两个并发只读请求，全部绑定同一revision/hash；这仍可能使长动画首次预览等待，实际耗时由独立生产桌面验收记录。

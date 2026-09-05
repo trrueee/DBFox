@@ -65,9 +65,10 @@ afterEach(async () => {
   delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).releasePointerCapture;
 });
 
-async function setup(options: { empty?: boolean; locked?: boolean; reject?: boolean; hold?: string; navigation?: boolean; frameMismatch?: boolean; huge?: boolean; exportFailure?: boolean; navigationFailure?: boolean } = {}) {
+async function setup(options: { empty?: boolean; locked?: boolean; reject?: boolean; hold?: string; navigation?: boolean; frameMismatch?: boolean; huge?: boolean; frameCount?: number; exportFailure?: boolean; navigationFailure?: boolean } = {}) {
   let doc = makeDocument(), revision = 1, scope = "scope1", released: (() => void) | undefined;
   if (options.locked) doc.layers[0].locked = true;
+  if (options.frameCount) doc.frames = Array.from({ length: options.frameCount }, (_, index) => ({ ...structuredClone(doc.frames[0]), id: `frame_${index + 1}` }));
   if (options.huge) {
     doc.canvas = { width: 128, height: 128 };
     doc.frames = Array.from({ length: 8 }, (_, i) => ({ id: `frame_${i + 1}`, duration_ms: 100, cels: doc.layers.map((layer) => ({ layer_id: layer.id, pixels: Array<number>(16384).fill(0) })) }));
@@ -141,6 +142,21 @@ async function clickSave(label: string) { fireEvent.click(screen.getByRole("butt
 async function tick(time: number) { await act(async () => { const entries = [...animation.entries()]; animation.clear(); for (const [, callback] of entries) callback(time); }); }
 
 describe("Pixel immutable frontend projection", () => {
+  it("pages hundreds of timeline thumbnails and edits the final frame by its stable identity", async () => {
+    const { calls } = await setup({ frameCount: 256 });
+    expect(screen.getAllByRole("button", { name: /^选择第 \d+ 帧$/ })).toHaveLength(32);
+    expect(screen.queryByRole("button", { name: "选择第 256 帧" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("跳转帧页"), { target: { value: "7" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "选择第 256 帧" })).toBeEnabled());
+    expect(screen.getAllByRole("button", { name: /^选择第 \d+ 帧$/ })).toHaveLength(32);
+    fireEvent.click(screen.getByRole("button", { name: "选择第 256 帧" }));
+    fireEvent.change(screen.getByLabelText("帧时长 ms"), { target: { value: "180" } });
+    await clickSave("设置帧时长");
+    expect(writes(calls)).toHaveLength(1);
+    expect(writes(calls)[0].input.operations).toEqual([{ kind: "frame_update", frame_id: "frame_256", duration_ms: 180 }]);
+    expect(screen.getByRole("button", { name: "选择第 256 帧" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "新建帧" })).toBeDisabled();
+  });
   it("composes only visible nontransparent layers in canonical order", () => {
     const document = makeDocument(); document.frames[0].cels[0].pixels[0] = 1; document.frames[0].cels[1].pixels[0] = 2;
     expect(model.composite(document, document.frames[0])[0]).toBe(2);

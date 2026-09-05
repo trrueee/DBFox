@@ -14,7 +14,7 @@ from .store import PixelStore
 
 
 def revision_artifact(result, scope):
-    summary = c.DocumentSummary.model_validate(result.model_dump(exclude={"changed", "changed_pixel_count", "changed_frame_ids", "changed_layer_ids"}))
+    summary = c.DocumentSummary.model_validate(result.model_dump(exclude={"changed", "changed_pixel_count", "changed_frame_ids", "changed_frame_ids_truncated", "changed_layer_ids"}))
     return ArtifactDraft(key="pixel_revision", type=c.ARTIFACT_TYPE, schema_version=1,
         title=f"{summary.title} · r{summary.revision}", payload=summary.model_dump(mode="json"),
         summary=f"{summary.width}x{summary.height}; {summary.frame_count} frames, {summary.layer_count} layers; revision {summary.revision}.",
@@ -219,7 +219,7 @@ def register_operations(host, store):
 
     specs = [
         ("documents.list", c.ListInput, c.ListResult, lambda i, x: store.list_documents(project(x), i), 65536),
-        ("documents.get", c.ReadInput, c.MetadataResult, lambda i, x: store.get(project(x), i), 262144),
+        ("documents.get", c.ReadInput, c.MetadataResult, lambda i, x: store.get(project(x), i), 524288),
         ("documents.head", c.HeadInput, c.HeadResult, lambda i, x: store.head(project(x), i), 1024),
         ("frames.read", c.FrameReadInput, c.FrameResult, lambda i, x: store.read_frame(project(x), i), c.MAX_DOCUMENT_BYTES),
         ("documents.create", c.CreateRequest, c.MutationResult, lambda i, x: store.create(project(x), i, i.mutation_id), c.MAX_OUTPUT_BYTES),

@@ -47,7 +47,7 @@ Human 通过 project-scoped operation 进入同一个 Store；Agent 使用正式
 
 每个文档有独立 version-fenced Resource，版本为规范十进制字符串；frame/layer/tag 是父文档对象。事务追加不可变修订、CAS head 和精确 receipt；相同 ID/输入返回原结果，不同输入重用 ID 拒绝。No-op 不追加内容修订，undo 将历史内容恢复为新修订，允许重复历史 hash。对象 ID 一经出生不能给新对象复用，undo 可以恢复原身份。删除为可恢复 tombstone，历史 Artifact 保留。
 
-Canvas 每轴1..128；总像素槽≤262144，最多64帧、16层、256调色板槽、16标签。Canonical≤2MiB；一次操作≤128项、规范输入≤64KiB；owner历史逻辑配额128MiB。达到配额拒绝新增耐久行，不删除旧历史。槽0固定透明，其余颜色只接受不透明RGBA。锁层拒绝绘制与删除；删除任何帧须先解锁其各 cel。
+Canvas 每轴1..128；总像素槽≤262144，最多256帧、16层、256调色板槽、16标签。Canonical≤2MiB；一次操作≤128项、规范输入≤64KiB；owner历史逻辑配额128MiB。达到配额拒绝新增耐久行，不删除旧历史。槽0固定透明，其余颜色只接受不透明RGBA。锁层拒绝绘制与删除；删除任何帧须先解锁其各 cel。
 
 Tool输出≤16KiB，目录工具每页≤8；Human目录每页≤32。Inspect/diff每页≤16项；极丰富diff若超过预算会明确要求缩小页面，不会截掉对象字段或丢失连续页位置。Context最多4×2000字符，不含像素。Inspect最多16×16像素仅进入本Run临时Provider窗口，耐久Observation facts保留ID、revision、目录、选择和计数。
 
@@ -55,7 +55,7 @@ Tool输出≤16KiB，目录工具每页≤8；Human目录每页≤32。Inspect/d
 
 `documents.export` 必须经 Host ActionRun 调用 `pixel_export` 并完成正式 Artifact。返回 `{run_id,session_id,artifact_ids}`；同一 `mutation_id` 由 owner reservation/receipt 查重，开始Run前预留完整16KiB结果额度。如果上次结果未知，明确拒绝重放，不创建另一个 Run。Workbench 在导出开始前捕获 Host、scope 和 AbortController，并用同一 AbortSignal 调用 operation 与可选 `openArtifact`。缺失导航方法时不会创建 Run；已知成果的导航失败可重新打开原成果，未知导出会停用当前工作台的新导出并显示原 mutation ID，禁止自动创建替代 Run。
 
-`dbfox.pixel.revision` 保存有界 summary；`dbfox.pixel.sprite.v1` 从固定修订提供 `metadata`、最大32×32合成 `frame` RGBA、`sheet_layout` JSON，以及 `png`、`sheet` 的 `image/png` 字节流。Sheet按文档帧顺序或tag显式顺序横向拼接。所有读核对文档/Project/revision/hash与Artifact provenance，拒绝路径、URL或任意编码器参数。
+`dbfox.pixel.revision` 保存有界 summary；`dbfox.pixel.sprite.v1` 从固定修订提供 `metadata`、最大32×32合成 `frame` RGBA、`sheet_layout` JSON，以及 `png`、`sheet` 的 `image/png` 字节流。Sheet按文档帧顺序或tag显式顺序排列；超过8192宽时分行，使用sheet_layout的逐帧坐标。所有读核对文档/Project/revision/hash与Artifact provenance，拒绝路径、URL或任意编码器参数。
 
 PNG由原样 vendored PyPNG 0.20220715.0 Writer 编码，见 [许可证](backend/vendor/LICENCE) 和 [provenance](backend/vendor/provenance.json)。它只有标准库依赖；产品不使用Pillow。`.gitattributes` 保持 upstream bytes 在 Windows checkout 后不变。Reader/CLI不暴露给产品输入，不安装共享依赖、不需要本地二进制或网络服务。
 
@@ -74,7 +74,7 @@ D:/Project/DBFox/.venv/Scripts/python.exe -m pytest verification/tests/system/te
 从项目资源进入 Pixel Studio，创建或打开作品。左侧提供透明槽、调色板、图层栈，中央为整数缩放 Canvas，底部为帧时间线，右侧提供选区、动画预览与标签。小窗口按顺序滚动；适应画布自动选整数缩放，手动缩放保持到当前文档视图结束。
 
 - B 画笔、E 橡皮、F 四邻接填充、R 矩形、V 选区；矩形可选空心。拖动临时笔迹标为未提交，松开后以最多128段的一次 `documents.apply` 保存；超限整笔取消，不截断。方向键定位、Enter 绘制一格、Esc 取消。输入框内不会截获快捷键。
-- 时间线可新建、复制、重排、删除帧，修改20..2000ms时长。删除标签中的帧必须明确勾选移除引用；有锁层时禁止删帧。图层支持添加、隐藏、锁定、改名、排序和删除；调色板支持命名、改色与追加，透明槽固定。
+- 时间线每页最多32个缩略图，可直接跳转页；可新建、复制、重排、删除帧，修改20..2000ms时长。删除标签中的帧必须明确勾选移除引用；有锁层时禁止删帧。图层支持添加、隐藏、锁定、改名、排序和删除；调色板支持命名、改色与追加，透明槽固定。
 - V拖选或填写选区范围；可水平/垂直镜像、顺时针旋转、移动或复制。越界默认拒绝；显式裁剪会提示移动可能丢弃目标外像素。历史面板可选明确修订，撤销追加恢复修订。
 - 标签保存显式帧顺序与循环选项，可调整顺序。播放仅使用同一修订的帧缓存，按各帧时长播放；不写回播放状态。选区交给 Agent 时只授权父document，并携带frame/layer/rect/revision定位。
 

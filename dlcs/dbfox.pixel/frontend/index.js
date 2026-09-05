@@ -464,15 +464,26 @@ function Selection({ snapshot, frameId, layerId, selection, setSelection, disabl
 
 function Timeline({ document, frames, frameId, setFrameId, disabled, apply, allocation }) {
   const position = document.frames.findIndex((frame) => frame.id === frameId), selected = document.frames[position];
-  const canAdd = document.frames.length < 64 && allocation + document.canvas.width * document.canvas.height * document.layers.length <= 262144;
+  const canAdd = document.frames.length < 256 && allocation + document.canvas.width * document.canvas.height * document.layers.length <= 262144;
   const [removeTags, setRemoveTags] = React.useState(false);
+  const [page, setPage] = React.useState(Math.floor(position / 32));
+  React.useEffect(() => { setPage(Math.floor(position / 32)); }, [frameId, position]);
+  const pageCount = Math.ceil(document.frames.length / 32), visiblePage = Math.min(page, pageCount - 1), start = visiblePage * 32;
   const tagged = document.tags.some((tag) => tag.frame_ids.includes(frameId));
   return h("section", { className: "dbfox-pixel__timeline", "aria-label": "帧时间线" },
     h("div", { className: "dbfox-pixel__row" }, h("h3", null, "帧时间线"), button("新建帧", () => apply([{ kind: "frame_create", frame_id: requestId("frame"), position: position + 1, duration_ms: selected.duration_ms }]), disabled || !canAdd),
       button("复制当前帧", () => apply([{ kind: "frame_duplicate", source_frame_id: frameId, frame_id: requestId("frame"), position: position + 1 }]), disabled || !canAdd),
       button("前移帧", () => apply([{ kind: "frame_update", frame_id: frameId, position: position - 1 }]), disabled || position === 0), button("后移帧", () => apply([{ kind: "frame_update", frame_id: frameId, position: position + 1 }]), disabled || position === document.frames.length - 1),
       !canAdd ? h("small", null, "帧数或总像素槽已达上限。") : null),
-    h("div", { className: "dbfox-pixel__frame-strip", role: "group", "aria-label": "选择帧" }, document.frames.map((frame, index) => button(h(React.Fragment, null, h(MiniCanvas, { document, frame: frames[frame.id], label: `第 ${index + 1} 帧缩略图`, zoom: 1 }), h("strong", null, String(index + 1).padStart(2, "0")), h("small", null, `${frame.duration_ms} ms`)), () => setFrameId(frame.id), disabled || !frames[frame.id], { key: frame.id, "aria-label": `选择第 ${index + 1} 帧`, "aria-pressed": frame.id === frameId, title: frame.id }))),
+    pageCount > 1 ? h("div", { className: "dbfox-pixel__row" }, button("上一页帧", () => setPage(visiblePage - 1), disabled || visiblePage === 0),
+      h("span", { role: "status" }, `第 ${start + 1}–${Math.min(start + 32, document.frames.length)} 帧 / 共 ${document.frames.length} 帧`),
+      button("下一页帧", () => setPage(visiblePage + 1), disabled || visiblePage === pageCount - 1),
+      h("label", null, "帧页 ", h("select", { "aria-label": "跳转帧页", value: visiblePage, disabled, onChange: (event) => setPage(Number(event.target.value)) },
+        Array.from({ length: pageCount }, (_, index) => h("option", { key: index, value: index }, `${index * 32 + 1}–${Math.min((index + 1) * 32, document.frames.length)}`))))) : null,
+    h("div", { className: "dbfox-pixel__frame-strip", role: "group", "aria-label": "选择帧" }, document.frames.slice(start, start + 32).map((frame, offset) => {
+      const index = start + offset;
+      return button(h(React.Fragment, null, h(MiniCanvas, { document, frame: frames[frame.id], label: `第 ${index + 1} 帧缩略图`, zoom: 1 }), h("strong", null, String(index + 1).padStart(2, "0")), h("small", null, `${frame.duration_ms} ms`)), () => setFrameId(frame.id), disabled || !frames[frame.id], { key: frame.id, "aria-label": `选择第 ${index + 1} 帧`, "aria-pressed": frame.id === frameId, title: frame.id });
+    })),
     h("div", { className: "dbfox-pixel__frame-properties" }, h(Form, { key: frameId, initial: { duration: selected.duration_ms }, submitLabel: "设置帧时长", disabled, onSubmit: (value) => apply([{ kind: "frame_update", frame_id: frameId, duration_ms: Number(value.duration) }]) }, (value, change) => number("帧时长 ms", value.duration, (duration) => change({ duration }), 20, 2000)),
       tagged ? check("删除时从动画标签移除", removeTags, setRemoveTags) : null,
       button("删除当前帧", () => apply([{ kind: "frame_delete", frame_id: frameId, remove_from_tags: removeTags }]), disabled || document.frames.length === 1 || document.layers.some((layer) => layer.locked) || (tagged && !removeTags)),
@@ -543,7 +554,7 @@ function PixelArtifact({ rt, artifact, payload, context }) {
     url ? h("img", { className: "dbfox-pixel__artifact-image", src: url, alt: `${payload.title} ${frameId} 固定 r${payload.revision}` }) : h("p", { role: "status" }, "读取成果预览…"),
     h("div", { className: "dbfox-pixel__row" }, h("select", { "aria-label": "成果动画标签", value: tagId, disabled: busy, onChange: (event) => setTagId(event.target.value) }, h("option", { value: "" }, "全部帧"), tags.map((tag) => h("option", { key: tag.id, value: tag.id }, tag.name))),
       h("select", { "aria-label": "成果预览帧", value: frameId, disabled: busy || !layout, onChange: (event) => setFrameId(event.target.value) }, layout?.frames.map((frame, index) => h("option", { key: frame.frame_id, value: frame.frame_id }, `${index + 1} · ${frame.duration_ms} ms`)))),
-    layout ? h("small", null, `Sprite Sheet ${layout.width} × ${layout.height} · ${layout.frames.length} 帧按标签顺序横向排列`) : null,
+    layout ? h("small", null, `Sprite Sheet ${layout.width} × ${layout.height} · ${layout.frames.length} 帧按标签顺序排列`) : null,
     h("div", { className: "dbfox-pixel__row" }, button("下载当前帧 PNG", () => download("png"), busy || !frameId), button("下载 Sprite Sheet", () => download("sheet"), busy || !layout), button("编辑当前作品", () => openWorkbench(rt, payload.project_id, payload), busy)),
     error ? h("p", { role: "alert", className: "dbfox-pixel__error" }, error) : null);
 }

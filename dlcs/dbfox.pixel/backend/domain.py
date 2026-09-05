@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import deque
 from copy import deepcopy
 
-from .contracts import MAX_SLOTS, PixelDocument, Rect
+from .contracts import MAX_FRAMES, MAX_SLOTS, PixelDocument, Rect
 
 
 class PixelError(Exception):
@@ -30,7 +30,7 @@ def check_rect(rect, width, height):
 
 
 def _allocation(document, frames, layers):
-    require(1 <= frames <= 64 and 1 <= layers <= 16 and
+    require(1 <= frames <= MAX_FRAMES and 1 <= layers <= 16 and
             document["canvas"]["width"] * document["canvas"]["height"] * frames * layers <= MAX_SLOTS,
             "Pixel document exceeds frame, layer or pixel slot budget.", "LIMIT")
 
@@ -240,7 +240,8 @@ def changes(before, after):
     old_layers = {layer.id: layer for layer in before.layers} if before else {}
     new_layers = {layer.id: layer for layer in after.layers}
     layers.update(identity for identity in old_layers.keys() | new_layers.keys() if old_layers.get(identity) != new_layers.get(identity))
-    return {"changed_pixel_count": count, "changed_frame_ids": frames, "changed_layer_ids": sorted(layers)}
+    return {"changed_pixel_count": count, "changed_frame_ids": frames[:128],
+            "changed_frame_ids_truncated": len(frames) > 128, "changed_layer_ids": sorted(layers)}
 
 
 def metadata(document):

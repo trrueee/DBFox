@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
+import json
 import sqlite3
 from uuid import uuid4
 
@@ -156,8 +157,28 @@ class PixelStore:
                 require(result.document_id == row["document_id"] and result.project_id == project_id,
                         "Pixel receipt identity is inconsistent.", "CORRUPT_STATE")
                 revision = self._revision(db, project_id, result.document_id, result.revision)
-                summary = c.DocumentSummary.model_validate(result.model_dump(exclude={"changed", "changed_pixel_count", "changed_frame_ids", "changed_layer_ids"}))
+                summary = c.DocumentSummary.model_validate(result.model_dump(exclude={"changed", "changed_pixel_count", "changed_frame_ids", "changed_frame_ids_truncated", "changed_layer_ids"}))
                 require(summary == revision.summary, "Pixel receipt differs from its immutable revision.", "CORRUPT_STATE")
+                original = json.loads(binding)
+                expected = original["input"]["expected_version"]
+                require(row["expected_version"] == expected and row["action"] == original["action"],
+                        "Pixel receipt differs from its bound request.", "CORRUPT_STATE")
+                if original["action"] == "create":
+                    require(expected == 0 and result.revision == 1,
+                            "Pixel creation receipt has an invalid revision.", "CORRUPT_STATE")
+                    before, changed = None, True
+                else:
+                    require(result.document_id == original["input"]["document_id"] and
+                            result.revision in (expected, expected + 1),
+                            "Pixel receipt has an invalid source revision.", "CORRUPT_STATE")
+                    source = self._revision(db, project_id, result.document_id, expected)
+                    before = source.document
+                    changed = (source.document != revision.document or source.summary.status != revision.summary.status)
+                    require(result.revision == expected + int(changed),
+                            "Pixel receipt change and revision are inconsistent.", "CORRUPT_STATE")
+                delta = changes(before, revision.document)
+                require(result.changed == changed and all(getattr(result, key) == value for key, value in delta.items()),
+                        "Pixel receipt change summary differs from its immutable revisions.", "CORRUPT_STATE")
             return result
         except ValueError as exc:
             raise PixelError("CORRUPT_STATE", "Pixel receipt is invalid.") from exc

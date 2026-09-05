@@ -214,3 +214,13 @@ Workbench Agent因账户额度停止在提交前，既有实现与记录保留�
 现在 `_document_index` 是完整读取与轻量head轮询共用的小索引边界：核对head等于已存最大revision、head父关系及父行、状态与hash格式。`_revision` 另外核对请求历史revision的父行存在。原有正文/hash/身份校验继续执行；轮询不加载2MiB正文。复用 SQLite 的既有主键索引和查询，并参考项目内Scene已经验证的head/parent不变量；没有新表、迁移、依赖、跨owner私有导入、兼容层或Core改动。
 
 Director 运行 `python -m pytest verification/tests/system/test_pixel_dlc_verification.py verification/tests/system/test_pixel_dlc.py -q --tb=short --show-capture=no`：**48 passed，53.69秒**，Pyflakes通过。独立验证员继续扩展公开head/list/历史入口攻击与实际Electron闭环；本节修复者检查不替代其结论。
+
+
+## 数百帧验收缺口与修复
+
+独立Verification依据用户原始规模要求加入200帧生产合同用例，修前失败于第64帧插入位置。Director检查现有slots、规范模型、所有position/tag/summary、changed IDs、PNG和工作台，采用原有owner模型与分页能力，扩展最多256帧而不放宽总像素、canonical或模型输出预算；没有新增依赖、Core/SDK模型、存储或迁移层。变化ID截断有显式标记，PNG超宽使用同一无padding网格布局，时间线每页32个缩略图。
+
+原200帧回归修后通过6.86秒。完整现有作者后端、独立故障和bench测试70项通过76.65秒；随后追加两项256帧作者回归通过15.53秒，覆盖32×32与128×8、最长ID、总槽满额/第257帧拒绝、标签反序、PNG逐帧坐标和透明像素、256帧undo有界摘要及固定旧成果。28项frontend通过8.97秒，其中256帧页面最后帧可按稳定身份编辑且仅32个缩略图挂载。独立生产200帧RunLoop与真实Electron规模测量继续，不把作者fixture作为真实GPU或模型创意证据。
+
+
+独立Verifier随后保留三项失败攻击：仅破坏receipts.result_body中的truncated标记（false/缺失）或changed=false，原读取仍返回伪摘要。Director在唯一_receipt边界核对绑定输入的expected/action与固定前后revision，并复用纯changes比较派生摘要；没有重新执行像素操作或写历史。创建、no-op、undo、delete/restore均按真实规范状态与版本核对。修后35作者与25独立测试合计60项通过69.33秒，原三项攻击未改；自有五模块Mypy与Pyflakes通过。对整个backend目录的额外Mypy尝试仅在原样PyPNG namedtuple类型命名报告上游错误，未修改vendor或把该尝试记为通过。完整lint0errors/5既有warnings、typecheck:test和生产build/Token/bundle预算通过。

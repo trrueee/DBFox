@@ -92,6 +92,46 @@ def test_strict_types_null_defaults_and_host_normalization(store):
     assert c.Rectangle.model_validate(normalized.model_dump(mode="json", exclude_none=True)) == normalized
     with pytest.raises(ValueError):
         c.FrameUpdate(kind="frame_update", frame_id="frame_1", duration_ms=None)
+
+
+@pytest.mark.parametrize("width,height", [(32, 32), (128, 8)])
+def test_hundreds_of_frames_keep_slot_output_history_and_png_budgets(store, width, height):
+    first = store.create("project-pixel", c.CreateInput(title="Long animation", width=width,
+        height=height, expected_version=0), "long-create")
+    current = edit(store, first, {"kind": "rect", "frame_id": "frame_1", "layer_id": "layer_1",
+        "palette_index": 1, "rect": {"x": 0, "y": 0, "width": 1, "height": 1}})
+    ids = ["frame_1"] + [f"f{i:03d}" + "x" * 60 for i in range(1, 256)]
+    for offset in (1, 129):
+        current = edit(store, current, *({"kind": "frame_duplicate", "frame_id": ids[i],
+            "source_frame_id": "frame_1", "position": i} for i in range(offset, min(offset + 128, 256))))
+    assert current.frame_count == 256
+    before = read(store, current)
+    assert width * height * len(before.document.frames) == c.MAX_SLOTS == 262144
+    with pytest.raises(d.PixelError, match="budget"):
+        edit(store, current, {"kind": "frame_create", "frame_id": "overflow", "position": 0})
+    assert read(store, current).summary == before.summary
+    current = edit(store, current, {"kind": "rect", "frame_id": ids[-1], "layer_id": "layer_1",
+        "palette_index": 2, "rect": {"x": 0, "y": 0, "width": 1, "height": 1}},
+        {"kind": "frame_update", "frame_id": ids[-1], "position": 255, "duration_ms": 200})
+    current = edit(store, current, {"kind": "tag_set", "tag_id": "reverse", "name": "Reverse",
+        "frame_ids": list(reversed(ids)), "loop": False})
+    layout = representation(store, current, "sheet_layout", tag_id="reverse").payload
+    sheet = Image.open(BytesIO(b"".join(representation(store, current, "sheet", tag_id="reverse").chunks))).convert("RGBA")
+    assert sheet.size == (layout["width"], layout["height"])
+    assert max(sheet.size) <= 8192 and sheet.width * sheet.height == c.MAX_SLOTS
+    assert [item["frame_id"] for item in layout["frames"]] == list(reversed(ids))
+    for index, item in enumerate(layout["frames"]):
+        assert item["width"] == width and item["height"] == height
+        assert sheet.getpixel((item["x"], item["y"])) == ((255, 255, 255, 255) if index == 0 else (24, 24, 37, 255))
+        assert sheet.getpixel((item["x"] + 1, item["y"])) == (0, 0, 0, 0)
+    changed = store.mutate("project-pixel", c.UndoInput(document_id=current.document_id,
+        expected_version=current.revision, restore_revision=1), "long-undo", action="undo")
+    assert changed.frame_count == 1 and changed.changed_frame_ids_truncated is True
+    assert len(changed.changed_frame_ids) == 128
+    assert len(c.canonical(changed).encode("utf-8")) <= c.MAX_OUTPUT_BYTES == 16384
+    assert read(store, changed).document == read(store, first, 1).document
+    assert len(layout["frames"]) == 256
+    assert len(representation(store, current, "sheet_layout", tag_id="reverse").payload["frames"]) == 256
     initial = read(store, create(store)).document.model_dump()
     initial["schema_version"] = True
     with pytest.raises(ValueError):
