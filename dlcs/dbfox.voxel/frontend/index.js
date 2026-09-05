@@ -373,6 +373,10 @@ function Studio({ projectId, worldId, context }) {
   async function snapshotArtifact() {
     if (busyRef.current || !latest.current || !alive.current) return;
     const navigationHost = host;
+    if (!navigationHost.workbench.openArtifact) {
+      setEditError("当前 Host 尚不支持从工作台打开成果；未创建快照。");
+      return;
+    }
     const workbenchScopeId = context.workbenchScopeId;
     busyRef.current = true; setBusy(true); setEditError("");
     const controller = new AbortController(); actionAbort.current = controller;
@@ -383,7 +387,6 @@ function Studio({ projectId, worldId, context }) {
       saved = true;
       if (!alive.current) return;
       controller.signal.throwIfAborted();
-      if (!navigationHost.workbench.openArtifact) { setNotice("快照已保存。当前 Host 尚不支持从工作台打开成果。"); return; }
       if (!result.artifact_ids?.[0]) throw new Error("快照操作未返回成果标识。");
       await navigationHost.workbench.openArtifact({ projectId, sessionId: result.session_id, runId: result.run_id, artifactId: result.artifact_ids[0] },
         { workbenchScopeId, signal: controller.signal });

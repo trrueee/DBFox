@@ -72,7 +72,7 @@ Read paging固定目标revision，keyset游标按layer/chunk坐标排序，每�
 
 3D 按可见图层从底到顶合成，使用最多60,000个表面方块的 InstancedMesh；超过预算明确显示“预览已截断”，提供“仅预览选区”和完整切片编辑路径。此预算只影响显示，不能据预览反写 canonical。大世界合成使用最多16MiB uint8 稠密派生投影，chunk 仍保持稀疏；合成/实例构建分批让出主线程且支持取消。切片底图按 revision/layer/axis 缓存，光标移动仅重画叠加层。极窄或高世界的离屏画布两轴均不超过768像素。渲染按 controls/resize/data change 请求 RAF，没有常驻空转循环。卸载/停用会中止请求与构建、清除轮询/focus通知、断开 ResizeObserver、释放 controls、instance/geometry/material/helper/renderer 和 DOM canvas。WebGL 不可用时明确提示且切片仍可编辑。
 
-“保存快照”只调用正式 `worlds.snapshot` ActionRun。动作前捕获 `host.workbench.currentScopeId()`；返回后可选调用通用 `host.workbench.openArtifact({projectId,sessionId,runId,artifactId},{workbenchScopeId,signal})`，使用服务返回的第一个 Artifact id 和同一取消信号。原 SDK 缺少这一可选能力时明确提示不可用，不伪造 Artifact、不借用其他 owner Dock、不建立另一条导出链。该 Host seam 正由独立角色实现；本轮 fixture 覆盖调用/缺失分支，**尚未完成真实 Host 端到端导航验证**。Artifact card 标注固定版本与尺寸，并清楚区分“打开当前世界”。
+“保存快照”只调用正式 `worlds.snapshot` ActionRun。动作前先检查 `host.workbench.openArtifact`，缺少此可选能力时直接提示未创建快照；通过后捕获当前 context 的 workbenchScopeId，返回后调用通用 `openArtifact({projectId,sessionId,runId,artifactId},{workbenchScopeId,signal})`，使用服务返回的第一个 Artifact id 和同一取消信号。独立生产 Electron 已验证真实 ActionRun→Artifact Dock；历史快照渲染和下载仍在补齐。Artifact card 标注固定版本与尺寸，并清楚区分“打开当前世界”。
 
 本轮确定性 fixture 共14项通过（3.28秒），使用真实 Host contribution staging 和真实 Three 几何/矩阵/OrbitControls，仅替换 WebGL device；覆盖 chunk 轴顺序、图层合成、固定版本增量/墓碑、分页/取消拒绝、表面剔除与预算、创建、单笔写入、onAsk、锁定、busy/stale、读失败恢复、WebGL 不可用、放弃笔触、Artifact navigation seam、外部修改、undo 与停用释放。测试代码通过 `typecheck:test`，本 fixture ESLint 和三个 DLC JS 的 no-undef/no-unused-vars 检查通过。可复现命令（worktree 根）：
 

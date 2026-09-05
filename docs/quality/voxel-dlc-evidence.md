@@ -135,3 +135,10 @@ Director 建立了 suite-owned `verification/bench/capabilities/dbfox_voxel` 并
 工程合同初跑44通过/1失败：Voxel架构草案缺少规定的文档类型和最后核验页眉。补齐当前页眉后同一集合 **45 passed，3.71秒**，未改合同断言。此前用官方 `npm.cmd run build:visualization-vendor` 消除已知Windows CRLF生成资产偏差；这些非Voxel生成文件不纳入提交。
 
 候选提交前增加 owner `.gitattributes`，仅保护固定frontend/vendor原始字节不受Windows自动CRLF转换；工作树、Git index与checkout filter输出逐字节相同，749,590 bytes及SHA与provenance吻合。自有文件的staged diff check通过；完整diff check发现的21处空白均在固定Three.js生成bundle的GLSL字符串中，保持上游字节，不为格式检查改写已校验vendor。
+# 独立验证发现后的回执与导航修正
+
+2026-09-05，独立 Verification 工作者复现了两项缺陷：Host 缺少可选导航方法时仍先创建持久化快照；合法 JSON 的损坏回执可伪造世界、项目、版本、hash 或方块数。Director 复现后者为 **5 failed / 1 passed**。
+
+修复复用 owner 内已有 `_snapshot`/`summary`，在唯一 `_receipt` 读取边界严格验证结果并核对请求身份、base/result 列、固定历史 revision 完整摘要、changed/parent 关系与耐久 chunk delta 数。不会使用后来 head 替代原操作结果，也不会重放几何。导航检查移到 ActionRun 之前。没有新依赖、表、兼容层或 Core 变更；现有 Pixel 的固定 revision 摘要检查提供了项目内参考，未导入其私有实现。
+
+Director 从本树执行 `python -m pytest verification/tests/system/test_voxel_independent.py verification/tests/system/test_voxel_dlc.py -q --tb=short`：**65 passed / 37.22秒**；完整 Voxel 前端 fixture **16 passed / 5.30秒**；8个后端模块 Mypy 通过。这些是修复者验证，独立复验继续进行。

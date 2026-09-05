@@ -275,21 +275,50 @@ class VoxelStore:
             # Reconciliation resolves historical scopes before querying an exact receipt.
             return self._snapshot(connection, str(row[0]), str(ref.id), version)
 
-    @staticmethod
-    def _receipt(connection: sqlite3.Connection, project_id: str, origin: str, request_id: str, kind: str, hashed: str) -> MutationOutput | None:
-        row = connection.execute("SELECT operation_kind,payload_hash,outcome_json FROM operation_receipts WHERE project_id=? AND origin=? AND request_id=?", (project_id, origin, request_id)).fetchone()
+    def _receipt(self, connection: sqlite3.Connection, project_id: str, origin: str, request_id: str, kind: str, hashed: str, input: CreateInput | WriteInput) -> MutationOutput | None:
+        row = connection.execute("SELECT operation_kind,payload_hash,world_id,base_version,result_version,outcome_json FROM operation_receipts WHERE project_id=? AND origin=? AND request_id=?", (project_id, origin, request_id)).fetchone()
         if row is None:
             return None
         if str(row["operation_kind"]) != kind or str(row["payload_hash"]) != hashed:
             raise VoxelError("INVOCATION_CONFLICT", "The request identity was already used with different voxel input.", 409)
         try:
-            return MutationOutput.model_validate_json(str(row["outcome_json"]))
+            output = MutationOutput.model_validate_json(str(row["outcome_json"]), strict=True)
+            base_version, result_version = row["base_version"], row["result_version"]
+            if (type(result_version) is not int or result_version < 1
+                    or output.project_id != project_id or output.world_id != row["world_id"]
+                    or output.version != result_version or output.operation_kind != kind):
+                raise ValueError("Receipt identity mismatch")
+            if isinstance(input, CreateInput):
+                if kind != "create" or base_version is not None or result_version != 1 or not output.changed:
+                    raise ValueError("Invalid create receipt")
+            elif (type(base_version) is not int or base_version != input.expected_version
+                    or output.world_id != input.world_id
+                    or result_version != base_version + int(output.changed)):
+                raise ValueError("Receipt version mismatch")
+            snapshot = self._snapshot(connection, project_id, output.world_id, result_version)
+            summary = self.summary(snapshot).model_dump(mode="json")
+            if any(output.model_dump(mode="json")[key] != value for key, value in summary.items()):
+                raise ValueError("Receipt differs from its immutable revision")
+            if output.changed and not isinstance(input, CreateInput) and snapshot.parent_version != base_version:
+                raise ValueError("Receipt parent mismatch")
+            if output.changed_chunk_count < 0 or output.changed_voxel_count < 0:
+                raise ValueError("Negative receipt change counts")
+            if (not output.changed or isinstance(input, CreateInput)) and (output.changed_chunk_count or output.changed_voxel_count):
+                raise ValueError("Unexpected receipt change counts")
+            if output.changed:
+                revision = connection.execute("SELECT operation_kind FROM world_revisions WHERE world_id=? AND version=?",
+                    (output.world_id, result_version)).fetchone()
+                chunk_count = connection.execute("SELECT COUNT(*) FROM chunk_versions WHERE world_id=? AND version=?",
+                    (output.world_id, result_version)).fetchone()[0]
+                if revision is None or revision[0] != kind or chunk_count != output.changed_chunk_count:
+                    raise ValueError("Receipt differs from its durable changes")
+            return output
         except ValueError as exc:
             raise VoxelError("CORRUPT_STATE", "The stored voxel operation receipt is invalid.", 409) from exc
 
-    def receipt(self, project_id: str, origin: Literal["tool", "human"], request_id: str, kind: str, input: BaseModel) -> MutationOutput | None:
+    def receipt(self, project_id: str, origin: Literal["tool", "human"], request_id: str, kind: str, input: CreateInput | WriteInput) -> MutationOutput | None:
         with self._connect() as connection:
-            return self._receipt(connection, project_id, origin, request_id, kind, payload_hash(kind, input))
+            return self._receipt(connection, project_id, origin, request_id, kind, payload_hash(kind, input), input)
 
     @staticmethod
     def _quota(connection: sqlite3.Connection, extra: int) -> None:
@@ -317,7 +346,7 @@ class VoxelStore:
         encoded = self._metadata(document)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            previous = self._receipt(connection, project_id, origin, request_id, "create", hashed)
+            previous = self._receipt(connection, project_id, origin, request_id, "create", hashed, input)
             if previous is not None:
                 return previous
             count = int(connection.execute("""SELECT COUNT(*) FROM worlds w JOIN world_revisions r ON
@@ -428,7 +457,7 @@ class VoxelStore:
         self._identity(project_id, request_id)
         hashed = payload_hash(kind, input)
         with self._connect() as connection:
-            previous = self._receipt(connection, project_id, origin, request_id, kind, hashed)
+            previous = self._receipt(connection, project_id, origin, request_id, kind, hashed, input)
             if previous is not None:
                 return previous
             if origin == "tool" and frozen_version != input.expected_version:
@@ -489,7 +518,7 @@ class VoxelStore:
                 fingerprint(document, index) if changed else source.content_hash, document, index)
             output = MutationOutput(**self.summary(result).model_dump(), changed=changed, changed_chunk_count=len(changes), changed_voxel_count=changed_voxels, operation_kind=kind)
             connection.execute("BEGIN IMMEDIATE")
-            previous = self._receipt(connection, project_id, origin, request_id, kind, hashed)
+            previous = self._receipt(connection, project_id, origin, request_id, kind, hashed, input)
             if previous is not None:
                 return previous
             current = self._snapshot(connection, project_id, source.world_id)
