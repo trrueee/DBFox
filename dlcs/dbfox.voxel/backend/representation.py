@@ -32,10 +32,10 @@ class VoxelRepresentationProvider:
         try:
             payload = SnapshotPayload.model_validate(artifact.payload)
             if not any((ref.kind == WORLD_KIND and ref.id == payload.world_id) or (ref.kind == LIBRARY_KIND and ref.id == payload.project_id) for ref in artifact.resource_refs):
-                raise VoxelError("INVALID_ARTIFACT", "The voxel snapshot has no matching resource provenance.", 409)
+                raise ArtifactRepresentationError("FORBIDDEN", "The voxel snapshot has no matching resource provenance.", status_code=403)
             snapshot = self.store.snapshot(payload.project_id, payload.world_id, payload.version)
             if self.store.summary(snapshot).model_dump() != payload.model_dump():
-                raise VoxelError("CORRUPT_STATE", "The immutable voxel snapshot does not match its durable revision.", 409)
+                raise ArtifactRepresentationError("SOURCE_CHANGED", "The immutable voxel snapshot does not match its durable revision.", status_code=409)
             if request.operation == "manifest":
                 EmptyInput.model_validate(request.parameters)
                 output = self.store.get(payload.project_id, ReadInput(world_id=payload.world_id, version=payload.version)).model_dump(mode="json")
@@ -43,9 +43,11 @@ class VoxelRepresentationProvider:
                 page = RepresentationPage.model_validate(request.parameters)
                 output = self.store.chunks(payload.project_id, ChunkPageInput(world_id=payload.world_id, version=payload.version, **page.model_dump())).model_dump(mode="json")
             else:
-                raise VoxelError("UNSUPPORTED_REPRESENTATION", "Voxel snapshots provide only manifest and chunks.", 409)
+                raise ArtifactRepresentationError("UNSUPPORTED_REPRESENTATION", "Voxel snapshots provide only manifest and chunks.", status_code=409)
         except VoxelError as exc:
-            raise ArtifactRepresentationError(exc.code, exc.message, status_code=exc.status_code) from exc
+            if exc.status_code in (400, 422):
+                raise ArtifactRepresentationError("INVALID_REQUEST", exc.message, status_code=422) from exc
+            raise ArtifactRepresentationError("SOURCE_UNAVAILABLE", exc.message, status_code=409) from exc
         except ValueError as exc:
             raise ArtifactRepresentationError("INVALID_REQUEST", "The voxel snapshot or page parameters are invalid.", status_code=422) from exc
         return ArtifactRepresentationResult(representation_type=REPRESENTATION_TYPE, representation_version=1,

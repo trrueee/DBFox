@@ -173,3 +173,5 @@ Director 在唯一 store 快照读取边界复用已有 `_raw` 有界解压与 h
 回执读取同时验证该 revision 的 producing receipt 唯一且身份属于当前请求；原 no-op 的 base=result，不会被误计为 producer。复用现有耐久请求和版本关系，不重新执行几何或绑定后来 head。新后端三个反例由失败变为通过（5.93 秒）；作者和旧独立回归 83 passed（35.41 秒）。首跑曾 82 pass/1 fail，因旧 fixture 的 0.35 秒总 deadline 在预定 after-commit 注入点前耗尽；独立原样单跑通过后，验证员将时间窗口改为 2 秒，保留实际超时、entered、attempts=1 与不重放断言。
 
 前端在原 `loadChunks` 发布边界拒绝重复坐标、核对完整/增量合成后的 chunk 与非零总数，并通过平台 [WebCrypto digest](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest) 校验收到的 chunk bytes 和完整文档 fingerprint。WorldDocument 的固定 ASCII 字段、整数/字符串/布尔值/数组按现有 owner 规范序列化，chunk 使用 layer 与数值坐标排序；没有自行实现 SHA-256 或加入第三方依赖。新的 6 项恶意分页测试含真实 Electron 下载字节正例全部通过（1.07 秒）。完整独立红队、最终重签浏览器检查与性能结论另由红队报告给出。
+
+继续攻击发现 create 在 receipt 写入与 commit 之间遗漏最后一次取消检查、历史 parent 和当前 head 可被修改成错误版本、私有 INVALID_CURSOR 直接进入公开表示错误目录。现在 create 复用 mutate 已有的提交前 `check_cancel`；快照要求 v1 无 parent、后续 parent 精确为 v-1 且存在，当前读取还要求 head 等于最新耐久 revision。显式固定历史读取不依赖后来损坏的 head。表示 provider 在真实公开边界使用既有 FORBIDDEN、SOURCE_CHANGED、INVALID_REQUEST、SOURCE_UNAVAILABLE 和 UNSUPPORTED_REPRESENTATION，不新增错误目录或转换层。Director 定向10项通过17.99秒；独立13项追加复跑通过24.04秒，仍保留真实 ToolExecutor 单次尝试和不重放断言。

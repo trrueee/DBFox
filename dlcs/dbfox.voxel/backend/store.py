@@ -193,9 +193,18 @@ class VoxelStore:
         return result
 
     def _snapshot(self, connection: sqlite3.Connection, project_id: str, world_id: str, version: int | None = None) -> WorldSnapshot:
+        if version is None:
+            head = connection.execute("""SELECT w.head_version,
+                (SELECT MAX(r.version) FROM world_revisions r WHERE r.world_id=w.id) AS latest
+                FROM worlds w WHERE w.project_id=? AND w.id=?""", (project_id, world_id)).fetchone()
+            if head is None:
+                raise VoxelError("WORLD_NOT_FOUND", "The requested voxel world is unavailable in this Project.", 404)
+            if type(head["head_version"]) is not int or head["head_version"] < 1 or head["head_version"] != head["latest"]:
+                raise VoxelError("CORRUPT_STATE", "The voxel world head does not match its durable history.", 409)
+            version = head["head_version"]
         row = connection.execute("""
             SELECT r.*,w.project_id FROM worlds w JOIN world_revisions r ON r.world_id=w.id
-            WHERE w.project_id=? AND w.id=? AND r.version=COALESCE(?,w.head_version)
+            WHERE w.project_id=? AND w.id=? AND r.version=?
         """, (project_id, world_id, version)).fetchone()
         if row is None:
             raise VoxelError("WORLD_NOT_FOUND", "The requested voxel world revision is unavailable in this Project.", 404)
@@ -204,12 +213,21 @@ class VoxelStore:
             self._metadata(document)
         except ValueError as exc:
             raise VoxelError("CORRUPT_STATE", "The voxel world metadata is invalid.", 409) from exc
-        resolved_version = int(row["version"])
+        resolved_version = row["version"]
+        if type(resolved_version) is not int or resolved_version < 1:
+            raise VoxelError("CORRUPT_STATE", "The voxel revision version is invalid.", 409)
+        parent_version = row["parent_version"]
+        if ((resolved_version == 1 and parent_version is not None)
+                or (resolved_version > 1 and (type(parent_version) is not int
+                    or parent_version != resolved_version - 1
+                    or connection.execute("SELECT 1 FROM world_revisions WHERE world_id=? AND version=?",
+                        (world_id, parent_version)).fetchone() is None))):
+            raise VoxelError("CORRUPT_STATE", "The voxel revision has an invalid or missing parent.", 409)
         chunks = self._index(connection, world_id, resolved_version, document)
         stored_hash = str(row["content_hash"])
         if fingerprint(document, chunks) != stored_hash:
             raise VoxelError("CORRUPT_STATE", "The voxel revision fingerprint does not match its stored content.", 409)
-        snapshot = WorldSnapshot(world_id, str(row["project_id"]), resolved_version, int(row["parent_version"]) if row["parent_version"] is not None else None, stored_hash, document, chunks)
+        snapshot = WorldSnapshot(world_id, str(row["project_id"]), resolved_version, parent_version, stored_hash, document, chunks)
         # The revision fingerprint binds raw hashes, not derived index counts.
         # Validate those counts against the same bounded decoder used for chunk
         # reads before publishing a snapshot to summaries, context, or mutations.
@@ -385,6 +403,7 @@ class VoxelStore:
             connection.execute("INSERT INTO worlds VALUES (?,?,1,?)", (world_id, project_id, created))
             connection.execute("INSERT INTO world_revisions VALUES (?,1,NULL,'create',NULL,?,?,?)", (world_id, encoded, snapshot.content_hash, created))
             self._write_receipt(connection, project_id, origin, request_id, "create", hashed, output, None)
+            check_cancel(cancelled)
             connection.commit()
             return output
 
