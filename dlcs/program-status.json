@@ -165,10 +165,10 @@
       "adversarial_reviewer": "/root/voxel_lead/domain_architect",
       "adversarial_progress": {
         "product": "32 independent adversarial cases passed in 58.14s after strict scalar and durable row/source consistency fixes",
-        "context": "Director reran all31 Artifact attacks after Context and canonical reference fixes:31 passed in68.54s; independent final verdict still pending.",
+        "context": "Independent final33 Artifact attacks passed with35 domain attacks in133.03s; six confirmed issues closed",
         "author_product": "34 backend passed in 12.11s; latest head and missing-parent cases included",
         "packaging": "Byte-preserving .gitattributes added for generated vendor and primitive bytes; hashes unchanged",
-        "integrated": false,
+        "integrated": true,
         "director_combined": "117 passed /5 failed in171.84s:3 actual invalid Host Object kind failures fixed at emitter;2 recovery-outcome fixture assumptions changed to bounded_partial without removing leak assertions;other91 tests passed.",
         "host_reference_fix": "00d43bfe / Scene c4d24b25",
         "engineering": "45 passed in3.25s",
@@ -186,7 +186,7 @@
         "cross_dlc_worktree": "D:/Project/DBFox-worktrees/creative-composition",
         "root_regression": "169 passed in 247.48s: author, independent fault, adversarial, capability bench and engineering",
         "frontend": "12 passed in 7.45s; typecheck:test passed",
-        "cross_dlc": "15 real Tool requests, 12 success/3 intended cross-owner rejection, immutable representation assertions and deactivate/reactivate passed in 9.45s"
+        "cross_dlc": "15 real Tool requests,12 success/3 intended cross-owner rejection,immutable representations and lifecycle;9.45s afterVoxel,12.50s afterPixelb6987f23"
       },
       "known_limitations": [
         "Public Host has no Project deletion hook; private-state automatic purge is not supported."
@@ -232,7 +232,7 @@
         "dbfox.voxel.snapshot"
       ],
       "tests": {
-        "status": "backend_and_fixture_pass_independent_verification_pending",
+        "status": "independent_checks_pass_final_report_pending",
         "paths": [
           "verification/tests/system/test_voxel_dlc.py",
           "desktop/src/features/dlc/__tests__/dbfoxVoxelFixture.test.ts"
@@ -240,10 +240,10 @@
         "backend": "47 backend + 14 Director-authored production RunLoop bench: 61 passed in 39.45s; no exclusion/xfail",
         "frontend": "16 passed; real GPU probe used fixture-backed operations and is not production Host proof",
         "typecheck": "passed",
-        "independent": "35 independent fault +14 reviewed production RunLoop:49 passed in41.16s;24 frontend passed in9.78s and typecheck passed"
+        "independent": "36 fault passed in12.03s;14/14 strengthened CLI bench;24 frontend passed in9.78s;typecheck and pyflakes passed"
       },
       "bench": {
-        "status": "director_authored_pass_independent_verification_pending",
+        "status": "independently_reviewed_cli_pass_report_pending",
         "path": "verification/bench/capabilities/dbfox_voxel",
         "suite": "capability.dbfox-voxel.scripted",
         "cases": 14,
@@ -277,7 +277,7 @@
         ]
       },
       "known_blockers": [
-        "Independent production picking, large-world, lifecycle final review and separate adversarial gate remain active."
+        "Independent verification report and final author checks are being finalized; separate adversarial gate is pending."
       ],
       "composition_candidates": [
         "dbfox.voxel-game",
@@ -287,7 +287,7 @@
       "worktree": "D:/Project/DBFox-worktrees/creative-voxel",
       "integrated": false,
       "phase": "independent_production_verification_active",
-      "workbench_evidence": "Independent actual Electron historical v8 representation with current v9,1135 rendered surface cells, hidden-layer display and actual34256-byte DownloadItem; disk verification and remaining gates underway.",
+      "workbench_evidence": "Actual Electron: historical34256-byte JSON SHA and all4chunks match;3D picking selects[10,11,10] with zero writes;64-cubed60chunks/12425surface826ms;128-cubed296chunks/explicit60000surface cap3571ms;CAS409 one request/no replay;late scope no artifact;deactivate and renderer restart preserve worldv12;WebGL and listeners disposed.",
       "candidate_commit": "e587edd6",
       "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/voxel-independent-verification-handoff.md",
       "verification_agent": "/root/pixel_workbench"
@@ -346,7 +346,7 @@
         "undo and Agent reference handoff"
       ],
       "tests": {
-        "status": "not_implemented",
+        "status": "author_backend_and_frontend_pass_independent_gpu_pending",
         "backend_path": "verification/tests/system/test_shader_dlc.py",
         "frontend_path": "desktop/src/features/dlc/__tests__/dbfoxShaderFixture.test.ts",
         "required": [
@@ -360,7 +360,9 @@
           "bounded context and resources",
           "production Tool authority and settlement",
           "packaged Electron/CSP"
-        ]
+        ],
+        "backend": "44 full signed-package tests passed in15.26s",
+        "frontend": "12 fixtures passed in7.83s; device doubles are not GPU proof"
       },
       "bench": {
         "status": "not_implemented",
@@ -398,12 +400,12 @@
           {
             "role": "Backend Engineer",
             "agent": "/root/scene_lead/domain_architect",
-            "status": "running"
+            "status": "completed_author_candidate"
           },
           {
             "role": "Workbench Engineer",
-            "agent": null,
-            "status": "pending_slot"
+            "agent": "/root/scene_lead/domain_architect",
+            "status": "running_formally_reassigned_author"
           },
           {
             "role": "Verification Engineer",
@@ -488,9 +490,8 @@
         }
       },
       "next_steps": [
-        "Complete Backend candidate and exact owned commit",
-        "Formal role transition to Shader Workbench Engineer using full handoff",
-        "Verify real production GPU Tool loop and capability benchmark/stress",
+        "Complete Workbench author checks and exact owned candidate commit",
+        "Independent real production GPU Tool loop, capability bench and stress",
         "Independent adversarial review and resolve confirmed findings",
         "Submit integration_candidate evidence to Director"
       ],
@@ -505,10 +506,17 @@
         "stable_contract": "dlcs/dbfox.shader/contracts.schema.json",
         "final_author_checks": "44 passed in12.29s;10 own modules mypy,pyflakes and links passed;PyPNG working/index/checkout hash exact",
         "commit": "f6dde52a (22 owned files)",
-        "gpu": "Protocol tests only; no real compute executor or Workbench delivered"
+        "gpu": "Backend44 use simulated compute receipts; actual frontend Chrome GPU probe now passed separately; production Electron independent verification remains pending"
       },
       "backend_commit": "f6dde52a",
-      "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/shader-workbench-handoff.md"
+      "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/shader-workbench-handoff.md",
+      "workbench_agent": "/root/scene_lead/domain_architect",
+      "workbench_progress": {
+        "status": "implementation_and_author_validation_active",
+        "gpu": "Actual Chrome strict CSP WebGL2 compile/error/repair,active-uniform rejection,2x2 top-left texture and2-pass exact pixels passed;not production Electron independent proof",
+        "editor": "Real CodeMirror6 ShadowRoot with constructed stylesheet,0 style elements;DLC-local415644-byte vendor and16 upstream licenses",
+        "remaining": "Full author UI/layout and lint/type/build, exact candidate commit, independent production GPU verification and adversarial review"
+      }
     },
     {
       "dlc_id": "dbfox.pixel",
@@ -537,9 +545,20 @@
         {
           "scope": "author backend",
           "result": "33 passed in 9.10s; real signed 5-Invocation same-Run and Human ActionRun passed; pyflakes/mypy passed"
+        },
+        {
+          "scope": "independent verification",
+          "result": "21 fault +15 bench tests:36 passed in86.88s;head rewind/missing parent independently closed with original assertions preserved"
         }
       ],
-      "bench": [],
+      "bench": {
+        "status": "independent_scripted_pass",
+        "path": "verification/bench/capabilities/dbfox_pixel",
+        "cases": 14,
+        "cli": "14/14",
+        "exports": "8 real PyPNG outputs decoded and compared pixel-for-pixel with Pillow",
+        "production_desktop": "in_progress"
+      },
       "architecture_review": {
         "status": "accepted",
         "agent": "/root/scene_lead/domain_architect",
@@ -551,7 +570,7 @@
       "detail_path": "docs/quality/pixel-dlc-evidence.md",
       "worktree": "D:/Project/DBFox-worktrees/creative-pixel",
       "integrated": false,
-      "phase": "independent_verification_assigned",
+      "phase": "independent_bench_faults_pass_production_electron_active",
       "backend_agent": "/root/pixel_backend",
       "backend_commit": "113f5334f12acee966c52182c62e56f9e4033b1b",
       "workbench_agent": "/root/pixel_workbench",
@@ -565,7 +584,8 @@
       },
       "workbench_commit": "5af763d0",
       "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/pixel-independent-verification-handoff.md",
-      "verification_agent": "/root/voxel_lead/domain_architect"
+      "verification_agent": "/root/voxel_lead/domain_architect",
+      "candidate_commit": "b6987f23"
     },
     {
       "dlc_id": "dbfox.game",
@@ -590,7 +610,8 @@
       "composition_candidates": [],
       "worktree": "D:/Project/DBFox-worktrees/creative-game",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-game.md",
-      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot"
+      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
+      "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md"
     },
     {
       "dlc_id": "dbfox.comic",
@@ -615,7 +636,8 @@
       "composition_candidates": [],
       "worktree": "D:/Project/DBFox-worktrees/creative-comic",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-comic.md",
-      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot"
+      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
+      "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md"
     },
     {
       "dlc_id": "dbfox.cad",
@@ -640,7 +662,8 @@
       "composition_candidates": [],
       "worktree": "D:/Project/DBFox-worktrees/creative-cad",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-cad.md",
-      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot"
+      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
+      "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md"
     },
     {
       "dlc_id": "dbfox.animation",
@@ -665,7 +688,8 @@
       "composition_candidates": [],
       "worktree": "D:/Project/DBFox-worktrees/creative-animation",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-animation.md",
-      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot"
+      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
+      "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md"
     },
     {
       "dlc_id": "dbfox.map",

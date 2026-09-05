@@ -114,6 +114,10 @@ Selection 与视图状态不产生权限。canonical document version 与 Resour
 Composition DLC 只有在普通 Agent 编排无法表达且确有自有联合状态时才创建。
 不为能力数量创建空包，也不为绕过 foreign-resource 限制创建私有导入。
 
+Game、Comic、CAD、Animation 的隔离工作树和完整 Lead 模板已准备；成熟库能力、
+部署约束及尚待验证项见[下一批技术调查](creative-dlc-next-wave-investigation.md)。
+该调查是架构师的启动材料，具体领域合同和依赖仍须独立审议。
+
 ## 6. 验证与集成门禁
 
 每个 Lead 必须交付可编辑 Workbench、后端、增量 Tools、持久化、Artifact/Representation、
