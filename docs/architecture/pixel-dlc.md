@@ -279,3 +279,7 @@ Director曾报告同Run创建document后的通用Artifact authority错配。Pixe
 | 25 | Composition | 仅公开read_artifact_representation读已授权成果；不得读SQLite/import PixelStore |
 
 最小实施顺序：严格canonical/operation模型与纯领域apply → 单个SQLite Store/CAS/receipt → provider/resolver/context与正式Tools → project operations/ActionRun → PyPNG表示 → Canvas Workbench。没有必要引入通用mapper、渲染器、数据库repository接口或私有导出HTTP。先写领域和事务必要测试，再以实际SDK包激活与生产RunLoop关闭真实系统边界；本次只读评审未写产品代码或测试文件。
+
+## 当前历史索引完整性
+
+`PixelStore._document_index` 为 `_revision` 与 `documents.head` 共同检查owner head、最大已存revision、head父行/状态/hash形状。`_revision` 同时要求所读固定历史版本的父行存在，并保留canonical字节、hash与对象出生记录检查。目录读取通过 `_revision`，不能把回退head伪装成旧作品；损坏状态直接报错，不自动重建或修复。head轮询只查索引列，完整正文仍在后续固定版本读取时校验。没有添加第二份耐久事实源。

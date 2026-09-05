@@ -205,4 +205,12 @@ Windows作者检查：
 
 Workbench Agent因账户额度停止在提交前，既有实现与记录保留。Director原样重跑工作台fixture：**27 passed，6.64秒**。随后将两处签名fixture改为复制真实frontend目录，并逐字节比较包内index.js/model.js/index.css与产品文件；完整后端、签名包激活和生产RunLoop集合 **33 passed，11.48秒**，测试Pyflakes通过。第7节的stub说明属于后端早期阶段，现行测试不再使用它。
 
-这属于Director接续检查，不是独立Verification或红队；真实Electron、12类benchmark、4idle+6attack的生产Tool压力作品和独立终审仍未完成。由于三个子Agent均报告账户usage limit，下一独立角色暂未启动；不据作者检查改变integrated=false。
+这属于Director接续检查，不是独立Verification或红队；当时真实Electron、12类benchmark、4idle+6attack的生产Tool压力作品和独立终审仍未完成。此前额度中断已恢复，独立Verification正在执行；不据作者检查改变integrated=false。
+
+## 独立故障发现后的历史索引修正
+
+独立 Verification 复现正式 r1→r2 后将 `documents.head` 回退至1，或删除父revision行，`documents.get` 仍成功。Director 修前复跑为 **2 failed / 13 deselected，8.69秒**。
+
+现在 `_document_index` 是完整读取与轻量head轮询共用的小索引边界：核对head等于已存最大revision、head父关系及父行、状态与hash格式。`_revision` 另外核对请求历史revision的父行存在。原有正文/hash/身份校验继续执行；轮询不加载2MiB正文。复用 SQLite 的既有主键索引和查询，并参考项目内Scene已经验证的head/parent不变量；没有新表、迁移、依赖、跨owner私有导入、兼容层或Core改动。
+
+Director 运行 `python -m pytest verification/tests/system/test_pixel_dlc_verification.py verification/tests/system/test_pixel_dlc.py -q --tb=short --show-capture=no`：**48 passed，53.69秒**，Pyflakes通过。独立验证员继续扩展公开head/list/历史入口攻击与实际Electron闭环；本节修复者检查不替代其结论。

@@ -67,9 +67,27 @@ class PixelStore:
                     db.rollback()
                 db.close()
 
+    @staticmethod
+    def _document_index(db, project_id, document_id):
+        # One small authority check shared by full reads and lightweight polling.
+        # Do not load/decode the document body on each head poll.
+        row = db.execute("""SELECT d.*,r.content_hash,r.status AS revision_status,r.parent_revision,
+            (SELECT MAX(revision) FROM revisions WHERE document_id=d.id) AS latest_revision,
+            EXISTS(SELECT 1 FROM revisions WHERE document_id=d.id AND revision=d.head-1) AS parent_exists
+            FROM documents d LEFT JOIN revisions r ON r.document_id=d.id AND r.revision=d.head
+            WHERE d.id=? AND d.project_id=?""", (document_id, project_id)).fetchone()
+        require(row is not None, "Pixel document does not exist in this Project.", "NOT_FOUND")
+        require(type(row["head"]) is int and row["head"] >= 1 and row["head"] == row["latest_revision"]
+                and row["status"] == row["revision_status"]
+                and row["parent_revision"] == (row["head"] - 1 if row["head"] > 1 else None)
+                and (row["head"] == 1 or row["parent_exists"])
+                and isinstance(row["content_hash"], str) and len(row["content_hash"]) == 64
+                and all(char in "0123456789abcdef" for char in row["content_hash"]),
+                "Pixel head index or ancestry is inconsistent.", "CORRUPT_STATE")
+        return row
+
     def _revision(self, db, project_id, document_id, revision=None):
-        owner = db.execute("SELECT * FROM documents WHERE id=? AND project_id=?", (document_id, project_id)).fetchone()
-        require(owner is not None, "Pixel document does not exist in this Project.", "NOT_FOUND")
+        owner = self._document_index(db, project_id, document_id)
         target = owner["head"] if revision is None else revision
         shape = db.execute("SELECT length(body) AS size,typeof(body) AS storage_type FROM revisions WHERE document_id=? AND revision=?", (document_id, target)).fetchone()
         require(shape is not None, "Pixel revision does not exist.", "NOT_FOUND" if revision is not None else "CORRUPT_STATE")
@@ -85,6 +103,8 @@ class PixelStore:
                     "Stored Pixel document hash does not match.", "CORRUPT_STATE")
             require(type(target) is int and target >= 1 and target <= owner["head"] and
                     row["parent_revision"] == (target - 1 if target > 1 else None), "Invalid revision ancestry.", "CORRUPT_STATE")
+            require(target == 1 or db.execute("SELECT 1 FROM revisions WHERE document_id=? AND revision=?",
+                    (document_id, target - 1)).fetchone() is not None, "Missing Pixel revision parent.", "CORRUPT_STATE")
             require(row["status"] in ("active", "deleted") and
                     (target != owner["head"] or row["status"] == owner["status"]), "Invalid revision status.", "CORRUPT_STATE")
             identities = {(item["kind"], item["object_id"]) for item in db.execute(
@@ -283,11 +303,7 @@ class PixelStore:
         # Polling transfers only the canonical head's small index fields. A
         # subsequent pinned frame/get read validates the full revision and hash.
         with self._connect() as db:
-            row = db.execute("SELECT d.id,d.head,d.status,r.content_hash,r.status AS revision_status FROM documents d LEFT JOIN revisions r ON r.document_id=d.id AND r.revision=d.head WHERE d.id=? AND d.project_id=?",
-                (request.document_id, project_id)).fetchone()
-            require(row is not None, "Pixel document does not exist in this Project.", "NOT_FOUND")
-            require(row["status"] == row["revision_status"] and isinstance(row["content_hash"], str) and len(row["content_hash"]) == 64,
-                    "Pixel head index is inconsistent.", "CORRUPT_STATE")
+            row = self._document_index(db, project_id, request.document_id)
             try:
                 return c.HeadResult(document_id=row["id"], revision=row["head"], content_hash=row["content_hash"], status=row["status"])
             except ValueError as exc:
