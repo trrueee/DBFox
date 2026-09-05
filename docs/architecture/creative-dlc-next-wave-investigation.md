@@ -16,6 +16,8 @@ Phaser提供Arcade物理世界、固定时间步和seeded随机生成器；可�
 
 Phaser的HEADLESS模式仍是浏览器Game生命周期的一部分，不能据其名称声称Frozen Python Sidecar可直接运行。候选需证明关Dock后Agent仍可playtest，模型只看有界观察，并保留取消、超时与迟到结果隔离；Shader的现有machine operation方案可作为公开合同调查对象，不能偷用其私有状态。暂不承诺跨平台逐位确定性，也未选择第二套物理算法。[Game API](https://docs.phaser.io/api-documentation/class/game)。
 
+补充的[Game 实现前合同调查](game-dlc-preflight.md)记录25项领域边界和固定步骤风险。官方 npm registry 当前返回4.2.1，本机镜像仍返回4.0.0；最终版本必须从官方固定元数据和源码核验，不能照浮动文档或镜像直接冻结。
+
 ## Comic
 
 Comic只拥有页面、镜头、角色放置、对白和视觉注释；Story继续拥有世界事实。先评估原生SVG/Canvas和Konva在面板布局、选择、缩放、文字编辑与导出的差异；Konva已有Canvas导出能力，但这不替代DBFox的耐久Artifact与固定表示。[Konva导出](https://konvajs.org/docs/react/Canvas_Export.html)。
