@@ -52,7 +52,7 @@
   "dlcs": [
     {
       "dlc_id": "dbfox.scene",
-      "status": "integration_candidate",
+      "status": "integrated",
       "scheduled": true,
       "wave": 1,
       "branch": "creative/scene",
@@ -132,16 +132,14 @@
         "status": "accepted_with_documented_sdk_limit",
         "agent": "/root/scene_lead/domain_architect"
       },
-      "known_blockers": [
-        "Public Host has no Project deletion hook; private-state automatic purge is not supported."
-      ],
+      "known_blockers": [],
       "composition_candidates": [
         "dbfox.scene-animation",
         "dbfox.scene-game",
         "dbfox.cad-scene"
       ],
       "detail_path": "dlcs/dbfox.scene/program-status.json",
-      "phase": "independent_adversarial_pass_cross_dlc_verification_pending",
+      "phase": "local_integration_complete",
       "role_history": [
         {
           "agent": "/root/scene_lead/domain_architect",
@@ -160,7 +158,7 @@
         }
       ],
       "worktree": "D:/Project/DBFox-worktrees/creative-scene",
-      "integrated": false,
+      "integrated": true,
       "verification_agent": "/root/voxel_lead/domain_architect",
       "observation_fix": "Explicit ToolObservationProjection completed; author backend30 and UI12 passed; independent production suite22 and CLI13/13 passed.",
       "workbench_evidence": "Independent actual Electron WebGL editing, Artifact Dock navigation, test-controlled native-save-path downloads, late scope cancellation, deactivate/reactivate cleanup and persisted state all passed.",
@@ -178,7 +176,21 @@
         "independent_final": "68 passed in 133.03s (35 domain, 33 Artifact); actual Electron artifactId-only emitter schema accepted; all six confirmed issues independently closed.",
         "report": "docs/quality/scene-dlc-adversarial-review.md"
       },
-      "candidate_commit": "50ccf2b7"
+      "candidate_commit": "50ccf2b7",
+      "integration": {
+        "branch": "codex/creative-program",
+        "candidate_commit": "6fee68f7",
+        "independent_review_commit": "7062e7f6",
+        "status_commit": "dc8d0b80",
+        "cross_dlc_commit": "6c18369a",
+        "cross_dlc_worktree": "D:/Project/DBFox-worktrees/creative-composition",
+        "root_regression": "169 passed in 247.48s: author, independent fault, adversarial, capability bench and engineering",
+        "frontend": "12 passed in 7.45s; typecheck:test passed",
+        "cross_dlc": "15 real Tool requests, 12 success/3 intended cross-owner rejection, immutable representation assertions and deactivate/reactivate passed in 9.45s"
+      },
+      "known_limitations": [
+        "Public Host has no Project deletion hook; private-state automatic purge is not supported."
+      ]
     },
     {
       "dlc_id": "dbfox.voxel",
@@ -227,7 +239,8 @@
         ],
         "backend": "47 backend + 14 Director-authored production RunLoop bench: 61 passed in 39.45s; no exclusion/xfail",
         "frontend": "16 passed; real GPU probe used fixture-backed operations and is not production Host proof",
-        "typecheck": "passed"
+        "typecheck": "passed",
+        "independent": "35 independent fault +14 reviewed production RunLoop:49 passed in41.16s;24 frontend passed in9.78s and typecheck passed"
       },
       "bench": {
         "status": "director_authored_pass_independent_verification_pending",
@@ -264,8 +277,7 @@
         ]
       },
       "known_blockers": [
-        "Independent verification found missing pre-export navigation check and unverified durable receipt summary; Director fixes under independent regression.",
-        "Actual production Workbench interaction, historical Artifact rendering/download and independent red-team gate pending."
+        "Independent production picking, large-world, lifecycle final review and separate adversarial gate remain active."
       ],
       "composition_candidates": [
         "dbfox.voxel-game",
@@ -275,8 +287,8 @@
       "worktree": "D:/Project/DBFox-worktrees/creative-voxel",
       "integrated": false,
       "phase": "independent_production_verification_active",
-      "workbench_evidence": "16 fixture tests passed; real GPU UI exercised with memory-operation fixture; independent full production navigation remains pending.",
-      "candidate_commit": "0a908b00",
+      "workbench_evidence": "Independent actual Electron historical v8 representation with current v9,1135 rendered surface cells, hidden-layer display and actual34256-byte DownloadItem; disk verification and remaining gates underway.",
+      "candidate_commit": "e587edd6",
       "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/voxel-independent-verification-handoff.md",
       "verification_agent": "/root/pixel_workbench"
     },
@@ -575,7 +587,10 @@
       "bench": [],
       "architecture_review": null,
       "known_blockers": [],
-      "composition_candidates": []
+      "composition_candidates": [],
+      "worktree": "D:/Project/DBFox-worktrees/creative-game",
+      "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-game.md",
+      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot"
     },
     {
       "dlc_id": "dbfox.comic",
@@ -597,7 +612,10 @@
       "bench": [],
       "architecture_review": null,
       "known_blockers": [],
-      "composition_candidates": []
+      "composition_candidates": [],
+      "worktree": "D:/Project/DBFox-worktrees/creative-comic",
+      "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-comic.md",
+      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot"
     },
     {
       "dlc_id": "dbfox.cad",
@@ -619,7 +637,10 @@
       "bench": [],
       "architecture_review": null,
       "known_blockers": [],
-      "composition_candidates": []
+      "composition_candidates": [],
+      "worktree": "D:/Project/DBFox-worktrees/creative-cad",
+      "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-cad.md",
+      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot"
     },
     {
       "dlc_id": "dbfox.animation",
@@ -641,7 +662,10 @@
       "bench": [],
       "architecture_review": null,
       "known_blockers": [],
-      "composition_candidates": []
+      "composition_candidates": [],
+      "worktree": "D:/Project/DBFox-worktrees/creative-animation",
+      "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-animation.md",
+      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot"
     },
     {
       "dlc_id": "dbfox.map",
@@ -1092,12 +1116,14 @@
     "status_file_location": "dlcs/program-status.json; docs naming contract intentionally retained",
     "latest_frontend": "68 targeted navigation/Dock/ArtifactView/ConversationStore regressions passed;typecheck passed",
     "creative_worktree": "D:/Project/DBFox-worktrees/creative-composition",
-    "creative_status": "Scene, Voxel and Pixel candidates combined in an isolated validation branch; all integrated flags remain false pending applicable gates."
+    "creative_status": "Scene integrated locally after all individual gates and three-owner composition test; Voxel/Pixel are validation-tree candidates only.",
+    "creative_evidence": "D:/Project/DBFox-worktrees/creative-composition/docs/quality/creative-dlc-composition-verification.md",
+    "creative_commit": "6c18369a"
   },
   "execution_status": {
     "state": "active",
     "date": "2026-09-05",
-    "scope": "Independent gates and full creative DLC implementation resumed",
+    "scope": "Voxel/Pixel independent verification, Shader implementation, Phase C preparation after Scene integration",
     "message": "All three workers resumed successfully; Scene independent adversarial review passed 68 cases. No Creative DLC integration gate has been waived.",
     "active_roles": [
       {

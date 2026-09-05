@@ -96,11 +96,10 @@ Selection 与视图状态不产生权限。canonical document version 与 Resour
 [Runtime DLC 平台](runtime-dlc-platform.md)。
 
 已依据真实Scene/Voxel需求单独审议并实现[工作台工件导航](dlc-artifact-navigation.md)，
-保留公开API v2可选成员和原Artifact投影；真实Electron验收仍在执行。Loader迟到注册和
+保留公开API v2可选成员和原Artifact投影；Scene独立真实Electron与Voxel实际导航/历史下载已有证据，Voxel完整门禁仍在执行。Loader迟到注册和
 [折叠Tree挂载](../quality/host-tree-visible-subtree.md)属于既有Host正确性修复，未增加领域
 原语。Scene/Voxel同Run增量验证另揭示Artifact结算仍检查最初Run输入而非持久Invocation；
-该通用修复在独立worktree验证，兼容同Run显式DERIVED_FROM公开成果继承，不能据此给私有
-Resource增加权限。最终状态与提交见机器队列。
+该通用修复已在根开发分支通过Core/System回归及独立Scene对抗审查，支持同Run显式DERIVED_FROM公开成果继承，不能据此给私有Resource增加权限。Context三处结构化投影复用正式availability，Artifact按钮只发既有artifactId。最终状态与提交见机器队列。
 
 ## 5. 波次与依赖
 

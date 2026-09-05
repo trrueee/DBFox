@@ -12,22 +12,22 @@
 
 ## 当前进展
 
-三个工作者已成功恢复。Scene 独立红队完整复验 **68 passed / 133.03秒**（35项领域、33项工件攻击），六项已确认问题均关闭；真实 Electron 已验证修复后的引用按钮和公开请求 schema。Scene 进入 integration candidate，仍需跨 DLC 验证。
+三个工作者已成功恢复。Scene 独立红队完整复验 **68 passed / 133.03秒**（35项领域、33项工件攻击），六项已确认问题均关闭；真实 Electron 已验证修复后的引用按钮和公开请求 schema。随后通过三owner联合验证，Scene已合入本地 `codex/creative-program`：候选 `6fee68f7`、独立终审 `7062e7f6`。合入后169项后端/bench/工程回归、12项前端和typecheck通过。
 
 Voxel 独立验证正在执行真实生产 Electron 与故障测试，已发现并复现导出前缺少导航检查、操作回执未核对固定 revision 两项缺陷，Director 正在修复。Shader 作者转任 Workbench Engineer，实现真实 WebGL2 执行器与 CodeMirror 编辑器。Scene 独立审查者结束该角色后转任 Pixel 独立 Verification Engineer。
 
-此前三个工作者曾因账户 usage limit 中断，Director 当时完成了可执行的本地检查与候选保存；该中断保留在机器状态的 execution_history。没有以作者测试替代独立终审，所有 Creative DLC 的 integrated 继续为 false。
+此前三个工作者曾因账户 usage limit 中断，Director 当时完成了可执行的本地检查与候选保存；该中断保留在机器状态的 execution_history。没有以作者测试替代独立终审。当前仅Scene的integrated为true，其余继续完整门禁。
 
 ## 已保存候选
 
 | DLC | 工作树 | 自有提交 | 已验证与剩余门禁 |
 | --- | --- | --- | --- |
-| Scene | `D:/Project/DBFox-worktrees/creative-scene` | `50ccf2b7`，84文件 | 真正编辑工作台、签名 RunLoop 13类、独立真实 Electron 编辑/导出/清理证据已保存；恢复后的独立红队68项通过，待跨 DLC 验证。 |
+| Scene | `D:/Project/DBFox-worktrees/creative-scene` | 候选 `50ccf2b7`；终审 `37d9f8bf` | 真正编辑工作台、签名 RunLoop 13类、独立真实 Electron 编辑/导出/清理与68项红队通过；三owner联合检查通过，已本地集成。 |
 | Voxel | `D:/Project/DBFox-worktrees/creative-voxel` | `0a908b00`，45文件 | 47后端+14正式RunLoop用例通过，64³压力作品及导出留证；独立生产Electron验证与红队待执行。 |
 | Pixel | `D:/Project/DBFox-worktrees/creative-pixel` | 后端 `113f5334`；工作台 `5af763d0` | 27工作台fixture通过；真实完整签名包的33后端/RunLoop测试通过。作者Canvas视觉证据使用受控transport；生产Electron、12类bench、狐狸骑士压力任务及独立红队待执行。 |
 | Shader | `D:/Project/DBFox-worktrees/creative-shader` | `f6dde52a`，22文件 | 44后端测试、10模块Mypy通过，稳定JSON合同及真实RunLoop/ActionRun结算已保存。GPU回执仍为协议模拟；真实执行器、编辑工作台及独立验证未完成。 |
 
-这些候选保存在各自分支，尚未作为完整 DLC 合入主开发树。根工作树 `D:/Project/DBFox` 的 `codex/creative-program` 已接入共享正确性修复；既有用户 dirty 基线继续保留，未整体暂存或提交。
+各候选保存在独立分支；Scene已通过完整门禁并合入本地开发树，Voxel/Pixel/Shader仍未完成集成。根工作树 `D:/Project/DBFox` 的 `codex/creative-program` 已接入共享正确性修复；既有用户 dirty 基线继续保留，未整体暂存或提交。
 
 ## 本次共享修复与回归
 
@@ -48,6 +48,8 @@ Scene 五文件接续运行曾为117通过/5失败：三个失败确认上述非
 3. Shader Backend 工作者已正式转任 Workbench Engineer，使用 `shader-workbench-handoff.md`。同属作者角色，之后不能自评 Shader 独立红队。
 4. Pixel 使用 `pixel-independent-verification-handoff.md`，完整执行12类bench、十类压力修改与实际Electron验证。
 5. Director 在独立 `creative-composition` 工作树组合 Scene/Voxel/Pixel 候选，验证正式 Runtime 多领域编排及资源/工件隔离；候选进入验证树不等于合入主开发树。
-6. Phase B 出现通过完整门禁的稳定结果后按总计划启动 Game/Comic/CAD/Animation；只有证明普通多DLC编排不足时才创建Composition DLC。
+6. Scene已形成通过完整门禁的稳定结果。Game/Comic/CAD/Animation独立工作树和完整Lead模板已准备，工作者结束当前独立验收后轮转进入下一批；只有证明普通多DLC编排不足时才创建Composition DLC。
+
+联合检查与报告保存在 `D:/Project/DBFox-worktrees/creative-composition`，提交 `6c18369a`。真实单Run执行15次请求（12成功、3次跨owner私有selector预期拒绝），产出12个有producer证明的工件；公开表示核对局部修改，停用和恢复Voxel保持另外两owner与原内容。最新候选再次通过9.45秒。该Director联合检查不替代各领域独立验收，也不代表跨媒体资产消费已实现。
 
 根与各工作树中用户原有混合文档改动未整体提交。新增的架构澄清补丁分别保存在外部 `artifact-authority-documentation.patch`、`artifact-context-documentation.patch`，可精确区分任务增量。未提交SQLite、日志、凭据、安装包或运行时目录。Shader/Scene hash-pinned vendor均核对了工作树、Git index和实际checkout字节一致。

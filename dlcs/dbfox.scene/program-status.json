@@ -1,6 +1,6 @@
 {
   "dlc_id": "dbfox.scene",
-  "status": "integration_candidate",
+  "status": "integrated",
   "branch": "creative/scene",
   "lead": "/root/scene_lead",
   "canonical_model": "SceneDocument schema 1",
@@ -103,7 +103,7 @@
       "scope": "Direct child of Director, logically assigned to Scene Lead because nested completed workers retain the global agent slots"
     }
   ],
-  "next_stage": "Director isolated three-owner production RunLoop/authority/representation checks, then integration decision; no gate waived.",
+  "next_stage": "Phase C consumers and later batch-level architecture/pattern audit; maintain current Scene invariants.",
   "architecture_document": "docs/architecture/scene-dlc.md",
   "completed_work": [
     "Full Lead Template read",
@@ -129,8 +129,8 @@
     "Signed backend activation test uses an isolated frontend stub; it is not evidence of Workbench product functionality",
     "Director independently reported four glTF/GLB outputs passing Khronos validator with zero errors, warnings and infos; independent full feature verification remains pending"
   ],
-  "phase": "independent_adversarial_pass_cross_dlc_verification_pending",
-  "completion_claimed": false,
+  "phase": "local_integration_complete",
+  "completion_claimed": true,
   "browser_verification": {
     "agent": "/root/voxel_lead/domain_architect",
     "passed": [
@@ -168,5 +168,14 @@
     "evidence": "docs/quality/scene-dlc-adversarial-review.md",
     "independent_commit": "37d9f8bf71bb608253e9271eb45397e8df981e2c"
   },
-  "integrated": false
+  "integrated": true,
+  "integration": {
+    "branch": "codex/creative-program",
+    "root_candidate": "6fee68f7",
+    "root_adversarial": "7062e7f6",
+    "cross_dlc_commit": "6c18369a",
+    "root_regression": "169 passed in247.48s",
+    "frontend": "12 passed/typecheck passed",
+    "cross_dlc": "One production Run with Scene/Voxel/Pixel:15 tool requests,exact owner scope and immutable exports; Voxel deactivate/restore preserves other owners."
+  }
 }
