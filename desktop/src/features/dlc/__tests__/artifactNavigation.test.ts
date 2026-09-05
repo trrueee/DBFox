@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ArtifactNavigationTarget, FrontendExtensionHost } from "../../../../../sdk/frontend/index";
 import type { ConversationArtifact } from "../../../types/conversation";
 import * as apiClient from "../../../lib/api/client";
@@ -13,6 +13,7 @@ import type { DlcModule } from "../types";
 import { TooltipProvider } from "../../../components/ui";
 import { WorkspaceDock } from "../../appShell/WorkspaceDock";
 import { agentApi } from "../../../lib/api/agent";
+import { zConversationInputReference } from "../../../lib/api/generated/zod.gen";
 
 const reads = vi.hoisted(() => ({ session: vi.fn(), artifacts: vi.fn() }));
 vi.mock("../../../lib/api/generated/sdk.gen", async (importOriginal) => ({
@@ -105,6 +106,16 @@ describe("Host Artifact navigation through the canonical repository and store", 
     expect((await screen.findByRole("tab", { name: artifact.title })).getAttribute("aria-selected")).toBe("true");
     expect(await screen.findByTestId("actual-result-view")).toBeTruthy();
     expect(useWorkspaceStore.getState().mainSurfaceByProject[target.projectId]).toEqual(initialSurface);
+    fireEvent.click(screen.getByRole("button", { name: "加入对话上下文" }));
+    const references = Object.values(useWorkspaceStore.getState().workbenchByConversation)
+      .flatMap((workbench) => workbench.references);
+    expect(references).toEqual([{
+        label: artifact.title, artifactId: artifact.id,
+      }]);
+    expect(zConversationInputReference.safeParse({
+      label: references[0].label, artifact_id: references[0].artifactId,
+      authority: null, object: references[0].object ?? null, locator: null,
+    }).success).toBe(true);
     act(() => { useWorkspaceStore.getState().setActiveProject("another-project"); });
     expect(screen.queryByRole("tab", { name: artifact.title })).toBeNull();
     expect(screen.queryByTestId("actual-result-view")).toBeNull();

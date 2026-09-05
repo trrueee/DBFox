@@ -153,7 +153,6 @@ export function ArtifactDockContent({
           onClick={() => {
             onAsk({
               label: artifact.title,
-              object: { kind: "artifact", id: artifact.id, version: artifact.version },
               artifactId: artifact.id,
             });
             showToast("已加入对话上下文", "success");
