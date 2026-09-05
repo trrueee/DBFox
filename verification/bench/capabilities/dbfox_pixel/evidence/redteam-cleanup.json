@@ -1,0 +1,50 @@
+{
+  "launcher_exit": 0,
+  "listening_ports": [],
+  "process_tree_before": [
+    {
+      "ProcessId": 77788,
+      "ParentProcessId": 55220,
+      "Name": "node.exe"
+    },
+    {
+      "ProcessId": 64568,
+      "ParentProcessId": 77788,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 27608,
+      "ParentProcessId": 64568,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 73500,
+      "ParentProcessId": 64568,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 62172,
+      "ParentProcessId": 64568,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 66212,
+      "ParentProcessId": 64568,
+      "Name": "python.exe"
+    },
+    {
+      "ProcessId": 32644,
+      "ParentProcessId": 66212,
+      "Name": "conhost.exe"
+    },
+    {
+      "ProcessId": 35844,
+      "ParentProcessId": 66212,
+      "Name": "python.exe"
+    }
+  ],
+  "app_close_result": "CLI observed page gone before url read; launcher completed 0",
+  "playwright_closed": true,
+  "remaining_processes": [],
+  "retained_runtime": "C:/Users/Lenovo/AppData/Local/Temp/dbfox-pixel-redteam-20260906"
+}

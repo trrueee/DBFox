@@ -1,0 +1,25 @@
+{
+  "status": 200,
+  "before": {
+    "generation": 1,
+    "styles": 1,
+    "downloadClicks": 0
+  },
+  "disabled": {
+    "generation": 2,
+    "styles": 0,
+    "downloadClicks": 0
+  },
+  "activated": {
+    "generation": 3,
+    "styles": 1,
+    "downloadClicks": 0
+  },
+  "after": {
+    "generation": 3,
+    "styles": 1,
+    "downloadClicks": 0
+  },
+  "oldRevoked": true,
+  "replacedPreviewUrl": true
+}

@@ -1,0 +1,104 @@
+{
+  "before": {
+    "project": "pixel-redteam-ui",
+    "workbench": {
+      "scopeId": "a468c6ed-e7a1-446f-b42c-e1f08585d525",
+      "open": true,
+      "activeViewKey": "dbfox.pixel.studio:pixel-redteam-ui:library",
+      "tabs": [
+        {
+          "viewKey": "dbfox.pixel.studio:pixel-redteam-ui:library",
+          "viewType": "dbfox.pixel.studio",
+          "title": "Pixel Studio",
+          "projectId": "pixel-redteam-ui",
+          "closeable": true
+        }
+      ],
+      "references": [
+        {
+          "label": "Adversarial Human During Drag 5 · frame_1 / layer_1 · r5",
+          "authority": {
+            "kind": "dbfox.pixel.document",
+            "id": "pixel_fd6f62efd4bf4121892810022f4e5eec"
+          },
+          "object": {
+            "kind": "dbfox.pixel.frame",
+            "id": "frame_1",
+            "version": "5"
+          },
+          "locator": "pixel://pixel_fd6f62efd4bf4121892810022f4e5eec;revision=5;frame=frame_1;layer=layer_1"
+        }
+      ]
+    }
+  },
+  "cancelled": {
+    "run_id": "run_aae2f0b85eeb4ba68fc7db4786ccfdfd",
+    "session_id": "1a7a845c-10d2-4835-9491-aabda1dd461d",
+    "artifact_ids": [
+      "artifact_6ae4d638a4bb4039825c00527ba1a8fa"
+    ]
+  },
+  "sessionStatus": 200,
+  "closedEditorExportPosts": 1,
+  "current": {
+    "run_id": "run_16c59f50a0ed4f328655e8a20a68a536",
+    "session_id": "4e78b48f-f100-4571-9b4b-f00e657a4651",
+    "artifact_ids": [
+      "artifact_24c10548333d4531a697f0bc2f210fb0"
+    ]
+  },
+  "preview": {
+    "width": 16,
+    "height": 16,
+    "bytes": 84,
+    "sha256": "689212f1f23ca70811ed4ba940b86057f418d6f17a0aeb92beb8724136c90731"
+  },
+  "after": {
+    "project": "pixel-redteam-ui",
+    "workbench": {
+      "scopeId": "a468c6ed-e7a1-446f-b42c-e1f08585d525",
+      "open": true,
+      "activeViewKey": "core.artifact:artifact_24c10548333d4531a697f0bc2f210fb0",
+      "tabs": [
+        {
+          "viewKey": "dbfox.pixel.studio:pixel-redteam-ui:library",
+          "viewType": "dbfox.pixel.studio",
+          "title": "Pixel Studio",
+          "projectId": "pixel-redteam-ui",
+          "closeable": true
+        },
+        {
+          "viewKey": "core.artifact:artifact_24c10548333d4531a697f0bc2f210fb0",
+          "viewType": "core.artifact",
+          "title": "Adversarial Human During Drag 5 · r5",
+          "closeable": true,
+          "projectId": "pixel-redteam-ui",
+          "target": {
+            "type": "artifact",
+            "id": "artifact_24c10548333d4531a697f0bc2f210fb0"
+          },
+          "selectedViewId": "dbfox.pixel.revision-view"
+        }
+      ],
+      "references": [
+        {
+          "label": "Adversarial Human During Drag 5 · frame_1 / layer_1 · r5",
+          "authority": {
+            "kind": "dbfox.pixel.document",
+            "id": "pixel_fd6f62efd4bf4121892810022f4e5eec"
+          },
+          "object": {
+            "kind": "dbfox.pixel.frame",
+            "id": "frame_1",
+            "version": "5"
+          },
+          "locator": "pixel://pixel_fd6f62efd4bf4121892810022f4e5eec;revision=5;frame=frame_1;layer=layer_1"
+        },
+        {
+          "label": "Adversarial Human During Drag 5 · r5",
+          "artifactId": "artifact_24c10548333d4531a697f0bc2f210fb0"
+        }
+      ]
+    }
+  }
+}

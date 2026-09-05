@@ -50,3 +50,25 @@ re-activate 脚本从扩展设置开始，scale 脚本从 QA 作品目录开始�
 `--accept-downloads` 使用仅限 `output/playwright` 的官方 Electron setSavePath，文件仍
 由 DownloadItem 接收和落盘，不能代称原生保存对话框点击自动化。测试结束关闭本任务的
 窗口并 detach；绝不关闭其他 Electron/CDP 实例或提交数据库、profile、日志及临时签名包。
+
+## Independent Pixel adversarial stage
+
+The independent red team is recorded separately from the completed Verification stage in
+[the review](../../../../docs/quality/pixel-dlc-adversarial-review.md). Its two new pytest modules
+are `verification/tests/system/test_pixel_dlc_adversarial.py` and
+`verification/tests/system/test_pixel_artifact_adversarial.py` (49 cases on candidate `88e7c7d1`).
+
+For a new isolated Electron red-team instance, run these commands from the repository root:
+
+```powershell
+python -m verification.bench.capabilities.dbfox_pixel.redteam_fixture <fresh-runtime-directory>
+node verification/bench/capabilities/dbfox_pixel/browser-launch.mjs <fresh-runtime-directory> <python-executable> --reuse
+```
+
+Attach the named Playwright CLI session to port 19225. Run `redteam-gestures.cjs`, `redteam-artifact-close.cjs`, and
+`redteam-generation-stream.cjs` in that order, saving CLI output to the corresponding
+`output/playwright/pixel-redteam-<name>.txt`. `redteam_audit` collects the captures and performs
+one actual product-factory continuation using the observed onAsk references. It mutates only
+the isolated artwork, so run it once per fixture. Finish with `redteam-finish.cjs`, normally
+close that Electron window, close the named CLI session, and verify the task process tree and
+ports are gone. `evidence/redteam-*.json` contains no Token, SQLite file or raw runtime log.
