@@ -187,3 +187,13 @@ interactions 脚本从已产生冲突的浏览器状态继续；完整键盘操�
 复用已有check_cancelled与SQLite回滚：mutate和save_report均将末次取消检查移到save_receipt之后、返回并退出原事务之前。这样所有领域写入、回执与配额计账完成后仍核验取消；没有新增事务、队列、重试或补偿层。已提交的相同identity仍按原receipt返回；提交本身与稍后到达的取消之间没有操作系统级原子承诺。
 
 回归中44项作者合同、实际生产工厂和原create-fence均通过（合计46项）；同期独立工程师正在新增report分支，第一次夹具把compute.next的idle当成立即有请求，因此该集合另有1项未到达注入点的失败。按公开轮询合同修正后，独立两分支2 passed / 7.11秒。创建缺陷有真实修前失败；报告分支是对同形提交路径的覆盖，不伪称已有第二份修前产品失败。store的pyflakes通过。最后真实Electron重签与GPU/窄Dock复验待独立报告记录。
+
+## 大型单次模型调用的上下文恢复调查（2026-09-06）
+
+原领域测评一次创建60个源码模块时，存储已成为v2，脚本下一步却找不到该次function_call_output；改为三个模块一批后覆盖了同规模作品，但尚不能解释该现象。Director先查实际PromptAssembler、ContextAssembler._response_batches、token估算与已有test_context_budget.py，再通过[新增生产工厂回归](../../verification/tests/system/test_shader_prompt_budget_recovery.py)确认原因。
+
+本次使用实际build_product_run_loop和完整签名Shader owner，只控制外部模型。单次modify的JSON输入为438254 bytes，60份source各7075 bytes，共424500 bytes。既有预算策略按完整model Turn移除过大的native function_call及其output，避免孤立call/output；同时保留已有durable_evidence_ledger中的成功状态、文档UUID/v2和两次写入的Artifact ID。这是现有明确的预算行为。原suite ShaderScript只消费native outputs，不能把其missing_observation断言当作产品丢写或工具结算失败。
+
+新受控模型观察到ledger后不重放mutation，而是正式shader_inspect读取documents→固定v2的stages→source，然后shader_export。最终Run completed，6个真实Invocation全部成功且attempts=1，只有一次shader_modify，head仍v2，3个正式Artifact；通过公开分页完整读取62个stage，60份新source逐字相同。检查还要求保留的native call/output成对，ledger确有两份Artifact身份。最后 **1 passed / 5.70秒**，pyflakes通过。
+
+没有修改Core、owner或旧suite的15项数据；没有从私有SQLite、评分器或Human结果补写模型观察。该回归证明受控模型可以遵守既有恢复合同，不能承诺任意真实模型都能自行采取正确恢复策略。独立GPU验收的已冻结产品字节保持不变。
