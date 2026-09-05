@@ -1,0 +1,480 @@
+{
+  "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+  "session_id": "pixel-session-7116246380b64a2b827ef2a96073a8ed",
+  "run_id": "run_ae368e41636a41788b287ed56057b270",
+  "run_status": "completed",
+  "answer": "Requested Pixel changes complete; no further mutation requested.",
+  "package_digest": "cf43cb1f28538119a437c68f13ef8b152d2cd18c7acf9d18f9506a713746c299",
+  "invocations": [
+    {
+      "id": "invocation_6cd2421ece974b7c8d782a480cacbb1f",
+      "call_id": "frames",
+      "tool": "dbfox_pixel_ff3efa59__pixel_inspect",
+      "run_id": "run_ae368e41636a41788b287ed56057b270",
+      "session_id": "pixel-session-7116246380b64a2b827ef2a96073a8ed",
+      "owner": "dbfox.pixel",
+      "package_digest": "cf43cb1f28538119a437c68f13ef8b152d2cd18c7acf9d18f9506a713746c299",
+      "status": "succeeded",
+      "attempts": 1,
+      "error_code": null,
+      "error_message": null,
+      "resource_refs": [
+        {
+          "id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+          "kind": "dbfox.pixel.document",
+          "version": "45"
+        }
+      ],
+      "input": {
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "kind": "frames",
+        "page": 0,
+        "page_size": 16
+      }
+    },
+    {
+      "id": "invocation_e513219a562946f3a5116af44f082221",
+      "call_id": "layers",
+      "tool": "dbfox_pixel_ff3efa59__pixel_inspect",
+      "run_id": "run_ae368e41636a41788b287ed56057b270",
+      "session_id": "pixel-session-7116246380b64a2b827ef2a96073a8ed",
+      "owner": "dbfox.pixel",
+      "package_digest": "cf43cb1f28538119a437c68f13ef8b152d2cd18c7acf9d18f9506a713746c299",
+      "status": "succeeded",
+      "attempts": 1,
+      "error_code": null,
+      "error_message": null,
+      "resource_refs": [
+        {
+          "id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+          "kind": "dbfox.pixel.document",
+          "version": "45"
+        }
+      ],
+      "input": {
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "kind": "layers",
+        "page": 0,
+        "page_size": 16
+      }
+    },
+    {
+      "id": "invocation_7a58e5fb3f7d436cb03f25513e7585c4",
+      "call_id": "human-agent-mark",
+      "tool": "dbfox_pixel_ff3efa59__pixel_rect",
+      "run_id": "run_ae368e41636a41788b287ed56057b270",
+      "session_id": "pixel-session-7116246380b64a2b827ef2a96073a8ed",
+      "owner": "dbfox.pixel",
+      "package_digest": "cf43cb1f28538119a437c68f13ef8b152d2cd18c7acf9d18f9506a713746c299",
+      "status": "succeeded",
+      "attempts": 1,
+      "error_code": null,
+      "error_message": null,
+      "resource_refs": [
+        {
+          "id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+          "kind": "dbfox.pixel.document",
+          "version": "45"
+        }
+      ],
+      "input": {
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "expected_version": 45,
+        "operation": {
+          "filled": true,
+          "frame_id": "frame_0c6292e94b214c92aef0981512421251",
+          "kind": "rect",
+          "layer_id": "layer_1",
+          "palette_index": 1,
+          "rect": {
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 15
+          }
+        }
+      }
+    }
+  ],
+  "observations": [
+    {
+      "call_id": "frames",
+      "status": "succeeded",
+      "facts": {
+        "has_more": false,
+        "items": [
+          {
+            "duration_ms": 180,
+            "id": "frame_0c6292e94b214c92aef0981512421251"
+          },
+          {
+            "duration_ms": 100,
+            "id": "frame_1"
+          }
+        ],
+        "kind": "frames",
+        "page": 0,
+        "page_size": 16,
+        "selection": null,
+        "summary": {
+          "content_hash": "1a859c268356ac294b27b840c5a09ff47656e702128d8211c25b6fabd924f096",
+          "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+          "frame_count": 2,
+          "height": 16,
+          "layer_count": 1,
+          "palette_count": 3,
+          "parent_revision": 44,
+          "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+          "revision": 45,
+          "status": "active",
+          "tag_count": 1,
+          "title": "Interactive Pixel human",
+          "width": 16
+        },
+        "total": 2
+      },
+      "model_output": {
+        "artifact_ids": [],
+        "facts": {
+          "has_more": false,
+          "items": [
+            {
+              "duration_ms": 180,
+              "id": "frame_0c6292e94b214c92aef0981512421251"
+            },
+            {
+              "duration_ms": 100,
+              "id": "frame_1"
+            }
+          ],
+          "kind": "frames",
+          "page": 0,
+          "page_size": 16,
+          "selection": null,
+          "summary": {
+            "content_hash": "1a859c268356ac294b27b840c5a09ff47656e702128d8211c25b6fabd924f096",
+            "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+            "frame_count": 2,
+            "height": 16,
+            "layer_count": 1,
+            "palette_count": 3,
+            "parent_revision": 44,
+            "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+            "revision": 45,
+            "status": "active",
+            "tag_count": 1,
+            "title": "Interactive Pixel human",
+            "width": 16
+          },
+          "total": 2
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Pixel inspection returned a bounded page; inspect the next page when has_more is true."
+      },
+      "artifacts": []
+    },
+    {
+      "call_id": "layers",
+      "status": "succeeded",
+      "facts": {
+        "has_more": false,
+        "items": [
+          {
+            "id": "layer_1",
+            "locked": false,
+            "name": "Layer 1",
+            "visible": true
+          }
+        ],
+        "kind": "layers",
+        "page": 0,
+        "page_size": 16,
+        "selection": null,
+        "summary": {
+          "content_hash": "1a859c268356ac294b27b840c5a09ff47656e702128d8211c25b6fabd924f096",
+          "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+          "frame_count": 2,
+          "height": 16,
+          "layer_count": 1,
+          "palette_count": 3,
+          "parent_revision": 44,
+          "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+          "revision": 45,
+          "status": "active",
+          "tag_count": 1,
+          "title": "Interactive Pixel human",
+          "width": 16
+        },
+        "total": 1
+      },
+      "model_output": {
+        "artifact_ids": [],
+        "facts": {
+          "has_more": false,
+          "items": [
+            {
+              "id": "layer_1",
+              "locked": false,
+              "name": "Layer 1",
+              "visible": true
+            }
+          ],
+          "kind": "layers",
+          "page": 0,
+          "page_size": 16,
+          "selection": null,
+          "summary": {
+            "content_hash": "1a859c268356ac294b27b840c5a09ff47656e702128d8211c25b6fabd924f096",
+            "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+            "frame_count": 2,
+            "height": 16,
+            "layer_count": 1,
+            "palette_count": 3,
+            "parent_revision": 44,
+            "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+            "revision": 45,
+            "status": "active",
+            "tag_count": 1,
+            "title": "Interactive Pixel human",
+            "width": 16
+          },
+          "total": 1
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Pixel inspection returned a bounded page; inspect the next page when has_more is true."
+      },
+      "artifacts": []
+    },
+    {
+      "call_id": "human-agent-mark",
+      "status": "succeeded",
+      "facts": {
+        "changed": true,
+        "changed_frame_ids": [
+          "frame_0c6292e94b214c92aef0981512421251"
+        ],
+        "changed_frame_ids_truncated": false,
+        "changed_layer_ids": [
+          "layer_1"
+        ],
+        "changed_pixel_count": 1,
+        "content_hash": "a648d13a9ed73e756477c94cf912b0c31abc2c7803d00a995ba8d61d68f2e6c6",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "frame_count": 2,
+        "height": 16,
+        "layer_count": 1,
+        "palette_count": 3,
+        "parent_revision": 45,
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "revision": 46,
+        "status": "active",
+        "tag_count": 1,
+        "title": "Interactive Pixel human",
+        "width": 16
+      },
+      "model_output": {
+        "artifact_ids": [
+          "artifact_9d109640db7a47d1b19ea19434996237"
+        ],
+        "facts": {
+          "changed": true,
+          "changed_frame_ids": [
+            "frame_0c6292e94b214c92aef0981512421251"
+          ],
+          "changed_frame_ids_truncated": false,
+          "changed_layer_ids": [
+            "layer_1"
+          ],
+          "changed_pixel_count": 1,
+          "content_hash": "a648d13a9ed73e756477c94cf912b0c31abc2c7803d00a995ba8d61d68f2e6c6",
+          "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+          "frame_count": 2,
+          "height": 16,
+          "layer_count": 1,
+          "palette_count": 3,
+          "parent_revision": 45,
+          "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+          "revision": 46,
+          "status": "active",
+          "tag_count": 1,
+          "title": "Interactive Pixel human",
+          "width": 16
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Pixel pixel_d737af8bf8d04a5fb688493384fccf5c revision 46; changed=True."
+      },
+      "artifacts": [
+        "artifact_9d109640db7a47d1b19ea19434996237"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "artifact_9d109640db7a47d1b19ea19434996237",
+      "run_id": "run_ae368e41636a41788b287ed56057b270",
+      "session_id": "pixel-session-7116246380b64a2b827ef2a96073a8ed",
+      "type": "dbfox.pixel.revision",
+      "version": 1,
+      "payload": {
+        "content_hash": "a648d13a9ed73e756477c94cf912b0c31abc2c7803d00a995ba8d61d68f2e6c6",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "frame_count": 2,
+        "height": 16,
+        "layer_count": 1,
+        "palette_count": 3,
+        "parent_revision": 45,
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "revision": 46,
+        "status": "active",
+        "tag_count": 1,
+        "title": "Interactive Pixel human",
+        "width": 16
+      },
+      "provenance": {
+        "tool_invocation_id": "invocation_7a58e5fb3f7d436cb03f25513e7585c4",
+        "tool_name": "dbfox_pixel_ff3efa59__pixel_rect"
+      },
+      "resource_refs": [
+        {
+          "kind": "dbfox.pixel.document",
+          "id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+          "version": "45"
+        }
+      ]
+    }
+  ],
+  "human_edits": [],
+  "requests": [
+    {
+      "id": "frames",
+      "tool": "pixel_inspect",
+      "arguments": {
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "kind": "frames"
+      }
+    },
+    {
+      "id": "layers",
+      "tool": "pixel_inspect",
+      "arguments": {
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "kind": "layers"
+      }
+    },
+    {
+      "id": "human-agent-mark",
+      "tool": "pixel_rect",
+      "arguments": {
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "expected_version": 45,
+        "operation": {
+          "kind": "rect",
+          "frame_id": "frame_0c6292e94b214c92aef0981512421251",
+          "layer_id": "layer_1",
+          "rect": {
+            "x": 0,
+            "y": 15,
+            "width": 1,
+            "height": 1
+          },
+          "palette_index": 1
+        }
+      }
+    }
+  ],
+  "max_observation_bytes": 759,
+  "max_prompt_bytes": 15124,
+  "turns": 4,
+  "pixel_contexts": [
+    [
+      {
+        "content": "Pixel document pixel_d737af8bf8d04a5fb688493384fccf5c revision 45; 16x16; 2 frames, 1 layers, 1 animation tags. Use pixel_inspect for exact object IDs; expected_version is required for edits.\n",
+        "lane": "resource",
+        "provenance": {
+          "owner": "dbfox.pixel"
+        },
+        "source_id": "dbfox.pixel.context",
+        "source_version": "1"
+      }
+    ],
+    [
+      {
+        "content": "Pixel document pixel_d737af8bf8d04a5fb688493384fccf5c revision 45; 16x16; 2 frames, 1 layers, 1 animation tags. Use pixel_inspect for exact object IDs; expected_version is required for edits.\n",
+        "lane": "resource",
+        "provenance": {
+          "owner": "dbfox.pixel"
+        },
+        "source_id": "dbfox.pixel.context",
+        "source_version": "1"
+      }
+    ],
+    [
+      {
+        "content": "Pixel document pixel_d737af8bf8d04a5fb688493384fccf5c revision 45; 16x16; 2 frames, 1 layers, 1 animation tags. Use pixel_inspect for exact object IDs; expected_version is required for edits.\n",
+        "lane": "resource",
+        "provenance": {
+          "owner": "dbfox.pixel"
+        },
+        "source_id": "dbfox.pixel.context",
+        "source_version": "1"
+      }
+    ],
+    [
+      {
+        "content": "Pixel document pixel_d737af8bf8d04a5fb688493384fccf5c revision 45; 16x16; 2 frames, 1 layers, 1 animation tags. Use pixel_inspect for exact object IDs; expected_version is required for edits.\n",
+        "lane": "resource",
+        "provenance": {
+          "owner": "dbfox.pixel"
+        },
+        "source_id": "dbfox.pixel.context",
+        "source_version": "1"
+      }
+    ]
+  ],
+  "latency_ms": 514.0469000325538,
+  "observed_summary": {
+    "changed": true,
+    "changed_frame_ids": [
+      "frame_0c6292e94b214c92aef0981512421251"
+    ],
+    "changed_frame_ids_truncated": false,
+    "changed_layer_ids": [
+      "layer_1"
+    ],
+    "changed_pixel_count": 1,
+    "content_hash": "a648d13a9ed73e756477c94cf912b0c31abc2c7803d00a995ba8d61d68f2e6c6",
+    "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+    "frame_count": 2,
+    "height": 16,
+    "layer_count": 1,
+    "palette_count": 3,
+    "parent_revision": 45,
+    "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+    "revision": 46,
+    "status": "active",
+    "tag_count": 1,
+    "title": "Interactive Pixel human",
+    "width": 16
+  },
+  "actual_on_ask": {
+    "label": "Interactive Pixel · frame_0c6292e94b214c92aef0981512421251 / layer_1 · r44",
+    "authority": {
+      "kind": "dbfox.pixel.document",
+      "id": "pixel_d737af8bf8d04a5fb688493384fccf5c"
+    },
+    "object": {
+      "kind": "dbfox.pixel.frame",
+      "id": "frame_0c6292e94b214c92aef0981512421251",
+      "version": "44"
+    },
+    "locator": "pixel://pixel_d737af8bf8d04a5fb688493384fccf5c;revision=44;frame=frame_0c6292e94b214c92aef0981512421251;layer=layer_1"
+  },
+  "artifact_from_other_action_session_available": false,
+  "tested_artifact_only_reference": {
+    "label": "Interactive Pixel · r44",
+    "artifactId": "artifact_b93e313e710d4ecf9e1ef6b842ad5b6f"
+  }
+}

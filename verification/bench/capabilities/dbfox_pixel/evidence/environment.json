@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-09-05T13:19:58.811684+00:00",
+  "git_commit": "0ab0256714137d4e8ea64321c4dc23eaba4f7cce",
+  "git_branch": "creative/pixel",
+  "git_status_sha256": "df3e82493c1a9ad7a760b5209c8603a0f433a7d8506d01a4267632a87f1f2387",
+  "os": "Windows-11-10.0.26200-SP0",
+  "architecture": "AMD64",
+  "python": "3.12.7",
+  "ci": false
+}

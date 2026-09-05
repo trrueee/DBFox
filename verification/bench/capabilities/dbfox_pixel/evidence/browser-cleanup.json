@@ -1,0 +1,15 @@
+{
+  "closed_by": "Actual task-owned Electron window Close button",
+  "electron_pid": 44148,
+  "sidecar_pid": 9152,
+  "electron_children": [47040, 56660, 75040],
+  "launcher_pid": 75428,
+  "launcher_exit_code": 0,
+  "processes_remaining": false,
+  "renderer_and_cdp_listeners_remaining": false,
+  "playwright_session": "pixel-verify detached",
+  "routes_and_performance_observer": "removed in fixture finally blocks",
+  "native_download_listener": "removed on app will-quit",
+  "external_runtime_retained": "C:/Users/Lenovo/AppData/Local/Temp/dbfox-pixel-browser-20260905",
+  "native_save_dialog_clicks_automated": false
+}

@@ -19,6 +19,8 @@ from verification.bench.capabilities.dbfox_data.direct.runtime import (
 from verification.bench.capabilities.dbfox_data.direct.schema import (
     load_cases as load_data_direct_cases,
 )
+from verification.bench.capabilities.dbfox_pixel.runtime import run_pixel_bench
+from verification.bench.capabilities.dbfox_pixel.schema import load_cases as load_pixel_cases
 from verification.bench.capabilities.dbfox_scene.runtime import run_scene_bench
 from verification.bench.capabilities.dbfox_scene.schema import load_cases as load_scene_cases
 from verification.bench.composition.data_workspace.runtime import (
@@ -59,6 +61,11 @@ class SuiteRegistration:
 
 
 SUITES: dict[str, SuiteRegistration] = {
+    "capability.dbfox-pixel.scripted": SuiteRegistration(
+        HERE / "capabilities" / "dbfox_pixel" / "suite.json",
+        _count(load_pixel_cases),
+        runner=run_pixel_bench,
+    ),
     "capability.dbfox-scene.scripted": SuiteRegistration(
         HERE / "capabilities" / "dbfox_scene" / "suite.json",
         _count(load_scene_cases),

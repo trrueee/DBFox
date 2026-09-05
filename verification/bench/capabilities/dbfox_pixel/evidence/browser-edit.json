@@ -1,0 +1,287 @@
+{
+  "method": "Real Electron Canvas/pointer/keyboard and official typed operation response; CDP request bodies unavailable through Main transport.",
+  "selection": {
+    "x": "8",
+    "y": "8",
+    "width": "3",
+    "height": "2"
+  },
+  "previewLabels": [
+    "动画预览 frame_1",
+    "动画预览 frame_0c6292e94b214c92aef0981512421251"
+  ],
+  "writes": [
+    {
+      "name": "brush",
+      "status": 200,
+      "request": null,
+      "response": {
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "revision": 13,
+        "parent_revision": 12,
+        "content_hash": "b7de6686166d6f7a7005fa33bf40215a14ec2018faa07696ef166b89ca56868c",
+        "title": "Interactive Pixel",
+        "width": 16,
+        "height": 16,
+        "frame_count": 1,
+        "layer_count": 1,
+        "palette_count": 3,
+        "tag_count": 0,
+        "status": "active",
+        "changed": true,
+        "changed_pixel_count": 4,
+        "changed_frame_ids": [
+          "frame_1"
+        ],
+        "changed_layer_ids": [
+          "layer_1"
+        ]
+      }
+    },
+    {
+      "name": "erase",
+      "status": 200,
+      "request": null,
+      "response": {
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "revision": 14,
+        "parent_revision": 13,
+        "content_hash": "5ca6864549cbaa6b7a0b8bcee423ada559c1f6de662dd8e1d52bc81772575088",
+        "title": "Interactive Pixel",
+        "width": 16,
+        "height": 16,
+        "frame_count": 1,
+        "layer_count": 1,
+        "palette_count": 3,
+        "tag_count": 0,
+        "status": "active",
+        "changed": true,
+        "changed_pixel_count": 1,
+        "changed_frame_ids": [
+          "frame_1"
+        ],
+        "changed_layer_ids": [
+          "layer_1"
+        ]
+      }
+    },
+    {
+      "name": "rectangle",
+      "status": 200,
+      "request": null,
+      "response": {
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "revision": 15,
+        "parent_revision": 14,
+        "content_hash": "986bac8277e558bdc167ab843c1c619d2f232d00b28e11ef01396ff15176eb32",
+        "title": "Interactive Pixel",
+        "width": 16,
+        "height": 16,
+        "frame_count": 1,
+        "layer_count": 1,
+        "palette_count": 3,
+        "tag_count": 0,
+        "status": "active",
+        "changed": true,
+        "changed_pixel_count": 6,
+        "changed_frame_ids": [
+          "frame_1"
+        ],
+        "changed_layer_ids": [
+          "layer_1"
+        ]
+      }
+    },
+    {
+      "name": "region-copy",
+      "status": 200,
+      "request": null,
+      "response": {
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "revision": 16,
+        "parent_revision": 15,
+        "content_hash": "57093a8a560c70fc6fed887765abaa0b097551c4b7666965e814c42c35c4eac2",
+        "title": "Interactive Pixel",
+        "width": 16,
+        "height": 16,
+        "frame_count": 1,
+        "layer_count": 1,
+        "palette_count": 3,
+        "tag_count": 0,
+        "status": "active",
+        "changed": true,
+        "changed_pixel_count": 6,
+        "changed_frame_ids": [
+          "frame_1"
+        ],
+        "changed_layer_ids": [
+          "layer_1"
+        ]
+      }
+    },
+    {
+      "name": "lock",
+      "status": 200,
+      "request": null,
+      "response": {
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "revision": 17,
+        "parent_revision": 16,
+        "content_hash": "0ec12ed6f09a4da108be9bce49eea2354c5de7e83f6c23afcee67f1df74f61f0",
+        "title": "Interactive Pixel",
+        "width": 16,
+        "height": 16,
+        "frame_count": 1,
+        "layer_count": 1,
+        "palette_count": 3,
+        "tag_count": 0,
+        "status": "active",
+        "changed": true,
+        "changed_pixel_count": 0,
+        "changed_frame_ids": [],
+        "changed_layer_ids": [
+          "layer_1"
+        ]
+      }
+    },
+    {
+      "name": "unlock",
+      "status": 200,
+      "request": null,
+      "response": {
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "revision": 18,
+        "parent_revision": 17,
+        "content_hash": "57093a8a560c70fc6fed887765abaa0b097551c4b7666965e814c42c35c4eac2",
+        "title": "Interactive Pixel",
+        "width": 16,
+        "height": 16,
+        "frame_count": 1,
+        "layer_count": 1,
+        "palette_count": 3,
+        "tag_count": 0,
+        "status": "active",
+        "changed": true,
+        "changed_pixel_count": 0,
+        "changed_frame_ids": [],
+        "changed_layer_ids": [
+          "layer_1"
+        ]
+      }
+    },
+    {
+      "name": "palette-name",
+      "status": 200,
+      "request": null,
+      "response": {
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "revision": 19,
+        "parent_revision": 18,
+        "content_hash": "37fc94e87fa8d3002cfd500ebfa9f309eda1e7b7d2b03b8796132b0a08d3b3ce",
+        "title": "Interactive Pixel",
+        "width": 16,
+        "height": 16,
+        "frame_count": 1,
+        "layer_count": 1,
+        "palette_count": 3,
+        "tag_count": 0,
+        "status": "active",
+        "changed": true,
+        "changed_pixel_count": 0,
+        "changed_frame_ids": [],
+        "changed_layer_ids": []
+      }
+    },
+    {
+      "name": "duplicate-frame",
+      "status": 200,
+      "request": null,
+      "response": {
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "revision": 20,
+        "parent_revision": 19,
+        "content_hash": "e44ff8a1467be476fc6a70ff9e681c510f541d6edd2a53974329f6da30d6941d",
+        "title": "Interactive Pixel",
+        "width": 16,
+        "height": 16,
+        "frame_count": 2,
+        "layer_count": 1,
+        "palette_count": 3,
+        "tag_count": 0,
+        "status": "active",
+        "changed": true,
+        "changed_pixel_count": 256,
+        "changed_frame_ids": [
+          "frame_0c6292e94b214c92aef0981512421251"
+        ],
+        "changed_layer_ids": [
+          "layer_1"
+        ]
+      }
+    },
+    {
+      "name": "duration",
+      "status": 200,
+      "request": null,
+      "response": {
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "revision": 21,
+        "parent_revision": 20,
+        "content_hash": "83311d87b7610691f13dbcda43f33296243bc578c480bbb20c45f4fd77c53c79",
+        "title": "Interactive Pixel",
+        "width": 16,
+        "height": 16,
+        "frame_count": 2,
+        "layer_count": 1,
+        "palette_count": 3,
+        "tag_count": 0,
+        "status": "active",
+        "changed": true,
+        "changed_pixel_count": 0,
+        "changed_frame_ids": [
+          "frame_0c6292e94b214c92aef0981512421251"
+        ],
+        "changed_layer_ids": []
+      }
+    },
+    {
+      "name": "keyboard-pixel",
+      "status": 200,
+      "request": null,
+      "response": {
+        "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+        "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+        "revision": 22,
+        "parent_revision": 21,
+        "content_hash": "5afc9125f135a8a59745f1246f9e249d235266b36c16f0ef61b9b274b3c5e5e9",
+        "title": "Interactive Pixel",
+        "width": 16,
+        "height": 16,
+        "frame_count": 2,
+        "layer_count": 1,
+        "palette_count": 3,
+        "tag_count": 0,
+        "status": "active",
+        "changed": true,
+        "changed_pixel_count": 1,
+        "changed_frame_ids": [
+          "frame_0c6292e94b214c92aef0981512421251"
+        ],
+        "changed_layer_ids": [
+          "layer_1"
+        ]
+      }
+    }
+  ],
+  "canvasCount": 4,
+  "styles": 1
+}

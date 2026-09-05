@@ -1,0 +1,24 @@
+{
+  "firstCanvasMs": 160,
+  "allFramesMs": 6270,
+  "frameReads": 200,
+  "statuses": [
+    200
+  ],
+  "lastPageButtons": 8,
+  "previewLabels": [
+    "动画预览 frame_1",
+    "动画预览 scale_1",
+    "动画预览 scale_2",
+    "动画预览 scale_3",
+    "动画预览 scale_4",
+    "动画预览 scale_5",
+    "动画预览 scale_6"
+  ],
+  "elements": 621,
+  "canvases": 10,
+  "longTasks": [
+    72
+  ],
+  "styles": 1
+}

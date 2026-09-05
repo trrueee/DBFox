@@ -1,0 +1,15 @@
+{
+  "disabled": {
+    "generation": 6,
+    "styles": 0,
+    "canvases": 0,
+    "state": "期望状态禁用当前运行未激活Selected digestcf43cb1f2853…Active digest—"
+  },
+  "active": {
+    "generation": 7,
+    "styles": 1,
+    "canvases": 0,
+    "state": "期望状态启用当前运行已激活Selected digestcf43cb1f2853…Active digestcf43cb1f2853…"
+  },
+  "heading": "Pixel independent example\n16 × 16 · 200 帧 · 1 层 · r11"
+}
