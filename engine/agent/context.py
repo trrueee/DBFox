@@ -41,7 +41,6 @@ from engine.agent.resource_refs import (
     ProjectResourceDescriptor,
     ProjectResourceProvider,
     discover_resources_from_providers,
-    load_resource_refs,
     resource_refs_for_run,
 )
 from engine.agent.references import (
@@ -706,7 +705,7 @@ class ContextAssembler:
                 else ""
             ),
             resource_refs=self._resource_refs_for_run(run),
-            recent_artifacts=self._recent_artifact_observations(str(run.session_id)),
+            recent_artifacts=self._recent_artifact_observations(run),
         )
         fragments: list[ContextFragment] = []
         for contributor_factory in self.contributors:
@@ -716,7 +715,7 @@ class ContextAssembler:
 
     def _recent_artifact_observations(
         self,
-        session_id: str,
+        run: AgentRun,
     ) -> tuple[ContextArtifactObservation, ...]:
         """Project bounded canonical Artifact evidence for neutral contributors."""
 
@@ -724,7 +723,7 @@ class ContextAssembler:
             self.session.execute(
                 select(AgentObservationRecord)
                 .where(
-                    AgentObservationRecord.session_id == session_id,
+                    AgentObservationRecord.session_id == run.session_id,
                     AgentObservationRecord.status == "succeeded",
                 )
                 .order_by(
@@ -753,40 +752,28 @@ class ContextAssembler:
         if not artifact_ids:
             return ()
 
-        rows = (
-            self.session.execute(
-                select(AgentArtifactRecord).where(
-                    AgentArtifactRecord.session_id == session_id,
-                    AgentArtifactRecord.id.in_(artifact_ids),
-                    AgentArtifactRecord.status == "completed",
-                )
-            )
-            .scalars()
-            .all()
-        )
-        by_id = {str(row.id): row for row in rows}
+        artifacts = ArtifactRepository(self.session)
         projected: list[ContextArtifactObservation] = []
         for observation, artifact_id in ordered_pairs:
-            row = by_id.get(artifact_id)
-            if row is None:
+            artifact = artifacts.available_artifact(
+                current_run_id=str(run.id), artifact_id=artifact_id,
+                session_id=str(run.session_id),
+            )
+            if artifact is None:
                 continue
-            payload = _json_object(row.payload_json)
+            payload = artifact.payload
             if byte_size(payload) > MAX_CONTEXT_ARTIFACT_PAYLOAD_BYTES:
                 continue
             projected.append(
                 ContextArtifactObservation(
                     observation_id=str(observation.id),
                     artifact_id=artifact_id,
-                    artifact_type=str(row.type),
-                    schema_version=int(row.schema_version or 1),
+                    artifact_type=artifact.type,
+                    schema_version=artifact.schema_version,
                     semantic_capabilities=tuple(
                         _json_strings(observation.semantic_capabilities_json)
                     ),
-                    resource_refs=(
-                        load_resource_refs(str(row.resource_refs_json))
-                        if getattr(row, "resource_refs_json", None)
-                        else ()
-                    ),
+                    resource_refs=artifact.resource_refs,
                     payload=payload,
                 )
             )
@@ -811,17 +798,29 @@ class ContextAssembler:
         ).scalar_one_or_none()
         result = _json_object(previous.result_json) if previous is not None else {}
         completion_disposition = str(result.get("completion_disposition") or "")
-        completed_with_result = bool(
-            previous is not None
-            and str(previous.status) == "completed"
-            and self.session.execute(
+        artifact_repository = ArtifactRepository(self.session)
+        available_results = []
+        if previous is not None:
+            candidates = self.session.execute(
                 select(AgentArtifactRecord.id)
                 .where(
                     AgentArtifactRecord.run_id == previous.id,
                     AgentArtifactRecord.status == "completed",
                 )
-                .limit(1)
-            ).scalar_one_or_none()
+                .order_by(AgentArtifactRecord.sequence, AgentArtifactRecord.created_at)
+                .limit(12)
+            ).scalars()
+            for artifact_id in candidates:
+                artifact = artifact_repository.available_artifact(
+                    current_run_id=str(run.id), artifact_id=str(artifact_id),
+                    session_id=str(run.session_id),
+                )
+                if artifact is not None:
+                    available_results.append(artifact)
+        completed_with_result = bool(
+            previous is not None
+            and str(previous.status) == "completed"
+            and available_results
         )
         resumable_partial = (
             previous is not None
@@ -870,20 +869,14 @@ class ContextAssembler:
             for _invocation, observation in settled
             for artifact_id in _json_strings(observation.artifact_ids_json)[:8]
         }
-        artifact_types = (
-            {
-                str(artifact.id): str(artifact.type)
-                for artifact in self.session.execute(
-                    select(AgentArtifactRecord).where(
-                        AgentArtifactRecord.id.in_(settled_artifact_ids)
-                    )
-                )
-                .scalars()
-                .all()
-            }
-            if settled_artifact_ids
-            else {}
-        )
+        artifact_types = {}
+        for artifact_id in settled_artifact_ids:
+            artifact = artifact_repository.available_artifact(
+                current_run_id=str(run.id), artifact_id=artifact_id,
+                session_id=str(run.session_id),
+            )
+            if artifact is not None:
+                artifact_types[artifact_id] = artifact.type
         tool_outcomes = [
             {
                 "tool": str(invocation.tool_name),
@@ -893,10 +886,15 @@ class ContextAssembler:
                     str(observation.error_code) if observation.error_code else None
                 ),
                 "retryable": bool(observation.retryable),
-                "artifact_ids": _json_strings(observation.artifact_ids_json)[:8],
-                "artifacts": [
-                    {"id": artifact_id, "type": artifact_types.get(artifact_id, "")}
+                "artifact_ids": [
+                    artifact_id
                     for artifact_id in _json_strings(observation.artifact_ids_json)[:8]
+                    if artifact_id in artifact_types
+                ],
+                "artifacts": [
+                    {"id": artifact_id, "type": artifact_types[artifact_id]}
+                    for artifact_id in _json_strings(observation.artifact_ids_json)[:8]
+                    if artifact_id in artifact_types
                 ],
             }
             for invocation, observation in settled
@@ -915,11 +913,16 @@ class ContextAssembler:
                         "id": str(step.get("id") or "")[:80],
                         "title": str(step.get("title") or "")[:240],
                         "status": str(step.get("status") or ""),
-                        "artifact_ids": _bounded_strings(
-                            step.get("artifact_ids"),
-                            limit=12,
-                            max_chars=128,
-                        ),
+                        "artifact_ids": [
+                            artifact_id
+                            for artifact_id in _bounded_strings(
+                                step.get("artifact_ids"), limit=12, max_chars=128,
+                            )
+                            if artifact_repository.available_artifact(
+                                current_run_id=str(run.id), artifact_id=artifact_id,
+                                session_id=str(run.session_id),
+                            ) is not None
+                        ],
                         "note": str(step.get("note") or "")[:500],
                     }
                     for step in _json_objects(plan_row.steps_json)[:12]
@@ -933,20 +936,7 @@ class ContextAssembler:
                 "title": str(artifact.title or "")[:240],
                 "summary": str(artifact.summary or "")[:500],
             }
-            for artifact in self.session.execute(
-                select(AgentArtifactRecord)
-                .where(
-                    AgentArtifactRecord.run_id == previous.id,
-                    AgentArtifactRecord.status == "completed",
-                )
-                .order_by(
-                    AgentArtifactRecord.sequence,
-                    AgentArtifactRecord.created_at,
-                )
-                .limit(12)
-            )
-            .scalars()
-            .all()
+            for artifact in available_results
         ]
         if resumable_partial:
             public_error_code: str | None = None
@@ -1171,25 +1161,13 @@ class ContextAssembler:
             )
             return []
 
-        rows = (
-            self.session.execute(
-                select(AgentArtifactRecord).where(
-                    AgentArtifactRecord.session_id == aggregate.id,
-                    AgentArtifactRecord.id.in_(selected_ids),
-                )
-            )
-            .scalars()
-            .all()
-        )
-        by_id = {str(row.id): row for row in rows}
         artifacts: list[ContextArtifact] = []
         artifact_repository = ArtifactRepository(self.session)
         for artifact_id in selected_ids:
-            row = by_id.get(artifact_id)
-            if row is None:
-                continue
-            payload = _json_object(row.payload_json)
-            artifact = artifact_repository.get(artifact_id)
+            artifact = artifact_repository.available_artifact(
+                current_run_id=str(admitted.run_id), artifact_id=artifact_id,
+                session_id=str(aggregate.id),
+            )
             if artifact is None:
                 continue
             representations = (
@@ -1197,17 +1175,17 @@ class ContextAssembler:
                 if self.artifact_representation_describer is not None
                 else ()
             )
-            descriptor = _context_artifact_descriptor(str(row.type), payload)
+            descriptor = _context_artifact_descriptor(artifact.type, artifact.payload)
             artifacts.append(
                 ContextArtifact(
-                    id=str(row.id),
-                    type=str(row.type),
-                    schema_version=int(row.schema_version or 1),
-                    version=int(row.version or 1),
-                    title=str(row.title),
-                    summary=str(row.summary) if row.summary else None,
+                    id=artifact.id,
+                    type=artifact.type,
+                    schema_version=artifact.schema_version,
+                    version=artifact.version,
+                    title=artifact.title,
+                    summary=artifact.summary,
                     descriptor=descriptor,
-                    payload_ref=str(row.payload_ref) if row.payload_ref else None,
+                    payload_ref=artifact.payload_ref,
                     provenance={
                         key: value
                         for key, value in artifact.provenance.items()

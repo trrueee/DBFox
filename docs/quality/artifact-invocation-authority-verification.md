@@ -21,6 +21,8 @@
 
 Dispatcher 与 PolicyGate 已共同调用 `get_for_run`，execute/reconcile/Representation 使用 `available_artifact`，因此在 repository 收紧现有入口即可闭合调用链，不新增透传层，也不用修改这些调用方。ToolSettlement 继续在一笔 metadata 事务中结算 Artifact、Observation 和 Invocation。
 
+后续独立 Scene 红队发现 ContextAssembler 的三个结构化投影未调用上述读取入口；这不改变来源证明规则，但需要修复调用方。当前已按[上下文可用性修复](artifact-context-availability-verification.md)统一校验选中工件、贡献者输入与上一轮结构化工件引用。本页原有实施范围和测试数量仅对应原始 Invocation 修复。
+
 没有修改模型、迁移、公共 API v2、前端 SDK、DLC 领域实现或锁文件。来源证明每次最多 256 节点、256 派生边、深度 64；超过预算明确拒绝。现有 16 ref、唯一 `(kind,id)` 及版本值类型保持不变。
 
 ## 生产者与历史数据限制
