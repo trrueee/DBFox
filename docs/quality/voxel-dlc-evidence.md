@@ -135,10 +135,20 @@ Director 建立了 suite-owned `verification/bench/capabilities/dbfox_voxel` 并
 工程合同初跑44通过/1失败：Voxel架构草案缺少规定的文档类型和最后核验页眉。补齐当前页眉后同一集合 **45 passed，3.71秒**，未改合同断言。此前用官方 `npm.cmd run build:visualization-vendor` 消除已知Windows CRLF生成资产偏差；这些非Voxel生成文件不纳入提交。
 
 候选提交前增加 owner `.gitattributes`，仅保护固定frontend/vendor原始字节不受Windows自动CRLF转换；工作树、Git index与checkout filter输出逐字节相同，749,590 bytes及SHA与provenance吻合。自有文件的staged diff check通过；完整diff check发现的21处空白均在固定Three.js生成bundle的GLSL字符串中，保持上游字节，不为格式检查改写已校验vendor。
-# 独立验证发现后的回执与导航修正
+## 独立验证发现后的回执与导航修正
 
 2026-09-05，独立 Verification 工作者复现了两项缺陷：Host 缺少可选导航方法时仍先创建持久化快照；合法 JSON 的损坏回执可伪造世界、项目、版本、hash 或方块数。Director 复现后者为 **5 failed / 1 passed**。
 
 修复复用 owner 内已有 `_snapshot`/`summary`，在唯一 `_receipt` 读取边界严格验证结果并核对请求身份、base/result 列、固定历史 revision 完整摘要、changed/parent 关系与耐久 chunk delta 数。不会使用后来 head 替代原操作结果，也不会重放几何。导航检查移到 ActionRun 之前。没有新依赖、表、兼容层或 Core 变更；现有 Pixel 的固定 revision 摘要检查提供了项目内参考，未导入其私有实现。
 
 Director 从本树执行 `python -m pytest verification/tests/system/test_voxel_independent.py verification/tests/system/test_voxel_dlc.py -q --tb=short`：**65 passed / 37.22秒**；完整 Voxel 前端 fixture **16 passed / 5.30秒**；8个后端模块 Mypy 通过。这些是修复者验证，独立复验继续进行。
+
+继续增加攻击后，合法正数 `changed_voxel_count=99` 仍可蒙混过关。现在从原 base/result 的实际 delta chunk 字节差核对该数值，复用 `_raw` 的完整性检查，不重新执行几何。35项独立故障测试由 Director 复跑 **35 passed / 12.58秒**，8模块 Mypy 通过。新增真实 executor 的两个 before-commit 测试初稿误将内部 `not_applied` 当成公开结果；独立验证员依据 Runtime 将其映射为 `failed / TOOL_RECONCILIATION_NOT_APPLIED` 的合同修正断言，原版本未变化、未重放断言保留。
+
+## 历史快照与三维选择补齐
+
+独立真实 Electron 首轮发现快照面板只有摘要，3D 无点击选择。补齐后，三维点击通过已固定 vendor 的 Three Raycaster/instanceId 选择一格，拖动保持 Orbit；选区不授予权限。该实现直接复用官方 [Raycaster](https://threejs.org/docs/pages/Raycaster.html)，没有另一套碰撞引擎。
+
+完整成果面板只从 Host `context.representations` 读取固定 `manifest/chunks`，检验表示类型、操作、版本和 fingerprint，分页完成后才显示。当前世界与历史快照共用 DLC 内只读 chunk 投影，历史读取不调用当前世界 operation。新增导出文件用标准 Blob/下载链接，卸载、停用时按 [URL.revokeObjectURL](https://developer.mozilla.org/en-US/docs/Web/API/URL/revokeObjectURL_static) 释放 URL；无共享 SDK、后端 operation、锁文件或 Core 变化。
+
+独立验证员报告同一 Runtime 当前 v9 与历史 v8 同时存在；历史3D显示1135表面块，隐藏Base后显示0但JSON下载仍包含全部图层。实际 Electron DownloadItem 完成34,256 bytes（验证层指定保存路径），磁盘逐chunk核对与剩余生命周期验证继续进行。新增8项固定表示/错误页/取消/全层导出测试使前端达到24项通过，typecheck通过。上述阶段结果不替代完整独立终审。

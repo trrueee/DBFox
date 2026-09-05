@@ -74,3 +74,11 @@ D:/Project/DBFox/.venv/Scripts/python.exe -m mypy --no-warn-unused-configs --fol
 ```
 
 Mypy与pyflakes通过。Director编写的14项生产RunLoop能力bench已通过，包含128³世界和64³狐狸神社十类持续修改；仍需独立验证员复核bench评分及真实桌面流程。上述证据不代替最终独立对抗审查。
+
+## 查看和保存固定快照
+
+三维视口点击方块会把选区缩到该格，并切到对应切片；拖动旋转，切片与选区工具继续通过正式 CAS 修改。选择和隐藏图层均为显示状态。
+
+保存快照后，成果工作台显示导出时的固定版本与全部可见图层；内联卡片可打开同一个成果。读取通过 Host Artifact Representation 的 `manifest/chunks`，不跟随当前世界 head。世界继续修改或被删除，不改变已保存的历史成果。
+
+“下载世界快照 JSON”包含 `schema_version:1`、`representation_type:"dbfox.voxel.world.v1"`、`artifact_id`、`manifest` 和完整 `chunks` 数组，每块为 `{layer_id,coord,hash,values}`。它是公开表示的离线文件，隐藏图层也会保存；文件不包含私有路径或数据库。面板卸载或DLC停用会取消在途读取并释放GPU与下载URL。当前不提供此文件的导入操作。

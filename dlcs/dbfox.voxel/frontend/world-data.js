@@ -1,5 +1,6 @@
 /** Read-only projections of the versioned backend chunk contract. */
 export const WORLD_KIND = "dbfox.voxel.world";
+export const REPRESENTATION = "dbfox.voxel.world.v1";
 export const CHUNK_SIZE = 16;
 export const MAX_INSTANCES = 60000;
 const MAX_CHUNKS = 8192;
@@ -32,6 +33,12 @@ export async function loadWorld(invoke, worldId, { previous = null, signal, onPr
   const world = validWorld(await invoke("worlds.get", { world_id: worldId }, signal), worldId);
   checkAbort(signal);
   if (world.status !== "active") throw new Error("这个世界已删除。可从历史快照查看已保存的内容。");
+  return loadChunks(world, (parameters) => invoke("worlds.chunks", { world_id: worldId, version: world.version, ...parameters }, signal),
+    { previous, signal, onProgress });
+}
+
+async function loadChunks(world, readPage, { previous = null, signal, onProgress } = {}) {
+  const worldId = world.world_id;
   if (previous?.world.world_id === worldId && previous.world.version === world.version) {
     if (previous.world.content_hash !== world.content_hash) throw new Error("同一版本的内容标识发生变化。");
     return previous;
@@ -46,9 +53,7 @@ export async function loadWorld(invoke, worldId, { previous = null, signal, onPr
   let count = 0;
   do {
     checkAbort(signal);
-    const page = await invoke("worlds.chunks", {
-      world_id: worldId, version: world.version, since_version: sinceVersion, limit: 16, after,
-    }, signal);
+    const page = await readPage({ since_version: sinceVersion, limit: 16, after });
     checkAbort(signal);
     if (page.world_id !== worldId || page.version !== world.version || page.since_version !== sinceVersion
       || !Array.isArray(page.chunks) || page.chunks.length > 16) throw new Error("分块页面的世界版本不一致。");
@@ -81,6 +86,42 @@ export async function loadWorld(invoke, worldId, { previous = null, signal, onPr
   for (const [key, chunk] of chunks) if (!layers.has(chunk.layer_id)) chunks.delete(key);
   checkAbort(signal);
   return { world, chunks };
+}
+
+/** The Artifact access owns authorization; only immutable representation pages enter here. */
+export async function loadSnapshot(access, artifactId, payload, signal) {
+  const read = async (operation, parameters) => {
+    checkAbort(signal);
+    const result = await access.read(artifactId, REPRESENTATION, { operation, parameters }, signal);
+    checkAbort(signal);
+    if (result.representation_type !== REPRESENTATION || result.representation_version !== 1
+      || result.operation !== operation || result.consistency !== "durable_snapshot"
+      || result.source_version !== String(payload.version) || result.source_fingerprint !== payload.content_hash) {
+      throw new Error("快照页面不属于这个固定版本。");
+    }
+    return result.payload;
+  };
+  const world = validWorld(await read("manifest", {}), payload.world_id);
+  if (world.project_id !== payload.project_id || world.version !== payload.version || world.content_hash !== payload.content_hash) {
+    throw new Error("快照清单的身份与版本不一致。");
+  }
+  const result = await loadChunks(world, (parameters) => read("chunks", parameters), { signal });
+  if (result.chunks.size !== world.chunk_count) throw new Error("快照分块不完整。");
+  return result;
+}
+
+/** Offline JSON file, assembled from the already verified immutable representation. */
+export function snapshotFile(snapshot, artifactId) {
+  const parts = [JSON.stringify({ schema_version: 1, representation_type: REPRESENTATION, artifact_id: artifactId,
+    manifest: snapshot.world }).slice(0, -1), ',"chunks":['];
+  let first = true;
+  for (const chunk of snapshot.chunks.values()) {
+    if (!first) parts.push(",");
+    parts.push(JSON.stringify({ ...chunk, values: Array.from(chunk.values) }));
+    first = false;
+  }
+  parts.push("]}");
+  return new Blob(parts, { type: "application/json" });
 }
 
 export function voxelAt(chunks, layerId, point) {

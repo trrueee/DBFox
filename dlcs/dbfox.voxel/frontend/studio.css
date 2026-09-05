@@ -89,6 +89,8 @@ details.voxel-section { display: block; }
 .voxel-connector { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
 .voxel-artifact { display: flex; align-items: start; gap: 12px; padding: 16px; }
 .voxel-artifact .voxel-button { margin-top: 10px; }
+.voxel-snapshot { padding: var(--space-4, 16px); overflow-y: auto; height: 100%; }
+.voxel-snapshot-layers { display: flex; flex-wrap: wrap; gap: 6px 18px; }
 @container (max-width: 620px) {
   .voxel-editor { grid-template-columns: minmax(0, 1fr); }
   .voxel-editor-main { position: static; }

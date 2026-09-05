@@ -308,10 +308,18 @@ class VoxelStore:
             if output.changed:
                 revision = connection.execute("SELECT operation_kind FROM world_revisions WHERE world_id=? AND version=?",
                     (output.world_id, result_version)).fetchone()
-                chunk_count = connection.execute("SELECT COUNT(*) FROM chunk_versions WHERE world_id=? AND version=?",
-                    (output.world_id, result_version)).fetchone()[0]
-                if revision is None or revision[0] != kind or chunk_count != output.changed_chunk_count:
+                changed_chunks = connection.execute("SELECT layer_id,cx,cy,cz FROM chunk_versions WHERE world_id=? AND version=?",
+                    (output.world_id, result_version)).fetchall()
+                if revision is None or revision[0] != kind or len(changed_chunks) != output.changed_chunk_count:
                     raise ValueError("Receipt differs from its durable changes")
+                if not isinstance(input, CreateInput):
+                    before = self._snapshot(connection, project_id, output.world_id, base_version)
+                    changed_voxels = 0
+                    for chunk in changed_chunks:
+                        key = (str(chunk[0]), int(chunk[1]), int(chunk[2]), int(chunk[3]))
+                        changed_voxels += sum(a != b for a, b in zip(self._raw(connection, before, key), self._raw(connection, snapshot, key)))
+                    if changed_voxels != output.changed_voxel_count:
+                        raise ValueError("Receipt voxel count differs from its durable changes")
             return output
         except ValueError as exc:
             raise VoxelError("CORRUPT_STATE", "The stored voxel operation receipt is invalid.", 409) from exc

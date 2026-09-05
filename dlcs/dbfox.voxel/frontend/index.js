@@ -1,5 +1,5 @@
 import { createVoxelViewport } from "./viewport.js";
-import { WORLD_KIND, axisIndex, planeAxes, loadWorld, composeVisible, voxelAt, slicePoint, strokeBounds, validateBounds } from "./world-data.js";
+import { WORLD_KIND, REPRESENTATION, axisIndex, planeAxes, loadWorld, loadSnapshot, snapshotFile, composeVisible, voxelAt, slicePoint, strokeBounds, validateBounds } from "./world-data.js";
 
 const DLC_ID = "dbfox.voxel";
 const VIEW = "dbfox.voxel.studio";
@@ -237,12 +237,14 @@ function SliceCanvas({ snapshot, activeLayer, brush, axis, slice, mode, disabled
       h("span", null, mode === "select" ? "拖动选择矩形；不会修改方块。" : mode === "erase" ? "拖动擦除矩形；释放后提交一次修改。" : "拖动填充矩形；释放后提交一次修改。")));
 }
 
-function Viewport({ projection, palette, selection, crop, viewportRef }) {
+function Viewport({ projection, palette, selection, crop, viewportRef, onPick }) {
   const element = React.useRef(null);
+  const pick = React.useRef(onPick);
+  pick.current = onPick;
   const [status, setStatus] = React.useState("正在启动三维预览…");
   const [state, setState] = React.useState("loading");
   React.useEffect(() => {
-    const viewport = createVoxelViewport(element.current, (text, kind) => { setStatus(text); setState(kind); });
+    const viewport = createVoxelViewport(element.current, (text, kind) => { setStatus(text); setState(kind); }, (point) => pick.current?.(point));
     viewportRef.current = viewport;
     return own(() => { viewport?.dispose(); viewportRef.current = null; });
   }, [viewportRef]);
@@ -255,7 +257,7 @@ function Viewport({ projection, palette, selection, crop, viewportRef }) {
     h("p", { className: `voxel-viewport-status voxel-viewport-status--${state}`, role: "status" }, status),
     h("div", { className: "voxel-view-actions" },
       h(Button, { onClick: () => viewportRef.current?.fit() }, "适合世界"),
-      h(Button, { onClick: () => viewportRef.current?.fit(selection) }, "聚焦选区")));
+      selection ? h(Button, { onClick: () => viewportRef.current?.fit(selection) }, "聚焦选区") : null));
 }
 
 function Studio({ projectId, worldId, context }) {
@@ -451,7 +453,12 @@ function Studio({ projectId, worldId, context }) {
     readError ? h("p", { className: "voxel-error", role: "alert" }, readError) : null,
     editError ? h("p", { className: "voxel-error", role: "alert" }, editError) : null,
     notice ? h("p", { className: "voxel-notice", role: "status" }, notice) : null,
-    h(Viewport, { projection, palette: doc.palette, selection, crop, viewportRef }),
+    h(Viewport, { projection, palette: doc.palette, selection, crop, viewportRef, onPick: (point) => {
+      if (disabled) return;
+      setSelection({ min: point, max: point.map((n) => n + 1) });
+      setSlice(point[axisIndex(axis)]);
+      setMode("select");
+    } }),
     h("label", { className: "voxel-check" }, h("input", { type: "checkbox", checked: crop, onChange: (event) => setCrop(event.target.checked) }), "仅预览选区"),
     h("div", { className: "voxel-editor" },
       h("div", { className: "voxel-editor-main" },
@@ -556,10 +563,74 @@ function Workbench({ view, context }) {
   return h(Studio, { key: `${projectId}:${worldId}`, projectId, worldId, context });
 }
 
-function SnapshotCard({ payload }) {
+function SnapshotViewer({ artifact, payload, context }) {
+  const [snapshot, setSnapshot] = React.useState(null);
+  const [projection, setProjection] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [attempt, setAttempt] = React.useState(0);
+  const [hidden, setHidden] = React.useState(new Set());
+  const viewportRef = React.useRef(null);
+  const downloadUrl = React.useRef(null);
+  const alive = React.useRef(true);
+  React.useEffect(() => {
+    alive.current = true;
+    return own(() => {
+      alive.current = false;
+      if (downloadUrl.current) { URL.revokeObjectURL(downloadUrl.current); downloadUrl.current = null; }
+    });
+  }, []);
+  React.useEffect(() => {
+    const controller = new AbortController();
+    setSnapshot(null); setProjection(null); setError(""); setHidden(new Set());
+    loadSnapshot(context.representations, artifact.id, payload, controller.signal).then((next) => {
+      if (alive.current && !controller.signal.aborted) setSnapshot(next);
+    }).catch((reason) => { if (alive.current && !controller.signal.aborted) setError(message(reason)); });
+    return own(() => controller.abort());
+  }, [artifact.id, payload.version, payload.content_hash, context.representations, attempt]);
+  React.useEffect(() => {
+    if (!snapshot) return;
+    const controller = new AbortController();
+    composeVisible(snapshot, hidden, controller.signal).then((value) => {
+      if (alive.current && !controller.signal.aborted) setProjection(value);
+    }).catch((reason) => { if (alive.current && !controller.signal.aborted) setError(message(reason)); });
+    return own(() => controller.abort());
+  }, [snapshot, hidden]);
+  function download() {
+    if (!alive.current || !snapshot) return;
+    try {
+      const blob = snapshotFile(snapshot, artifact.id);
+      if (downloadUrl.current) URL.revokeObjectURL(downloadUrl.current);
+      const url = URL.createObjectURL(blob); downloadUrl.current = url;
+      const anchor = document.createElement("a"); anchor.href = url;
+      anchor.download = `${payload.world_id}-v${payload.version}.voxel.json`;
+      anchor.click();
+      context.onToast("已交给浏览器下载，请选择保存位置。");
+    } catch (reason) { setError(message(reason)); }
+  }
+  return h("article", { className: "dbfox-voxel voxel-snapshot", "aria-label": "不可变体素快照" },
+    h("header", { className: "voxel-header" }, h(Icon), h("div", null,
+      h("h3", null, payload.title), h("p", { className: "voxel-muted" }, `不可变快照 · v${payload.version} · ${payload.size.join(" × ")}`))),
+    h("p", { className: "voxel-caption" }, "显示导出时的固定版本。图层开关只影响预览，下载包含全部图层。"),
+    h("div", { className: "voxel-toolbar" },
+      h(Button, { onClick: download, disabled: !snapshot }, "下载世界快照 JSON"),
+      h(Button, { onClick: () => openWorld(payload.project_id, payload) }, "打开当前世界")),
+    snapshot ? h(React.Fragment, null,
+      h(Viewport, { projection, palette: snapshot.world.document.palette, selection: null, crop: false, viewportRef }),
+      h("div", { className: "voxel-snapshot-layers", role: "group", "aria-label": "快照图层显示" },
+        ...snapshot.world.document.layers.map((layer) => h("label", { key: layer.id, className: "voxel-check" },
+          h("input", { type: "checkbox", checked: !hidden.has(layer.id), onChange: () => setHidden((values) => {
+            const next = new Set(values); if (next.has(layer.id)) next.delete(layer.id); else next.add(layer.id); return next;
+          }) }), layer.name)))) : !error ? h("p", { role: "status" }, "正在读取固定版本的完整快照…") : null,
+    error ? h("div", { className: "voxel-error", role: "alert" }, error,
+      h(Button, { onClick: () => setAttempt((value) => value + 1) }, "重新读取快照")) : null);
+}
+
+function SnapshotCard({ artifact, payload, context }) {
   React.useEffect(() => { notify(payload.project_id, payload.world_id); }, [payload.project_id, payload.world_id, payload.version]);
+  if (context.surface === "workspace") return h(SnapshotViewer, { key: artifact.id, artifact, payload, context });
   return h("article", { className: "dbfox-voxel voxel-artifact" }, h(Icon), h("div", null,
     h("strong", null, payload.title), h("p", { className: "voxel-muted" }, `不可变快照 · v${payload.version} · ${payload.size.join(" × ")}`),
+    context.openArtifact ? h(Button, { onClick: () => context.openArtifact(artifact) }, "查看导出快照") : null,
     h(Button, { onClick: () => openWorld(payload.project_id, payload) }, "打开当前世界")));
 }
 
@@ -587,13 +658,14 @@ export function register(extensionHost) {
   });
   host.artifactViews.register({ id: ARTIFACT, title: "体素世界快照", surfaces: ["inline", "workspace"],
     artifactTypes: [{ type: ARTIFACT, schemaVersions: [1] }],
+    representationTypes: [REPRESENTATION],
     parsePayload: (value) => {
       if (!value || typeof value.world_id !== "string" || typeof value.project_id !== "string" || typeof value.title !== "string"
         || !Number.isInteger(value.version) || value.version < 1 || !Array.isArray(value.size) || value.size.length !== 3)
         throw new Error("Invalid Voxel snapshot payload");
       return value;
     },
-    render: (_artifact, payload) => h(SnapshotCard, { payload }),
+    render: (artifact, payload, context) => h(SnapshotCard, { artifact, payload, context }),
   });
 }
 

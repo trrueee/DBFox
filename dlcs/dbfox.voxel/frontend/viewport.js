@@ -2,7 +2,7 @@ import * as THREE from "./vendor/three.js";
 import { surfaceInstances } from "./world-data.js";
 
 /** Owns its GPU resources. This view can always be reconstructed from chunks. */
-export function createVoxelViewport(element, report) {
+export function createVoxelViewport(element, report, onPick) {
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -14,6 +14,8 @@ export function createVoxelViewport(element, report) {
   let buildAbort = null;
   let frame = 0;
   let mesh = null;
+  let instancePositions = null;
+  let pointer = null;
   let framed = false;
   let worldSize = [64, 64, 64];
   const scene = new THREE.Scene();
@@ -26,7 +28,7 @@ export function createVoxelViewport(element, report) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setClearColor(0x000000, 0);
   renderer.domElement.tabIndex = 0;
-  renderer.domElement.setAttribute("aria-label", "体素三维视口：拖动旋转、滚轮缩放、右键平移，方向键平移");
+  renderer.domElement.setAttribute("aria-label", "体素三维视口：点击选择方块，拖动旋转、滚轮缩放、右键平移，方向键平移");
   controls.listenToKeyEvents(renderer.domElement);
   element.appendChild(renderer.domElement);
   const cube = new THREE.BoxGeometry(1, 1, 1);
@@ -84,7 +86,33 @@ export function createVoxelViewport(element, report) {
     report("三维预览已恢复。", "ready");
     draw();
   }
+  function pointerDown(event) {
+    if (event.button === 0) pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, mesh, moved: false };
+    else pointer = null;
+  }
+  function pointerMove(event) {
+    if (pointer && Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) > 4) pointer.moved = true;
+  }
+  function pointerUp(event) {
+    const started = pointer;
+    pointer = null;
+    if (!started || started.id !== event.pointerId || started.moved || started.mesh !== mesh
+      || !mesh || !instancePositions || !onPick || disposed) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const raycaster = new THREE.Raycaster();
+    camera.updateMatrixWorld(); mesh.updateMatrixWorld();
+    raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1,
+      1 - (event.clientY - rect.top) / rect.height * 2), camera);
+    const hit = raycaster.intersectObject(mesh, false)[0];
+    if (hit?.instanceId != null) onPick(Array.from(instancePositions.subarray(hit.instanceId * 3, hit.instanceId * 3 + 3)));
+  }
+  function pointerCancel() { pointer = null; }
   controls.addEventListener("change", draw);
+  renderer.domElement.addEventListener("pointerdown", pointerDown);
+  renderer.domElement.addEventListener("pointermove", pointerMove);
+  renderer.domElement.addEventListener("pointerup", pointerUp);
+  renderer.domElement.addEventListener("pointercancel", pointerCancel);
   renderer.domElement.addEventListener("webglcontextlost", lost);
   renderer.domElement.addEventListener("webglcontextrestored", restored);
   const observer = new ResizeObserver(resize);
@@ -130,6 +158,7 @@ export function createVoxelViewport(element, report) {
         next.computeBoundingSphere();
         if (mesh) { scene.remove(mesh); mesh.dispose(); }
         mesh = next;
+        instancePositions = instances.positions;
         scene.add(mesh);
         worldSize = composite.size;
         worldBox.box.max.set(...worldSize);
@@ -152,6 +181,11 @@ export function createVoxelViewport(element, report) {
       observer.disconnect();
       controls.removeEventListener("change", draw);
       controls.dispose();
+      renderer.domElement.removeEventListener("pointerdown", pointerDown);
+      renderer.domElement.removeEventListener("pointermove", pointerMove);
+      renderer.domElement.removeEventListener("pointerup", pointerUp);
+      renderer.domElement.removeEventListener("pointercancel", pointerCancel);
+      pointer = null; instancePositions = null;
       renderer.domElement.removeEventListener("webglcontextlost", lost);
       renderer.domElement.removeEventListener("webglcontextrestored", restored);
       mesh?.dispose();
