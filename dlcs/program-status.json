@@ -142,7 +142,7 @@
         "dbfox.cad-scene"
       ],
       "detail_path": "dlcs/dbfox.scene/program-status.json",
-      "phase": "independent_adversarial_review",
+      "phase": "independent_adversarial_review_interrupted_by_usage_limit",
       "role_history": [
         {
           "agent": "/root/scene_lead/domain_architect",
@@ -165,7 +165,19 @@
       "verification_agent": "/root/voxel_lead/domain_architect",
       "observation_fix": "Explicit ToolObservationProjection completed; author backend30 and UI12 passed; independent production suite22 and CLI13/13 passed.",
       "workbench_evidence": "Independent actual Electron WebGL editing, Artifact Dock navigation, test-controlled native-save-path downloads, late scope cancellation, deactivate/reactivate cleanup and persisted state all passed.",
-      "adversarial_reviewer": "/root/voxel_lead/domain_architect"
+      "adversarial_reviewer": "/root/voxel_lead/domain_architect",
+      "adversarial_progress": {
+        "product": "32 independent adversarial cases passed in 58.14s after strict scalar and durable row/source consistency fixes",
+        "context": "Director reran all31 Artifact attacks after Context and canonical reference fixes:31 passed in68.54s; independent final verdict still pending.",
+        "author_product": "34 backend passed in 12.11s; latest head and missing-parent cases included",
+        "packaging": "Byte-preserving .gitattributes added for generated vendor and primitive bytes; hashes unchanged",
+        "integrated": false,
+        "director_combined": "117 passed /5 failed in171.84s:3 actual invalid Host Object kind failures fixed at emitter;2 recovery-outcome fixture assumptions changed to bounded_partial without removing leak assertions;other91 tests passed.",
+        "host_reference_fix": "00d43bfe / Scene c4d24b25",
+        "engineering": "45 passed in3.25s",
+        "candidate": "50ccf2b7 (84 owned files)"
+      },
+      "candidate_commit": "50ccf2b7"
     },
     {
       "dlc_id": "dbfox.voxel",
@@ -259,7 +271,9 @@
       "worktree": "D:/Project/DBFox-worktrees/creative-voxel",
       "integrated": false,
       "phase": "independent_bench_review_production_workbench_and_red_team_pending",
-      "workbench_evidence": "16 fixture tests passed; real GPU UI exercised with memory-operation fixture; independent full production navigation remains pending."
+      "workbench_evidence": "16 fixture tests passed; real GPU UI exercised with memory-operation fixture; independent full production navigation remains pending.",
+      "candidate_commit": "0a908b00",
+      "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/voxel-independent-verification-handoff.md"
     },
     {
       "dlc_id": "dbfox.shader",
@@ -457,17 +471,27 @@
         }
       },
       "next_steps": [
-        "Director schedules Backend Engineer against accepted independent architecture",
-        "Implement canonical store and Tools plus activation compute executor",
-        "Implement editable Workbench",
-        "Verify real production Tool loop and benchmarks",
-        "Independent adversarial review and resolve confirmed high severity findings",
+        "Complete Backend candidate and exact owned commit",
+        "Formal role transition to Shader Workbench Engineer using full handoff",
+        "Verify real production GPU Tool loop and capability benchmark/stress",
+        "Independent adversarial review and resolve confirmed findings",
         "Submit integration_candidate evidence to Director"
       ],
       "completion_claimed": false,
       "integrated_by": null,
-      "phase": "backend_implementation",
-      "backend_agent": "/root/scene_lead/domain_architect"
+      "phase": "workbench_pending_usage",
+      "backend_agent": "/root/scene_lead/domain_architect",
+      "backend_progress": {
+        "status": "author_verified_candidate_saved",
+        "reported_cases": 44,
+        "evidence": "Signed lifecycle, real ActionRun export and nine Tool same-Run edit/inspect/conflict/undo/diff/export chain; simulated compute protocol only",
+        "stable_contract": "dlcs/dbfox.shader/contracts.schema.json",
+        "final_author_checks": "44 passed in12.29s;10 own modules mypy,pyflakes and links passed;PyPNG working/index/checkout hash exact",
+        "commit": "f6dde52a (22 owned files)",
+        "gpu": "Protocol tests only; no real compute executor or Workbench delivered"
+      },
+      "backend_commit": "f6dde52a",
+      "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/shader-workbench-handoff.md"
     },
     {
       "dlc_id": "dbfox.pixel",
@@ -510,10 +534,20 @@
       "detail_path": "docs/quality/pixel-dlc-evidence.md",
       "worktree": "D:/Project/DBFox-worktrees/creative-pixel",
       "integrated": false,
-      "phase": "workbench_implementation",
+      "phase": "independent_verification_pending_usage",
       "backend_agent": "/root/pixel_backend",
       "backend_commit": "113f5334f12acee966c52182c62e56f9e4033b1b",
-      "workbench_agent": "/root/pixel_workbench"
+      "workbench_agent": "/root/pixel_workbench",
+      "workbench_progress": {
+        "status": "author_verified_candidate_saved",
+        "frontend": "Full Canvas tools, palette/layer/frame/tag management, transforms, history, playback, immutable exports and scoped navigation",
+        "tests": "27 fixtures passed in6.64s on Director rerun; author typecheck/lint/build passed",
+        "full_signed_package": "Director replaced old frontend stubs with real3-file frontend;33 backend/signature/RunLoop tests passed in11.48s;package contents checked byte-for-byte",
+        "browser": "Author real Canvas/CSP/pointer/layout proof uses controlled transport;production Electron,12-case benchmark/stress and independent redteam remain pending",
+        "commit": "5af763d0"
+      },
+      "workbench_commit": "5af763d0",
+      "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/pixel-independent-verification-handoff.md"
     },
     {
       "dlc_id": "dbfox.game",
@@ -993,11 +1027,79 @@
         "seconds": 11.2
       },
       "scene_full": "Independent bench13 plus fault9: 22 passed in 33.73s; unified CLI13/13; separate adversarial review pending"
+    },
+    {
+      "id": "artifact-context-availability",
+      "status": "director_verified_independent_review_interrupted",
+      "integrated": false,
+      "implementation_agent": "/root",
+      "review_agent": "/root/voxel_lead/domain_architect",
+      "commit": "078cee32",
+      "root_commit": "e24d2423",
+      "worktree": "D:/Project/DBFox-worktrees/creative-artifact-authority",
+      "evidence": "docs/quality/artifact-context-availability-verification.md",
+      "finding": "Selected artifacts, recent contributor payloads and previous outcome structured references bypassed the existing available_artifact proof.",
+      "solution": "Use existing availability proof at all three context projection boundaries; no authority/SDK/domain/migration changes.",
+      "verification": {
+        "context": "72 passed",
+        "agent_core": "314 passed, 2 deselected in 17.94s",
+        "data_visualization_and_scope": "31 passed in 16.99s, including 5 actual Data to Visualization RunLoop cases",
+        "engineering": "45 passed in 3.18s",
+        "mypy_pyflakes": "passed",
+        "root_core_system": "886 passed, 137 deselected in 118.88s",
+        "scene_artifact_adversarial": "Director continuation31 passed in68.54s;independent review pending"
+      },
+      "consumers": [
+        "dbfox.scene",
+        "dbfox.voxel",
+        "dbfox.pixel",
+        "dbfox.shader"
+      ]
+    },
+    {
+      "id": "artifact-dock-copy",
+      "status": "verified",
+      "integrated": true,
+      "commit": "d1d6bc29",
+      "root_commit": "67468a07",
+      "finding": "139 replacement characters in Artifact Dock source made loading, empty states and reference action unreadable.",
+      "change": "Restored nine Chinese strings; reference behavior unchanged.",
+      "verification": "60 navigation, WorkspaceDock and ArtifactViewHost tests passed in 11.41s"
+    },
+    {
+      "id": "artifact-reference-admission",
+      "status": "director_verified_independent_review_interrupted",
+      "integrated": false,
+      "commit": "00d43bfe",
+      "root_commit": "96403e71",
+      "finding": "Artifact Dock emitted object.kind=artifact that canonical ConversationInputReference rejects;attached user message could not be admitted.",
+      "solution": "Use existing artifactId without a duplicate invalid Object; no schema/authority/SDK change.",
+      "verification": "68 frontend regressions and typecheck passed;31 Scene Artifact attacks passed on Director continuation.",
+      "evidence": "docs/quality/artifact-reference-admission.md"
     }
   ],
   "integration_verification": {
-    "core_system": "822 passed, 137 deselected in 120.70s",
-    "engineering": "45 passed in 3.17s",
-    "status_file_location": "dlcs/program-status.json; docs naming contract intentionally retained"
+    "core_system": "886 passed, 137 deselected in 118.88s after structured Context availability correction",
+    "engineering": "45 passed in3.19s;Scene candidate45 passed in3.25s",
+    "status_file_location": "dlcs/program-status.json; docs naming contract intentionally retained",
+    "latest_frontend": "68 targeted navigation/Dock/ArtifactView/ConversationStore regressions passed;typecheck passed"
+  },
+  "execution_status": {
+    "state": "blocked_usage_limit",
+    "date": "2026-09-05",
+    "scope": "Required multi-agent implementation and independent final review",
+    "reported_by": [
+      "/root/pixel_workbench",
+      "/root/scene_lead/domain_architect",
+      "/root/voxel_lead/domain_architect"
+    ],
+    "message": "All three workers stopped with account usage limit; Director completed available local checks and saved candidate commits. No DLC final integration gate was waived.",
+    "next_roles": [
+      "Resume Scene independent Adversarial Reviewer",
+      "Assign new independent Voxel Verification Engineer",
+      "Transition completed Shader Backend Engineer to Shader Workbench Engineer",
+      "Assign independent Pixel Verification Engineer after a slot is available"
+    ],
+    "handoffs_directory": "D:/Project/DBFox-worktrees/creative-program"
   }
 }
