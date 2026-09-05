@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
+import { build, version as esbuildVersion } from "esbuild";
 import { createPrimitive, PRIMITIVE_NAMES } from "./frontend/vendor-src/three.js";
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -11,6 +11,13 @@ const vendorRoot = join(root, "frontend", "vendor");
 const backendRoot = join(root, "backend");
 const threePackage = JSON.parse(await readFile(join(root, "node_modules", "three", "package.json"), "utf8"));
 if (threePackage.version !== "0.185.1") throw new Error("Run npm ci for the locked Three version");
+if (esbuildVersion !== "0.28.2") throw new Error("Run npm ci for the locked esbuild version");
+const controlsPath = join(root, "node_modules", "three", "examples", "jsm", "controls", "OrbitControls.js");
+const originalControls = await readFile(controlsPath, "utf8");
+const before = "document.removeEventListener( 'keydown', this._interceptControlDown, { capture: true } );";
+const after = before + "\n\t\tdocument.removeEventListener( 'keyup', this._interceptControlUp, { capture: true } );\n\t\tthis._controlActive = false;";
+if (originalControls.split(before).length !== 2) throw new Error("OrbitControls cleanup patch source changed");
+const patchedControls = originalControls.replace(before, after);
 
 await mkdir(join(vendorRoot, "licenses"), { recursive: true });
 await mkdir(backendRoot, { recursive: true });
@@ -24,6 +31,15 @@ await build({
   minify: true,
   legalComments: "eof",
   absWorkingDir: root,
+  plugins: [{
+    name: "orbit-controls-disconnect",
+    setup(builder) {
+      builder.onLoad({ filter: /[/\\]controls[/\\]OrbitControls\.js$/ }, async (args) => {
+        if (args.path !== controlsPath) throw new Error("Unexpected OrbitControls build source");
+        return { contents: patchedControls, loader: "js", resolveDir: dirname(controlsPath) };
+      });
+    },
+  }],
 });
 await copyFile(join(root, "node_modules", "three", "LICENSE"), join(vendorRoot, "licenses", "three-MIT.txt"));
 
@@ -64,5 +80,14 @@ await writeFile(join(vendorRoot, "provenance.json"), `${JSON.stringify({
   bundle_bytes: bundle.length,
   primitive_sha256: createHash("sha256").update(geometryBytes).digest("hex"),
   primitive_bytes: geometryBytes.length,
+  build: { script: "dlcs/dbfox.scene/build.mjs", esbuild: esbuildVersion, target: "es2022" },
+  patches: [{
+    source: "examples/jsm/controls/OrbitControls.js",
+    original_sha256: createHash("sha256").update(originalControls).digest("hex"),
+    patched_sha256: createHash("sha256").update(patchedControls).digest("hex"),
+    reason: "Disconnect must release the Control-held keyup interceptor as well as keydown.",
+    owner: "dbfox.scene",
+    removal: "Upgrade to fixed upstream OrbitControls and remove the guarded build patch after native listener and React DOM lifecycle regressions pass.",
+  }],
 }, null, 2)}\n`, "utf8");
 console.log(`Built Scene vendor (${bundle.length} bytes) and ${PRIMITIVE_NAMES.length} official primitives (${geometryBytes.length} bytes).`);

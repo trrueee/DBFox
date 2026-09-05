@@ -305,7 +305,7 @@ function Viewport(props) {
   const current = React.useRef(props);
   current.current = props;
   const [failure, setFailure] = React.useState("");
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!props.visible) return undefined;
     let stopped = false;
     let view;

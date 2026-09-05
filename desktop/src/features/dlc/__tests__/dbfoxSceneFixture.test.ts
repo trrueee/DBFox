@@ -31,7 +31,8 @@ async function fixture(options: { objects?: Node[]; reject?: boolean; deferred?:
   const openArtifact = vi.fn(async () => undefined);
   const view = { update: vi.fn(), select: vi.fn(), setEnabled: vi.fn(), setMode: vi.fn(), setCamera: vi.fn(), focus: vi.fn(), dispose: vi.fn() };
   let callbacks: Record<string, Callback> = {};
-  vi.stubGlobal("__sceneViewport", (_element: HTMLElement, values: Record<string, Callback>) => { callbacks = values; return view; });
+  let viewportElement: HTMLElement | undefined;
+  vi.stubGlobal("__sceneViewport", (element: HTMLElement, values: Record<string, Callback>) => { viewportElement = element; callbacks = values; return view; });
   const summary = () => ({ id: "scene-1", project_id: "p1", title: "Test Scene", version, content_hash: "a".repeat(64), object_count: objects.length, material_count: 0 });
   const invoke = vi.fn(async (name: string, input: Input, signal?: AbortSignal): Promise<unknown> => {
     signal?.throwIfAborted();
@@ -81,12 +82,20 @@ async function fixture(options: { objects?: Node[]; reject?: boolean; deferred?:
     { activeProjectId: "p1", activeConversationId: null, showToast: vi.fn(), workbenchScopeId: "scope-1", onAsk }));
   await waitFor(() => expect(view.update).toHaveBeenCalled());
   await waitFor(() => expect((screen.getByRole("button", { name: "导出工件" }) as HTMLButtonElement).disabled).toBe(false));
-  return { invoke, view, callbacks: () => callbacks, onAsk, openArtifact, staged, module, rendered,
+  return { invoke, view, callbacks: () => callbacks, viewportElement: () => viewportElement, onAsk, openArtifact, staged, module, rendered,
     changeHead: (next: number, nodes = objects) => { version = next; objects = nodes; },
     reject: (next: boolean) => { reject = next; }, release: () => release?.() };
 }
 
 describe("dbfox.scene production frontend fixture", () => {
+  it("disconnects viewport controls before React detaches their DOM root", async () => {
+    const target = await fixture();
+    let connectedDuringDispose = false;
+    target.view.dispose.mockImplementation(() => { connectedDuringDispose = target.viewportElement()?.isConnected === true; });
+    target.rendered.unmount();
+    expect(target.view.dispose).toHaveBeenCalledTimes(1);
+    expect(connectedDuringDispose).toBe(true);
+  });
   it("replaces its stylesheet on same-module registration and removes it on deactivate", async () => {
     const { module } = await fixture({ styles: true });
     const selector = 'link[data-dbfox-dlc="dbfox.scene"]';
@@ -236,7 +245,7 @@ describe("dbfox.scene production frontend fixture", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:scene-export");
   });
 
-  it("applies real Three hierarchy transforms, retains mesh/geometry on edits and disposes GPU resources", async () => {
+  it.each([false, true])("applies real Three hierarchy and releases native controls (Control held: %s)", async (controlHeld) => {
     type RenderNode = { matrixWorld: { elements: number[] }; geometry: { dispose(): void }; material: { dispose(): void }; getObjectByName(name: string): RenderNode };
     const frames: FrameRequestCallback[] = [];
     vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => { frames.push(callback); return frames.length; });
@@ -252,7 +261,10 @@ describe("dbfox.scene production frontend fixture", () => {
     const module = await import(/* @vite-ignore */ viewportUrl) as { createViewport(container: HTMLElement, callbacks: Record<string, Callback>): { update(snapshot: unknown): void; select(id: string): void; dispose(): void } };
     const container = document.createElement("div");
     document.body.append(container);
+    const added = vi.spyOn(document, "addEventListener");
+    const removed = vi.spyOn(document, "removeEventListener");
     const view = module.createViewport(container, { onSelect: vi.fn(), onDragEnd: vi.fn(), onError: vi.fn() });
+    if (controlHeld) document.dispatchEvent(new KeyboardEvent("keydown", { key: "Control", code: "ControlLeft", ctrlKey: true }));
     const snapshot = { scene: { id: "scene-1", version: 1 }, settings: { background: [0.02, 0.03, 0.04] },
       objects: [{ ...cube("parent"), kind: "group", position: [4, 0, 0], rotation: [0, Math.PI / 2, 0] }, { ...cube(), parent_id: "parent", position: [1, 0, 0] }],
       geometries: [{ id: "geometry.box", primitive: "box" }], materials: [] };
@@ -279,6 +291,11 @@ describe("dbfox.scene production frontend fixture", () => {
     expect(renderer.dispose).toHaveBeenCalledTimes(1);
     expect(disconnected).toHaveBeenCalledTimes(1);
     expect(container.children).toHaveLength(0);
+    const keyboardListeners = added.mock.calls.filter(([type]) => type === "keydown" || type === "keyup");
+    expect(keyboardListeners.length).toBe(controlHeld ? 2 : 1);
+    for (const [type, listener] of keyboardListeners) {
+      expect(removed.mock.calls.some(([removedType, removedListener]) => removedType === type && removedListener === listener)).toBe(true);
+    }
     container.remove();
   });
 });
