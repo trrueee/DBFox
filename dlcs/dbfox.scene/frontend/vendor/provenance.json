@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "package": "three",
+  "version": "0.185.1",
+  "license": "MIT",
+  "source": "https://github.com/mrdoob/three.js",
+  "bundle_sha256": "57a411fb2d2f3738e39fce9f6557879116f28c3417d2d25e386bf6a442d26074",
+  "bundle_bytes": 772431,
+  "primitive_sha256": "5df8bea98c0554098cc85693d969e3406e17f378d13c7ff3503af46bb293a92b",
+  "primitive_bytes": 120012
+}

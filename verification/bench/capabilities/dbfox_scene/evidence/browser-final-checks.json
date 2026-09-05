@@ -1,0 +1,124 @@
+{
+  "date": "2026-09-05",
+  "method": "Actual isolated Electron Main/Preload/EngineSupervisor, Vite, signed DLC, registered typed operations/ActionRun/Representation. Playwright controls real UI. No model calls, no fake Renderer or domain writes.",
+  "package_digest": "21ceabee97f28f37d63627d8445ddf93747e6fa554e08f2d73166bef09e6ccc7",
+  "scene_id": "91df7fd0cf114c53abd368d88950cc9e",
+  "scene_version": 2,
+  "successful_navigation_download": {
+    "artifact_id": "artifact_05a7954fdd4a4c09935ba274f540ad35",
+    "run_id": "run_2f99dcde36814270b6e4d0202901fb5b",
+    "session_id": "3b5063c5-0b01-4d46-b5f1-ddf7d329c824",
+    "actual_artifact_dock_visible": true,
+    "representation_post_status": [
+      200,
+      200
+    ],
+    "exports": [
+      {
+        "file": "browser-download/interactive-scene.glb",
+        "sha256": "f2ee6a603193842eecbadd880e00beca6d8f87fdd35c1a9ab6afdd5a5b099505",
+        "native_done": {
+          "phase": "done",
+          "time": 1788579560742,
+          "filename": "scene-91df7fd0cf114c53abd368d88950cc9e-v2.glb",
+          "state": "completed",
+          "savePath": "D:\\Project\\DBFox-worktrees\\creative-scene\\output\\playwright\\interactive-scene.glb",
+          "totalBytes": 2164,
+          "receivedBytes": 2164,
+          "userGesture": true,
+          "defaultPrevented": false,
+          "boundary": "controlled-native-save-path"
+        },
+        "khronos_validator": {
+          "version": "2.0.0-dev.3.10",
+          "errors": 0,
+          "warnings": 0,
+          "infos": 0
+        },
+        "renderer_blob_sha256_matches": true
+      },
+      {
+        "file": "browser-download/interactive-scene.gltf",
+        "sha256": "ffc26118b016a56cc5a0c258c25d60ad41bb2804af4277e4806dd3c8795e6e88",
+        "native_done": {
+          "phase": "done",
+          "time": 1788579560837,
+          "filename": "scene-91df7fd0cf114c53abd368d88950cc9e-v2.gltf",
+          "state": "completed",
+          "savePath": "D:\\Project\\DBFox-worktrees\\creative-scene\\output\\playwright\\interactive-scene.gltf",
+          "totalBytes": 2421,
+          "receivedBytes": 2421,
+          "userGesture": true,
+          "defaultPrevented": false,
+          "boundary": "controlled-native-save-path"
+        },
+        "khronos_validator": {
+          "version": "2.0.0-dev.3.10",
+          "errors": 0,
+          "warnings": 0,
+          "infos": 0
+        },
+        "renderer_blob_sha256_matches": true
+      }
+    ]
+  },
+  "download_boundary": {
+    "cdp": "default",
+    "native_save_path": "Verification-only will-download item.setSavePath; fixed filenames under isolated workspace output/playwright; Electron receives and writes bytes. Listener removed after two Native done events.",
+    "native_save_dialog_clicks_automated": false,
+    "production_main_or_csp_modified": false,
+    "blob_written_directly_to_disk": false
+  },
+  "initial_download_diagnostics": {
+    "cdp_allow": "Representation 200, Blob fetch 200 and correct digest, Native item received full bytes but done interrupted with empty savePath. CDP reported canceled. This was not counted as success.",
+    "cdp_default_without_save_path": "Native item received full bytes, remained progressing with empty savePath awaiting native save selection; later canceled when isolated app closed."
+  },
+  "scope_cancellation": {
+    "method": "Hold delivery of real Session GET 200 using route.fetch, switch UI project, release unchanged response, return to original project; finally unroute. Read-only existing store selectors inspect tabs.",
+    "artifact_id": "artifact_15025b7146d64fa88f71f843d7e83baa",
+    "run_id": "run_972f0a1ebf9b4f2f9ed00a3f9557c6b5",
+    "session_id": "f93f06b6-b74a-44df-b913-1bd7555e631f",
+    "original_session_status": 200,
+    "after_switch": {
+      "project": "default-project",
+      "has_artifact": false
+    },
+    "after_return": {
+      "project": "scene-browser-project",
+      "has_artifact": false
+    }
+  },
+  "lifecycle": {
+    "method": "Official DLC settings disable, explicit Engine restart, reenable and restart. No internal store mutations.",
+    "disabled": {
+      "stylesheet_count": 0,
+      "canvas_count": 0,
+      "scene_workbench_count": 0
+    },
+    "reenabled": {
+      "stylesheet_count": 1,
+      "canvas_count": 1,
+      "qa_cube_preserved": true
+    },
+    "transient_restart_observation": "One /dlcs/activation connection refused while the previous Sidecar port closed; subsequent fresh reload recovered.",
+    "fresh_reload_console": {
+      "errors": 0,
+      "warnings": 1
+    }
+  },
+  "cleanup": {
+    "own_electron_and_launcher_closed": true,
+    "last_launcher_exit": 0,
+    "playwright_named_session_detached": true,
+    "debugger_detached": true,
+    "delayed_response_route_removed": true,
+    "save_path_hook_removed_and_app_restarted_without_option": true,
+    "external_runtime_retained": true
+  },
+  "limitations": [
+    "Scripted capability bench proves mechanism and domain outcomes, not actual LLM creativity.",
+    "Native Save dialog clicks were not automated.",
+    "10,000-node full load still used 102 pages and 19.60 seconds on this machine.",
+    "Adversarial review is a separate unfinished stage."
+  ]
+}

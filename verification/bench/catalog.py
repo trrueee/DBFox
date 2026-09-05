@@ -19,6 +19,8 @@ from verification.bench.capabilities.dbfox_data.direct.runtime import (
 from verification.bench.capabilities.dbfox_data.direct.schema import (
     load_cases as load_data_direct_cases,
 )
+from verification.bench.capabilities.dbfox_scene.runtime import run_scene_bench
+from verification.bench.capabilities.dbfox_scene.schema import load_cases as load_scene_cases
 from verification.bench.composition.data_workspace.runtime import (
     run_data_workspace_bench,
 )
@@ -55,6 +57,11 @@ class SuiteRegistration:
 
 
 SUITES: dict[str, SuiteRegistration] = {
+    "capability.dbfox-scene.scripted": SuiteRegistration(
+        HERE / "capabilities" / "dbfox_scene" / "suite.json",
+        _count(load_scene_cases),
+        runner=run_scene_bench,
+    ),
     "core.loop.scripted": SuiteRegistration(
         HERE / "core" / "loop" / "suite.json",
         _count(load_loop_cases),

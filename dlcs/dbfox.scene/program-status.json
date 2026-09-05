@@ -1,0 +1,171 @@
+{
+  "dlc_id": "dbfox.scene",
+  "status": "implementation",
+  "branch": "creative/scene",
+  "lead": "/root/scene_lead",
+  "canonical_model": "SceneDocument schema 1",
+  "resource_kinds": [
+    "dbfox.scene.library",
+    "dbfox.scene.document"
+  ],
+  "tools": [
+    "scene_create",
+    "scene_inspect",
+    "object_create",
+    "object_duplicate",
+    "object_transform",
+    "object_reparent",
+    "object_delete",
+    "object_update",
+    "material_create",
+    "material_update",
+    "material_assign",
+    "light_create",
+    "light_update",
+    "camera_create",
+    "camera_update",
+    "scene_settings_update",
+    "scene_undo",
+    "scene_diff",
+    "scene_export"
+  ],
+  "artifacts": [
+    "dbfox.scene.revision"
+  ],
+  "representations": [
+    "dbfox.scene.document.v1"
+  ],
+  "frontend_views": [
+    "dbfox.scene.workbench",
+    "dbfox.scene.revision-view"
+  ],
+  "tests": [
+    {
+      "command": "python -m pytest verification/tests/system/test_scene_dlc.py -q --tb=short",
+      "result": "30 passed in 10.68s; includes observation identity and bounded continuation regressions",
+      "scope": "backend-owned verification, not independent review"
+    },
+    {
+      "command": "python -m pyflakes dlcs/dbfox.scene/backend verification/tests/system/test_scene_dlc.py",
+      "result": "passed"
+    },
+    {
+      "command": "python -m mypy --follow-imports=skip --no-incremental dlcs/dbfox.scene/backend",
+      "result": "passed: 6 source files"
+    },
+    {
+      "command": "npm.cmd test -- src/features/dlc/__tests__/dbfoxSceneFixture.test.ts --maxWorkers=1",
+      "result": "12 passed in 4.82s; includes repeated ESM stylesheet cleanup; network/viewport fixture boundaries",
+      "scope": "Workbench-owned fixture verification; actual Host Tree and official Three object/controls/matrix tests; WebGLRenderer replaced in test, not real browser QA"
+    },
+    {
+      "command": "npm.cmd run typecheck:test",
+      "result": "passed"
+    },
+    {
+      "command": "npx.cmd eslint src/features/dlc/__tests__/dbfoxSceneFixture.test.ts; node scripts/check-design-contracts.mjs",
+      "result": "12 passed in 4.82s; includes repeated ESM stylesheet cleanup; network/viewport fixture boundaries"
+    }
+  ],
+  "bench": {},
+  "architecture_review": {
+    "status": "accepted_with_documented_sdk_limit",
+    "agent": "/root/scene_lead/domain_architect"
+  },
+  "known_blockers": [
+    "Public Host has no project deletion hook; automatic private-state purge cannot currently be wired.",
+    "Full 10000-object UI read remains 102 pages / 19.60 seconds; collapsed DOM is fixed and independently verified.",
+    "Full RunLoop suite awaits generic Artifact Invocation authority fix; independent adversarial review remains pending.",
+    "Real export navigation/download awaits independent retest of project-visible Artifact tabs."
+  ],
+  "composition_candidates": [
+    "dbfox.scene-animation",
+    "dbfox.scene-game",
+    "dbfox.cad-scene"
+  ],
+  "specialist_agents": [
+    "/root/scene_lead/domain_architect",
+    "/root/scene_workbench"
+  ],
+  "role_history": [
+    {
+      "agent": "/root/scene_lead/domain_architect",
+      "role": "Domain Architect",
+      "scope": "initial read-only canonical and Host seam investigation"
+    },
+    {
+      "agent": "/root/scene_lead/domain_architect",
+      "role": "Backend Engineer",
+      "scope": "reassigned by Program Director due global agent-slot constraints; implementation and its own tests; not an independent reviewer"
+    },
+    {
+      "role": "Workbench Engineer",
+      "agent": "/root/scene_workbench",
+      "scope": "Direct child of Director, logically assigned to Scene Lead because nested completed workers retain the global agent slots"
+    }
+  ],
+  "next_stage": "Resume independent reviewer for final Artifact Context/Host reference fix audit; Director candidate is saved, integration remains gated.",
+  "architecture_document": "docs/architecture/scene-dlc.md",
+  "completed_work": [
+    "Full Lead Template read",
+    "Host/seam/reuse/history investigation",
+    "Independent Domain Architect review",
+    "DLC-local Three/esbuild pinned installation and official npm audit",
+    "Typed canonical schema, bounded incremental operations, immutable revisions, CAS and receipts",
+    "Scene tools, project operations, provider/resolvers, context and Artifact Representation",
+    "glTF/GLB packing from Director-generated official Three primitive buffers",
+    "Backend-owned deterministic tests including 10000 objects, concurrency, cancellation, corruption and signed activation lifecycle",
+    "Workbench scene library, Host Tree, official Three viewport, raycast selection, TransformControls direct edits, Inspector TRS/name/visibility/parent/material/light/camera controls, undo and subtree operations",
+    "Fixed-revision pagination, actual displayed CAS, synchronous write lock, no unknown-write replay, dirty-input preservation and active-visible external modification polling",
+    "Stable Three Object3D/mesh and shared primitive/material resources across edits; listener/observer/RAF/control/GPU resource cleanup on hide/unmount/deactivate",
+    "Formal authority/object/locator onAsk handoff and fixed Artifact representation downloads; direct Workbench Artifact navigation explicitly pending",
+    "Workbench-owned 9 fixture tests, test typecheck, scoped TypeScript/JavaScript lint, design contracts and Scene README",
+    "Director implemented optional public Host Artifact navigation with original scope capture and cancellation across export/navigation"
+  ],
+  "backend_contract_notes": [
+    "light_update clears range with clear_range:true; null is not a clear sentinel because Host tool normalization excludes null fields",
+    "Scene revisions are append-only; entity_ids prevents reuse of deleted identities except explicit undo",
+    "Hierarchy stretch has conservative bounds 1e-9..1e9 and world translation bound 1e12 to avoid numeric overflow",
+    "Plain project operations have no server cancellation probe in the public SDK. An interrupted client request may already have committed; request_id identifies its exact receipt, and callers must not automatically replay with a new identity",
+    "Signed backend activation test uses an isolated frontend stub; it is not evidence of Workbench product functionality",
+    "Director independently reported four glTF/GLB outputs passing Khronos validator with zero errors, warnings and infos; independent full feature verification remains pending"
+  ],
+  "phase": "independent_adversarial_review_interrupted_by_usage_limit",
+  "completion_claimed": false,
+  "browser_verification": {
+    "agent": "/root/voxel_lead/domain_architect",
+    "passed": [
+      "real WebGL2",
+      "pointer gizmo and Inspector durable local edits",
+      "collapsed 10000-object tree DOM and tail navigation",
+      "actual ActionRun Artifact Dock navigation",
+      "Electron DownloadItem GLB/glTF completed with test-controlled save paths, matching disk hashes and zero Khronos issues",
+      "late export scope cancellation with no tab after leaving or returning",
+      "deactivate/reactivate cleanup and durable persistence; CSS1/canvas1 after restoration"
+    ],
+    "limitations": [
+      "native Save-dialog clicks were not automated",
+      "10000-object full data pagination takes about20 seconds",
+      "different GPU/OS hardware not covered"
+    ],
+    "pending": [],
+    "evidence": "docs/quality/scene-dlc-independent-verification.md"
+  },
+  "verification": {
+    "status": "passed",
+    "agent": "/root/voxel_lead/domain_architect",
+    "independent_pytest": "22 passed in 33.73s",
+    "bench_cli": "13/13",
+    "engineering": "45 passed in 3.13s after official Visualization vendor generation",
+    "evidence": "docs/quality/scene-dlc-independent-verification.md"
+  },
+  "adversarial_checkpoint": {
+    "independent_product": "32 passed in58.14s before later added cases",
+    "director_combined": "117 passed /5 failed in171.84s; three genuine invalid Host reference cases plus two fixture recovery-shape assumptions",
+    "director_artifact_after_fix": "31 passed in68.54s; remaining91 already passed in combined run",
+    "shared_context_fix": "c4f0b7fe",
+    "shared_reference_fix": "c4d24b25",
+    "independent_final_verdict": "pending usage availability",
+    "evidence": "docs/quality/scene-dlc-adversarial-review.md"
+  }
+}

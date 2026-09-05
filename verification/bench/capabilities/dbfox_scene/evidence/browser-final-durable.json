@@ -1,0 +1,196 @@
+{
+  "fixture": {
+    "project_id": "scene-browser-project",
+    "small_scene_id": "91df7fd0cf114c53abd368d88950cc9e",
+    "large_scene_id": "a2454db541d641f287d555d32b6596a8",
+    "large_count": 10000,
+    "package_digest": "21ceabee97f28f37d63627d8445ddf93747e6fa554e08f2d73166bef09e6ccc7"
+  },
+  "runs": [
+    {
+      "id": "run_3fecc828c9a1429bac42acfdcee14497",
+      "session_id": "42713bfb-0b18-4dec-9561-caf04dfa5689",
+      "status": "completed",
+      "error_code": null,
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    },
+    {
+      "id": "run_73a7ebd57366418ea76fa1a185e46862",
+      "session_id": "4d719d70-b2d2-4977-abf7-1c1416728731",
+      "status": "completed",
+      "error_code": null,
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    },
+    {
+      "id": "run_2f99dcde36814270b6e4d0202901fb5b",
+      "session_id": "3b5063c5-0b01-4d46-b5f1-ddf7d329c824",
+      "status": "completed",
+      "error_code": null,
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    },
+    {
+      "id": "run_972f0a1ebf9b4f2f9ed00a3f9557c6b5",
+      "session_id": "f93f06b6-b74a-44df-b913-1bd7555e631f",
+      "status": "completed",
+      "error_code": null,
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    }
+  ],
+  "invocations": [
+    {
+      "id": "invocation_dbd2d95047f04369bd97c7d16c6f5be4",
+      "run_id": "run_3fecc828c9a1429bac42acfdcee14497",
+      "tool_name": "dbfox_scene_c870271c__scene_export",
+      "owner_id": "dbfox.scene",
+      "package_digest": "21ceabee97f28f37d63627d8445ddf93747e6fa554e08f2d73166bef09e6ccc7",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"expected_version\":2,\"scene_id\":\"91df7fd0cf114c53abd368d88950cc9e\"}",
+      "resource_refs_json": "[{\"id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"kind\":\"dbfox.scene.document\",\"version\":2}]"
+    },
+    {
+      "id": "invocation_474a14d7e6684962b3a894fb3524b56e",
+      "run_id": "run_73a7ebd57366418ea76fa1a185e46862",
+      "tool_name": "dbfox_scene_c870271c__scene_export",
+      "owner_id": "dbfox.scene",
+      "package_digest": "21ceabee97f28f37d63627d8445ddf93747e6fa554e08f2d73166bef09e6ccc7",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"expected_version\":2,\"scene_id\":\"91df7fd0cf114c53abd368d88950cc9e\"}",
+      "resource_refs_json": "[{\"id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"kind\":\"dbfox.scene.document\",\"version\":2}]"
+    },
+    {
+      "id": "invocation_290fad9fd3414ffead4541b979e9c08b",
+      "run_id": "run_2f99dcde36814270b6e4d0202901fb5b",
+      "tool_name": "dbfox_scene_c870271c__scene_export",
+      "owner_id": "dbfox.scene",
+      "package_digest": "21ceabee97f28f37d63627d8445ddf93747e6fa554e08f2d73166bef09e6ccc7",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"expected_version\":2,\"scene_id\":\"91df7fd0cf114c53abd368d88950cc9e\"}",
+      "resource_refs_json": "[{\"id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"kind\":\"dbfox.scene.document\",\"version\":2}]"
+    },
+    {
+      "id": "invocation_520665d6678b475493ac5c9f57a43021",
+      "run_id": "run_972f0a1ebf9b4f2f9ed00a3f9557c6b5",
+      "tool_name": "dbfox_scene_c870271c__scene_export",
+      "owner_id": "dbfox.scene",
+      "package_digest": "21ceabee97f28f37d63627d8445ddf93747e6fa554e08f2d73166bef09e6ccc7",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"expected_version\":2,\"scene_id\":\"91df7fd0cf114c53abd368d88950cc9e\"}",
+      "resource_refs_json": "[{\"id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"kind\":\"dbfox.scene.document\",\"version\":2}]"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "artifact_d4705e403b61418b9bc44f84fa009952",
+      "run_id": "run_3fecc828c9a1429bac42acfdcee14497",
+      "session_id": "42713bfb-0b18-4dec-9561-caf04dfa5689",
+      "type": "dbfox.scene.revision",
+      "status": "completed",
+      "payload_json": "{\"content_hash\":\"b668fe5e59a0d596fdbd989bb81306c49e8b3fa0b3533220fd571a8c7acf965e\",\"material_count\":0,\"object_count\":2,\"project_id\":\"scene-browser-project\",\"scene_id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"title\":\"Interactive Scene\",\"version\":2}",
+      "resource_refs_json": "[{\"id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"kind\":\"dbfox.scene.document\",\"version\":2}]"
+    },
+    {
+      "id": "artifact_be86d33f73c2439b833d9e62fa307fb0",
+      "run_id": "run_73a7ebd57366418ea76fa1a185e46862",
+      "session_id": "4d719d70-b2d2-4977-abf7-1c1416728731",
+      "type": "dbfox.scene.revision",
+      "status": "completed",
+      "payload_json": "{\"content_hash\":\"b668fe5e59a0d596fdbd989bb81306c49e8b3fa0b3533220fd571a8c7acf965e\",\"material_count\":0,\"object_count\":2,\"project_id\":\"scene-browser-project\",\"scene_id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"title\":\"Interactive Scene\",\"version\":2}",
+      "resource_refs_json": "[{\"id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"kind\":\"dbfox.scene.document\",\"version\":2}]"
+    },
+    {
+      "id": "artifact_05a7954fdd4a4c09935ba274f540ad35",
+      "run_id": "run_2f99dcde36814270b6e4d0202901fb5b",
+      "session_id": "3b5063c5-0b01-4d46-b5f1-ddf7d329c824",
+      "type": "dbfox.scene.revision",
+      "status": "completed",
+      "payload_json": "{\"content_hash\":\"b668fe5e59a0d596fdbd989bb81306c49e8b3fa0b3533220fd571a8c7acf965e\",\"material_count\":0,\"object_count\":2,\"project_id\":\"scene-browser-project\",\"scene_id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"title\":\"Interactive Scene\",\"version\":2}",
+      "resource_refs_json": "[{\"id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"kind\":\"dbfox.scene.document\",\"version\":2}]"
+    },
+    {
+      "id": "artifact_15025b7146d64fa88f71f843d7e83baa",
+      "run_id": "run_972f0a1ebf9b4f2f9ed00a3f9557c6b5",
+      "session_id": "f93f06b6-b74a-44df-b913-1bd7555e631f",
+      "type": "dbfox.scene.revision",
+      "status": "completed",
+      "payload_json": "{\"content_hash\":\"b668fe5e59a0d596fdbd989bb81306c49e8b3fa0b3533220fd571a8c7acf965e\",\"material_count\":0,\"object_count\":2,\"project_id\":\"scene-browser-project\",\"scene_id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"title\":\"Interactive Scene\",\"version\":2}",
+      "resource_refs_json": "[{\"id\":\"91df7fd0cf114c53abd368d88950cc9e\",\"kind\":\"dbfox.scene.document\",\"version\":2}]"
+    }
+  ],
+  "small_scene_revisions": [
+    {
+      "version": 1,
+      "content_hash": "8866e4eda020ec2d3b3881ab1af1e9b92db5a6cdf219ad1ccc7156a065dd8736",
+      "objects": []
+    },
+    {
+      "version": 2,
+      "content_hash": "b668fe5e59a0d596fdbd989bb81306c49e8b3fa0b3533220fd571a8c7acf965e",
+      "objects": [
+        {
+          "geometry_id": "geometry.box",
+          "id": "qa-cube",
+          "kind": "mesh",
+          "material_id": null,
+          "name": "QA Cube",
+          "parent_id": null,
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        {
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "id": "qa-light",
+          "inner_cone_angle": 0.0,
+          "intensity": 5.0,
+          "kind": "light",
+          "light_type": "directional",
+          "name": "QA Light",
+          "outer_cone_angle": 0.7853981633974483,
+          "parent_id": null,
+          "position": [
+            3.0,
+            5.0,
+            4.0
+          ],
+          "range": null,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        }
+      ]
+    }
+  ]
+}

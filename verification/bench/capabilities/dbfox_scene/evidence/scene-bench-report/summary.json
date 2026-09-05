@@ -1,0 +1,106 @@
+{
+  "suite": {
+    "schema_version": "1.0",
+    "suite_id": "capability.dbfox-scene.scripted",
+    "suite_version": "1.0.0",
+    "subject": {
+      "kind": "capability",
+      "components": [
+        "dbfox.scene"
+      ],
+      "supporting_fixtures": [
+        "scripted-provider",
+        "migrated-metadata",
+        "signed-package"
+      ]
+    },
+    "execution": {
+      "provider_modes": [
+        "scripted"
+      ],
+      "default_repetitions": 1,
+      "max_repetitions": 5
+    },
+    "dataset": "cases.json",
+    "metrics": [
+      {
+        "name": "task.success_rate",
+        "direction": "higher_is_better",
+        "unit": "ratio",
+        "description": "task.success_rate"
+      },
+      {
+        "name": "runtime.tool_calls",
+        "direction": "lower_is_better",
+        "unit": "count",
+        "description": "runtime.tool_calls"
+      },
+      {
+        "name": "runtime.turns",
+        "direction": "lower_is_better",
+        "unit": "count",
+        "description": "runtime.turns"
+      },
+      {
+        "name": "scene.objects",
+        "direction": "informational",
+        "unit": "count",
+        "description": "scene.objects"
+      },
+      {
+        "name": "context.scene_chars",
+        "direction": "informational",
+        "unit": "chars",
+        "description": "context.scene_chars"
+      },
+      {
+        "name": "observation.max_bytes",
+        "direction": "informational",
+        "unit": "bytes",
+        "description": "observation.max_bytes"
+      }
+    ]
+  },
+  "trials": 13,
+  "scored_trials": 13,
+  "passed_trials": 13,
+  "unscored_trials": 0,
+  "success_rate": 1.0,
+  "wilson_95_ci": [
+    0.7719046276458015,
+    1.0
+  ],
+  "metrics": {
+    "context.scene_chars": {
+      "median": 563.0,
+      "p90": 863.8,
+      "maximum": 2522.0
+    },
+    "observation.max_bytes": {
+      "median": 1129.0,
+      "p90": 12252.80000000001,
+      "maximum": 21302.0
+    },
+    "runtime.tool_calls": {
+      "median": 4.0,
+      "p90": 6.0,
+      "maximum": 24.0
+    },
+    "runtime.turns": {
+      "median": 5.0,
+      "p90": 7.0,
+      "maximum": 26.0
+    },
+    "scene.objects": {
+      "median": 2.0,
+      "p90": 413.4000000000003,
+      "maximum": 2000.0
+    },
+    "task.success_rate": {
+      "median": 1.0,
+      "p90": 1.0,
+      "maximum": 1.0
+    }
+  },
+  "failed_checks": []
+}

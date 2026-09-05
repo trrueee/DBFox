@@ -1,0 +1,3 @@
+# Preserve hash-pinned generated vendor and primitive bytes across checkouts.
+frontend/vendor/** -text
+backend/primitives.json -text
