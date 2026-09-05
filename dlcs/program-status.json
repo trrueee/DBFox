@@ -719,7 +719,9 @@
       "worktree": "D:/Project/DBFox-worktrees/creative-cad",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-cad.md",
       "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
-      "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md"
+      "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
+      "preflight": "docs/architecture/cad-dlc-preflight.md",
+      "deployment_investigation": "Real HeadlessChrome152 under exact appProtocol CSP rejects valid8-byte WASM;streaming separately needs application/wasm MIME. Published Replicad WASM exceeds20MiB. No policy/budget/dependency changes;kernel selection remains open."
     },
     {
       "dlc_id": "dbfox.animation",

@@ -4,7 +4,7 @@
 >
 > 状态：草案
 >
-> 最后核验：2026-09-05
+> 最后核验：2026-09-06
 >
 > 适用范围：Game、Comic、CAD、Animation 的独立Domain Architect启动材料
 
@@ -27,6 +27,8 @@ Comic只拥有页面、镜头、角色放置、对白和视觉注释；Story继�
 需在实现前冻结故事输入的稳定Representation；没有输入能力时应允许独立创作，不复制Story的角色事实库。页数和面板规模必须通过分页、可见页渲染及有界Context验证。
 
 ## CAD
+
+[CAD部署与规范模型调查](cad-dlc-preflight.md)补充真实Chrome因果探针：当前CSP拒绝最小8-byte WASM模块；流式加载另需application/wasm，现有DLC资产返回octet-stream。没有修改Host策略、资产预算或安装产品内核。
 
 JSCAD提供几何布尔和拉伸/旋转等成熟建模操作；其单位由应用约定，不能把输出网格当作canonical参数树。已查文档尚不足以证明它覆盖通用草图约束或任意BRep倒角，因此不能据基本布尔成功宣称CAD全部能力实现。[JSCAD布尔](https://openjscad.xyz/docs/module-modeling_booleans.html)、[建模基础](https://openjscad.xyz/docs/tutorial-02_modelingBasics.html)。
 
