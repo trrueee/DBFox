@@ -456,8 +456,8 @@
           },
           {
             "role": "Adversarial Reviewer",
-            "agent": null,
-            "status": "pending_independent_agent",
+            "agent": "/root/voxel_lead/domain_architect",
+            "status": "active",
             "must_not_implement": true
           }
         ],
@@ -465,7 +465,7 @@
         "agent": "/root/shader_architect"
       },
       "known_blockers": [
-        "Independent production Electron Generate/Compile/Error/Repair/Preview, full stress and separate Red Team remain required."
+        "Independent final cancellation/generation verification, separate Adversarial closure and Director integration remain required."
       ],
       "composition_candidates": [
         "dbfox.music-visual",
@@ -524,7 +524,7 @@
       ],
       "completion_claimed": false,
       "integrated_by": null,
-      "phase": "independent_verification_active",
+      "phase": "independent_verification_and_adversarial_active",
       "backend_agent": "/root/scene_lead/domain_architect",
       "backend_progress": {
         "status": "author_verified_candidate_saved",
@@ -539,24 +539,26 @@
       "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/shader-independent-verification-handoff.md",
       "workbench_agent": "/root/scene_lead/domain_architect",
       "workbench_progress": "Author candidate4df3568d complete;13fixture pass;independent narrow Dock finding repaired003eb7ec using CSS container queries.",
-      "candidate_commit": "ad83881d",
+      "candidate_commit": "efb9167f",
       "verification_agent": "/root/pixel_workbench",
       "verification_progress": {
-        "status": "cold_recheck_active",
+        "status": "final_lifecycle_verification_active",
         "agent": "/root/pixel_workbench",
         "findings": {
           "production_factory": "root2bd3fa75/source73ad76f0;actual factory fixture independently passed",
           "narrow_dock": "003eb7ec;13fixture passed;real narrow Dock recheck pending",
-          "precommit_cancellation": "ad83881d;independent actual receipt fence original1fail,2branches pass7.11s"
+          "precommit_cancellation": "ad83881d;independent actual receipt fence original1fail,2branches pass7.11s",
+          "artifact_nullable_report_id": "efb9167f;frontend now accepts canonical optional report_id:null;independent original failure and9 frontend cases plus cold native historical JSON/source download passed"
         },
-        "observed": "Real ActionRuns compile,error,repair,preview;2x2 texture through two passes byte-exact;native256x256PNG65536pixels independently decoded. Full same-Sidecar Agent flow recheck pending.",
+        "observed": "Real native Agent completed with9 tools/8 Artifacts after factory fix;real narrow Dock passed;Coral Plasma v12 two passes128x96 GPU;62-stage424809-byte full source and GPU;history source/JSON downloads after delete;context-loss disposal/reconnect. Final cancellation/generation cases still active.",
         "native_agent": "Independent coldad83881d package:9nativeTools/8Artifacts/4.65s,allDockclosed;actualcompileerror→inspect→repair→compiletrue→previewtrue→export. FinalUI/CAS/stress/lifecycle closure pending.",
         "large_call": "Director09d2d3a2 actualfactory438254byte singlemodify:expectednativeTurneviction preservesledger;publicinspect→export recovers completedRun,no replay,v2,62stages exact;1passed5.70s,no productchange."
-      }
+      },
+      "adversarial_agent": "/root/voxel_lead/domain_architect"
     },
     {
       "dlc_id": "dbfox.pixel",
-      "status": "verification",
+      "status": "integration_verification",
       "scheduled": true,
       "wave": 1,
       "branch": "creative/pixel",
@@ -593,7 +595,7 @@
         "cases": 15,
         "cli": "15/15",
         "exports": "8 real PyPNG outputs decoded and compared pixel-for-pixel with Pillow",
-        "production_desktop": "independent_verification_passed; final adversarial candidate cold verification active"
+        "production_desktop": "independent_verification_and_adversarial_passed"
       },
       "architecture_review": {
         "status": "accepted",
@@ -602,13 +604,13 @@
         "scope": "independent architecture only; no product tests yet"
       },
       "known_blockers": [
-        "Final independent Adversarial signed candidate closure and Director integration pending."
+        "Three-owner production factory fails after creating all documents:60 schemas estimate31942 tokens against32768 default; shared bounded tool discovery investigation is active."
       ],
       "composition_candidates": [],
       "detail_path": "docs/quality/pixel-dlc-evidence.md",
       "worktree": "D:/Project/DBFox-worktrees/creative-pixel",
       "integrated": false,
-      "phase": "independent_adversarial_fixes_cold_verification",
+      "phase": "candidate_merged_default_composition_gate_open",
       "backend_agent": "/root/pixel_backend",
       "backend_commit": "113f5334f12acee966c52182c62e56f9e4033b1b",
       "workbench_agent": "/root/pixel_workbench",
@@ -633,12 +635,18 @@
       },
       "adversarial_progress": {
         "agent": "/root/voxel_lead/domain_architect",
-        "status": "active",
+        "status": "passed",
         "original": "7 passed,4 failed: invalid birth revisions and incomplete tag Tool member access",
         "fix_commit": "88e7c7d1",
         "first_recheck": "18 passed3.05s;20 further Artifact attacks passed43.41s;final cold candidate pending",
-        "director_regression": "77 author/Verification/bench passed167.79s;5 own modules pyflakes/mypy passed"
-      }
+        "director_regression": "Root171 backend/independent/bench/engineering passed230.85s;70 Pixel/Scene/Voxel frontend passed14.99s;typecheck passed7.02s",
+        "commit": "13e2fcf9",
+        "report": "docs/quality/pixel-dlc-adversarial-review.md",
+        "checks": "49 new attacks passed94.39s;final cold signed Electron pointer/CAS/late export/generation/history/native Agent checks passed",
+        "package_digest": "2b7cd5337f8a847bc1d73dfa047b3b42022fe9f0ace383678161d7ea3b97c6f9"
+      },
+      "candidate_merged": true,
+      "candidate_root_commit": "118be7fd"
     },
     {
       "dlc_id": "dbfox.game",
@@ -668,7 +676,11 @@
       "integrated": false,
       "preflight": "docs/architecture/game-dlc-preflight.md",
       "role_note": "Formally reassigned after Shader author commit4df3568d; full Lead scope retained; no independent review claimed.",
-      "implementation_progress": "Author25-contract architecture in game-dlc.md;Phaser4.2.1 fixed bundle,Canvas/HEADLESS/reset same physics values;4-instance VisibilityHandler leak fixed by guarded build patch;Backend implementation active;independent architecture and all final gates pending."
+      "implementation_progress": "Author25-contract architecture in game-dlc.md;Phaser4.2.1 fixed bundle,Canvas/HEADLESS/reset same physics values;4-instance VisibilityHandler leak fixed by guarded build patch;Backend implementation active;independent architecture and all final gates pending.",
+      "backend_progress": {
+        "status": "author_implementation_active",
+        "reported": "24 author tests including actual product RunLoop/ActionRun and public Pixel Representation import;17 tools/16 incremental operations;native strict nullable-contract repair in progress;Workbench implementation pending"
+      }
     },
     {
       "dlc_id": "dbfox.comic",
@@ -1223,22 +1235,30 @@
       "solution": "Pass build_attempt_resource_resolver(snapshot=snap) at existing factory;no Core semantics,SDK,domain,dependency or migration change.",
       "evidence": "docs/quality/product-run-loop-resource-composition.md",
       "verification": "Root823System+314Core passed;Scene/Voxel actual factory2passed;independent Shader factory and Pixel scoped Tool flow passed."
+    },
+    {
+      "id": "multi-dlc-tool-schema-budget",
+      "status": "investigation",
+      "integrated": false,
+      "finding": "Production factory fourth prepare exposes60 schemas estimated31942 tokens against32768 default;system and durable evidence cannot fit.",
+      "rejected_experiment": "Pydantic named aliases reduced schemas only to30068;all19 experimental alias changes reverted. No Core budget/schema or DLC contract change applied.",
+      "evidence": "D:/Project/DBFox-worktrees/creative-composition/docs/quality/creative-dlc-composition-verification.md"
     }
   ],
   "integration_verification": {
     "core_system": "After production factory fix:823 System/135deselected/441.52s +314 AgentCore/2deselected/20.96s;51 preexisting System warnings.",
     "engineering": "45 passed in3.19s;Scene candidate45 passed in3.25s",
     "status_file_location": "dlcs/program-status.json; docs naming contract intentionally retained",
-    "latest_frontend": "59 Voxel/Scene/Tree passed10.38s;typecheck passed",
+    "latest_frontend": "70 Pixel/Scene/Voxel passed14.99s;typecheck passed7.02s",
     "creative_worktree": "D:/Project/DBFox-worktrees/creative-composition",
-    "creative_status": "Scene and Voxel integrated;Pixel88e7c7d1 repairs passed77regressions,independent final cold verification active. Shaderad83881d independent cold GPU/Agent recheck active. CompositionwithPixel88e7c7d1 andfactory73ad76f0 passed8.08s.",
+    "creative_status": "Pixel exact product and independent evidence merged through118be7fd;171root regression passed230.85s. Actual build_product_run_loop composition fails at fourth prepare with31942/32768 tool schemas;prior manual128000-budget pass does not prove production defaults. Shader efb9167f independent verification/redteam active.",
     "creative_evidence": "D:/Project/DBFox-worktrees/creative-composition/docs/quality/creative-dlc-composition-verification.md",
     "creative_commit": "6c18369a"
   },
   "execution_status": {
     "state": "active",
     "date": "2026-09-06",
-    "scope": "Production RunLoop factory correction, Pixel final adversarial candidate, Shader native Agent/GPU/cancellation/Dock verification and Game backend implementation",
+    "scope": "Default-budget multi-DLC tool discovery investigation;Pixel root integration verification;Shader independent lifecycle and adversarial review;Game implementation",
     "message": "Confirmed regressions are repaired at their owner boundaries and independently rechecked; no full-program completion or waived gate.",
     "active_roles": [
       {
@@ -1247,7 +1267,7 @@
       },
       {
         "agent": "/root/voxel_lead/domain_architect",
-        "role": "Pixel independent Adversarial Reviewer after separate Verification6ed057d0 and bounded Scene regressionea720a8f"
+        "role": "Shader independent Adversarial Reviewer after completed Pixel Adversarial13e2fcf9"
       },
       {
         "agent": "/root/scene_lead/domain_architect",
