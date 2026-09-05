@@ -132,14 +132,16 @@
         "status": "accepted_with_documented_sdk_limit",
         "agent": "/root/scene_lead/domain_architect"
       },
-      "known_blockers": [],
+      "known_blockers": [
+        "New native Control-held and React DOM cleanup regressions confirmed; author fix5cdc6242 in isolated Scene tree awaits independent production Electron verification before root integration."
+      ],
       "composition_candidates": [
         "dbfox.scene-animation",
         "dbfox.scene-game",
         "dbfox.cad-scene"
       ],
       "detail_path": "dlcs/dbfox.scene/program-status.json",
-      "phase": "local_integration_complete",
+      "phase": "integrated_with_lifecycle_regression_under_independent_reverification",
       "role_history": [
         {
           "agent": "/root/scene_lead/domain_architect",
@@ -190,7 +192,14 @@
       },
       "known_limitations": [
         "Public Host has no Project deletion hook; private-state automatic purge is not supported."
-      ]
+      ],
+      "lifecycle_regression": {
+        "candidate": "5cdc6242",
+        "before": "2 failed, 12 passed",
+        "after": "14 passed4.33s;typecheck and targeted lint passed;primitive bytes unchanged",
+        "handoff": "D:/Project/DBFox-worktrees/creative-program/scene-controls-regression-handoff.md",
+        "independently_closed": false
+      }
     },
     {
       "dlc_id": "dbfox.voxel",
@@ -277,7 +286,7 @@
         ]
       },
       "known_blockers": [
-        "Independent verification report and final author checks are being finalized; separate adversarial gate is pending."
+        "Final adversarial verification and cold signed Electron recheck after snapshot/receipt/page integrity fixes remain open."
       ],
       "composition_candidates": [
         "dbfox.voxel-game",
@@ -286,11 +295,24 @@
       "detail_path": "dlcs/dbfox.voxel/program-status.json",
       "worktree": "D:/Project/DBFox-worktrees/creative-voxel",
       "integrated": false,
-      "phase": "independent_production_verification_active",
+      "phase": "independent_adversarial_review_active",
       "workbench_evidence": "Actual Electron: historical34256-byte JSON SHA and all4chunks match;3D picking selects[10,11,10] with zero writes;64-cubed60chunks/12425surface826ms;128-cubed296chunks/explicit60000surface cap3571ms;CAS409 one request/no replay;late scope no artifact;deactivate and renderer restart preserve worldv12;WebGL and listeners disposed.",
-      "candidate_commit": "e587edd6",
-      "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/voxel-independent-verification-handoff.md",
-      "verification_agent": "/root/pixel_workbench"
+      "candidate_commit": "6100268",
+      "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/voxel-adversarial-handoff.md",
+      "verification_agent": "/root/pixel_workbench",
+      "independent_verification": {
+        "commit": "6467337c",
+        "report": "docs/quality/voxel-independent-verification.md",
+        "status": "passed_before_new_adversarial_fixes"
+      },
+      "adversarial_progress": {
+        "reviewer": "/root/pixel_workbench",
+        "confirmed": "Derived summary count, no-op receipt adopting another producer, incomplete/substituted frontend pages",
+        "fix": "6100268",
+        "director_backend": "83 passed35.41s;8modulesmypy passed",
+        "independent_frontend": "26 original fixtures adjusted to genuine hashes plus6 hostile-page cases:32 passed5.01s",
+        "final_gate": "open"
+      }
     },
     {
       "dlc_id": "dbfox.shader",
@@ -511,12 +533,7 @@
       "backend_commit": "f6dde52a",
       "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/shader-workbench-handoff.md",
       "workbench_agent": "/root/scene_lead/domain_architect",
-      "workbench_progress": {
-        "status": "implementation_and_author_validation_active",
-        "gpu": "Actual Chrome strict CSP WebGL2 compile/error/repair,active-uniform rejection,2x2 top-left texture and2-pass exact pixels passed;not production Electron independent proof",
-        "editor": "Real CodeMirror6 ShadowRoot with constructed stylesheet,0 style elements;DLC-local415644-byte vendor and16 upstream licenses",
-        "remaining": "Full author UI/layout and lint/type/build, exact candidate commit, independent production GPU verification and adversarial review"
-      }
+      "workbench_progress": "Author12frontend fixtures and44signed backend passed; actual Chrome WebGL2 compile/driver errors/texture/two-pass readPixels; GLSL300driver guard validated;fullbuild/typecheck/lint passed; finalUI and evidence freeze ongoing."
     },
     {
       "dlc_id": "dbfox.pixel",
@@ -565,12 +582,14 @@
         "evidence": "D:/Project/DBFox-worktrees/creative-pixel/docs/quality/pixel-dlc-evidence.md",
         "scope": "independent architecture only; no product tests yet"
       },
-      "known_blockers": [],
+      "known_blockers": [
+        "Separate adversarial review has not started; independent Verification report commit is finalizing."
+      ],
       "composition_candidates": [],
       "detail_path": "docs/quality/pixel-dlc-evidence.md",
       "worktree": "D:/Project/DBFox-worktrees/creative-pixel",
       "integrated": false,
-      "phase": "independent_bench_faults_pass_production_electron_active",
+      "phase": "independent_production_verification_completed_report_finalizing",
       "backend_agent": "/root/pixel_backend",
       "backend_commit": "113f5334f12acee966c52182c62e56f9e4033b1b",
       "workbench_agent": "/root/pixel_workbench",
@@ -585,7 +604,15 @@
       "workbench_commit": "5af763d0",
       "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/pixel-independent-verification-handoff.md",
       "verification_agent": "/root/voxel_lead/domain_architect",
-      "candidate_commit": "b6987f23"
+      "candidate_commit": "5f222e4e",
+      "workbench_evidence": "Independent cold signed Electron:1100HTTP requests all200 in6.8735s without generation change;200frames firstcanvas160ms/fullread6.27s/lastframe onepixel edit;13UI edits;CAS409 one request;PNG and sheet native downloads pixel-exact;375px layout;deactivate/restart retainsr11;late cross-generation Artifact did not open.",
+      "independent_verification": {
+        "deterministic": "25fault+17bench=42passed118.04s",
+        "cli": "15/15",
+        "engineering": "45passed",
+        "status": "report_finalizing",
+        "separate_adversarial": "pending"
+      }
     },
     {
       "dlc_id": "dbfox.game",
@@ -1132,6 +1159,24 @@
       "verification": "68 frontend regressions and typecheck passed;31 Scene Artifact attacks passed on Director continuation.",
       "evidence": "docs/quality/artifact-reference-admission.md",
       "independent_verification": "Scene independent 68-case adversarial suite passed; actual new Host reference emitter validated in Electron."
+    },
+    {
+      "commit": "883e6bb7",
+      "id": "sidecar-stdout-liveness",
+      "verification": "33Electron tests passed;independent real1100HTTP all200 without restart",
+      "report": "docs/quality/engine-stdout-liveness.md",
+      "status": "implemented_pending_remaining_independent_ui_evidence",
+      "integrated": true,
+      "root_commit": "883e6bb7"
+    },
+    {
+      "commit": "b3c9225d",
+      "id": "selected-resource-reactivation",
+      "verification": "9Tree tests,typecheck,lint/fullbuild passed;actualVoxel leaf recheck pending",
+      "report": "docs/quality/tree-resource-reactivation.md",
+      "status": "implemented_pending_remaining_independent_ui_evidence",
+      "integrated": true,
+      "root_commit": "b3c9225d"
     }
   ],
   "integration_verification": {
@@ -1140,15 +1185,15 @@
     "status_file_location": "dlcs/program-status.json; docs naming contract intentionally retained",
     "latest_frontend": "68 targeted navigation/Dock/ArtifactView/ConversationStore regressions passed;typecheck passed",
     "creative_worktree": "D:/Project/DBFox-worktrees/creative-composition",
-    "creative_status": "Scene integrated locally after all individual gates and three-owner composition test; Voxel/Pixel are validation-tree candidates only.",
+    "creative_status": "Scene locally integrated, new lifecycle regression candidate awaiting independent recheck. Voxel/Pixel remain isolated candidates; latest three-owner RunLoop composition passed6.42s on Voxel6100268/Pixel5f222e4e.",
     "creative_evidence": "D:/Project/DBFox-worktrees/creative-composition/docs/quality/creative-dlc-composition-verification.md",
     "creative_commit": "6c18369a"
   },
   "execution_status": {
     "state": "active",
     "date": "2026-09-05",
-    "scope": "Voxel/Pixel independent verification, Shader implementation, Phase C preparation after Scene integration",
-    "message": "All three workers resumed successfully; Scene independent adversarial review passed 68 cases. No Creative DLC integration gate has been waived.",
+    "scope": "Voxel red-team fixes, Pixel independent closure, Shader workbench, Scene lifecycle regression and Phase C preparation",
+    "message": "Confirmed regressions are repaired at their owner boundaries and independently rechecked; no full-program completion or waived gate.",
     "active_roles": [
       {
         "agent": "/root/voxel_lead/domain_architect",
@@ -1156,7 +1201,7 @@
       },
       {
         "agent": "/root/pixel_workbench",
-        "role": "Voxel independent Verification Engineer"
+        "role": "Voxel independent Adversarial Reviewer after verification commit6467337c"
       },
       {
         "agent": "/root/scene_lead/domain_architect",
