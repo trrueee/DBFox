@@ -250,7 +250,11 @@ def metadata(document):
     return result
 
 
-def directory(document, kind):
+def directory(document, kind, tag_id=None):
+    if tag_id is not None:
+        tag = next((tag for tag in document.tags if tag.id == tag_id), None)
+        require(tag is not None, "Pixel tag does not exist.", "NOT_FOUND")
+        return [{"frame_id": identity} for identity in tag.frame_ids]
     if kind == "frames":
         return [{"id": frame.id, "duration_ms": frame.duration_ms} for frame in document.frames]
     if kind == "tags":

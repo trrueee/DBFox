@@ -96,7 +96,7 @@ class PixelWriteTool(BaseTool):
 class PixelReadTool(BaseTool):
     name = "pixel_inspect"
     group = "pixel"
-    description = "Inspect bounded Pixel frame/layer/tag/palette metadata and an optional 16x16 cel window. Preserve returned document_id and revision; use smaller pages if a rich diff exceeds its budget."
+    description = "Inspect bounded Pixel frame/layer/tag/palette metadata or a 16x16 cel window. Tag directories preview only eight frame IDs: use kind=tags with tag_id and page/page_size to read complete ordered members before editing a tag. Preserve returned document_id and revision across pages."
     input_model = c.InspectInput
     output_model = c.PageResult
     version = "1"

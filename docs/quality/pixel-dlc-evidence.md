@@ -224,3 +224,11 @@ Director 运行 `python -m pytest verification/tests/system/test_pixel_dlc_verif
 
 
 独立Verifier随后保留三项失败攻击：仅破坏receipts.result_body中的truncated标记（false/缺失）或changed=false，原读取仍返回伪摘要。Director在唯一_receipt边界核对绑定输入的expected/action与固定前后revision，并复用纯changes比较派生摘要；没有重新执行像素操作或写历史。创建、no-op、undo、delete/restore均按真实规范状态与版本核对。修后35作者与25独立测试合计60项通过69.33秒，原三项攻击未改；自有五模块Mypy与Pyflakes通过。对整个backend目录的额外Mypy尝试仅在原样PyPNG namedtuple类型命名报告上游错误，未修改vendor或把该尝试记为通过。完整lint0errors/5既有warnings、typecheck:test和生产build/Token/bundle预算通过。
+
+## Director 修复独立红队发现（2026-09-06）
+
+独立Adversarial Reviewer在完整Verification之后另建攻击集，修复前7项通过、4项失败：三个非法对象出生版本（0、负数、小数）仍被完整文档读取接受；20帧tag的工具目录只有前8项预览且无成员读取入口。完整失败与独立后续验证归[独立红队报告](pixel-dlc-adversarial-review.md)所有，本节仅记录Director产品修复。
+
+完整修订读取复用SQLite现有revisions事实检查出生记录类型、有效范围与真实修订联结；轻量head不加载正文。pixel_inspect增加可省略tag_id，复用既有Representation成员分页的MetadataInput与directory函数，返回完整顺序的有界页。既有目录预览、权限、canonical和历史配额保持原合同；无依赖、迁移、兼容包装或第二事实来源。规范参数与边界见[架构说明](../architecture/pixel-dlc.md)。
+
+修复后既有作者、独立Verification与suite回归共77 passed / 167.79秒；五个自有源码pyflakes和mypy通过。独立审查员另行报告18项首轮复验通过（3.05秒），包括原失败、错误参数组合和修改当前tag后读取固定历史页；不将这些独立结果计入作者77项。独立最终签名候选复验与新增攻击仍在执行，integrated保持false。

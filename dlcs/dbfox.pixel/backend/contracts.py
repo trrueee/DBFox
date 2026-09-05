@@ -376,8 +376,18 @@ class FrameReadInput(ReadInput):
     frame_id: Id
 
 
-class InspectInput(ReadInput, PageInput):
+class MetadataInput(PageInput):
     kind: Kind = "frames"
+    tag_id: Id | None = None
+
+    @model_validator(mode="after")
+    def tag_selection(self):
+        if self.tag_id is not None and self.kind != "tags":
+            raise ValueError("tag_id is only valid for tag metadata")
+        return self
+
+
+class InspectInput(ReadInput, MetadataInput):
     frame_id: Id | None = None
     layer_id: Id | None = None
     rect: Rect | None = None
@@ -387,6 +397,8 @@ class InspectInput(ReadInput, PageInput):
         count = sum(x is not None for x in (self.frame_id, self.layer_id, self.rect))
         if count not in (0, 3) or (self.rect and (self.rect.width > 16 or self.rect.height > 16)):
             raise ValueError("Inspect requires frame/layer/rect together, at most 16x16")
+        if self.tag_id is not None and count:
+            raise ValueError("Tag member inspection cannot include a cel window")
         return self
 
 
@@ -464,6 +476,7 @@ class FrameResult(Contract):
 class PageResult(Contract):
     summary: DocumentSummary
     kind: Kind
+    tag_id: Id | None = None
     page: int
     page_size: int
     total: int

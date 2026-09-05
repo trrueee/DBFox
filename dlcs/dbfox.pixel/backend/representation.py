@@ -12,11 +12,6 @@ from .store import digest, now
 from .vendor import png
 
 
-class MetadataInput(c.PageInput):
-    kind: c.Kind = "frames"
-    tag_id: c.Id | None = None
-
-
 class FrameInput(c.Input):
     frame_id: c.Id
     rect: c.Rect
@@ -98,14 +93,8 @@ class PixelRepresentation:
             document = source.document
             operation = request.operation
             if operation == "metadata":
-                params = MetadataInput.model_validate(request.parameters)
-                require(params.tag_id is None or params.kind == "tags", "tag_id is only valid for tag metadata.")
-                if params.tag_id is None:
-                    items = directory(document, params.kind)
-                else:
-                    tag = next((tag for tag in document.tags if tag.id == params.tag_id), None)
-                    require(tag is not None, "Pixel tag does not exist.", "NOT_FOUND")
-                    items = [{"frame_id": identity} for identity in tag.frame_ids]
+                params = c.MetadataInput.model_validate(request.parameters)
+                items = directory(document, params.kind, params.tag_id)
                 offset = params.page * params.page_size
                 result = {"summary": payload.model_dump(), "kind": params.kind, "tag_id": params.tag_id,
                     "page": params.page, "page_size": params.page_size, "total": len(items),

@@ -108,8 +108,15 @@ class PixelStore:
                     (document_id, target - 1)).fetchone() is not None, "Missing Pixel revision parent.", "CORRUPT_STATE")
             require(row["status"] in ("active", "deleted") and
                     (target != owner["head"] or row["status"] == owner["status"]), "Invalid revision status.", "CORRUPT_STATE")
-            identities = {(item["kind"], item["object_id"]) for item in db.execute(
-                "SELECT kind,object_id FROM object_identities WHERE document_id=? AND created_revision<=?", (document_id, target))}
+            births = db.execute("""SELECT o.kind,o.object_id,o.created_revision,r.revision AS birth_revision
+                FROM object_identities o LEFT JOIN revisions r
+                ON r.document_id=o.document_id AND r.revision=o.created_revision
+                WHERE o.document_id=?""", (document_id,)).fetchall()
+            require(all(type(item["created_revision"]) is int and 1 <= item["created_revision"] <= owner["head"]
+                        and item["birth_revision"] == item["created_revision"]
+                        and item["kind"] in ("frame", "layer", "tag") for item in births),
+                    "Pixel object birth revision is inconsistent.", "CORRUPT_STATE")
+            identities = {(item["kind"], item["object_id"]) for item in births if item["created_revision"] <= target}
             require(all((kind, item.id) in identities for kind, items in (("frame", document.frames), ("layer", document.layers), ("tag", document.tags)) for item in items),
                     "Pixel object birth records are inconsistent.", "CORRUPT_STATE")
             summary = c.DocumentSummary(project_id=project_id, document_id=document_id, revision=target,
@@ -339,7 +346,7 @@ class PixelStore:
 
     def inspect(self, project_id, request):
         revision = self.get_revision(project_id, request.document_id, request.revision)
-        items = directory(revision.document, request.kind)
+        items = directory(revision.document, request.kind, request.tag_id)
         offset = request.page * request.page_size
         pixels, selection = None, None
         if request.rect is not None:
@@ -351,7 +358,7 @@ class PixelStore:
             check_rect(rect, width, revision.document.canvas.height)
             pixels = [cel.pixels[(rect.y + y) * width + rect.x + x] for y in range(rect.height) for x in range(rect.width)]
             selection = {"frame_id": request.frame_id, "layer_id": request.layer_id, "rect": rect.model_dump()}
-        result = c.PageResult(summary=revision.summary, kind=request.kind, page=request.page, page_size=request.page_size,
+        result = c.PageResult(summary=revision.summary, kind=request.kind, tag_id=request.tag_id, page=request.page, page_size=request.page_size,
             total=len(items), has_more=offset + request.page_size < len(items), items=items[offset:offset + request.page_size], pixels=pixels, selection=selection)
         require(len(c.canonical(result).encode("utf-8")) <= c.MAX_OUTPUT_BYTES, "Pixel inspection exceeds output budget; request a smaller page.", "LIMIT")
         return result

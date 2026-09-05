@@ -4,7 +4,7 @@
 >
 > 状态：已接受
 >
-> 最后核验：2026-09-05
+> 最后核验：2026-09-06
 >
 > 适用范围：`dbfox.pixel` Capability DLC 后端与 Canvas Workbench
 
@@ -194,7 +194,7 @@ region transform 先读取整个 source snapshot；move 清除原source，再将
 
 自动 Context 最多4个 fragment，每个不超过2000字符，只包含已授权文档的 ID、revision、尺寸、帧/图层数量、有限标签摘要和如何 inspect 的引用信息。不得自动注入像素、全帧内容、PNG/base64、整个 palette 或未授权 Project 目录。动态文档标题与标签是 untrusted data，不进入 Guidance。
 
-`pixel_inspect` 详细像素最多返回单帧单图层16×16；输入 `{document_id,revision=null,kind="frames",page=0,page_size=16,frame_id=null,layer_id=null,rect=null}`，后三项必须同时提供才返回局部像素。kind为frames/layers/tags/palette；每页最多16项。tag目录只给frame_count和前8个frame ID，并标注truncated，不能16项各塞64个长ID冲破预算；完整tag顺序由表示metadata分页读取。默认只给摘要；Tool 输出上限16KiB，耐久Observation facts保留摘要/计数/版本/目录与selection，不保存像素细节；局部像素只进入本Run临时provider_payload，以便模型实际检查。完整function_call_output包装在作者测试中同时检查字节和字符预算≤18KiB。
+`pixel_inspect` 详细像素最多返回单帧单图层16×16；输入 `{document_id,revision=null,kind="frames",page=0,page_size=16,tag_id=null,frame_id=null,layer_id=null,rect=null}`，后三项必须同时提供才返回局部像素。kind为frames/layers/tags/palette；每页最多16项。tag目录只给frame_count和前8个frame ID，并标注truncated，不能16项各塞64个长ID冲破预算；读取完整tag顺序时，继续调用同一pixel_inspect，设置kind="tags"、tag_id并逐页读取items中的frame_id；输出回显tag_id，total为该tag的成员数量，has_more只描述成员页。所有页固定第一次返回的revision，不能将目录预览当成完整顺序。tag_id不得与其他kind或cel窗口混用。Artifact表示metadata复用同一MetadataInput和目录函数，避免两套分页规则。默认只给摘要；Tool 输出上限16KiB，耐久Observation facts保留摘要/计数/版本/目录与selection，不保存像素细节；局部像素只进入本Run临时provider_payload，以便模型实际检查。完整function_call_output包装在作者测试中同时检查字节和字符预算≤18KiB。
 
 `dbfox.pixel.revision` schema_version=1，payload为上述 DocumentSummary。Artifact refs 必须是本次合法 Invocation scope；create/restore绑定library，由不可变payload标识文档；后续修改使用当次document scope，不能清空refs或退回初始library来逃过Host检查。
 
@@ -292,3 +292,9 @@ Director曾报告同Run创建document后的通用Artifact authority错配。Pixe
 超过128个变化帧ID时，MutationResult的changed_frame_ids_truncated=true，不能把其前128项解释为全部变化；完整变化走原分页diff。该字段默认false准确覆盖旧64帧版本至多128个前后ID的回执，无需改写旧SQLite行。Renderer metadata上限512KiB仅容纳256长ID帧及16个完整标签，Agent的inspect/Context预算没有变化。PNG复用PyPNG，layout与编码使用同一无padding行列计算，边长8192和总像素槽预算不提高。
 
 Workbench时间线每页最多32个缩略图，提供页跳转；选中身份跨刷新保留，跳页不写耐久状态。已选帧优先读，剩余帧保持最多两个并发只读请求，全部绑定同一revision/hash；这仍可能使长动画首次预览等待，实际耗时由独立生产桌面验收记录。
+
+## 对象出生记录与 Agent 标签成员读取修正
+
+独立红队原用例证明created_revision为0、负数或小数时，旧查询仍可能接受对象记录。完整修订读取现在通过既有revisions表联结检查每条出生记录：必须是Python整数、位于1..head、指向同文档的真实修订，且kind合法；所读版本的对象仍须存在于该版本前的出生记录集合。使用SQLite现有事实，不增加表、迁移或自动修复；轻量head轮询保持原合同。未来改成合法但错误的出生位置、每条历史内容的实际首次出现，以及最大历史容量性能不由本次检查承诺。
+
+超过8个成员的tag目录仍保留有界预览；Agent通过上文tag_id分页读完整有序成员。新输入可省略，旧调用语义保持；复用现有Representation分页语义，不增加另一套数据模型、工具或资源权限。
