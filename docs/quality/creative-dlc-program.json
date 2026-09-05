@@ -1,0 +1,936 @@
+{
+  "schema_version": 1,
+  "program": "DBFox Creative DLC",
+  "updated_at": "2026-09-05",
+  "baseline": {
+    "head": "2dc62653",
+    "includes_preexisting_working_tree_changes": true,
+    "engineering_contracts": {
+      "command": "python -m pytest verification/tests/system/test_engineering_contracts.py -q --tb=short",
+      "passed": 45
+    },
+    "agent_core": {
+      "passed": 219,
+      "deselected": 2
+    },
+    "system": {
+      "passed": 567,
+      "deselected": 135
+    },
+    "frontend": {
+      "typecheck_test": "passed",
+      "lint": "0 errors, 5 preexisting warnings",
+      "test_files_passed": 95,
+      "tests_passed": 469,
+      "test_duration_seconds": 158.09
+    },
+    "electron": {
+      "tests_passed": 32,
+      "test_files_passed": 10,
+      "duration_seconds": 12.98
+    },
+    "tracked_changes_unchanged_since_start": true,
+    "baseline_verification_note": "Original tracked changes were hash-verified unchanged before integration. Root is now codex/creative-program; Host commit and additive documentation links are separate task changes."
+  },
+  "policy": {
+    "max_concurrent_agents": 4,
+    "core_domain_changes": false,
+    "paid_external_api": false,
+    "integration_requires": [
+      "architecture",
+      "backend",
+      "workbench",
+      "persistence",
+      "stale_version",
+      "deterministic_tests",
+      "capability_bench",
+      "example_project",
+      "independent_red_team",
+      "cross_dlc_verification"
+    ]
+  },
+  "dlcs": [
+    {
+      "dlc_id": "dbfox.scene",
+      "status": "implementation",
+      "scheduled": true,
+      "wave": 1,
+      "branch": "creative/scene",
+      "lead": "/root/scene_lead",
+      "canonical_model": "SceneDocument schema 1",
+      "resource_kinds": [
+        "dbfox.scene.library",
+        "dbfox.scene.document"
+      ],
+      "tools": [
+        "scene_create",
+        "scene_inspect",
+        "object_create",
+        "object_duplicate",
+        "object_transform",
+        "object_reparent",
+        "object_delete",
+        "object_update",
+        "material_create",
+        "material_update",
+        "material_assign",
+        "light_create",
+        "light_update",
+        "camera_create",
+        "camera_update",
+        "scene_settings_update",
+        "scene_undo",
+        "scene_diff",
+        "scene_export"
+      ],
+      "artifacts": [
+        "dbfox.scene.revision"
+      ],
+      "representations": [
+        "dbfox.scene.document.v1"
+      ],
+      "frontend_views": [
+        "dbfox.scene.studio"
+      ],
+      "tests": [
+        {
+          "command": "python -m pytest verification/tests/system/test_scene_dlc.py -q --tb=short",
+          "result": "30 passed in 10.68s",
+          "scope": "backend-owned verification, not independent review"
+        },
+        {
+          "command": "python -m pyflakes dlcs/dbfox.scene/backend verification/tests/system/test_scene_dlc.py",
+          "result": "passed"
+        },
+        {
+          "command": "python -m mypy --follow-imports=skip --no-incremental dlcs/dbfox.scene/backend",
+          "result": "passed: 6 source files"
+        }
+      ],
+      "bench": {},
+      "architecture_review": {
+        "status": "accepted_with_documented_sdk_limit",
+        "agent": "/root/scene_lead/domain_architect"
+      },
+      "known_blockers": [
+        "Public Host has no project deletion hook; automatic private-state purge cannot currently be wired.",
+        "Production RunLoop writes commit but Artifact settlement rejects current Invocation authority against obsolete initial Run refs; independent generic correctness review underway."
+      ],
+      "composition_candidates": [
+        "dbfox.scene-animation",
+        "dbfox.scene-game",
+        "dbfox.cad-scene"
+      ],
+      "detail_path": "dlcs/dbfox.scene/program-status.json",
+      "phase": "independent_verification_artifact_authority_fix_pending",
+      "role_history": [
+        {
+          "agent": "/root/scene_lead/domain_architect",
+          "role": "Domain Architect",
+          "scope": "initial read-only canonical and Host seam investigation"
+        },
+        {
+          "agent": "/root/scene_lead/domain_architect",
+          "role": "Backend Engineer",
+          "scope": "reassigned by Program Director due global agent-slot constraints; implementation and its own tests; not an independent reviewer"
+        },
+        {
+          "role": "Workbench Engineer",
+          "agent": "/root/scene_workbench",
+          "scope": "Direct child of Director, logically assigned to Scene Lead because nested completed workers retain the global agent slots"
+        }
+      ],
+      "worktree": "D:/Project/DBFox-worktrees/creative-scene",
+      "integrated": false,
+      "verification_agent": "/root/voxel_lead/domain_architect",
+      "observation_fix": "Explicit ToolObservationProjection completed; backend author tests30 passed, UI11 passed; independent simple-create passes."
+    },
+    {
+      "dlc_id": "dbfox.voxel",
+      "status": "implementation",
+      "scheduled": true,
+      "wave": 1,
+      "branch": "creative/voxel",
+      "lead": "/root/voxel_lead",
+      "canonical_model": "VoxelWorld: 16-cubed palette-indexed chunks, ordered layers, named regions, metadata",
+      "resource_kinds": [
+        "dbfox.voxel.library",
+        "dbfox.voxel.world"
+      ],
+      "tools": [
+        "voxel_create",
+        "voxel_inspect",
+        "voxel_fill",
+        "voxel_box",
+        "voxel_sphere",
+        "voxel_extrude",
+        "voxel_replace",
+        "voxel_copy_region",
+        "voxel_mirror",
+        "voxel_boolean",
+        "voxel_configure",
+        "voxel_undo",
+        "voxel_delete",
+        "voxel_export",
+        "voxel_diff"
+      ],
+      "artifacts": [
+        "dbfox.voxel.snapshot"
+      ],
+      "representations": [
+        "dbfox.voxel.world.v1"
+      ],
+      "frontend_views": [
+        "dbfox.voxel.workbench",
+        "dbfox.voxel.snapshot"
+      ],
+      "tests": {
+        "status": "partial_pass_authority_blocker",
+        "paths": [
+          "verification/tests/system/test_voxel_dlc.py",
+          "desktop/src/features/dlc/__tests__/dbfoxVoxelFixture.test.ts"
+        ],
+        "backend": "43 passed, 1 deselected; full signed RunLoop incremental currently fails shared Artifact authority",
+        "frontend": "16 passed; real GPU probe used fixture-backed operations and is not production Host proof",
+        "typecheck": "passed"
+      },
+      "bench": {
+        "status": "pending",
+        "path": "verification/bench/capabilities/dbfox_voxel"
+      },
+      "architecture_review": {
+        "status": "accepted_with_host_correction",
+        "specialists": [
+          {
+            "agent": "/root/voxel_lead/domain_architect",
+            "role": "Domain Architect",
+            "status": "completed",
+            "evidence": "docs/architecture/voxel-dlc.md",
+            "correction": "Per-invocation canonical resource binding allows same-Run incremental editing; reject proposed new-Run requirement."
+          },
+          {
+            "agent": "/root/voxel_lead/domain_architect",
+            "role": "Backend Engineer",
+            "status": "running",
+            "staffing": "Reused completed specialist thread because global thread limit counts completed agents; independent final review must use a non-author."
+          }
+        ]
+      },
+      "known_blockers": [],
+      "composition_candidates": [
+        "dbfox.voxel-game",
+        "dbfox.voxel-scene"
+      ],
+      "detail_path": "dlcs/dbfox.voxel/program-status.json",
+      "worktree": "D:/Project/DBFox-worktrees/creative-voxel",
+      "integrated": false,
+      "phase": "independent_verification_pending_authority_fix",
+      "workbench_evidence": "14 fixture tests passed; real GPU UI exercised with memory-operation fixture; full production navigation remains pending."
+    },
+    {
+      "dlc_id": "dbfox.shader",
+      "status": "architecture",
+      "scheduled": true,
+      "wave": 1,
+      "branch": "creative/shader",
+      "lead": "/root/shader_lead",
+      "canonical_model": {
+        "name": "ShaderDocument",
+        "schema_version": 1,
+        "language": "glsl-es-300",
+        "authority": "DLC-owned state.sqlite3",
+        "resource": "One dbfox.shader.studio per Project; document/stage/pass/uniform/texture are Objects",
+        "versions": "studio generation and changed document version advance in the same SQLite transaction; all edits use expected_version; no-op/stale/invalid do not advance",
+        "state": "accepted_independent_architecture"
+      },
+      "resource_kinds": [
+        "dbfox.shader.studio"
+      ],
+      "tools": [
+        "shader_create",
+        "shader_inspect",
+        "shader_modify",
+        "uniform_set",
+        "texture_bind",
+        "pass_create",
+        "compile",
+        "inspect_compile_error",
+        "render_preview",
+        "shader_delete",
+        "shader_undo",
+        "shader_diff",
+        "shader_export"
+      ],
+      "artifacts": [
+        "dbfox.shader.document-revision",
+        "dbfox.shader.compile-report",
+        "dbfox.shader.preview"
+      ],
+      "representations": [
+        "dbfox.shader.document.v1",
+        "dbfox.shader.compile-report.v1",
+        "dbfox.shader.preview.v1",
+        "dbfox.shader.preview-png.v1"
+      ],
+      "frontend_views": [
+        "Shader Studio code editor",
+        "live WebGL2 preview",
+        "uniform controls",
+        "pass and stage selection",
+        "compile diagnostics",
+        "undo and Agent reference handoff"
+      ],
+      "tests": {
+        "status": "not_implemented",
+        "backend_path": "verification/tests/system/test_shader_dlc.py",
+        "frontend_path": "desktop/src/features/dlc/__tests__/dbfoxShaderFixture.test.ts",
+        "required": [
+          "CAS and concurrent human/Agent edits",
+          "persistence/crash/migration/corrupt state",
+          "real compile/link/error/repair/preview",
+          "Dock-closed activation compute",
+          "nonce/epoch/hash/version/deadline mismatch",
+          "cancel/timeout/retry/late result",
+          "deactivate/reactivate and cleanup",
+          "bounded context and resources",
+          "production Tool authority and settlement",
+          "packaged Electron/CSP"
+        ]
+      },
+      "bench": {
+        "status": "not_implemented",
+        "path": "verification/bench/capabilities/dbfox_shader",
+        "required_scenarios": [
+          "simple_creation",
+          "incremental_modification",
+          "multi_stage_creation",
+          "invalid_instruction_recovery",
+          "inspect_before_edit",
+          "stale_version",
+          "no_op",
+          "ambiguous_request",
+          "large_document",
+          "bounded_context",
+          "human_then_agent_edit",
+          "negative_no_modification"
+        ],
+        "stress": "A complex procedural scene followed by at least 10 different changes through production Tools; no mock compile evidence"
+      },
+      "architecture_review": {
+        "status": "accepted",
+        "director_decision": "DLC-local activation compute through existing machine operations may enter verification; no new Host seam",
+        "core_changes": [],
+        "sdk_changes": [],
+        "proposal": "docs/architecture/shader-dlc.md",
+        "evidence": "docs/quality/shader-dlc-evidence.md",
+        "roles": [
+          {
+            "role": "Domain Architect",
+            "agent": "/root/shader_architect",
+            "status": "completed",
+            "implementation_allowed": false
+          },
+          {
+            "role": "Backend Engineer",
+            "agent": null,
+            "status": "pending_slot"
+          },
+          {
+            "role": "Workbench Engineer",
+            "agent": null,
+            "status": "pending_slot"
+          },
+          {
+            "role": "Verification Engineer",
+            "agent": null,
+            "status": "pending_slot"
+          },
+          {
+            "role": "Adversarial Reviewer",
+            "agent": null,
+            "status": "pending_independent_agent",
+            "must_not_implement": true
+          }
+        ],
+        "concurrency_note": "Director plus Shader Lead plus Scene Backend plus Voxel Backend occupied the four slots during research. No specialist work is falsely claimed. Director will schedule distinct roles; completed-child slot retention may require explicitly recorded thread reuse.",
+        "agent": "/root/shader_architect"
+      },
+      "known_blockers": [
+        {
+          "id": "SHADER-VERIFY-COMPUTE",
+          "kind": "verification_gap",
+          "detail": "Existing machine operations can express a transient Tool-owned compute request, but real release-renderer compile/link/readPixels/cancel evidence has not yet been produced."
+        },
+        {
+          "id": "SHADER-RENDERER-INTERRUPT",
+          "kind": "risk_to_verify",
+          "detail": "WebGL synchronous calls may block the renderer. Backend timeout can reject late results; immediate GPU preemption is not guaranteed. Worker same-origin/CSP constraints must not be bypassed."
+        },
+        {
+          "id": "SHADER-PROJECT-DELETE",
+          "kind": "current_platform_absence",
+          "detail": "Current Project API has no delete route and public SDK no project deletion lifecycle callback. Do not claim this lifecycle case implemented or read Core metadata privately."
+        }
+      ],
+      "composition_candidates": [
+        "dbfox.music-visual",
+        "dbfox.scene-game",
+        "Shader document/preview representation consumer when a real joint-resource task is proven"
+      ],
+      "detail_path": "dlcs/dbfox.shader/program-status.json",
+      "worktree": "D:/Project/DBFox-worktrees/creative-shader",
+      "integrated": false,
+      "compute_path": {
+        "state": "approved_in_principle_for_verification",
+        "runtime": "Bundled Electron Chromium WebGL2; GLSL ES 3.00",
+        "scope": "machine",
+        "creation": "Only a running authorized production Tool creates transient request",
+        "operation_surface": [
+          "compute.attach",
+          "compute.next",
+          "compute.complete",
+          "compute.detach"
+        ],
+        "binding": [
+          "owner",
+          "package_digest",
+          "worker_epoch",
+          "invocation_id",
+          "document_id",
+          "revision",
+          "source_hash",
+          "claim_nonce",
+          "deadline"
+        ],
+        "durable_queue": false,
+        "canonical_write_access": false,
+        "requires_open_dock": false,
+        "renderer_missing": "Explicit read-only unavailable/timeout failure; no replay of edits",
+        "attestation": "Observation by trusted renderer only; no malicious-publisher/GPU attestation claim",
+        "budgets_proposed": {
+          "source_total_bytes": 524288,
+          "passes": 32,
+          "stages": 64,
+          "uniforms": 128,
+          "textures": 16,
+          "texture_bytes_each": 1048576,
+          "preview_width": 256,
+          "preview_height": 256,
+          "deadline_seconds": 10,
+          "diagnostics_summary": 20,
+          "texture_total_bytes": 4194304,
+          "compute_claim_json_bytes": 8388608
+        }
+      },
+      "next_steps": [
+        "Director schedules Backend Engineer against accepted independent architecture",
+        "Implement canonical store and Tools plus activation compute executor",
+        "Implement editable Workbench",
+        "Verify real production Tool loop and benchmarks",
+        "Independent adversarial review and resolve confirmed high severity findings",
+        "Submit integration_candidate evidence to Director"
+      ],
+      "completion_claimed": false,
+      "integrated_by": null,
+      "phase": "architecture_accepted_backend_pending"
+    },
+    {
+      "dlc_id": "dbfox.pixel",
+      "status": "implementation",
+      "scheduled": true,
+      "wave": 1,
+      "branch": "creative/pixel",
+      "lead": "/root/pixel_lead",
+      "canonical_model": {
+        "accepted": true,
+        "name": "PixelDocument schema 1"
+      },
+      "resource_kinds": [
+        "dbfox.pixel.library",
+        "dbfox.pixel.document"
+      ],
+      "tools": [],
+      "artifacts": [
+        "dbfox.pixel.revision"
+      ],
+      "representations": [
+        "dbfox.pixel.sprite.v1"
+      ],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": {
+        "status": "accepted",
+        "agent": "/root/scene_lead/domain_architect",
+        "evidence": "D:/Project/DBFox-worktrees/creative-pixel/docs/quality/pixel-dlc-evidence.md",
+        "scope": "independent architecture only; no product tests yet"
+      },
+      "known_blockers": [],
+      "composition_candidates": [],
+      "detail_path": "docs/quality/pixel-dlc-evidence.md",
+      "worktree": "D:/Project/DBFox-worktrees/creative-pixel",
+      "integrated": false,
+      "phase": "backend_implementation",
+      "backend_agent": "/root/pixel_backend"
+    },
+    {
+      "dlc_id": "dbfox.game",
+      "status": "research",
+      "scheduled": false,
+      "wave": 1,
+      "branch": "creative/game",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "GameProject",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.comic",
+      "status": "research",
+      "scheduled": false,
+      "wave": 1,
+      "branch": "creative/comic",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "ComicProject",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.cad",
+      "status": "research",
+      "scheduled": false,
+      "wave": 1,
+      "branch": "creative/cad",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "CADDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.animation",
+      "status": "research",
+      "scheduled": false,
+      "wave": 1,
+      "branch": "creative/animation",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "AnimationDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.map",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/map",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "MapDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.architecture",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/architecture",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "BuildingDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.poster",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/poster",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "DesignDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.typography",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/typography",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "TypographyDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.sound",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/sound",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "SoundDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.simulation",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/simulation",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "SimulationDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.robot",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/robot",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "RobotDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.electronics",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/electronics",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "CircuitDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.lego",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/lego",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "BrickModel",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.creature",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/creature",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "CreatureDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.recipe",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/recipe",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "RecipeDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    },
+    {
+      "dlc_id": "dbfox.fashion",
+      "status": "research",
+      "scheduled": false,
+      "wave": 2,
+      "branch": "creative/fashion",
+      "lead": null,
+      "canonical_model": {
+        "candidate": "FashionDocument",
+        "accepted": false
+      },
+      "resource_kinds": [],
+      "tools": [],
+      "artifacts": [],
+      "representations": [],
+      "frontend_views": [],
+      "tests": [],
+      "bench": [],
+      "architecture_review": null,
+      "known_blockers": [],
+      "composition_candidates": []
+    }
+  ],
+  "composition_queue": [
+    {
+      "dlc_id": "dbfox.story-comic",
+      "status": "research",
+      "scheduled": false,
+      "decision": "Require capability integration and an evidenced need beyond ordinary Agent composition."
+    },
+    {
+      "dlc_id": "dbfox.pixel-game",
+      "status": "research",
+      "scheduled": false,
+      "decision": "Require capability integration and an evidenced need beyond ordinary Agent composition."
+    },
+    {
+      "dlc_id": "dbfox.scene-animation",
+      "status": "research",
+      "scheduled": false,
+      "decision": "Require capability integration and an evidenced need beyond ordinary Agent composition."
+    },
+    {
+      "dlc_id": "dbfox.scene-game",
+      "status": "research",
+      "scheduled": false,
+      "decision": "Require capability integration and an evidenced need beyond ordinary Agent composition."
+    },
+    {
+      "dlc_id": "dbfox.music-visual",
+      "status": "research",
+      "scheduled": false,
+      "decision": "Require capability integration and an evidenced need beyond ordinary Agent composition."
+    },
+    {
+      "dlc_id": "dbfox.music-game",
+      "status": "research",
+      "scheduled": false,
+      "decision": "Require capability integration and an evidenced need beyond ordinary Agent composition."
+    },
+    {
+      "dlc_id": "dbfox.map-story",
+      "status": "research",
+      "scheduled": false,
+      "decision": "Require capability integration and an evidenced need beyond ordinary Agent composition."
+    },
+    {
+      "dlc_id": "dbfox.cad-scene",
+      "status": "research",
+      "scheduled": false,
+      "decision": "Require capability integration and an evidenced need beyond ordinary Agent composition."
+    }
+  ],
+  "shared_host_changes": [
+    {
+      "id": "host-tree-collapsed-subtree",
+      "status": "independent_browser_passed",
+      "commit": "be813187",
+      "root_commit": "6198b20b",
+      "implementation_agent": "/root",
+      "verification_agent": "/root/voxel_lead/domain_architect",
+      "finding": "Collapsed 10,000-object Scene tree mounted 10,000 treeitems and 60,357 DOM elements.",
+      "validation": "Tree 7 passed; frontend 513 passed in 96 files; typecheck and lint passed.",
+      "evidence": "docs/quality/host-tree-visible-subtree.md",
+      "integrated": true,
+      "independent_evidence": "Same production Electron scene: collapsed treeitems 10000 -> 1; total elements 60357 -> 414; expanded 22 rows and last object reachable. Full data read remains 102 pages / 19.60s."
+    },
+    {
+      "integrated": false,
+      "implementation_started": true,
+      "branch": "creative/host-artifacts",
+      "status": "cross_dlc_verification",
+      "review_agent": "/root/voxel_lead/domain_architect",
+      "worktree": "D:/Project/DBFox-worktrees/creative-host-artifacts",
+      "consumers": [
+        "dbfox.scene",
+        "dbfox.voxel"
+      ],
+      "proposal": "docs/architecture/dlc-artifact-navigation.md",
+      "id": "artifact-navigation",
+      "implementation_agent": "/root/host_artifact_navigation",
+      "review": "docs/quality/dlc-artifact-navigation-review.md",
+      "review_result": "independent architecture accepted; stale registration fixed and retested; actual Dock visibility fixed, final production navigation/download retest pending",
+      "commit": "24f2e8562144777a6e0528ef3a7c8238758cb181",
+      "integration_branch": "codex/creative-program",
+      "root_commit": "f934f997",
+      "loader_correctness_commit": "d9ca70c7",
+      "loader_root_commit": "9231f036",
+      "loader_tests": "511 passed in 96 files; typecheck/lint/build passed",
+      "visibility_commit": "aaf0d7df",
+      "visibility_root_commit": "208e83b3",
+      "latest_tests": "516 passed / 96 files; typecheck/lint/build passed"
+    },
+    {
+      "id": "artifact-invocation-authority",
+      "status": "implementation",
+      "integrated": false,
+      "worktree": "D:/Project/DBFox-worktrees/creative-artifact-authority",
+      "branch": "codex/creative-artifact-authority",
+      "consumers": [
+        "dbfox.scene",
+        "dbfox.voxel"
+      ],
+      "finding": "Formal same-Run mutation commits DLC state but ArtifactRepository rejects authorized Invocation refs against obsolete SessionInput refs.",
+      "verification": "independently reproduced by Scene verifier and Voxel observation repair engineer",
+      "architecture": "accepted",
+      "review": "docs/quality/artifact-invocation-authority-review.md",
+      "implementation_agent": "/root/scene_lead/domain_architect"
+    }
+  ]
+}
