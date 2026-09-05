@@ -20,6 +20,8 @@ Phaser的HEADLESS模式仍是浏览器Game生命周期的一部分，不能据�
 
 ## Comic
 
+[Comic领域与文字排版调查](comic-dlc-preflight.md)记录25项边界草案及当前Story尚未注册固定Representation的源码事实；最终渲染/导出方案仍须真实Chromium验证。
+
 Comic只拥有页面、镜头、角色放置、对白和视觉注释；Story继续拥有世界事实。先评估原生SVG/Canvas和Konva在面板布局、选择、缩放、文字编辑与导出的差异；Konva已有Canvas导出能力，但这不替代DBFox的耐久Artifact与固定表示。[Konva导出](https://konvajs.org/docs/react/Canvas_Export.html)。
 
 需在实现前冻结故事输入的稳定Representation；没有输入能力时应允许独立创作，不复制Story的角色事实库。页数和面板规模必须通过分页、可见页渲染及有界Context验证。

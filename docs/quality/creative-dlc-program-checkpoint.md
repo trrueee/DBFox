@@ -14,15 +14,15 @@
 
 Voxel 已完成独立 Verification `6467337c` 和另行 Adversarial `f095d35f`，七类确认缺陷已由 `61002688`、`25b1e76e` 修复并独立关闭。最终冷签名 Electron 证明实际已选资源重开、600次HTTP全部200、64³/128³世界、历史全部chunk及原生下载逐字节相等、Control-held清理和停启代际隔离。候选及证据已精确合入本地 `codex/creative-program`，最后集成提交 `bb9a00a4`。根分支197项后端/bench/工程回归通过（168.18秒），59项Voxel/Scene/Tree前端通过（10.38秒），typecheck通过；产品、vendor、独立测试和suite与最终隔离分支一致。[最终对抗报告](voxel-adversarial-review.md)保留成本和覆盖限制。
 
-Scene 原稳定候选已集成；新增生命周期修复 `5cdc6242` 的真实 Electron 独立复验现已通过普通及Control-held四次卸载、原生callback identity清理、GPU/RAF/observer/poll停机、重开Orbit/拾取/Inspector/Gizmo，以及拖拽中关闭和generation切换后的迟到响应。独立证据提交正在收尾，修复暂未合入根分支；原报告中的历史通过结果没有扩大为未执行条件。
+Scene 原稳定候选已集成；新增生命周期修复 `5cdc6242` 的真实 Electron 独立复验现已通过普通及Control-held四次卸载、原生callback identity清理、GPU/RAF/observer/poll停机、重开Orbit/拾取/Inspector/Gizmo，以及拖拽中关闭和generation切换后的迟到响应。独立证据ea720a8f已与修复一同合入根分支fd3d8cfb/1ec34c12；根14项前端（4.65秒）与45项工程（3.14秒）通过，产品/vendor与独立验收候选一致。
 
-Pixel 独立验证完整提交 `6ed057d0`：42项故障/bench、CLI15/15、真实200帧编辑、1100次HTTP、CAS无重放、375px布局与原生PNG下载逐像素核验完成。另行 Adversarial 阶段即将开始，当前未集成。Shader 作者冻结 `4df3568d`；Director已完成15类生产RunLoop领域测评、17测试和CLI15/15，包括62-stage/438486-byte大型文档、128uniform和双pass程序化作品十次修改。没有模拟成功GPU；独立验证员正准备同一Sidecar中的真实Electron编译/错误/修复/预览，之后仍需独立红队。
+Pixel 独立验证完整提交 `6ed057d0`：42项故障/bench、CLI15/15、真实200帧编辑、1100次HTTP、CAS无重放、375px布局与原生PNG下载逐像素核验完成。另行 Adversarial 阶段已开始，当前未集成。Shader 作者冻结 `4df3568d`；Director已完成15类生产RunLoop领域测评、17测试和CLI15/15，包括62-stage/438486-byte大型文档、128uniform和双pass程序化作品十次修改。没有模拟成功GPU；独立验证员正准备同一Sidecar中的真实Electron编译/错误/修复/预览，之后仍需独立红队。
 
 Game Lead已在独立 `creative-game` 工作树开始完整规范及固定Phaser版本调查。Comic/CAD/Animation工作树和完整Lead指令已准备，第二波十二项能力及必要的Composition仍在原计划内。当前四个并发槽按明确角色轮转，容量错误恢复不改变独立门禁或原范围。
 
 | DLC | 当前候选与阶段 | 未完成门禁 |
 | --- | --- | --- |
-| Scene | 原版本已集成；5cdc6242生命周期修复真实复验通过 | 新证据精确提交及本地集成 |
+| Scene | 5cdc6242生命周期修复与ea720a8f独立证据已集成 | 后续跨媒体Composition与常规维护 |
 | Voxel | 25b1e76e + f095d35f，已集成至bb9a00a4 | 后续跨媒体Composition与常规维护 |
 | Pixel | 5f222e4e + 6ed057d0，独立验证完成 | 独立Adversarial、本地集成 |
 | Shader | 4df3568d，领域bench通过 | 真实Electron独立Verification、完整GPU stress、另行红队及集成 |
@@ -47,10 +47,10 @@ Scene 五文件接续运行曾为117通过/5失败：三个失败确认上述非
 完整Lead模板和交接保留在 `D:/Project/DBFox-worktrees/creative-program`。
 
 1. `/root/pixel_workbench` 完成Voxel独立红队后，正式转任Shader独立Verification；完整补充交接为 `shader-independent-verification-handoff.md`。
-2. `/root/voxel_lead/domain_architect` 完成Pixel独立验证后，收尾Scene有界生命周期复验，然后正式执行Pixel另行Adversarial；不得把原故障用例改名充数。
+2. `/root/voxel_lead/domain_architect` 完成Pixel独立验证后，完成Scene有界生命周期复验ea720a8f后，正式执行Pixel另行Adversarial；不得把原故障用例改名充数。
 3. `/root/scene_lead/domain_architect` 完成Shader作者候选后，正式转任Game Lead，执行完整 `lead-game.md`。
 4. Director维护本地集成、Shader领域bench及三owner联合验证。独立 `creative-composition` 候选不等于所有DLC已经集成；只有普通多DLC编排确实不足才创建Composition DLC。
 
-联合检查与报告保存在 `D:/Project/DBFox-worktrees/creative-composition`，测试提交 `6c18369a`。真实单Run执行15次请求（12成功、3次跨owner私有selector预期拒绝），产出12个有producer证明的工件；公开表示核对局部修改，停用和恢复Voxel保持另外两owner与原内容。Voxel修复后通过9.45秒，加入Pixel索引修复后通过12.50秒，最终Voxel25b1e76e后通过10.49秒。该Director联合检查不替代各领域独立验收，也不代表跨媒体资产消费已实现。
+联合检查与报告保存在 `D:/Project/DBFox-worktrees/creative-composition`，测试提交 `6c18369a`。真实单Run执行15次请求（12成功、3次跨owner私有selector预期拒绝），产出12个有producer证明的工件；公开表示核对局部修改，停用和恢复Voxel保持另外两owner与原内容。Voxel修复后通过9.45秒，加入Pixel索引修复后通过12.50秒，最终Voxel25b1e76e后通过10.49秒，加入已独立通过的Scene5cdc6242后通过7.07秒。该Director联合检查不替代各领域独立验收，也不代表跨媒体资产消费已实现。
 
 根与各工作树中用户原有混合文档改动未整体提交。新增的架构澄清补丁分别保存在外部 `artifact-authority-documentation.patch`、`artifact-context-documentation.patch`，可精确区分任务增量。未提交SQLite、日志、凭据、安装包或运行时目录。Shader/Scene hash-pinned vendor均核对了工作树、Git index和实际checkout字节一致。

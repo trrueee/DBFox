@@ -132,16 +132,14 @@
         "status": "accepted_with_documented_sdk_limit",
         "agent": "/root/scene_lead/domain_architect"
       },
-      "known_blockers": [
-        "New native Control-held and React DOM cleanup regressions confirmed; author fix5cdc6242 in isolated Scene tree awaits independent production Electron verification before root integration."
-      ],
+      "known_blockers": [],
       "composition_candidates": [
         "dbfox.scene-animation",
         "dbfox.scene-game",
         "dbfox.cad-scene"
       ],
       "detail_path": "dlcs/dbfox.scene/program-status.json",
-      "phase": "integrated_with_lifecycle_regression_under_independent_reverification",
+      "phase": "integrated_after_independent_lifecycle_regression_closure",
       "role_history": [
         {
           "agent": "/root/scene_lead/domain_architect",
@@ -198,7 +196,13 @@
         "before": "2 failed, 12 passed",
         "after": "14 passed4.33s;typecheck and targeted lint passed;primitive bytes unchanged",
         "handoff": "D:/Project/DBFox-worktrees/creative-program/scene-controls-regression-handoff.md",
-        "independently_closed": false
+        "independently_closed": true,
+        "independent_commit": "ea720a8f",
+        "root_fix": "fd3d8cfb",
+        "root_evidence": "1ec34c12",
+        "report": "docs/quality/scene-controls-lifecycle-regression.md",
+        "root_verification": "14 frontend4.65s;45 engineering3.14s;isolated product/vendor/test bytes match",
+        "independent": "Four native ordinary/Control-held React closes;GPU/RAF/timer/observer cleanup;Orbit/raycast/Inspector/Gizmo;unfinished drag close;late Session across generation3->4->5;owned process cleanup"
       }
     },
     {
@@ -418,7 +422,8 @@
         "suite": "capability.dbfox-shader.scripted",
         "cases": 15,
         "result": "17 tests passed30.10s;CLI15/15;max observation8260 bytes",
-        "scope": "Signed full DLC and production RunLoop; no simulated successful GPU;62-stage438486-byte document,128 uniforms and10-change procedural stress"
+        "scope": "Signed full DLC and production RunLoop; no simulated successful GPU;62-stage438486-byte document,128 uniforms and10-change procedural stress",
+        "commit": "079acb42"
       },
       "architecture_review": {
         "status": "accepted",
@@ -669,7 +674,8 @@
       "worktree": "D:/Project/DBFox-worktrees/creative-comic",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-comic.md",
       "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
-      "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md"
+      "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
+      "preflight": "docs/architecture/comic-dlc-preflight.md"
     },
     {
       "dlc_id": "dbfox.cad",
@@ -1190,7 +1196,7 @@
     "status_file_location": "dlcs/program-status.json; docs naming contract intentionally retained",
     "latest_frontend": "59 Voxel/Scene/Tree passed10.38s;typecheck passed",
     "creative_worktree": "D:/Project/DBFox-worktrees/creative-composition",
-    "creative_status": "Scene originally integrated, lifecycle regression real Electron passed awaiting evidence commit. Voxel integrated atbb9a00a4 with197 root regression+59 frontend+typecheck. Pixel verified but separate red-team pending;Shader verification active. Three-owner composition passed10.49s after finalVoxel25b1e76e.",
+    "creative_status": "Scene lifecycle candidate5cdc6242 and independent evidenceea720a8f integrated asfd3d8cfb/1ec34c12, root14 frontend and45 engineering pass. Voxel integratedbb9a00a4 with197 root tests+59frontend. Three-owner composition passes7.07s with finalVoxel25b1e76e,Scene5cdc6242,Pixel5f222e4e. Pixel separate red-team active,Shader independent GPU verification active.",
     "creative_evidence": "D:/Project/DBFox-worktrees/creative-composition/docs/quality/creative-dlc-composition-verification.md",
     "creative_commit": "6c18369a"
   },
@@ -1206,7 +1212,7 @@
       },
       {
         "agent": "/root/voxel_lead/domain_architect",
-        "role": "Scene bounded independent regression closure, then Pixel separate Adversarial Reviewer"
+        "role": "Pixel independent Adversarial Reviewer after separate Verification6ed057d0 and bounded Scene regressionea720a8f"
       },
       {
         "agent": "/root/scene_lead/domain_architect",

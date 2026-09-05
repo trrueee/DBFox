@@ -176,6 +176,20 @@
     "cross_dlc_commit": "6c18369a",
     "root_regression": "169 passed in247.48s",
     "frontend": "12 passed/typecheck passed",
-    "cross_dlc": "One production Run with Scene/Voxel/Pixel:15 tool requests,exact owner scope and immutable exports; Voxel deactivate/restore preserves other owners."
+    "cross_dlc": "One production Run with Scene/Voxel/Pixel:15 tool requests,exact owner scope and immutable exports; Voxel deactivate/restore preserves other owners.",
+    "latest_frontend": "14 passed4.65s;45 engineering3.14s;production bytes match independently verified candidate"
+  },
+  "lifecycle_regression": {
+    "candidate": "5cdc6242",
+    "before": "2 failed, 12 passed",
+    "after": "14 passed4.33s;typecheck and targeted lint passed;primitive bytes unchanged",
+    "handoff": "D:/Project/DBFox-worktrees/creative-program/scene-controls-regression-handoff.md",
+    "independently_closed": true,
+    "independent_commit": "ea720a8f",
+    "root_fix": "fd3d8cfb",
+    "root_evidence": "1ec34c12",
+    "report": "docs/quality/scene-controls-lifecycle-regression.md",
+    "root_verification": "14 frontend4.65s;45 engineering3.14s;isolated product/vendor/test bytes match",
+    "independent": "Four native ordinary/Control-held React closes;GPU/RAF/timer/observer cleanup;Orbit/raycast/Inspector/Gizmo;unfinished drag close;late Session across generation3->4->5;owned process cleanup"
   }
 }
