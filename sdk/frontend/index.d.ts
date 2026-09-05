@@ -292,6 +292,21 @@ export interface PickFileOptions {
   readonly maxBytes?: number;
 }
 
+/** Persistent identity only; the Host reads and validates the canonical Artifact. */
+export interface ArtifactNavigationTarget {
+  readonly projectId: string;
+  readonly sessionId: string;
+  readonly runId: string;
+  readonly artifactId: string;
+}
+
+export interface ArtifactNavigationOptions {
+  /** Capture before awaiting the operation that produces the Artifact. */
+  readonly workbenchScopeId: string;
+  /** Abort on unmount or scope changes, including during the producing operation. */
+  readonly signal?: AbortSignal;
+}
+
 export interface FrontendExtensionHost {
   readonly dlcId: string;
   readonly ui: HostUiPrimitives;
@@ -322,6 +337,11 @@ export interface FrontendExtensionHost {
   readonly workbench: {
     /** Stable across draft-to-Conversation promotion; isolates capability view state. */
     currentScopeId(): string;
+    /** Optional API v2 navigation. Missing capability, invalid identity or stale scope fail closed. */
+    openArtifact?(
+      target: ArtifactNavigationTarget,
+      options: ArtifactNavigationOptions,
+    ): Promise<void>;
   };
   readonly artifactViews: {
     register(contribution: ArtifactViewContribution<unknown>): void;

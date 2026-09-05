@@ -67,6 +67,12 @@ export interface ConversationActions {
     conversationId: string,
     runId: string,
     expectedArtifactIds: readonly string[],
+    /** A navigation read is fresh and independent of shared timeline requests. */
+    options?: {
+      signal?: AbortSignal;
+      beforeCommit: () => void;
+      afterCommit: () => void;
+    },
   ) => Promise<void>;
   sendMessage: (
     conversationId: string,
@@ -195,20 +201,44 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }));
   },
 
-  loadRunArtifacts: async (conversationId, runId, expectedArtifactIds) => {
+  loadRunArtifacts: async (conversationId, runId, expectedArtifactIds, options) => {
     const artifactIds = [...new Set(expectedArtifactIds)];
     if (artifactIds.length === 0) return;
-    if (artifactIds.every((artifactId) => Boolean(get().artifactsById[artifactId]))) return;
+    const isLoaded = () => artifactIds.every((artifactId) => {
+      const artifact = get().artifactsById[artifactId];
+      return artifact?.session_id === conversationId && artifact.run_id === runId;
+    });
+
+    const load = async () => {
+      options?.signal?.throwIfAborted();
+      const artifacts = await getConversationRunArtifacts(conversationId, runId, options?.signal);
+      options?.signal?.throwIfAborted();
+      const ids = new Set(artifacts.map((artifact) => artifact.id));
+      if (ids.size !== artifacts.length || artifacts.some((artifact) => (
+        artifact.session_id !== conversationId || artifact.run_id !== runId
+      )) || (options && artifactIds.some((id) => !ids.has(id)))) {
+        throw new Error("Artifact response does not match the requested run.");
+      }
+      if (artifacts.some((artifact) => {
+        const cached = get().artifactsById[artifact.id];
+        return cached && (cached.session_id !== conversationId || cached.run_id !== runId);
+      })) {
+        throw new Error("Artifact identity conflicts with the existing projection.");
+      }
+      options?.beforeCommit();
+      set((state) => upsertArtifacts(state, artifacts));
+      options?.afterCommit();
+    };
+    // A caller's cancellation or activation must not affect another consumer.
+    if (options) return load();
+    if (isLoaded()) return;
 
     const requestKey = `${conversationId}:${runId}`;
     const activeRequest = artifactLoadRequests.get(requestKey);
     if (activeRequest) await activeRequest;
-    if (artifactIds.every((artifactId) => Boolean(get().artifactsById[artifactId]))) return;
+    if (isLoaded()) return;
 
-    const request = (async () => {
-      const artifacts = await getConversationRunArtifacts(conversationId, runId);
-      set((state) => upsertArtifacts(state, artifacts));
-    })();
+    const request = load();
     artifactLoadRequests.set(requestKey, request);
     try {
       await request;

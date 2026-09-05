@@ -39,6 +39,8 @@ const defaultDynamicImport: DynamicImportFn = async (url: string) => {
 interface ActiveFrontendModule {
   readonly packageDigest: string;
   readonly module: DlcModule;
+  readonly activateNavigation: () => void;
+  readonly revokeNavigation: () => void;
 }
 
 let projectionEpoch = 0;
@@ -47,6 +49,8 @@ let lifecycleBarrier: Promise<void> = Promise.resolve();
 
 function reserveProjectionEpoch(): number {
   projectionEpoch += 1;
+  // Retire navigation synchronously, before async imports or deactivate callbacks.
+  for (const active of activeFrontendModules.values()) active.revokeNavigation();
   return projectionEpoch;
 }
 
@@ -121,6 +125,7 @@ async function loadFrontendProjection(
     const dlcId = dlc.dlc_id;
     const digest = dlc.package_digest;
     let importedModule: DlcModule | null = null;
+    const staged = createStagedExtensionHost(dlcId);
 
     if (!dlc.frontend_entrypoint) {
       records[dlcId] = {
@@ -134,8 +139,6 @@ async function loadFrontendProjection(
 
     try {
       const assetUrl = buildDlcAssetUrl(digest, dlc.frontend_entrypoint);
-      const staged = createStagedExtensionHost(dlcId);
-
       const module = await dynamicImport(assetUrl);
       importedModule = module;
       if (typeof module.register === "function") {
@@ -187,8 +190,14 @@ async function loadFrontendProjection(
         status: "loaded",
         contributions: contribs,
       };
-      stagedModules.set(dlcId, { packageDigest: digest, module });
+      stagedModules.set(dlcId, {
+        packageDigest: digest,
+        module,
+        activateNavigation: staged.activateNavigation,
+        revokeNavigation: staged.revokeNavigation,
+      });
     } catch (err: unknown) {
+      staged.revokeNavigation();
       if (
         importedModule
         && activeFrontendModules.get(dlcId)?.module !== importedModule
@@ -221,6 +230,7 @@ async function loadFrontendProjection(
   if (epoch !== projectionEpoch) {
     const staleModules = new Map<string, ActiveFrontendModule>();
     for (const [dlcId, staged] of stagedModules) {
+      staged.revokeNavigation();
       if (activeFrontendModules.get(dlcId)?.module !== staged.module) {
         staleModules.set(dlcId, staged);
       }
@@ -233,6 +243,11 @@ async function loadFrontendProjection(
     };
   }
 
+  // Install leases before notifying synchronous subscribers, so invalidation from
+  // a subscriber revokes this exact registration and cannot be undone below.
+  const retired = activeFrontendModules;
+  activeFrontendModules = stagedModules;
+  for (const active of activeFrontendModules.values()) active.activateNavigation();
   store.setProjectionResult(
     projection.snapshot_id,
     records,
@@ -243,10 +258,9 @@ async function loadFrontendProjection(
     ...mergedContributions.dockViews.map((view) => view.viewType),
   ]);
 
-  const retired = activeFrontendModules;
-  activeFrontendModules = stagedModules;
   const deactivated = new Map<string, ActiveFrontendModule>();
   for (const [dlcId, active] of retired) {
+    active.revokeNavigation();
     if (stagedModules.get(dlcId)?.module !== active.module) {
       deactivated.set(dlcId, active);
     }
