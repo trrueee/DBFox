@@ -243,7 +243,7 @@ function Viewport({ projection, palette, selection, crop, viewportRef, onPick })
   pick.current = onPick;
   const [status, setStatus] = React.useState("正在启动三维预览…");
   const [state, setState] = React.useState("loading");
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const viewport = createVoxelViewport(element.current, (text, kind) => { setStatus(text); setState(kind); }, (point) => pick.current?.(point));
     viewportRef.current = viewport;
     return own(() => { viewport?.dispose(); viewportRef.current = null; });
@@ -480,7 +480,7 @@ function Studio({ projectId, worldId, context }) {
         h("section", { className: "voxel-section" }, h("h3", null, "方块调色板"),
           h("div", { className: "voxel-palette", role: "group", "aria-label": "选择方块颜色" },
             ...doc.palette.map((entry) => h("button", { key: entry.index, type: "button", className: `voxel-swatch${entry.index === 0 ? " voxel-swatch--air" : ""}`,
-              style: { "--voxel-swatch": entry.color }, "aria-label": `${entry.name} (${entry.index})`, title: `${entry.name} · ${entry.color}`,
+              style: { backgroundColor: entry.index === 0 ? undefined : entry.color }, "aria-label": `${entry.name} (${entry.index})`, title: `${entry.name} · ${entry.color}`,
               "aria-pressed": brush === entry.index, disabled, onClick: () => setBrush(entry.index) },
               h("span", { "aria-hidden": true }, entry.index === 0 ? "×" : entry.index)))),
           h("p", { className: "voxel-caption" }, selectedEntry ? `${selectedEntry.name} · ${selectedEntry.color}` : "选择一个方块"),

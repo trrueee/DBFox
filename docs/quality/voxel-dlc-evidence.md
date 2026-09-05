@@ -152,3 +152,14 @@ Director 从本树执行 `python -m pytest verification/tests/system/test_voxel_
 完整成果面板只从 Host `context.representations` 读取固定 `manifest/chunks`，检验表示类型、操作、版本和 fingerprint，分页完成后才显示。当前世界与历史快照共用 DLC 内只读 chunk 投影，历史读取不调用当前世界 operation。新增导出文件用标准 Blob/下载链接，卸载、停用时按 [URL.revokeObjectURL](https://developer.mozilla.org/en-US/docs/Web/API/URL/revokeObjectURL_static) 释放 URL；无共享 SDK、后端 operation、锁文件或 Core 变化。
 
 独立验证员报告同一 Runtime 当前 v9 与历史 v8 同时存在；历史3D显示1135表面块，隐藏Base后显示0但JSON下载仍包含全部图层。实际 Electron DownloadItem 完成34,256 bytes（验证层指定保存路径），磁盘逐chunk核对与剩余生命周期验证继续进行。新增8项固定表示/错误页/取消/全层导出测试使前端达到24项通过，typecheck通过。上述阶段结果不替代完整独立终审。
+
+
+## 独立验收后的样式与监听器修复
+
+独立检查发现studio.css未满足Host设计合同，以及OrbitControls注册/释放键盘事件时DOM root不同。Director将选择器限制在真实dbfox-voxel根内，字体/标签颜色采用既有令牌，调色板颜色作为领域数据直接传给style；移除两处!important。未修改设计合同。
+
+Viewport先挂载canvas再连接OrbitControls，React layout cleanup在DOM移除前断开。独立普通卸载测试由失败转为通过，但按住Control卸载仍有keyup残留。固定r185与当前上游dev的[OrbitControls源码](https://github.com/mrdoob/three.js/blob/r185/examples/jsm/controls/OrbitControls.js)均未在disconnect移除动态Control keyup；没有对应的公开清理API。
+
+采用固定Three 0.185.1 tarball的最小构建期源码补丁，仅在disconnect移除keyup并重置Control状态。没有运行时私有字段wrapper、伪造用户keyup或新事件代理。复现命令为desktop目录下 `node scripts/build-voxel-vendor.mjs`；脚本先验证原始sha512，再断言补丁唯一位置，使用固定esbuild0.28.2构建。原始/补丁源码hash、产物hash和补丁负责人/退出条件维护在vendor/provenance.json。升级到修复上游后，删除补丁并要求两个独立原生监听器用例通过。MIT许可证原样保留，未修改共享锁文件。
+
+新产物749587bytes，SHA256为4019cf00891df54884c4d14981c787f36e47b125590241402a5c9b1759351929。原两个独立断言未改：26项frontend通过3.60秒，完整lint为0errors/5条既有warnings。真实Electron重签与Control-held清理复验仍由独立Verifier完成后记录；本节不代替其结论。

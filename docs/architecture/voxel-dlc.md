@@ -86,3 +86,8 @@ node --check dlcs/dbfox.voxel/frontend/viewport.js
 ```
 
 另用本机 Edge 的真实 WebGL 做隔离浏览器检查：Host operation 为内存 fixture，未连接用户项目；32³神社显示1,556个表面方块，隐藏屋顶后624且version保持1，键盘绘制后voxel计数2,424→2,425、version1→2，选择与onAsk保持version2并携带正确layer/version/bounds。已检查真实截图；普通全页截图超时后使用有界内容截图。浏览器窄布局观察到560 CSS px下单列528px、无页面横向溢出，临时viewport已恢复。以上不代替真实Host导航、实际大规模GPU性能、完整Agent创作bench或最终独立对抗审查。
+
+
+## 固定渲染依赖的生命周期修正
+
+相机控制必须在canvas挂载后连接，并在React layout cleanup、DOM删除前释放，保持同一事件root。Three0.185.1另有Control保持按下时disconnect遗留keyup的问题；DLC固定构建仅补足该移除与状态重置，原始/补丁/产物hash与升级删除条件记录在vendor/provenance.json。此补丁由Voxel owner维护，不成为Core或通用事件层；已有两个不替换控件的独立原生EventTarget回归。详情见[验收证据](../quality/voxel-dlc-evidence.md)。

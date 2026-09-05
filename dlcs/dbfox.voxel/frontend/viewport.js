@@ -20,6 +20,9 @@ export function createVoxelViewport(element, report, onPick) {
   let worldSize = [64, 64, 64];
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 4000);
+  // OrbitControls registers its key interceptor on getRootNode(). Connect only
+  // after mounting; the owning layout effect disconnects before DOM removal.
+  element.appendChild(renderer.domElement);
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = false;
   controls.minDistance = 2;
@@ -30,7 +33,6 @@ export function createVoxelViewport(element, report, onPick) {
   renderer.domElement.tabIndex = 0;
   renderer.domElement.setAttribute("aria-label", "体素三维视口：点击选择方块，拖动旋转、滚轮缩放、右键平移，方向键平移");
   controls.listenToKeyEvents(renderer.domElement);
-  element.appendChild(renderer.domElement);
   const cube = new THREE.BoxGeometry(1, 1, 1);
   const material = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0.05 });
   const grid = new THREE.GridHelper(256, 32, 0x637187, 0x465062);
