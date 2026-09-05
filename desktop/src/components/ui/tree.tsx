@@ -474,7 +474,9 @@ function TreeNode<T>({
   const icon = renderItemIcon?.(item, state);
   const meta = renderItemMeta?.(item, state);
   const actions = renderItemActions?.(item, state);
-  const branchFooter = renderBranchFooter?.(item, state);
+  const branchFooter = nodeState.isBranch && nodeState.expanded
+    ? renderBranchFooter?.(item, state)
+    : null;
   const children = api.collection.getNodeChildren(item) as T[];
 
   if (nodeState.isBranch) {
@@ -495,7 +497,7 @@ function TreeNode<T>({
           {actions != null && <TreeNodeActions>{actions}</TreeNodeActions>}
         </div>
         <div {...api.getBranchContentProps(nodeProps)} className="dbfox-tree__group">
-          {children.map((child, index) => (
+          {nodeState.expanded && children.map((child, index) => (
             <TreeNode
               key={getItemId(child)}
               item={child}

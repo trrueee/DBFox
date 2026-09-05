@@ -185,4 +185,68 @@ describe("Host Tree primitive", () => {
     expect(mountedLeaf?.getAttribute("aria-posinset")).toBeTruthy();
     expect(container.querySelectorAll("[style]")).toHaveLength(0);
   });
+
+  it("mounts only visible rows when a 10,000-node branch is collapsed and reopened", async () => {
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(320);
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(448);
+    const largeRoot: Node = {
+      id: "root", label: "", children: [{
+        id: "scene", label: "Scene",
+        children: Array.from({ length: 9_999 }, (_, index) => ({
+          id: `object-${index}`, label: `Object ${index}`,
+        })),
+      }],
+    };
+    const renderItemIcon = vi.fn(() => null);
+    const { container } = render(<Tree
+      rootItem={largeRoot}
+      ariaLabel="Scene hierarchy"
+      getItemId={(item) => item.id}
+      getItemLabel={(item) => item.label}
+      getItemChildren={(item) => item.children}
+      renderItemIcon={renderItemIcon}
+    />);
+    expect(container.querySelectorAll('[role="treeitem"]')).toHaveLength(1);
+    expect(renderItemIcon.mock.calls.length).toBeLessThan(10);
+    fireEvent.click(screen.getByRole("button", { name: "Scene" }));
+    await waitFor(() => {
+      expect(container.querySelector(".is-virtualized")).toBeTruthy();
+      const rows = container.querySelectorAll('[role="treeitem"]');
+      expect(rows.length).toBeGreaterThan(1);
+      expect(rows.length).toBeLessThan(80);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Scene" }));
+    await waitFor(() => expect(container.querySelectorAll('[role="treeitem"]')).toHaveLength(1));
+    expect(container.querySelector(".is-virtualized")).toBeNull();
+    expect(container.querySelectorAll("[style]")).toHaveLength(0);
+  });
+
+  it("retains nested expansion and controlled selection while collapsed children unmount", async () => {
+    const nestedRoot: Node = { id: "root", label: "", children: [{
+      id: "scene", label: "Scene", children: [{
+        id: "group", label: "Group", children: [{ id: "cube", label: "Cube" }],
+      }],
+    }] };
+    const { container } = render(<Tree
+      rootItem={nestedRoot}
+      ariaLabel="Nested hierarchy"
+      getItemId={(item) => item.id}
+      getItemLabel={(item) => item.label}
+      getItemChildren={(item) => item.children}
+      defaultExpandedIds={["scene", "group"]}
+      selectedIds={["cube"]}
+      renderBranchFooter={(item) => item.id === "group" ? "Group footer" : null}
+    />);
+    const branch = screen.getByRole("button", { name: "Scene" });
+    act(() => { branch.focus(); });
+    fireEvent.keyDown(branch, { key: "ArrowLeft" });
+    await waitFor(() => expect(container.querySelectorAll('[role="treeitem"]')).toHaveLength(1));
+    expect(screen.queryByText("Group footer")).toBeNull();
+    expect(document.activeElement).toBe(branch);
+    fireEvent.keyDown(branch, { key: "ArrowRight" });
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "Cube" }).getAttribute("aria-selected")).toBe("true"));
+    expect(screen.getByText("Group footer")).toBeTruthy();
+    fireEvent.keyDown(branch, { key: "ArrowRight" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Group" })));
+  });
 });
