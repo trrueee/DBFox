@@ -107,14 +107,34 @@
           "result": "passed: 6 source files"
         }
       ],
-      "bench": {},
+      "bench": {
+        "status": "passed",
+        "suite": "capability.dbfox-scene.scripted",
+        "path": "verification/bench/capabilities/dbfox_scene",
+        "cases": 13,
+        "independent_fault_tests": 9,
+        "combined_result": "22 passed in 33.73s",
+        "cli_result": "13/13",
+        "max_context_chars": 2522,
+        "max_observation_bytes": 21302,
+        "stress": {
+          "formal_tools": 24,
+          "turns": 26,
+          "final_version": 18,
+          "nodes": 67,
+          "materials": 2,
+          "gltf_bytes": 76249,
+          "glb_bytes": 60656,
+          "validator": "0 errors, 0 warnings, 0 infos"
+        }
+      },
       "architecture_review": {
         "status": "accepted_with_documented_sdk_limit",
         "agent": "/root/scene_lead/domain_architect"
       },
       "known_blockers": [
-        "Public Host has no project deletion hook; automatic private-state purge cannot currently be wired.",
-        "Production RunLoop writes commit but Artifact settlement rejects current Invocation authority against obsolete initial Run refs; independent generic correctness review underway."
+        "Public Host has no Project deletion hook; private-state automatic purge is not supported.",
+        "Final independent adversarial review underway."
       ],
       "composition_candidates": [
         "dbfox.scene-animation",
@@ -122,7 +142,7 @@
         "dbfox.cad-scene"
       ],
       "detail_path": "dlcs/dbfox.scene/program-status.json",
-      "phase": "independent_verification_artifact_authority_fix_pending",
+      "phase": "independent_adversarial_review",
       "role_history": [
         {
           "agent": "/root/scene_lead/domain_architect",
@@ -143,7 +163,9 @@
       "worktree": "D:/Project/DBFox-worktrees/creative-scene",
       "integrated": false,
       "verification_agent": "/root/voxel_lead/domain_architect",
-      "observation_fix": "Explicit ToolObservationProjection completed; backend author tests30 passed, UI11 passed; independent simple-create passes."
+      "observation_fix": "Explicit ToolObservationProjection completed; author backend30 and UI12 passed; independent production suite22 and CLI13/13 passed.",
+      "workbench_evidence": "Independent actual Electron WebGL editing, Artifact Dock navigation, test-controlled native-save-path downloads, late scope cancellation, deactivate/reactivate cleanup and persisted state all passed.",
+      "adversarial_reviewer": "/root/voxel_lead/domain_architect"
     },
     {
       "dlc_id": "dbfox.voxel",
@@ -185,18 +207,30 @@
         "dbfox.voxel.snapshot"
       ],
       "tests": {
-        "status": "partial_pass_authority_blocker",
+        "status": "backend_and_fixture_pass_independent_verification_pending",
         "paths": [
           "verification/tests/system/test_voxel_dlc.py",
           "desktop/src/features/dlc/__tests__/dbfoxVoxelFixture.test.ts"
         ],
-        "backend": "44 passed in 20.84s including unchanged signed production RunLoop incremental case after shared authority fix",
+        "backend": "47 backend + 14 Director-authored production RunLoop bench: 61 passed in 39.45s; no exclusion/xfail",
         "frontend": "16 passed; real GPU probe used fixture-backed operations and is not production Host proof",
         "typecheck": "passed"
       },
       "bench": {
-        "status": "pending",
-        "path": "verification/bench/capabilities/dbfox_voxel"
+        "status": "director_authored_pass_independent_verification_pending",
+        "path": "verification/bench/capabilities/dbfox_voxel",
+        "suite": "capability.dbfox-voxel.scripted",
+        "cases": 14,
+        "cli": "14/14",
+        "stress": {
+          "formal_tools": 44,
+          "turns": 46,
+          "version": 38,
+          "nonzero_layer_voxels": 23386,
+          "chunks": 60
+        },
+        "max_context_chars": 1573,
+        "max_observation_bytes": 1942
       },
       "architecture_review": {
         "status": "accepted_with_host_correction",
@@ -211,7 +245,7 @@
           {
             "agent": "/root/voxel_lead/domain_architect",
             "role": "Backend Engineer",
-            "status": "running",
+            "status": "implementation_completed_independent_verification_pending",
             "staffing": "Reused completed specialist thread because global thread limit counts completed agents; independent final review must use a non-author."
           }
         ]
@@ -224,8 +258,8 @@
       "detail_path": "dlcs/dbfox.voxel/program-status.json",
       "worktree": "D:/Project/DBFox-worktrees/creative-voxel",
       "integrated": false,
-      "phase": "independent_bench_and_red_team_pending",
-      "workbench_evidence": "14 fixture tests passed; real GPU UI exercised with memory-operation fixture; full production navigation remains pending."
+      "phase": "independent_bench_review_production_workbench_and_red_team_pending",
+      "workbench_evidence": "16 fixture tests passed; real GPU UI exercised with memory-operation fixture; independent full production navigation remains pending."
     },
     {
       "dlc_id": "dbfox.shader",
@@ -461,7 +495,7 @@
       "tests": [
         {
           "scope": "author backend",
-          "result": "30 passed in 11.20s; actual 5-Invocation same-Run create/rect/inspect/line/export passed"
+          "result": "33 passed in 9.10s; real signed 5-Invocation same-Run and Human ActionRun passed; pyflakes/mypy passed"
         }
       ],
       "bench": [],
@@ -476,8 +510,10 @@
       "detail_path": "docs/quality/pixel-dlc-evidence.md",
       "worktree": "D:/Project/DBFox-worktrees/creative-pixel",
       "integrated": false,
-      "phase": "backend_handoff_workbench_pending",
-      "backend_agent": "/root/pixel_backend"
+      "phase": "workbench_implementation",
+      "backend_agent": "/root/pixel_backend",
+      "backend_commit": "113f5334f12acee966c52182c62e56f9e4033b1b",
+      "workbench_agent": "/root/pixel_workbench"
     },
     {
       "dlc_id": "dbfox.game",
@@ -911,7 +947,7 @@
       "id": "artifact-navigation",
       "implementation_agent": "/root/host_artifact_navigation",
       "review": "docs/quality/dlc-artifact-navigation-review.md",
-      "review_result": "independent architecture accepted; stale registration fixed and retested; actual Dock visibility fixed, final production navigation/download retest pending",
+      "review_result": "Independent architecture and production Scene navigation/download/scope cancellation/lifecycle passed; separate adversarial review underway, independent Voxel production flow pending.",
       "commit": "24f2e8562144777a6e0528ef3a7c8238758cb181",
       "integration_branch": "codex/creative-program",
       "root_commit": "f934f997",
@@ -956,7 +992,7 @@
         "passed": 30,
         "seconds": 11.2
       },
-      "scene_full": "independent suite running"
+      "scene_full": "Independent bench13 plus fault9: 22 passed in 33.73s; unified CLI13/13; separate adversarial review pending"
     }
   ],
   "integration_verification": {
