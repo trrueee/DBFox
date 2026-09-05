@@ -22,6 +22,8 @@ Resource：Project 中的 Voxel Library 是创建入口；每个独立 VoxelWorl
 
 Canonical durable state：world 标识、project 归属、整数 size、version、title、palette、ordered layers、named regions、metadata 和每层稀疏 16³ chunk 的 palette index。Palette index 0 始终为空，非零 index 必须引用有效颜色。世界尺寸每轴至多 256，每个操作至多 2,097,152 个候选格点，超限明确拒绝；大世界分区域调用高层工具。
 
+快照读取先核对 metadata/chunk-hash 的既有 fingerprint，再逐个复用有界 chunk 解码验证实际 hash、非零计数、调色板与边界 padding；通过后才可发布摘要。派生索引计数不能单独成为事实源。每个新 revision 必须有唯一且身份一致的 producing receipt；no-op 回执不能冒领后来请求的结果。前端完整/增量分页在发布前核对重复坐标、最终计数、原生 WebCrypto chunk digest 和完整 fingerprint，失败保留上一次投影。
+
 View state：相机、hover、当前笔刷、当前 layer、层可见性、slice axis/index、临时 selection 与展开状态留在组件；selection 可作为 object reference/请求输入，不能给予资源权限。Derived state：mesh、surface cache、统计和 viewport 均可从已提交 chunk 重建。
 
 Operation：严格类型的 fill、box、sphere、extrude、replace、copy、mirror、boolean 与 metadata/configure。所有修改、delete 和 undo 必须提供 `expected_version`。UI 与 Agent 调用相同 store 方法；未知结果不自动重试。Operation log 记录被修改 chunk 的前后值和 metadata 前后值；不保存第二套可写作品。

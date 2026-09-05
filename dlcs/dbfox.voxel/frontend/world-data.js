@@ -15,13 +15,31 @@ function checkAbort(signal) {
   if (signal?.aborted) throw new DOMException("Read cancelled", "AbortError");
 }
 
+async function digest(bytes) {
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return "sha256:" + Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+// WorldDocument contains only fixed ASCII field names, integers, strings,
+// booleans and arrays. This is the existing owner fingerprint serialization.
+function canonical(value) {
+  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
+  if (value !== null && typeof value === "object") {
+    return "{" + Object.keys(value).sort().map((key) => JSON.stringify(key) + ":" + canonical(value[key])).join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
 function validWorld(world, worldId) {
   const doc = world?.document;
   if (world?.world_id !== worldId || !Number.isInteger(world.version) || world.version < 1
     || doc?.schema_version !== 1 || !Array.isArray(doc.size) || doc.size.length !== 3
     || doc.size.some((n) => !Number.isInteger(n) || n < 1 || n > 256)
     || !Array.isArray(doc.layers) || !doc.layers.length || doc.layers.length > 16
-    || !Array.isArray(doc.palette) || doc.palette.length > 256) {
+    || !Array.isArray(doc.palette) || doc.palette.length > 256
+    || !Number.isInteger(world.chunk_count) || world.chunk_count < 0 || world.chunk_count > MAX_CHUNKS
+    || !Number.isInteger(world.nonzero_count) || world.nonzero_count < 0 || world.nonzero_count > MAX_CHUNKS * 4096
+    || !/^sha256:[a-f0-9]{64}$/.test(world.content_hash)) {
     throw new Error("世界数据不符合版本合同，请刷新后重试。");
   }
   return world;
@@ -49,6 +67,7 @@ async function loadChunks(world, readPage, { previous = null, signal, onProgress
   const layers = new Set(world.document.layers.map((layer) => layer.id));
   const palette = new Set(world.document.palette.map((entry) => entry.index));
   const cursors = new Set();
+  const received = new Set();
   let after = null;
   let count = 0;
   do {
@@ -63,6 +82,8 @@ async function loadChunks(world, readPage, { previous = null, signal, onProgress
         throw new Error("分块坐标无效。");
       }
       const key = chunkKey(chunk.layer_id, chunk.coord);
+      if (received.has(key)) throw new Error("分块页面含有重复坐标。");
+      received.add(key);
       if (chunk.values === null) {
         chunks.delete(key);
       } else {
@@ -70,7 +91,10 @@ async function loadChunks(world, readPage, { previous = null, signal, onProgress
           || chunk.values.some((value) => !Number.isInteger(value) || value < 0 || value > 255 || !palette.has(value))) {
           throw new Error("分块内容损坏或引用了不存在的调色板颜色。");
         }
-        chunks.set(key, { layer_id: chunk.layer_id, coord: chunk.coord, hash: chunk.hash, values: Uint8Array.from(chunk.values) });
+        const values = Uint8Array.from(chunk.values);
+        if (await digest(values) !== chunk.hash) throw new Error("分块内容与其固定指纹不一致。");
+        checkAbort(signal);
+        chunks.set(key, { layer_id: chunk.layer_id, coord: chunk.coord, hash: chunk.hash, values });
       }
       count += 1;
     }
@@ -84,6 +108,15 @@ async function loadChunks(world, readPage, { previous = null, signal, onProgress
   } while (after != null);
   // Layer removals are metadata changes; tombstones are still accepted above.
   for (const [key, chunk] of chunks) if (!layers.has(chunk.layer_id)) chunks.delete(key);
+  let nonzero = 0;
+  const ordered = [...chunks.values()].sort((a, b) => {
+    if (a.layer_id !== b.layer_id) return a.layer_id < b.layer_id ? -1 : 1;
+    return a.coord[0] - b.coord[0] || a.coord[1] - b.coord[1] || a.coord[2] - b.coord[2];
+  });
+  for (const chunk of ordered) for (const value of chunk.values) if (value) nonzero += 1;
+  if (chunks.size !== world.chunk_count || nonzero !== world.nonzero_count) throw new Error("世界分块不完整或与摘要计数不一致。");
+  const fingerprint = canonical(world.document) + ordered.map((chunk) => "\n" + canonical([chunk.layer_id, ...chunk.coord, chunk.hash])).join("");
+  if (await digest(new TextEncoder().encode(fingerprint)) !== world.content_hash) throw new Error("完整世界与其固定指纹不一致。");
   checkAbort(signal);
   return { world, chunks };
 }
@@ -106,7 +139,6 @@ export async function loadSnapshot(access, artifactId, payload, signal) {
     throw new Error("快照清单的身份与版本不一致。");
   }
   const result = await loadChunks(world, (parameters) => read("chunks", parameters), { signal });
-  if (result.chunks.size !== world.chunk_count) throw new Error("快照分块不完整。");
   return result;
 }
 

@@ -163,3 +163,13 @@ Viewport先挂载canvas再连接OrbitControls，React layout cleanup在DOM移除
 采用固定Three 0.185.1 tarball的最小构建期源码补丁，仅在disconnect移除keyup并重置Control状态。没有运行时私有字段wrapper、伪造用户keyup或新事件代理。复现命令为desktop目录下 `node scripts/build-voxel-vendor.mjs`；脚本先验证原始sha512，再断言补丁唯一位置，使用固定esbuild0.28.2构建。原始/补丁源码hash、产物hash和补丁负责人/退出条件维护在vendor/provenance.json。升级到修复上游后，删除补丁并要求两个独立原生监听器用例通过。MIT许可证原样保留，未修改共享锁文件。
 
 新产物749587bytes，SHA256为4019cf00891df54884c4d14981c787f36e47b125590241402a5c9b1759351929。原两个独立断言未改：26项frontend通过3.60秒，完整lint为0errors/5条既有warnings。真实Electron重签与Control-held清理复验仍由独立Verifier完成后记录；本节不代替其结论。
+
+## 独立红队后的完整性修复
+
+新的独立攻击发现三类问题：只修改 chunk index 的非零计数后，world summary 仍发布错误计数；原 no-op receipt 可以冒领另一个请求实际生成的新 revision；前端可发布缺页、遗漏墓碑或内容被替换的固定快照。
+
+Director 在唯一 store 快照读取边界复用已有 `_raw` 有界解压与 hash/count/palette/padding 校验，所有 live chunks 验证后才发布 summary/context 或参与修改。保留现有历史 fingerprint，不新增索引缓存、迁移或第二份模型。代价为每次快照额外验证至多 8192 个 4096-byte chunk，逐个读取、不保留解压全集；大世界成本由独立红队继续测量。
+
+回执读取同时验证该 revision 的 producing receipt 唯一且身份属于当前请求；原 no-op 的 base=result，不会被误计为 producer。复用现有耐久请求和版本关系，不重新执行几何或绑定后来 head。新后端三个反例由失败变为通过（5.93 秒）；作者和旧独立回归 83 passed（35.41 秒）。首跑曾 82 pass/1 fail，因旧 fixture 的 0.35 秒总 deadline 在预定 after-commit 注入点前耗尽；独立原样单跑通过后，验证员将时间窗口改为 2 秒，保留实际超时、entered、attempts=1 与不重放断言。
+
+前端在原 `loadChunks` 发布边界拒绝重复坐标、核对完整/增量合成后的 chunk 与非零总数，并通过平台 [WebCrypto digest](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest) 校验收到的 chunk bytes 和完整文档 fingerprint。WorldDocument 的固定 ASCII 字段、整数/字符串/布尔值/数组按现有 owner 规范序列化，chunk 使用 layer 与数值坐标排序；没有自行实现 SHA-256 或加入第三方依赖。新的 6 项恶意分页测试含真实 Electron 下载字节正例全部通过（1.07 秒）。完整独立红队、最终重签浏览器检查与性能结论另由红队报告给出。

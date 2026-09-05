@@ -209,7 +209,13 @@ class VoxelStore:
         stored_hash = str(row["content_hash"])
         if fingerprint(document, chunks) != stored_hash:
             raise VoxelError("CORRUPT_STATE", "The voxel revision fingerprint does not match its stored content.", 409)
-        return WorldSnapshot(world_id, str(row["project_id"]), resolved_version, int(row["parent_version"]) if row["parent_version"] is not None else None, stored_hash, document, chunks)
+        snapshot = WorldSnapshot(world_id, str(row["project_id"]), resolved_version, int(row["parent_version"]) if row["parent_version"] is not None else None, stored_hash, document, chunks)
+        # The revision fingerprint binds raw hashes, not derived index counts.
+        # Validate those counts against the same bounded decoder used for chunk
+        # reads before publishing a snapshot to summaries, context, or mutations.
+        for key in chunks:
+            self._raw(connection, snapshot, key)
+        return snapshot
 
     def snapshot(self, project_id: str, world_id: str, version: int | None = None) -> WorldSnapshot:
         with self._connect() as connection:
@@ -306,6 +312,15 @@ class VoxelStore:
             if (not output.changed or isinstance(input, CreateInput)) and (output.changed_chunk_count or output.changed_voxel_count):
                 raise ValueError("Unexpected receipt change counts")
             if output.changed:
+                # Each new revision has exactly one producing receipt. No-op
+                # receipts at that revision have base_version == result_version.
+                # A receipt must not adopt a later request's valid revision.
+                producers = connection.execute("""SELECT project_id,origin,request_id FROM operation_receipts
+                    WHERE world_id=? AND result_version=?
+                    AND (base_version IS NULL OR base_version=result_version-1)""",
+                    (output.world_id, result_version)).fetchall()
+                if len(producers) != 1 or tuple(producers[0]) != (project_id, origin, request_id):
+                    raise ValueError("Receipt does not uniquely produce its revision")
                 revision = connection.execute("SELECT operation_kind FROM world_revisions WHERE world_id=? AND version=?",
                     (output.world_id, result_version)).fetchone()
                 changed_chunks = connection.execute("SELECT layer_id,cx,cy,cz FROM chunk_versions WHERE world_id=? AND version=?",
