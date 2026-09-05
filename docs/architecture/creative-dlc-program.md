@@ -9,7 +9,7 @@
 > 适用范围：新增 Creative Capability DLC、组合验证与集成门禁
 
 本计划把创作领域保留在独立 DLC 中。它不表示目录中的能力已经实现。
-执行状态以 [机器可读队列](../quality/creative-dlc-program.json) 和每个 DLC 的
+执行状态以 [机器可读队列](../../dlcs/program-status.json) 和每个 DLC 的
 `program-status.json` 为准；只有完成验证与独立审查的能力才能进入集成候选。
 
 ## 1. 实施基线与分工

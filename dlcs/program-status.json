@@ -190,7 +190,7 @@
           "verification/tests/system/test_voxel_dlc.py",
           "desktop/src/features/dlc/__tests__/dbfoxVoxelFixture.test.ts"
         ],
-        "backend": "43 passed, 1 deselected; full signed RunLoop incremental currently fails shared Artifact authority",
+        "backend": "44 passed in 20.84s including unchanged signed production RunLoop incremental case after shared authority fix",
         "frontend": "16 passed; real GPU probe used fixture-backed operations and is not production Host proof",
         "typecheck": "passed"
       },
@@ -224,12 +224,12 @@
       "detail_path": "dlcs/dbfox.voxel/program-status.json",
       "worktree": "D:/Project/DBFox-worktrees/creative-voxel",
       "integrated": false,
-      "phase": "independent_verification_pending_authority_fix",
+      "phase": "independent_bench_and_red_team_pending",
       "workbench_evidence": "14 fixture tests passed; real GPU UI exercised with memory-operation fixture; full production navigation remains pending."
     },
     {
       "dlc_id": "dbfox.shader",
-      "status": "architecture",
+      "status": "implementation",
       "scheduled": true,
       "wave": 1,
       "branch": "creative/shader",
@@ -332,8 +332,8 @@
           },
           {
             "role": "Backend Engineer",
-            "agent": null,
-            "status": "pending_slot"
+            "agent": "/root/scene_lead/domain_architect",
+            "status": "running"
           },
           {
             "role": "Workbench Engineer",
@@ -432,7 +432,8 @@
       ],
       "completion_claimed": false,
       "integrated_by": null,
-      "phase": "architecture_accepted_backend_pending"
+      "phase": "backend_implementation",
+      "backend_agent": "/root/scene_lead/domain_architect"
     },
     {
       "dlc_id": "dbfox.pixel",
@@ -457,7 +458,12 @@
         "dbfox.pixel.sprite.v1"
       ],
       "frontend_views": [],
-      "tests": [],
+      "tests": [
+        {
+          "scope": "author backend",
+          "result": "30 passed in 11.20s; actual 5-Invocation same-Run create/rect/inspect/line/export passed"
+        }
+      ],
       "bench": [],
       "architecture_review": {
         "status": "accepted",
@@ -470,7 +476,7 @@
       "detail_path": "docs/quality/pixel-dlc-evidence.md",
       "worktree": "D:/Project/DBFox-worktrees/creative-pixel",
       "integrated": false,
-      "phase": "backend_implementation",
+      "phase": "backend_handoff_workbench_pending",
       "backend_agent": "/root/pixel_backend"
     },
     {
@@ -918,7 +924,7 @@
     },
     {
       "id": "artifact-invocation-authority",
-      "status": "implementation",
+      "status": "cross_dlc_verification",
       "integrated": false,
       "worktree": "D:/Project/DBFox-worktrees/creative-artifact-authority",
       "branch": "codex/creative-artifact-authority",
@@ -930,7 +936,32 @@
       "verification": "independently reproduced by Scene verifier and Voxel observation repair engineer",
       "architecture": "accepted",
       "review": "docs/quality/artifact-invocation-authority-review.md",
-      "implementation_agent": "/root/scene_lead/domain_architect"
+      "implementation_agent": "/root/scene_lead/domain_architect",
+      "commit": "8ba14f69",
+      "root_commit": "cec7c6dc",
+      "core_system_verification": {
+        "passed": 822,
+        "deselected": 137,
+        "seconds": 120.7
+      },
+      "engineering_contracts": {
+        "passed": 45,
+        "seconds": 3.17
+      },
+      "voxel_full": {
+        "passed": 44,
+        "seconds": 20.84
+      },
+      "pixel_author": {
+        "passed": 30,
+        "seconds": 11.2
+      },
+      "scene_full": "independent suite running"
     }
-  ]
+  ],
+  "integration_verification": {
+    "core_system": "822 passed, 137 deselected in 120.70s",
+    "engineering": "45 passed in 3.17s",
+    "status_file_location": "dlcs/program-status.json; docs naming contract intentionally retained"
+  }
 }

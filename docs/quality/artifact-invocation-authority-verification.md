@@ -79,3 +79,19 @@ git diff --check
 独立 Scene capability 脚本套件位于 `creative-scene/verification/bench/capabilities/dbfox_scene`，由 Director 在集成后运行；本页不声称 Scene 全套、真实 LLM、桌面交互、隔离进程的 Artifact 读取能力或独立红队已通过。
 
 现行宪章 3.2 与主合同旧“Run authority”句子的澄清已在审议页给出。相关主文档属于用户既有 dirty 基线，本提交不混入；由 Director 集成时更新，语义为 Invocation 执行权威与显式公开成果来源继承分离。
+
+## Director 集成回归
+
+共享实现`8ba14f69`合入主工作区`codex/creative-program`（`cec7c6dc`）后，Director独立
+重跑完整Core/System确定性集合：822 passed、137 deselected、120.70秒。使用AGENTS规定
+排除e2e、integration、real_llm、migration、engineering_contract、platform_contract；
+另跑工程合同45 passed、3.17秒。新增全局状态JSON最初位于docs，违反其既有文件名合同，
+已移至`dlcs/program-status.json`并更新导航，没有放宽工程检查。
+
+Director在Voxel工作树合入相同实现后原样运行`test_voxel_dlc.py`：44 passed、20.84秒，
+不再排除同Run增量用例。Pixel作者报告30项通过，其中生产签名包5次Invocation在1个Run
+完成创建、矩形、检查、线条、导出，未修改失败断言；这部分仍标记为Pixel作者证据。
+Scene独立完整套件仍在执行，最终独立红队尚未完成。
+
+Director已在所有工作树的既有dirty主合同中仅更新上述权威措辞；原有用户内容仍不纳入本
+实现提交。变更增量单独保存在任务外部工作目录，防止与用户基线混合提交。
