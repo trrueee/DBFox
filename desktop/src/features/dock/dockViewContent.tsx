@@ -19,7 +19,7 @@ const ArtifactDock = lazy(() =>
 export type { DockShowToast };
 
 export function DockSuspense({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<LoadingState label="�������빤��̨" />}>{children}</Suspense>;
+  return <Suspense fallback={<LoadingState label="正在载入工作台" />}>{children}</Suspense>;
 }
 
 export function ArtifactsDockContent({ conversationId }: { conversationId: string }) {
@@ -89,8 +89,8 @@ export function ArtifactsDockContent({ conversationId }: { conversationId: strin
   if (!conversationId || artifacts.filter(isPrimaryConversationArtifact).length === 0) {
     return (
       <EmptyState
-        title="���޹���"
-        description="������ɺ����ɵĽ����ͼ���ͱʼǻ���������"
+        title="暂无工件"
+        description="分析完成后生成的结果、图表和笔记会显示在这里。"
       />
     );
   }
@@ -122,14 +122,14 @@ export function ArtifactDockContent({
     return (
       <WorkspaceShell
         title={tab.title}
-        description="�ñ�ǩ�����ù������ݣ���������ע�����ͼ�����ȡ��"
+        description="此标签引用工件，内容由已注册的视图负责读取。"
         showHeader={false}
         aria-label={tab.title}
         bodyClassName="workspace-shell__body--artifact"
       >
         <EmptyState
-          title="����������"
-          description="�ù����ѹرջ�δ�ڵ�ǰ�Ự�����롣"
+          title="工件不可用"
+          description="该工件已关闭或尚未在当前会话中载入。"
         />
       </WorkspaceShell>
     );
@@ -140,7 +140,7 @@ export function ArtifactDockContent({
   return (
     <WorkspaceShell
       title={artifact.title}
-      description="ͬһ�;ù����ڹ������еĽ�����ͼ��"
+      description="同一工件在工作区中的交互视图。"
       showHeader={false}
       aria-label={artifact.title}
       bodyClassName="workspace-shell__body--artifact"
@@ -156,11 +156,11 @@ export function ArtifactDockContent({
               object: { kind: "artifact", id: artifact.id, version: artifact.version },
               artifactId: artifact.id,
             });
-            showToast("�Ѽ���Ի�������", "success");
+            showToast("已加入对话上下文", "success");
           }}
         >
           <MessageSquarePlus size={14} aria-hidden="true" />
-          ����Ի�������
+          加入对话上下文
         </Button>
       </div>
       <ArtifactViewHost
