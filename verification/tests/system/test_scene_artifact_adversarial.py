@@ -276,3 +276,18 @@ def test_terminal_prior_plan_and_tool_references_filter_only_unavailable_artifac
         assert [item.id for item in previous.artifacts]==[valid]
         assert [artifact for item in previous.tool_outcomes for artifact in item.artifact_ids]==[valid]
         assert [artifact.id for item in previous.tool_outcomes for artifact in item.artifacts]==[valid]
+
+
+@pytest.mark.parametrize("damage",["internal","producer_failed"])
+def test_completed_prior_run_without_available_artifacts_omits_recovery_index(produced,damage):
+    runtime,evidence,scene=produced
+    admission,_=admit(runtime,evidence,reference(scene))
+    with runtime.factory() as db:
+        current_export=db.get(AgentArtifactRecord,evidence["artifacts"][2]["id"])
+        if damage=="internal":current_export.presentation_json=json.dumps({"visibility":"internal"})
+        else:db.get(AgentToolInvocation,json.loads(current_export.provenance_json)["tool_invocation_id"]).status="failed"
+        db.commit()
+        assert all(ArtifactRepository(db).available_artifact(session_id=evidence["session_id"],
+            current_run_id=admission.run_id,artifact_id=item["id"]) is None for item in evidence["artifacts"])
+        context=ContextAssembler(db).build(admission.run_id)
+        assert context.previous_run_outcome is None

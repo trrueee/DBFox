@@ -20,7 +20,8 @@ async (page) => {
       references:module.selectActiveWorkbench(state).references};
   });
   const generic=after.references.find(reference=>reference.artifactId===exported.artifact_id);
-  if(!generic || generic.authority || generic.object.kind!=='artifact') throw new Error('Actual generic Artifact handoff shape changed');
-  await page.screenshot({path:'output/playwright/scene-artifact-reference.png'});
+  if(!generic || generic.authority !== undefined || generic.object !== undefined) throw new Error('Generic Artifact handoff must use canonical artifactId without Resource or Object authority');
+  if(actualButtonLabel!=='加入对话上下文') throw new Error('Artifact reference action label is unreadable');
+  await page.screenshot({path:'output/playwright/scene-artifact-reference-after.png'});
   return {documentReferences,exported,actualButtonLabel,after};
 }
