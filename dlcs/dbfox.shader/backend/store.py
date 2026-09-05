@@ -306,8 +306,8 @@ class Store:
                 result = c.MutationResult(document=c.Summary(id=document.id, title=document.title, version=version, content_hash=digest_content, deleted=deleted), studio_generation=next_generation, changed=changed, changed_ids=changed_ids[:64], truncated=len(changed_ids)>64, created_refs=refs)
                 if len(c.encoded(result.model_dump(mode="json"))) > 8192:
                     raise ShaderError("SHADER_LIMIT", "Mutation response exceeds its observation budget.")
-                check_cancelled(cancelled)
                 self.save_receipt(db, project, actor, request_id, digest, result)
+                check_cancelled(cancelled)
                 return result
             except ShaderError:
                 raise
@@ -356,8 +356,8 @@ class Store:
             while len(c.encoded(result.model_dump(mode="json", exclude_none=True))) > 8192 and result.diagnostics:
                 result.diagnostics.pop()
                 result.truncated = True
-            check_cancelled(cancelled)
             self.save_receipt(db, project, "agent", invocation_id, digest, result)
+            check_cancelled(cancelled)
             return result
 
     def read_report(self, db: sqlite3.Connection, project: str, report_id: str, generation: int | None = None) -> tuple[c.Report, bytes]:

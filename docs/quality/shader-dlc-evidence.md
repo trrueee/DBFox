@@ -179,3 +179,11 @@ interactions 脚本从已产生冲突的浏览器状态继续；完整键盘操�
 独立验证在1440×902的真实Electron窗口发现正常Dock只有319.3 CSS px，工作区却保留340+270 px两列，scrollWidth为610 px；点击源码页签会带动父区域横向滚动。原800/480 px断点以整个窗口为准，因此作者390 px窗口测试未覆盖此布局。
 
 复用浏览器原生[CSS容器查询](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Containment/Container_queries)：在既有owner根节点声明具名inline-size容器，两组宽度断点依据实际容器切换；减少动态效果仍按设备媒体查询。没有增加DOM包装、JavaScript宽度镜像、ResizeObserver或依赖。原13项前端fixture通过（5.95秒），lint与设计令牌合同通过（0错误，5个既存共享警告）。fixture不提供布局证据，实际窄Dock修复复验由独立工程师在重新签名安装的候选中完成。
+
+## 独立取消提交窗口修正（2026-09-06）
+
+独立工程师在签名包与真实ToolRuntime的shader_create路径，只在原save_receipt完成SQLite INSERT与配额计账后触发取消信号，保留原事务未提交。工具报告取消，公开documents.list仍出现新文档及generation1，原用例1 failed / 3.79秒；Director原样复现1 failed / 3.26秒。
+
+复用已有check_cancelled与SQLite回滚：mutate和save_report均将末次取消检查移到save_receipt之后、返回并退出原事务之前。这样所有领域写入、回执与配额计账完成后仍核验取消；没有新增事务、队列、重试或补偿层。已提交的相同identity仍按原receipt返回；提交本身与稍后到达的取消之间没有操作系统级原子承诺。
+
+回归中44项作者合同、实际生产工厂和原create-fence均通过（合计46项）；同期独立工程师正在新增report分支，第一次夹具把compute.next的idle当成立即有请求，因此该集合另有1项未到达注入点的失败。按公开轮询合同修正后，独立两分支2 passed / 7.11秒。创建缺陷有真实修前失败；报告分支是对同形提交路径的覆盖，不伪称已有第二份修前产品失败。store的pyflakes通过。最后真实Electron重签与GPU/窄Dock复验待独立报告记录。
