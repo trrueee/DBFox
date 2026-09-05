@@ -197,3 +197,9 @@ interactions 脚本从已产生冲突的浏览器状态继续；完整键盘操�
 新受控模型观察到ledger后不重放mutation，而是正式shader_inspect读取documents→固定v2的stages→source，然后shader_export。最终Run completed，6个真实Invocation全部成功且attempts=1，只有一次shader_modify，head仍v2，3个正式Artifact；通过公开分页完整读取62个stage，60份新source逐字相同。检查还要求保留的native call/output成对，ledger确有两份Artifact身份。最后 **1 passed / 5.70秒**，pyflakes通过。
 
 没有修改Core、owner或旧suite的15项数据；没有从私有SQLite、评分器或Human结果补写模型观察。该回归证明受控模型可以遵守既有恢复合同，不能承诺任意真实模型都能自行采取正确恢复策略。独立GPU验收的已冻结产品字节保持不变。
+
+## 正式文档Artifact空值合同修正（2026-09-06）
+
+独立真实Agent的8个Artifact中，4个document-revision都带正式payload.report_id=null，前端parseLocator却只允许省略或字符串，四个卡片均不能解析；compile-report/preview卡片正常。独立fixture直接读取实际producer输出，原1 failed / 1.79秒；Director原样复现1 failed / 1.14秒。
+
+权威后端ArtifactLocator已明确Id|None=None，因此只在前端现有解析条件接受null，保持原输入对象、不删除或转换字段，其他错误类型仍拒绝。未改SDK、后端、Artifact producer、表示一致性或来源权限，没有兼容映射。原13项作者UI与独立真实payload回归合计 **14 passed / 5.90秒**。已请独立验证员在重新签名候选上完成固定源码打开及JSON下载，不能用解析通过代替真实卡片行为。

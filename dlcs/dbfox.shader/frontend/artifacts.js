@@ -4,7 +4,7 @@ export function parseLocator(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Invalid Shader Artifact locator.');
   for (const name of ['project_id', 'document_id', 'content_hash', 'title']) if (typeof payload[name] !== 'string' || !payload[name]) throw new Error(`Shader Artifact is missing ${name}.`);
   if (!Number.isSafeInteger(payload.version) || payload.version < 1 || !/^[a-f0-9]{64}$/.test(payload.content_hash)) throw new Error('Invalid Shader Artifact revision.');
-  if (payload.report_id !== undefined && typeof payload.report_id !== 'string') throw new Error('Invalid Shader report identity.');
+  if (payload.report_id !== undefined && payload.report_id !== null && typeof payload.report_id !== 'string') throw new Error('Invalid Shader report identity.');
   return payload;
 }
 
