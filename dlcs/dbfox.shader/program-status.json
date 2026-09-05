@@ -1,0 +1,204 @@
+{
+  "dlc_id": "dbfox.shader",
+  "status": "backend_candidate",
+  "branch": "creative/shader",
+  "worktree": "D:/Project/DBFox-worktrees/creative-shader",
+  "lead": "/root/shader_lead",
+  "canonical_model": {
+    "name": "ShaderDocument",
+    "schema_version": 1,
+    "language": "glsl-es-300",
+    "authority": "DLC-owned state.sqlite3",
+    "resource": "One dbfox.shader.studio per Project; document/stage/pass/uniform/texture are Objects",
+    "versions": "studio generation and changed document version advance in the same SQLite transaction; all edits use expected_version; no-op/stale/invalid do not advance",
+    "state": "accepted_independent_architecture"
+  },
+  "resource_kinds": [
+    "dbfox.shader.studio"
+  ],
+  "tools": [
+    "shader_create",
+    "shader_inspect",
+    "shader_modify",
+    "uniform_set",
+    "texture_bind",
+    "pass_create",
+    "compile",
+    "inspect_compile_error",
+    "render_preview",
+    "shader_delete",
+    "shader_undo",
+    "shader_diff",
+    "shader_export"
+  ],
+  "artifacts": [
+    "dbfox.shader.document-revision",
+    "dbfox.shader.compile-report",
+    "dbfox.shader.preview"
+  ],
+  "representations": [
+    "dbfox.shader.document.v1",
+    "dbfox.shader.compile-report.v1",
+    "dbfox.shader.preview.v1",
+    "dbfox.shader.preview-png.v1"
+  ],
+  "frontend_views": [
+    "Shader Studio code editor",
+    "live WebGL2 preview",
+    "uniform controls",
+    "pass and stage selection",
+    "compile diagnostics",
+    "undo and Agent reference handoff"
+  ],
+  "tests": {
+    "status": "backend_author_44_passed_frontend_pending",
+    "backend_path": "verification/tests/system/test_shader_dlc.py",
+    "frontend_path": "desktop/src/features/dlc/__tests__/dbfoxShaderFixture.test.ts",
+    "required": [
+      "CAS and concurrent human/Agent edits",
+      "persistence/crash/migration/corrupt state",
+      "real compile/link/error/repair/preview",
+      "Dock-closed activation compute",
+      "nonce/epoch/hash/version/deadline mismatch",
+      "cancel/timeout/retry/late result",
+      "deactivate/reactivate and cleanup",
+      "bounded context and resources",
+      "production Tool authority and settlement",
+      "packaged Electron/CSP"
+    ],
+    "backend_count": 44,
+    "gpu_evidence": "simulated bridge receipts only; real GPU unverified"
+  },
+  "bench": {
+    "status": "not_implemented",
+    "path": "verification/bench/capabilities/dbfox_shader",
+    "required_scenarios": [
+      "simple_creation",
+      "incremental_modification",
+      "multi_stage_creation",
+      "invalid_instruction_recovery",
+      "inspect_before_edit",
+      "stale_version",
+      "no_op",
+      "ambiguous_request",
+      "large_document",
+      "bounded_context",
+      "human_then_agent_edit",
+      "negative_no_modification"
+    ],
+    "stress": "A complex procedural scene followed by at least 10 different changes through production Tools; no mock compile evidence"
+  },
+  "architecture_review": {
+    "status": "accepted",
+    "director_decision": "DLC-local activation compute through existing machine operations may enter verification; no new Host seam",
+    "core_changes": [],
+    "sdk_changes": [],
+    "proposal": "docs/architecture/shader-dlc.md",
+    "evidence": "docs/quality/shader-dlc-evidence.md",
+    "roles": [
+      {
+        "role": "Domain Architect",
+        "agent": "/root/shader_architect",
+        "status": "completed",
+        "implementation_allowed": false
+      },
+      {
+        "role": "Backend Engineer",
+        "agent": "/root/scene_lead/domain_architect",
+        "status": "completed_author_verification"
+      },
+      {
+        "role": "Workbench Engineer",
+        "agent": null,
+        "status": "pending_slot"
+      },
+      {
+        "role": "Verification Engineer",
+        "agent": null,
+        "status": "pending_slot"
+      },
+      {
+        "role": "Adversarial Reviewer",
+        "agent": null,
+        "status": "pending_independent_agent",
+        "must_not_implement": true
+      }
+    ],
+    "concurrency_note": "Director plus Shader Lead plus Scene Backend plus Voxel Backend occupied the four slots during research. No specialist work is falsely claimed. Director will schedule distinct roles; completed-child slot retention may require explicitly recorded thread reuse.",
+    "agent": "/root/shader_architect"
+  },
+  "known_blockers": [
+    {
+      "id": "SHADER-VERIFY-COMPUTE",
+      "kind": "verification_gap",
+      "detail": "Existing machine operations can express a transient Tool-owned compute request, but real release-renderer compile/link/readPixels/cancel evidence has not yet been produced."
+    },
+    {
+      "id": "SHADER-RENDERER-INTERRUPT",
+      "kind": "risk_to_verify",
+      "detail": "WebGL synchronous calls may block the renderer. Backend timeout can reject late results; immediate GPU preemption is not guaranteed. Worker same-origin/CSP constraints must not be bypassed."
+    },
+    {
+      "id": "SHADER-PROJECT-DELETE",
+      "kind": "current_platform_absence",
+      "detail": "Current Project API has no delete route and public SDK no project deletion lifecycle callback. Do not claim this lifecycle case implemented or read Core metadata privately."
+    }
+  ],
+  "composition_candidates": [
+    "dbfox.music-visual",
+    "dbfox.scene-game",
+    "Shader document/preview representation consumer when a real joint-resource task is proven"
+  ],
+  "compute_path": {
+    "state": "approved_in_principle_for_verification",
+    "runtime": "Bundled Electron Chromium WebGL2; GLSL ES 3.00",
+    "scope": "machine",
+    "creation": "Only a running authorized production Tool creates transient request",
+    "operation_surface": [
+      "compute.attach",
+      "compute.next",
+      "compute.complete",
+      "compute.detach"
+    ],
+    "binding": [
+      "owner",
+      "package_digest",
+      "worker_epoch",
+      "invocation_id",
+      "document_id",
+      "revision",
+      "source_hash",
+      "claim_nonce",
+      "deadline"
+    ],
+    "durable_queue": false,
+    "canonical_write_access": false,
+    "requires_open_dock": false,
+    "renderer_missing": "Explicit read-only unavailable/timeout failure; no replay of edits",
+    "attestation": "Observation by trusted renderer only; no malicious-publisher/GPU attestation claim",
+    "budgets_proposed": {
+      "source_total_bytes": 524288,
+      "passes": 32,
+      "stages": 64,
+      "uniforms": 128,
+      "textures": 16,
+      "texture_bytes_each": 1048576,
+      "preview_width": 256,
+      "preview_height": 256,
+      "deadline_seconds": 10,
+      "diagnostics_summary": 20,
+      "texture_total_bytes": 4194304,
+      "compute_claim_json_bytes": 8388608
+    }
+  },
+  "next_steps": [
+    "Director schedules independent Shader Workbench Engineer using contracts.schema.json",
+    "Verify real installed Chromium WebGL2 with Dock closed",
+    "Run independent Verification/benchmark/stress",
+    "Run independent Adversarial Review and resolve confirmed defects",
+    "Director assesses complete integration candidate"
+  ],
+  "completion_claimed": false,
+  "integrated_by": null,
+  "phase": "backend_candidate_workbench_pending"
+}
