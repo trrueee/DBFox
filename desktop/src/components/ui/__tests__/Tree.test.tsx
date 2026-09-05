@@ -27,6 +27,40 @@ afterEach(() => {
 });
 
 describe("Host Tree primitive", () => {
+  it.each([2, 150])("reactivates a selected leaf after its tab closes (%i visible nodes)", async (count) => {
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(320);
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(448);
+    const items = Array.from({ length: count }, (_, index) => ({ id: `world-${index}`, label: `World ${index}` }));
+    const onItemSelect = vi.fn();
+    const onSelectedIdsChange = vi.fn();
+    const onAction = vi.fn();
+    render(<Tree
+      rootItem={{ id: "root", label: "", children: items }}
+      ariaLabel="Worlds"
+      getItemId={(item: Node) => item.id}
+      getItemLabel={(item: Node) => item.label}
+      getItemChildren={(item: Node) => item.children}
+      onItemSelect={onItemSelect}
+      onSelectedIdsChange={onSelectedIdsChange}
+      renderItemActions={(item) => <button type="button" onClick={onAction}>Inspect {item.label}</button>}
+    />);
+    const leaf = await screen.findByRole("treeitem", { name: "World 0" });
+    fireEvent.click(leaf);
+    await waitFor(() => expect(onItemSelect).toHaveBeenCalledTimes(1));
+    expect(onSelectedIdsChange).toHaveBeenCalledTimes(1);
+    // The tab closes independently; the resource selection remains in the tree.
+    fireEvent.click(leaf);
+    await waitFor(() => expect(onItemSelect).toHaveBeenCalledTimes(2));
+    fireEvent.keyDown(leaf, { key: "Enter" });
+    await waitFor(() => expect(onItemSelect).toHaveBeenCalledTimes(3));
+    expect(onItemSelect.mock.calls.every(([item]) => item === items[0])).toBe(true);
+    expect(onSelectedIdsChange).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Inspect World 0" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Inspect World 0" }), { key: "Enter" });
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onItemSelect).toHaveBeenCalledTimes(3);
+  });
+
   it("uses Zag keyboard/selection behavior without emitting CSP-blocked inline styles", async () => {
     const onItemSelect = vi.fn();
     const { container } = render(

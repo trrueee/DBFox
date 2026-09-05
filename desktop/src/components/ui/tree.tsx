@@ -244,6 +244,7 @@ export function Tree<T>({
                       renderItemIcon={renderItemIcon}
                       renderItemMeta={renderItemMeta}
                       renderItemActions={renderItemActions}
+                      onItemSelect={onItemSelect}
                     />
                   ) : (
                     <div
@@ -274,6 +275,7 @@ export function Tree<T>({
                 renderItemMeta={renderItemMeta}
                 renderItemActions={renderItemActions}
                 renderBranchFooter={renderBranchFooter}
+                onItemSelect={onItemSelect}
               />
             ))}
       </div>
@@ -352,6 +354,7 @@ function TreeFlatNode<T>({
   renderItemIcon,
   renderItemMeta,
   renderItemActions,
+  onItemSelect,
 }: {
   item: T;
   indexPath: number[];
@@ -362,6 +365,7 @@ function TreeFlatNode<T>({
   renderItemIcon?: (item: T, state: TreeItemRenderState) => ReactNode;
   renderItemMeta?: (item: T, state: TreeItemRenderState) => ReactNode;
   renderItemActions?: (item: T, state: TreeItemRenderState) => ReactNode;
+  onItemSelect?: (item: T) => void;
 }) {
   const nodeProps = { node: item, indexPath };
   const nodeState = api.getNodeState(nodeProps);
@@ -400,6 +404,18 @@ function TreeFlatNode<T>({
   return (
     <div
       {...itemProps}
+      onClick={(event) => {
+        const reactivate = nodeState.selected && !nodeState.disabled && !event.defaultPrevented
+          && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+        itemProps.onClick?.(event);
+        if (reactivate) onItemSelect?.(item);
+      }}
+      onKeyDown={(event) => {
+        // Zag reports selection changes; Enter also reopens a selected leaf.
+        if (nodeState.selected && !nodeState.disabled && event.target === event.currentTarget
+          && event.key === "Enter" && !event.repeat && !event.nativeEvent.isComposing
+          && !event.defaultPrevented) onItemSelect?.(item);
+      }}
       {...declaredTreePosition}
       aria-label={label}
       className={joinClassNames("dbfox-tree__row-shell", "dbfox-tree__item-shell", depthClass)}
@@ -447,6 +463,7 @@ function TreeNode<T>({
   renderItemMeta,
   renderItemActions,
   renderBranchFooter,
+  onItemSelect,
 }: {
   item: T;
   indexPath: number[];
@@ -458,6 +475,7 @@ function TreeNode<T>({
   renderItemIcon?: (item: T, state: TreeItemRenderState) => ReactNode;
   renderItemMeta?: (item: T, state: TreeItemRenderState) => ReactNode;
   renderItemActions?: (item: T, state: TreeItemRenderState) => ReactNode;
+  onItemSelect?: (item: T) => void;
   renderBranchFooter?: (item: T, state: TreeItemRenderState) => ReactNode;
 }) {
   const nodeProps = { node: item, indexPath };
@@ -511,6 +529,7 @@ function TreeNode<T>({
               renderItemMeta={renderItemMeta}
               renderItemActions={renderItemActions}
               renderBranchFooter={renderBranchFooter}
+              onItemSelect={onItemSelect}
             />
           ))}
           {branchFooter != null && (
@@ -529,7 +548,23 @@ function TreeNode<T>({
 
   const itemProps = withoutInlineStyle(api.getItemProps(nodeProps));
   return (
-    <div {...itemProps} aria-label={label} className="dbfox-tree__row-shell dbfox-tree__item-shell">
+    <div
+      {...itemProps}
+      onClick={(event) => {
+        const reactivate = nodeState.selected && !nodeState.disabled && !event.defaultPrevented
+          && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+        itemProps.onClick?.(event);
+        if (reactivate) onItemSelect?.(item);
+      }}
+      onKeyDown={(event) => {
+        // Zag reports selection changes; Enter also reopens a selected leaf.
+        if (nodeState.selected && !nodeState.disabled && event.target === event.currentTarget
+          && event.key === "Enter" && !event.repeat && !event.nativeEvent.isComposing
+          && !event.defaultPrevented) onItemSelect?.(item);
+      }}
+      aria-label={label}
+      className="dbfox-tree__row-shell dbfox-tree__item-shell"
+    >
       <div className="dbfox-tree__row dbfox-tree__item-row">
         <span className="dbfox-tree__indicator dbfox-tree__indicator--leaf" aria-hidden="true" />
         {icon != null && <span className="dbfox-tree__icon">{icon}</span>}
