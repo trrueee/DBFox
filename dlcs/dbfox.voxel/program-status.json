@@ -1,6 +1,6 @@
 {
   "dlc_id": "dbfox.voxel",
-  "status": "implementation",
+  "status": "integrated",
   "branch": "creative/voxel",
   "lead": "/root/voxel_lead",
   "canonical_model": "VoxelWorld: 16-cubed palette-indexed chunks, ordered layers, named regions, metadata",
@@ -36,17 +36,20 @@
     "dbfox.voxel.snapshot"
   ],
   "tests": {
-    "status": "backend_and_fixture_pass_independent_verification_pending",
+    "status": "independent_and_root_integration_passed",
     "paths": [
       "verification/tests/system/test_voxel_dlc.py",
       "desktop/src/features/dlc/__tests__/dbfoxVoxelFixture.test.ts"
     ],
     "backend": "47 backend + 14 capability bench: 61 passed in 39.45s; no exclusions or xfail",
     "frontend": "16 passed; real GPU probe used fixture-backed operations and is not production Host proof",
-    "typecheck": "passed"
+    "typecheck": "passed",
+    "independent_verification": "6467337c; production Electron, faults and14/14 CLI",
+    "independent_adversarial": "f095d35f;55 new backend and12 new frontend;7 confirmed categories closed;actual cold signed Electron passed",
+    "root_integration": "197 backend/bench/engineering168.18s;59 frontend10.38s;typecheck passed"
   },
   "bench": {
-    "status": "director_authored_pass_independent_review_pending",
+    "status": "independently_reviewed_passed",
     "path": "verification/bench/capabilities/dbfox_voxel",
     "suite": "capability.dbfox-voxel.scripted",
     "cases": 14,
@@ -87,5 +90,12 @@
     "dbfox.voxel-game",
     "dbfox.voxel-scene"
   ],
-  "phase": "independent_bench_review_production_workbench_and_red_team_pending"
+  "phase": "integrated_after_independent_verification_and_adversarial",
+  "integrated": true,
+  "candidate_commit": "25b1e76e",
+  "integration_commit": "bb9a00a4",
+  "independent_reports": [
+    "docs/quality/voxel-independent-verification.md",
+    "docs/quality/voxel-adversarial-review.md"
+  ]
 }

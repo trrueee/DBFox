@@ -20,4 +20,4 @@ Pixel 独立验收在真实 Electron 中两次观察到约500次请求后所有 
 
 独立工程师提交的[真实子进程回归](../../desktop/main/__tests__/engine.stdout.test.ts)通过实际4MiB pipe验证生产Supervisor，不用模拟Readable状态。修前因果探针失败，修后无需测试干预即写完、flowing=true。`cd desktop; npm run test:electron`：11文件、33项通过，9.85秒，包括现有启动、失败、重启、退出和Main/Preload合同。
 
-真实 Electron 超过原阻塞阈值的长时间请求验证仍由独立 Pixel 验收执行，其最终证据另列。Windows x64 的测试不代表其他平台或安装包已验证。
+独立Pixel最终提交6ed057d0证明真实Electron连续1100次正式HTTP全部200（6.8735秒），同generation且没有重启。独立Voxel最终冷签名候选另验600次HTTP全部200（3.237秒），见[已集成对抗证据](../../verification/bench/capabilities/dbfox_voxel/evidence/adversarial-electron.json)。这些是超过原阻塞阈值的有限样本，不代表无限持续服务。Windows x64 的测试不代表其他平台或安装包已验证。
