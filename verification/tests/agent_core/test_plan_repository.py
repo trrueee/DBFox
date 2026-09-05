@@ -200,6 +200,20 @@ def test_task_plan_accepts_a_prior_result_observed_by_the_current_run(
     lease = sessions.claim(session_id=session_id, owner="worker-plan-observed")
     assert lease is not None
     assert sessions.promote_next_input(lease=lease) == previous.run_id
+    previous_turn = sessions.start_turn(
+        lease=lease, run_id=previous.run_id, agent_definition_version="1",
+        prompt_version="1", prompt_hash="prompt", context_snapshot={}, context_hash="context",
+        tool_materialization={"tools": []}, tool_materialization_hash="tools",
+        provider="provider", model_name="model",
+    )
+    db_session.add(AgentToolInvocation(
+        id="invocation-produced-result", session_id=session_id, run_id=previous.run_id,
+        turn_id=str(previous_turn.id), provider_call_id="produce-prior-result",
+        tool_name="verification_create", declared_version="1", contract_hash="sha256:1",
+        input_json="{}", input_hash="input-hash", idempotency_key="produce-prior-result",
+        status="succeeded", resource_refs_json="[]", policy_json="{}",
+        presentation_json="{}", recovery_policy="retry_safe",
+    ))
     previous_run = db_session.get(AgentRun, previous.run_id)
     assert previous_run is not None
     previous_run.status = "completed"
@@ -208,11 +222,12 @@ def test_task_plan_accepts_a_prior_result_observed_by_the_current_run(
             id="artifact-observed-result",
             run_id=previous.run_id,
             session_id=session_id,
+            turn_id=str(previous_turn.id),
             type="verification.evidence",
             title="前序证据产物",
             payload_json='{"summary":"verified"}',
             presentation_json="{}",
-            provenance_json="{}",
+            provenance_json='{"tool_invocation_id":"invocation-produced-result","tool_name":"verification_create"}',
             relations_json="[]",
         )
     )

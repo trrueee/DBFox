@@ -56,6 +56,13 @@ def bind_tool_invocation_resources(
                 raise ToolInputError(
                     f"The referenced Artifact does not bind exactly one {requirement.kind} resource."
                 )
+            if not any(
+                candidate.to_scope_ref() == artifact_refs[0]
+                for candidate in candidates
+            ):
+                raise ToolInputError(
+                    "The referenced Artifact resource is unavailable or its version has changed."
+                )
             bound.append(artifact_refs[0])
             continue
         if selected_id:
