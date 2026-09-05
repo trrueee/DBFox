@@ -173,3 +173,9 @@ interactions 脚本从已产生冲突的浏览器状态继续；完整键盘操�
 ### 交接与明确剩余项
 
 作者实现候选可冻结，`program-status.json` 记录当前角色与验证。Director 已另行接手 `verification/bench/capabilities/dbfox_shader` 与对应 suite test，未将作者临时探针复制到 Core。后续非作者需完成生产 Electron/CSP 与关闭 Dock 的正式 RunLoop → 真正 compile error → inspect → repair → render/PNG，确认已安装包 digest/epoch/claim/deadline、FBO 不完整、真实 context loss、同步驱动阻塞/取消边界、最大 pass/source/texture 预算、benchmark/stress 和独立 Adversarial Review。作者未承诺 GPU 即时抢占或恶意 publisher attestation，DLC 全量完成状态仍为 false。
+
+## 独立 Electron 窄 Dock 修正（2026-09-06）
+
+独立验证在1440×902的真实Electron窗口发现正常Dock只有319.3 CSS px，工作区却保留340+270 px两列，scrollWidth为610 px；点击源码页签会带动父区域横向滚动。原800/480 px断点以整个窗口为准，因此作者390 px窗口测试未覆盖此布局。
+
+复用浏览器原生[CSS容器查询](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Containment/Container_queries)：在既有owner根节点声明具名inline-size容器，两组宽度断点依据实际容器切换；减少动态效果仍按设备媒体查询。没有增加DOM包装、JavaScript宽度镜像、ResizeObserver或依赖。原13项前端fixture通过（5.95秒），lint与设计令牌合同通过（0错误，5个既存共享警告）。fixture不提供布局证据，实际窄Dock修复复验由独立工程师在重新签名安装的候选中完成。

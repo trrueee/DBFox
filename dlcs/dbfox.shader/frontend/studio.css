@@ -6,6 +6,7 @@
   line-height: 1.5;
   min-width: 0;
   box-sizing: border-box;
+  container: dbfox-shader / inline-size;
 }
 .dbfox-shader *, .dbfox-shader *::before, .dbfox-shader *::after { box-sizing: inherit; }
 .dbfox-shader h1, .dbfox-shader h2, .dbfox-shader h3, .dbfox-shader h4, .dbfox-shader p { margin: 0; }
@@ -119,7 +120,7 @@
 .dbfox-shader .shader-facts { display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-4); margin: 0; }
 .dbfox-shader .shader-facts dt { color: var(--color-text-muted); }
 .dbfox-shader .shader-facts dd { margin: 0; }
-@media (max-width: 800px) {
+@container dbfox-shader (max-width: 800px) {
   .dbfox-shader .shader-work-area { grid-template-columns: minmax(0, 1fr); flex: none; }
   .dbfox-shader .shader-main-panel { overflow: visible; }
   .dbfox-shader .shader-preview-panel { border-left: 0; border-top: 1px solid var(--color-border); overflow: visible; }
@@ -127,7 +128,7 @@
   .dbfox-shader .shader-code { height: 380px; flex: none; }
   .dbfox-shader .shader-executor-status { max-width: 240px; }
 }
-@media (max-width: 480px) {
+@container dbfox-shader (max-width: 480px) {
   .dbfox-shader .shader-header { align-items: flex-start; flex-direction: column; padding: var(--space-4); }
   .dbfox-shader .shader-document-bar, .dbfox-shader .shader-toolbar { padding: var(--space-3); }
   .dbfox-shader .shader-section-tabs { padding: 0 var(--space-2); }
