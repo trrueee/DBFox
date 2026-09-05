@@ -24,4 +24,4 @@ Shader 独立工程师新增直接调用生产工厂的签名包 fixture，Direc
 
 根分支新增[生产工厂的跨能力回归](../../verification/tests/system/test_product_run_loop_capabilities.py)：复用 Scene/Voxel suite 的真实签名安装、入场、资源与独立 scorer；将 fixture 的手工构造入口替换为真正生产工厂，只控制模型 Responses，不注入 registry、resolver 或工具结果。修复后 Scene 创建及 Voxel 创建/修改/inspect/导出均通过完整 owner/Artifact/领域断言，**2 passed / 5.19秒**。原[装配合同](../../verification/tests/system/test_runtime_composition.py) **10 passed / 1.10秒**，pyflakes 通过。
 
-同 Sidecar 的 Shader 真正 Agent Generate→Compile→Error→Repair→Preview 复验和更广 Core/System 回归仍在执行。本文的签名领域测试不等于成功 GPU、安装包或真实 LLM 智能证据；独立浏览器结果将按实际执行补记。
+根完整确定性回归为System **823 passed、135 deselected、51条既存告警 / 441.52秒**，Agent Core **314 passed、2 deselected / 20.96秒**，进程均正常退出。Shader独立生产工厂fixture修后1 passed / 2.99秒；Pixel独立工程师另用真实工厂完成document引用后的inspect→layers→rect，三个Invocation成功，仅外部模型受控。共享源补丁73ad76f0已同步八个候选工作树。Shader工厂与提交取消回归最终3 passed / 8.34秒。同Sidecar真正Agent Generate→Compile→Error→Repair→Preview完整复验仍在执行。本文的签名领域测试不等于成功 GPU、安装包或真实 LLM 智能证据；独立浏览器结果将按实际执行补记。
