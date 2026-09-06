@@ -1,0 +1,110 @@
+{
+  "dlc": "dbfox.game",
+  "status": "in_progress",
+  "completion": false,
+  "current_phase": "paused_for_handoff_workbench_unverified",
+  "role_history": [
+    {
+      "role": "Game DLC Lead / Domain Architect",
+      "agent": "/root/scene_lead/domain_architect",
+      "independent": false,
+      "result": "25 boundaries and Phaser 4.2.1 lifecycle/step decisions recorded"
+    },
+    {
+      "role": "Game Backend Engineer",
+      "agent": "/root/scene_lead/domain_architect",
+      "independent": false,
+      "result": "Canonical/store/tools/operations/Representation/Phaser bridge implemented; author validation in progress"
+    },
+    {
+      "role": "Game Workbench Engineer",
+      "agent": "/root/scene_lead/domain_architect",
+      "independent": false,
+      "result": "Runtime author Chrome probe succeeded; complete UI draft written but unmounted/unverified when user stopped implementation"
+    }
+  ],
+  "resource_kinds": [
+    "dbfox.game.library",
+    "dbfox.game.project"
+  ],
+  "canonical": "GameProject with scenes, entities/components, behaviors, rules, variables and immutable RGBA assets",
+  "tools": [
+    "game_create",
+    "game_inspect",
+    "game_modify",
+    "game_diff",
+    "game_undo",
+    "game_delete",
+    "game_export",
+    "scene_create",
+    "entity_create",
+    "entity_delete",
+    "component_add",
+    "component_modify",
+    "behavior_create",
+    "rule_create",
+    "variable_create",
+    "playtest",
+    "asset_import"
+  ],
+  "project_operations": [
+    "games.list",
+    "games.head",
+    "games.get",
+    "games.create",
+    "games.apply",
+    "games.undo",
+    "games.delete",
+    "assets.upload",
+    "games.revisions",
+    "games.diff",
+    "games.export",
+    "games.playtest"
+  ],
+  "machine_operations": [
+    "playtest.attach",
+    "playtest.next",
+    "playtest.complete",
+    "playtest.detach"
+  ],
+  "artifacts": [
+    "dbfox.game.project-revision",
+    "dbfox.game.playtest-report"
+  ],
+  "representations": [
+    "dbfox.game.document.v1",
+    "dbfox.game.playtest.v1"
+  ],
+  "views": {
+    "game_studio": "written, not mounted or verified",
+    "immutable_revision": "written, not verified",
+    "playtest_report": "written, not verified"
+  },
+  "verified": [
+    "Phaser 4.2.1 real Chrome Canvas/HEADLESS/reset/lifecycle probe under production CSP",
+    "32 author backend cases passed in 9.21s; mypy 11 backend files and pyflakes passed",
+    "Actual production build_product_run_loop with backend-only signed package: create/inspect/incremental edit/stale/undo/export",
+    "Actual Host ActionRun export and exact action receipt; one durable Run on duplicate",
+    "All 17 materialized native Tool schemas: required fields and declared optional-null input normalization",
+    "DLC-local offline Phaser vendor build"
+  ],
+  "evidence_limits": [
+    "Phaser probe is author Chrome, not production Electron",
+    "Bridge reports are protocol fixtures, not Phaser execution evidence",
+    "Signed package gate is explicitly backend-only while frontend is unfinished",
+    "Pixel page transport fixture is not a multi-DLC production RunLoop proof"
+  ],
+  "pending": [
+    "User requested stop; next AI resumes from detailed handoff, no new verification in checkpoint turn",
+    "Complete editable Phaser Workbench and activation executor",
+    "Actual Phaser compile/run kernel fixtures and real UI",
+    "Full signed desktop activation and lifecycle",
+    "12-case capability bench and 10-change creative stress",
+    "Example fox/slime survival game",
+    "Independent Verification and Adversarial review"
+  ],
+  "core_changes": [],
+  "architecture": "docs/architecture/game-dlc.md",
+  "quality": "docs/quality/game-dlc-evidence.md",
+  "handoff": "docs/quality/game-dlc-handoff.md"
+}

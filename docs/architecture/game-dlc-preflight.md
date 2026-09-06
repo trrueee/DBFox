@@ -10,6 +10,8 @@
 
 目标保持为真正可编辑的小型游戏工作台：用户与 Agent 创建狐狸躲避史莱姆、存活 60 秒获胜的游戏，执行 playtest、观察结果、修改规则后再验证。数百实体、十类增量修改和实际运行不能被静态预览替代。
 
+2026-09-06：Game Lead 已据固定源码和实际 Phaser 探针冻结 [当前实施合同](game-dlc.md)。本页以下保留实施前提案与调查出处，不作为另一套规范字段；实际角色和证据见 [质量页](../quality/game-dlc-evidence.md)。
+
 ## 复用调查与尚未冻结的选择
 
 项目已有 SQLite 事务、typed operations、Resource resolver、Tool Runtime、Artifact / JSON Representation、Host Tree 与 Dock。Scene 提供可编辑层级和固定导出；Pixel 提供版本化精灵及分页 RGBA 表示；Shader 已有独立于 Dock 的 activation 计算请求方案，但尚未完成独立生产验收。研究这些边界，不能导入其私有 store、renderer 或 compute 模块。
