@@ -331,7 +331,7 @@
     },
     {
       "dlc_id": "dbfox.shader",
-      "status": "verification",
+      "status": "red_team",
       "scheduled": true,
       "wave": 1,
       "branch": "creative/shader",
@@ -383,7 +383,7 @@
         "undo and Agent reference handoff"
       ],
       "tests": {
-        "status": "author_backend_and_frontend_pass_independent_gpu_pending",
+        "status": "author_and_independent_repairs_pass_new_candidate_cold_recheck_pending",
         "backend_path": "verification/tests/system/test_shader_dlc.py",
         "frontend_path": "desktop/src/features/dlc/__tests__/dbfoxShaderFixture.test.ts",
         "required": [
@@ -399,7 +399,18 @@
           "packaged Electron/CSP"
         ],
         "backend": "44 full signed-package tests passed in15.26s",
-        "frontend": "13 author fixtures passed4.00s;actual Chrome memory-transport GPU evidence, not independent production Electron"
+        "frontend": "13 author fixtures passed4.00s;actual Chrome memory-transport GPU evidence, not independent production Electron",
+        "repair_validation": {
+          "backend_author_and_independent_compute": 53,
+          "backend_seconds": 26.01,
+          "frontend_three_suites": 37,
+          "frontend_seconds": 7.6,
+          "independent_utf8": 1,
+          "independent_utf8_seconds": 1.2,
+          "typecheck": "passed",
+          "pyflakes": "passed",
+          "mypy_files": 5
+        }
       },
       "bench": {
         "status": "director_domain_suite_passed_gpu_verification_pending",
@@ -465,7 +476,7 @@
         "agent": "/root/shader_architect"
       },
       "known_blockers": [
-        "Independent final cancellation/generation verification, separate Adversarial closure and Director integration remain required."
+        "8a412cdb affected-path cold package verification, separate adversarial closure and Director integration remain required."
       ],
       "composition_candidates": [
         "dbfox.music-visual",
@@ -539,18 +550,20 @@
       "next_stage_handoff": "D:/Project/DBFox-worktrees/creative-program/shader-independent-verification-handoff.md",
       "workbench_agent": "/root/scene_lead/domain_architect",
       "workbench_progress": "Author candidate4df3568d complete;13fixture pass;independent narrow Dock finding repaired003eb7ec using CSS container queries.",
-      "candidate_commit": "efb9167f",
+      "candidate_commit": "8a412cdb",
       "verification_agent": "/root/pixel_workbench",
       "verification_progress": {
-        "status": "final_lifecycle_verification_active",
+        "status": "8a412cdb_cold_recheck_active",
         "agent": "/root/pixel_workbench",
         "findings": {
           "production_factory": "root2bd3fa75/source73ad76f0;actual factory fixture independently passed",
           "narrow_dock": "003eb7ec;13fixture passed;real narrow Dock recheck pending",
           "precommit_cancellation": "ad83881d;independent actual receipt fence original1fail,2branches pass7.11s",
-          "artifact_nullable_report_id": "efb9167f;frontend now accepts canonical optional report_id:null;independent original failure and9 frontend cases plus cold native historical JSON/source download passed"
+          "artifact_nullable_report_id": "efb9167f;frontend now accepts canonical optional report_id:null;independent original failure and9 frontend cases plus cold native historical JSON/source download passed",
+          "canonical_integrity": "8a412cdb: bounded original JSON byte reads verified before parsing; positive integer history, immutable receipt/report semantics, pass position diff and declared nullable inputs",
+          "utf8_log_boundary": "8a412cdb: each driver record owns a TextDecoder, incomplete UTF8 cannot cross records; independent negative driver regression passed"
         },
-        "observed": "Real native Agent completed with9 tools/8 Artifacts after factory fix;real narrow Dock passed;Coral Plasma v12 two passes128x96 GPU;62-stage424809-byte full source and GPU;history source/JSON downloads after delete;context-loss disposal/reconnect. Final cancellation/generation cases still active.",
+        "observed": "Independent native Electron: compile/repair/preview, exact PNG pixels, historic JSON after delete, 62 stages/424809 source bytes, 128 active uniforms, cancel/late complete rejected, disable/restart/enable persisted, real Ask references and 600/600 HTTP; new candidate affected-path cold recheck active.",
         "native_agent": "Independent coldad83881d package:9nativeTools/8Artifacts/4.65s,allDockclosed;actualcompileerror→inspect→repair→compiletrue→previewtrue→export. FinalUI/CAS/stress/lifecycle closure pending.",
         "large_call": "Director09d2d3a2 actualfactory438254byte singlemodify:expectednativeTurneviction preservesledger;publicinspect→export recovers completedRun,no replay,v2,62stages exact;1passed5.70s,no productchange."
       },

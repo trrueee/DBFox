@@ -39,3 +39,16 @@ SDK生成已复用 `openai.pydantic_function_tool`。按[Pydantic命名类型文
 7. 必须覆盖完整默认生产工厂三DLC联合、无资源/错误mode/不可见工具、升级/停用、跨Run选择、预算边界、取消/重启、未加载调用拒绝、tool hash以及全部Core和工程合同。之后仍需独立审查；未通过前保持联合门禁未完成。
 
 维护责任属于通用工具物化边界。主要风险为选择额外消耗模型轮次、目录不完整、预算估计保守与恢复时沿用旧合同；验证应明确记录这些成本，不能只统计最终领域工具成功。
+
+## 源码核对后的候选边界（仍待独立审议）
+
+`materialize_tools` 已有 allowed_names，`ToolMaterialization.require` 已拒绝本轮未加载工具。`ControlCommandContext` 已携带 db、run_id、turn_id、invocation_id；ControlCommand 由同一 Dispatcher 在既有事务结算为 Observation。因此候选无需向 DLC 注入 registry、增加可调用 service locator，或让控制函数执行领域工具。
+
+1. 当全部 schema 足够小，保持既有完整物化。超过明确的 schema 子预算时才启用按需目录；保留控制/完成所必需的函数，并由现有估算器计算预算。不得捕获 ContextBudgetExceeded 后无声丢工具，也不得调整总体预算来掩盖容量问题。
+2. 一个 Runtime 原生控制函数分别接受有界目录查询与显式工具集合选择。目录仅包括当轮按 group、mode、可见性和可发现资源过滤后的真实工具；条目提供原 wire name、owner、简短说明和合同身份。查询和选择只改变后续 schema 投影，不授予 ResourceRef，不调用 DLC resolver。
+3. 可考虑在既有 Turn 工具物化记录内明确区分 active/deferred 集合，保留原完整 MaterializedTool schema；provider_schemas/require 只使用 active，完整 registry 仍是当前能力事实源。旧持久 Turn 没有 deferred 时读为无延迟集合。是否需要持久 deferred 全模型及其字节成本，须由审议比较只保留描述索引的方案。
+4. 控制函数读取自己的冻结 Turn 集合并通过现有 Observation 保存选择；后续 prepare 只投影同 Run 最近成功且带明确选择的控制结果。目录查询、失败选择和其他 Run 不改变选择。候选选择必须核对当前 owner、contract hash、package digest 和过滤条件；恢复不得重新执行领域写入。
+5. 每次显式选择应原子替换有界集合，避免无限累加；超预算请求返回可操作的拒绝，不能偷偷保留其中一部分。目录分页具有固定排序、查询/目录身份与条目/字节上限，目录变化不能把旧 offset 对应为不同事实。Tool ActionRun 仍按既有显式单工具装配执行，finalizing 的既有白名单继续生效。
+6. 测试必须证明：未加载工具即使模型知道名字也被原 Dispatcher 拒绝；加载请求与领域调用在同一旧模型 Turn 时不会提前生效；多次控制结果按耐久顺序恢复；上游停用/升级、group/mode改变和跨 Run 不继承旧选择。实际三 DLC 测评要让受控模型根据真实目录输出选择工具，再按新 provider schema 调用，记录增加的轮次与全部 prompt 峰值。
+
+待解决项包括：子预算占比与至少一个大工具能否装入、保留的 Runtime 函数范围、目录选择本身的进展/循环预算、默认全量到按需模式的稳定切换、旧 Turn hash 的兼容校验。独立架构审议通过前，以上内容不是产品合同，不能直接据此声明门禁通过。
