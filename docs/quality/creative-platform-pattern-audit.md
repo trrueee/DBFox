@@ -22,7 +22,7 @@
 - 根工作树：`D:/Project/DBFox`。通过已有 CodeGraph 查询并读取当前磁盘源码；工作树未初始化 CodeGraph。Scene、Voxel、Pixel 已集成，Shader `8a412cdb` 在 Director 集成过程中被读取。不能把这个移动的根工作树当成单一已验收提交。
 - 原始用户要求第 21、22 节：从代码检查 Core 侵蚀，重复模式分类 A/B/C/D，默认倾向 A/B，不立即重构。
 - 已读根 `AGENTS.md`、`CONTRIBUTING.md`、`docs/architecture/core-kernel-constitution.md` 和根草案 `docs/architecture/bounded-tool-discovery.md`。
-- 联合失败的既有实测记录见[组合验证报告](creative-dlc-composition-verification.md)；本轮独立读取实际测试工厂及相关生产源码，没有把 Director 实测计为本轮重跑。
+- 联合失败的既有实测记录见[组合验证报告副本](creative-handoff/composition-verification.md)；本轮独立读取实际测试工厂及相关生产源码，没有把 Director 实测计为本轮重跑。
 
 联合树已有大量未提交基线，不属于本轮。三个领域 `contracts.py` 在 `git status` 中显示修改，但本轮 `git diff --stat` 没有内容差异，伴随 CRLF 提示；未修改、还原或纳入提交。此记录不替代后续集成前的字节核对。
 

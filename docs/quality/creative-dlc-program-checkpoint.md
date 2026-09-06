@@ -10,6 +10,8 @@
 
 机器状态维护在 [program-status.json](../../dlcs/program-status.json)。本计划仍涵盖 Scene/Voxel/Shader/Pixel、后续 Game/Comic/CAD/Animation、必要的 Composition 与第二波十二项能力，不因本次中断缩减范围。
 
+**2026-09-06 用户主动暂停：** 因额度有限，用户要求停止继续实现，改为详细文档交给其他 AI。接手时以[总交接](creative-program-handoff.md)和[任务包](creative-handoff/task-packets.md)为准；下文的“当前调度”是暂停前记录，不是自动恢复授权。Shader 8a412cdb 产品与独立证据现已合入根 e4732e46，根 164+9 项后端/bench/工程及 38 项前端、类型检查通过。仅 CSS 补充 cd8c94a7 的独立布局验证及合入仍未完成，详细范围见总交接。整个 Program 未完成。
+
 ## 当前进展
 
 Voxel 已完成独立 Verification `6467337c` 和另行 Adversarial `f095d35f`，七类确认缺陷已由 `61002688`、`25b1e76e` 修复并独立关闭。最终冷签名 Electron 证明实际已选资源重开、600次HTTP全部200、64³/128³世界、历史全部chunk及原生下载逐字节相等、Control-held清理和停启代际隔离。候选及证据已精确合入本地 `codex/creative-program`，最后集成提交 `bb9a00a4`。根分支197项后端/bench/工程回归通过（168.18秒），59项Voxel/Scene/Tree前端通过（10.38秒），typecheck通过；产品、vendor、独立测试和suite与最终隔离分支一致。[最终对抗报告](voxel-adversarial-review.md)保留成本和覆盖限制。
