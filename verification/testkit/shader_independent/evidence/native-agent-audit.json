@@ -1,0 +1,56 @@
+{
+  "run_id": "run_82aac163b7624fa88fb1603f3fcbda6b",
+  "status": "completed",
+  "native_calls": 9,
+  "all_attempts": 1,
+  "shader_dock_count": 0,
+  "elapsed_ms": 4650,
+  "artifact_count": 8,
+  "actual_driver_diagnostic": {
+    "code": "GLSL_DIAGNOSTIC",
+    "line": 4,
+    "message": "'BROKEN_TOKEN' : syntax error",
+    "severity": "error",
+    "stage_id": "6a40f6ef-4c1d-42a8-81e6-11003a22fee6"
+  },
+  "repair_operations": [
+    {
+      "kind": "stage_patch",
+      "new_text": "",
+      "old_text": " BROKEN_TOKEN",
+      "stage_id": {
+        "id": "6a40f6ef-4c1d-42a8-81e6-11003a22fee6"
+      }
+    }
+  ],
+  "compile_report": {
+    "compiled": true,
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "document": {
+      "content_hash": "0176393c3ad60804fc457d0cc13897c1f3d21f5f4ef299a2233a748b57096a68",
+      "deleted": false,
+      "id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+      "title": "Native Agent Error Repair",
+      "version": 3
+    },
+    "rendered": false,
+    "report_id": "9ce30140-53dc-4df2-a9e7-100be36db471",
+    "truncated": false
+  },
+  "preview_report": {
+    "compiled": true,
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "document": {
+      "content_hash": "0176393c3ad60804fc457d0cc13897c1f3d21f5f4ef299a2233a748b57096a68",
+      "deleted": false,
+      "id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+      "title": "Native Agent Error Repair",
+      "version": 3
+    },
+    "rendered": true,
+    "report_id": "11bddba6-3e8d-4234-b13f-4a4dbabc1186",
+    "truncated": false
+  }
+}

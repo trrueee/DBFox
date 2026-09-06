@@ -1,0 +1,1 @@
+{"elapsedMs":2368,"publicDocumentPageRequests":188,"stageTabs":62,"lastTitle":"VS · Module 59","displayedSourceExcerpt":"#version 300 es\nvoid main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.0-1.0,0.0,1.0); }\n// bounded shader module line 000: preserve exact content\n// bounded shader module li","alerts":[]}

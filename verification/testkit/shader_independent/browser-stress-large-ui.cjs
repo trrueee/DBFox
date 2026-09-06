@@ -1,0 +1,33 @@
+async (page) => {
+  const navigation = page.getByRole('navigation', { name: '主导航' });
+  const conversation = navigation.getByRole('button', { name: /^Shader Independent Stress QA / });
+  if (!(await conversation.count())) await page.getByRole('button', { name: 'Shader Independent Stress QA', exact: true }).click();
+  await conversation.click();
+  const preview = page.locator('.shader-artifact').filter({ hasText: 'Rendered preview' }).filter({ hasText: 'IMMUTABLE · v12' });
+  await preview.getByRole('button', { name: 'Download PNG', exact: true }).click();
+  await preview.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'docs/quality/evidence/shader-independent/stress-final-artwork.png' });
+  await page.waitForTimeout(500);
+  const exported = page.locator('.shader-artifact').filter({ has: page.getByRole('button', { name: 'Download revision JSON', exact: true }) }).filter({ hasText: 'IMMUTABLE · v12' }).last();
+  await exported.getByRole('button', { name: 'Download revision JSON', exact: true }).click();
+  await page.waitForTimeout(400);
+  await page.getByRole('button', { name: 'Shader Independent Large QA', exact: true }).click();
+  const reads = []; const observer = request => { if (request.url().includes('/operations/documents.get')) reads.push(request.url()); };
+  page.on('request', observer); const started = Date.now();
+  await page.getByRole('treeitem', { name: /Aurora Study/ }).click();
+  await page.locator('.shader-studio').getByRole('tablist', { name: 'Shader stages', exact: true }).waitFor();
+  const elapsedMs = Date.now() - started; page.off('request', observer);
+  const studio = page.locator('.shader-studio');
+  const tabs = studio.getByRole('tablist', { name: 'Shader stages', exact: true }).getByRole('tab');
+  if (await tabs.count() !== 62) throw new Error('The complete 62-stage editor did not load');
+  await tabs.first().click(); await tabs.first().press('End');
+  const lastTitle = await tabs.last().innerText();
+  if (await tabs.last().getAttribute('aria-selected') !== 'true') throw new Error('Native tab End key did not select last stage');
+  const text = await studio.getByRole('textbox', { name: 'GLSL source editor', exact: true }).innerText();
+  if (!text.includes('bounded shader module line 000')) throw new Error('Last stage source is not displayed');
+  if (await page.getByRole('button', { name: '工作区全屏', exact: true }).count()) await page.getByRole('button', { name: '工作区全屏', exact: true }).click();
+  await studio.getByRole('button', { name: 'Preview locally', exact: true }).click();
+  await studio.getByText('Revision v21 · actual WebGL pixels', { exact: true }).waitFor();
+  await page.screenshot({ path: 'docs/quality/evidence/shader-independent/large-62-stage-editor.png' });
+  return { elapsedMs, publicDocumentPageRequests: reads.length, stageTabs: 62, lastTitle, displayedSourceExcerpt: text.slice(0, 200), alerts: await page.getByRole('alert').allTextContents() };
+}

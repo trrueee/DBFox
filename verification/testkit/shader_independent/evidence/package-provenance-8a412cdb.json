@@ -1,0 +1,72 @@
+{
+  "package_digest": "8a14196f82c580313a08ee98d763a1d37f1cd3f9df00c8e279307201275fb361",
+  "publisher_fingerprint": "ff422e699246270ba5377b9b860d02b77f46ce0874f9f8905ae9c985e4dfb333",
+  "frontend": [
+    {
+      "path": "frontend/artifacts.js",
+      "bytes": 9725,
+      "sha256": "b8ee26a30f9ce48d0a2a43811ac4f126fda2055c4594e2777c1ca9af327a3798"
+    },
+    {
+      "path": "frontend/document-data.js",
+      "bytes": 6377,
+      "sha256": "099fb56acf33b57ff310edad94583b75d8dbceb52fd7f1318167ef4d68ca9d0b"
+    },
+    {
+      "path": "frontend/editor.js",
+      "bytes": 4167,
+      "sha256": "1371bcc9644395c46bb0c5a516d9cbab92b981054b38b528b9e3e1c67cc6f2d4"
+    },
+    {
+      "path": "frontend/executor.js",
+      "bytes": 7555,
+      "sha256": "77619f09b07afb21f16d665090b0e1894083312aeb602315a6976d83430d55e5"
+    },
+    {
+      "path": "frontend/index.js",
+      "bytes": 3065,
+      "sha256": "c13dd734a56fa616f477f76adb0891028fa169b7d52ebea64c5bd2f5fee447f5"
+    },
+    {
+      "path": "frontend/inspectors.js",
+      "bytes": 15766,
+      "sha256": "cac61b982810ce02e5278ad078ecd06b7d948b851afccca2dcd3749e8b241c87"
+    },
+    {
+      "path": "frontend/renderer.js",
+      "bytes": 18460,
+      "sha256": "0235bd7b19087890f953b322f61acb1e97633e0118f3a3c8adcf7f1b584e5daf"
+    },
+    {
+      "path": "frontend/studio.css",
+      "bytes": 15401,
+      "sha256": "41c888047b4b53a6c9b7923668580de5570ba3c7e3481180819879361342f812"
+    },
+    {
+      "path": "frontend/studio.js",
+      "bytes": 37022,
+      "sha256": "cc64b6677e0732af08faa2944412482560f8cfeee01b1534b5b345e8c0cdf0b1"
+    },
+    {
+      "path": "frontend/vendor/codemirror.js",
+      "bytes": 415700,
+      "sha256": "418c6c4622c8e9413977a829b9ac91ac7850ca143da727d36aa411b156c811f6"
+    },
+    {
+      "path": "frontend/vendor/LICENSES.txt",
+      "bytes": 18434,
+      "sha256": "486479ca1595c3ce61da70721a4a1ac0e06d9fbdede361f4cb9599b3e393a213"
+    },
+    {
+      "path": "frontend/vendor/provenance.json",
+      "bytes": 6527,
+      "sha256": "3a53d06cc60a2bffb677ee32d4e3453224a63b064fb45a171a49a9336f85d551"
+    },
+    {
+      "path": "frontend/vendor-src/codemirror.js",
+      "bytes": 457,
+      "sha256": "6617b57016b3218909fb96e7e0a728d9b5c4ec14d675de0b834f98ba5dca396e"
+    }
+  ],
+  "boundary": "complete signed source, normal trust/install/enable lifecycle"
+}

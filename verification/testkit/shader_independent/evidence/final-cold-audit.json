@@ -1,0 +1,49 @@
+{
+  "candidate": "8a412cdb",
+  "snapshots": [
+    {
+      "version": 1,
+      "document_id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+      "canonical_bytes": 1078,
+      "canonical_sha256": "aa8e9a8025bffc3dc8e42a608ba6e62fa7a7b9c7274a68d582e7bd5f2866b64b",
+      "texture_count": 0,
+      "native_json": {
+        "filename": "shader-9a4b43a7-ba94-43be-83f4-753912e2c120-v1.json",
+        "bytes": 1434,
+        "sha256": "0c6b89119f18640a476e69a2efcd8322a2f21dec198a4ac29b6bc814ccedcae4"
+      }
+    },
+    {
+      "version": 12,
+      "document_id": "f000046a-cd02-4402-bb2d-333cfe6a4450",
+      "canonical_bytes": 3011,
+      "canonical_sha256": "8449737d4cfa4fab3edfa60f786241700fbc427420846146e414266a42e67d96",
+      "texture_count": 1,
+      "native_json": {
+        "filename": "shader-f000046a-cd02-4402-bb2d-333cfe6a4450-v12.json",
+        "bytes": 3995,
+        "sha256": "5632968405aae88058cc326f70ea8878ae17e5295b776fff3d049f903e646572"
+      }
+    },
+    {
+      "version": 24,
+      "document_id": "60427616-04bb-480a-895f-182695fb2bed",
+      "canonical_bytes": 462264,
+      "canonical_sha256": "3e05782d8f449d516d1f07e75da923045378b01491ec3b54cde1dc2fe7892fa2",
+      "texture_count": 0,
+      "native_json": null
+    }
+  ],
+  "native_load_ms": 840,
+  "native_read_requests": 30,
+  "run_id": "run_15203363d6854c3e8b26844c40b4beb7",
+  "one_real_gpu_attempt": true,
+  "report_elapsed_ms": 609,
+  "png": {
+    "filename": "shader-fe92a929-641e-4e28-a7f7-b83d526214dd.png",
+    "bytes": 853,
+    "sha256": "55a653b6dbb5af195220f4d7b81a9c71cfe5fd69ccbf2afc2e736a97485b2ca3",
+    "pixel_sha256": "b3eda195e69c0998a10176a7a474b5b4b5db139940cf06a2b2e96707c3352f8d",
+    "exact_pixels": 65536
+  }
+}

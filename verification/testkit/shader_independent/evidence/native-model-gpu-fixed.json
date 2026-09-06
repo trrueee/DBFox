@@ -1,0 +1,490 @@
+{
+  "shader-independent-gpu": {
+    "next_step": 1,
+    "requests": [
+      {
+        "id": "inventory",
+        "name": "dbfox_shader_06b593e8__shader_inspect",
+        "arguments": {
+          "section": "documents"
+        }
+      }
+    ],
+    "observations": {},
+    "windows": [
+      {
+        "visible_call_ids": [],
+        "input_bytes": 10459
+      }
+    ],
+    "errors": []
+  },
+  "shader-independent-gpu-fixed": {
+    "next_step": 9,
+    "requests": [
+      {
+        "id": "inventory",
+        "name": "dbfox_shader_06b593e8__shader_inspect",
+        "arguments": {
+          "section": "documents"
+        }
+      },
+      {
+        "id": "create",
+        "name": "dbfox_shader_06b593e8__shader_create",
+        "arguments": {
+          "title": "Native Agent Error Repair",
+          "expected_generation": 0
+        }
+      },
+      {
+        "id": "invalid",
+        "name": "dbfox_shader_06b593e8__shader_modify",
+        "arguments": {
+          "document_id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+          "expected_version": 1,
+          "operations": [
+            {
+              "kind": "stage_replace",
+              "stage_id": {
+                "id": "6a40f6ef-4c1d-42a8-81e6-11003a22fee6"
+              },
+              "source": "#version 300 es\nprecision highp float;\nout vec4 color;\nvoid main(){ color = vec4(1.0) BROKEN_TOKEN; }\n"
+            }
+          ]
+        }
+      },
+      {
+        "id": "broken_compile",
+        "name": "dbfox_shader_06b593e8__compile",
+        "arguments": {
+          "document_id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+          "expected_version": 2
+        }
+      },
+      {
+        "id": "diagnostics",
+        "name": "dbfox_shader_06b593e8__inspect_compile_error",
+        "arguments": {
+          "report_id": "c4e6db41-7c07-489d-9300-8f9bac75f039",
+          "offset": 0,
+          "limit": 20
+        }
+      },
+      {
+        "id": "repair",
+        "name": "dbfox_shader_06b593e8__shader_modify",
+        "arguments": {
+          "document_id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+          "expected_version": 2,
+          "operations": [
+            {
+              "kind": "stage_patch",
+              "stage_id": {
+                "id": "6a40f6ef-4c1d-42a8-81e6-11003a22fee6"
+              },
+              "old_text": " BROKEN_TOKEN",
+              "new_text": ""
+            }
+          ]
+        }
+      },
+      {
+        "id": "compiled",
+        "name": "dbfox_shader_06b593e8__compile",
+        "arguments": {
+          "document_id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+          "expected_version": 3
+        }
+      },
+      {
+        "id": "preview",
+        "name": "dbfox_shader_06b593e8__render_preview",
+        "arguments": {
+          "document_id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+          "expected_version": 3
+        }
+      },
+      {
+        "id": "export",
+        "name": "dbfox_shader_06b593e8__shader_export",
+        "arguments": {
+          "document_id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+          "expected_version": 3
+        }
+      }
+    ],
+    "observations": {
+      "inventory": {
+        "artifact_ids": [],
+        "facts": {
+          "has_more": false,
+          "items": [],
+          "metadata": {},
+          "next_offset": 0,
+          "offset": 0,
+          "section": "documents",
+          "studio_generation": 0,
+          "total": 0
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Shader documents: exact document version and next_offset=0; has_more=False."
+      },
+      "create": {
+        "artifact_ids": [
+          "artifact_cd67a13378744ae28c0b281e25c1897b"
+        ],
+        "facts": {
+          "changed": true,
+          "changed_ids": [
+            "138fe30a-10ae-4a1e-b2de-98332d409f30",
+            "6a40f6ef-4c1d-42a8-81e6-11003a22fee6",
+            "b407f164-a8db-4b6b-bbc1-92d3fc1599bd",
+            "9a4b43a7-ba94-43be-83f4-753912e2c120"
+          ],
+          "created_refs": {
+            "fragment": "6a40f6ef-4c1d-42a8-81e6-11003a22fee6",
+            "pass": "138fe30a-10ae-4a1e-b2de-98332d409f30",
+            "vertex": "b407f164-a8db-4b6b-bbc1-92d3fc1599bd"
+          },
+          "document": {
+            "content_hash": "aa8e9a8025bffc3dc8e42a608ba6e62fa7a7b9c7274a68d582e7bd5f2866b64b",
+            "deleted": false,
+            "id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+            "title": "Native Agent Error Repair",
+            "version": 1
+          },
+          "studio_generation": 1,
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Shader 9a4b43a7-ba94-43be-83f4-753912e2c120 v1; studio generation 1; changed=True."
+      },
+      "invalid": {
+        "artifact_ids": [
+          "artifact_01b9aa2028fd414cb35708a886634d6b"
+        ],
+        "facts": {
+          "changed": true,
+          "changed_ids": [
+            "6a40f6ef-4c1d-42a8-81e6-11003a22fee6"
+          ],
+          "created_refs": {},
+          "document": {
+            "content_hash": "80fb4ea81c9d810166daf111a36fa358afab58224281b24004c905002b244696",
+            "deleted": false,
+            "id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+            "title": "Native Agent Error Repair",
+            "version": 2
+          },
+          "studio_generation": 2,
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Shader 9a4b43a7-ba94-43be-83f4-753912e2c120 v2; studio generation 2; changed=True."
+      },
+      "broken_compile": {
+        "artifact_ids": [
+          "artifact_c72c4ae9289a48acb93840366b16130a"
+        ],
+        "facts": {
+          "compiled": false,
+          "diagnostic_count": 3,
+          "diagnostics": [
+            {
+              "code": "GLSL_DIAGNOSTIC",
+              "line": 4,
+              "message": "'BROKEN_TOKEN' : syntax error",
+              "pass_id": null,
+              "severity": "error",
+              "stage_id": "6a40f6ef-4c1d-42a8-81e6-11003a22fee6"
+            },
+            {
+              "code": "STAGE_COMPILE_FAILED",
+              "line": null,
+              "message": "Gradient: shader compilation failed.",
+              "pass_id": null,
+              "severity": "error",
+              "stage_id": "6a40f6ef-4c1d-42a8-81e6-11003a22fee6"
+            },
+            {
+              "code": "PROGRAM_LINK_FAILED",
+              "line": null,
+              "message": "Main: program linking failed.",
+              "pass_id": "138fe30a-10ae-4a1e-b2de-98332d409f30",
+              "severity": "error",
+              "stage_id": null
+            }
+          ],
+          "document": {
+            "content_hash": "80fb4ea81c9d810166daf111a36fa358afab58224281b24004c905002b244696",
+            "deleted": false,
+            "id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+            "title": "Native Agent Error Repair",
+            "version": 2
+          },
+          "rendered": false,
+          "report_id": "c4e6db41-7c07-489d-9300-8f9bac75f039",
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Shader v2: compiled=False, rendered=False. Compiler/binding errors were observed."
+      },
+      "diagnostics": {
+        "artifact_ids": [],
+        "facts": {
+          "document": {
+            "content_hash": "80fb4ea81c9d810166daf111a36fa358afab58224281b24004c905002b244696",
+            "deleted": false,
+            "id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+            "title": "Native Agent Error Repair",
+            "version": 2
+          },
+          "has_more": false,
+          "items": [
+            {
+              "code": "GLSL_DIAGNOSTIC",
+              "line": 4,
+              "message": "'BROKEN_TOKEN' : syntax error",
+              "severity": "error",
+              "stage_id": "6a40f6ef-4c1d-42a8-81e6-11003a22fee6"
+            },
+            {
+              "code": "STAGE_COMPILE_FAILED",
+              "message": "Gradient: shader compilation failed.",
+              "severity": "error",
+              "stage_id": "6a40f6ef-4c1d-42a8-81e6-11003a22fee6"
+            },
+            {
+              "code": "PROGRAM_LINK_FAILED",
+              "message": "Main: program linking failed.",
+              "pass_id": "138fe30a-10ae-4a1e-b2de-98332d409f30",
+              "severity": "error"
+            }
+          ],
+          "metadata": {
+            "capabilities": {
+              "max_combined_texture_image_units": 32,
+              "max_fragment_uniform_vectors": 1024,
+              "max_renderbuffer_size": 16384,
+              "max_texture_image_units": 16,
+              "max_texture_size": 16384,
+              "max_vertex_uniform_vectors": 4095,
+              "parallel_shader_compile": true,
+              "shading_language_version": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+              "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+            },
+            "compiled": false,
+            "elapsed_ms": 92,
+            "kind": "compile",
+            "log_truncated": 0,
+            "rendered": false,
+            "report_id": "c4e6db41-7c07-489d-9300-8f9bac75f039"
+          },
+          "next_offset": 3,
+          "offset": 0,
+          "section": "diagnostics",
+          "studio_generation": 2,
+          "total": 3
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Shader diagnostics: exact document version and next_offset=3; has_more=False."
+      },
+      "repair": {
+        "artifact_ids": [
+          "artifact_86961bd3e1174bac8d18c4a95526a5e0"
+        ],
+        "facts": {
+          "changed": true,
+          "changed_ids": [
+            "6a40f6ef-4c1d-42a8-81e6-11003a22fee6"
+          ],
+          "created_refs": {},
+          "document": {
+            "content_hash": "0176393c3ad60804fc457d0cc13897c1f3d21f5f4ef299a2233a748b57096a68",
+            "deleted": false,
+            "id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+            "title": "Native Agent Error Repair",
+            "version": 3
+          },
+          "studio_generation": 3,
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Shader 9a4b43a7-ba94-43be-83f4-753912e2c120 v3; studio generation 3; changed=True."
+      },
+      "compiled": {
+        "artifact_ids": [
+          "artifact_1ee1b3e2abc84224a1b3b1458b537a9e"
+        ],
+        "facts": {
+          "compiled": true,
+          "diagnostic_count": 0,
+          "diagnostics": [],
+          "document": {
+            "content_hash": "0176393c3ad60804fc457d0cc13897c1f3d21f5f4ef299a2233a748b57096a68",
+            "deleted": false,
+            "id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+            "title": "Native Agent Error Repair",
+            "version": 3
+          },
+          "rendered": false,
+          "report_id": "9ce30140-53dc-4df2-a9e7-100be36db471",
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Shader v3: compiled=True, rendered=False."
+      },
+      "preview": {
+        "artifact_ids": [
+          "artifact_9f04d037e4e4457b8eb960288f460659",
+          "artifact_a3215ac5971f440e8a03ae4b66c6888f"
+        ],
+        "facts": {
+          "compiled": true,
+          "diagnostic_count": 0,
+          "diagnostics": [],
+          "document": {
+            "content_hash": "0176393c3ad60804fc457d0cc13897c1f3d21f5f4ef299a2233a748b57096a68",
+            "deleted": false,
+            "id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+            "title": "Native Agent Error Repair",
+            "version": 3
+          },
+          "rendered": true,
+          "report_id": "11bddba6-3e8d-4234-b13f-4a4dbabc1186",
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Shader v3: compiled=True, rendered=True."
+      },
+      "export": {
+        "artifact_ids": [
+          "artifact_9cd514881d704fc2a1b57eac7442e103"
+        ],
+        "facts": {
+          "changed": false,
+          "changed_ids": [],
+          "created_refs": {},
+          "document": {
+            "content_hash": "0176393c3ad60804fc457d0cc13897c1f3d21f5f4ef299a2233a748b57096a68",
+            "deleted": false,
+            "id": "9a4b43a7-ba94-43be-83f4-753912e2c120",
+            "title": "Native Agent Error Repair",
+            "version": 3
+          },
+          "studio_generation": 3,
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Shader 9a4b43a7-ba94-43be-83f4-753912e2c120 v3; studio generation 3; changed=False."
+      }
+    },
+    "windows": [
+      {
+        "visible_call_ids": [],
+        "input_bytes": 10459
+      },
+      {
+        "visible_call_ids": [
+          "inventory"
+        ],
+        "input_bytes": 11032
+      },
+      {
+        "visible_call_ids": [
+          "inventory",
+          "create"
+        ],
+        "input_bytes": 12561
+      },
+      {
+        "visible_call_ids": [
+          "inventory",
+          "create",
+          "invalid"
+        ],
+        "input_bytes": 13698
+      },
+      {
+        "visible_call_ids": [
+          "inventory",
+          "create",
+          "invalid",
+          "broken_compile"
+        ],
+        "input_bytes": 15253
+      },
+      {
+        "visible_call_ids": [
+          "inventory",
+          "create",
+          "invalid",
+          "broken_compile",
+          "diagnostics"
+        ],
+        "input_bytes": 17153
+      },
+      {
+        "visible_call_ids": [
+          "inventory",
+          "create",
+          "invalid",
+          "broken_compile",
+          "diagnostics",
+          "repair"
+        ],
+        "input_bytes": 18145
+      },
+      {
+        "visible_call_ids": [
+          "inventory",
+          "create",
+          "invalid",
+          "broken_compile",
+          "diagnostics",
+          "repair",
+          "compiled"
+        ],
+        "input_bytes": 19068
+      },
+      {
+        "visible_call_ids": [
+          "inventory",
+          "create",
+          "invalid",
+          "broken_compile",
+          "diagnostics",
+          "repair",
+          "compiled",
+          "preview"
+        ],
+        "input_bytes": 19980
+      },
+      {
+        "visible_call_ids": [
+          "inventory",
+          "create",
+          "invalid",
+          "broken_compile",
+          "diagnostics",
+          "repair",
+          "compiled",
+          "preview",
+          "export"
+        ],
+        "input_bytes": 20833
+      }
+    ],
+    "errors": []
+  }
+}
