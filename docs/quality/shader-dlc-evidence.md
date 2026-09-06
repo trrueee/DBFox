@@ -217,3 +217,7 @@ Director 本轮运行 82 项后端得到 81 passed、1 个尚未更新的合同�
 补充源头检查又复现 2 项报告问题：已存 CONTEXT_LOST 可被当作编译证据；在内部 make_report 后注入非 rendered 尺寸会提交，但随后读取会拒绝。后者属于内部派生损坏，不能声称合法 CompleteInput 可绕过原有校验。现统一保存/读取的像素字段约束，运行错误集合由既有 compute 与持久 Report 校验共用；保持原 Tool 的 GPU_UNAVAILABLE 结算。
 
 Reviewer 另以负驱动边界输入独立复现 UTF-8 残码点从一条日志污染下一条的失败。修复只为每个独立字符串使用独立标准 TextDecoder，保留 stream 模式丢弃截断尾部，按实际保留字节计费；没有自制 UTF-8 decoder。原攻击 **1 passed / 1.20 秒**，GL 资源释放断言保持。更新快照后的作者全套 **44 passed / 10.73 秒**；后续作者与独立 compute 合计 **53 passed / 26.01 秒**。全部后端 pyflakes、改动的 5 个 Python 模块 mypy 通过；新签名包桌面复验仍待独立工程师交付。
+
+## 窄 Artifact 网格修正（2026-09-06）
+
+独立验证员最终冷签名截图 `docs/quality/evidence/shader-independent/final-cold-gpu.png` 显示：Studio 窄布局已修复，但 preview Artifact 的完整 pixel hash 仍使默认 grid 列按最小内容宽度扩张，画布和下载按钮超出 Dock。Director 核看原截图后，仅将 Artifact 单列设为 `minmax(0,1fr)`、直接子元素允许收缩并让长文本换行。保留原画布尺寸与导出字节；不隐藏溢出来掩盖内容。该纯 CSS 修复交独立原生宽窄截图与边界测量，不用 jsdom 的零布局尺寸充当验证。

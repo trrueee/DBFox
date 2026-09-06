@@ -113,7 +113,8 @@
 .dbfox-shader .shader-empty h2 { color: var(--color-text-primary); font-size: var(--ui-font-display); }
 .dbfox-shader .shader-empty p { max-width: 470px; }
 .dbfox-shader.shader-connector { padding: var(--space-2); display: grid; gap: var(--space-2); }
-.dbfox-shader.shader-artifact { padding: var(--space-4); display: grid; gap: var(--space-3); }
+.dbfox-shader.shader-artifact { padding: var(--space-4); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); overflow-wrap: anywhere; }
+.dbfox-shader.shader-artifact > * { min-width: 0; }
 .dbfox-shader.shader-artifact .shader-preview-canvas { max-width: 600px; }
 .dbfox-shader .shader-artifact-source { min-width: 0; display: grid; gap: var(--space-2); }
 .dbfox-shader .shader-artifact-source .shader-code { height: 360px; }
