@@ -1,0 +1,304 @@
+{
+  "package_digest": "14c6f7891203171d9e87d16242c77c7b3bf01935bab4b83691a62086c18d5b9b",
+  "summary": {
+    "id": "22e9eb8c-cfcc-4f49-bccd-463e82d9ea85",
+    "title": "Paged shader 日本語 🦊",
+    "version": 2,
+    "content_hash": "edb0d8cd383cacd1ac04e6a94cc951faf93c9356660744a76eed2e2317792fd9",
+    "deleted": false
+  },
+  "pages": [
+    {
+      "parameters": {
+        "section": "summary"
+      },
+      "page": {
+        "document": {
+          "id": "22e9eb8c-cfcc-4f49-bccd-463e82d9ea85",
+          "title": "Paged shader 日本語 🦊",
+          "version": 2,
+          "content_hash": "edb0d8cd383cacd1ac04e6a94cc951faf93c9356660744a76eed2e2317792fd9",
+          "deleted": false
+        },
+        "studio_generation": 2,
+        "section": "summary",
+        "items": [],
+        "source": null,
+        "stage_id": null,
+        "offset": 0,
+        "next_offset": 0,
+        "total": 0,
+        "has_more": false,
+        "metadata": {
+          "schema_version": 1,
+          "language": "glsl-es-300",
+          "preview": {
+            "pass_id": "deea7629-0051-4c95-88d2-5cf8428e7e35",
+            "width": 256,
+            "height": 256,
+            "time_seconds": 0.0
+          },
+          "stage_count": 2,
+          "pass_count": 1,
+          "uniform_count": 1,
+          "texture_count": 1,
+          "source_bytes": 309
+        },
+        "texture_bytes": null
+      }
+    },
+    {
+      "parameters": {
+        "section": "stages",
+        "offset": 0,
+        "limit": 50
+      },
+      "page": {
+        "document": {
+          "id": "22e9eb8c-cfcc-4f49-bccd-463e82d9ea85",
+          "title": "Paged shader 日本語 🦊",
+          "version": 2,
+          "content_hash": "edb0d8cd383cacd1ac04e6a94cc951faf93c9356660744a76eed2e2317792fd9",
+          "deleted": false
+        },
+        "studio_generation": 2,
+        "section": "stages",
+        "items": [
+          {
+            "id": "3deab390-9d13-4f9a-bf1e-dacf5a1c8fc8",
+            "title": "Fullscreen triangle",
+            "kind": "vertex",
+            "source_hash": "c8d1ed2354905f1e928347ec47aa86bc2255a9d7962bc4713fa6f412a8bb83ff",
+            "source_bytes": 137,
+            "line_count": 5
+          },
+          {
+            "id": "774f14f6-e68a-4613-8530-f7956ef0e442",
+            "title": "Gradient",
+            "kind": "fragment",
+            "source_hash": "c76dfa3fd6af6f3a2194dcdb17040382917aaffcd618c68032d817f7a31c9b19",
+            "source_bytes": 172,
+            "line_count": 8
+          }
+        ],
+        "source": null,
+        "stage_id": null,
+        "offset": 0,
+        "next_offset": 2,
+        "total": 2,
+        "has_more": false,
+        "metadata": {},
+        "texture_bytes": null
+      }
+    },
+    {
+      "parameters": {
+        "section": "source",
+        "stage_id": "3deab390-9d13-4f9a-bf1e-dacf5a1c8fc8",
+        "offset": 0,
+        "limit": 50
+      },
+      "page": {
+        "document": {
+          "id": "22e9eb8c-cfcc-4f49-bccd-463e82d9ea85",
+          "title": "Paged shader 日本語 🦊",
+          "version": 2,
+          "content_hash": "edb0d8cd383cacd1ac04e6a94cc951faf93c9356660744a76eed2e2317792fd9",
+          "deleted": false
+        },
+        "studio_generation": 2,
+        "section": "source",
+        "items": [],
+        "source": "#version 300 es\nvoid main() {\n  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);\n  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);\n}\n",
+        "stage_id": "3deab390-9d13-4f9a-bf1e-dacf5a1c8fc8",
+        "offset": 0,
+        "next_offset": 5,
+        "total": 5,
+        "has_more": false,
+        "metadata": {
+          "source_hash": "c8d1ed2354905f1e928347ec47aa86bc2255a9d7962bc4713fa6f412a8bb83ff",
+          "source_bytes": 137
+        },
+        "texture_bytes": null
+      }
+    },
+    {
+      "parameters": {
+        "section": "source",
+        "stage_id": "774f14f6-e68a-4613-8530-f7956ef0e442",
+        "offset": 0,
+        "limit": 50
+      },
+      "page": {
+        "document": {
+          "id": "22e9eb8c-cfcc-4f49-bccd-463e82d9ea85",
+          "title": "Paged shader 日本語 🦊",
+          "version": 2,
+          "content_hash": "edb0d8cd383cacd1ac04e6a94cc951faf93c9356660744a76eed2e2317792fd9",
+          "deleted": false
+        },
+        "studio_generation": 2,
+        "section": "source",
+        "items": [],
+        "source": "#version 300 es\nprecision highp float;\nuniform vec2 u_resolution;\nout vec4 color;\nvoid main() {\n  vec2 uv = gl_FragCoord.xy / u_resolution;\n  color = vec4(uv, 0.5, 1.0);\n}\n",
+        "stage_id": "774f14f6-e68a-4613-8530-f7956ef0e442",
+        "offset": 0,
+        "next_offset": 8,
+        "total": 8,
+        "has_more": false,
+        "metadata": {
+          "source_hash": "c76dfa3fd6af6f3a2194dcdb17040382917aaffcd618c68032d817f7a31c9b19",
+          "source_bytes": 172
+        },
+        "texture_bytes": null
+      }
+    },
+    {
+      "parameters": {
+        "section": "passes",
+        "offset": 0,
+        "limit": 50
+      },
+      "page": {
+        "document": {
+          "id": "22e9eb8c-cfcc-4f49-bccd-463e82d9ea85",
+          "title": "Paged shader 日本語 🦊",
+          "version": 2,
+          "content_hash": "edb0d8cd383cacd1ac04e6a94cc951faf93c9356660744a76eed2e2317792fd9",
+          "deleted": false
+        },
+        "studio_generation": 2,
+        "section": "passes",
+        "items": [
+          {
+            "id": "deea7629-0051-4c95-88d2-5cf8428e7e35",
+            "title": "Main",
+            "vertex_stage_id": "3deab390-9d13-4f9a-bf1e-dacf5a1c8fc8",
+            "fragment_stage_id": "774f14f6-e68a-4613-8530-f7956ef0e442",
+            "width": 256,
+            "height": 256,
+            "clear_color": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "bindings": []
+          }
+        ],
+        "source": null,
+        "stage_id": null,
+        "offset": 0,
+        "next_offset": 1,
+        "total": 1,
+        "has_more": false,
+        "metadata": {},
+        "texture_bytes": null
+      }
+    },
+    {
+      "parameters": {
+        "section": "uniforms",
+        "offset": 0,
+        "limit": 50
+      },
+      "page": {
+        "document": {
+          "id": "22e9eb8c-cfcc-4f49-bccd-463e82d9ea85",
+          "title": "Paged shader 日本語 🦊",
+          "version": 2,
+          "content_hash": "edb0d8cd383cacd1ac04e6a94cc951faf93c9356660744a76eed2e2317792fd9",
+          "deleted": false
+        },
+        "studio_generation": 2,
+        "section": "uniforms",
+        "items": [
+          {
+            "id": "3819f4ba-025d-4987-9cb3-c71ec0d6550c",
+            "pass_id": "deea7629-0051-4c95-88d2-5cf8428e7e35",
+            "name": "strength",
+            "type": "float",
+            "value": 0.25
+          }
+        ],
+        "source": null,
+        "stage_id": null,
+        "offset": 0,
+        "next_offset": 1,
+        "total": 1,
+        "has_more": false,
+        "metadata": {},
+        "texture_bytes": null
+      }
+    },
+    {
+      "parameters": {
+        "section": "textures",
+        "offset": 0,
+        "limit": 50
+      },
+      "page": {
+        "document": {
+          "id": "22e9eb8c-cfcc-4f49-bccd-463e82d9ea85",
+          "title": "Paged shader 日本語 🦊",
+          "version": 2,
+          "content_hash": "edb0d8cd383cacd1ac04e6a94cc951faf93c9356660744a76eed2e2317792fd9",
+          "deleted": false
+        },
+        "studio_generation": 2,
+        "section": "textures",
+        "items": [
+          {
+            "id": "93e148bd-a299-468a-8d7f-a8ec7186d31e",
+            "title": "RGBA corners",
+            "width": 2,
+            "height": 2,
+            "format": "rgba8",
+            "content_hash": "c21b35e3f28e676cedf24c13575a7346682e101a2d26aad9598d0cdbcee9ee3b"
+          }
+        ],
+        "source": null,
+        "stage_id": null,
+        "offset": 0,
+        "next_offset": 1,
+        "total": 1,
+        "has_more": false,
+        "metadata": {},
+        "texture_bytes": null
+      }
+    },
+    {
+      "parameters": {
+        "section": "texture_bytes",
+        "texture_id": "93e148bd-a299-468a-8d7f-a8ec7186d31e",
+        "offset": 0,
+        "limit": 16384
+      },
+      "page": {
+        "document": {
+          "id": "22e9eb8c-cfcc-4f49-bccd-463e82d9ea85",
+          "title": "Paged shader 日本語 🦊",
+          "version": 2,
+          "content_hash": "edb0d8cd383cacd1ac04e6a94cc951faf93c9356660744a76eed2e2317792fd9",
+          "deleted": false
+        },
+        "studio_generation": 2,
+        "section": "texture_bytes",
+        "items": [],
+        "source": null,
+        "stage_id": null,
+        "offset": 0,
+        "next_offset": 16,
+        "total": 16,
+        "has_more": false,
+        "metadata": {},
+        "texture_bytes": {
+          "texture_id": "93e148bd-a299-468a-8d7f-a8ec7186d31e",
+          "content_hash": "c21b35e3f28e676cedf24c13575a7346682e101a2d26aad9598d0cdbcee9ee3b",
+          "total_bytes": 16,
+          "rgba_base64": "/wAA/wD/AP8AAP///////w=="
+        }
+      }
+    }
+  ]
+}

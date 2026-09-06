@@ -1,0 +1,38 @@
+{
+  "role": "Shader separate independent Adversarial Reviewer",
+  "product_candidate": "8a412cdba1c094d57e63bf409d09acfc734ae510",
+  "package_digest": "1b586ec8b79bc1c4d8095708618d8bfaa75b5e3a79047d8a9c21f0f44f11d73b",
+  "decision": "accepted_with_scope_limits",
+  "unresolved_confirmed_p1_p2": [],
+  "new_backend_cases": 57,
+  "new_frontend_cases": 16,
+  "verification_method": "Disjoint bounded runs; only changed final boundaries repeated on frozen candidate. No claim that all 57 backend cases were rerun together at final SHA.",
+  "backend_batches": [
+    {"suite": "persistence + compute initial 7 + native schema", "passed": 38, "seconds": 63.37},
+    {"suite": "actual product factory authority", "passed": 9, "seconds": 20.44},
+    {"suite": "canonical and limits", "passed": 8, "seconds": 14.47},
+    {"suite": "final operational report + nonrendered layout", "passed": 2, "deselected": 7, "seconds": 4.91}
+  ],
+  "final_frontend_batches": [
+    {"suite": "public canonical byte pages", "passed": 15, "seconds": 1.59},
+    {"suite": "independent UTF-8 driver records", "passed": 1, "seconds": 1.42}
+  ],
+  "engineering": {"passed": 45, "seconds": 2.85, "initial": {"passed": 44, "failed": 1, "reason": "Missing standard headers in two independently owned new reports; corrected by each owner."}},
+  "static": {"pyflakes": "passed", "typecheck_test": "passed", "new_frontend_eslint": "passed"},
+  "signed_public_fixture_pages": 31,
+  "initial_failures": {
+    "history_receipt_reorder": 9,
+    "canonical_page_projection": 7,
+    "durable_report_semantics": 3,
+    "native_nullable_schema": 3,
+    "additional_report_boundaries": 2,
+    "utf8_stream_state": 1
+  },
+  "scope_limits": [
+    "Native GPU, Electron interaction, creativity stress and download validation remain separately owned independent Verification evidence.",
+    "GPU protocol and driver-log stubs are explicitly negative fault injection; they do not prove actual compilation or rendering.",
+    "Changing another document advances the shared Studio generation and can make a previous Artifact unavailable to a later Run under the existing exact admission fence.",
+    "Reviewer launched no Electron or Sidecar instance and did not touch the concurrent verifier's processes or ports.",
+    "No source, SDK, Core, vendor, lock or other verifier files are included in this independent delivery."
+  ]
+}
