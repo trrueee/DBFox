@@ -20,15 +20,15 @@ Pixel 独立验证 `6ed057d0` 与另行Adversarial `13e2fcf9` 均已完成；出
 
 Shader 最新修复候选 `8a412cdb` 已冻结。独立真实原生Agent完成9工具/8工件，实际GPU编译/错误/修复/预览、Coral Plasma双pass、62-stage大文档、128活跃uniform、原生历史源码/JSON下载、删除后的历史读取、上下文丢失、Run取消与停用重启、真实Ask和迟到Project/Session读取隔离均取得证据。独立红队新发现的历史索引、receipt/report语义、pass排序、原生nullable输入、完整文档读取及UTF-8日志边界已在该候选修复；原攻击保留。作者和独立compute共53项后端、三套37项前端及1项新增日志攻击通过，typecheck与后端静态检查通过。独立工程师正在新签名包复验受影响的读页、固定JSON与GPU；最终红队提交与Director集成仍未完成，不将旧候选证据扩大为新候选验收。
 
-Game Lead已在独立 `creative-game` 工作树完成作者25项规范及固定Phaser4.2.1真实Chrome探针，修复受hash守卫的VisibilityHandler销毁监听；现在实现唯一owner后端，独立架构和最终门禁尚未完成。Comic/CAD/Animation工作树和完整Lead指令已准备，第二波十二项能力及必要的Composition仍在原计划内。当前四个并发槽按明确角色轮转，容量错误恢复不改变独立门禁或原范围。
+Game Lead已在独立 `creative-game` 工作树完成作者25项规范、32项后端测试和17个实际物化工具的nullable合同。实际Phaser4.2.1 runtime在生产CSP下完成Canvas/HEADLESS 120 tick报告一致、3600 tick胜利规则、同seed生成/寿命/seek一致及scene切换/finish顺序；这些是作者证据，完整Studio仍在实施，独立架构和最终门禁尚未完成。Comic/CAD/Animation工作树和完整Lead指令已准备，第二波十二项能力及必要的Composition仍在原计划内。当前四个并发槽按明确角色轮转，容量错误恢复不改变独立门禁或原范围。
 
 | DLC | 当前候选与阶段 | 未完成门禁 |
 | --- | --- | --- |
 | Scene | 5cdc6242生命周期修复与ea720a8f独立证据已集成 | 后续跨媒体Composition与常规维护 |
 | Voxel | 25b1e76e + f095d35f，已集成至bb9a00a4 | 后续跨媒体Composition与常规维护 |
 | Pixel | 88e7c7d1与13e2fcf9已合入118be7fd，171根回归通过 | 默认预算三owner联合门禁 |
-| Shader | efb9167f，真实GPU/stress/原生历史下载已复验 | 最后生命周期Verification、另行红队及集成 |
-| Game | 作者架构及引擎探针完成，后端实施中 | 产品实现及全部原始门禁 |
+| Shader | 8a412cdb，独立发现修复已冻结 | 新候选受影响路径冷验、最终红队提交及集成 |
+| Game | 32项作者后端通过，真实Phaser runtime与Studio实施中 | 产品实现及全部原始门禁 |
 
 根工作树原有用户dirty baseline保留。各自精确提交，不整体暂存、提交运行时数据库或扩大作者证据的证明范围。
 

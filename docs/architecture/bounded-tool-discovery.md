@@ -18,6 +18,8 @@ Scene、Voxel、Pixel在同一Project创建文档后，默认生产工厂第4次
 
 SDK生成已复用 `openai.pydantic_function_tool`。按[Pydantic命名类型文档](https://pydantic.dev/docs/validation/2.12/concepts/types/#named-type-aliases)做过已有标量/向量类型 `$defs` 复用实验，估计仅降至30068，仍不足；全部实验已撤回。没有采用删约束、删用户要求的增量工具、自由JSON参数、调大默认预算或自制token估计规则。
 
+在联合树 `36224475` 使用原签名 fixture 和既有估算器另作完整 registry 成本调查（未过滤 Resource，不能算生产 Run 通过）：60 个 schema 合计 31942；按 owner 单独计算为 Scene 11493、Pixel 10877、Voxel 7333、Core 1304、Conversation 550、Remote Job 388。最大的单工具 Pixel apply 为 3694，Scene object_create 为 2838，Voxel configure 为 1808。成本来自同时加载完整集合，当前三个 owner 尚无单工具本身超过默认总预算的证据；各子集合编码开销不同，因此不把分组数字相加当作精确全量。
+
 [OpenAI Tool search](https://developers.openai.com/api/docs/guides/tools-tool-search)支持先显示工具目录，再加载所需参数schema，并区分服务端和客户端发现。可以复用这种按需加载方式；直接依赖其专用 `tool_search_call/tool_search_output` 会改变DBFox当前只处理原生function calling的provider边界，不能未经验证加入。引入另一个Agent框架、MCP服务、索引数据库或模型路由器也没有必要。
 
 ## 待审议方案
