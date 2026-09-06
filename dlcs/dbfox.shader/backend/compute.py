@@ -125,19 +125,12 @@ class ComputeBridge:
                     raise ShaderError("SHADER_GPU_RESULT_INVALID", str(exc)) from exc
             elif any(value is not None for value in (result.width, result.height, result.rgba_base64, result.row_order)):
                 raise ShaderError("SHADER_GPU_RESULT_INVALID", "Non-rendered results cannot include pixel fields.")
-            if request.kind == "preview" and result.compiled and not result.rendered:
-                raise ShaderError("SHADER_GPU_RESULT_INVALID", "A successful preview must include actual rendered pixels.")
-            if result.compiled and any(item.severity == "error" for item in result.diagnostics):
-                raise ShaderError("SHADER_GPU_RESULT_INVALID", "Successful compilation cannot report binding or compiler errors.")
-            if not result.compiled and not any(item.severity == "error" for item in result.diagnostics):
-                raise ShaderError("SHADER_GPU_RESULT_INVALID", "Failed compilation requires an explicit error diagnostic.")
-            stage_ids = {value.id for value in request.snapshot.document.stages}
-            pass_ids = {value.id for value in request.snapshot.document.passes}
-            for item in [*result.diagnostics, *result.logs]:
-                if item.stage_id is not None and item.stage_id not in stage_ids or item.pass_id is not None and item.pass_id not in pass_ids:
-                    raise ShaderError("SHADER_GPU_RESULT_INVALID", "Diagnostic references an unrelated object.")
+            try:
+                c.validate_compute_evidence(request.snapshot.document, result, request.kind)
+            except ValueError as exc:
+                raise ShaderError("SHADER_GPU_RESULT_INVALID", str(exc)) from exc
             # Operational failures cannot masquerade as observed ESSL errors.
-            if any(item.code in {"CONTEXT_LOST", "GPU_ERROR", "FBO_INCOMPLETE", "EXECUTOR_UNAVAILABLE", "COMPUTE_TIMEOUT"} for item in result.diagnostics):
+            if any(item.code in c.OPERATIONAL_ERRORS for item in result.diagnostics):
                 pending.error = ShaderError("SHADER_GPU_UNAVAILABLE", "GPU execution failed; no successful preview was recorded.")
             else:
                 pending.result = result

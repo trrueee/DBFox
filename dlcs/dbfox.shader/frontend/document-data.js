@@ -11,46 +11,43 @@ export async function loadDocument(read, signal, version) {
     signal.throwIfAborted();
     const page = await read({ ...parameters, version: fixed }, signal);
     signal.throwIfAborted();
-    if (page.document?.id !== summary.id || page.document.version !== fixed || page.document.content_hash !== summary.content_hash) throw new Error('Document pages do not belong to the same immutable revision.');
+    if (!page.document || ['id', 'version', 'content_hash', 'title', 'deleted'].some((key) => page.document[key] !== summary[key])) throw new Error('Document pages do not belong to the same immutable revision.');
     return page;
   };
-  const pages = async (section, maximum) => {
-    const values = [];
-    let offset = 0;
-    do {
-      const page = await get({ section, offset, limit: 50 });
-      if (page.offset !== offset || page.total > maximum || !Array.isArray(page.items) || page.items.length > 50) throw new Error('Invalid bounded document page.');
-      values.push(...page.items);
-      if (!page.has_more) {
-        if (values.length !== page.total) throw new Error('Document object page is incomplete.');
-        break;
-      }
-      if (page.next_offset <= offset || page.next_offset !== values.length) throw new Error('Document page did not advance.');
-      offset = page.next_offset;
-    } while (values.length <= maximum);
-    return values;
-  };
-  const stageMetadata = await pages('stages', 64);
-  const stages = [];
-  for (const stage of stageMetadata) {
-    let source = '';
-    let offset = 0;
-    do {
-      const page = await get({ section: 'source', stage_id: stage.id, offset, limit: 50 });
-      if (page.offset !== offset || page.stage_id !== stage.id || typeof page.source !== 'string' || page.total > 16384) throw new Error('Invalid source page.');
-      source += page.source;
-      if (source.length > 262144) throw new Error('Stage source exceeds its budget.');
-      if (!page.has_more) break;
-      if (page.next_offset <= offset) throw new Error('Source page did not advance.');
-      offset = page.next_offset;
-    } while (offset <= 16384);
-    const bytes = new TextEncoder().encode(source);
-    if (bytes.length !== stage.source_bytes || await sha256(bytes) !== stage.source_hash) throw new Error('Stage source hash does not match this revision.');
-    stages.push({ id: stage.id, kind: stage.kind, title: stage.title, source });
+  // Verify the owner's original bytes before parsing; JavaScript must not try
+  // to reproduce Python's floating-point JSON spelling or rebuild another model.
+  let canonical;
+  let documentOffset = 0;
+  do {
+    const page = await get({ section: 'document_bytes', offset: documentOffset, limit: 16384 });
+    if (page.section !== 'document_bytes' || page.offset !== documentOffset
+      || !Number.isSafeInteger(page.total) || page.total < 1 || page.total > 1048608
+      || typeof page.document_bytes !== 'string') throw new Error('Invalid canonical document byte page.');
+    if (canonical === undefined) canonical = new Uint8Array(page.total);
+    if (page.total !== canonical.length) throw new Error('Canonical document byte length changed.');
+    const bytes = decodeBytes(page.document_bytes);
+    if (!bytes.length || bytes.length > 16384 || encodeBytes(bytes) !== page.document_bytes
+      || documentOffset + bytes.length > canonical.length || page.next_offset !== documentOffset + bytes.length
+      || page.has_more !== (page.next_offset < canonical.length)) throw new Error('Invalid canonical document byte cursor.');
+    canonical.set(bytes, documentOffset);
+    documentOffset = page.next_offset;
+  } while (documentOffset < canonical.length);
+  if (await sha256(canonical) !== summary.content_hash) throw new Error('Canonical document hash does not match this revision.');
+  signal.throwIfAborted();
+  const envelope = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(canonical));
+  const document = envelope.document;
+  const metadata = first.metadata;
+  if (!document || envelope.deleted !== summary.deleted || typeof envelope.deleted !== 'boolean'
+    || document.id !== summary.id || document.title !== summary.title
+    || document.schema_version !== 1 || document.language !== 'glsl-es-300'
+    || metadata?.schema_version !== document.schema_version || metadata.language !== document.language
+    || !metadata.preview || !document.preview
+    || ['pass_id', 'width', 'height', 'time_seconds'].some((key) => metadata.preview[key] !== document.preview[key])) throw new Error('Document summary does not match its canonical bytes.');
+  for (const [section, count, maximum] of [['stages', 'stage_count', 64], ['passes', 'pass_count', 32], ['uniforms', 'uniform_count', 128], ['textures', 'texture_count', 16]]) {
+    if (!Array.isArray(document[section]) || document[section].length > maximum || metadata[count] !== document[section].length) throw new Error('Document object count does not match its canonical bytes.');
   }
-  const passes = await pages('passes', 32);
-  const uniforms = await pages('uniforms', 128);
-  const textures = await pages('textures', 16);
+  if (metadata.source_bytes !== document.stages.reduce((sum, stage) => sum + new TextEncoder().encode(stage.source).length, 0)) throw new Error('Document source count does not match its canonical bytes.');
+  const textures = document.textures;
   const blobs = [];
   let totalTextureBytes = 0;
   for (const texture of textures) {
@@ -74,7 +71,7 @@ export async function loadDocument(read, signal, version) {
   }
   return {
     summary, generation: first.studio_generation,
-    snapshot: { document: { id: summary.id, schema_version: first.metadata.schema_version, language: first.metadata.language, title: summary.title, stages, passes, uniforms, textures, preview: first.metadata.preview }, textures: blobs },
+    snapshot: { document, textures: blobs },
   };
 }
 

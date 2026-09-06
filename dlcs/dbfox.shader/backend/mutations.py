@@ -5,11 +5,28 @@ import base64
 from hashlib import sha256
 from uuid import uuid4
 
+from pydantic import JsonValue
+
 from . import contracts as c
 
 
 DEFAULT_VERTEX = "#version 300 es\nvoid main() {\n  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);\n  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);\n}\n"
 DEFAULT_FRAGMENT = "#version 300 es\nprecision highp float;\nuniform vec2 u_resolution;\nout vec4 color;\nvoid main() {\n  vec2 uv = gl_FragCoord.xy / u_resolution;\n  color = vec4(uv, 0.5, 1.0);\n}\n"
+
+
+def object_changes(before: c.Document | None, after: c.Document) -> list[dict[str, JsonValue]]:
+    """Compare both content and position in the canonical ordered collections."""
+    changes: list[dict[str, JsonValue]] = []
+    for section in ("stages", "passes", "uniforms", "textures"):
+        left = {} if before is None else {value.id: (index, value) for index, value in enumerate(getattr(before, section))}
+        right = {value.id: (index, value) for index, value in enumerate(getattr(after, section))}
+        for identity in sorted(left.keys() | right.keys()):
+            if left.get(identity) != right.get(identity):
+                changes.append({"section": section, "id": identity,
+                    "change": "created" if identity not in left else "removed" if identity not in right else "updated",
+                    "from_index": left[identity][0] if identity in left else None,
+                    "to_index": right[identity][0] if identity in right else None})
+    return changes
 
 
 def new_document(title: str) -> tuple[c.Document, dict[str, str]]:

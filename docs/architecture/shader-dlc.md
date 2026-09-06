@@ -150,7 +150,7 @@ WebGL compile/link/status/readPixels 可能阻塞 renderer；后端 deadline 可
 
 ### 7.1 数据、数值与资源预算
 
-所有 model 均禁止未知字段。整数使用严格整数、拒绝 bool；浮点拒绝 bool、NaN 和 infinity。数值不得靠截断、取模或 clamp 变成合法输入。JSON 的可选字段采用“省略表示不修改”，删除使用带类型的 remove 操作，不能依赖 `null` 穿过 Tool 的序列化路径。对源代码只在输入边界统一 CRLF/CR 为 LF；其余文本、顺序和空白不做隐式重写。
+所有 model 均禁止未知字段。整数使用严格整数、拒绝 bool；浮点拒绝 bool、NaN 和 infinity。数值不得靠截断、取模或 clamp 变成合法输入。JSON 的可选字段采用“省略表示不修改”；为匹配正式原生严格 function schema，仅 Input 模型明确声明默认值为 None 的字段将 null 视为省略，必需字段、数值和对象 selector 仍严格校验，canonical Document 不增加空值能力。删除使用带类型的 remove 操作。对源代码只在输入边界统一 CRLF/CR 为 LF；其余文本、顺序和空白不做隐式重写。
 
 | 边界 | 冻结值 |
 | --- | --- |
@@ -288,7 +288,7 @@ remaining_ms 由 backend monotonic deadline 计算，frontend 用 performance.no
 
 Director 在后端实施阶段确认：既存纹理 bytes 只在 Tool compute snapshot 中可见，无法供重开后的 Workbench 恢复未冻结 live preview。因此复用现有 `documents.get` 与 immutable `dbfox.shader.document.v1` Representation 增加 `section=texture_bytes`，不增加 operation、Host seam 或下载 HTTP。
 
-Human get 必须携带 `document_id`、固定 `version` 和该 revision 内的 `texture_id`；Representation 从不可变 Artifact 取得 Project/document/version，参数只能指定 texture_id。offset 是原始 RGBA 字节，严格整数非负；limit 1–16384，完整返回 ≤ 32 KiB。返回外层 offset/next_offset/total/has_more，以及 `texture_bytes:{texture_id,content_hash,total_bytes,rgba_base64}`。末页允许为空；超过 total 的 offset 拒绝。逐页均读取并验证已有 immutable BLOB 的 hash/layout，客户端完整重组再校验 content_hash。不同 Project、不同 revision 无此 texture、显式 null、bool 数值、hash/path/URL override 均拒绝。
+Human get 必须携带 `document_id`、固定 `version` 和该 revision 内的 `texture_id`；Representation 从不可变 Artifact 取得 Project/document/version，参数只能指定 texture_id。offset 是原始 RGBA 字节，严格整数非负；limit 1–16384，完整返回 ≤ 32 KiB。返回外层 offset/next_offset/total/has_more，以及 `texture_bytes:{texture_id,content_hash,total_bytes,rgba_base64}`。末页允许为空；超过 total 的 offset 拒绝。逐页均读取并验证已有 immutable BLOB 的 hash/layout，客户端完整重组再校验 content_hash。不同 Project、不同 revision 无此 texture、缺失或 null texture_id/version、bool 数值、hash/path/URL override 均拒绝。
 
 读取不建 snapshot/Run/receipt、不修改文档。历史 texture 删除后旧 revision 仍可读。`shader_inspect`、自动 Context 和耐久 ToolObservation 不加入纹理 base64；人类 get 与明确请求的 Composition Representation 共用同一纯读取实现。公开 operation/Representation context 没有取消 probe，Host/前端 AbortSignal 负责丢弃停止的读取；本领域纯读取函数也接受取消 probe 并在读取前后检查，不能宣称 HTTP abort 抢占了已开始的 SQLite read。
 
@@ -299,3 +299,13 @@ Human get 必须携带 `document_id`、固定 `version` 和该 revision 内的 `
 Workbench 与 activation executor 共用这一 renderer。前者可以编译明确标为 unpublished 的内存草稿；后者只读取原 Tool 领取的 frozen snapshot 和 exact proof，不能用本地预览产物代替正式 receipt。CodeMirror 用官方 GLSL stream mode、ShadowRoot 和 constructable stylesheet，未增加 CSP 例外。PNG 导入通过既有 Host nativeFiles 与浏览器标准 codec，先检查文件/尺寸预算，再把 RGBA 交现有 typed operation；immutable PNG 下载仍读取原 Representation。
 
 历史 diagnostic 链接的 Dock 固定到 Artifact version 并禁写，不因轮询转成当前文档。所有固定版本读取（包括首个 metadata 页）必须与要求版本相等。当前文档的外部修改检测、内存草稿与显式冲突选择仅为 UI 状态；没有新 canonical store、GPU 队列、自动重放或 SDK 变化。具体作者证据与剩余独立门禁见 [质量页](../quality/shader-dlc-evidence.md)。
+
+### 7.9 完整文档读取与持久证据一致性
+
+工作台与 immutable document Representation 通过已有只读页增加 `section=document_bytes`。服务端仍由 `read_revision` 校验唯一的 Document schema、引用和 hash，再用既有 `encoded` 返回与该 revision content_hash 完全相同的 `{document,deleted}` 字节。固定 document/version 必需，不接受 stage/texture selector。offset 按原字节计，limit 为 1–16384，完整响应 ≤ 32 KiB；总字节数 ≤ 1048608，包含原 1 MiB 文档上限与 envelope。到末尾可返回空页，超出 total 拒绝。
+
+客户端固定 id/version/hash/title/deleted，核验 base64、页长度、offset/next_offset/total/has_more，核对完整 SHA-256 后才以严格 UTF-8 解析原文。metadata 的 preview、对象计数和 source_bytes 必须与原文一致，纹理继续单独按原内容 hash 校验。复用后端现有 JSON 编码与 Web Crypto，避免为重组另一份文档而复制完整模型校验，也避免 JavaScript 与 Python 浮点序列化差异。`shader_inspect` 和自动 Context 不暴露此 section；没有新增 Operation、HTTP 路由、持久副本、兼容格式或依赖。
+
+历史连续性在已有 SQLite audit 查询中同时检查整数类型与正数范围，再结合既有唯一键、数量和最大值校验，拒绝 0、负数和分数修订/generation。回执必须使用规范字节并精确匹配原不可变 revision Summary；计算回执还必须等于原 report 的同一有界投影。合法 no-op/export 可能发生在其他文档推进 studio generation 之后，因此只要求 receipt generation 位于原 revision 与当前 studio 之间，不伪造二者必然相等。
+
+计算交接与已存 report 共用诊断/编译状态、对象引用和日志预算检查，持久读另检查规范字节与像素尺寸/hash。集合差异统一比较对象内容和原位置，因此 pass 重排会出现在 changed_ids 及 diff 的 from_index/to_index 中；没有新增顺序镜像或另一套差异规则。

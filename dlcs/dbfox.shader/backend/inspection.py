@@ -9,6 +9,7 @@ from hashlib import sha256
 from pydantic import JsonValue
 
 from . import contracts as c
+from .mutations import object_changes
 from .store import ShaderError, Store, check_cancelled, not_cancelled
 
 
@@ -85,6 +86,19 @@ def inspect(store: Store, project: str, data: c.InspectInput, generation: int | 
 
 def get_page(store: Store, project: str, data: c.GetInput, cancelled: Callable[[], bool] = not_cancelled) -> c.PageResult:
     check_cancelled(cancelled)
+    if data.section == "document_bytes":
+        with store.transaction() as db:
+            revision = store.read_revision(db, project, data.document_id, data.version)
+            raw = c.encoded({"document": revision.document.model_dump(mode="json"), "deleted": revision.deleted})
+            if len(raw) > c.MAX_DOCUMENT + 32:
+                raise ShaderError("SHADER_LIMIT", "Canonical document bytes exceed their budget.")
+            if data.offset > len(raw):
+                raise ShaderError("SHADER_INVALID", "Document byte offset exceeds its length.")
+            selected = raw[data.offset:data.offset+data.limit]
+            check_cancelled(cancelled)
+            return limit_page(c.PageResult(document=revision.summary(), studio_generation=revision.studio_generation,
+                section="document_bytes", offset=data.offset, next_offset=data.offset+len(selected), total=len(raw),
+                has_more=data.offset+len(selected)<len(raw), document_bytes=base64.b64encode(selected).decode("ascii")))
     if data.section != "texture_bytes":
         return inspect(store, project, c.InspectInput.model_validate(data.model_dump(mode="json", exclude_none=True, exclude={"texture_id"})))
     with store.transaction() as db:
@@ -129,13 +143,7 @@ def diff(store: Store, project: str, data: c.DiffInput, generation: int | None =
         page.metadata["source_diff_available"] = True
         page.total = len(lines)
         return source_page(page, lines, data.limit)
-    items: list[dict[str, JsonValue]] = []
-    for section in ("stages", "passes", "uniforms", "textures"):
-        left = {value.id: value.model_dump(mode="json") for value in getattr(before.document, section)}
-        right = {value.id: value.model_dump(mode="json") for value in getattr(after.document, section)}
-        for identity in sorted(left.keys() | right.keys()):
-            if left.get(identity) != right.get(identity):
-                items.append({"section": section, "id": identity, "change": "created" if identity not in left else "removed" if identity not in right else "updated"})
+    items = object_changes(before.document, after.document)
     for name in ("title", "preview"):
         if getattr(before.document, name) != getattr(after.document, name):
             items.append({"section": name, "id": data.document_id, "change": "updated"})

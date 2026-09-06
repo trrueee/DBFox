@@ -16,6 +16,7 @@ MAX_DOCUMENT = 1_048_576
 MAX_HISTORY = 256 * 1024 * 1024
 MAX_REPORT = 262_144
 MAX_RECEIPT = 32_768
+OPERATIONAL_ERRORS = frozenset({"CONTEXT_LOST", "GPU_ERROR", "FBO_INCOMPLETE", "EXECUTOR_UNAVAILABLE", "COMPUTE_TIMEOUT"})
 
 
 def encoded(value: object) -> bytes:
@@ -66,18 +67,13 @@ class Contract(BaseModel):
 class Input(Contract):
     @model_validator(mode="before")
     @classmethod
-    def no_explicit_null(cls, value: object) -> object:
-        def check(item: object) -> None:
-            if item is None:
-                raise ValueError("Omit optional fields; explicit null is not supported")
-            if isinstance(item, dict):
-                for nested in item.values():
-                    check(nested)
-            elif isinstance(item, list):
-                for nested in item:
-                    check(nested)
-        check(value)
-        return value
+    def omit_nullable_defaults(cls, value: object) -> object:
+        # Native strict function schemas require nullable properties to be present.
+        # Only an explicitly declared None default may use null as omission.
+        if not isinstance(value, dict):
+            return value
+        return {key: item for key, item in value.items()
+                if item is not None or key not in cls.model_fields or cls.model_fields[key].default is not None}
 
 
 class ObjectId(Input):
@@ -452,7 +448,7 @@ class HeadInput(Input):
 
 
 class ReadParameters(Input):
-    section: Literal["summary", "stages", "passes", "uniforms", "textures", "source", "texture_bytes"] = "summary"
+    section: Literal["summary", "stages", "passes", "uniforms", "textures", "source", "texture_bytes", "document_bytes"] = "summary"
     offset: Nonnegative = 0
     limit: Annotated[int, Field(ge=1, le=16384)] = 20
     stage_id: Id | None = None
@@ -460,7 +456,10 @@ class ReadParameters(Input):
 
     @model_validator(mode="after")
     def read_locator(self) -> ReadParameters:
-        if self.section == "texture_bytes":
+        if self.section == "document_bytes":
+            if self.texture_id is not None or self.stage_id is not None:
+                raise ValueError("Document bytes have no object selector")
+        elif self.section == "texture_bytes":
             if self.texture_id is None or self.stage_id is not None:
                 raise ValueError("texture_bytes requires only a texture_id locator")
         elif self.texture_id is not None or self.limit > 50:
@@ -474,7 +473,7 @@ class GetInput(ReadParameters):
 
     @model_validator(mode="after")
     def fixed_version(self) -> GetInput:
-        if (self.section == "texture_bytes" or self.offset > 0) and self.version is None:
+        if (self.section in {"texture_bytes", "document_bytes"} or self.offset > 0) and self.version is None:
             raise ValueError("Byte reads and subsequent pages require fixed version")
         return self
 
@@ -564,6 +563,7 @@ class PageResult(Contract):
     document: Summary | None = None
     studio_generation: Nonnegative
     section: str
+    document_bytes: str | None = Field(default=None, max_length=21848)
     items: list[dict[str, JsonValue]] = Field(default_factory=list, max_length=50)
     source: str | None = None
     stage_id: Id | None = None
@@ -639,6 +639,26 @@ class Report(Contract):
     height: PreviewDimension | None = None
     pixel_hash: Hash | None = None
     pixel_format: Literal["rgba8-unorm"] | None = None
+
+
+def validate_compute_evidence(document: Document, result: ComputeResult | Report, kind: str) -> None:
+    """Shared semantic checks for incoming and stored immutable GPU evidence."""
+    if isinstance(result, Report) and any(item.code in OPERATIONAL_ERRORS for item in result.diagnostics):
+        raise ValueError("Operational failures cannot be stored as compiler evidence")
+    if result.rendered and (not result.compiled or kind != "preview"):
+        raise ValueError("Rendered evidence requires a compiled preview")
+    if kind == "preview" and result.compiled and not result.rendered:
+        raise ValueError("A successful preview requires rendered pixels")
+    if result.compiled == any(item.severity == "error" for item in result.diagnostics):
+        raise ValueError("Compilation status and error diagnostics disagree")
+    stage_ids = {value.id for value in document.stages}
+    pass_ids = {value.id for value in document.passes}
+    for item in [*result.diagnostics, *result.logs]:
+        if (item.stage_id is not None and item.stage_id not in stage_ids
+                or item.pass_id is not None and item.pass_id not in pass_ids):
+            raise ValueError("Diagnostic references an unrelated object")
+    if sum(len(item.text.encode("utf-8")) for item in result.logs) > 65_536:
+        raise ValueError("Driver log budget exceeded")
 
 
 class ComputeOutcome(Contract):

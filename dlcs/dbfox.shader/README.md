@@ -10,9 +10,11 @@
 
 12 个 project operations：`documents.list/get/head/create/apply/undo/delete/revisions/diff/compile/preview/export`。普通修改直接进入同一个 store；compile、preview、export 是显式 Host Action Run，返回 `session_id/run_id/artifact_ids/outcome`。所有写入需 UUID `request_id`；create 用 `expected_generation`，其他写入用 `expected_version`。返回的 mutation 形状是 `{document:{id,title,version,content_hash,deleted},studio_generation,changed,changed_ids,truncated,created_refs}`。
 
-create 默认返回 `created_refs.vertex/fragment/pass`。一次 apply 含 1–64 个 `kind` discriminated operations；创建对象的 `ref` 是本批次唯一 ASCII 名，引用字段只能是 `{id: UUID}` 或 `{ref: local_ref}`，后者必须指向较早 create。`stage_create.stage_kind` 选择 vertex/fragment。`pass_update`、`uniform_update` 和 `preview_set` 省略字段表示保持，所有输入显式 null 均拒绝。remove 是单独 typed operation。
+create 默认返回 `created_refs.vertex/fragment/pass`。一次 apply 含 1–64 个 `kind` discriminated operations；创建对象的 `ref` 是本批次唯一 ASCII 名，引用字段只能是 `{id: UUID}` 或 `{ref: local_ref}`，后者必须指向较早 create。`stage_create.stage_kind` 选择 vertex/fragment。`pass_update`、`uniform_update` 和 `preview_set` 省略字段表示保持；输入模型明确声明默认值为 None 的可选字段也接受 null，含义同省略，以匹配原生严格 function schema。必需字段、数值、对象 selector 和未知字段仍按严格模型校验。remove 是单独 typed operation。
 
 `documents.get` 默认 summary，metadata 包含 preview 与对象计数。`stages` 页只含 stage 元信息；源码必须用 `section:source, stage_id` 按完整行读取。后续页必须带首次读取的固定 document `version`，用返回 `next_offset/has_more` 继续，不能把不同版本拼接。普通页 limit ≤ 50，source 完整响应 ≤ 16 KiB，其他页 ≤ 32 KiB。
+
+工作台完整加载使用同一 get/Representation 的 `section:document_bytes`，逐页读取固定 revision 的原始规范 JSON 字节，每页 ≤ 16384 bytes，总额 ≤ 1048608 bytes。先核对整个 envelope 的 SHA-256 和 summary，再解析 document；不会在浏览器重新拼接或重新序列化规范模型。Agent inspect 和自动 context 保持原来的细粒度读取，不包含完整文档字节。
 
 工作台重开后用 `documents.get` 的 `section:texture_bytes` 重组纹理。必须提供 document_id、固定 version、该 revision 中的 texture_id；offset 为原始字节，limit ≤ 16384。返回 PageResult 的 `texture_bytes:{texture_id,content_hash,total_bytes,rgba_base64}` 与外层 `offset/next_offset/total/has_more`。完整重组后核对 SHA-256，再交给本地预览。删除 texture 后仍可按旧 revision 读取。不能传 hash、路径、URL 或另一个 document 作为替代定位。这个读取不生成 Run、receipt 或文档修订；Tool inspect 与自动 context 不提供这些字节。
 

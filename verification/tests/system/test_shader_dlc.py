@@ -159,8 +159,7 @@ def test_registration_and_machine_schemas(harness):
 def test_strict_generation_and_null(harness, bad):
     with pytest.raises(ValueError):
         harness.c.CreateInput.model_validate({"title": "x", "expected_generation": bad})
-    with pytest.raises(ValueError):
-        harness.c.InspectInput.model_validate({"section": "documents", "document_id": None})
+    assert harness.c.InspectInput.model_validate({"section": "documents", "document_id": None}).document_id is None
 
 
 def test_public_runtime_observation_incremental_stale_noop_undo(harness):
@@ -231,8 +230,7 @@ def test_uniform_types_and_bool_cannot_be_number(harness):
     for type_, value in (("float", True), ("int", 1.1), ("bool", 1), ("vec3", [1, 2]), ("vec3", [1, True, 2])):
         with pytest.raises(ValueError):
             h.c.Uniform(id=str(uuid4()), pass_id=created.created_refs["pass"], name="test", type=type_, value=value)
-    with pytest.raises(ValueError):
-        h.c.PreviewSet.model_validate({"kind": "preview_set", "time_seconds": None})
+    assert h.c.PreviewSet.model_validate({"kind": "preview_set", "time_seconds": None}).time_seconds is None
 
 
 def test_single_winner_concurrency_and_studio_fence(harness):
@@ -695,6 +693,7 @@ def test_final_contract_schema_matches_actual_operations(harness):
     for spec in h.staged.operations:
         assert expected["operations"][spec.name] == {"scope": spec.scope, "max_output_bytes": spec.max_output_bytes, "input": spec.input_model.model_json_schema(), "output": spec.output_model.model_json_schema()}
     assert expected["document"] == h.c.Document.model_json_schema()
+    assert expected["representation_parameters"] == h.c.ReadParameters.model_json_schema()
 
 
 def test_active_document_cap_tombstone_restore_and_undo_of_undo(harness):

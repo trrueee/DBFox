@@ -1,6 +1,5 @@
 // WebGL2 is the compiler and renderer. This module is shared by Tool execution and draft preview.
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 
 export function decodeBytes(base64) {
   const raw = atob(base64);
@@ -91,7 +90,7 @@ export function createRenderer(canvas) {
     const diagnostic = (code, message, details = {}, severity = 'error') => {
       // Driver text is untrusted display content; strip control characters intentionally.
       // eslint-disable-next-line no-control-regex
-      const bounded = decoder.decode(encoder.encode(message.replace(/[\u0000-\u001f\u007f]/g, ' ')).subarray(0, 512), { stream: true });
+      const bounded = new TextDecoder().decode(encoder.encode(message.replace(/[\u0000-\u001f\u007f]/g, ' ')).subarray(0, 512), { stream: true });
       const item = { severity, code, message: bounded, ...details };
       if (severity === 'error') hasError = true;
       if (diagnostics.length < 128) diagnostics.push(item);
@@ -103,9 +102,12 @@ export function createRenderer(canvas) {
       // eslint-disable-next-line no-control-regex
       const bytes = encoder.encode(text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' '));
       const available = Math.max(0, 65536 - logBytes);
-      const bounded = decoder.decode(bytes.subarray(0, available), { stream: true });
-      if (bounded && logs.length < 96) { logs.push({ text: bounded, ...details }); logBytes += encoder.encode(bounded).length; }
-      truncated += Math.max(0, bytes.length - available);
+      // Each driver record is a separate string. Discard its incomplete final
+      // code point instead of carrying decoder state into another record.
+      const bounded = new TextDecoder().decode(bytes.subarray(0, available), { stream: true });
+      const savedBytes = bounded && logs.length < 96 ? encoder.encode(bounded).length : 0;
+      if (savedBytes) { logs.push({ text: bounded, ...details }); logBytes += savedBytes; }
+      truncated += bytes.length - savedBytes;
       // Parse location only from actual driver output; status always comes from WebGL.
       for (const line of text.split('\n').slice(0, 128)) {
         const match = /^(ERROR|WARNING):\s*\d+:(\d+):\s*(.*)/i.exec(line);

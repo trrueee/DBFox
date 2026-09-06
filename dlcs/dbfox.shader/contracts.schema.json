@@ -445,7 +445,8 @@
           "uniforms",
           "textures",
           "source",
-          "texture_bytes"
+          "texture_bytes",
+          "document_bytes"
         ],
         "title": "Section",
         "type": "string"
@@ -620,6 +621,19 @@
             "title": "Section",
             "type": "string"
           },
+          "document_bytes": {
+            "anyOf": [
+              {
+                "maxLength": 21848,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Document Bytes"
+          },
           "items": {
             "items": {
               "additionalProperties": {
@@ -724,7 +738,8 @@
               "uniforms",
               "textures",
               "source",
-              "texture_bytes"
+              "texture_bytes",
+              "document_bytes"
             ],
             "title": "Section",
             "type": "string"
@@ -895,6 +910,19 @@
           "section": {
             "title": "Section",
             "type": "string"
+          },
+          "document_bytes": {
+            "anyOf": [
+              {
+                "maxLength": 21848,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Document Bytes"
           },
           "items": {
             "items": {
@@ -2867,6 +2895,19 @@
             "title": "Section",
             "type": "string"
           },
+          "document_bytes": {
+            "anyOf": [
+              {
+                "maxLength": 21848,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Document Bytes"
+          },
           "items": {
             "items": {
               "additionalProperties": {
@@ -3124,6 +3165,19 @@
           "section": {
             "title": "Section",
             "type": "string"
+          },
+          "document_bytes": {
+            "anyOf": [
+              {
+                "maxLength": 21848,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Document Bytes"
           },
           "items": {
             "items": {

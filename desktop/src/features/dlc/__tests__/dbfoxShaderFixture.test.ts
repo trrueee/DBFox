@@ -24,7 +24,7 @@ const canonical = () => ({
 });
 type Canonical = ReturnType<typeof canonical>;
 type Snapshot = { document: Canonical; textures: { content_hash: string; rgba_base64: string }[] };
-type Page = { document: { id: string; title: string; version: number; content_hash: string; deleted: boolean }; studio_generation: number; section: string; items: object[]; offset: number; next_offset: number; total: number; has_more: boolean; metadata: Record<string, unknown>; source?: string; stage_id?: string; texture_bytes?: { texture_id: string; content_hash: string; total_bytes: number; rgba_base64: string } };
+type Page = { document: { id: string; title: string; version: number; content_hash: string; deleted: boolean }; studio_generation: number; section: string; items: object[]; offset: number; next_offset: number; total: number; has_more: boolean; metadata: Record<string, unknown>; document_bytes?: string; source?: string; stage_id?: string; texture_bytes?: { texture_id: string; content_hash: string; total_bytes: number; rgba_base64: string } };
 type Read = (parameters: Record<string, unknown>, signal: AbortSignal) => Promise<Page>;
 type Loaded = { summary: Page['document']; generation: number; snapshot: Snapshot };
 type ComputeResult = { compiled: boolean; rendered: boolean; diagnostics: object[]; logs: object[]; log_truncated: number };
@@ -55,14 +55,22 @@ function deferred<T>() {
   const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 }
-const summary = (document: Canonical, version = 1) => ({ id: document.id, title: document.title, version, content_hash: hash(JSON.stringify(document)), deleted: false });
+// A transport fixture: hash the same envelope bytes that the reader serves.
+// Actual Python canonical bytes are covered by the independent captured fixture.
+const documentBytes = (document: Canonical) => Buffer.from(JSON.stringify({ document, deleted: false }), 'utf8');
+const summary = (document: Canonical, version = 1) => ({ id: document.id, title: document.title, version, content_hash: hash(documentBytes(document)), deleted: false });
 function reader(document: Canonical, version = 1, bytes = new Uint8Array()): Read {
   return async (parameters) => {
     const section = String(parameters.section);
     const offset = Number(parameters.offset ?? 0);
     const page: Page = { document: summary(document, version), studio_generation: version, section, offset, next_offset: offset, total: 0, has_more: false, items: [], metadata: {} };
-    if (section === 'summary') page.metadata = { schema_version: 1, language: 'glsl-es-300', preview: document.preview, stage_count: document.stages.length, pass_count: document.passes.length, uniform_count: document.uniforms.length, texture_count: document.textures.length };
-    else if (section === 'source') {
+    if (section === 'summary') page.metadata = { schema_version: 1, language: 'glsl-es-300', preview: document.preview, stage_count: document.stages.length, pass_count: document.passes.length, uniform_count: document.uniforms.length, texture_count: document.textures.length, source_bytes: document.stages.reduce((sum, stage) => sum + Buffer.byteLength(stage.source), 0) };
+    else if (section === 'document_bytes') {
+      const canonical = documentBytes(document);
+      const selected = canonical.subarray(offset, offset + Math.min(Number(parameters.limit), 16384));
+      page.document_bytes = selected.toString('base64'); page.total = canonical.length;
+      page.next_offset = offset + selected.length; page.has_more = page.next_offset < page.total;
+    } else if (section === 'source') {
       const stage = document.stages.find((stage) => stage.id === parameters.stage_id)!;
       const lines = stage.source.match(/[^\n]*\n|[^\n]+$/g) ?? [];
       page.source = lines.slice(offset, offset + 1).join(''); page.stage_id = stage.id; page.total = lines.length; page.next_offset = Math.min(offset + 1, lines.length); page.has_more = page.next_offset < lines.length;
@@ -125,7 +133,7 @@ describe('Shader owner frontend: public contracts and immutable reads', () => {
     for (const url of [installedUrl + '?override=1', 'http://localhost/' + digest + '/frontend/index.js', installedUrl.replace('localhost', 'foreign'), installedUrl.replace(digest, 'z'.repeat(64))]) expect(() => module.packageDigestFromUrl(url)).toThrow();
   });
 
-  it('pins every source/object/texture page and hashes reassembled bytes across multiple pages', async () => {
+  it('pins every canonical/texture byte page and hashes reassembled bytes across multiple pages', async () => {
     const module = await importOwner<DataModule>('document-data.js');
     const document = canonical(); const bytes = new Uint8Array(128 * 64 * 4).map((_, index) => index % 251);
     document.textures.push({ id: uuid(5), title: 'Texture', width: 128, height: 64, format: 'rgba8', content_hash: hash(bytes) });
@@ -142,10 +150,15 @@ describe('Shader owner frontend: public contracts and immutable reads', () => {
     const read = reader(document);
     await expect(module.loadDocument(read, new AbortController().signal, 7)).rejects.toThrow('requested immutable revision');
     await expect(module.loadDocument(async (parameters, signal) => {
-      const page = await read(parameters, signal); if (parameters.section === 'passes') page.document.version = 2; return page;
+      const page = await read(parameters, signal); if (parameters.section === 'document_bytes') page.document.version = 2; return page;
     }, new AbortController().signal)).rejects.toThrow('same immutable revision');
     await expect(module.loadDocument(async (parameters, signal) => {
-      const page = await read(parameters, signal); if (parameters.section === 'source') page.source += '//tampered'; return page;
+      const page = await read(parameters, signal);
+      if (parameters.section === 'document_bytes') {
+        const bytes = Buffer.from(page.document_bytes!, 'base64'); bytes[0] ^= 1;
+        page.document_bytes = bytes.toString('base64');
+      }
+      return page;
     }, new AbortController().signal)).rejects.toThrow('hash');
     const controller = new AbortController(); const stopped = vi.fn(async (parameters: Record<string, unknown>, signal: AbortSignal) => { controller.abort(); return read(parameters, signal); });
     await expect(module.loadDocument(stopped, controller.signal)).rejects.toThrow(); expect(stopped).toHaveBeenCalledTimes(1);

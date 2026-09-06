@@ -1,6 +1,6 @@
 {
   "dlc_id": "dbfox.shader",
-  "status": "implementation_candidate",
+  "status": "red_team",
   "branch": "creative/shader",
   "worktree": "D:/Project/DBFox-worktrees/creative-shader",
   "lead": "/root/shader_lead",
@@ -71,7 +71,22 @@
     "frontend_count": 13,
     "frontend_typecheck": "passed",
     "frontend_lint": "0 errors; 5 preexisting shared warnings; owner 10 JS modules clean",
-    "production_build": "passed on 69563a79"
+    "production_build": "passed on 69563a79",
+    "independent_reports": [
+      "docs/quality/shader-independent-verification.md",
+      "docs/quality/shader-dlc-adversarial-review.md"
+    ],
+    "repair_verification": {
+      "backend_author_and_adversarial_compute": 53,
+      "seconds": 26.01,
+      "frontend_author_verifier_and_pages": 37,
+      "frontend_seconds": 7.6,
+      "frontend_adversarial_utf8": 1,
+      "frontend_utf8_seconds": 1.2,
+      "typecheck": "passed",
+      "pyflakes": "passed",
+      "mypy_modules": 5
+    }
   },
   "bench": {
     "status": "director_implementation_in_progress",
@@ -119,24 +134,24 @@
       },
       {
         "role": "Verification Engineer",
-        "agent": null,
-        "status": "pending_slot"
+        "agent": "/root/pixel_workbench",
+        "status": "native_electron_evidence_complete_repaired_candidate_cold_recheck_pending"
       },
       {
         "role": "Adversarial Reviewer",
-        "agent": null,
-        "status": "pending_independent_agent",
+        "agent": "/root/voxel_lead/domain_architect",
+        "status": "independent_attacks_repairs_under_final_review",
         "must_not_implement": true
       }
     ],
-    "concurrency_note": "Director explicitly reused this thread from Shader Backend to Workbench after capacity interruptions; both are author roles. Domain Architect was /root/shader_architect. Verification and Adversarial require a non-author; slot availability never counts as evidence.",
+    "concurrency_note": "Shader author roles remained with /root/scene_lead/domain_architect; non-author /root/pixel_workbench verifies and non-author /root/voxel_lead/domain_architect performs adversarial review. Director implements confirmed repairs without editing independent attacks.",
     "agent": "/root/shader_architect"
   },
   "known_blockers": [
     {
       "id": "SHADER-VERIFY-COMPUTE",
       "kind": "verification_gap",
-      "detail": "Existing machine operations can express a transient Tool-owned compute request, but real release-renderer compile/link/readPixels/cancel evidence has not yet been produced."
+      "detail": "Independent native Electron compile/repair/preview, PNG pixels, cancellation and restart evidence exists for efb9167f. The repaired canonical byte loader and report/log validation candidate still needs a bounded cold package recheck and final independent acceptance."
     },
     {
       "id": "SHADER-RENDERER-INTERRUPT",
@@ -155,7 +170,7 @@
     "Shader document/preview representation consumer when a real joint-resource task is proven"
   ],
   "compute_path": {
-    "state": "implemented_author_chrome_verified_production_gate_pending",
+    "state": "native_electron_independently_verified_repaired_candidate_recheck_pending",
     "runtime": "Bundled Electron Chromium WebGL2; GLSL ES 3.00",
     "scope": "machine",
     "creation": "Only a running authorized production Tool creates transient request",
@@ -197,11 +212,9 @@
     }
   },
   "next_steps": [
-    "Director integrates exact author candidate",
-    "Non-author validates installed Electron CSP and production Tool compile/repair/preview with Shader Dock closed",
-    "Complete capability benchmark and continuous stress through production RunLoop",
-    "Independent Adversarial Review and confirmed fixes",
-    "Director assesses DLC/composition integration"
+    "Freeze repaired candidate and cold-check affected canonical reads, historical JSON download and GPU execution",
+    "Receive independent adversarial report and exact candidate acceptance",
+    "Director integrates only verified commits and evaluates composition gates"
   ],
   "completion_claimed": false,
   "integrated_by": null,

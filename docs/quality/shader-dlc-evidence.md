@@ -203,3 +203,17 @@ interactions 脚本从已产生冲突的浏览器状态继续；完整键盘操�
 独立真实Agent的8个Artifact中，4个document-revision都带正式payload.report_id=null，前端parseLocator却只允许省略或字符串，四个卡片均不能解析；compile-report/preview卡片正常。独立fixture直接读取实际producer输出，原1 failed / 1.79秒；Director原样复现1 failed / 1.14秒。
 
 权威后端ArtifactLocator已明确Id|None=None，因此只在前端现有解析条件接受null，保持原输入对象、不删除或转换字段，其他错误类型仍拒绝。未改SDK、后端、Artifact producer、表示一致性或来源权限，没有兼容映射。原13项作者UI与独立真实payload回归合计 **14 passed / 5.90秒**。已请独立验证员在重新签名候选上完成固定源码打开及JSON下载，不能用解析通过代替真实卡片行为。
+
+## 独立红队驱动的持久证据与完整读取修正（2026-09-06）
+
+独立 Reviewer 在正式 owner 边界复现：0/2 历史可绕过 count/max；重算 hash 后的 receipt Summary 可以偏离源 revision；pass 重排只改变 hash 而 changed_ids/diff 为空；已存 report 接受矛盾编译状态及外部对象诊断；实际原生严格 schema 的可选 null 被 Input 全面拒绝。原持久化 9 项均失败，Director 原样复现。后续 report 3 项、实际 schema 3 项也有独立修前失败；这些模拟负报告只证明协议，不能作为真实 GPU 证据。
+
+前端原对象/源码页重建不能证明完整文档一致性，独立捕获正式页后有 7 项篡改失败。修复复用现有 get/Representation 返回原规范文档的有界字节页，先校验 SHA 再解析，不复制另一套前端领域模型，不修改 Agent 细粒度读取预算。原始失败 fixture 保留；Reviewer 重新捕获 31 个正式字节页并以同等攻击继续验证，同时增加分页/base64/长度攻击。
+
+实现细节与复用决策见[架构 7.9 节](../architecture/shader-dlc.md#79-完整文档读取与持久证据一致性)。没有新增 Core seam、表、迁移、依赖或兼容层。新增风险限于完整读取需要传输文档原字节；每页和总体预算固定，实际大型桌面加载性能由独立新签名包复验记录。
+
+Director 本轮运行 82 项后端得到 81 passed、1 个尚未更新的合同快照失败（75.19 秒）。快照现从注册的实际 Pydantic 模型重新生成，并增加 Representation 参数快照断言；不是手改生成文件。同步作者 transport fixture 后，作者 13 项、独立 Verification 9 项和独立 Red Team 15 项前端合计 **37 passed / 7.60 秒**，测试类型检查通过。独立新增后端和最终候选验收数字分别由各自报告维护；本节不将旧作者测试冒充新攻击。
+
+补充源头检查又复现 2 项报告问题：已存 CONTEXT_LOST 可被当作编译证据；在内部 make_report 后注入非 rendered 尺寸会提交，但随后读取会拒绝。后者属于内部派生损坏，不能声称合法 CompleteInput 可绕过原有校验。现统一保存/读取的像素字段约束，运行错误集合由既有 compute 与持久 Report 校验共用；保持原 Tool 的 GPU_UNAVAILABLE 结算。
+
+Reviewer 另以负驱动边界输入独立复现 UTF-8 残码点从一条日志污染下一条的失败。修复只为每个独立字符串使用独立标准 TextDecoder，保留 stream 模式丢弃截断尾部，按实际保留字节计费；没有自制 UTF-8 decoder。原攻击 **1 passed / 1.20 秒**，GL 资源释放断言保持。更新快照后的作者全套 **44 passed / 10.73 秒**；后续作者与独立 compute 合计 **53 passed / 26.01 秒**。全部后端 pyflakes、改动的 5 个 Python 模块 mypy 通过；新签名包桌面复验仍待独立工程师交付。

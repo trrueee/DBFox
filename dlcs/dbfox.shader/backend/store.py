@@ -12,7 +12,7 @@ from uuid import uuid4
 from dbfox_dlc_api import ProjectResourceDescriptor, ResourceScopeRef
 
 from . import contracts as c
-from .mutations import apply_operations, dedicated_operations, new_document
+from .mutations import apply_operations, dedicated_operations, new_document, object_changes
 
 
 class ShaderError(ValueError):
@@ -36,6 +36,16 @@ def check_cancelled(cancelled: Callable[[], bool]) -> None:
 
 def not_cancelled() -> bool:
     return False
+
+
+def compute_outcome(revision: c.Revision, report: c.Report) -> c.ComputeOutcome:
+    """The bounded receipt is a projection of the immutable revision and report."""
+    diagnostics = [item.model_copy(update={"message": item.message[:256]}) for item in report.diagnostics[:20]]
+    result = c.ComputeOutcome(document=revision.summary(), report_id=report.id, compiled=report.compiled, rendered=report.rendered, diagnostics=diagnostics, diagnostic_count=len(report.diagnostics), truncated=len(report.diagnostics)>20 or any(len(item.message)>256 for item in report.diagnostics[:20]))
+    while len(c.encoded(result.model_dump(mode="json", exclude_none=True))) > 8192 and result.diagnostics:
+        result.diagnostics.pop()
+        result.truncated = True
+    return result
 
 
 class Store:
@@ -92,9 +102,9 @@ class Store:
     def audit(self, db: sqlite3.Connection) -> None:
         if db.execute("PRAGMA user_version").fetchone()[0] != 1:
             raise ShaderError("SHADER_SCHEMA_UNSUPPORTED", "Unsupported Shader state schema.")
-        broken = db.execute("SELECT 1 FROM heads h LEFT JOIN revisions r ON r.id=h.id AND r.version=h.version AND r.project=h.project WHERE r.id IS NULL OR h.version!=(SELECT count(*) FROM revisions x WHERE x.id=h.id) OR h.version!=(SELECT max(version) FROM revisions x WHERE x.id=h.id) LIMIT 1").fetchone()
-        missing = db.execute("SELECT 1 FROM revisions r LEFT JOIN heads h ON h.id=r.id AND h.project=r.project LEFT JOIN studios s ON s.project=r.project WHERE h.id IS NULL OR s.project IS NULL LIMIT 1").fetchone()
-        generation = db.execute("SELECT 1 FROM studios s WHERE s.generation!=(SELECT count(*) FROM revisions r WHERE r.project=s.project) OR s.generation!=(SELECT max(generation) FROM revisions r WHERE r.project=s.project) LIMIT 1").fetchone()
+        broken = db.execute("SELECT 1 FROM heads h LEFT JOIN revisions r ON r.id=h.id AND r.version=h.version AND r.project=h.project WHERE r.id IS NULL OR typeof(h.version)!='integer' OR h.version NOT BETWEEN 1 AND 9007199254740991 OR h.version!=(SELECT count(*) FROM revisions x WHERE x.id=h.id) OR h.version!=(SELECT max(version) FROM revisions x WHERE x.id=h.id) LIMIT 1").fetchone()
+        missing = db.execute("SELECT 1 FROM revisions r LEFT JOIN heads h ON h.id=r.id AND h.project=r.project LEFT JOIN studios s ON s.project=r.project WHERE h.id IS NULL OR s.project IS NULL OR typeof(r.version)!='integer' OR r.version NOT BETWEEN 1 AND 9007199254740991 OR typeof(r.generation)!='integer' OR r.generation NOT BETWEEN 1 AND 9007199254740991 LIMIT 1").fetchone()
+        generation = db.execute("SELECT 1 FROM studios s WHERE typeof(s.generation)!='integer' OR s.generation NOT BETWEEN 1 AND 9007199254740991 OR s.generation!=(SELECT count(*) FROM revisions r WHERE r.project=s.project) OR s.generation!=(SELECT max(generation) FROM revisions r WHERE r.project=s.project) LIMIT 1").fetchone()
         if broken or missing or generation:
             raise ShaderError("SHADER_CORRUPT", "Shader head/history generations are inconsistent.")
         total = 0
@@ -210,11 +220,25 @@ class Store:
         try:
             if sha256(row["payload"]).hexdigest() != row["hash"]:
                 raise ValueError("Receipt hash mismatch")
+            result: c.MutationResult | c.ComputeOutcome
             if row["kind"] == "mutation":
-                return c.MutationResult.model_validate_json(row["payload"])
-            if row["kind"] == "compute":
-                return c.ComputeOutcome.model_validate_json(row["payload"])
-            raise ValueError("Unknown receipt kind")
+                result = c.MutationResult.model_validate_json(row["payload"])
+            elif row["kind"] == "compute":
+                result = c.ComputeOutcome.model_validate_json(row["payload"])
+            else:
+                raise ValueError("Unknown receipt kind")
+            if c.encoded(result.model_dump(mode="json", exclude_none=True)) != row["payload"]:
+                raise ValueError("Receipt is not canonical")
+            revision = self.read_revision(db, project, result.document.id, result.document.version)
+            if result.document != revision.summary():
+                raise ValueError("Receipt does not match its immutable revision")
+            if isinstance(result, c.ComputeOutcome):
+                report, _ = self.read_report(db, project, result.report_id)
+                if report.document_id != revision.document.id or report.version != revision.version or result != compute_outcome(revision, report):
+                    raise ValueError("Receipt does not match its immutable report")
+            elif not revision.studio_generation <= result.studio_generation <= self.generation(db, project):
+                raise ValueError("Receipt generation is outside its immutable history")
+            return result
         except ValueError as exc:
             raise ShaderError("SHADER_CORRUPT", "Stored Shader receipt failed validation.") from exc
 
@@ -298,9 +322,7 @@ class Store:
                     db.execute("INSERT INTO revisions VALUES (?,?,?,?,?,?,?)", (document.id, version, project, next_generation, digest_content, int(deleted), payload))
                     db.execute("INSERT INTO heads VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version", (document.id, project, version))
                     db.execute("INSERT INTO studios VALUES (?,?) ON CONFLICT(project) DO UPDATE SET generation=excluded.generation", (project, next_generation))
-                old_items = {} if old is None else {item.id: item.model_dump() for item in [*old.document.stages, *old.document.passes, *old.document.uniforms, *old.document.textures]}
-                new_items = {item.id: item.model_dump() for item in [*document.stages, *document.passes, *document.uniforms, *document.textures]}
-                changed_ids = sorted(key for key in old_items.keys() | new_items.keys() if old_items.get(key) != new_items.get(key))
+                changed_ids = sorted(str(item["id"]) for item in object_changes(old.document if old else None, document))
                 if changed and (old is None or old.document.title != document.title or old.document.preview != document.preview or old.deleted != deleted):
                     changed_ids.append(document.id)
                 result = c.MutationResult(document=c.Summary(id=document.id, title=document.title, version=version, content_hash=digest_content, deleted=deleted), studio_generation=next_generation, changed=changed, changed_ids=changed_ids[:64], truncated=len(changed_ids)>64, created_refs=refs)
@@ -340,22 +362,21 @@ class Store:
                 raise ShaderError("STALE_VERSION", "Shader document changed during GPU computation.")
             if report.document_id != data.document_id or report.kind != action:
                 raise ShaderError("SHADER_INVALID", "Compute report identity mismatch.")
+            try:
+                c.validate_compute_evidence(current.document, report, action)
+            except ValueError as exc:
+                raise ShaderError("SHADER_INVALID", str(exc)) from exc
             payload = c.encoded(report.model_dump(mode="json", exclude_none=True))
             if len(payload) > c.MAX_REPORT or len(pixels) > 262_144:
                 raise ShaderError("SHADER_LIMIT", "Compute evidence budget exceeded.")
             if report.rendered:
-                if not report.compiled or report.width != current.document.preview.width or report.height != current.document.preview.height or len(pixels) != report.width * report.height * 4 or sha256(pixels).hexdigest() != report.pixel_hash:
+                if not report.compiled or report.pixel_format != "rgba8-unorm" or report.width != current.document.preview.width or report.height != current.document.preview.height or len(pixels) != report.width * report.height * 4 or sha256(pixels).hexdigest() != report.pixel_hash:
                     raise ShaderError("SHADER_INVALID", "Preview evidence does not match the document.")
-            elif pixels or report.pixel_hash is not None:
+            elif pixels or any(value is not None for value in (report.pixel_hash, report.width, report.height, report.pixel_format)):
                 raise ShaderError("SHADER_INVALID", "Non-rendered report cannot contain pixels.")
             self.charge(db, len(payload) + len(pixels))
             db.execute("INSERT INTO reports VALUES (?,?,?,?,?,?,?)", (report.id, project, data.document_id, report.version, sha256(payload).hexdigest(), payload, pixels))
-            diagnostics = [item.model_copy(update={"message": item.message[:256]}) for item in report.diagnostics[:20]]
-            result = c.ComputeOutcome(document=current.summary(), report_id=report.id, compiled=report.compiled, rendered=report.rendered, diagnostics=diagnostics, diagnostic_count=len(report.diagnostics), truncated=len(report.diagnostics)>20 or any(len(item.message)>256 for item in report.diagnostics[:20]))
-            # Count/code truncation must fit even when all messages are multibyte.
-            while len(c.encoded(result.model_dump(mode="json", exclude_none=True))) > 8192 and result.diagnostics:
-                result.diagnostics.pop()
-                result.truncated = True
+            result = compute_outcome(current, report)
             self.save_receipt(db, project, "agent", invocation_id, digest, result)
             check_cancelled(cancelled)
             return result
@@ -369,13 +390,16 @@ class Store:
                 raise ValueError("Report hash mismatch")
             report = c.Report.model_validate_json(row["payload"])
             revision = self.read_revision(db, project, report.document_id, report.version, generation)
+            c.validate_compute_evidence(revision.document, report, report.kind)
+            if c.encoded(report.model_dump(mode="json", exclude_none=True)) != row["payload"]:
+                raise ValueError("Report is not canonical")
             if report.id != report_id or report.document_id != row["document_id"] or report.version != row["version"] or report.content_hash != revision.content_hash:
                 raise ValueError("Report locator mismatch")
             pixels: bytes = row["pixels"]
             if report.rendered:
-                if not report.compiled or report.kind != "preview" or report.width is None or report.height is None or len(pixels) != report.width * report.height * 4 or sha256(pixels).hexdigest() != report.pixel_hash:
+                if report.width != revision.document.preview.width or report.height != revision.document.preview.height or report.width is None or report.height is None or report.pixel_format != "rgba8-unorm" or len(pixels) != report.width * report.height * 4 or sha256(pixels).hexdigest() != report.pixel_hash:
                     raise ValueError("Preview hash/layout mismatch")
-            elif pixels or report.pixel_hash is not None:
+            elif pixels or any(value is not None for value in (report.pixel_hash, report.width, report.height, report.pixel_format)):
                 raise ValueError("Unexpected preview pixels")
             return report, pixels
         except ValueError as exc:
