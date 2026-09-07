@@ -1,0 +1,2819 @@
+[
+  {
+    "id": "simple-creation",
+    "prompt": "simple-creation：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [
+      {
+        "tool": "comic_create",
+        "input": {
+          "title": "灯塔归途"
+        },
+        "success": true
+      }
+    ],
+    "expected_pages": 0,
+    "expected_panels": 0
+  },
+  {
+    "id": "incremental-modification",
+    "prompt": "incremental-modification：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [
+      {
+        "tool": "comic_create",
+        "input": {
+          "title": "灯塔归途"
+        },
+        "success": true
+      },
+      {
+        "tool": "page_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "page_create",
+            "page": {
+              "id": "page1",
+              "title": "归途",
+              "panels": [
+                {
+                  "id": "panel1",
+                  "title": "灯塔",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.04,
+                    "width": 0.92,
+                    "height": 0.42
+                  },
+                  "shot": {
+                    "framing": "wide",
+                    "description": "海风吹过码头，灯塔在远处亮起。"
+                  },
+                  "elements": [
+                    {
+                      "kind": "character",
+                      "id": "traveler",
+                      "label": "归来的旅行者",
+                      "rect": {
+                        "x": 0.12,
+                        "y": 0.32,
+                        "width": 0.22,
+                        "height": 0.62
+                      }
+                    },
+                    {
+                      "kind": "bubble",
+                      "id": "hello",
+                      "text": "我们终于到家了。",
+                      "speaker_id": "traveler",
+                      "rect": {
+                        "x": 0.3,
+                        "y": 0.08,
+                        "width": 0.62,
+                        "height": 0.28
+                      }
+                    },
+                    {
+                      "kind": "caption",
+                      "id": "time",
+                      "text": "黄昏 · 港口",
+                      "rect": {
+                        "x": 0.05,
+                        "y": 0.8,
+                        "width": 0.6,
+                        "height": 0.15
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "panel2",
+                  "title": "重逢",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.52,
+                    "width": 0.92,
+                    "height": 0.43
+                  },
+                  "shot": {
+                    "framing": "close",
+                    "description": "门后的朋友抬起头。"
+                  },
+                  "elements": []
+                }
+              ]
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "shot_set",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "shot_set",
+            "panel_id": "panel1",
+            "shot": {
+              "framing": "medium",
+              "description": "聚焦旅行者"
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_inspect",
+        "input": {
+          "comic_id": "$comic",
+          "section": "pages"
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_export",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version"
+        },
+        "success": true
+      }
+    ],
+    "expected_pages": 1,
+    "expected_panels": 2
+  },
+  {
+    "id": "multi-stage-creation",
+    "prompt": "multi-stage-creation：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [
+      {
+        "tool": "comic_create",
+        "input": {
+          "title": "灯塔归途"
+        },
+        "success": true
+      },
+      {
+        "tool": "page_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "page_create",
+            "page": {
+              "id": "page1",
+              "title": "归途",
+              "panels": [
+                {
+                  "id": "panel1",
+                  "title": "灯塔",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.04,
+                    "width": 0.92,
+                    "height": 0.42
+                  },
+                  "shot": {
+                    "framing": "wide",
+                    "description": "海风吹过码头，灯塔在远处亮起。"
+                  },
+                  "elements": [
+                    {
+                      "kind": "character",
+                      "id": "traveler",
+                      "label": "归来的旅行者",
+                      "rect": {
+                        "x": 0.12,
+                        "y": 0.32,
+                        "width": 0.22,
+                        "height": 0.62
+                      }
+                    },
+                    {
+                      "kind": "bubble",
+                      "id": "hello",
+                      "text": "我们终于到家了。",
+                      "speaker_id": "traveler",
+                      "rect": {
+                        "x": 0.3,
+                        "y": 0.08,
+                        "width": 0.62,
+                        "height": 0.28
+                      }
+                    },
+                    {
+                      "kind": "caption",
+                      "id": "time",
+                      "text": "黄昏 · 港口",
+                      "rect": {
+                        "x": 0.05,
+                        "y": 0.8,
+                        "width": 0.6,
+                        "height": 0.15
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "panel2",
+                  "title": "重逢",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.52,
+                    "width": 0.92,
+                    "height": 0.43
+                  },
+                  "shot": {
+                    "framing": "close",
+                    "description": "门后的朋友抬起头。"
+                  },
+                  "elements": []
+                }
+              ]
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "character_place",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "character_place",
+            "panel_id": "panel2",
+            "character": {
+              "id": "friend",
+              "label": "朋友"
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "bubble_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "bubble_create",
+            "panel_id": "panel2",
+            "bubble": {
+              "id": "reply",
+              "text": "欢迎回来。",
+              "speaker_id": "friend"
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_export",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version"
+        },
+        "success": true
+      }
+    ],
+    "expected_pages": 1,
+    "expected_panels": 2
+  },
+  {
+    "id": "invalid-instruction-recovery",
+    "prompt": "invalid-instruction-recovery：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [
+      {
+        "tool": "comic_create",
+        "input": {
+          "title": "灯塔归途"
+        },
+        "success": true
+      },
+      {
+        "tool": "page_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "page_create",
+            "page": {
+              "id": "page1",
+              "title": "归途",
+              "panels": [
+                {
+                  "id": "panel1",
+                  "title": "灯塔",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.04,
+                    "width": 0.92,
+                    "height": 0.42
+                  },
+                  "shot": {
+                    "framing": "wide",
+                    "description": "海风吹过码头，灯塔在远处亮起。"
+                  },
+                  "elements": [
+                    {
+                      "kind": "character",
+                      "id": "traveler",
+                      "label": "归来的旅行者",
+                      "rect": {
+                        "x": 0.12,
+                        "y": 0.32,
+                        "width": 0.22,
+                        "height": 0.62
+                      }
+                    },
+                    {
+                      "kind": "bubble",
+                      "id": "hello",
+                      "text": "我们终于到家了。",
+                      "speaker_id": "traveler",
+                      "rect": {
+                        "x": 0.3,
+                        "y": 0.08,
+                        "width": 0.62,
+                        "height": 0.28
+                      }
+                    },
+                    {
+                      "kind": "caption",
+                      "id": "time",
+                      "text": "黄昏 · 港口",
+                      "rect": {
+                        "x": 0.05,
+                        "y": 0.8,
+                        "width": 0.6,
+                        "height": 0.15
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "panel2",
+                  "title": "重逢",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.52,
+                    "width": 0.92,
+                    "height": 0.43
+                  },
+                  "shot": {
+                    "framing": "close",
+                    "description": "门后的朋友抬起头。"
+                  },
+                  "elements": []
+                }
+              ]
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "object_delete",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "object_delete",
+            "object_id": "missing"
+          }
+        },
+        "success": false
+      },
+      {
+        "tool": "comic_inspect",
+        "input": {
+          "comic_id": "$comic",
+          "section": "pages"
+        },
+        "success": true
+      },
+      {
+        "tool": "note_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "note_create",
+            "panel_id": "panel2",
+            "note": {
+              "id": "note",
+              "text": "转场"
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_export",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version"
+        },
+        "success": true
+      }
+    ],
+    "expected_pages": 1,
+    "expected_panels": 2
+  },
+  {
+    "id": "inspect-before-edit",
+    "prompt": "inspect-before-edit：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [
+      {
+        "tool": "comic_create",
+        "input": {
+          "title": "灯塔归途"
+        },
+        "success": true
+      },
+      {
+        "tool": "page_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "page_create",
+            "page": {
+              "id": "page1",
+              "title": "归途",
+              "panels": [
+                {
+                  "id": "panel1",
+                  "title": "灯塔",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.04,
+                    "width": 0.92,
+                    "height": 0.42
+                  },
+                  "shot": {
+                    "framing": "wide",
+                    "description": "海风吹过码头，灯塔在远处亮起。"
+                  },
+                  "elements": [
+                    {
+                      "kind": "character",
+                      "id": "traveler",
+                      "label": "归来的旅行者",
+                      "rect": {
+                        "x": 0.12,
+                        "y": 0.32,
+                        "width": 0.22,
+                        "height": 0.62
+                      }
+                    },
+                    {
+                      "kind": "bubble",
+                      "id": "hello",
+                      "text": "我们终于到家了。",
+                      "speaker_id": "traveler",
+                      "rect": {
+                        "x": 0.3,
+                        "y": 0.08,
+                        "width": 0.62,
+                        "height": 0.28
+                      }
+                    },
+                    {
+                      "kind": "caption",
+                      "id": "time",
+                      "text": "黄昏 · 港口",
+                      "rect": {
+                        "x": 0.05,
+                        "y": 0.8,
+                        "width": 0.6,
+                        "height": 0.15
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "panel2",
+                  "title": "重逢",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.52,
+                    "width": 0.92,
+                    "height": 0.43
+                  },
+                  "shot": {
+                    "framing": "close",
+                    "description": "门后的朋友抬起头。"
+                  },
+                  "elements": []
+                }
+              ]
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_inspect",
+        "input": {
+          "comic_id": "$comic",
+          "section": "pages"
+        },
+        "success": true
+      },
+      {
+        "tool": "shot_set",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "shot_set",
+            "panel_id": "panel2",
+            "shot": {
+              "angle": "low",
+              "description": "从门边看出去"
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_export",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version"
+        },
+        "success": true
+      }
+    ],
+    "expected_pages": 1,
+    "expected_panels": 2
+  },
+  {
+    "id": "stale-version",
+    "prompt": "stale-version：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [
+      {
+        "tool": "comic_create",
+        "input": {
+          "title": "灯塔归途"
+        },
+        "success": true
+      },
+      {
+        "tool": "page_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "page_create",
+            "page": {
+              "id": "page1",
+              "title": "归途",
+              "panels": [
+                {
+                  "id": "panel1",
+                  "title": "灯塔",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.04,
+                    "width": 0.92,
+                    "height": 0.42
+                  },
+                  "shot": {
+                    "framing": "wide",
+                    "description": "海风吹过码头，灯塔在远处亮起。"
+                  },
+                  "elements": [
+                    {
+                      "kind": "character",
+                      "id": "traveler",
+                      "label": "归来的旅行者",
+                      "rect": {
+                        "x": 0.12,
+                        "y": 0.32,
+                        "width": 0.22,
+                        "height": 0.62
+                      }
+                    },
+                    {
+                      "kind": "bubble",
+                      "id": "hello",
+                      "text": "我们终于到家了。",
+                      "speaker_id": "traveler",
+                      "rect": {
+                        "x": 0.3,
+                        "y": 0.08,
+                        "width": 0.62,
+                        "height": 0.28
+                      }
+                    },
+                    {
+                      "kind": "caption",
+                      "id": "time",
+                      "text": "黄昏 · 港口",
+                      "rect": {
+                        "x": 0.05,
+                        "y": 0.8,
+                        "width": 0.6,
+                        "height": 0.15
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "panel2",
+                  "title": "重逢",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.52,
+                    "width": 0.92,
+                    "height": 0.43
+                  },
+                  "shot": {
+                    "framing": "close",
+                    "description": "门后的朋友抬起头。"
+                  },
+                  "elements": []
+                }
+              ]
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "shot_set",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": 1,
+          "operation": {
+            "kind": "shot_set",
+            "panel_id": "panel1",
+            "shot": {
+              "framing": "detail"
+            }
+          }
+        },
+        "success": false
+      },
+      {
+        "tool": "comic_inspect",
+        "input": {
+          "comic_id": "$comic",
+          "section": "pages"
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_export",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version"
+        },
+        "success": true
+      }
+    ],
+    "expected_pages": 1,
+    "expected_panels": 2
+  },
+  {
+    "id": "noop-request",
+    "prompt": "noop-request：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [
+      {
+        "tool": "comic_create",
+        "input": {
+          "title": "灯塔归途"
+        },
+        "success": true
+      },
+      {
+        "tool": "page_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "page_create",
+            "page": {
+              "id": "page1",
+              "title": "归途",
+              "panels": [
+                {
+                  "id": "panel1",
+                  "title": "灯塔",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.04,
+                    "width": 0.92,
+                    "height": 0.42
+                  },
+                  "shot": {
+                    "framing": "wide",
+                    "description": "海风吹过码头，灯塔在远处亮起。"
+                  },
+                  "elements": [
+                    {
+                      "kind": "character",
+                      "id": "traveler",
+                      "label": "归来的旅行者",
+                      "rect": {
+                        "x": 0.12,
+                        "y": 0.32,
+                        "width": 0.22,
+                        "height": 0.62
+                      }
+                    },
+                    {
+                      "kind": "bubble",
+                      "id": "hello",
+                      "text": "我们终于到家了。",
+                      "speaker_id": "traveler",
+                      "rect": {
+                        "x": 0.3,
+                        "y": 0.08,
+                        "width": 0.62,
+                        "height": 0.28
+                      }
+                    },
+                    {
+                      "kind": "caption",
+                      "id": "time",
+                      "text": "黄昏 · 港口",
+                      "rect": {
+                        "x": 0.05,
+                        "y": 0.8,
+                        "width": 0.6,
+                        "height": 0.15
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "panel2",
+                  "title": "重逢",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.52,
+                    "width": 0.92,
+                    "height": 0.43
+                  },
+                  "shot": {
+                    "framing": "close",
+                    "description": "门后的朋友抬起头。"
+                  },
+                  "elements": []
+                }
+              ]
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "panel_reorder",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "panel_reorder",
+            "page_id": "page1",
+            "panel_ids": [
+              "panel1",
+              "panel2"
+            ]
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_export",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version"
+        },
+        "success": true
+      }
+    ],
+    "expected_pages": 1,
+    "expected_panels": 2,
+    "expected_version": 2
+  },
+  {
+    "id": "ambiguous-request",
+    "prompt": "ambiguous-request：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [],
+    "expected_pages": 0,
+    "expected_panels": 0,
+    "answer": "请明确要移动哪个面板，以及目标位置。",
+    "expect_no_document": true
+  },
+  {
+    "id": "large-document",
+    "prompt": "large-document：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [
+      {
+        "tool": "comic_create",
+        "input": {
+          "title": "灯塔归途"
+        },
+        "success": true
+      },
+      {
+        "tool": "page_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "page_create",
+            "page": {
+              "id": "large",
+              "title": "大型分镜页",
+              "panels": [
+                {
+                  "id": "panel0",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note0-0",
+                      "text": "视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note0-1",
+                      "text": "视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note0-2",
+                      "text": "视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note0-3",
+                      "text": "视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note0-4",
+                      "text": "视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel1",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note1-0",
+                      "text": "视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note1-1",
+                      "text": "视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note1-2",
+                      "text": "视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note1-3",
+                      "text": "视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note1-4",
+                      "text": "视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel2",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note2-0",
+                      "text": "视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note2-1",
+                      "text": "视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note2-2",
+                      "text": "视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note2-3",
+                      "text": "视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note2-4",
+                      "text": "视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel3",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note3-0",
+                      "text": "视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note3-1",
+                      "text": "视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note3-2",
+                      "text": "视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note3-3",
+                      "text": "视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note3-4",
+                      "text": "视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel4",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note4-0",
+                      "text": "视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note4-1",
+                      "text": "视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note4-2",
+                      "text": "视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note4-3",
+                      "text": "视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note4-4",
+                      "text": "视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel5",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note5-0",
+                      "text": "视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note5-1",
+                      "text": "视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note5-2",
+                      "text": "视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note5-3",
+                      "text": "视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note5-4",
+                      "text": "视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel6",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note6-0",
+                      "text": "视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note6-1",
+                      "text": "视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note6-2",
+                      "text": "视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note6-3",
+                      "text": "视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note6-4",
+                      "text": "视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel7",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note7-0",
+                      "text": "视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note7-1",
+                      "text": "视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note7-2",
+                      "text": "视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note7-3",
+                      "text": "视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note7-4",
+                      "text": "视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel8",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note8-0",
+                      "text": "视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note8-1",
+                      "text": "视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note8-2",
+                      "text": "视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note8-3",
+                      "text": "视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note8-4",
+                      "text": "视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel9",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note9-0",
+                      "text": "视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note9-1",
+                      "text": "视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note9-2",
+                      "text": "视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note9-3",
+                      "text": "视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note9-4",
+                      "text": "视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel10",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note10-0",
+                      "text": "视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note10-1",
+                      "text": "视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note10-2",
+                      "text": "视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note10-3",
+                      "text": "视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note10-4",
+                      "text": "视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel11",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note11-0",
+                      "text": "视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note11-1",
+                      "text": "视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note11-2",
+                      "text": "视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note11-3",
+                      "text": "视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note11-4",
+                      "text": "视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel12",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note12-0",
+                      "text": "视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note12-1",
+                      "text": "视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note12-2",
+                      "text": "视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note12-3",
+                      "text": "视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note12-4",
+                      "text": "视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel13",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note13-0",
+                      "text": "视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note13-1",
+                      "text": "视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note13-2",
+                      "text": "视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note13-3",
+                      "text": "视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note13-4",
+                      "text": "视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel14",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note14-0",
+                      "text": "视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note14-1",
+                      "text": "视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note14-2",
+                      "text": "视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note14-3",
+                      "text": "视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note14-4",
+                      "text": "视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel15",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note15-0",
+                      "text": "视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note15-1",
+                      "text": "视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note15-2",
+                      "text": "视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note15-3",
+                      "text": "视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note15-4",
+                      "text": "视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel16",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note16-0",
+                      "text": "视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note16-1",
+                      "text": "视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note16-2",
+                      "text": "视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note16-3",
+                      "text": "视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note16-4",
+                      "text": "视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel17",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note17-0",
+                      "text": "视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note17-1",
+                      "text": "视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note17-2",
+                      "text": "视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note17-3",
+                      "text": "视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note17-4",
+                      "text": "视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel18",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note18-0",
+                      "text": "视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note18-1",
+                      "text": "视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note18-2",
+                      "text": "视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note18-3",
+                      "text": "视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note18-4",
+                      "text": "视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel19",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note19-0",
+                      "text": "视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note19-1",
+                      "text": "视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note19-2",
+                      "text": "视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note19-3",
+                      "text": "视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note19-4",
+                      "text": "视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel20",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note20-0",
+                      "text": "视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note20-1",
+                      "text": "视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note20-2",
+                      "text": "视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note20-3",
+                      "text": "视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note20-4",
+                      "text": "视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel21",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note21-0",
+                      "text": "视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note21-1",
+                      "text": "视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note21-2",
+                      "text": "视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note21-3",
+                      "text": "视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note21-4",
+                      "text": "视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel22",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note22-0",
+                      "text": "视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note22-1",
+                      "text": "视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note22-2",
+                      "text": "视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note22-3",
+                      "text": "视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note22-4",
+                      "text": "视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel23",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note23-0",
+                      "text": "视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note23-1",
+                      "text": "视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note23-2",
+                      "text": "视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note23-3",
+                      "text": "视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note23-4",
+                      "text": "视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 "
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_inspect",
+        "input": {
+          "comic_id": "$comic",
+          "section": "panels",
+          "object_id": "large",
+          "limit": 8
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_export",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version"
+        },
+        "success": true
+      }
+    ],
+    "expected_pages": 1,
+    "expected_panels": 24
+  },
+  {
+    "id": "bounded-context",
+    "prompt": "bounded-context：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [
+      {
+        "tool": "comic_create",
+        "input": {
+          "title": "灯塔归途"
+        },
+        "success": true
+      },
+      {
+        "tool": "page_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "page_create",
+            "page": {
+              "id": "large",
+              "title": "大型分镜页",
+              "panels": [
+                {
+                  "id": "panel0",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note0-0",
+                      "text": "视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note0-1",
+                      "text": "视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note0-2",
+                      "text": "视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note0-3",
+                      "text": "视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note0-4",
+                      "text": "视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 视觉注释与边界测量 0 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel1",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note1-0",
+                      "text": "视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note1-1",
+                      "text": "视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note1-2",
+                      "text": "视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note1-3",
+                      "text": "视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note1-4",
+                      "text": "视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 视觉注释与边界测量 1 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel2",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note2-0",
+                      "text": "视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note2-1",
+                      "text": "视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note2-2",
+                      "text": "视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note2-3",
+                      "text": "视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note2-4",
+                      "text": "视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 视觉注释与边界测量 2 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel3",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note3-0",
+                      "text": "视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note3-1",
+                      "text": "视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note3-2",
+                      "text": "视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note3-3",
+                      "text": "视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note3-4",
+                      "text": "视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 视觉注释与边界测量 3 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel4",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note4-0",
+                      "text": "视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note4-1",
+                      "text": "视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note4-2",
+                      "text": "视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note4-3",
+                      "text": "视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note4-4",
+                      "text": "视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 视觉注释与边界测量 4 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel5",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note5-0",
+                      "text": "视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note5-1",
+                      "text": "视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note5-2",
+                      "text": "视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note5-3",
+                      "text": "视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note5-4",
+                      "text": "视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 视觉注释与边界测量 5 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel6",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note6-0",
+                      "text": "视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note6-1",
+                      "text": "视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note6-2",
+                      "text": "视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note6-3",
+                      "text": "视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note6-4",
+                      "text": "视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 视觉注释与边界测量 6 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel7",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note7-0",
+                      "text": "视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note7-1",
+                      "text": "视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note7-2",
+                      "text": "视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note7-3",
+                      "text": "视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note7-4",
+                      "text": "视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 视觉注释与边界测量 7 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel8",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note8-0",
+                      "text": "视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note8-1",
+                      "text": "视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note8-2",
+                      "text": "视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note8-3",
+                      "text": "视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note8-4",
+                      "text": "视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 视觉注释与边界测量 8 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel9",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note9-0",
+                      "text": "视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note9-1",
+                      "text": "视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note9-2",
+                      "text": "视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note9-3",
+                      "text": "视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note9-4",
+                      "text": "视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 视觉注释与边界测量 9 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel10",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note10-0",
+                      "text": "视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note10-1",
+                      "text": "视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note10-2",
+                      "text": "视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note10-3",
+                      "text": "视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note10-4",
+                      "text": "视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 视觉注释与边界测量 10 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel11",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note11-0",
+                      "text": "视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note11-1",
+                      "text": "视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note11-2",
+                      "text": "视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note11-3",
+                      "text": "视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note11-4",
+                      "text": "视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 视觉注释与边界测量 11 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel12",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note12-0",
+                      "text": "视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note12-1",
+                      "text": "视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note12-2",
+                      "text": "视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note12-3",
+                      "text": "视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note12-4",
+                      "text": "视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 视觉注释与边界测量 12 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel13",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note13-0",
+                      "text": "视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note13-1",
+                      "text": "视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note13-2",
+                      "text": "视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note13-3",
+                      "text": "视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note13-4",
+                      "text": "视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 视觉注释与边界测量 13 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel14",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note14-0",
+                      "text": "视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note14-1",
+                      "text": "视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note14-2",
+                      "text": "视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note14-3",
+                      "text": "视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note14-4",
+                      "text": "视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 视觉注释与边界测量 14 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel15",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note15-0",
+                      "text": "视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note15-1",
+                      "text": "视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note15-2",
+                      "text": "视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note15-3",
+                      "text": "视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note15-4",
+                      "text": "视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 视觉注释与边界测量 15 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel16",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note16-0",
+                      "text": "视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note16-1",
+                      "text": "视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note16-2",
+                      "text": "视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note16-3",
+                      "text": "视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note16-4",
+                      "text": "视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 视觉注释与边界测量 16 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel17",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note17-0",
+                      "text": "视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note17-1",
+                      "text": "视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note17-2",
+                      "text": "视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note17-3",
+                      "text": "视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note17-4",
+                      "text": "视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 视觉注释与边界测量 17 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel18",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note18-0",
+                      "text": "视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note18-1",
+                      "text": "视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note18-2",
+                      "text": "视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note18-3",
+                      "text": "视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note18-4",
+                      "text": "视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 视觉注释与边界测量 18 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel19",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note19-0",
+                      "text": "视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note19-1",
+                      "text": "视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note19-2",
+                      "text": "视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note19-3",
+                      "text": "视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note19-4",
+                      "text": "视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 视觉注释与边界测量 19 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel20",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note20-0",
+                      "text": "视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note20-1",
+                      "text": "视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note20-2",
+                      "text": "视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note20-3",
+                      "text": "视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note20-4",
+                      "text": "视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 视觉注释与边界测量 20 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel21",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note21-0",
+                      "text": "视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note21-1",
+                      "text": "视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note21-2",
+                      "text": "视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note21-3",
+                      "text": "视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note21-4",
+                      "text": "视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 视觉注释与边界测量 21 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel22",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note22-0",
+                      "text": "视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note22-1",
+                      "text": "视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note22-2",
+                      "text": "视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note22-3",
+                      "text": "视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note22-4",
+                      "text": "视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 视觉注释与边界测量 22 "
+                    }
+                  ]
+                },
+                {
+                  "id": "panel23",
+                  "elements": [
+                    {
+                      "kind": "note",
+                      "id": "note23-0",
+                      "text": "视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note23-1",
+                      "text": "视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note23-2",
+                      "text": "视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note23-3",
+                      "text": "视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 "
+                    },
+                    {
+                      "kind": "note",
+                      "id": "note23-4",
+                      "text": "视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 视觉注释与边界测量 23 "
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_inspect",
+        "input": {
+          "comic_id": "$comic",
+          "section": "elements",
+          "object_id": "panel0",
+          "limit": 8
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_export",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version"
+        },
+        "success": true
+      }
+    ],
+    "expected_pages": 1,
+    "expected_panels": 24
+  },
+  {
+    "id": "human-then-agent",
+    "prompt": "human-then-agent：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [
+      {
+        "tool": "comic_create",
+        "input": {
+          "title": "灯塔归途"
+        },
+        "success": true
+      },
+      {
+        "tool": "page_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "page_create",
+            "page": {
+              "id": "page1",
+              "title": "归途",
+              "panels": [
+                {
+                  "id": "panel1",
+                  "title": "灯塔",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.04,
+                    "width": 0.92,
+                    "height": 0.42
+                  },
+                  "shot": {
+                    "framing": "wide",
+                    "description": "海风吹过码头，灯塔在远处亮起。"
+                  },
+                  "elements": [
+                    {
+                      "kind": "character",
+                      "id": "traveler",
+                      "label": "归来的旅行者",
+                      "rect": {
+                        "x": 0.12,
+                        "y": 0.32,
+                        "width": 0.22,
+                        "height": 0.62
+                      }
+                    },
+                    {
+                      "kind": "bubble",
+                      "id": "hello",
+                      "text": "我们终于到家了。",
+                      "speaker_id": "traveler",
+                      "rect": {
+                        "x": 0.3,
+                        "y": 0.08,
+                        "width": 0.62,
+                        "height": 0.28
+                      }
+                    },
+                    {
+                      "kind": "caption",
+                      "id": "time",
+                      "text": "黄昏 · 港口",
+                      "rect": {
+                        "x": 0.05,
+                        "y": 0.8,
+                        "width": 0.6,
+                        "height": 0.15
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "panel2",
+                  "title": "重逢",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.52,
+                    "width": 0.92,
+                    "height": 0.43
+                  },
+                  "shot": {
+                    "framing": "close",
+                    "description": "门后的朋友抬起头。"
+                  },
+                  "elements": []
+                }
+              ]
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "human": true,
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "caption_create",
+            "panel_id": "panel2",
+            "caption": {
+              "id": "human-caption",
+              "text": "用户写下的后记"
+            }
+          }
+        }
+      },
+      {
+        "tool": "comic_inspect",
+        "input": {
+          "comic_id": "$comic",
+          "section": "pages"
+        },
+        "success": true
+      },
+      {
+        "tool": "shot_set",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "shot_set",
+            "panel_id": "panel2",
+            "shot": {
+              "framing": "close",
+              "description": "保留用户后记"
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_export",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version"
+        },
+        "success": true
+      }
+    ],
+    "expected_pages": 1,
+    "expected_panels": 2
+  },
+  {
+    "id": "negative-no-change",
+    "prompt": "negative-no-change：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [],
+    "expected_pages": 0,
+    "expected_panels": 0,
+    "answer": "当前没有明确修改要求，作品保持不变。",
+    "expect_no_document": true
+  },
+  {
+    "id": "lighthouse-stress",
+    "prompt": "lighthouse-stress：只执行明确的增量漫画编辑，保留其他内容。",
+    "steps": [
+      {
+        "tool": "comic_create",
+        "input": {
+          "title": "灯塔归途"
+        },
+        "success": true
+      },
+      {
+        "tool": "page_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "page_create",
+            "page": {
+              "id": "page1",
+              "title": "归途",
+              "panels": [
+                {
+                  "id": "panel1",
+                  "title": "灯塔",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.04,
+                    "width": 0.92,
+                    "height": 0.42
+                  },
+                  "shot": {
+                    "framing": "wide",
+                    "description": "海风吹过码头，灯塔在远处亮起。"
+                  },
+                  "elements": [
+                    {
+                      "kind": "character",
+                      "id": "traveler",
+                      "label": "归来的旅行者",
+                      "rect": {
+                        "x": 0.12,
+                        "y": 0.32,
+                        "width": 0.22,
+                        "height": 0.62
+                      }
+                    },
+                    {
+                      "kind": "bubble",
+                      "id": "hello",
+                      "text": "我们终于到家了。",
+                      "speaker_id": "traveler",
+                      "rect": {
+                        "x": 0.3,
+                        "y": 0.08,
+                        "width": 0.62,
+                        "height": 0.28
+                      }
+                    },
+                    {
+                      "kind": "caption",
+                      "id": "time",
+                      "text": "黄昏 · 港口",
+                      "rect": {
+                        "x": 0.05,
+                        "y": 0.8,
+                        "width": 0.6,
+                        "height": 0.15
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "panel2",
+                  "title": "重逢",
+                  "rect": {
+                    "x": 0.04,
+                    "y": 0.52,
+                    "width": 0.92,
+                    "height": 0.43
+                  },
+                  "shot": {
+                    "framing": "close",
+                    "description": "门后的朋友抬起头。"
+                  },
+                  "elements": []
+                }
+              ]
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "note_create",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "note_create",
+            "panel_id": "panel2",
+            "note": {
+              "id": "remove-note",
+              "text": "添加可撤销提示"
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "object_delete",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "object_delete",
+            "object_id": "remove-note"
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "element_update",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "element_update",
+            "panel_id": "panel1",
+            "element": {
+              "id": "hello",
+              "kind": "bubble",
+              "text": "现在，我们真的回到家了。",
+              "speaker_id": "traveler",
+              "rect": {
+                "x": 0.3,
+                "y": 0.08,
+                "width": 0.62,
+                "height": 0.28
+              }
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "panel_layout",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "panel_layout",
+            "page_id": "page1",
+            "placements": [
+              {
+                "panel_id": "panel1",
+                "rect": {
+                  "x": 0.04,
+                  "y": 0.04,
+                  "width": 0.44,
+                  "height": 0.92
+                }
+              },
+              {
+                "panel_id": "panel2",
+                "rect": {
+                  "x": 0.52,
+                  "y": 0.04,
+                  "width": 0.44,
+                  "height": 0.92
+                }
+              }
+            ]
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "shot_set",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "shot_set",
+            "panel_id": "panel1",
+            "shot": {
+              "duration_seconds": 6,
+              "framing": "wide"
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "shot_set",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": 1,
+          "operation": {
+            "kind": "shot_set",
+            "panel_id": "panel1",
+            "shot": {
+              "framing": "detail"
+            }
+          }
+        },
+        "success": false
+      },
+      {
+        "clarify": "你说“让它更近”，是调整第一个镜头的景别，还是移动角色位置？",
+        "answer": "保持角色位置不变，只将第一个镜头景别改成 close。"
+      },
+      {
+        "tool": "shot_set",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "shot_set",
+            "panel_id": "panel1",
+            "shot": {
+              "framing": "close",
+              "duration_seconds": 6
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_inspect",
+        "input": {
+          "comic_id": "$comic",
+          "section": "pages"
+        },
+        "success": true
+      },
+      {
+        "human": true,
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "caption_create",
+            "panel_id": "panel2",
+            "caption": {
+              "id": "human-caption",
+              "text": "用户写下的后记"
+            }
+          }
+        }
+      },
+      {
+        "tool": "comic_inspect",
+        "input": {
+          "comic_id": "$comic",
+          "section": "pages"
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_undo",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "target_version": 7
+        },
+        "success": true
+      },
+      {
+        "tool": "panel_reorder",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "panel_reorder",
+            "page_id": "page1",
+            "panel_ids": [
+              "panel2",
+              "panel1"
+            ]
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "shot_set",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version",
+          "operation": {
+            "kind": "shot_set",
+            "panel_id": "panel2",
+            "shot": {
+              "description": "最终润色：从朋友视角切回灯塔。",
+              "framing": "close"
+            }
+          }
+        },
+        "success": true
+      },
+      {
+        "tool": "comic_export",
+        "input": {
+          "comic_id": "$comic",
+          "expected_version": "$version"
+        },
+        "success": true
+      }
+    ],
+    "expected_pages": 1,
+    "expected_panels": 2,
+    "stress": true
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0", "suite_id": "capability.dbfox-comic.scripted", "suite_version": "1.0.0",
+  "description": "Comic author verification through a signed full DLC and default production RunLoop. Scripted model; no real-LLM creativity claim.",
+  "subject": {"kind": "capability", "components": ["dbfox.comic"], "supporting_fixtures": ["scripted-provider", "migrated-metadata", "signed-package"]},
+  "execution": {"provider_modes": ["scripted"], "default_repetitions": 1, "max_repetitions": 1},
+  "dataset": "cases.json",
+  "metrics": [
+    {"name": "task.success_rate", "direction": "higher_is_better", "unit": "ratio", "description": "Exact runtime and state assertions"},
+    {"name": "runtime.tool_calls", "direction": "informational", "unit": "count", "description": "Executed tool calls"},
+    {"name": "context.prompt_peak", "direction": "informational", "unit": "tokens", "description": "Default production estimated prompt peak"}
+  ]
+}

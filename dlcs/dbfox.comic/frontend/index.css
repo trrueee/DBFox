@@ -1,0 +1,63 @@
+.dbfox-comic { color: var(--color-text-primary); font-family: var(--font-sans, system-ui, sans-serif); font-size: var(--ui-font-body, 14px); line-height: 1.5; min-width: 0; box-sizing: border-box; }
+.dbfox-comic *, .dbfox-comic *::before, .dbfox-comic *::after { box-sizing: border-box; }
+.dbfox-comic button, .dbfox-comic input, .dbfox-comic select, .dbfox-comic textarea { font: inherit; color: inherit; border: 1px solid var(--color-border); background: var(--color-bg-primary); border-radius: var(--radius-md, 6px); padding: 6px 9px; min-height: 34px; }
+.dbfox-comic button { cursor: pointer; transition: background 160ms, border-color 160ms; }
+.dbfox-comic button:hover:not(:disabled), .dbfox-comic button[aria-pressed="true"], .dbfox-comic button[aria-current] { border-color: var(--color-primary); background: var(--color-bg-hover); }
+.dbfox-comic :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.dbfox-comic button:disabled { opacity: .5; cursor: default; }
+.dbfox-comic input, .dbfox-comic select, .dbfox-comic textarea { max-width: 100%; }
+.dbfox-comic textarea { min-height: 116px; width: 100%; resize: vertical; }
+.dbfox-comic h2 { font-size: 20px; margin: 0; letter-spacing: -.02em; }
+.dbfox-comic h3 { font-size: 14px; margin: 0 0 10px; }
+.comic-eyebrow { font-size: 10px; letter-spacing: .12em; color: var(--color-text-secondary); margin: 0 0 3px; }
+.comic-studio { height: 100%; min-height: 400px; display: flex; flex-direction: column; background: var(--color-bg-primary); container-type: inline-size; }
+.comic-topbar { display: flex; gap: 9px; padding: 13px 16px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--color-border); }
+.comic-topbar > div:first-child { flex: 1 1 180px; }
+.comic-version { color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.comic-toolbar { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding: 9px 12px; border-bottom: 1px solid var(--color-border); }
+.comic-toolbar label { display: inline-flex; align-items: center; gap: 4px; color: var(--color-text-secondary); }
+.comic-toolbar input[type="checkbox"] { min-height: 0; }
+.comic-workspace { display: grid; grid-template-columns: 155px minmax(0, 1fr) 246px; flex: 1; min-height: 0; overflow: hidden; }
+.comic-pages, .comic-inspector { padding: 13px 10px; overflow-y: auto; min-width: 0; background: var(--color-bg-primary); }
+.comic-pages { border-right: 1px solid var(--color-border); }
+.comic-pages > button { width: 100%; text-align: left; margin: 0 0 7px; overflow-wrap: anywhere; }
+.comic-page-actions { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 12px; }
+.comic-inspector { border-left: 1px solid var(--color-border); }
+.comic-stage { overflow: auto; min-width: 0; min-height: 0; padding: 22px; background: var(--color-bg-secondary); }
+.comic-paper { width: calc(100% * var(--comic-zoom, 1)); max-width: calc(780px * var(--comic-zoom, 1)); margin: auto; box-shadow: var(--shadow-md, 0 3px 18px #0002); }
+.comic-canvas { outline-offset: 4px; touch-action: none; user-select: none; }
+.comic-canvas > svg { display: block; width: 100%; height: auto; }
+.comic-storyboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 20px; }
+.comic-shot-card { min-width: 0; background: var(--color-bg-primary); border: 1px solid var(--color-border); border-radius: 6px; overflow: hidden; }
+.comic-shot-card header { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 8px; font-size: 12px; flex-wrap: wrap; }
+.comic-shot-card > p { padding: 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-text-secondary); }
+.comic-object-list { max-height: 280px; overflow-y: auto; margin-bottom: 12px; }
+.comic-object-list button { display: block; width: 100%; text-align: left; border-color: transparent; padding: 4px 7px; overflow-wrap: anywhere; }
+.comic-object-list .comic-child { padding-left: 18px; font-size: 12px; }
+.comic-add-elements { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 12px 0; border-top: 1px solid var(--color-border); }
+.comic-details { display: flex; flex-wrap: wrap; gap: 6px; }
+.comic-details p { width: 100%; overflow-wrap: anywhere; font-size: 12px; }
+.comic-field { display: flex; flex-direction: column; gap: 5px; margin: 0 0 10px; }
+.comic-field > span, .comic-field { color: var(--color-text-secondary); }
+.comic-edit-form { padding-top: 8px; }
+.comic-edit-form > button { margin-right: 5px; }
+.comic-history { margin-top: 18px; border-top: 1px solid var(--color-border); padding-top: 12px; }
+.comic-history summary { cursor: pointer; margin-bottom: 10px; }
+.comic-history p { font-size: 12px; color: var(--color-text-secondary); }
+.comic-feedback { margin: 0; padding: 8px 14px; border-bottom: 1px solid var(--color-border); overflow-wrap: anywhere; }
+.comic-error { color: var(--color-error); }
+.comic-empty { text-align: center; margin: 80px auto; max-width: 340px; color: var(--color-text-secondary); }
+.comic-library { padding: 28px; max-width: 820px; margin: auto; }
+.comic-library header { margin-bottom: 25px; }
+.comic-library form { display: flex; align-items: end; gap: 12px; }
+.comic-library .comic-field { flex: 1; margin-bottom: 0; }
+.comic-projects { margin-top: 22px; display: grid; gap: 9px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.comic-projects button { text-align: left; padding: 16px; }
+.comic-artifact { width: 100%; padding: 12px; min-width: 0; }
+.comic-artifact .comic-canvas { max-width: 760px; margin: 12px auto; }
+.comic-fingerprint { font-size: 11px; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+@container (max-width: 850px) { .comic-workspace { grid-template-columns: 115px minmax(0, 1fr); overflow-y: auto; } .comic-inspector { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--color-border); max-height: 340px; } .comic-stage { min-height: 440px; } }
+@container (max-width: 520px) { .comic-workspace { display: flex; flex-direction: column; } .comic-pages { display: flex; flex-wrap: wrap; gap: 5px; max-height: 130px; flex: none; border-right: 0; } .comic-pages > button { width: auto; margin: 0; } .comic-pages h3 { width: 100%; } .comic-stage { flex: none; padding: 12px; } .comic-inspector { overflow: visible; max-height: none; flex: none; } }
+@media (prefers-reduced-motion: reduce) { .dbfox-comic button { transition: none; } }
+
+.comic-diff pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
