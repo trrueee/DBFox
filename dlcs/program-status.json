@@ -985,48 +985,107 @@
     },
     {
       "dlc_id": "dbfox.animation",
-      "status": "independent_verification",
+      "status": "integrated",
       "scheduled": true,
       "wave": 1,
       "branch": "creative/animation",
       "lead": "/root/shader_evidence_finish",
       "canonical_model": {
-        "candidate": "AnimationDocument",
-        "accepted": false
+        "candidate": "AnimationDocument: integer-ms timeline, scalar TRS tracks, canonical curves/clips/markers and fixed Scene bindings",
+        "accepted": true
       },
-      "resource_kinds": [],
-      "tools": [],
-      "artifacts": [],
-      "representations": [],
-      "frontend_views": [],
-      "tests": [],
-      "bench": [],
-      "architecture_review": null,
-      "known_blockers": [
-        "Independent adversarial test confirms persisted cancellation can permit owner revision/receipt in Core negative-cancel-cache window; shared source fix in progress.",
-        "Independent production native UI verification pending."
+      "resource_kinds": [
+        "dbfox.animation.library",
+        "dbfox.animation.document"
       ],
-      "composition_candidates": [],
+      "tools": [
+        "animation_inspect",
+        "animation_diff",
+        "animation_export",
+        "animation_create",
+        "animation_undo",
+        "animation_delete",
+        "scene_bind",
+        "target_create",
+        "track_create",
+        "track_modify",
+        "keyframe_add",
+        "keyframe_move",
+        "easing_set",
+        "clip_create",
+        "clip_trim",
+        "clip_modify",
+        "timing_modify",
+        "marker_set",
+        "entity_delete",
+        "animation_rename"
+      ],
+      "artifacts": [
+        "dbfox.animation.revision"
+      ],
+      "representations": [
+        "dbfox.animation.document.v1"
+      ],
+      "frontend_views": [
+        "dbfox.animation.workbench",
+        "dbfox.animation.revision-view"
+      ],
+      "tests": {
+        "root_backend_composition_passed": 30,
+        "root_engineering": "45 passed4.25s after report header fix",
+        "root_real_three_passed": 5,
+        "root_agent_core": "341 passed/2 deselected20.92s",
+        "original_combined_result": "74 passed/1 report-header contract failure50.29s; only header repaired"
+      },
+      "bench": {
+        "cases": 12,
+        "path": "verification/bench/capabilities/dbfox_animation",
+        "scope": "author deterministic production RunLoop; external model HTTP scripted"
+      },
+      "architecture_review": {
+        "status": "accepted",
+        "document": "docs/architecture/animation-dlc.md"
+      },
+      "known_blockers": [],
+      "composition_candidates": [
+        "dbfox.scene-animation"
+      ],
       "worktree": "D:/Project/DBFox-worktrees/creative-animation",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-animation.md",
-      "phase": "independent_composition_passed_core_cancel_fix_and_native_pending",
+      "phase": "integrated_after_independent_cancel_closure_and_native",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
       "preflight": "docs/architecture/animation-dlc-preflight.md",
       "engine_investigation": "Pinned real Three 0.185.1; author five tests include 20,000 keys and 10,000 seeks. Native evidence is author-owned, independent gates pending.",
-      "implementation_note": "Author candidate1aa66a3 and engineering housekeeping57087c4 committed. Independent Scene composition passes10 calls/11HTTP peak20433; final backend29 passed/1 confirmed cancel failure. Engineering45 and realThree5 pass. Separate author fixes Core cancellation; separate non-author verifies native UI.",
+      "implementation_note": "Root product ac1c4bc5/19e5298c, independent f7bb0a1e/5ab5a10c/2afc77b9 integrated. Shared Core24b94efa closes confirmed negative cancellation cache race,341 Core passed. Root30 Animation/backend/composition passed; native editing, exact undo,2048-key paging,5 exact immutable downloads and narrow/wide gate independently passed. Full original composed-world scenarios remain separate.",
       "candidate_commit": "1aa66a3c5e0644ee619ed529c113291dac19090c",
       "candidate_followup_commit": "57087c4bc776067750bae317ad2d35ab5ae4c0f8",
-      "candidate_merged": false,
-      "integrated": false,
+      "candidate_merged": true,
+      "integrated": true,
       "independent_verification": {
         "worktree": "D:/Project/DBFox-worktrees/creative-animation-verification",
-        "commit": "d434be82",
-        "backend_passed": 29,
-        "backend_failed": 1,
+        "commit": "e17aafbb",
+        "backend_passed": 30,
+        "backend_failed": 0,
         "engineering_passed": 45,
         "three_passed": 5,
         "native_worktree": "D:/Project/DBFox-worktrees/creative-animation-native-verification",
-        "native_status": "active"
+        "native_status": "scoped_functional_gate_passed",
+        "native_commit": "156271cf",
+        "native_report": "docs/quality/animation-independent-native.md",
+        "native_limitations": [
+          "Known shared Host overflow menu CSP inline-style error retained; no new Animation functional blocker",
+          "Not signed installer, live-model or final composed-world proof"
+        ],
+        "cancellation_fix": "24b94efa",
+        "cancellation_related_passed": 70
+      },
+      "integration": {
+        "product": "ac1c4bc5",
+        "engineering_housekeeping": "19e5298c",
+        "backend_evidence": "f7bb0a1e",
+        "cancel_closure": "5ab5a10c",
+        "native_evidence": "2afc77b9",
+        "full_program_acceptance": false
       }
     },
     {
@@ -1521,7 +1580,7 @@
     "status_file_location": "dlcs/program-status.json; docs naming contract intentionally retained",
     "latest_frontend": "70 Pixel/Scene/Voxel passed14.99s;typecheck passed7.02s",
     "creative_worktree": "D:/Project/DBFox-worktrees/creative-composition",
-    "creative_status": "Scene,Voxel,Pixel,Shader,Game,Comic are integrated with documented scoped evidence. Animation awaiting shared Core cancel race closure and independent native gates; CAD real solver rebuild passed, geometry and product pending. Original20DLC and final world incomplete.",
+    "creative_status": "Scene,Voxel,Pixel,Shader,Game,Comic,Animation integrated with documented scoped evidence. CAD real solver rebuild passed; geometry and product pending. Original20DLC and final world incomplete; original composition scenarios are checked separately from pairwise plumbing.",
     "creative_evidence": "D:/Project/DBFox-worktrees/creative-composition/docs/quality/creative-dlc-composition-verification.md",
     "creative_commit": "36224475",
     "latest_shader": {
@@ -1557,17 +1616,41 @@
       "header_fix_engineering": "45 passed3.24s",
       "production_build": "passed",
       "baseline": "36 unchanged +3 precisely modified Story files"
-    }
+    },
+    "durable_cancellation": {
+      "root_commit": "24b94efa",
+      "core_passed": 341,
+      "core_deselected": 2,
+      "core_seconds": 20.92,
+      "independent_animation_passed": 30,
+      "independent_related_passed": 70,
+      "report": "docs/quality/durable-cancellation-probe-fix.md",
+      "limits": "Cooperative cancellation; removes stale-negative100ms window, not atomic cross-store cancellation or preemption."
+    },
+    "wasm_policy_candidate": {
+      "source_commit": "8c18527e",
+      "independent_commit": "202704cd",
+      "worktree": "D:/Project/DBFox-worktrees/wasm-asset-policy",
+      "integrated": false,
+      "native": "Real Electron43/Chrome150 production protocol handlers with fixture activation;5 solver cases,compileStreaming,three negative CSP controls passed. Not signed installation.",
+      "governance": "Explicitly review internal Host policy vs Stable public contract before integration; no root CSP change yet."
+    },
+    "original_composition_gaps": [
+      "Story-to-Comic scoped Tool-observation test does not satisfy original fixed Story Representation / chapter3-to8pages requirement; owner source work active.",
+      "Scene-to-Game playable level original requirement active.",
+      "Scene-to-Animation fixed binding test is distinct from original8-second temple entrance-to-crystal camera task; final scenario acceptance pending.",
+      "Music-to-Visual,Music-to-Game,Map-to-Story,CAD-to-Scene and final world remain to be implemented/verified."
+    ]
   },
   "execution_status": {
     "state": "active_implementation",
     "date": "2026-09-07",
     "scope": "Complete the original 20 capability DLCs and evidenced compositions, including UI/UX, without domain logic entering Core.",
-    "message": "Full original20DLC goal active. Game/Comic integrated after scoped independent gates; Animation cancellation fix/native verification and CAD solid kernel work active.",
+    "message": "Seven Wave1 products integrated with scoped evidence; CAD geometry build and original Scene-to-Game / fixed Story-to-8-page-Comic composition requirements active. WASM policy candidate independently reviewed, root policy unchanged pending governance decision.",
     "active_roles": [
-      "Core cancellation author: /root/shader_evidence_finish",
-      "Animation independent native: /root/game_independent_review",
-      "CAD geometry build: /root/cad_solver_build"
+      "CAD geometry build: /root/cad_solver_build",
+      "Scene-to-Game composition author: /root/game_independent_review",
+      "Story fixed Representation/Comic composition author: /root/shader_evidence_finish"
     ],
     "handoff": "docs/quality/creative-program-handoff.md",
     "task_packets": "docs/quality/creative-handoff/task-packets.md",

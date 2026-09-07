@@ -36,7 +36,7 @@
 | Game | 产品及独立Pixel组合、9项红队、原生Phaser/历史/下载证据已合入；定位与Host窄窗缺陷独立关闭 | integrated；参加后续组合与最终世界验收，范围见独立报告 |
 | Comic | 根 `51a3aaa5` 产品、`ac15914b` 独立Story组合/红队、`32693b8e` 原始CSP生产原生验收已合入 | integrated；参加最终组合，Story原有未提交章节工作不冒充本任务产品 |
 | CAD | 固定PlaneGCS成功禁止动态JS求值重建，Node与wasm-only浏览器5项通过，原Host CSP仍拒WASM | 正在构建官方精简OpenCascade几何内核；通用部署边界和完整CAD产品待完成 |
-| Animation | 作者 `1aa66a3` /整理 `57087c4` 已提交；独立Scene组合10工具/11HTTP通过，工程45/Three5通过 | 独立最终后端29通过/1取消竞态失败；Core作者修复及另一独立角色生产原生验收进行中 |
+| Animation | 根 `ac1c4bc5`/`19e5298c` 产品和独立组合/红队/原生证据已合入；取消竞态已独立关闭 | integrated；根30后端/组合、45工程、5Three与341Core通过；原始8秒镜头组合场景仍单独验收 |
 | 第二波 12 项 | 原始范围和任务方向明确，未进入产品实施 | 先完成第一波稳定门禁；不得把空目录/架构稿计作产品 |
 
 Music、Story、Visualization、Data、Workspace、GitHub 是参考能力，不能把它们原有功能计入本次新增 20 项的完成量。用户原有 Story/Workspace 改动也不是本 Agent 的交付。
@@ -80,13 +80,14 @@ Music、Story、Visualization、Data、Workspace、GitHub 是参考能力，不�
 - **Host窄窗已关闭**：根 `d1563f55` 按实际容器宽度派生compact展示，沿用原Panel树与状态；`6561704a` 修正测试TSX进入生产类型检查的问题。真实960/1440、导航切换、草稿保留、20次Tab和320px键盘/拖动下限已独立验证，见[报告](workspace-compact-independent-review.md)。
 - **Game作品定位已关闭**：根 `3612db26` 复用既有具体作品target和主要对象locator；`383d07cf` 记录实际Artifact→Game/狐狸选择返回及v2..v5历史不变。不同标签卸载时未保存草稿不承诺保留。
 - **Story授权已关闭**：`ffea18d5` 直接复用公开ProjectResourceDescriptor；`d4c98a6b` 在工具权威声明处补required_resources。12项Story及真实签名Story→Comic/红队独立通过；没有扩大Invocation权限。[修复说明](story-resource-admission-fix.md)。
-- **取消竞态待关闭**：Animation独立验证确认，取消已持久化后Core仍可能在100ms负缓存窗口内允许owner写入。共享Core作者在原取消回调边界修复，独立失败断言保留；不在DLC私查Core数据库。
+- **取消竞态已关闭**：根 `24b94efa` 去掉负缓存，沿用原取消回调，仅保留已观察到的取消。原独立HTTP反例不改，30项Animation/组合与70项相关独立回归通过；根341项Core通过。仍是合作取消，不宣称任意代码可抢占或跨库事务原子取消。
 - **CAD内核部署待完成**：根 `9db6f23b` 已消除PlaneGCS动态JS求值阻碍，原Host CSP仍不允许WASM。实际精简几何内核构建与通用部署方案裁决继续进行，探针通过不等于CAD产品完成。
 
 ## 5. 最近验证证据，避免重复烧额度
 
 | 验证 | 已完成结果 | 证明范围 |
 | --- | --- | --- |
+| 根Animation集成检查 | 30后端/组合、5Three通过；原74通过/1报告头失败，修正后45工程通过4.25s；共享取消修复后341Core通过20.92s | scoped门禁；仍非最终镜头任务或全程序验收 |
 | 根Game/Comic集成检查 | 31项Game/Comic/Story通过；原组合共75通过/1报告头失败，修正后45工程通过3.24s；生产build通过 | 两份报告缺标准元信息，未发现新的产品回归；非全系统新回归 |
 | 根 Shader 作者+红队+bench+大调用恢复+工程 | 164 passed / 153.19s | 根合入代码的确定性回归；不是实际 GPU |
 | 根 Shader 独立 factory/fence/crash | 9 passed / 29.58s | 正式装配、真实 executor、提交前后恢复与不重放 |
@@ -103,10 +104,12 @@ Shader native Choose PNG 被点击，但 Windows computer-use 服务管道两次
 ## 6. 当前执行顺序
 
 1. Game/Comic已集成。保持现有独立证据，并在共享边界改变时复跑相关回归。
-2. 关闭共享Core取消竞态，由原Animation独立验证员复验；完成另一角色的生产原生Animation验收。
+2. Animation已合入。继续原始组合要求：稳定Story Representation消费并把第三章做成8页Comic、Scene成为可玩Game关卡；这些与既有小型pairwise合同测试分别验收。
 3. 继续CAD固定上游构建、约束求解与几何内核实际部署，不将探针作为CAD产品。
-4. 第一波稳定后扩展Scene→Game、Music→Visual/Game、Map→Story等原始组合；普通Agent编排足够时不新建Composition DLC。
+4. 原始8秒神殿入口→水晶的Scene/Animation镜头、Music→Visual/Game、Map→Story、CAD→Scene仍待逐项验收；普通Agent编排足够时不新建Composition DLC。
 5. 按依赖进入第二波12能力，最终执行蒸汽朋克狐狸世界任务和整体架构审计。
+
+WASM部署候选 `8c18527e` /独立审查 `202704cd` 在 `wasm-asset-policy` 工作树，根CSP尚未改变。原生Electron协议探针通过固定求解器和三个拒绝控制，但fixture activation不证明签名安装，也不能宣称WASM只允许签名字节。
 
 每项只重跑变更相关门禁，保留作者与独立证据区分；不重复从头调研已决事项，不用累计测试数推算完成率。
 

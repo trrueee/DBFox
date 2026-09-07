@@ -1,6 +1,10 @@
 # Animation independent native verification
 
-状态：当前
+> 文档类型：独立验证
+>
+> 状态：当前
+>
+> 最后核验：2026-09-07
 
 Date: 2026-09-07. Independent reviewer `/root/game_independent_review`, not the
 Animation implementation author. The bounded native **functional** gate passes:
