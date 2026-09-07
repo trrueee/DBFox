@@ -6,7 +6,7 @@
 >
 > 最后核验：2026-09-07
 
-本目录是作者验证，不是独立验收。复用已验证的 Shader native testkit 的进程隔离、正常签名安装和官方 SDK SSE 边界模式；没有导入其他 DLC 私有产品实现。公共证据在 `docs/quality/evidence/game-author/`，原生截图在 `docs/images/game/`。
+本目录是作者验证，不是独立验收。复用已验证的 Shader native testkit 的进程隔离、正常签名安装和官方 SDK SSE 边界模式；没有导入其他 DLC 私有产品实现。公共证据在 `verification/testkit/game_studio/evidence/`，原生截图在 `docs/images/game/`。
 
 ## 确定性门禁
 

@@ -20,7 +20,7 @@
 
 正常升级后的最终前端包 `82996d3da0630568941ac7de0ab1c2d7ce0acddd4c5ee44459f83d268d679dff` 重新读取 6 份旧 Artifact，v1/v2/v3 均保持 exact fingerprint；固定预览宽/窄可播放暂停重置，canvas 适配 Dock。原生 Studio 又验证 single-step、pause/reset、drag v3→v4、undo v5。公共原始分页重建规范 JSON 并独立重算 hash：v4 仅狐狸 transform.x +80，其余字节对应内容不变；v5 与 v3 相同。原生 DownloadItem 完成 4365 字节，下载 bundle 与 v3 相同。新包再次通过真实 ActionRun Playtest 与原生键盘输入录制/松开→正式 claim→结果工件。
 
-12 类 capability + 10-request stress 共 13/13，通过完整签名包、生产工厂和默认预算；stress 的 27 实体完整生存游戏保留 stable IDs，包含模糊请求无修改、stale 拒绝、Human 后 Agent 和 undo。范围与详细说明见 [Bench](../../verification/bench/capabilities/dbfox_game/README.md)、[可复现 testkit](../../verification/testkit/game_studio/README.md)，证据在 `docs/quality/evidence/game-author/`，实际规范内容在 `canonical-audit.json`，原生截图在 `docs/images/game/`。
+12 类 capability + 10-request stress 共 13/13，通过完整签名包、生产工厂和默认预算；stress 的 27 实体完整生存游戏保留 stable IDs，包含模糊请求无修改、stale 拒绝、Human 后 Agent 和 undo。范围与详细说明见 [Bench](../../verification/bench/capabilities/dbfox_game/README.md)、[可复现 testkit](../../verification/testkit/game_studio/README.md)，证据在 `verification/testkit/game_studio/evidence/`，实际规范内容在 `canonical-audit.json`，原生截图在 `docs/images/game/`。
 
 剩余发布门禁：独立 Verification/Adversarial；root 新 Core 上的真实 Pixel→Game composition 与 DERIVED_FROM exact source 证明。当前 Pixel 测试只证明公开 Representation 边界，不能声称真组合完成。前端 Device fixture 也不能替代本节原生证据。completion 继续 false。
 
