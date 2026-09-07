@@ -16,7 +16,7 @@
 cd dlcs/dbfox.animation
 npm ci
 npm run build
-npm test
+npm run test:three
 cd ../..
 python -m pytest verification/tests/system/test_animation_dlc.py -q
 python -m verification.bench.capabilities.dbfox_animation --output output/animation-bench-new

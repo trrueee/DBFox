@@ -8,4 +8,4 @@
 
 实际Electron：先 `cd desktop; npm run build:electron-host`，再从根运行 `node verification/bench/capabilities/dbfox_animation/browser-launch.mjs <全新外部runtime目录>`。端口Vite5191、CDP19241；`--reuse` 保留已有signed runtime。fixture真实生成3key和2048key作品，使用真实Main/Preload/EngineSupervisor。仅关闭由本launcher启动的窗口；没有付费API或账号凭据。
 
-浏览器截图和开发原始记录在output/playwright/；可提交的有限证据在docs/quality/evidence/animation-author/。最终作者质量说明和独立验收界限见docs/quality/animation-author-verification.md。
+浏览器截图和开发原始记录在output/playwright/；可提交截图在docs/images/animation/，JSON审计与测量在verification/testkit/animation/evidence/。最终作者质量说明和独立验收界限见docs/quality/animation-author-verification.md。

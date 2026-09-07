@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createPlayback, curveTrack, advance } from "../frontend/playback.js";
+import { createPlayback, curveTrack, advance } from "../../../dlcs/dbfox.animation/frontend/playback.js";
 
 const document = { timing: { duration: 3600000 }, targets: [{ id: "object", position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }], tracks: [{ id: "track", target_id: "object", property: "position.x", enabled: true }], keyframes: [{ id:"a",track_id:"track",tick:3599999,value:1 }, { id:"b",track_id:"track",tick:3600000,value:2 }], curves: [], clips: [] };
 test("one millisecond keys at one hour survive Mixer and replay", () => {

@@ -19,7 +19,7 @@
   "console_warnings": 1,
   "screenshots": [
     {
-      "file": "animation-artifact-1.0.2.png",
+      "file": "animation-artifact-v1-0-2.png",
       "sha256": "e8b6e59ce3b9c45797916d006960ef9cfd569fe954ac80bb529c34adfc66ff46",
       "package_digest": "840b1f4d4f00572f98633207bc7f6a29398a6722308e8ea3c73e6cc4d71fbc87"
     },
@@ -44,7 +44,7 @@
       "package_digest": "4548d67e4af69f9113e4242d8bb367a0a2330c501f911ebd42c570f017e90266"
     },
     {
-      "file": "animation-narrow-1.0.2.png",
+      "file": "animation-narrow-v1-0-2.png",
       "sha256": "101cdbe8d0caa62fb065056da8bcb85ce7912a3d06cd27d497cda6e71611ab81",
       "package_digest": "840b1f4d4f00572f98633207bc7f6a29398a6722308e8ea3c73e6cc4d71fbc87"
     },
@@ -54,7 +54,7 @@
       "package_digest": "4548d67e4af69f9113e4242d8bb367a0a2330c501f911ebd42c570f017e90266"
     },
     {
-      "file": "animation-wide-1.0.2.png",
+      "file": "animation-wide-v1-0-2.png",
       "sha256": "30de1c94d322231a894eefeb0d083281bf09826dce8ca4ffaced65a61cdd4082",
       "package_digest": "840b1f4d4f00572f98633207bc7f6a29398a6722308e8ea3c73e6cc4d71fbc87"
     },

@@ -1,8 +1,10 @@
 # Animation 作者验证记录
 
+> 文档类型：质量验证
+>
 > 状态：当前
 >
-> 日期：2026-09-07
+> 最后核验：2026-09-07
 >
 > 身份：Animation 作者；本记录不是独立质量审查或发布批准。
 
@@ -27,21 +29,23 @@
 
 `git diff --cached --check` 仅报告生成的 Three bundle 内上游 GLSL 字符串空白（trailing whitespace / space-before-tab）；未手工改写第三方输出。排除该单一生成文件后的作者源码/文档检查通过。
 
+独立审查后的工程收尾：Three 测试迁至 `verification/tests/animation/`，通过 DLC 的 `npm run test:three` 运行，5/5 通过；截图统一至 `docs/images/animation/`，JSON 审计至 `verification/testkit/animation/evidence/`，并补齐本页元信息。44 项工程合同通过；已知 Visualization bundle 的 15 字节 CRLF 差异由独立验证员处理，不修改其他 DLC。此轮仅移动测试/证据与更新文档/测试命令，未改变已验收的产品逻辑或第三方 bundle。
+
 ## 原生操作与证据链
 
-原生 QA 保留同一外部 runtime/profile，依次通过公开安装/选择入口更新 1.0.0 → 1.0.1 → 1.0.2，原文档和版本未重建。最终 [只读审计](evidence/animation-author/native-audit.json) 核对 selected digest 与六个关键生产文件逐字节一致，并重新计算所有文档历史 hash。
+原生 QA 保留同一外部 runtime/profile，依次通过公开安装/选择入口更新 1.0.0 → 1.0.1 → 1.0.2，原文档和版本未重建。最终 [只读审计](../../verification/testkit/animation/evidence/native-audit.json) 核对 selected digest 与六个关键生产文件逐字节一致，并重新计算所有文档历史 hash。
 
 1. 1.0.0 上用真实鼠标/键盘完成：Contact marker 4000→4200ms；clip 0..8000→500..7000ms；Bézier 第一手柄 .25/0→约 .290823/.2；contact key 4000→4499ms 拖动，再按一帧移动至 4533ms。小文档由 v7 变为 v12。到末尾播放后点击播放能重新开始；播放本身没有产生 owner 写入。
 2. 1.0.1 校正窄时间尺标签密度；原生打开 2048 keys 文档，工作台后代 DOM 为 428 个，键表分页 50 行。通过键表将 k0 的 value 改为 5，head 从 v11 到 v12，key 数量保持 2048。曲线/clip/marker Inspector 和宽窄截图保留为 `*-final.png`。
-3. 最终 1.0.2 复验命名空间 CSS、原生宽窄 Dock、加载原有 v12、导出与下载。通过 UI 创建 `Disposable native QA` 后用文档管理删除，活动列表移除；SQLite 新 revision 的 status 为 deleted，历史仍保留。截图 `*-1.0.2.png` 属于最终候选。
+3. 最终 1.0.2 复验命名空间 CSS、原生宽窄 Dock、加载原有 v12、导出与下载。通过 UI 创建 `Disposable native QA` 后用文档管理删除，活动列表移除；SQLite 新 revision 的 status 为 deleted，历史仍保留。截图 `*-v1-0-2.png` 属于最终候选。
 
-[测量与截图 hash](evidence/animation-author/browser-measurements.json) 明确标注各阶段，避免把旧截图冒充最终包。原生截图：
+[测量与截图 hash](../../verification/testkit/animation/evidence/browser-measurements.json) 明确标注各阶段，避免把旧截图冒充最终包。原生截图：
 
-![最终宽工作台](evidence/animation-author/animation-wide-1.0.2.png)
+![最终宽工作台](../images/animation/animation-wide-v1-0-2.png)
 
-![最终窄 Dock](evidence/animation-author/animation-narrow-1.0.2.png)
+![最终窄 Dock](../images/animation/animation-narrow-v1-0-2.png)
 
-![最终 Artifact](evidence/animation-author/animation-artifact-1.0.2.png)
+![最终 Artifact](../images/animation/animation-artifact-v1-0-2.png)
 
 下载使用 Electron `will-download` 接收真实响应流，由 QA launcher 显式指定本地保存位置（`controlled-native-save-path`）。这验证真实下载字节，不宣称无人干预操作了 OS 保存对话框。三次 completed 下载中，v9 JSON 为 783 bytes，SHA256 `c03d187ab9654289496674c12202bb7dcc60a1f75da76e891e925dd997ee436b`；v12 两次均为 798 bytes，SHA256 `acf0697d7b0425f06b88ec8699c91a8fe09f41a2181b4434eb13d6d6ef189acb`。全部等于对应不可变 revision 的 canonical UTF-8 字节。旧 v9 在后续编辑与包更新后仍可验证。
 
@@ -61,7 +65,7 @@
 
 ```powershell
 python -m pytest verification/tests/system/test_animation_dlc.py -q --tb=short
-node --test dlcs/dbfox.animation/tests/playback.test.mjs
+node --test verification/tests/animation/playback.test.mjs
 python -m pyflakes dlcs/dbfox.animation/backend verification/bench/capabilities/dbfox_animation verification/tests/system/test_animation_dlc.py
 python -m verification.bench.capabilities.dbfox_animation --output output/animation-independent-bench
 python -m verification.bench.capabilities.dbfox_animation.audit D:/Project/DBFox-worktrees/creative-program/animation-browser-runtime-v4 --output output/animation-independent-audit.json
