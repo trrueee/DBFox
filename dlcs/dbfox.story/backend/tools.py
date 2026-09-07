@@ -17,6 +17,7 @@ from dbfox_dlc_api import (
     ToolObservationProjection,
     ToolPolicy,
     ToolPresentation,
+    ToolResourceRequirement,
 )
 
 from .contracts import (
@@ -28,6 +29,7 @@ from .contracts import (
     StoryRevisionsInput,
 )
 from .store import StoryStateStore
+from .resource_kind import STORY_WORLD_KIND
 from .world_selection import select_world
 
 class StoryGraphQueryTool(BaseTool[StoryGraphQueryInput, GraphFactsOutput]):
@@ -44,7 +46,10 @@ class StoryGraphQueryTool(BaseTool[StoryGraphQueryInput, GraphFactsOutput]):
     output_model = GraphFactsOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="查询故事设定", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -92,7 +97,10 @@ class StoryProposeRelationsTool(BaseTool[RelationProposeInput, StoryProposeOutpu
     output_model = StoryProposeOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="提出关系提案", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -103,7 +111,7 @@ class StoryProposeRelationsTool(BaseTool[RelationProposeInput, StoryProposeOutpu
         tool_input: RelationProposeInput,
         context: ExtensionToolRunContext,
     ) -> StoryProposeOutput:
-        _ref, world = select_world(context, tool_input.world_id)
+        _ref, world = select_world(context, None)
         items = [
             {
                 "from_name": relation.from_name,
@@ -159,7 +167,10 @@ class StoryRevisionsTool(BaseTool[StoryRevisionsInput, RevisionListOutput]):
     output_model = RevisionListOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="查询修订历史", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:

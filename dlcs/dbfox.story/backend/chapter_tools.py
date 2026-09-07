@@ -18,6 +18,7 @@ from dbfox_dlc_api import (
     ToolObservationProjection,
     ToolPolicy,
     ToolPresentation,
+    ToolResourceRequirement,
 )
 
 from .contracts import (
@@ -31,6 +32,7 @@ from .contracts import (
     StoryWriteChapterInput,
 )
 from .store import StoryStateStore
+from .resource_kind import STORY_WORLD_KIND
 from .world_selection import select_world
 
 
@@ -47,7 +49,10 @@ class StoryUpsertEntityTool(BaseTool[StoryUpsertEntityInput, object]):
     output_model = EntityUpsertOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="写入故事实体", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -107,7 +112,10 @@ class StoryChaptersListTool(BaseTool[StoryChaptersListInput, ChapterListOutput])
     output_model = ChapterListOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="列出章节", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -146,7 +154,10 @@ class StoryChapterReadTool(BaseTool[StoryChapterReadInput, object]):
     output_model = ChapterReadOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="阅读章节", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -204,7 +215,10 @@ class StoryWriteChapterTool(BaseTool[StoryWriteChapterInput, object]):
     output_model = ChapterWriteOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="写章节", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
