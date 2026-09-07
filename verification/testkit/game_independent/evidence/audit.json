@@ -1,0 +1,126 @@
+{
+  "package_digest": "7fa7e692cf09c2786b890a599e70c0444f9019d31d74452ba34a0c58635f235d",
+  "installed_frontend_files": 14,
+  "game_id": "0f0d8d85-b780-4973-8b57-5034b1dd69e4",
+  "fingerprints": {
+    "2": "165e2f9c24f0e0cee66318f71cdcb591f761ecc991893563eccf74721b540ed0",
+    "3": "d41618bebba9bcc618a9866705811b36210851fc864b6d59f57ee2ee2d875035",
+    "4": "165e2f9c24f0e0cee66318f71cdcb591f761ecc991893563eccf74721b540ed0"
+  },
+  "v3_only_change": "player transform x +80",
+  "v4_exactly_restores_v2": true,
+  "formal": {
+    "pauseStable": true,
+    "singleStep": 1,
+    "reset": 0,
+    "result": {
+      "session_id": "79976068-7881-44f6-91e4-9b782b546ee5",
+      "run_id": "run_fb28d39b9f504296b2d8cb511834a4b1",
+      "artifact_ids": [
+        "artifact_6ff8daf1a91a401d91448497f973d329"
+      ],
+      "outcome": {
+        "game": {
+          "id": "0f0d8d85-b780-4973-8b57-5034b1dd69e4",
+          "project_id": "default-project",
+          "title": "Independent Fox Review",
+          "version": 4,
+          "content_hash": "165e2f9c24f0e0cee66318f71cdcb591f761ecc991893563eccf74721b540ed0",
+          "deleted": false,
+          "scene_count": 1,
+          "entity_count": 3,
+          "rule_count": 3
+        },
+        "library_version": 5,
+        "changed": false,
+        "changed_ids": [],
+        "truncated": false,
+        "created_refs": {},
+        "report": {
+          "id": "32b4365d-b62b-4f75-b9f8-565e7e9b78f9",
+          "engine": "phaser-arcade-4.2.1",
+          "seed": 1,
+          "ticks_requested": 3600,
+          "ticks_completed": 698,
+          "outcome": "lost",
+          "reason": "狐狸被追上了。调整路线再试一次。",
+          "event_count": 17,
+          "events_truncated": false,
+          "entity_count": 3
+        }
+      }
+    }
+  },
+  "artifacts": {
+    "reads": [
+      {
+        "artifactId": "artifact_6ff8daf1a91a401d91448497f973d329",
+        "representation": "dbfox.game.playtest.v1",
+        "version": "4",
+        "hash": "165e2f9c24f0e0cee66318f71cdcb591f761ecc991893563eccf74721b540ed0",
+        "download_bytes": 4112,
+        "download_sha256": "7c2874c5c651e7dca3a97427f2a74cd9fdebba027ebb1a899b535781cd32d37b",
+        "native_download_matches": true
+      },
+      {
+        "artifactId": "artifact_19b55753006b433db80f97ea99dca2ad",
+        "representation": "dbfox.game.document.v1",
+        "version": "4",
+        "hash": "165e2f9c24f0e0cee66318f71cdcb591f761ecc991893563eccf74721b540ed0",
+        "download_bytes": 4338,
+        "download_sha256": "b1e3dd5bb89dde93dc424fc0acaf43cc1938d378fb1d4231f49efb87f672d20a",
+        "native_download_matches": true
+      }
+    ],
+    "previewPauseReset": true,
+    "bounds": {
+      "x": 16.666667938232422,
+      "y": 297.3333435058594,
+      "width": 898.6667060852051,
+      "height": 673.6666564941406
+    },
+    "requestCount": 17,
+    "nonReadRequests": []
+  },
+  "cold_reopen_public_versions_unchanged": true,
+  "v5_only_change": "player health initial/maximum 3 to 100",
+  "v5_content_hash": "2ad67acb513575c94543180b6a908724e83e677634920516005fa9eb2b66ef50",
+  "winning": {
+    "session_id": "5fee1d74-e21f-474d-885e-145dc1761828",
+    "run_id": "run_776e124c458d43f39b7a82b877316d48",
+    "artifact_ids": [
+      "artifact_3c9eb85c6b5b4238b8c8fcfe15085ce7"
+    ],
+    "outcome": {
+      "game": {
+        "id": "0f0d8d85-b780-4973-8b57-5034b1dd69e4",
+        "project_id": "default-project",
+        "title": "Independent Fox Review",
+        "version": 5,
+        "content_hash": "2ad67acb513575c94543180b6a908724e83e677634920516005fa9eb2b66ef50",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 3,
+        "rule_count": 3
+      },
+      "library_version": 6,
+      "changed": false,
+      "changed_ids": [],
+      "truncated": false,
+      "created_refs": {},
+      "report": {
+        "id": "c10f4b81-58aa-44f4-8d71-86dc11676174",
+        "engine": "phaser-arcade-4.2.1",
+        "seed": 1,
+        "ticks_requested": 3600,
+        "ticks_completed": 3600,
+        "outcome": "won",
+        "reason": "狐狸成功守住了森林！",
+        "event_count": 108,
+        "events_truncated": false,
+        "entity_count": 4
+      }
+    }
+  },
+  "v4_artifacts_unchanged_after_v5": true
+}
