@@ -1,0 +1,1490 @@
+{
+  "game-author-native": {
+    "next_step": 8,
+    "requests": [
+      {
+        "id": "create",
+        "name": "dbfox_game_4f598f53__game_create",
+        "arguments": {
+          "title": "Native Agent Fox Survival",
+          "expected_library_version": 1
+        }
+      },
+      {
+        "id": "summary",
+        "name": "dbfox_game_4f598f53__game_inspect",
+        "arguments": {
+          "game_id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+          "section": "summary"
+        }
+      },
+      {
+        "id": "design",
+        "name": "dbfox_game_4f598f53__game_modify",
+        "arguments": {
+          "game_id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+          "expected_version": 1,
+          "operations": [
+            {
+              "kind": "scene_modify",
+              "scene_id": {
+                "id": "da55d394-4a06-48fb-96ab-a3896327d674"
+              },
+              "scene": {
+                "name": "森林 · 生存 60 秒",
+                "width": 800,
+                "height": 600,
+                "background": "#152d2c",
+                "gravity_x": 0,
+                "gravity_y": 0
+              }
+            },
+            {
+              "kind": "entity_create",
+              "entities": [
+                {
+                  "scene_id": {
+                    "id": "da55d394-4a06-48fb-96ab-a3896327d674"
+                  },
+                  "name": "狐狸",
+                  "ref": "fox",
+                  "tags": [
+                    "player"
+                  ],
+                  "components": [
+                    {
+                      "kind": "transform",
+                      "x": 480,
+                      "y": 300,
+                      "width": 36,
+                      "height": 36
+                    },
+                    {
+                      "kind": "visual",
+                      "shape": "fox",
+                      "color": "#f39a42",
+                      "depth": 10
+                    },
+                    {
+                      "kind": "body",
+                      "shape": "circle"
+                    },
+                    {
+                      "kind": "health",
+                      "initial": 3,
+                      "maximum": 3
+                    }
+                  ]
+                },
+                {
+                  "scene_id": {
+                    "id": "da55d394-4a06-48fb-96ab-a3896327d674"
+                  },
+                  "name": "史莱姆模板",
+                  "ref": "slime",
+                  "enabled": false,
+                  "tags": [
+                    "slime"
+                  ],
+                  "components": [
+                    {
+                      "kind": "transform",
+                      "x": 40,
+                      "y": 40,
+                      "width": 28,
+                      "height": 28
+                    },
+                    {
+                      "kind": "visual",
+                      "shape": "slime",
+                      "color": "#78c791"
+                    },
+                    {
+                      "kind": "body",
+                      "shape": "circle"
+                    }
+                  ]
+                },
+                {
+                  "scene_id": {
+                    "id": "da55d394-4a06-48fb-96ab-a3896327d674"
+                  },
+                  "name": "林地入口",
+                  "ref": "spawner",
+                  "components": [
+                    {
+                      "kind": "transform",
+                      "x": 400,
+                      "y": 26,
+                      "width": 20,
+                      "height": 20
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "behavior_create",
+              "behavior": {
+                "kind": "player_control",
+                "entity_id": {
+                  "ref": "fox"
+                },
+                "speed": 230
+              }
+            },
+            {
+              "kind": "behavior_create",
+              "behavior": {
+                "kind": "seek",
+                "entity_id": {
+                  "ref": "slime"
+                },
+                "target_id": {
+                  "ref": "fox"
+                },
+                "speed": 58
+              }
+            },
+            {
+              "kind": "behavior_create",
+              "behavior": {
+                "kind": "lifetime",
+                "entity_id": {
+                  "ref": "slime"
+                },
+                "ticks": 1500
+              }
+            },
+            {
+              "kind": "behavior_create",
+              "behavior": {
+                "kind": "spawn",
+                "entity_id": {
+                  "ref": "spawner"
+                },
+                "template_id": {
+                  "ref": "slime"
+                },
+                "interval_ticks": 150,
+                "count": 1,
+                "max_alive": 24,
+                "region": {
+                  "x": 30,
+                  "y": 25,
+                  "width": 740,
+                  "height": 20
+                }
+              }
+            },
+            {
+              "kind": "variable_create",
+              "variable": {
+                "name": "encounters",
+                "value_type": "int",
+                "initial": 0
+              },
+              "ref": "encounters"
+            },
+            {
+              "kind": "rule_create",
+              "rule": {
+                "scene_id": {
+                  "id": "da55d394-4a06-48fb-96ab-a3896327d674"
+                },
+                "name": "碰到史莱姆扣血",
+                "trigger": {
+                  "kind": "overlap",
+                  "left_tag": "player",
+                  "right_tag": "slime",
+                  "phase": "enter"
+                },
+                "actions": [
+                  {
+                    "kind": "damage",
+                    "target": "left",
+                    "amount": 1
+                  },
+                  {
+                    "kind": "variable_add",
+                    "variable_id": {
+                      "ref": "encounters"
+                    },
+                    "amount": 1
+                  },
+                  {
+                    "kind": "despawn",
+                    "target": "right"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "rule_create",
+              "rule": {
+                "scene_id": {
+                  "id": "da55d394-4a06-48fb-96ab-a3896327d674"
+                },
+                "name": "生命归零",
+                "trigger": {
+                  "kind": "health_compare",
+                  "entity_id": {
+                    "ref": "fox"
+                  },
+                  "comparison": "le",
+                  "value": 0
+                },
+                "actions": [
+                  {
+                    "kind": "finish",
+                    "result": "lost",
+                    "message": "狐狸被追上了。调整路线再试一次。"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "rule_create",
+              "rule": {
+                "scene_id": {
+                  "id": "da55d394-4a06-48fb-96ab-a3896327d674"
+                },
+                "name": "存活 60 秒",
+                "trigger": {
+                  "kind": "elapsed_tick",
+                  "at_tick": 3600
+                },
+                "actions": [
+                  {
+                    "kind": "finish",
+                    "result": "won",
+                    "message": "狐狸成功守住了森林！"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "entities",
+        "name": "dbfox_game_4f598f53__game_inspect",
+        "arguments": {
+          "game_id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+          "section": "entities",
+          "limit": 10
+        }
+      },
+      {
+        "id": "lost",
+        "name": "dbfox_game_4f598f53__playtest",
+        "arguments": {
+          "game_id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+          "expected_version": 2,
+          "seed": 42,
+          "ticks": 3600,
+          "inputs": []
+        }
+      },
+      {
+        "id": "adjust",
+        "name": "dbfox_game_4f598f53__game_modify",
+        "arguments": {
+          "game_id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+          "expected_version": 2,
+          "operations": [
+            {
+              "kind": "component_modify",
+              "component_id": {
+                "id": "e15417ad-346f-4633-8dd1-9a62a424cbb9"
+              },
+              "component": {
+                "kind": "health",
+                "initial": 4,
+                "maximum": 4
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "won",
+        "name": "dbfox_game_4f598f53__playtest",
+        "arguments": {
+          "game_id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+          "expected_version": 3,
+          "seed": 42,
+          "ticks": 3600,
+          "inputs": [
+            {
+              "tick": 0,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "down"
+              ]
+            },
+            {
+              "tick": 20,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": []
+            },
+            {
+              "tick": 150,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 180,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "down"
+              ]
+            },
+            {
+              "tick": 190,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left"
+              ]
+            },
+            {
+              "tick": 260,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": []
+            },
+            {
+              "tick": 290,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "down"
+              ]
+            },
+            {
+              "tick": 300,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": []
+            },
+            {
+              "tick": 670,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right"
+              ]
+            },
+            {
+              "tick": 680,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "up"
+              ]
+            },
+            {
+              "tick": 690,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "down"
+              ]
+            },
+            {
+              "tick": 700,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 800,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right"
+              ]
+            },
+            {
+              "tick": 810,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "up"
+              ]
+            },
+            {
+              "tick": 830,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 860,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right"
+              ]
+            },
+            {
+              "tick": 880,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "down"
+              ]
+            },
+            {
+              "tick": 930,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 940,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "down"
+              ]
+            },
+            {
+              "tick": 980,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right"
+              ]
+            },
+            {
+              "tick": 1050,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "up"
+              ]
+            },
+            {
+              "tick": 1060,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "down"
+              ]
+            },
+            {
+              "tick": 1070,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": []
+            },
+            {
+              "tick": 1180,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 1190,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 1200,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 1210,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 1220,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": []
+            },
+            {
+              "tick": 1360,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "down"
+              ]
+            },
+            {
+              "tick": 1370,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left"
+              ]
+            },
+            {
+              "tick": 1510,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "up"
+              ]
+            },
+            {
+              "tick": 1530,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 1610,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "up"
+              ]
+            },
+            {
+              "tick": 1620,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": []
+            },
+            {
+              "tick": 1810,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 1820,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 1830,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 1840,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 1850,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 1860,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 1870,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 1880,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 1890,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 1900,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 1910,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 1920,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 1930,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 2020,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "down"
+              ]
+            },
+            {
+              "tick": 2030,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right"
+              ]
+            },
+            {
+              "tick": 2180,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "down"
+              ]
+            },
+            {
+              "tick": 2190,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": []
+            },
+            {
+              "tick": 2400,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left"
+              ]
+            },
+            {
+              "tick": 2420,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right"
+              ]
+            },
+            {
+              "tick": 2430,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left"
+              ]
+            },
+            {
+              "tick": 2440,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right"
+              ]
+            },
+            {
+              "tick": 2450,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left"
+              ]
+            },
+            {
+              "tick": 2590,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": []
+            },
+            {
+              "tick": 2710,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "up"
+              ]
+            },
+            {
+              "tick": 2720,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": []
+            },
+            {
+              "tick": 2750,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "up"
+              ]
+            },
+            {
+              "tick": 2760,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "down"
+              ]
+            },
+            {
+              "tick": 2770,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "up"
+              ]
+            },
+            {
+              "tick": 2780,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "down"
+              ]
+            },
+            {
+              "tick": 2790,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 2800,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "up"
+              ]
+            },
+            {
+              "tick": 2820,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "down"
+              ]
+            },
+            {
+              "tick": 2830,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "up"
+              ]
+            },
+            {
+              "tick": 2950,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right"
+              ]
+            },
+            {
+              "tick": 3010,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "down"
+              ]
+            },
+            {
+              "tick": 3020,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 3030,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 3040,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 3050,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 3060,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 3070,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 3080,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 3090,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 3100,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 3110,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 3120,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 3130,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 3140,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "down"
+              ]
+            },
+            {
+              "tick": 3230,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "down"
+              ]
+            },
+            {
+              "tick": 3240,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "down"
+              ]
+            },
+            {
+              "tick": 3250,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": []
+            },
+            {
+              "tick": 3350,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left"
+              ]
+            },
+            {
+              "tick": 3370,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right"
+              ]
+            },
+            {
+              "tick": 3380,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left"
+              ]
+            },
+            {
+              "tick": 3390,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right"
+              ]
+            },
+            {
+              "tick": 3400,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left"
+              ]
+            },
+            {
+              "tick": 3410,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right"
+              ]
+            },
+            {
+              "tick": 3420,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "right",
+                "up"
+              ]
+            },
+            {
+              "tick": 3430,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "up"
+              ]
+            },
+            {
+              "tick": 3440,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "down"
+              ]
+            },
+            {
+              "tick": 3450,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left"
+              ]
+            },
+            {
+              "tick": 3590,
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "actions": [
+                "left",
+                "down"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "export",
+        "name": "dbfox_game_4f598f53__game_export",
+        "arguments": {
+          "game_id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+          "expected_version": 3
+        }
+      }
+    ],
+    "observations": {
+      "create": {
+        "artifact_ids": [
+          "artifact_b2a1cd3eb4894f27bfd50f0c0f0a7468"
+        ],
+        "facts": {
+          "changed": true,
+          "changed_ids": [
+            "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+            "da55d394-4a06-48fb-96ab-a3896327d674"
+          ],
+          "created_refs": {},
+          "game": {
+            "content_hash": "43a010ea1b46ec88345e02e54cebdfffff92b107438b202f16e73e2318d8f7b5",
+            "deleted": false,
+            "entity_count": 0,
+            "id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+            "project_id": "d8b6a346-5ba3-48de-8af7-62bb0c70ab0f",
+            "rule_count": 0,
+            "scene_count": 1,
+            "title": "Native Agent Fox Survival",
+            "version": 1
+          },
+          "library_version": 2,
+          "report": null,
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "game_create: success"
+      },
+      "summary": {
+        "artifact_ids": [],
+        "facts": {
+          "game": {
+            "content_hash": "43a010ea1b46ec88345e02e54cebdfffff92b107438b202f16e73e2318d8f7b5",
+            "deleted": false,
+            "entity_count": 0,
+            "id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+            "project_id": "d8b6a346-5ba3-48de-8af7-62bb0c70ab0f",
+            "rule_count": 0,
+            "scene_count": 1,
+            "title": "Native Agent Fox Survival",
+            "version": 1
+          },
+          "has_more": false,
+          "items": [],
+          "library_version": 2,
+          "metadata": {
+            "counts": {
+              "assets": 0,
+              "behaviors": 0,
+              "components": 0,
+              "entities": 0,
+              "rules": 0,
+              "scenes": 1,
+              "variables": 0
+            },
+            "engine": "phaser-arcade-4.2.1",
+            "initial_scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+            "schema_version": 1,
+            "tick_hz": 60
+          },
+          "next_offset": 0,
+          "offset": 0,
+          "section": "summary",
+          "total": 0
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "game_inspect: success"
+      },
+      "design": {
+        "artifact_ids": [
+          "artifact_9e3dcdc2cb1d4032b521084e16dfa16a"
+        ],
+        "facts": {
+          "changed": true,
+          "changed_ids": [
+            "0b0490a9-b3f4-4019-bbe1-229fcfbc8404",
+            "165200d7-1e2d-48de-be40-ed4dc1c88a58",
+            "20d7ea50-ef30-4b90-80df-8a866c09f990",
+            "40b8cfc1-cc08-403f-9f1c-699e413fe97a",
+            "4cf8692d-7199-4a80-9170-fb321626df56",
+            "4e52a312-c7e6-4190-88c5-5407a5c58490",
+            "56b0b54b-7abb-4564-902e-2208609c5cfd",
+            "6901b606-e054-4e1a-afa0-9c8fcea8b338",
+            "6dba1a03-1381-4f98-aa5c-820013b0cc41",
+            "6ffa7627-5ded-4b76-a541-fe29878b4924",
+            "73f57b16-2df4-4b96-8ea0-e0041162ece0",
+            "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+            "8a3831e8-bcd3-4820-a844-2001adbd2998",
+            "9fbeae46-946e-4db8-836d-020a693fa890",
+            "ab77b147-97d0-408c-9ea6-365de9707611",
+            "b9fc140a-bf87-494f-a792-b3b42baf62ca",
+            "d400445e-1ed5-4c0d-af21-a55f2c4977b5",
+            "da55d394-4a06-48fb-96ab-a3896327d674",
+            "e15417ad-346f-4633-8dd1-9a62a424cbb9",
+            "e63fcae3-829b-4702-a394-e04ab1233e7f"
+          ],
+          "created_refs": {
+            "encounters": "40b8cfc1-cc08-403f-9f1c-699e413fe97a",
+            "fox": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+            "slime": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+            "spawner": "4cf8692d-7199-4a80-9170-fb321626df56"
+          },
+          "game": {
+            "content_hash": "5a3ae394761cc8eeb3dcdcb811185fe304df654df1a917a73555430e10f608da",
+            "deleted": false,
+            "entity_count": 3,
+            "id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+            "project_id": "d8b6a346-5ba3-48de-8af7-62bb0c70ab0f",
+            "rule_count": 3,
+            "scene_count": 1,
+            "title": "Native Agent Fox Survival",
+            "version": 2
+          },
+          "library_version": 3,
+          "report": null,
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "game_modify: success"
+      },
+      "entities": {
+        "artifact_ids": [],
+        "facts": {
+          "game": {
+            "content_hash": "5a3ae394761cc8eeb3dcdcb811185fe304df654df1a917a73555430e10f608da",
+            "deleted": false,
+            "entity_count": 3,
+            "id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+            "project_id": "d8b6a346-5ba3-48de-8af7-62bb0c70ab0f",
+            "rule_count": 3,
+            "scene_count": 1,
+            "title": "Native Agent Fox Survival",
+            "version": 2
+          },
+          "has_more": false,
+          "items": [
+            {
+              "components": [
+                {
+                  "id": "6901b606-e054-4e1a-afa0-9c8fcea8b338",
+                  "spec": {
+                    "angle": 0.0,
+                    "height": 36.0,
+                    "kind": "transform",
+                    "width": 36.0,
+                    "x": 480.0,
+                    "y": 300.0
+                  }
+                },
+                {
+                  "id": "8a3831e8-bcd3-4820-a844-2001adbd2998",
+                  "spec": {
+                    "color": "#f39a42",
+                    "depth": 10,
+                    "kind": "visual",
+                    "opacity": 1.0,
+                    "shape": "fox"
+                  }
+                },
+                {
+                  "id": "4e52a312-c7e6-4190-88c5-5407a5c58490",
+                  "spec": {
+                    "body_type": "dynamic",
+                    "bounce": 0.0,
+                    "drag": 0.0,
+                    "kind": "body",
+                    "shape": "circle",
+                    "solid": false,
+                    "vx": 0.0,
+                    "vy": 0.0,
+                    "world_bounds": true
+                  }
+                },
+                {
+                  "id": "e15417ad-346f-4633-8dd1-9a62a424cbb9",
+                  "spec": {
+                    "initial": 3,
+                    "kind": "health",
+                    "maximum": 3
+                  }
+                }
+              ],
+              "enabled": true,
+              "id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "name": "狐狸",
+              "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+              "tags": [
+                "player"
+              ]
+            },
+            {
+              "components": [
+                {
+                  "id": "6dba1a03-1381-4f98-aa5c-820013b0cc41",
+                  "spec": {
+                    "angle": 0.0,
+                    "height": 28.0,
+                    "kind": "transform",
+                    "width": 28.0,
+                    "x": 40.0,
+                    "y": 40.0
+                  }
+                },
+                {
+                  "id": "ab77b147-97d0-408c-9ea6-365de9707611",
+                  "spec": {
+                    "color": "#78c791",
+                    "depth": 0,
+                    "kind": "visual",
+                    "opacity": 1.0,
+                    "shape": "slime"
+                  }
+                },
+                {
+                  "id": "0b0490a9-b3f4-4019-bbe1-229fcfbc8404",
+                  "spec": {
+                    "body_type": "dynamic",
+                    "bounce": 0.0,
+                    "drag": 0.0,
+                    "kind": "body",
+                    "shape": "circle",
+                    "solid": false,
+                    "vx": 0.0,
+                    "vy": 0.0,
+                    "world_bounds": true
+                  }
+                }
+              ],
+              "enabled": false,
+              "id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+              "name": "史莱姆模板",
+              "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+              "tags": [
+                "slime"
+              ]
+            },
+            {
+              "components": [
+                {
+                  "id": "e63fcae3-829b-4702-a394-e04ab1233e7f",
+                  "spec": {
+                    "angle": 0.0,
+                    "height": 20.0,
+                    "kind": "transform",
+                    "width": 20.0,
+                    "x": 400.0,
+                    "y": 26.0
+                  }
+                }
+              ],
+              "enabled": true,
+              "id": "4cf8692d-7199-4a80-9170-fb321626df56",
+              "name": "林地入口",
+              "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+              "tags": []
+            }
+          ],
+          "library_version": 3,
+          "metadata": {},
+          "next_offset": 3,
+          "offset": 0,
+          "section": "entities",
+          "total": 3
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "game_inspect: success"
+      },
+      "lost": {
+        "artifact_ids": [
+          "artifact_5d47c66e108e4dd7be4e0602ac215ea5"
+        ],
+        "facts": {
+          "changed": false,
+          "changed_ids": [],
+          "created_refs": {},
+          "game": {
+            "content_hash": "5a3ae394761cc8eeb3dcdcb811185fe304df654df1a917a73555430e10f608da",
+            "deleted": false,
+            "entity_count": 3,
+            "id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+            "project_id": "d8b6a346-5ba3-48de-8af7-62bb0c70ab0f",
+            "rule_count": 3,
+            "scene_count": 1,
+            "title": "Native Agent Fox Survival",
+            "version": 2
+          },
+          "library_version": 3,
+          "report": {
+            "engine": "phaser-arcade-4.2.1",
+            "entity_count": 3,
+            "event_count": 17,
+            "events_truncated": false,
+            "id": "883c8b37-d308-4064-8da4-7a227c9d59db",
+            "outcome": "lost",
+            "reason": "狐狸被追上了。调整路线再试一次。",
+            "seed": 42,
+            "ticks_completed": 737,
+            "ticks_requested": 3600
+          },
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "playtest: success"
+      },
+      "adjust": {
+        "artifact_ids": [
+          "artifact_91b38cd4e397471cbf5215579a20651b"
+        ],
+        "facts": {
+          "changed": true,
+          "changed_ids": [
+            "56b0b54b-7abb-4564-902e-2208609c5cfd",
+            "e15417ad-346f-4633-8dd1-9a62a424cbb9"
+          ],
+          "created_refs": {},
+          "game": {
+            "content_hash": "b2393f7893e3b1b1f495fba535652c62c4bdedebfab50986df6d681633ee5149",
+            "deleted": false,
+            "entity_count": 3,
+            "id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+            "project_id": "d8b6a346-5ba3-48de-8af7-62bb0c70ab0f",
+            "rule_count": 3,
+            "scene_count": 1,
+            "title": "Native Agent Fox Survival",
+            "version": 3
+          },
+          "library_version": 4,
+          "report": null,
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "game_modify: success"
+      },
+      "won": {
+        "artifact_ids": [
+          "artifact_334be2d82c974557aa37c00c43608269"
+        ],
+        "facts": {
+          "changed": false,
+          "changed_ids": [],
+          "created_refs": {},
+          "game": {
+            "content_hash": "b2393f7893e3b1b1f495fba535652c62c4bdedebfab50986df6d681633ee5149",
+            "deleted": false,
+            "entity_count": 3,
+            "id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+            "project_id": "d8b6a346-5ba3-48de-8af7-62bb0c70ab0f",
+            "rule_count": 3,
+            "scene_count": 1,
+            "title": "Native Agent Fox Survival",
+            "version": 3
+          },
+          "library_version": 4,
+          "report": {
+            "engine": "phaser-arcade-4.2.1",
+            "entity_count": 11,
+            "event_count": 44,
+            "events_truncated": false,
+            "id": "686c4d4b-679d-4965-9a14-89e65605c273",
+            "outcome": "won",
+            "reason": "狐狸成功守住了森林！",
+            "seed": 42,
+            "ticks_completed": 3600,
+            "ticks_requested": 3600
+          },
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "playtest: success"
+      },
+      "export": {
+        "artifact_ids": [
+          "artifact_4dd0b178d0cb459ea474395d78edee10"
+        ],
+        "facts": {
+          "changed": false,
+          "changed_ids": [],
+          "created_refs": {},
+          "game": {
+            "content_hash": "b2393f7893e3b1b1f495fba535652c62c4bdedebfab50986df6d681633ee5149",
+            "deleted": false,
+            "entity_count": 3,
+            "id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+            "project_id": "d8b6a346-5ba3-48de-8af7-62bb0c70ab0f",
+            "rule_count": 3,
+            "scene_count": 1,
+            "title": "Native Agent Fox Survival",
+            "version": 3
+          },
+          "library_version": 4,
+          "report": null,
+          "truncated": false
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "game_export: success"
+      }
+    },
+    "windows": [
+      {
+        "visible_call_ids": [],
+        "input_bytes": 8759
+      },
+      {
+        "visible_call_ids": [
+          "create"
+        ],
+        "input_bytes": 10763
+      },
+      {
+        "visible_call_ids": [
+          "create",
+          "summary"
+        ],
+        "input_bytes": 11895
+      },
+      {
+        "visible_call_ids": [
+          "create",
+          "summary",
+          "design"
+        ],
+        "input_bytes": 17299
+      },
+      {
+        "visible_call_ids": [
+          "create",
+          "summary",
+          "design",
+          "entities"
+        ],
+        "input_bytes": 20075
+      },
+      {
+        "visible_call_ids": [
+          "create",
+          "summary",
+          "design",
+          "entities",
+          "lost"
+        ],
+        "input_bytes": 21351
+      },
+      {
+        "visible_call_ids": [
+          "create",
+          "summary",
+          "design",
+          "entities",
+          "lost",
+          "adjust"
+        ],
+        "input_bytes": 22526
+      },
+      {
+        "visible_call_ids": [
+          "won"
+        ],
+        "input_bytes": 24179
+      },
+      {
+        "visible_call_ids": [
+          "export"
+        ],
+        "input_bytes": 16847
+      }
+    ],
+    "errors": []
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-09-07T12:54:19.121867+00:00",
+  "git_commit": "f54950ca3196ea6526d95a579b194f7b98469c43",
+  "git_branch": "creative/game",
+  "git_status_sha256": "c3f5e4dc16f2d2b7207c9991ac1f9c5219904069233b2def8eec99780b7feaf4",
+  "os": "Windows-11-10.0.26200-SP0",
+  "architecture": "AMD64",
+  "python": "3.12.7",
+  "ci": false
+}

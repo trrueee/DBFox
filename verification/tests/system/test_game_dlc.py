@@ -505,16 +505,16 @@ def test_public_pixel_rgba_import_stitch_provenance_and_failures(harness, module
 
 
 def backend_snapshot(tmp_path):
-    """Explicit backend-only signed package gate; not a complete desktop package test."""
-    source = tmp_path / "backend-package"
+    """Sign the complete source package, including the offline Phaser frontend."""
+    source = tmp_path / "complete-package"
     source.mkdir()
     shutil.copytree(SOURCE / "backend", source / "backend", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(SOURCE / "frontend", source / "frontend")
     manifest = json.loads((SOURCE / "manifest.template.json").read_text(encoding="utf-8"))
-    manifest["entrypoints"].pop("frontend")
     (source / "manifest.template.json").write_text(json.dumps(manifest), encoding="utf-8")
     key = Ed25519PrivateKey.from_private_bytes(hashlib.sha256(b"Game test signing key; not a production publisher").digest())
     built = build_dlc_package_from_source(source, private_key=key)
-    archive = tmp_path / "game-backend.dbfox-dlc"
+    archive = tmp_path / "game-complete.dbfox-dlc"
     archive.write_bytes(built.archive_bytes)
     service = DlcPackageService(tmp_path / "runtime" / "dlcs")
     service.trust_publisher_from_file(archive, expected_package_digest=built.package_digest, expected_publisher_key_id=built.publisher_fingerprint)

@@ -2,7 +2,7 @@
   "dlc": "dbfox.game",
   "status": "in_progress",
   "completion": false,
-  "current_phase": "paused_for_handoff_workbench_unverified",
+  "current_phase": "author_verified_waiting_independent_and_composition",
   "role_history": [
     {
       "role": "Game DLC Lead / Domain Architect",
@@ -21,6 +21,12 @@
       "agent": "/root/scene_lead/domain_architect",
       "independent": false,
       "result": "Runtime author Chrome probe succeeded; complete UI draft written but unmounted/unverified when user stopped implementation"
+    },
+    {
+      "role": "Game author completion and native verification",
+      "agent": "/root/game_finish",
+      "independent": false,
+      "result": "Mounted Studio, complete signed package, native Agent and ActionRun playtests, immutable Artifacts, actual downloads, canonical drag/undo audit, 13-case capability suite and ten-change stress verified"
     }
   ],
   "resource_kinds": [
@@ -76,32 +82,30 @@
     "dbfox.game.playtest.v1"
   ],
   "views": {
-    "game_studio": "written, not mounted or verified",
-    "immutable_revision": "written, not verified",
-    "playtest_report": "written, not verified"
+    "game_studio": "author verified in production Electron; independent review pending",
+    "immutable_revision": "author verified in production Electron; independent review pending",
+    "playtest_report": "author verified in production Electron; independent review pending"
   },
   "verified": [
-    "Phaser 4.2.1 real Chrome Canvas/HEADLESS/reset/lifecycle probe under production CSP",
-    "32 author backend cases passed in 9.21s; mypy 11 backend files and pyflakes passed",
-    "Actual production build_product_run_loop with backend-only signed package: create/inspect/incremental edit/stale/undo/export",
-    "Actual Host ActionRun export and exact action receipt; one durable Run on duplicate",
-    "All 17 materialized native Tool schemas: required fields and declared optional-null input normalization",
-    "DLC-local offline Phaser vendor build"
+    "32 backend tests passed; backend mypy 11 files and pyflakes passed",
+    "7 frontend contract tests, frontend test typecheck, production build and lint passed (five existing Host warnings)",
+    "Full signed DLC with all 14 frontend assets installed and verified against source hashes",
+    "Native production Agent Run completed eight tool calls with closed Studio, no raised budgets and loopback scripted Responses model boundary",
+    "Actual Phaser seeded survival: stationary loss and recorded-input win at tick 3600; Canvas/HEADLESS deterministic replay, cancellation, timeout and dense candidate budget verified",
+    "Native Studio step/play/pause/reset, keyboard recording, drag revision and exact canonical undo verified",
+    "All six native Run Artifacts mounted after signed upgrade; fixed revision snapshots unchanged and actual Electron JSON download audited",
+    "13 capability cases passed through production RunLoop: 12 categories plus ten-change stress",
+    "Editable fox/slime survival preset and actual exported example bundle included"
   ],
   "evidence_limits": [
-    "Phaser probe is author Chrome, not production Electron",
-    "Bridge reports are protocol fixtures, not Phaser execution evidence",
-    "Signed package gate is explicitly backend-only while frontend is unfinished",
-    "Pixel page transport fixture is not a multi-DLC production RunLoop proof"
+    "Author verification is not independent acceptance",
+    "Model choices use a loopback scripted Responses boundary; evidence does not measure live model reasoning",
+    "Pixel page transport fixture is not a multi-DLC production RunLoop proof; root will verify true Pixel to Game composition",
+    "Dense physics evidence proves bounded rejection, not sustained performance at every maximum"
   ],
   "pending": [
-    "User requested stop; next AI resumes from detailed handoff, no new verification in checkpoint turn",
-    "Complete editable Phaser Workbench and activation executor",
-    "Actual Phaser compile/run kernel fixtures and real UI",
-    "Full signed desktop activation and lifecycle",
-    "12-case capability bench and 10-change creative stress",
-    "Example fox/slime survival game",
-    "Independent Verification and Adversarial review"
+    "Independent verification and adversarial review on root current Core",
+    "True Pixel to Game production composition on root current Core"
   ],
   "core_changes": [],
   "architecture": "docs/architecture/game-dlc.md",

@@ -402,6 +402,9 @@ export async function createRuntime({ document: canonical, rgba_assets: rgbaAsse
     parent,
     width: start.width,
     height: start.height,
+    // Phaser's public canvasStyle owns its canvas; DLC CSS need not override
+    // engine inline dimensions with !important or affect any Host canvas.
+    canvasStyle: 'display:block;width:100%;height:100%;',
     banner: false,
     audio: { noAudio: true },
     autoFocus: false,
@@ -514,12 +517,15 @@ export async function runPlaytest(options, { signal, deadline = performance.now(
     while (!runtime.done) {
       for (let i = 0; i < 32 && !runtime.done; i += 1) {
         if (signal?.aborted) throw abortError();
-        if (performance.now() >= deadline) throw new Error('DEADLINE_EXCEEDED');
+        if (performance.now() >= deadline) throw new DOMException('Playtest deadline exceeded.', 'TimeoutError');
         runtime.step(false);
       }
       onProgress(runtime.tick);
       if (!runtime.done) await new Promise((resolve) => setTimeout(resolve, 0));
     }
+    // Abort destroys the Phaser instance and therefore also makes `done` true.
+    // A destroyed partial run must never be reported as successful completion.
+    if (signal?.aborted) throw abortError();
     return runtime.snapshot();
   } finally { runtime.destroy(); }
 }

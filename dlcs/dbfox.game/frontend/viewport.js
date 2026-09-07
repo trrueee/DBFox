@@ -3,12 +3,12 @@ import { errorText, part } from './model.js';
 
 export function createViewport(React) {
   const h = React.createElement;
-  return function Viewport({ snapshot, sceneId, selection, onSelect, onMove, busy, playing, setPlaying, resetKey, stepKey, seed, onState, onInputs, onError, registerCleanup }) {
+  return function Viewport({ snapshot, sceneId, selection, onSelect, onMove, readOnly = false, busy, playing, setPlaying, resetKey, stepKey, seed, onState, onInputs, onError, registerCleanup }) {
     const parent = React.useRef(null);
     const container = React.useRef(null);
     const engine = React.useRef(null);
     const live = React.useRef({});
-    live.current = { snapshot, sceneId, selection, onSelect, onMove, busy, playing, setPlaying, onState, onInputs, onError };
+    live.current = { snapshot, sceneId, selection, onSelect, onMove, readOnly, busy, playing, setPlaying, onState, onInputs, onError };
     const [ready, setReady] = React.useState(false);
     const [runtimeScene, setRuntimeScene] = React.useState(null);
 
@@ -77,7 +77,7 @@ export function createViewport(React) {
         drag = undefined;
       }
       const pointerdown = (event) => {
-        if (!runtime || event.button !== 0 || live.current.busy || live.current.playing) return;
+        if (!runtime || event.button !== 0 || live.current.busy || live.current.playing || live.current.readOnly) return;
         element.focus();
         const start = point(event);
         const id = runtime.pick(start.x, start.y)?.split(':')[0];
@@ -167,14 +167,14 @@ export function createViewport(React) {
 
     const scene = runtimeScene ?? snapshot.document.scenes.find((item) => item.id === sceneId);
     return h('div', { className: 'game-viewport-frame' },
-      h('div', { ref: container, className: 'game-viewport', tabIndex: 0, role: 'application', 'aria-label': '游戏预览：播放时使用方向键或 WASD；编辑时拖动实体，Shift 多选', style: { aspectRatio: `${scene.width} / ${scene.height}` } }, h('div', { ref: parent, className: 'game-canvas-parent' }),
+      h('div', { ref: container, className: 'game-viewport', tabIndex: 0, role: 'application', 'aria-label': readOnly ? '固定版本游戏预览：播放时使用方向键或 WASD' : '游戏预览：播放时使用方向键或 WASD；编辑时拖动实体，Shift 多选', style: { aspectRatio: `${scene.width} / ${scene.height}` } }, h('div', { ref: parent, className: 'game-canvas-parent' }),
         !playing && selection.map((id) => {
           const entity = snapshot.document.entities.find((item) => item.id === id && item.scene_id === scene.id && item.enabled);
           const transform = part(entity, 'transform')?.spec;
           if (!transform) return null;
           return h('span', { key: id, className: 'game-selection-box', style: { left: `${(transform.x - transform.width / 2) / scene.width * 100}%`, top: `${(transform.y - transform.height / 2) / scene.height * 100}%`, width: `${transform.width / scene.width * 100}%`, height: `${transform.height / scene.height * 100}%` } }, h('span', null, entity.name));
         }), !ready && h('div', { className: 'game-viewport-loading', role: 'status' }, '正在启动 Phaser 场景…')),
-      h('p', { className: 'game-help' }, 'WASD / 方向键移动 · 点击预览获取键盘焦点 · Shift 多选 · 重置到 tick 0 后可拖动实体'),
+      h('p', { className: 'game-help' }, readOnly ? 'WASD / 方向键移动 · 点击预览获取键盘焦点 · 固定版本只读' : 'WASD / 方向键移动 · 点击预览获取键盘焦点 · Shift 多选 · 重置到 tick 0 后可拖动实体'),
     );
   };
 }

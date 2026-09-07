@@ -4,9 +4,25 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-09-06
+> 最后核验：2026-09-07
 >
 > 适用范围：Game Lead 的实施前调查和后续作者验证；尚不是独立交付验收。
+
+## 2026-09-07 作者候选
+
+本节替代下文 2026-09-06 的“尚未挂载/未完成作者验证”进度描述，历史调查保留。`/root/game_finish` 接续在制品，没有修改 Core/SDK 或用户原有 dirty baseline。完整签名包测试 32 passed（8.55s），backend mypy 11 文件、pyflakes 通过；新增前端 7 passed、typecheck:test、lint/设计令牌和 production build 通过。lint 仍有 5 个既有 Host warning、零 error。
+
+修复：数字字段清空保持 number；只读工件禁止拖动；真实取消销毁 Phaser 后抛 AbortError，不把半份报告返回成功；deadline 为 TimeoutError；Artifact 接受公开 nullable report_id；Connector 定时刷新并在卸载停止；CSS 全部命名空间化、移除 !important，Phaser 使用官方 canvasStyle 管理自己的 canvas。
+
+真实作者 Chrome：Studio 创建完整狐狸生存游戏，single step/play/pause/reset、drag 持久化、numeric clear/save、精确 undo、430px 无横向溢出及卸载 canvas=0。Phaser 静止在 tick737 lost；96 条动作记录在 tick3600 won，Canvas/HEADLESS 及完整重放相等；512 重叠刚体在 tick1 返回 budget_exceeded（本机 112.5ms），所有实例释放。过载结果不是持续运行性能保证。
+
+真实 Windows Electron：完整 signed 原始包 `c61d3296…` 在 Studio 关闭状态下，由实际 Sidecar/OpenAI SDK/SessionCoordinator/RunLoop 执行同一 Run `run_a348d215a3ae46c38105c504389975f5`：8 个真实调用，create→inspect→design→inspect→playtest lost tick737→health 局部调整→playtest won tick3600→export；仅模型 Responses SSE 为 loopback fixture，无真实 LLM 能力声明。耗时 4632ms。
+
+正常升级后的最终前端包 `82996d3da0630568941ac7de0ab1c2d7ce0acddd4c5ee44459f83d268d679dff` 重新读取 6 份旧 Artifact，v1/v2/v3 均保持 exact fingerprint；固定预览宽/窄可播放暂停重置，canvas 适配 Dock。原生 Studio 又验证 single-step、pause/reset、drag v3→v4、undo v5。公共原始分页重建规范 JSON 并独立重算 hash：v4 仅狐狸 transform.x +80，其余字节对应内容不变；v5 与 v3 相同。原生 DownloadItem 完成 4365 字节，下载 bundle 与 v3 相同。新包再次通过真实 ActionRun Playtest 与原生键盘输入录制/松开→正式 claim→结果工件。
+
+12 类 capability + 10-request stress 共 13/13，通过完整签名包、生产工厂和默认预算；stress 的 27 实体完整生存游戏保留 stable IDs，包含模糊请求无修改、stale 拒绝、Human 后 Agent 和 undo。范围与详细说明见 [Bench](../../verification/bench/capabilities/dbfox_game/README.md)、[可复现 testkit](../../verification/testkit/game_studio/README.md)，证据在 `docs/quality/evidence/game-author/`，实际规范内容在 `canonical-audit.json`，原生截图在 `docs/images/game/`。
+
+剩余发布门禁：独立 Verification/Adversarial；root 新 Core 上的真实 Pixel→Game composition 与 DERIVED_FROM exact source 证明。当前 Pixel 测试只证明公开 Representation 边界，不能声称真组合完成。前端 Device fixture 也不能替代本节原生证据。completion 继续 false。
 
 Director 将历史线程 `/root/scene_lead/domain_architect` 从已交付 Shader Workbench 转任 Game DLC Lead，逻辑角色现为 Game。已完整读取原 Lead 模板、CONTRIBUTING、AGENTS、Game preflight、下一批技术调查、文档规范与复用要求。工作树 `D:/Project/DBFox-worktrees/creative-game`，初始 `1fd2e556`，Director 后续仅合入 shared stdout 独立回归 `5d8712b4`。用户原 dirty baseline 与 desktop node_modules junction 保留；本轮候选依赖只装在本树 `.tmp/game-phaser-review`。
 

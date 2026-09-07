@@ -38,8 +38,17 @@ export function register(host) {
     const [error, setError] = React.useState('');
     React.useEffect(() => {
       const read = new AbortController();
-      const stop = () => read.abort(); const unregister = activation.registerCleanup(stop);
-      listGames((name, input, signal) => host.operations.invoke(name, input, { projectId, signal }), read.signal).then((page) => { if (!read.signal.aborted) setGames(page.items.filter((item) => !item.deleted)); }).catch((caught) => { if (!read.signal.aborted) setError(errorText(caught)); });
+      let timer;
+      const stop = () => { clearTimeout(timer); read.abort(); }; const unregister = activation.registerCleanup(stop);
+      async function refresh() {
+        try {
+          if (document.visibilityState === 'hidden') return;
+          const page = await listGames((name, input, signal) => host.operations.invoke(name, input, { projectId, signal }), read.signal);
+          if (!read.signal.aborted) { setGames(page.items.filter((item) => !item.deleted)); setError(''); }
+        } catch (caught) { if (!read.signal.aborted) setError(errorText(caught)); }
+        finally { if (!read.signal.aborted) timer = setTimeout(refresh, 5000); }
+      }
+      void refresh();
       return () => { unregister(); stop(); };
     }, [projectId]);
     const root = { id: 'library', name: 'Game Studio', children: games.map((game) => ({ ...game, name: game.title, children: [] })) };

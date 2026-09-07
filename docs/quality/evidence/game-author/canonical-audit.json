@@ -1,0 +1,827 @@
+{
+  "package_digest": "82996d3da0630568941ac7de0ab1c2d7ce0acddd4c5ee44459f83d268d679dff",
+  "public_versions": {
+    "3": {
+      "id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+      "title": "Native Agent Fox Survival",
+      "schema_version": 1,
+      "engine": "phaser-arcade-4.2.1",
+      "tick_hz": 60,
+      "initial_scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+      "scenes": [
+        {
+          "name": "森林 · 生存 60 秒",
+          "width": 800,
+          "height": 600,
+          "background": "#152d2c",
+          "gravity_x": 0.0,
+          "gravity_y": 0.0,
+          "id": "da55d394-4a06-48fb-96ab-a3896327d674"
+        }
+      ],
+      "entities": [
+        {
+          "id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+          "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+          "name": "狐狸",
+          "enabled": true,
+          "tags": [
+            "player"
+          ],
+          "components": [
+            {
+              "id": "6901b606-e054-4e1a-afa0-9c8fcea8b338",
+              "spec": {
+                "kind": "transform",
+                "x": 480.0,
+                "y": 300.0,
+                "width": 36.0,
+                "height": 36.0,
+                "angle": 0.0
+              }
+            },
+            {
+              "id": "8a3831e8-bcd3-4820-a844-2001adbd2998",
+              "spec": {
+                "kind": "visual",
+                "shape": "fox",
+                "color": "#f39a42",
+                "opacity": 1.0,
+                "depth": 10
+              }
+            },
+            {
+              "id": "4e52a312-c7e6-4190-88c5-5407a5c58490",
+              "spec": {
+                "kind": "body",
+                "body_type": "dynamic",
+                "shape": "circle",
+                "vx": 0.0,
+                "vy": 0.0,
+                "drag": 0.0,
+                "bounce": 0.0,
+                "world_bounds": true,
+                "solid": false
+              }
+            },
+            {
+              "id": "e15417ad-346f-4633-8dd1-9a62a424cbb9",
+              "spec": {
+                "kind": "health",
+                "initial": 4,
+                "maximum": 4
+              }
+            }
+          ]
+        },
+        {
+          "id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+          "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+          "name": "史莱姆模板",
+          "enabled": false,
+          "tags": [
+            "slime"
+          ],
+          "components": [
+            {
+              "id": "6dba1a03-1381-4f98-aa5c-820013b0cc41",
+              "spec": {
+                "kind": "transform",
+                "x": 40.0,
+                "y": 40.0,
+                "width": 28.0,
+                "height": 28.0,
+                "angle": 0.0
+              }
+            },
+            {
+              "id": "ab77b147-97d0-408c-9ea6-365de9707611",
+              "spec": {
+                "kind": "visual",
+                "shape": "slime",
+                "color": "#78c791",
+                "opacity": 1.0,
+                "depth": 0
+              }
+            },
+            {
+              "id": "0b0490a9-b3f4-4019-bbe1-229fcfbc8404",
+              "spec": {
+                "kind": "body",
+                "body_type": "dynamic",
+                "shape": "circle",
+                "vx": 0.0,
+                "vy": 0.0,
+                "drag": 0.0,
+                "bounce": 0.0,
+                "world_bounds": true,
+                "solid": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "4cf8692d-7199-4a80-9170-fb321626df56",
+          "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+          "name": "林地入口",
+          "enabled": true,
+          "tags": [],
+          "components": [
+            {
+              "id": "e63fcae3-829b-4702-a394-e04ab1233e7f",
+              "spec": {
+                "kind": "transform",
+                "x": 400.0,
+                "y": 26.0,
+                "width": 20.0,
+                "height": 20.0,
+                "angle": 0.0
+              }
+            }
+          ]
+        }
+      ],
+      "behaviors": [
+        {
+          "id": "165200d7-1e2d-48de-be40-ed4dc1c88a58",
+          "enabled": true,
+          "spec": {
+            "kind": "player_control",
+            "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+            "speed": 230.0
+          }
+        },
+        {
+          "id": "73f57b16-2df4-4b96-8ea0-e0041162ece0",
+          "enabled": true,
+          "spec": {
+            "kind": "seek",
+            "entity_id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+            "target_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+            "speed": 58.0
+          }
+        },
+        {
+          "id": "d400445e-1ed5-4c0d-af21-a55f2c4977b5",
+          "enabled": true,
+          "spec": {
+            "kind": "lifetime",
+            "entity_id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+            "ticks": 1500
+          }
+        },
+        {
+          "id": "9fbeae46-946e-4db8-836d-020a693fa890",
+          "enabled": true,
+          "spec": {
+            "kind": "spawn",
+            "entity_id": "4cf8692d-7199-4a80-9170-fb321626df56",
+            "template_id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+            "interval_ticks": 150,
+            "count": 1,
+            "max_alive": 24,
+            "region": {
+              "x": 30.0,
+              "y": 25.0,
+              "width": 740.0,
+              "height": 20.0
+            }
+          }
+        }
+      ],
+      "rules": [
+        {
+          "id": "20d7ea50-ef30-4b90-80df-8a866c09f990",
+          "enabled": true,
+          "spec": {
+            "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+            "name": "碰到史莱姆扣血",
+            "trigger": {
+              "kind": "overlap",
+              "left_tag": "player",
+              "right_tag": "slime",
+              "phase": "enter"
+            },
+            "actions": [
+              {
+                "kind": "damage",
+                "target": "left",
+                "amount": 1
+              },
+              {
+                "kind": "variable_add",
+                "variable_id": "40b8cfc1-cc08-403f-9f1c-699e413fe97a",
+                "amount": 1.0
+              },
+              {
+                "kind": "despawn",
+                "target": "right"
+              }
+            ]
+          }
+        },
+        {
+          "id": "b9fc140a-bf87-494f-a792-b3b42baf62ca",
+          "enabled": true,
+          "spec": {
+            "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+            "name": "生命归零",
+            "trigger": {
+              "kind": "health_compare",
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "comparison": "le",
+              "value": 0
+            },
+            "actions": [
+              {
+                "kind": "finish",
+                "result": "lost",
+                "message": "狐狸被追上了。调整路线再试一次。"
+              }
+            ]
+          }
+        },
+        {
+          "id": "6ffa7627-5ded-4b76-a541-fe29878b4924",
+          "enabled": true,
+          "spec": {
+            "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+            "name": "存活 60 秒",
+            "trigger": {
+              "kind": "elapsed_tick",
+              "at_tick": 3600
+            },
+            "actions": [
+              {
+                "kind": "finish",
+                "result": "won",
+                "message": "狐狸成功守住了森林！"
+              }
+            ]
+          }
+        }
+      ],
+      "variables": [
+        {
+          "name": "encounters",
+          "value_type": "int",
+          "initial": 0,
+          "id": "40b8cfc1-cc08-403f-9f1c-699e413fe97a"
+        }
+      ],
+      "assets": []
+    },
+    "4": {
+      "id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+      "title": "Native Agent Fox Survival",
+      "schema_version": 1,
+      "engine": "phaser-arcade-4.2.1",
+      "tick_hz": 60,
+      "initial_scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+      "scenes": [
+        {
+          "name": "森林 · 生存 60 秒",
+          "width": 800,
+          "height": 600,
+          "background": "#152d2c",
+          "gravity_x": 0.0,
+          "gravity_y": 0.0,
+          "id": "da55d394-4a06-48fb-96ab-a3896327d674"
+        }
+      ],
+      "entities": [
+        {
+          "id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+          "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+          "name": "狐狸",
+          "enabled": true,
+          "tags": [
+            "player"
+          ],
+          "components": [
+            {
+              "id": "6901b606-e054-4e1a-afa0-9c8fcea8b338",
+              "spec": {
+                "kind": "transform",
+                "x": 560.0,
+                "y": 300.0,
+                "width": 36.0,
+                "height": 36.0,
+                "angle": 0.0
+              }
+            },
+            {
+              "id": "8a3831e8-bcd3-4820-a844-2001adbd2998",
+              "spec": {
+                "kind": "visual",
+                "shape": "fox",
+                "color": "#f39a42",
+                "opacity": 1.0,
+                "depth": 10
+              }
+            },
+            {
+              "id": "4e52a312-c7e6-4190-88c5-5407a5c58490",
+              "spec": {
+                "kind": "body",
+                "body_type": "dynamic",
+                "shape": "circle",
+                "vx": 0.0,
+                "vy": 0.0,
+                "drag": 0.0,
+                "bounce": 0.0,
+                "world_bounds": true,
+                "solid": false
+              }
+            },
+            {
+              "id": "e15417ad-346f-4633-8dd1-9a62a424cbb9",
+              "spec": {
+                "kind": "health",
+                "initial": 4,
+                "maximum": 4
+              }
+            }
+          ]
+        },
+        {
+          "id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+          "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+          "name": "史莱姆模板",
+          "enabled": false,
+          "tags": [
+            "slime"
+          ],
+          "components": [
+            {
+              "id": "6dba1a03-1381-4f98-aa5c-820013b0cc41",
+              "spec": {
+                "kind": "transform",
+                "x": 40.0,
+                "y": 40.0,
+                "width": 28.0,
+                "height": 28.0,
+                "angle": 0.0
+              }
+            },
+            {
+              "id": "ab77b147-97d0-408c-9ea6-365de9707611",
+              "spec": {
+                "kind": "visual",
+                "shape": "slime",
+                "color": "#78c791",
+                "opacity": 1.0,
+                "depth": 0
+              }
+            },
+            {
+              "id": "0b0490a9-b3f4-4019-bbe1-229fcfbc8404",
+              "spec": {
+                "kind": "body",
+                "body_type": "dynamic",
+                "shape": "circle",
+                "vx": 0.0,
+                "vy": 0.0,
+                "drag": 0.0,
+                "bounce": 0.0,
+                "world_bounds": true,
+                "solid": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "4cf8692d-7199-4a80-9170-fb321626df56",
+          "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+          "name": "林地入口",
+          "enabled": true,
+          "tags": [],
+          "components": [
+            {
+              "id": "e63fcae3-829b-4702-a394-e04ab1233e7f",
+              "spec": {
+                "kind": "transform",
+                "x": 400.0,
+                "y": 26.0,
+                "width": 20.0,
+                "height": 20.0,
+                "angle": 0.0
+              }
+            }
+          ]
+        }
+      ],
+      "behaviors": [
+        {
+          "id": "165200d7-1e2d-48de-be40-ed4dc1c88a58",
+          "enabled": true,
+          "spec": {
+            "kind": "player_control",
+            "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+            "speed": 230.0
+          }
+        },
+        {
+          "id": "73f57b16-2df4-4b96-8ea0-e0041162ece0",
+          "enabled": true,
+          "spec": {
+            "kind": "seek",
+            "entity_id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+            "target_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+            "speed": 58.0
+          }
+        },
+        {
+          "id": "d400445e-1ed5-4c0d-af21-a55f2c4977b5",
+          "enabled": true,
+          "spec": {
+            "kind": "lifetime",
+            "entity_id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+            "ticks": 1500
+          }
+        },
+        {
+          "id": "9fbeae46-946e-4db8-836d-020a693fa890",
+          "enabled": true,
+          "spec": {
+            "kind": "spawn",
+            "entity_id": "4cf8692d-7199-4a80-9170-fb321626df56",
+            "template_id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+            "interval_ticks": 150,
+            "count": 1,
+            "max_alive": 24,
+            "region": {
+              "x": 30.0,
+              "y": 25.0,
+              "width": 740.0,
+              "height": 20.0
+            }
+          }
+        }
+      ],
+      "rules": [
+        {
+          "id": "20d7ea50-ef30-4b90-80df-8a866c09f990",
+          "enabled": true,
+          "spec": {
+            "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+            "name": "碰到史莱姆扣血",
+            "trigger": {
+              "kind": "overlap",
+              "left_tag": "player",
+              "right_tag": "slime",
+              "phase": "enter"
+            },
+            "actions": [
+              {
+                "kind": "damage",
+                "target": "left",
+                "amount": 1
+              },
+              {
+                "kind": "variable_add",
+                "variable_id": "40b8cfc1-cc08-403f-9f1c-699e413fe97a",
+                "amount": 1.0
+              },
+              {
+                "kind": "despawn",
+                "target": "right"
+              }
+            ]
+          }
+        },
+        {
+          "id": "b9fc140a-bf87-494f-a792-b3b42baf62ca",
+          "enabled": true,
+          "spec": {
+            "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+            "name": "生命归零",
+            "trigger": {
+              "kind": "health_compare",
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "comparison": "le",
+              "value": 0
+            },
+            "actions": [
+              {
+                "kind": "finish",
+                "result": "lost",
+                "message": "狐狸被追上了。调整路线再试一次。"
+              }
+            ]
+          }
+        },
+        {
+          "id": "6ffa7627-5ded-4b76-a541-fe29878b4924",
+          "enabled": true,
+          "spec": {
+            "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+            "name": "存活 60 秒",
+            "trigger": {
+              "kind": "elapsed_tick",
+              "at_tick": 3600
+            },
+            "actions": [
+              {
+                "kind": "finish",
+                "result": "won",
+                "message": "狐狸成功守住了森林！"
+              }
+            ]
+          }
+        }
+      ],
+      "variables": [
+        {
+          "name": "encounters",
+          "value_type": "int",
+          "initial": 0,
+          "id": "40b8cfc1-cc08-403f-9f1c-699e413fe97a"
+        }
+      ],
+      "assets": []
+    },
+    "5": {
+      "id": "b1706aff-b7ab-41e3-b87c-73c8160b856d",
+      "title": "Native Agent Fox Survival",
+      "schema_version": 1,
+      "engine": "phaser-arcade-4.2.1",
+      "tick_hz": 60,
+      "initial_scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+      "scenes": [
+        {
+          "name": "森林 · 生存 60 秒",
+          "width": 800,
+          "height": 600,
+          "background": "#152d2c",
+          "gravity_x": 0.0,
+          "gravity_y": 0.0,
+          "id": "da55d394-4a06-48fb-96ab-a3896327d674"
+        }
+      ],
+      "entities": [
+        {
+          "id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+          "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+          "name": "狐狸",
+          "enabled": true,
+          "tags": [
+            "player"
+          ],
+          "components": [
+            {
+              "id": "6901b606-e054-4e1a-afa0-9c8fcea8b338",
+              "spec": {
+                "kind": "transform",
+                "x": 480.0,
+                "y": 300.0,
+                "width": 36.0,
+                "height": 36.0,
+                "angle": 0.0
+              }
+            },
+            {
+              "id": "8a3831e8-bcd3-4820-a844-2001adbd2998",
+              "spec": {
+                "kind": "visual",
+                "shape": "fox",
+                "color": "#f39a42",
+                "opacity": 1.0,
+                "depth": 10
+              }
+            },
+            {
+              "id": "4e52a312-c7e6-4190-88c5-5407a5c58490",
+              "spec": {
+                "kind": "body",
+                "body_type": "dynamic",
+                "shape": "circle",
+                "vx": 0.0,
+                "vy": 0.0,
+                "drag": 0.0,
+                "bounce": 0.0,
+                "world_bounds": true,
+                "solid": false
+              }
+            },
+            {
+              "id": "e15417ad-346f-4633-8dd1-9a62a424cbb9",
+              "spec": {
+                "kind": "health",
+                "initial": 4,
+                "maximum": 4
+              }
+            }
+          ]
+        },
+        {
+          "id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+          "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+          "name": "史莱姆模板",
+          "enabled": false,
+          "tags": [
+            "slime"
+          ],
+          "components": [
+            {
+              "id": "6dba1a03-1381-4f98-aa5c-820013b0cc41",
+              "spec": {
+                "kind": "transform",
+                "x": 40.0,
+                "y": 40.0,
+                "width": 28.0,
+                "height": 28.0,
+                "angle": 0.0
+              }
+            },
+            {
+              "id": "ab77b147-97d0-408c-9ea6-365de9707611",
+              "spec": {
+                "kind": "visual",
+                "shape": "slime",
+                "color": "#78c791",
+                "opacity": 1.0,
+                "depth": 0
+              }
+            },
+            {
+              "id": "0b0490a9-b3f4-4019-bbe1-229fcfbc8404",
+              "spec": {
+                "kind": "body",
+                "body_type": "dynamic",
+                "shape": "circle",
+                "vx": 0.0,
+                "vy": 0.0,
+                "drag": 0.0,
+                "bounce": 0.0,
+                "world_bounds": true,
+                "solid": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "4cf8692d-7199-4a80-9170-fb321626df56",
+          "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+          "name": "林地入口",
+          "enabled": true,
+          "tags": [],
+          "components": [
+            {
+              "id": "e63fcae3-829b-4702-a394-e04ab1233e7f",
+              "spec": {
+                "kind": "transform",
+                "x": 400.0,
+                "y": 26.0,
+                "width": 20.0,
+                "height": 20.0,
+                "angle": 0.0
+              }
+            }
+          ]
+        }
+      ],
+      "behaviors": [
+        {
+          "id": "165200d7-1e2d-48de-be40-ed4dc1c88a58",
+          "enabled": true,
+          "spec": {
+            "kind": "player_control",
+            "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+            "speed": 230.0
+          }
+        },
+        {
+          "id": "73f57b16-2df4-4b96-8ea0-e0041162ece0",
+          "enabled": true,
+          "spec": {
+            "kind": "seek",
+            "entity_id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+            "target_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+            "speed": 58.0
+          }
+        },
+        {
+          "id": "d400445e-1ed5-4c0d-af21-a55f2c4977b5",
+          "enabled": true,
+          "spec": {
+            "kind": "lifetime",
+            "entity_id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+            "ticks": 1500
+          }
+        },
+        {
+          "id": "9fbeae46-946e-4db8-836d-020a693fa890",
+          "enabled": true,
+          "spec": {
+            "kind": "spawn",
+            "entity_id": "4cf8692d-7199-4a80-9170-fb321626df56",
+            "template_id": "788d515c-ee87-435d-bf4a-e41e8b70c4fc",
+            "interval_ticks": 150,
+            "count": 1,
+            "max_alive": 24,
+            "region": {
+              "x": 30.0,
+              "y": 25.0,
+              "width": 740.0,
+              "height": 20.0
+            }
+          }
+        }
+      ],
+      "rules": [
+        {
+          "id": "20d7ea50-ef30-4b90-80df-8a866c09f990",
+          "enabled": true,
+          "spec": {
+            "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+            "name": "碰到史莱姆扣血",
+            "trigger": {
+              "kind": "overlap",
+              "left_tag": "player",
+              "right_tag": "slime",
+              "phase": "enter"
+            },
+            "actions": [
+              {
+                "kind": "damage",
+                "target": "left",
+                "amount": 1
+              },
+              {
+                "kind": "variable_add",
+                "variable_id": "40b8cfc1-cc08-403f-9f1c-699e413fe97a",
+                "amount": 1.0
+              },
+              {
+                "kind": "despawn",
+                "target": "right"
+              }
+            ]
+          }
+        },
+        {
+          "id": "b9fc140a-bf87-494f-a792-b3b42baf62ca",
+          "enabled": true,
+          "spec": {
+            "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+            "name": "生命归零",
+            "trigger": {
+              "kind": "health_compare",
+              "entity_id": "56b0b54b-7abb-4564-902e-2208609c5cfd",
+              "comparison": "le",
+              "value": 0
+            },
+            "actions": [
+              {
+                "kind": "finish",
+                "result": "lost",
+                "message": "狐狸被追上了。调整路线再试一次。"
+              }
+            ]
+          }
+        },
+        {
+          "id": "6ffa7627-5ded-4b76-a541-fe29878b4924",
+          "enabled": true,
+          "spec": {
+            "scene_id": "da55d394-4a06-48fb-96ab-a3896327d674",
+            "name": "存活 60 秒",
+            "trigger": {
+              "kind": "elapsed_tick",
+              "at_tick": 3600
+            },
+            "actions": [
+              {
+                "kind": "finish",
+                "result": "won",
+                "message": "狐狸成功守住了森林！"
+              }
+            ]
+          }
+        }
+      ],
+      "variables": [
+        {
+          "name": "encounters",
+          "value_type": "int",
+          "initial": 0,
+          "id": "40b8cfc1-cc08-403f-9f1c-699e413fe97a"
+        }
+      ],
+      "assets": []
+    }
+  },
+  "fingerprints": {
+    "3": "b2393f7893e3b1b1f495fba535652c62c4bdedebfab50986df6d681633ee5149",
+    "4": "5d35bfb4a7d6d90862e522790067c92023ef6e15141f1ba4146e7b3eb2156d47",
+    "5": "b2393f7893e3b1b1f495fba535652c62c4bdedebfab50986df6d681633ee5149"
+  },
+  "only_change_v4": "Fox transform.x +80",
+  "undo_exact": true,
+  "download": {
+    "bytes": 4365,
+    "sha256": "fc89b27447c3dc1fe8b4f157a9050b38bccdfbc940265192ecf9fbf4a1c968fb",
+    "native_completed": true
+  }
+}

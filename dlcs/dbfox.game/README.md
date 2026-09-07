@@ -4,7 +4,9 @@
 >
 > 状态：当前
 >
-> 适用范围：`dbfox.game` 0.1.0，Extension API v2；完整工作台与独立门禁正在实施。
+> 适用范围：`dbfox.game` 0.1.0，Extension API v2；作者候选已验证，独立与组合门禁待完成。
+
+创建游戏后点击“添加狐狸生存示例”，即可直接编辑狐狸、史莱姆生成器、生命和 60 秒获胜规则。方向键/WASD 控制角色，播放/暂停/单步/重置用于本地预览；正式 Playtest 将实际输入和固定版本交给已安装 Phaser 执行器并保存报告。可下载的固定版本参考见 [示例 Game 包](examples/fox-survival.game.json)；当前以结构化操作编辑，不承诺整包 JSON 导入覆盖。
 
 Game 保存可增量编辑的场景、实体、组件、行为、规则、变量和 RGBA 素材。完整领域合同与25项边界在 [架构](../../docs/architecture/game-dlc.md)，实际验证在 [质量证据](../../docs/quality/game-dlc-evidence.md)。[生成合同](contracts.schema.json) 来自实际注册模型，含 canonical、每个 operation 的输入/输出以及17个 Tool schema。
 

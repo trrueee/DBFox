@@ -1,0 +1,15 @@
+[
+  {"id":"simple_creation","requirement":"Create and inspect a game through a real Run"},
+  {"id":"incremental_modification","requirement":"Rename without replacing stable object identities"},
+  {"id":"multi_stage_creation","requirement":"Create entity, behavior and survival rule incrementally"},
+  {"id":"invalid_recovery","requirement":"Reject invalid reference then make a valid correction"},
+  {"id":"inspect_before_edit","requirement":"Inspect authoritative revision before transforming an entity"},
+  {"id":"stale_version","requirement":"Reject Agent write after a human edit, re-inspect and recover"},
+  {"id":"no_op","requirement":"Identical rename preserves revision and hash"},
+  {"id":"ambiguous_request","requirement":"Ask for clarification without changing durable state"},
+  {"id":"large_document","requirement":"128 entities remain durable while one page is bounded"},
+  {"id":"bounded_context","requirement":"Large Game summary omits full entities and inspect returns one item"},
+  {"id":"human_then_agent","requirement":"Human transform remains visible after Agent increment"},
+  {"id":"negative_no_modification","requirement":"Invalid entity deletion cannot change canonical state"},
+  {"id":"creative_stress","requirement":"Ten distinct modification requests through production tools, including ambiguous/conflicting instructions, human edit and undo"}
+]
