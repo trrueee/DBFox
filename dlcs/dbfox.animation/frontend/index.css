@@ -1,0 +1,49 @@
+.dbfox-animation { --dbfox-animation__bg: var(--surface-panel); --dbfox-animation__border: var(--hairline); --dbfox-animation__text: var(--color-text-primary); --dbfox-animation__accent: var(--color-primary); --dbfox-animation__selected: var(--control-bg-pressed); display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; min-height: 0; height: 100%; overflow: auto; container-type: inline-size; color: var(--color-text-primary); background: var(--surface-panel); font-family: var(--font-family-ui); font-size: var(--ui-font-body); padding: var(--space-2); }
+.dbfox-animation *, .dbfox-animation *::before, .dbfox-animation *::after { box-sizing: border-box; }
+.dbfox-animation :is(button,input,select) { font: inherit; font-size: var(--ui-font-caption); min-height: 32px; min-width: 0; max-width: 100%; border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--color-text-primary); background: var(--control-bg); padding: 4px 7px; }
+.dbfox-animation button { cursor: pointer; overflow-wrap: anywhere; }
+.dbfox-animation button:hover:enabled { background: var(--control-bg-hover); }
+.dbfox-animation button[aria-pressed=true] { color: var(--color-primary); border-color: var(--color-primary); background: var(--control-bg-pressed); }
+.dbfox-animation :disabled { opacity: var(--control-disabled-opacity); cursor: not-allowed; }
+.dbfox-animation :is(button,input,select,canvas,summary):focus-visible { outline: 2px solid var(--control-border-focus); outline-offset: 2px; }
+.dbfox-animation input { width: 100%; font-variant-numeric: tabular-nums; }
+.dbfox-animation input[type=checkbox] { width: auto; min-height: 18px; }
+.dbfox-animation__toolbar,.dbfox-animation__transport,.dbfox-animation__row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); min-width:0; }
+.dbfox-animation__toolbar,.dbfox-animation__transport { padding-bottom:var(--space-2); border-bottom:1px solid var(--hairline); }
+.dbfox-animation__toolbar>strong { margin-right:auto; }
+.dbfox-animation__field { display:grid; gap:3px; min-width:0; font-size:var(--ui-font-caption); color:var(--color-text-secondary); }
+.dbfox-animation__field>span { overflow-wrap:anywhere; }
+.dbfox-animation__toolbar .dbfox-animation__field { flex:1 1 120px; max-width:200px; }
+.dbfox-animation__transport .dbfox-animation__field { width:115px; }
+.dbfox-animation__layout { display:grid; grid-template-columns:minmax(0,1fr) 250px; gap:var(--space-3); min-width:0; }
+.dbfox-animation__main,.dbfox-animation__inspector { display:flex; flex-direction:column; gap:var(--space-3); min-width:0; }
+.dbfox-animation__inspector { border-left:1px solid var(--hairline); padding-left:var(--space-3); }
+.dbfox-animation__timeline,.dbfox-animation__curves { border:1px solid var(--hairline); border-radius:var(--radius-card); min-width:0; overflow:hidden; }
+.dbfox-animation__timeline>.dbfox-animation__row,.dbfox-animation__curves>.dbfox-animation__row { padding:var(--space-2); }
+.dbfox-animation__timeline-grid { display:grid; grid-template-columns:130px minmax(0,1fr); }
+.dbfox-animation__track-labels { display:flex; flex-direction:column; min-width:0; }
+.dbfox-animation__track-labels button { min-height:30px; text-align:left; border-radius:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.dbfox-animation__timeline canvas { display:block; width:100%; min-width:0; touch-action:none; }
+.dbfox-animation__curves canvas { display:block; width:100%; height:200px; touch-action:none; }
+.dbfox-animation__preview { position:relative; height:160px; display:grid; place-items:center; overflow:hidden; border:1px solid var(--hairline); background:var(--surface-raised); }
+.dbfox-animation__preview>.dbfox-animation__muted { position:absolute; top:var(--space-2); left:var(--space-2); }
+.dbfox-animation__preview-object { width:56px; height:56px; display:grid; place-items:center; border:2px solid var(--color-primary); border-radius:var(--radius-card); background:var(--control-bg-pressed); color:var(--color-primary); text-align:center; overflow:hidden; }
+.dbfox-animation fieldset { display:grid; gap:var(--space-2); margin:0; min-width:0; border:0; border-top:1px solid var(--hairline); padding:var(--space-2) 0; }
+.dbfox-animation legend { font-weight:600; padding:0 var(--space-2) 0 0; }
+.dbfox-animation details { min-width:0; }
+.dbfox-animation summary { cursor:pointer; padding:var(--space-2) 0; }
+.dbfox-animation form { min-width:0; }
+.dbfox-animation__inspector form { display:grid; gap:var(--space-2); }
+.dbfox-animation__inspector .dbfox-animation__row>.dbfox-animation__field { flex:1 1 80px; }
+.dbfox-animation__muted,.dbfox-animation small { color:var(--color-text-muted); font-size:var(--ui-font-caption); overflow-wrap:anywhere; }
+.dbfox-animation__status,.dbfox-animation__error { margin:0; padding:var(--space-2); font-size:var(--ui-font-caption); overflow-wrap:anywhere; }
+.dbfox-animation__status { color:var(--color-text-secondary); }
+.dbfox-animation__error { border-left:3px solid var(--color-danger); background:var(--surface-raised); }
+.dbfox-animation__key-table { max-width:100%; overflow:auto; }
+.dbfox-animation__key-table table { border-collapse:collapse; width:100%; font-size:var(--ui-font-caption); font-variant-numeric:tabular-nums; }
+.dbfox-animation__key-table :is(th,td) { text-align:left; padding:var(--space-1); border-bottom:1px solid var(--hairline); }
+.dbfox-animation__key-table td:first-child { max-width:180px; overflow-wrap:anywhere; }
+.dbfox-animation__artifact { height:auto; }
+@container (max-width:760px) { .dbfox-animation__layout { grid-template-columns:minmax(0,1fr); } .dbfox-animation__inspector { border-left:0; border-top:1px solid var(--hairline); padding-left:0; padding-top:var(--space-3); } .dbfox-animation__timeline-grid { grid-template-columns:90px minmax(0,1fr); } }
+@container (max-width:360px) { .dbfox-animation__toolbar form { width:100%; } .dbfox-animation__transport .dbfox-animation__field { flex:1 1 110px; } .dbfox-animation__timeline-grid { grid-template-columns:72px minmax(0,1fr); } }
+@media (prefers-reduced-motion:reduce) { .dbfox-animation * { scroll-behavior:auto; } }

@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "capability.dbfox-animation.scripted",
+  "suite_version": "1.0.0",
+  "subject": {
+    "kind": "capability",
+    "components": [
+      "dbfox.animation"
+    ],
+    "supporting_fixtures": [
+      "scripted-provider",
+      "migrated-metadata",
+      "signed-package"
+    ]
+  },
+  "execution": {
+    "provider_modes": [
+      "scripted"
+    ],
+    "default_repetitions": 1,
+    "max_repetitions": 1
+  },
+  "dataset": "cases.json",
+  "metrics": [
+    {
+      "name": "task.success_rate",
+      "direction": "higher_is_better",
+      "unit": "ratio",
+      "description": "Authoritative Animation facts and runtime checks"
+    },
+    {
+      "name": "runtime.tool_calls",
+      "direction": "lower_is_better",
+      "unit": "count",
+      "description": "Persisted production invocations"
+    },
+    {
+      "name": "animation.keys",
+      "direction": "informational",
+      "unit": "count",
+      "description": "Final canonical key count"
+    },
+    {
+      "name": "observation.max_bytes",
+      "direction": "informational",
+      "unit": "bytes",
+      "description": "Maximum actual provider-visible observation"
+    }
+  ]
+}

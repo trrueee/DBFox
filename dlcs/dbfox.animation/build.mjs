@@ -1,0 +1,11 @@
+import { build } from "esbuild";
+import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+await mkdir("frontend/vendor", { recursive: true });
+await mkdir("licenses", { recursive: true });
+await build({ entryPoints: ["vendor-src/three.js"], outfile: "frontend/vendor/three.js", bundle: true, format: "esm", platform: "browser", target: "es2022", minify: true, legalComments: "eof" });
+await copyFile("node_modules/three/LICENSE", "licenses/THREE-MIT.txt");
+const bytes = await readFile("frontend/vendor/three.js");
+if (bytes.length > 512 * 1024) throw new Error("Animation vendor exceeds 512 KiB");
+const lock = JSON.parse(await readFile("package-lock.json", "utf8"));
+await writeFile("licenses/provenance.json", JSON.stringify({ package: "three", version: "0.185.1", license: "MIT", source: "https://github.com/mrdoob/three.js/tree/r185", npm: lock.packages["node_modules/three"], bundle: { path: "frontend/vendor/three.js", bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }, build: "esbuild 0.28.2; npm ci && npm run build; no remote runtime resources" }, null, 2) + "\n");

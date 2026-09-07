@@ -1,0 +1,92 @@
+{
+  "clips": [
+    {
+      "end": 8000,
+      "id": "gesture",
+      "name": "Gesture",
+      "start": 0,
+      "track_ids": [
+        "move"
+      ]
+    }
+  ],
+  "curves": [
+    {
+      "id": "ease",
+      "kind": "bezier",
+      "x1": 0.25,
+      "x2": 0.75,
+      "y1": 0.0,
+      "y2": 1.0
+    }
+  ],
+  "keyframes": [
+    {
+      "curve_id": "ease",
+      "id": "begin",
+      "tick": 0,
+      "track_id": "move",
+      "value": 0.0
+    },
+    {
+      "curve_id": null,
+      "id": "contact",
+      "tick": 4000,
+      "track_id": "move",
+      "value": 6.0
+    },
+    {
+      "curve_id": null,
+      "id": "settle",
+      "tick": 8000,
+      "track_id": "move",
+      "value": 0.0
+    }
+  ],
+  "markers": [
+    {
+      "id": "beat",
+      "name": "Contact",
+      "tick": 4000
+    }
+  ],
+  "schema_version": 1,
+  "targets": [
+    {
+      "id": "fox",
+      "name": "Fox",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "source": null
+    }
+  ],
+  "timing": {
+    "duration": 8000,
+    "fps": 30,
+    "loop": false,
+    "rate": 1.0
+  },
+  "title": "Fox gesture",
+  "tracks": [
+    {
+      "enabled": true,
+      "id": "move",
+      "name": "位置 X",
+      "property": "position.x",
+      "target_id": "fox"
+    }
+  ]
+}

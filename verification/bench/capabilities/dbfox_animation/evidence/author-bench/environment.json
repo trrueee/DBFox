@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-09-07T13:48:23.999824+00:00",
+  "git_commit": "1b175d7354d64c033b591d3ea4bb2c913ebd1139",
+  "git_branch": "creative/animation",
+  "git_status_sha256": "a111f863f8f436e60248eb87cd06dda4ab15c4af006bff11eb823e50fae1fb41",
+  "os": "Windows-11-10.0.26200-SP0",
+  "architecture": "AMD64",
+  "python": "3.12.7",
+  "ci": false
+}
