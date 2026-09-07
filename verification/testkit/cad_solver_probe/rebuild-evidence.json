@@ -1,0 +1,453 @@
+{
+  "measured_at": "2026-09-07T14:11:40Z",
+  "platform": "Windows 11 x64 10.0.26200; isolated HTTP, not signed Electron/DLC installation",
+  "build": {
+    "scope": "investigative rebuild only",
+    "upstream_commit": "ee9b156da9827a91a56a888a53520f63d5cffaa6",
+    "freecad_commit": "5f8eac49f31626354ee69bf40616bac801ca5560",
+    "emscripten": "3.1.45",
+    "dynamic_execution": 0,
+    "assets": {
+      "planegcs.js": {
+        "raw_bytes": 27602,
+        "gzip_bytes": 10739,
+        "sha256": "49f3c3a963861e2c41d19de315b13c9ad5d8287f0b0cc603a88a38deded8ef8e"
+      },
+      "planegcs.wasm": {
+        "raw_bytes": 508141,
+        "gzip_bytes": 173175,
+        "sha256": "af37e4c9228dafe008f636657a087b597305adf6beba11ebcfbe81f547023896"
+      }
+    }
+  },
+  "toolchain": {
+    "emsdk_commit": "c8dcb45665fec5e743336703f1d22a191810f2a8",
+    "emscripten_build": "2b7c5fb8ffeac3315deb1f82ab7bf8da544f84a1",
+    "emcc_commit": "ef3e4e3b044de98e1811546e0bc605c65d3412f4",
+    "cmake": "3.31.6-msvc6",
+    "ninja": "1.12.1",
+    "binding_node": "16.20.0",
+    "binding_npm": "8.19.4",
+    "tree_sitter": "0.20.6",
+    "tree_sitter_cpp": "0.20.5",
+    "msvc_build_tools": "17.14.37314.3",
+    "eigen_commit": "3147391d946bb4b6c68edd901f2add6ac1f31f8c",
+    "boost_tar_sha256": "afff36d392885120bcac079148c177d1f6f7730ec3d47233aa51b0afa4db94a5",
+    "observed_sha256": {
+      "upstream/bin/clang.exe": "aadb3b4ac4cca3b63a6ffcc4dc434b6f36606b26582817467faafd8447c3104b",
+      "upstream/bin/wasm-ld.exe": "a148e6eb46bc5e904b9b5a73f8f5c57c47118f01e87c2207a1a13ce4afad9115",
+      "upstream/bin/wasm-opt.exe": "8aba2c1b4758a136c2a3491f4f32728bcfa3ef940f04b3cc17ea1e64192c9c9e",
+      "node/16.20.0_64bit/bin/node.exe": "a49f9e852f80cfc00ddcd75dcfccbe2987672f78dcbf7f5454a832479c77f448"
+    }
+  },
+  "policies": {
+    "strict": "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self' dlc-asset:; script-src-attr 'none'; style-src 'self' dlc-asset:; style-src-elem 'self' dlc-asset:; style-src-attr 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* dlc-asset:; img-src 'self' data: https: dlc-asset:; font-src 'self' dlc-asset:",
+    "wasm_only": "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self' dlc-asset: 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' dlc-asset:; style-src-elem 'self' dlc-asset:; style-src-attr 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* dlc-asset:; img-src 'self' data: https: dlc-asset:; font-src 'self' dlc-asset:",
+    "host_source_sha256": "aec5aa8bb83ba977976065d1a1ca0f622f48a6739326e8afbb7a17486962287c"
+  },
+  "node": {
+    "scope": "upstream Node solver only; no DBFox integration, browser CSP, CAD solid or export acceptance",
+    "package": "@salusoft89/planegcs@1.2.0",
+    "node": "v24.13.0",
+    "wasm_bytes": 508141,
+    "wasm_sha256": "af37e4c9228dafe008f636657a087b597305adf6beba11ebcfbe81f547023896",
+    "passed": 5,
+    "diagnostics": [],
+    "results": [
+      {
+        "name": "same_sketch_width_78_to_82",
+        "before": [
+          {
+            "id": "a",
+            "type": "point",
+            "x": 0,
+            "y": 0,
+            "fixed": true
+          },
+          {
+            "id": "b",
+            "type": "point",
+            "x": 78,
+            "y": 0,
+            "fixed": false
+          },
+          {
+            "id": "c",
+            "type": "point",
+            "x": 78,
+            "y": 10,
+            "fixed": false
+          },
+          {
+            "id": "d",
+            "type": "point",
+            "x": 0,
+            "y": 10,
+            "fixed": false
+          },
+          {
+            "id": "bottom",
+            "type": "horizontal_pp",
+            "p1_id": "a",
+            "p2_id": "b"
+          },
+          {
+            "id": "right",
+            "type": "vertical_pp",
+            "p1_id": "b",
+            "p2_id": "c"
+          },
+          {
+            "id": "top",
+            "type": "horizontal_pp",
+            "p1_id": "c",
+            "p2_id": "d"
+          },
+          {
+            "id": "left",
+            "type": "vertical_pp",
+            "p1_id": "d",
+            "p2_id": "a"
+          },
+          {
+            "id": "width",
+            "type": "p2p_distance",
+            "p1_id": "a",
+            "p2_id": "b",
+            "distance": "phone_width"
+          },
+          {
+            "id": "thickness",
+            "type": "p2p_distance",
+            "p1_id": "b",
+            "p2_id": "c",
+            "distance": 10
+          }
+        ],
+        "after": [
+          {
+            "id": "a",
+            "type": "point",
+            "x": 0,
+            "y": 0,
+            "fixed": true
+          },
+          {
+            "id": "b",
+            "type": "point",
+            "x": 82,
+            "y": 0,
+            "fixed": false
+          },
+          {
+            "id": "c",
+            "type": "point",
+            "x": 82,
+            "y": 10,
+            "fixed": false
+          },
+          {
+            "id": "d",
+            "type": "point",
+            "x": 0,
+            "y": 10,
+            "fixed": false
+          },
+          {
+            "id": "bottom",
+            "type": "horizontal_pp",
+            "p1_id": "a",
+            "p2_id": "b"
+          },
+          {
+            "id": "right",
+            "type": "vertical_pp",
+            "p1_id": "b",
+            "p2_id": "c"
+          },
+          {
+            "id": "top",
+            "type": "horizontal_pp",
+            "p1_id": "c",
+            "p2_id": "d"
+          },
+          {
+            "id": "left",
+            "type": "vertical_pp",
+            "p1_id": "d",
+            "p2_id": "a"
+          },
+          {
+            "id": "width",
+            "type": "p2p_distance",
+            "p1_id": "a",
+            "p2_id": "b",
+            "distance": "phone_width"
+          },
+          {
+            "id": "thickness",
+            "type": "p2p_distance",
+            "p1_id": "b",
+            "p2_id": "c",
+            "distance": 10
+          }
+        ],
+        "repeated_solves": 200,
+        "dof": 0,
+        "elapsed_ms": 15.263900000000007
+      },
+      {
+        "name": "angle_65_degrees",
+        "tip": {
+          "id": "tip",
+          "type": "point",
+          "x": 12.67854785224496,
+          "y": 27.18923361109345,
+          "fixed": false
+        },
+        "dof": 0,
+        "elapsed_ms": 0.5269999999999868
+      },
+      {
+        "name": "underconstrained_distance",
+        "dof": 1,
+        "point": {
+          "id": "b",
+          "type": "point",
+          "x": 75.09219048853622,
+          "y": 21.098884511589514,
+          "fixed": false
+        },
+        "elapsed_ms": 0.11260000000001469
+      },
+      {
+        "name": "conflicting_distances",
+        "status": 2,
+        "conflicts": [
+          "width78",
+          "width82"
+        ],
+        "has_conflicts": true,
+        "solution_applied": false,
+        "elapsed_ms": 1.216700000000003
+      },
+      {
+        "name": "impossible_triangle_3_4_10",
+        "status": 2,
+        "conflicts": [],
+        "solution_applied": false,
+        "elapsed_ms": 0.21709999999998786
+      }
+    ]
+  },
+  "chrome_strict": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+    "path": "/strict",
+    "javascript_eval": "EvalError",
+    "ok": false,
+    "error": {
+      "name": "RuntimeError",
+      "message": "Aborted(CompileError: WebAssembly.instantiate(): Compiling or instantiating WebAssembly module violates the following Content Security policy directive because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: \"script-src 'self' dlc-asset:\".). Build with -sASSERTIONS for more info."
+    },
+    "diagnostics": [
+      "wasm streaming compile failed: CompileError: WebAssembly.instantiateStreaming(): Compiling or instantiating WebAssembly module violates the following Content Security policy directive because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: \"script-src 'self' dlc-asset:\".",
+      "falling back to ArrayBuffer instantiation",
+      "failed to asynchronously prepare wasm: CompileError: WebAssembly.instantiate(): Compiling or instantiating WebAssembly module violates the following Content Security policy directive because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: \"script-src 'self' dlc-asset:\".",
+      "Aborted(CompileError: WebAssembly.instantiate(): Compiling or instantiating WebAssembly module violates the following Content Security policy directive because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: \"script-src 'self' dlc-asset:\".)"
+    ]
+  },
+  "chrome_wasm_only": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+    "path": "/wasm-only",
+    "javascript_eval": "EvalError",
+    "results": [
+      {
+        "name": "same_sketch_width_78_to_82",
+        "before": [
+          {
+            "id": "a",
+            "type": "point",
+            "x": 0,
+            "y": 0,
+            "fixed": true
+          },
+          {
+            "id": "b",
+            "type": "point",
+            "x": 78,
+            "y": 0,
+            "fixed": false
+          },
+          {
+            "id": "c",
+            "type": "point",
+            "x": 78,
+            "y": 10,
+            "fixed": false
+          },
+          {
+            "id": "d",
+            "type": "point",
+            "x": 0,
+            "y": 10,
+            "fixed": false
+          },
+          {
+            "id": "bottom",
+            "type": "horizontal_pp",
+            "p1_id": "a",
+            "p2_id": "b"
+          },
+          {
+            "id": "right",
+            "type": "vertical_pp",
+            "p1_id": "b",
+            "p2_id": "c"
+          },
+          {
+            "id": "top",
+            "type": "horizontal_pp",
+            "p1_id": "c",
+            "p2_id": "d"
+          },
+          {
+            "id": "left",
+            "type": "vertical_pp",
+            "p1_id": "d",
+            "p2_id": "a"
+          },
+          {
+            "id": "width",
+            "type": "p2p_distance",
+            "p1_id": "a",
+            "p2_id": "b",
+            "distance": "phone_width"
+          },
+          {
+            "id": "thickness",
+            "type": "p2p_distance",
+            "p1_id": "b",
+            "p2_id": "c",
+            "distance": 10
+          }
+        ],
+        "after": [
+          {
+            "id": "a",
+            "type": "point",
+            "x": 0,
+            "y": 0,
+            "fixed": true
+          },
+          {
+            "id": "b",
+            "type": "point",
+            "x": 82,
+            "y": 0,
+            "fixed": false
+          },
+          {
+            "id": "c",
+            "type": "point",
+            "x": 82,
+            "y": 10,
+            "fixed": false
+          },
+          {
+            "id": "d",
+            "type": "point",
+            "x": 0,
+            "y": 10,
+            "fixed": false
+          },
+          {
+            "id": "bottom",
+            "type": "horizontal_pp",
+            "p1_id": "a",
+            "p2_id": "b"
+          },
+          {
+            "id": "right",
+            "type": "vertical_pp",
+            "p1_id": "b",
+            "p2_id": "c"
+          },
+          {
+            "id": "top",
+            "type": "horizontal_pp",
+            "p1_id": "c",
+            "p2_id": "d"
+          },
+          {
+            "id": "left",
+            "type": "vertical_pp",
+            "p1_id": "d",
+            "p2_id": "a"
+          },
+          {
+            "id": "width",
+            "type": "p2p_distance",
+            "p1_id": "a",
+            "p2_id": "b",
+            "distance": "phone_width"
+          },
+          {
+            "id": "thickness",
+            "type": "p2p_distance",
+            "p1_id": "b",
+            "p2_id": "c",
+            "distance": 10
+          }
+        ],
+        "repeated_solves": 200,
+        "dof": 0,
+        "elapsed_ms": 18
+      },
+      {
+        "name": "angle_65_degrees",
+        "tip": {
+          "id": "tip",
+          "type": "point",
+          "x": 12.67854785224496,
+          "y": 27.18923361109345,
+          "fixed": false
+        },
+        "dof": 0,
+        "elapsed_ms": 0.5
+      },
+      {
+        "name": "underconstrained_distance",
+        "dof": 1,
+        "point": {
+          "id": "b",
+          "type": "point",
+          "x": 75.09219048853622,
+          "y": 21.098884511589514,
+          "fixed": false
+        },
+        "elapsed_ms": 0.19999999925494194
+      },
+      {
+        "name": "conflicting_distances",
+        "status": 2,
+        "conflicts": [
+          "width78",
+          "width82"
+        ],
+        "has_conflicts": true,
+        "solution_applied": false,
+        "elapsed_ms": 2.400000000372529
+      },
+      {
+        "name": "impossible_triangle_3_4_10",
+        "status": 2,
+        "conflicts": [],
+        "solution_applied": false,
+        "elapsed_ms": 0.19999999925494194
+      }
+    ],
+    "passed": 5,
+    "ok": true,
+    "diagnostics": []
+  }
+}

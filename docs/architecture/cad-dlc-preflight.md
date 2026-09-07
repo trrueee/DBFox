@@ -66,3 +66,20 @@ HeadlessChrome152 中又加载同一个发布包：原样 Host CSP 拒绝 WASM�
 [Emscripten 官方 DYNAMIC_EXECUTION](https://emscripten.org/docs/tools_reference/settings_reference.html#dynamic-execution)提供禁用动态求值的构建选项；其 Embind AOT 是可调查的编译期优化。下一步应在固定上游源上用正式编译选项重新构建，再复验浏览器，不得手改压缩后 JS、允许 `unsafe-eval`、启用 CSP bypass 或另建私有运行通道。定制几何内核仍需分别证明 extrude/revolve/cut/boolean/fillet、拓扑检查、导出、取消和资源上限。当前结论是“可复用算法已验证，部署候选尚未合格”，不是 CAD 完成。
 
 本次尝试以隐藏方式启动本机已有 Docker Desktop，`docker version` 和 `docker desktop status` 都未返回可用状态，未拉取镜像或开始构建。随后 `docker desktop stop --timeout 30` 报告停止失败；仅终止了本轮启动、路径和启动时间已核对的 Desktop/backend 进程，另两条查询也已中断。未改 WSL、系统启动设置或安装新软件。上游固定源码已保存在忽略的 `output/cad-solver-probe/upstream`，其所需 bindings.cpp 还需按上游生成步骤构建；不把已取得源码或 Node 成功当作重建成功。
+
+## 2026-09-07 禁止动态求值的求解器重建：浏览器候选通过
+
+后续使用任务目录中的官方便携 emsdk 3.1.45 完成真实编译，没有再次启动 Docker。复用原 PlaneGCS 固定源码、上游 Tree-sitter/Nunjucks 绑定生成器和 CMake；只在构建副本中适配 Boost/Eigen 的 Linux 头文件路径，并增加官方 `-s DYNAMIC_EXECUTION=0`。未修改求解算法、生成后的 JS、Host CSP、SDK 或 Core。[重建指南](../../verification/testkit/cad_solver_probe/README.md)包含完整工具链版本、命令和[输入哈希](../../verification/testkit/cad_solver_probe/source-hashes.json)。
+
+官方 emsdk tag 固定为 `c8dcb45665fec5e743336703f1d22a191810f2a8`，其编译器构建为 `2b7c5fb8ffeac3315deb1f82ab7bf8da544f84a1`；Eigen 3.4.0 固定提交为 `3147391d946bb4b6c68edd901f2add6ac1f31f8c`，Boost 1.74.0 tarball 已按官方 SHA-256 校验。上游绑定工具在 Node 24 下因 C++17/C++20 要求冲突失败，改用 SDK 自带 Node 16.20.0 和本机已有 VS2022 BuildTools 后完成生成。没有通过修改旧原生扩展、重新实现解析器或全局安装软件绕过问题。旧 emsdk 下载使用固定官方 HTTPS 地址，但自身未核验独立的发布者校验和；记录的编译器可执行文件哈希不能等同于签名工具链证明。
+
+| 重建资产 | 原始 bytes | gzip bytes |
+| --- | ---: | ---: |
+| planegcs.js | 27,602 | 10,739 |
+| planegcs.wasm | 508,141 | 173,175 |
+
+WASM SHA-256 为 `af37e4c9228dafe008f636657a087b597305adf6beba11ebcfbe81f547023896`，gzip 使用 level 9、mtime 0；判断20 MiB资产限制仍使用原始字节。新的 WASM 与发布包大小相同但 hash 不同，不能把它们当作同一二进制。原 Dockerfile 的 apt 头文件版本并未固定，本轮明确固定 Boost/Eigen 后不宣称逐字节复现 npm 发布包。
+
+[实际结果](../../verification/testkit/cad_solver_probe/rebuild-evidence.json)记录 Windows x64、Node 24.13.0 和 HeadlessChrome152：Node 五项通过；Chrome 原 Host 策略仍在 WASM 编译阶段失败；仅在本地探针响应中增加 `wasm-unsafe-eval` 后，同一份共享用例的五项检查全部通过，200次宽度重算保留原ID，65°、欠约束和互斥/不可解约束结果与Node一致。两个页面的显式 `new Function` 控制均报 `EvalError`，候选页面求解诊断为空。浏览器会话 `cad-independent` 与端口18846测试服务已经关闭。该证据表明本轮已消除发布包的动态JS绑定阻碍，但仍不满足未修改的Host政策。
+
+采用决定是继续将此重建列为 CAD 草图求解候选，交由 Director 依据几何内核证据统一选择执行位置。没有新增兼容层、产品依赖、第二事实源或迁移债务。当前保留上游 Release 的异常、固定内存和未定义符号策略；五项通过不证明所有公开API、任意约束、取消或资源上限安全。LGPL版本文字差异、vendored FreeCAD与补丁对应、Eigen混合许可文件、完整通知与可重链接/重建分发安排仍待核验，不能据此宣称许可已获清理。几何特征、拓扑、导出、签名DLC安装及原始手机支架任务仍须另行完成。

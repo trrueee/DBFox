@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import json
 import re
+import argparse
 
 ROOT = Path(__file__).resolve().parents[3]
 PACKAGE = (ROOT / "output/cad-solver-probe/package").resolve()
@@ -18,8 +19,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/strict", "/wasm-only"):
             body = b'<!doctype html><meta charset="utf-8"><title>CAD solver policy probe</title><h1>CAD solver policy probe</h1><pre>Running</pre><script type="module" src="/browser.mjs"></script>'
             mime = "text/html; charset=utf-8"
-        elif self.path == "/browser.mjs":
-            body = Path(__file__).with_name("browser.mjs").read_bytes()
+        elif self.path in ("/browser.mjs", "/cases.mjs"):
+            body = Path(__file__).with_name(self.path[1:]).read_bytes()
             mime = "text/javascript"
         elif self.path.startswith("/package/"):
             target = (PACKAGE / self.path.removeprefix("/package/")).resolve()
@@ -45,5 +46,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--package", type=Path, default=PACKAGE)
+    args = parser.parse_args()
+    PACKAGE = args.package.resolve()
+    assert (PACKAGE / "dist/index.js").is_file()
     print(json.dumps({"port": 18846, "actual_policy": POLICY, "candidate_policy": CANDIDATE}), flush=True)
     ThreadingHTTPServer(("127.0.0.1", 18846), Handler).serve_forever()
