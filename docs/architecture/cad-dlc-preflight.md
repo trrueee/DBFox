@@ -4,7 +4,7 @@
 >
 > 状态：草案
 >
-> 最后核验：2026-09-06
+> 最后核验：2026-09-07
 >
 > 适用范围：`dbfox.cad` Lead 的实现前选型；尚未选择或安装产品内核
 
@@ -52,3 +52,17 @@ WASM输入是合法空模块的8个字节 `[0,97,115,109,1,0,0,0]`，可以排�
 [JSCAD 官方 primitives](https://jscad.app/docs/module-modeling_primitives.html)提供 roundedCuboid 等圆角基本体；基本体带圆角不能证明任意布尔结果上的边倒圆角、尺寸约束或可编辑 B-Rep。该方案仍需对原始功能逐项验收，不能以“纯 JavaScript 可加载”缩减原始 CAD 目标。
 
 本机已有 Docker CLI，但本轮实际查询显示 Docker Desktop Linux engine 的命名管道不存在，尚无可用构建 daemon；没有因此宣布无法定制构建，也未安装新工具或更改系统启动设置。后续先恢复已安装的构建环境并固定上游镜像摘要，再做最小可重现建模内核。已确认的 CSP WASM 编译限制仍独立存在，定制构建不解决该限制；是否需要通用、受约束的 Host 扩展，须依据实际能力要求另作架构裁决。
+
+## 2026-09-07 求解器实测：PlaneGCS 发布包不能直接进入产品
+
+调查了 [PlaneGCS 浏览器封装](https://github.com/Salusoft89/planegcs)、[JSketcher 许可源文件](https://github.com/xibyte/jsketcher/blob/main/LICENSE)与 Emscripten 的官方构建选项。JSketcher 的许可含修改贡献与版权转让条款，不能按普通 MIT 依赖直接采用。PlaneGCS 复用 FreeCAD 数值约束求解，当前作为优先验证候选；它并不替代 OpenCascade 的实体建模。
+
+从官方 npm registry 取得 `@salusoft89/planegcs@1.2.0`，校验 SHA-512 后只解包至忽略的输出目录，没有改 package.json/锁文件或执行 lifecycle scripts。对应上游 tag 为 `ee9b156da9827a91a56a888a53520f63d5cffaa6`。WASM 为 508,141 bytes，SHA-256 `039601df53b11cd06d0f8626cd2e9422b07aca31b18db9ba437b7d26cf5594c5`，满足现有单资产上限。npm 元数据写 LGPL-2.0-or-later，而该版本源码头写 2.1-or-later、LICENSE 为 2.1；分发前须固定对应源码、实际许可通知和重建办法，不能只抄 npm 标签。
+
+[可复现实测](../../verification/testkit/cad_solver_probe/README.md)使用未修改的真实 WASM，在 Node 24.13.0 下通过五项数值检验：78×10 mm 约束矩形改成82×10，保留相同点与约束ID，再交替重算200次；65°线段；欠约束自由度为1；互斥78/82尺寸返回失败并定位两条冲突；边长3/4/10三角形返回失败但冲突列表为空。最后一项说明不能把“冲突列表为空”当作成功，失败时不得应用派生解或提交规范模型。
+
+HeadlessChrome152 中又加载同一个发布包：原样 Host CSP 拒绝 WASM；仅在探针页面增加 `wasm-unsafe-eval` 后，WASM阶段可越过原限制，但生成的绑定继续触发 JavaScript `EvalError`，初始化仍失败。两个页面的普通动态求值控制均被拒绝。该结果推翻了“只加 WASM 指令即可使用发布包”的假设；本轮没有修改 Host CSP、SDK或Core。
+
+[Emscripten 官方 DYNAMIC_EXECUTION](https://emscripten.org/docs/tools_reference/settings_reference.html#dynamic-execution)提供禁用动态求值的构建选项；其 Embind AOT 是可调查的编译期优化。下一步应在固定上游源上用正式编译选项重新构建，再复验浏览器，不得手改压缩后 JS、允许 `unsafe-eval`、启用 CSP bypass 或另建私有运行通道。定制几何内核仍需分别证明 extrude/revolve/cut/boolean/fillet、拓扑检查、导出、取消和资源上限。当前结论是“可复用算法已验证，部署候选尚未合格”，不是 CAD 完成。
+
+本次尝试以隐藏方式启动本机已有 Docker Desktop，`docker version` 和 `docker desktop status` 都未返回可用状态，未拉取镜像或开始构建。随后 `docker desktop stop --timeout 30` 报告停止失败；仅终止了本轮启动、路径和启动时间已核对的 Desktop/backend 进程，另两条查询也已中断。未改 WSL、系统启动设置或安装新软件。上游固定源码已保存在忽略的 `output/cad-solver-probe/upstream`，其所需 bindings.cpp 还需按上游生成步骤构建；不把已取得源码或 Node 成功当作重建成功。

@@ -1,0 +1,228 @@
+{
+  "observed_on": "2026-09-07",
+  "scope": "investigation only; not product integration",
+  "results": {
+    "node-result": {
+      "scope": "upstream Node solver only; no DBFox integration, browser CSP, CAD solid or export acceptance",
+      "package": "@salusoft89/planegcs@1.2.0",
+      "node": "v24.13.0",
+      "wasm_bytes": 508141,
+      "wasm_sha256": "039601df53b11cd06d0f8626cd2e9422b07aca31b18db9ba437b7d26cf5594c5",
+      "passed": 5,
+      "diagnostics": [],
+      "results": [
+        {
+          "name": "same_sketch_width_78_to_82",
+          "before": [
+            {
+              "id": "a",
+              "type": "point",
+              "x": 0,
+              "y": 0,
+              "fixed": true
+            },
+            {
+              "id": "b",
+              "type": "point",
+              "x": 78,
+              "y": 0,
+              "fixed": false
+            },
+            {
+              "id": "c",
+              "type": "point",
+              "x": 78,
+              "y": 10,
+              "fixed": false
+            },
+            {
+              "id": "d",
+              "type": "point",
+              "x": 0,
+              "y": 10,
+              "fixed": false
+            },
+            {
+              "id": "bottom",
+              "type": "horizontal_pp",
+              "p1_id": "a",
+              "p2_id": "b"
+            },
+            {
+              "id": "right",
+              "type": "vertical_pp",
+              "p1_id": "b",
+              "p2_id": "c"
+            },
+            {
+              "id": "top",
+              "type": "horizontal_pp",
+              "p1_id": "c",
+              "p2_id": "d"
+            },
+            {
+              "id": "left",
+              "type": "vertical_pp",
+              "p1_id": "d",
+              "p2_id": "a"
+            },
+            {
+              "id": "width",
+              "type": "p2p_distance",
+              "p1_id": "a",
+              "p2_id": "b",
+              "distance": "phone_width"
+            },
+            {
+              "id": "thickness",
+              "type": "p2p_distance",
+              "p1_id": "b",
+              "p2_id": "c",
+              "distance": 10
+            }
+          ],
+          "after": [
+            {
+              "id": "a",
+              "type": "point",
+              "x": 0,
+              "y": 0,
+              "fixed": true
+            },
+            {
+              "id": "b",
+              "type": "point",
+              "x": 82,
+              "y": 0,
+              "fixed": false
+            },
+            {
+              "id": "c",
+              "type": "point",
+              "x": 82,
+              "y": 10,
+              "fixed": false
+            },
+            {
+              "id": "d",
+              "type": "point",
+              "x": 0,
+              "y": 10,
+              "fixed": false
+            },
+            {
+              "id": "bottom",
+              "type": "horizontal_pp",
+              "p1_id": "a",
+              "p2_id": "b"
+            },
+            {
+              "id": "right",
+              "type": "vertical_pp",
+              "p1_id": "b",
+              "p2_id": "c"
+            },
+            {
+              "id": "top",
+              "type": "horizontal_pp",
+              "p1_id": "c",
+              "p2_id": "d"
+            },
+            {
+              "id": "left",
+              "type": "vertical_pp",
+              "p1_id": "d",
+              "p2_id": "a"
+            },
+            {
+              "id": "width",
+              "type": "p2p_distance",
+              "p1_id": "a",
+              "p2_id": "b",
+              "distance": "phone_width"
+            },
+            {
+              "id": "thickness",
+              "type": "p2p_distance",
+              "p1_id": "b",
+              "p2_id": "c",
+              "distance": 10
+            }
+          ],
+          "repeated_solves": 200,
+          "dof": 0,
+          "elapsed_ms": 14.992800000000003
+        },
+        {
+          "name": "angle_65_degrees",
+          "tip": {
+            "id": "tip",
+            "type": "point",
+            "x": 12.67854785224496,
+            "y": 27.18923361109345,
+            "fixed": false
+          },
+          "dof": 0,
+          "elapsed_ms": 0.5450999999999979
+        },
+        {
+          "name": "underconstrained_distance",
+          "dof": 1,
+          "point": {
+            "id": "b",
+            "type": "point",
+            "x": 75.09219048853622,
+            "y": 21.098884511589514,
+            "fixed": false
+          },
+          "elapsed_ms": 0.10829999999999984
+        },
+        {
+          "name": "conflicting_distances",
+          "status": 2,
+          "conflicts": [
+            "width78",
+            "width82"
+          ],
+          "has_conflicts": true,
+          "solution_applied": false,
+          "elapsed_ms": 1.4568000000000012
+        },
+        {
+          "name": "impossible_triangle_3_4_10",
+          "status": 2,
+          "conflicts": [],
+          "solution_applied": false,
+          "elapsed_ms": 0.20379999999999399
+        }
+      ]
+    },
+    "browser-strict": {
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "path": "/strict",
+      "javascript_eval": "EvalError",
+      "ok": false,
+      "error": {
+        "name": "RuntimeError",
+        "message": "Aborted(CompileError: WebAssembly.instantiate(): Compiling or instantiating WebAssembly module violates the following Content Security policy directive because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: \"script-src 'self' dlc-asset:\".). Build with -sASSERTIONS for more info."
+      },
+      "diagnostics": [
+        "wasm streaming compile failed: CompileError: WebAssembly.instantiateStreaming(): Compiling or instantiating WebAssembly module violates the following Content Security policy directive because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: \"script-src 'self' dlc-asset:\".",
+        "falling back to ArrayBuffer instantiation",
+        "failed to asynchronously prepare wasm: CompileError: WebAssembly.instantiate(): Compiling or instantiating WebAssembly module violates the following Content Security policy directive because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: \"script-src 'self' dlc-asset:\".",
+        "Aborted(CompileError: WebAssembly.instantiate(): Compiling or instantiating WebAssembly module violates the following Content Security policy directive because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: \"script-src 'self' dlc-asset:\".)"
+      ]
+    },
+    "browser-wasm-only": {
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "path": "/wasm-only",
+      "javascript_eval": "EvalError",
+      "ok": false,
+      "error": {
+        "name": "EvalError",
+        "message": "Evaluating a string as JavaScript violates the following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script: script-src 'self' dlc-asset: 'wasm-unsafe-eval'\".\n"
+      },
+      "diagnostics": []
+    }
+  }
+}
