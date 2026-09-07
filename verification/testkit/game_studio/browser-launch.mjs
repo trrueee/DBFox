@@ -9,6 +9,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../..');
 const desktop = join(root, 'desktop');
 const directory = resolve(process.argv[2]);
+const rendererPort = Number(process.env.GAME_QA_RENDERER_PORT ?? 5184);
+const cdpPort = Number(process.env.GAME_QA_CDP_PORT ?? 19230);
 const python = process.argv[3] && !process.argv[3].startsWith('--') ? process.argv[3] : 'D:/Project/DBFox/.venv/Scripts/python.exe';
 const require = createRequire(join(desktop, 'package.json'));
 const { preview } = await import(pathToFileURL(require.resolve('vite')).href);
@@ -17,8 +19,8 @@ const env = { ...process.env, DBFOX_RUNTIME_DIR: directory,
   DBFOX_DATABASE_URL: `sqlite:///${join(directory, 'metadata.sqlite').replaceAll('\\', '/')}`,
   DBFOX_TESTING: '1', DBFOX_SYSTEM_DLC_DIR: '', DBFOX_SYSTEM_DLC_MANIFEST: '',
   DBFOX_ALLOW_LOOPBACK_LLM_HTTP: '1',
-  DBFOX_ELECTRON_ENGINE_COMMAND: python, DBFOX_ELECTRON_RENDERER_URL: 'http://127.0.0.1:5184',
-  GAME_QA_CDP_PORT: '19230' };
+  DBFOX_ELECTRON_ENGINE_COMMAND: python, DBFOX_ELECTRON_RENDERER_URL: `http://127.0.0.1:${rendererPort}`,
+  GAME_QA_CDP_PORT: String(cdpPort) };
 delete env.DBFOX_ELECTRON_SMOKE;
 delete env.DBFOX_ELECTRON_DEV_PARENT;
 const prepared = process.argv.includes('--reuse') ? { status: 0 } : spawnSync(python,
@@ -32,7 +34,7 @@ await require('esbuild').build({ entryPoints: [join(desktop, 'main/appProtocol.t
 const { CONTENT_SECURITY_POLICY } = await import(pathToFileURL(join(directory, 'app-policy.mjs')).href);
 process.chdir(desktop);
 const vite = await preview({ root: desktop, configFile: join(desktop, 'vite.config.ts'),
-  preview: { host: '127.0.0.1', port: 5184, strictPort: true,
+  preview: { host: '127.0.0.1', port: rendererPort, strictPort: true,
     headers: { 'Content-Security-Policy': CONTENT_SECURITY_POLICY } } });
 const closePreview = () => new Promise(resolveClose => vite.httpServer.close(resolveClose));
 const electron = spawn(require('electron'), [join(here, 'browser-electron.mjs')],
@@ -40,7 +42,7 @@ const electron = spawn(require('electron'), [join(here, 'browser-electron.mjs')]
 let tail = '';
 electron.stderr.on('data', value => { tail = (tail + value.toString()).slice(-4000); });
 electron.stdout.on('data', () => {});
-console.log(JSON.stringify({ renderer: 'http://127.0.0.1:5184', rendererBuild: 'production dist with verbatim Host CSP', cdp: 'http://127.0.0.1:19230', runtime: directory, electron_pid: electron.pid }));
+console.log(JSON.stringify({ renderer: `http://127.0.0.1:${rendererPort}`, rendererBuild: 'production dist with verbatim Host CSP', cdp: `http://127.0.0.1:${cdpPort}`, runtime: directory, electron_pid: electron.pid }));
 const close = async () => { electron.kill(); await closePreview(); };
 process.once('SIGINT', close);
 process.once('SIGTERM', close);

@@ -1,5 +1,4 @@
-import { useLayoutEffect, type ReactNode } from "react";
-import { usePanelRef } from "react-resizable-panels";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   ResizableHandle,
@@ -23,30 +22,45 @@ export function ConversationWorkspaceLayout({
   conversation,
   dock,
 }: ConversationWorkspaceLayoutProps) {
-  const dockPanelRef = usePanelRef();
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
 
   useLayoutEffect(() => {
-    const panel = dockPanelRef.current;
-    if (!panel) return;
-    if (dockOpen) panel.expand();
-    else panel.collapse();
-  }, [dockOpen, dockPanelRef]);
+    const stage = stageRef.current;
+    if (!stage) return;
+    // Measure the actual stage: navigation changes its width without a window
+    // resize. Keep the same panels mounted so layout changes retain drafts.
+    const measure = () => {
+      const width = stage.getBoundingClientRect().width;
+      if (width > 0) setCompact(width < 420 + 8 + 320);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
+  const conversationHidden = compact && dockOpen;
 
   return (
     <ResizablePanelGroup
       id="conversation-workspace-split"
+      ref={stageRef}
+      data-compact={compact ? "true" : undefined}
       direction="horizontal"
       className="app-v3-stage"
     >
       <ResizablePanel
         id="conversation-workspace-panel"
         className="app-conversation-panel"
-        minSize={420}
+        minSize={compact ? 0 : 420}
+        maxSize={conversationHidden ? 0 : "100%"}
+        inert={conversationHidden}
+        aria-hidden={conversationHidden || undefined}
       >
         {conversation}
       </ResizablePanel>
 
-      {dockOpen && (
+      {dockOpen && !compact && (
         <ResizableHandle
           aria-label="调整工作区宽度"
           className="app-dock-resize-handle"
@@ -56,13 +70,10 @@ export function ConversationWorkspaceLayout({
 
       <ResizablePanel
         id="conversation-dock-panel"
-        panelRef={dockPanelRef}
         className="app-dock-panel"
         defaultSize={dockOpen ? 440 : 44}
-        minSize={320}
-        maxSize="56%"
-        collapsible
-        collapsedSize={44}
+        minSize={dockOpen ? (compact ? "100%" : 320) : 44}
+        maxSize={dockOpen ? (compact ? "100%" : "56%") : 44}
         groupResizeBehavior="preserve-pixel-size"
       >
         {dock}

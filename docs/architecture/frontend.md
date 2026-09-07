@@ -345,3 +345,9 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 | Tokens | `desktop/src/styles/tokens.css` |
 | Appearance contract | `desktop/src/lib/appearance.ts`、`desktop/src/hooks/useTheme.tsx` |
 | Appearance settings | `desktop/src/features/settings/AppearanceSettingsPanel.tsx` |
+
+## 工作区实际宽度与收起
+
+`ConversationWorkspaceLayout` 在 Host 的真实 stage 边界测量可用宽度。低于 748px（对话 420 + 分隔条 8 + Dock 320）时，打开的 Dock 独占 stage，隐藏的对话保持挂载并设置 `inert`/`aria-hidden`；收起 Dock 后显示对话和 44px 工作区入口。窗口或导航宽度恢复后自动重新分栏，同一个组件树不因布局模式切换而卸载。
+
+宽屏分隔条复用 `react-resizable-panels` 的指针和键盘交互，Dock 在 320px 最小宽度停住。收起只由已有 Host 工作区按钮更新 `workspaceStore`，不再让 Panel 自行 collapse 后留下仍为 open 的 store。无需新的持久布局状态、DLC 特例或 SDK 合同。实际 Electron 作者矩阵见 [工作区布局验证](../quality/workspace-compact-layout-verification.md)。
