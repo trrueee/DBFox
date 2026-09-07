@@ -697,7 +697,7 @@
     },
     {
       "dlc_id": "dbfox.game",
-      "status": "implementation",
+      "status": "independent_verification",
       "scheduled": true,
       "wave": 1,
       "branch": "creative/game",
@@ -715,24 +715,46 @@
       "bench": [],
       "architecture_review": null,
       "known_blockers": [
-        "Independent Verification and Adversarial review pending; real Pixel-to-Game composition on current Core pending. Author results are not final acceptance."
+        "Independent native rendering/interaction verification and Adversarial review pending; final batch/composed-world acceptance pending. Game remains outside root product branch until its independent gates complete."
       ],
       "composition_candidates": [],
       "worktree": "D:/Project/DBFox-worktrees/creative-game",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-game.md",
-      "phase": "author_native_candidate_preparing_independent_review",
+      "phase": "independent_composition_passed_native_and_red_team_pending",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
       "integrated": false,
       "preflight": "docs/architecture/game-dlc-preflight.md",
       "role_note": "Formally reassigned after Shader author commit4df3568d; full Lead scope retained; no independent review claimed.",
-      "implementation_progress": "Author reports full signed package, 13 capability bench cases, native production Agent/playtest, immutable Artifact download, Studio edit/undo. Not independently accepted; candidate checkpoint pending.",
+      "implementation_progress": "Author complete signed candidate committed; native author processes closed with runtime/evidence retained. Director independently verified backend/frontend fixtures and actual signed Pixel-to-Game durable composition in a separate current-Core worktree. Full independent native verification and red team remain pending.",
       "backend_progress": {
         "status": "author_verification_reported",
         "reported": "32 backend tests; full signed package used in author gates; native 8-call Agent create/design/playtest/fix/playtest/export loop reported. Root independent verification pending."
       },
-      "candidate_commit": "f54950ca",
+      "candidate_commit": "737a1f1c72ca99ab350c47851ee5d5948b30f576",
       "candidate_merged": false,
-      "handoff": "docs/quality/creative-handoff/game-author-handoff.md"
+      "handoff": "docs/quality/creative-handoff/game-author-handoff.md",
+      "candidate_followup_commit": "031a5f11a7433ac94feda714421bd588f2002c27",
+      "independent_verification": {
+        "worktree": "D:/Project/DBFox-worktrees/creative-game-verification",
+        "branch": "codex/game-verification",
+        "commit": "d1f48ea4",
+        "report": "docs/quality/pixel-game-composition-verification.md",
+        "core_baseline": "94294767",
+        "backend_and_composition_passed": 33,
+        "frontend_passed": 7,
+        "engineering_passed": 45,
+        "composition": {
+          "signed_owners": 2,
+          "tool_calls": 8,
+          "provider_requests": 9,
+          "prompt_estimate_peak": 16544,
+          "default_prompt_budget": 32768,
+          "model_boundary": "scripted external HTTP only",
+          "source_immutability_and_disable_verified": true,
+          "native_rendering_verified": false
+        },
+        "final_acceptance": false
+      }
     },
     {
       "dlc_id": "dbfox.comic",

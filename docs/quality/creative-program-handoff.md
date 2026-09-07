@@ -33,7 +33,7 @@
 | Voxel | 产品与独立验收已合入；64³/128³、历史 chunk、真实下载与生命周期有证据 | 保持通过；参加组合与批次审计 |
 | Pixel | 实现、独立 Verification、49 项新增红队攻击及修复已合入；原组合预算问题已有原生 tool search 修复与确定性组合证明 | integrated；参加 Pixel→Game 真组合和最终批次验收，付费在线模型质量未测 |
 | Shader | CSS 修复 `88fcb110` 和独立原生窄/宽 Artifact、不可变下载证据 `df6a91fe` 已合入 | integration_verification；保留质量报告中的文件选择器、安装包及最终批次范围限制 |
-| Game | 作者报告完整签名包、13项能力 bench、原生 Agent/playtest、下载和 Studio 编辑/撤销已通过；候选整理中 | 尚未独立验收；需非作者检查、红队和 Pixel→Game 真组合，不能仅据作者报告计完成 |
+| Game | 作者候选 `737a1f1c` 已提交；独立树 `d1f48ea4` 已通过真实签名Pixel→Game耐久组合、后端/组合33项、前端7项、工程45项 | independent_verification；非作者原生渲染/交互、红队和最终组合仍待完成，根产品分支尚未集成Game |
 | Comic | SVG/HTML真实排版探针完成；DLC自有规范模型、SQLite与增量操作正在实现 | 完整 Workbench、生产测试、Story组合、独立验收仍未完成 |
 | CAD | 真实 PlaneGCS 数值探针5项通过，发布包浏览器加载失败已复现，无完整产品 | 固定上游重新构建、几何内核及发布边界待解决；详见 CAD preflight 和复现脚本 |
 | Animation | 作者报告模型/SQLite初版、真实Three库5项测试通过，包括20,000 keys/10,000 seeks | Tools、Representation、Workbench、Scene组合和独立验收仍未完成 |
