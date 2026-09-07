@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "program": "DBFox Creative DLC",
-  "updated_at": "2026-09-06",
+  "updated_at": "2026-09-07",
   "baseline": {
     "head": "2dc62653",
     "includes_preexisting_working_tree_changes": true,
@@ -331,7 +331,7 @@
     },
     {
       "dlc_id": "dbfox.shader",
-      "status": "verification",
+      "status": "integration_verification",
       "scheduled": true,
       "wave": 1,
       "branch": "creative/shader",
@@ -463,12 +463,12 @@
           {
             "role": "Verification Engineer",
             "agent": "/root/pixel_workbench",
-            "status": "active"
+            "status": "completed_scoped_evidence"
           },
           {
             "role": "Adversarial Reviewer",
             "agent": "/root/voxel_lead/domain_architect",
-            "status": "active",
+            "status": "completed_scoped_evidence",
             "must_not_implement": true
           }
         ],
@@ -476,8 +476,7 @@
         "agent": "/root/shader_architect"
       },
       "known_blockers": [
-        "CSS-only cd8c94a7 independent narrow/wide Artifact layout verification is unfinished and the CSS patch is not merged into root. User paused further work.",
-        "Default-budget multi-DLC composition and final program audit remain open."
+        "Final program audit remains open; native PNG chooser and human Save-dialog destination smoke are still unverified as scoped in the independent report."
       ],
       "composition_candidates": [
         "dbfox.music-visual",
@@ -578,11 +577,32 @@
       },
       "adversarial_agent": "/root/voxel_lead/domain_architect",
       "candidate_merged": true,
-      "root_commit": "e4732e46"
+      "root_commit": "e4732e46",
+      "native_artifact_layout": {
+        "status": "independently_verified",
+        "date": "2026-09-07",
+        "product_css_commit": "88fcb110",
+        "evidence_commit": "df6a91fe",
+        "narrow_client_scroll": [
+          319,
+          319
+        ],
+        "wide_client_scroll": [
+          1440,
+          1440
+        ],
+        "immutable_json_bytes": 1434,
+        "report": "docs/quality/shader-independent-verification.md"
+      },
+      "composition_gate": {
+        "root_commit": "e2a2c69f",
+        "result": "Four signed owner document workflow passed; this composition does not re-test GPU.",
+        "evidence": "docs/quality/creative-dlc-composition-verification.md"
+      }
     },
     {
       "dlc_id": "dbfox.pixel",
-      "status": "integration_verification",
+      "status": "integrated",
       "scheduled": true,
       "wave": 1,
       "branch": "creative/pixel",
@@ -627,9 +647,7 @@
         "evidence": "D:/Project/DBFox-worktrees/creative-pixel/docs/quality/pixel-dlc-evidence.md",
         "scope": "independent architecture only; no product tests yet"
       },
-      "known_blockers": [
-        "Three-owner production factory fails after creating all documents:60 schemas estimate31942 tokens against32768 default; shared bounded tool discovery investigation is active."
-      ],
+      "known_blockers": [],
       "composition_candidates": [],
       "detail_path": "docs/quality/pixel-dlc-evidence.md",
       "worktree": "D:/Project/DBFox-worktrees/creative-pixel",
@@ -670,7 +688,12 @@
         "package_digest": "2b7cd5337f8a847bc1d73dfa047b3b42022fe9f0ace383678161d7ea3b97c6f9"
       },
       "candidate_merged": true,
-      "candidate_root_commit": "118be7fd"
+      "candidate_root_commit": "118be7fd",
+      "composition_gate": {
+        "root_commit": "e2a2c69f",
+        "result": "Three/four signed owners: production SDK/RunLoop/authority/SQLite passed under default32768 budget using supported model protocol; no live-model claim.",
+        "evidence": "docs/quality/creative-dlc-composition-verification.md"
+      }
     },
     {
       "dlc_id": "dbfox.game",
@@ -713,11 +736,11 @@
     },
     {
       "dlc_id": "dbfox.comic",
-      "status": "research",
-      "scheduled": false,
+      "status": "implementation",
+      "scheduled": true,
       "wave": 1,
       "branch": "creative/comic",
-      "lead": null,
+      "lead": "/root/native_search_finish",
       "canonical_model": {
         "candidate": "ComicProject",
         "accepted": false
@@ -736,7 +759,8 @@
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-comic.md",
       "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
-      "preflight": "docs/architecture/comic-dlc-preflight.md"
+      "preflight": "docs/architecture/comic-dlc-preflight.md",
+      "implementation_note": "Resumed from original preflight; real Chromium SVG/HTML vs Konva CJK/emoji/export probe completed. Native SVG/HTML layout selected without a new product dependency. Full product and independent gates remain pending."
     },
     {
       "dlc_id": "dbfox.cad",
@@ -764,15 +788,21 @@
       "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
       "preflight": "docs/architecture/cad-dlc-preflight.md",
-      "deployment_investigation": "Real HeadlessChrome152 under exact appProtocol CSP rejects valid8-byte WASM;streaming separately needs application/wasm MIME. Published Replicad WASM exceeds20MiB. No policy/budget/dependency changes;kernel selection remains open."
+      "deployment_investigation": "Real HeadlessChrome152 under exact appProtocol CSP rejects valid8-byte WASM;streaming separately needs application/wasm MIME. Published Replicad WASM exceeds20MiB. No policy/budget/dependency changes;kernel selection remains open.",
+      "preflight_continuation": {
+        "commit": "5d4d0249",
+        "worktree": "D:/Project/DBFox-worktrees/creative-cad",
+        "evidence": "docs/architecture/cad-dlc-preflight.md",
+        "finding": "Official custom bindings build can reduce kernel size; final feature coverage/uncompressed size/CSP still need validation. Docker CLI installed but daemon was not running."
+      }
     },
     {
       "dlc_id": "dbfox.animation",
-      "status": "research",
-      "scheduled": false,
+      "status": "implementation",
+      "scheduled": true,
       "wave": 1,
       "branch": "creative/animation",
-      "lead": null,
+      "lead": "/root/shader_evidence_finish",
       "canonical_model": {
         "candidate": "AnimationDocument",
         "accepted": false
@@ -792,7 +822,8 @@
       "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
       "preflight": "docs/architecture/animation-dlc-preflight.md",
-      "engine_investigation": "Read-only pinnedThree0.185.1 Node probe:1001keys,exact0/2/4/6/8/0 seek;pausedAction/timeScale semantics;Bezier tangents omitted by nativeclone/toJSON. Product/UI/GPU/independent gates not started."
+      "engine_investigation": "Read-only pinnedThree0.185.1 Node probe:1001keys,exact0/2/4/6/8/0 seek;pausedAction/timeScale semantics;Bezier tangents omitted by nativeclone/toJSON. Product/UI/GPU/independent gates not started.",
+      "implementation_note": "Public Scene Artifact Representation seam verified; canonical timeline/curve and real Three playback implementation in progress; independent gates pending."
     },
     {
       "dlc_id": "dbfox.map",
@@ -1267,11 +1298,17 @@
     },
     {
       "id": "multi-dlc-tool-schema-budget",
-      "status": "investigation",
-      "integrated": false,
+      "status": "independently_reviewed_deterministic_verification_passed",
+      "integrated": true,
       "finding": "Production factory fourth prepare exposes60 schemas estimated31942 tokens against32768 default;system and durable evidence cannot fit.",
       "rejected_experiment": "Pydantic named aliases reduced schemas only to30068;all19 experimental alias changes reverted. No Core budget/schema or DLC contract change applied.",
-      "evidence": "D:/Project/DBFox-worktrees/creative-composition/docs/quality/creative-dlc-composition-verification.md"
+      "evidence": "docs/quality/creative-dlc-composition-verification.md",
+      "solution_candidate": "OpenAI native hosted tool search at provider boundary; complete filtered ToolMaterialization remains execution authority. Old query/select controls removed with recoverable backup.",
+      "verification": "Native SDK+HTTP mock production composition:4 passed26.44s; three-owner peak25198/four-owner32711<=32768; old model budget refusal preserved. Independent security/Coordinator review active. No live-model proof.",
+      "root_commit": "e2a2c69f",
+      "architecture": "docs/architecture/bounded-tool-discovery.md",
+      "independent_review": "docs/quality/native-tool-search-review.md",
+      "remaining_validation": "Live service history truncation/re-discovery and schema changes; actual search quality/cost. Default gpt-4o-mini does not support native tool search."
     }
   ],
   "integration_verification": {
@@ -1280,7 +1317,7 @@
     "status_file_location": "dlcs/program-status.json; docs naming contract intentionally retained",
     "latest_frontend": "70 Pixel/Scene/Voxel passed14.99s;typecheck passed7.02s",
     "creative_worktree": "D:/Project/DBFox-worktrees/creative-composition",
-    "creative_status": "Scene/Voxel integrated; Pixel and Shader accepted product/evidence merged but final integration gates remain open. Default production three-owner schema budget still fails. User paused implementation for documentation handoff.",
+    "creative_status": "Scene/Voxel/Pixel integrated. Shader CSS and independent completed-state layout evidence integrated; scoped native picker/full-program audit remain. Native tool search deterministic protocol/authority/default-budget gates passed and independently reviewed. Game,Comic,Animation implementations active; original20DLC program incomplete.",
     "creative_evidence": "D:/Project/DBFox-worktrees/creative-composition/docs/quality/creative-dlc-composition-verification.md",
     "creative_commit": "36224475",
     "latest_shader": {
@@ -1292,19 +1329,37 @@
       "frontend": 38,
       "frontend_seconds": 10.92,
       "typecheck": "passed",
-      "css_cd8c94a7_included": false
+      "css_cd8c94a7_included": true,
+      "css_root_commit": "88fcb110"
+    },
+    "native_tool_search": {
+      "root_commit": "e2a2c69f",
+      "system": "1047 passed,135 deselected,51 preexisting warnings in752.77s",
+      "final_core": "339 passed,2 deselected in23.18s",
+      "engineering": "45 passed in3.32s",
+      "composition": "4 passed in26.44s",
+      "independent": "6 passed in3.92s;49 related tests re-run in29.15s",
+      "mypy": "3 production files passed",
+      "prompt_estimate_peak": {
+        "three_owners": 25198,
+        "four_owners": 32711
+      },
+      "limits": "No live paid model; full-system run preceded final shorthand estimate fix, covered by subsequent Core/targeted composition runs."
     }
   },
   "execution_status": {
-    "state": "paused_for_user_handoff",
-    "date": "2026-09-06",
-    "scope": "Documentation and checkpoint closeout only; further implementation assigned by user to other AIs",
-    "message": "No full-program completion. Existing work preserved; no automatic continuation, automation, paid API or publishing.",
-    "active_roles": [],
+    "state": "active_implementation",
+    "date": "2026-09-07",
+    "scope": "Complete the original 20 capability DLCs and evidenced compositions, including UI/UX, without domain logic entering Core.",
+    "message": "Full original20DLC goal remains active. Native tool search and Shader Artifact layout checkpoints committed; Game/Comic/Animation continue in isolated worktrees. No paid API, publication or completion gate waiver.",
+    "active_roles": [
+      "Game Lead: /root/game_finish",
+      "Comic Lead: /root/native_search_finish",
+      "Animation Lead: /root/shader_evidence_finish"
+    ],
     "handoff": "docs/quality/creative-program-handoff.md",
     "task_packets": "docs/quality/creative-handoff/task-packets.md",
     "external_worktrees": "D:/Project/DBFox-worktrees",
-    "resume_requires": "A new task assigned by the user to a successor AI",
     "checkpoints": {
       "shader_accepted_product": "8a412cdb",
       "shader_pending_css": "cd8c94a7",
@@ -1314,7 +1369,7 @@
       "pattern_audit_draft": "d6419861",
       "pattern_audit_root_docs": "6331d1a1"
     },
-    "all_workers_stopped": true
+    "all_workers_stopped": false
   },
   "execution_history": [
     {
@@ -1353,6 +1408,11 @@
           "role": "Game DLC Lead after Shader author4df3568d"
         }
       ]
+    },
+    {
+      "state": "active_implementation",
+      "date": "2026-09-07",
+      "reason": "User resumed the complete original 20-DLC program, authorized removing the custom catalog design and implementing the native protocol, and retained Core/DLC boundaries and full acceptance gates."
     }
   ]
 }
