@@ -33,10 +33,10 @@
 | Voxel | 产品与独立验收已合入；64³/128³、历史 chunk、真实下载与生命周期有证据 | 保持通过；参加组合与批次审计 |
 | Pixel | 实现、独立 Verification、49 项新增红队攻击及修复已合入；原组合预算问题已有原生 tool search 修复与确定性组合证明 | integrated；参加 Pixel→Game 真组合和最终批次验收，付费在线模型质量未测 |
 | Shader | CSS 修复 `88fcb110` 和独立原生窄/宽 Artifact、不可变下载证据 `df6a91fe` 已合入 | integration_verification；保留质量报告中的文件选择器、安装包及最终批次范围限制 |
-| Game | 作者候选 `737a1f1c` 已提交；独立树 `d1f48ea4` 已通过真实签名Pixel→Game耐久组合、后端/组合33项、前端7项、工程45项 | independent_verification；非作者原生渲染/交互、红队和最终组合仍待完成，根产品分支尚未集成Game |
-| Comic | SVG/HTML真实排版探针完成；DLC自有规范模型、SQLite与增量操作正在实现 | 完整 Workbench、生产测试、Story组合、独立验收仍未完成 |
+| Game | 作者候选已提交；独立树 `77d1deb5` 完成真实Pixel→Game组合、9项红队和原生编辑/撤销/重启/失败698/胜利3600/下载证据 | 两项真实UI问题正在修：通用Studio切换丢选择、Host窄窗43px；根产品尚未集成 |
+| Comic | 作者完整候选 `196f949f` 已提交，24项测试/13类bench和原生UI有作者证据 | 独立Story→Comic组合与红队进行中；Story授权入口已修 `ffea18d5`，待独立复跑 |
 | CAD | 真实 PlaneGCS 数值探针5项通过，发布包浏览器加载失败已复现，无完整产品 | 固定上游重新构建、几何内核及发布边界待解决；详见 CAD preflight 和复现脚本 |
-| Animation | 作者报告模型/SQLite初版、真实Three库5项测试通过，包括20,000 keys/10,000 seeks | Tools、Representation、Workbench、Scene组合和独立验收仍未完成 |
+| Animation | 完整工具/Representation/Workbench进入作者原生收尾；19后端/5Three/12类生产bench报告通过 | 最后尺标密度修复重签验证，随后独立Scene组合、红队与原生验收 |
 | 第二波 12 项 | 原始范围和任务方向明确，未进入产品实施 | 先完成第一波稳定门禁；不得把空目录/架构稿计作产品 |
 
 Music、Story、Visualization、Data、Workspace、GitHub 是参考能力，不能把它们原有功能计入本次新增 20 项的完成量。用户原有 Story/Workspace 改动也不是本 Agent 的交付。
@@ -63,44 +63,24 @@ Music、Story、Visualization、Data、Workspace、GitHub 是参考能力，不�
 - `e24d2423`：选中/近期/上一轮 Artifact 上下文统一使用既有可用性验证。[证据](artifact-context-availability-verification.md)。
 - `96403e71`：前端 Artifact 引用使用正式 artifactId，移除非法 object.kind。[证据](artifact-reference-admission.md)。
 
-## 4. 最重要的未完成共性问题
+## 4. 当前共性问题与已关闭事项
 
-### 4.1 默认工具 schema 预算 — 真正的生产失败
+### 4.1 工具预算：原生发现修复已合入
 
-工作树 `D:/Project/DBFox-worktrees/creative-composition`，起始 HEAD `36224475`。
+原生产四能力默认32768预算失败保留为回归。根 `e2a2c69f` 已在真实 Provider 边界接入原生 hosted `tool_search`/延迟函数 schema，保留完整 Responses 历史；删除此前未接受的自定义查询/选择控制面，原 Registry、Materialization、Dispatcher、授权与预算职责不变。独立四签名DLC组合峰值32711，默认预算内完成。
 
-复现：
+旧/未知模型仍走完整schema，原默认 `gpt-4o-mini` 容量问题没有被伪称消失；没有擅自替换用户模型。详见 [当前架构](../architecture/bounded-tool-discovery.md)、[独立审查](native-tool-search-review.md) 和 [组合验证](creative-dlc-composition-verification.md)。旧控制面讨论见 archive，仅作历史。
 
-```powershell
-Set-Location D:/Project/DBFox-worktrees/creative-composition
-D:/Project/DBFox/.venv/Scripts/python.exe -m pytest verification/tests/system/test_creative_dlc_composition.py -q --tb=short --show-capture=no
-```
+### 4.2 Shader CSS：修复和 scoped 原生复验已合入
 
-该测试使用实际 `build_product_run_loop`，仅控制外部模型。Scene、Voxel、Pixel 三次创建成功，**第 4 次 prepare** 暴露 60 个完整原生函数 schema，既有估算为 31942 token；默认总预算 32768 容不下系统说明和上下文。它是保留的失败门禁，不是应该删除的“坏测试”。
+根 `88fcb110` 与 `df6a91fe` 已完成Shader自己的grid约束、319/1440窄宽Artifact和1434bytes不可变下载复验。该补丁没有修通用Host布局。质量报告中原生文件选择、Frozen安装器、人工保存对话框、长期heap等边界仍保留。
 
-原联合测试使用手工 RunLoop 和 128000 预算，曾完成 15 请求、12 成功、3 个预期跨 owner 拒绝、12 Artifact 与停启隔离。该结果只能证明那种夹具配置，**不能证明默认产品可用**。
+### 4.3 正在修复的真正阻断
 
-已调查并否决：19 个 Pydantic 命名类型别名试验只降至 30068，仍失败；实验全部撤回。不要增加预算、删用户要求的工具、削弱输入约束或改成自由 JSON。不要新建框架、私有工具执行器或第二 RunLoop。
-
-候选草案：[按需工具发现](../architecture/bounded-tool-discovery.md)。方案仍未实现。独立审查另发现：ControlCommand 当前不计入普通工具调用预算，不贡献进展；ProgressGuard 忽略控制观察，默认停滞限制可能让“查询→选择→执行”在执行前提前终止。因此不能仅增加 discover 控制函数就宣布修复。需要明确有界成本、真正新发现的有限进展、重复调用防护和恢复语义。
-
-独立审计已以源 `d6419861`、根文档提交 `6331d1a1` 保存：[Pattern 审计](creative-platform-pattern-audit.md)、[工具发现独立审议](../archive/bounded-tool-discovery-control-review.md)。它们明确未正式批准实现、未完成全面零泄漏证明；[补充交接](creative-handoff/agent-closeout.md)记录最终停止状态。没有审议闭合前不要改 Frozen Kernel。
-
-### 4.2 Shader 最后 CSS 补丁
-
-已验收产品源 `8a412cdb`；其独立 native 冷签包 digest：`8a14196f82c580313a08ee98d763a1d37f1cd3f9df00c8e279307201275fb361`。红队另行构建的包 digest 不同，因为签名/构建身份不同，不能只凭摘要不同推断产品源码不同。
-
-最后原生截图发现 preview Artifact 完整 pixel hash 撑宽 grid，画布和按钮超出窄 Dock。源补丁 `cd8c94a7` 仅改 `studio.css` 与质量说明：单列 minmax(0,1fr)、直接子 min-width:0、长文本换行。根分支在本轮交接前**未合入**此补丁。
-
-接手只需验证同一历史 preview/document/report 卡片的窄宽布局、内容可达、截图及尺寸，然后按结果合入。不必重跑全部 GPU、所有后端故障与完整压力测试来验证 CSS。原生实例是否关闭、保留 profile 和复现脚本见补充交接；不能假设旧端口仍活跃。
-
-### 4.3 Game 在制品
-
-工作树 `D:/Project/DBFox-worktrees/creative-game`，原基线 `81345258`；新作者检查点见补充交接。**不要从根分支新建空 Game 实现覆盖现有工作。**
-
-已报告事实：32 项作者后端、17 个实际物化 schema 的完整 nullable 参数、正式生产工厂/ActionRun、公开 Pixel frame Representation 消费与 DERIVED_FROM。固定 Phaser 4.2.1 vendor 有许可证、provenance 和 hash 守卫的 VisibilityHandler 销毁修复。真实 runtime 在生产 CSP 下跑出 Canvas/HEADLESS 120 tick 报告一致、3600 tick 胜利条件、同 seed 的 spawn/lifetime/seek 一致，以及同 tick scene_change/finish 顺序和资源释放。
-
-以上属于作者证据。完整 Studio、连续真实 Agent→playtest→observe→修改、规模、独立 Verification/红队均不可跳过。精确文件、命令和剩余操作由作者的 `docs/quality/game-dlc-handoff.md` 维护。
+- **Host窄窗**：696px可用空间容不下420+320+8的分栏最小值，布局库自动折成44px而store仍认为打开。专门作者 `codex/game-host-fix` 在源头修分栏和显示一致性，不让各DLC各自加补丁。
+- **Game作品定位**：初次通用Studio tab切到报告再返回丢游戏选择；数据保留。修复复用既有Host具体作品target/authority，原生和独立复核待完成。
+- **Story授权**：独立真实Story→Comic组合发现自建WorldDescriptor缺SDK授权方法；根 `ffea18d5` 删除重复类型直接复用公开ProjectResourceDescriptor。原12项Story测试通过，组合独立复跑中。[修复说明](story-resource-admission-fix.md)。
+- **CAD内核部署**：数值计算真实通过不等于发布可用，现成PlaneGCS包同时触及Host WASM和动态JS策略限制。需固定上游重新构建并实测；不得放宽生产CSP来冒充部署完成。
 
 ## 5. 最近验证证据，避免重复烧额度
 
@@ -118,16 +98,15 @@ D:/Project/DBFox/.venv/Scripts/python.exe -m pytest verification/tests/system/te
 
 Shader native Choose PNG 被点击，但 Windows computer-use 服务管道两次不可用，没有完成原生文件选择/导入。已有 sampler、codec 与 domain 测试不能替代它。本环境也没有 packaged installer、Frozen Sidecar、保存对话框目标选择或长期 heap 上界的完整证明。明确保留这些边界，不伪造已测结果。
 
-## 6. 后续建议顺序
+## 6. 当前执行顺序
 
-1. 保存并阅读本轮全部检查点；核对根、Shader、Game、composition 的最新 HEAD 和 dirty baseline。
-2. 用小任务结束 Shader CSS 的独立布局验收及精确合入。
-3. 单独完成四能力 Pattern/Architecture Audit，冻结通用工具预算方案；另开实现 AI 修复并由非作者审查。
-4. 让 Game AI 继续在制品，同时可启动独立 Comic AI；CAD 和 Animation 可以先做有界架构研究。
-5. 第一波完整稳定后，实现有真实需求的 Pixel→Game、Scene→Animation、Scene→Game、Story→Comic 联合任务。普通 Agent 编排已经足够时，不额外建 Composition DLC。
-6. 再进入第二波 12 能力，按依赖和用户预算逐项分发；最后执行原始世界级任务。
+1. 收束Game作品定位和Host布局修复，并做独立原生宽窄复核后再集成Game。
+2. 完成Comic独立红队与真实Story组合；接收Animation作者候选后独立验证Scene组合。
+3. 继续CAD固定上游构建、约束求解与几何内核实际部署，不将探针作为CAD产品。
+4. 第一波稳定后扩展Scene→Game、Music→Visual/Game、Map→Story等原始组合；普通Agent编排足够时不新建Composition DLC。
+5. 按依赖进入第二波12能力，最终执行蒸汽朋克狐狸世界任务和整体架构审计。
 
-预算有限时建议每次只派一个明确交付：例如“完成 Shader CSS 验收”，或“Game 完成可编辑 Studio 并交作者验证”。收到可审查代码和证据后再派独立审查。不要让每个 AI 从头重读所有仓库、反复跑全量测试，或只重复写 roadmap。
+每项只重跑变更相关门禁，保留作者与独立证据区分；不重复从头调研已决事项，不用累计测试数推算完成率。
 
 ## 7. 工作区与用户改动保护
 
