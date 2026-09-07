@@ -69,3 +69,11 @@ npx.cmd --offline --package @playwright/cli playwright-cli --session game-engine
 Native schema 调查发现 Host 使用 `pydantic_function_tool` 和 strict=true，所有可选 nullable字段都变为 required。输入仅对声明 default=None 的字段 null归一为省略；canonical Game显式null仍拒绝。测试对全部17个实际materialized schemas与完整字段样例，逐字段验证 nullable默认、省略等价，以及其余字段null拒绝，没有调高默认token预算。
 
 完整 Workbench、完整签名桌面包、真实产品 Phaser playtest、12类 capability bench、10类 stress、示例和独立 Verification/RedTeam 尚未完成。桥报告/Pixel页读取的模拟边界只证明合同，不当作真实浏览器或跨DLC生产执行。Lead 按阶段实际履行 Domain Architect → Backend → Workbench → 作者验证；不能因此记录五个独立 Agent 或冒充独立红队。最后仍由 Director 调度未参与实现的验收者，completion 保持 false。
+
+## 2026-09-07 Dock 定位补丁作者复验
+
+`/root/game_host_fix` 修复独立验收发现的具体问题：库内仅 `setGameId` 会在 Host 切到 Artifact 后丢掉游戏定位。现复用已有 `dockViews.open` 与 `target.object/authority/locator`，创建和库选择打开具体作品标签；主选中实体/场景由 Host 保存定位。没有 Core/SDK/数据库变更、依赖、DLC 镜像 store 或兼容层。表单草稿仍服从 Host 切标签卸载语义，本补丁不宣称跨卸载保留。
+
+完整安装包 digest `7a9b3429174ecbbaa6dbcfe4e9bf5230825a55bf45a38ba65c755a619ba21134`，实际 Electron 43.4.1/生产 Main、Preload、EngineSupervisor、CSP，独立作者 profile。UI 创建 `Host Fix Fox` 并添加狐狸示例到 v2；创建后标题是具体作品名。库选择→选狐狸→60 tick 正式 Playtest→Artifact→具体作品 tab，重新挂载后 Game UUID、v2 和狐狸 Inspector 一致。真实执行结果见 [导航证据](../../verification/testkit/game_studio/evidence/game-navigation.json)，可复验脚本 `browser-game-navigation.cjs`。
+
+新增 React 导航回归覆盖创建/选择后的 Host open，以及带定位的 editor 卸载再挂载；既有 7 个 Game 前端边界测试通过。初轮自动化等待被 overflow 收起的 tab 超时，之后走真实“更多标签”菜单；一次断言误写 `executed_ticks`，按公开合同改为 `ticks_completed`。这些是验证脚本错误，实际 ActionRun 均完成，无产品数据回滚或伪造 report。本节是修复作者证据，最终独立复验仍归 Director。

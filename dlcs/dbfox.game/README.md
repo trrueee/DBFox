@@ -65,3 +65,7 @@ python -m pytest verification/tests/system/test_game_dlc.py -q --tb=short
 ```
 
 5秒 activation lease、20秒单请求 deadline、25秒 Tool timeout；一次 playtest≤7200ticks/1024 input events/512 active runtime entities。超预算明确失败，不悄悄少模拟实体或步数。桥协议测试的模拟报告不证明真实 Phaser execution。当前完整 frontend、生产 Electron、capability bench/stress 和独立 Review 仍待完成。
+
+## 具体作品标签
+
+从游戏库选择或创建游戏会打开以游戏名称命名的独立 Dock 标签。Host 标签保存 Game Resource 定位及主选中实体/场景的 `target.locator`，切到报告或其他工件再返回时重新读取同一游戏和检查对象。定位不冻结编辑器版本，也不增加执行授权。UI 多选集合、未提交表单和播放状态仍为组件内状态；切标签或关闭工作区会沿用 Host 的卸载语义，不把这些内容写进领域数据库或镜像 store。

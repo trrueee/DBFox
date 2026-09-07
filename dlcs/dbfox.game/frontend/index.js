@@ -27,11 +27,11 @@ export function register(host) {
     const status = Object.freeze({ state: 'unavailable', message: errorText(error) });
     activation.executor = { getSnapshot: () => status, subscribe: () => () => {}, reconnect() {}, dispose() {} };
   }
-  function open(projectId, game) {
+  function open(projectId, game, locator) {
     if (controller.signal.aborted) return;
-    host.dockViews.open({ viewType: VIEW, viewKey: `${VIEW}:${projectId}:${game?.id ?? 'library'}`, title: game?.title ?? 'Game Studio', projectId, closeable: true, ...(game ? { target: { type: 'object', object: { kind: GAME_KIND, id: game.id }, authority: { kind: GAME_KIND, id: game.id } } } : {}) });
+    host.dockViews.open({ viewType: VIEW, viewKey: `${VIEW}:${projectId}:${game?.id ?? 'library'}`, title: game?.title ?? 'Game Studio', projectId, closeable: true, ...(game ? { target: { type: 'object', object: { kind: GAME_KIND, id: game.id }, authority: { kind: GAME_KIND, id: game.id }, ...(locator ? { locator } : {}) } } : {}) });
   }
-  const Studio = createStudio(React, host, activation);
+  const Studio = createStudio(React, host, activation, open);
   const ArtifactView = createArtifactView(React, activation, open);
   function Connector({ projectId }) {
     const [games, setGames] = React.useState([]);

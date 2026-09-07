@@ -3,7 +3,7 @@ import { behaviorKinds, componentKinds, createForms, defaultBehavior, defaultSpe
 import { createViewport } from './viewport.js';
 import { survivalOperations } from './presets.js';
 
-export function createStudio(React, host, activation) {
+export function createStudio(React, host, activation, open) {
   const h = React.createElement;
   const { Fields, Spec, RuleFields } = createForms(React);
   const Viewport = createViewport(React);
@@ -11,11 +11,12 @@ export function createStudio(React, host, activation) {
 
   function Studio({ view, context }) {
     const projectId = view.projectId;
-    const [gameId, setGameId] = React.useState(view.target?.type === 'object' ? view.target.object.id : '');
+    const gameId = view.target?.type === 'object' ? view.target.object.id : '';
+    const locator = view.target?.type === 'object' ? view.target.locator ?? '' : '';
     const [library, setLibrary] = React.useState(null);
     const [snapshot, setSnapshot] = React.useState(null);
-    const [sceneId, setSceneId] = React.useState('');
-    const [selection, setSelection] = React.useState([]);
+    const [sceneId, setSceneId] = React.useState(locator.startsWith('scenes/') ? locator.slice(7) : '');
+    const [selection, setSelection] = React.useState(locator.startsWith('entities/') ? [locator.slice(9)] : []);
     const [draft, setDraft] = React.useState(null);
     const [newer, setNewer] = React.useState(null);
     const [loading, setLoading] = React.useState(true);
@@ -38,7 +39,7 @@ export function createStudio(React, host, activation) {
     const [createTitle, setCreateTitle] = React.useState('我的游戏');
     const status = React.useSyncExternalStore(activation.executor.subscribe, activation.executor.getSnapshot);
     const live = React.useRef({ alive: true, busy: false, loading: true, read: null, write: null });
-    Object.assign(live.current, { snapshot, gameId, draft, uncertain });
+    Object.assign(live.current, { snapshot, gameId, draft, uncertain, selection });
     const invoke = React.useCallback((name, input, signal) => host.operations.invoke(name, input, { projectId, signal }), [projectId]);
     const registerCleanup = React.useCallback((callback) => activation.registerCleanup(callback), []);
     const game = snapshot?.document;
@@ -50,7 +51,7 @@ export function createStudio(React, host, activation) {
       setSnapshot(next);
       setPlaying(false); setPreview(null); setInputs([]); setHistory(null); setDiff(null);
       setSelection((ids) => ids.filter((id) => next?.document.entities.some((item) => item.id === id)));
-      setSceneId((id) => next?.document.scenes.some((item) => item.id === id) ? id : next?.document.initial_scene_id ?? '');
+      setSceneId((id) => next?.document.entities.find((item) => item.id === live.current.selection?.[0])?.scene_id ?? (next?.document.scenes.some((item) => item.id === id) ? id : next?.document.initial_scene_id ?? ''));
       setNewer(null); setUncertain(false); live.current.uncertain = false;
     }, []);
 
@@ -116,7 +117,7 @@ export function createStudio(React, host, activation) {
         const result = await invoke(name, request, controller.signal);
         if (!live.current.alive || controller.signal.aborted) return false;
         cancelDraft();
-        if (result.game.id !== gameId) { setGameId(result.game.id); }
+        if (result.game.id !== gameId) { open(projectId, result.game); }
         else accept(await readGame(invoke, result.game.id, controller.signal));
         if (controller.signal.aborted || !live.current.alive) return false;
         setLibrary((old) => old ? { ...old, library_version: result.library_version, items: [...old.items.filter((item) => item.id !== result.game.id), result.game] } : old);
@@ -129,6 +130,11 @@ export function createStudio(React, host, activation) {
         }
         return false;
       } finally { if (live.current.write === controller) live.current.write = null; live.current.busy = false; if (live.current.alive) setBusy(false); }
+    }
+
+    function select(ids, nextScene = sceneId) {
+      setSelection(ids); setSceneId(nextScene);
+      open(projectId, snapshot.revision, ids.length ? `entities/${ids[0]}` : `scenes/${nextScene}`);
     }
 
     const apply = (operations, version) => write('games.apply', { operations }, version);
@@ -229,7 +235,7 @@ export function createStudio(React, host, activation) {
 
     return h('section', { className: 'dbfox-game game-studio', 'aria-label': 'Game Studio' },
       h('header', { className: 'game-header' }, h('div', null, h('div', { className: 'game-eyebrow' }, 'GAME STUDIO'), h('h2', null, game?.title ?? '创作一个可以玩的世界')), h('div', { className: 'game-button-row' }, snapshot && h('span', { className: 'game-badge' }, `v${snapshot.revision.version}${snapshot.revision.deleted ? ' · 已删除' : ''}`), button('刷新', refresh, busy), button('导出工件', () => action('games.export'), locked || !snapshot))),
-      h('div', { className: 'game-library-row' }, h('label', null, '游戏 ', h('select', { 'aria-label': '选择游戏', value: gameId, disabled: busy || Boolean(draft), onChange: (event) => { setPlaying(false); setSelection([]); setGameId(event.target.value); } }, h('option', { value: '' }, '游戏库'), library?.items.map((item) => h('option', { key: item.id, value: item.id }, item.title + (item.deleted ? ' · 已删除' : ''))))), h('span', { className: 'game-executor', 'data-state': status.state }, status.message), status.state === 'unavailable' && button('连接执行器', () => activation.executor.reconnect())),
+      h('div', { className: 'game-library-row' }, h('label', null, '游戏 ', h('select', { 'aria-label': '选择游戏', value: gameId, disabled: busy || Boolean(draft), onChange: (event) => { setPlaying(false); open(projectId, library.items.find((item) => item.id === event.target.value)); } }, h('option', { value: '' }, '游戏库'), library?.items.map((item) => h('option', { key: item.id, value: item.id }, item.title + (item.deleted ? ' · 已删除' : ''))))), h('span', { className: 'game-executor', 'data-state': status.state }, status.message), status.state === 'unavailable' && button('连接执行器', () => activation.executor.reconnect())),
       error && h('div', { className: 'game-error', role: 'alert' }, error), notice && h('div', { className: 'game-notice', role: 'status' }, notice),
       newer && h('div', { className: 'game-warning', role: 'status' }, `检测到外部 v${newer}，已保留草稿并暂停预览。`, button('载入新版本（保留草稿）', refresh, busy)),
       loading && h('div', { className: 'game-loading', role: 'status' }, '正在读取固定版本与图片…'),
@@ -238,15 +244,15 @@ export function createStudio(React, host, activation) {
         snapshot.revision.deleted && h('div', { className: 'game-warning' }, '此游戏已删除。历史内容仍可查看；选择一个未删除的历史版本恢复。', button('查看历史', () => { setBottom('history'); void readHistory(); }, busy)),
         h('div', { className: 'game-workspace' },
           h('aside', { className: 'game-library-panel' }, h('nav', { className: 'game-tabs', 'aria-label': '游戏对象' }, [['entities', '实体'], ['behaviors', '行为'], ['rules', '规则'], ['variables', '变量'], ['assets', '图片']].map(([id, label]) => button(label, () => setTab(id), false, { key: id, 'aria-pressed': tab === id }))),
-            tab === 'entities' && h(React.Fragment, null, h('div', { className: 'game-button-row' }, button('+ 实体', () => entityDraft('rect'), locked), button('+ 狐狸', () => entityDraft('fox'), locked), button('+ 场景', () => edit({ kind: 'scene', spec: { name: '新场景', width: 800, height: 600, background: '#152333', gravity_x: 0, gravity_y: 0 } }), locked)), h(host.ui.Tree, { rootItem: tree, ariaLabel: '场景与实体', getItemId: (item) => item.id, getItemLabel: (item) => item.name, getItemChildren: (item) => item.children, defaultExpandedIds: [game.id, sceneId], selectedIds: selection, onItemSelect: (item) => { if (draft) return; if (item.node === 'entity') { setSceneId(item.scene_id); setSelection([item.id]); } else if (item.node === 'scene') { setSceneId(item.id); setSelection([]); } }, renderItemMeta: (item) => item.node === 'entity' && !item.enabled ? h('span', { className: 'game-badge' }, '模板') : null })),
+            tab === 'entities' && h(React.Fragment, null, h('div', { className: 'game-button-row' }, button('+ 实体', () => entityDraft('rect'), locked), button('+ 狐狸', () => entityDraft('fox'), locked), button('+ 场景', () => edit({ kind: 'scene', spec: { name: '新场景', width: 800, height: 600, background: '#152333', gravity_x: 0, gravity_y: 0 } }), locked)), h(host.ui.Tree, { rootItem: tree, ariaLabel: '场景与实体', getItemId: (item) => item.id, getItemLabel: (item) => item.name, getItemChildren: (item) => item.children, defaultExpandedIds: [game.id, sceneId], selectedIds: selection, onItemSelect: (item) => { if (draft) return; if (item.node === 'entity') { select([item.id], item.scene_id); } else if (item.node === 'scene') { select([], item.id); } }, renderItemMeta: (item) => item.node === 'entity' && !item.enabled ? h('span', { className: 'game-badge' }, '模板') : null })),
             tab === 'behaviors' && h(React.Fragment, null, button('+ 行为', () => edit({ kind: 'behavior', enabled: true, spec: defaultBehavior('player_control', game, selected?.id) }), locked || !game.entities.length), game.behaviors.map((item) => h('section', { key: item.id, className: 'game-list-card' }, h('strong', null, names[item.spec.kind]), h('span', null, game.entities.find((entity) => entity.id === item.spec.entity_id)?.name), h('div', { className: 'game-button-row' }, button(item.enabled ? '已启用' : '已停用', () => apply([{ kind: 'behavior_modify', behavior_id: byId(item.id), behavior: inputSpec(item.spec), enabled: !item.enabled }]), locked), button('编辑', () => edit({ kind: 'behavior', id: item.id, spec: item.spec, enabled: item.enabled }), locked), button('删除', () => apply([{ kind: 'object_remove', object_id: byId(item.id) }]), locked))))),
             tab === 'rules' && h(React.Fragment, null, h('p', { className: 'game-help' }, '规则按下列顺序运行；首个结束动作拥有该 tick。'), button('+ 规则', () => edit({ kind: 'rule', enabled: true, spec: { name: '新规则', scene_id: sceneId, trigger: defaultSpec('elapsed_tick', game), actions: [defaultSpec('finish', game)] } }), locked), game.rules.map((item, index) => h('section', { key: item.id, className: 'game-list-card' }, h('strong', null, `${index + 1}. ${item.spec.name}`), h('span', null, names[item.spec.trigger.kind]), h('div', { className: 'game-button-row' }, button(item.enabled ? '已启用' : '已停用', () => apply([{ kind: 'rule_modify', rule_id: byId(item.id), rule: inputSpec(item.spec), enabled: !item.enabled }]), locked), button('编辑', () => edit({ kind: 'rule', id: item.id, spec: item.spec, enabled: item.enabled }), locked), button('上移', () => { const ids = game.rules.map((rule) => byId(rule.id)); [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]]; void apply([{ kind: 'rule_reorder', rule_ids: ids }]); }, locked || index === 0), button('删除', () => apply([{ kind: 'object_remove', object_id: byId(item.id) }]), locked))))),
             tab === 'variables' && h(React.Fragment, null, button('+ 变量', () => edit({ kind: 'variable', spec: { name: 'score', value_type: 'int', initial: 0 } }), locked), game.variables.map(({ id, ...spec }) => h('section', { key: id, className: 'game-list-card' }, h('strong', null, spec.name), h('span', null, `${spec.value_type} · 初始 ${spec.initial} · 预览 ${preview?.variables[id] ?? spec.initial}`), button('编辑', () => edit({ kind: 'variable', id, spec }), locked), button('删除变量及依赖规则', () => apply([{ kind: 'object_remove', object_id: byId(id), cascade: true }]), locked)))),
             tab === 'assets' && h(React.Fragment, null, button('导入 PNG', upload, locked), h('p', { className: 'game-help' }, '最多 512 × 512；图片保存在正式版本中。Agent 也可显式读取 Pixel 工件后导入。'), game.assets.map((asset) => h('section', { key: asset.id, className: 'game-list-card' }, h('strong', null, asset.name), h('span', null, `${asset.width} × ${asset.height}`), asset.source && h('span', null, '来源：Pixel 固定版本 ' + asset.source.source_version), button('询问 Agent', () => context.onAsk(referenceFor(snapshot, asset, 'asset'))), button('删除图片及依赖', () => apply([{ kind: 'object_remove', object_id: byId(asset.id), cascade: true }]), locked)))),
           ),
           h('main', { className: 'game-preview-panel' },
-            h('div', { className: 'game-preview-toolbar' }, h('label', null, '场景 ', h('select', { 'aria-label': '预览场景', value: sceneId, disabled: busy || Boolean(draft), onChange: (event) => { setPlaying(false); setSelection([]); setSceneId(event.target.value); } }, game.scenes.map((scene) => h('option', { key: scene.id, value: scene.id }, scene.name)))), h('div', { className: 'game-button-row' }, button(playing ? '暂停' : '播放', () => setPlaying(!playing), busy || Boolean(draft) || uncertain || preview?.outcome && preview.outcome !== 'running', { className: 'game-primary' }), button('单步', () => setStepKey((value) => value + 1), busy || playing || Boolean(draft)), button('重置', () => { setPlaying(false); setResetKey((value) => value + 1); }, busy))),
-            h(Viewport, { snapshot, sceneId, selection, busy: busy || Boolean(draft) || uncertain || Boolean(newer) || snapshot.revision.deleted, playing, setPlaying, seed, resetKey, stepKey, onState: setPreview, onInputs: setInputs, onError: setError, onSelect: setSelection, onMove: (ids, dx, dy) => apply([{ kind: 'entities_transform', entity_ids: ids.map(byId), dx, dy }]), registerCleanup }),
+            h('div', { className: 'game-preview-toolbar' }, h('label', null, '场景 ', h('select', { 'aria-label': '预览场景', value: sceneId, disabled: busy || Boolean(draft), onChange: (event) => { setPlaying(false); select([], event.target.value); } }, game.scenes.map((scene) => h('option', { key: scene.id, value: scene.id }, scene.name)))), h('div', { className: 'game-button-row' }, button(playing ? '暂停' : '播放', () => setPlaying(!playing), busy || Boolean(draft) || uncertain || preview?.outcome && preview.outcome !== 'running', { className: 'game-primary' }), button('单步', () => setStepKey((value) => value + 1), busy || playing || Boolean(draft)), button('重置', () => { setPlaying(false); setResetKey((value) => value + 1); }, busy))),
+            h(Viewport, { snapshot, sceneId, selection, busy: busy || Boolean(draft) || uncertain || Boolean(newer) || snapshot.revision.deleted, playing, setPlaying, seed, resetKey, stepKey, onState: setPreview, onInputs: setInputs, onError: setError, onSelect: select, onMove: (ids, dx, dy) => apply([{ kind: 'entities_transform', entity_ids: ids.map(byId), dx, dy }]), registerCleanup }),
             h('div', { className: 'game-preview-stats' }, h('span', null, `${((preview?.ticks_completed ?? 0) / 60).toFixed(1)} 秒 / tick ${preview?.ticks_completed ?? 0}`), h('span', null, `${preview?.entities.length ?? 0} 个运行实体`), h('span', null, preview?.outcome === 'running' ? '本地预览' : preview?.reason ?? 'Phaser 4.2.1')),
             !game.entities.length && h('div', { className: 'game-empty-prompt' }, h('h3', null, '让狐狸躲开史莱姆'), h('p', null, '添加可直接编辑的角色、生成器、生命与 60 秒获胜规则。'), button('添加狐狸生存示例', () => apply(survivalOperations(sceneId)), locked, { className: 'game-primary' })),
             h('div', { className: 'game-playtest-row' }, h('label', null, '种子 ', h('input', { type: 'number', min: 0, max: 2147483647, value: seed, disabled: busy || playing, 'aria-label': '随机种子', onChange: (event) => { const value = Number(event.target.value); if (Number.isInteger(value) && value >= 0 && value <= 2147483647) setSeed(value); } })), h('label', null, '时长 / tick ', h('input', { type: 'number', min: 1, max: 7200, value: ticks, 'aria-label': 'Playtest tick 数', onChange: (event) => { const value = Number(event.target.value); if (Number.isInteger(value) && value >= 1 && value <= 7200) setTicks(value); } })), button('运行正式 Playtest', () => action('games.playtest'), locked || status.state !== 'ready', { className: 'game-primary' })), h('p', { className: 'game-help' }, `正式测试从启动场景运行 ${ticks} tick，使用当前种子和 ${inputs.filter((item) => item.tick < ticks).length} 条预览输入；结果保存为耐久工件。`),
