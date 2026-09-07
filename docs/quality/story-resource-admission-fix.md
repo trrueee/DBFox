@@ -20,6 +20,6 @@
 
 ## 验证
 
-根工作区执行 `python -m pytest verification/tests/system/test_story_dlc.py -q --tb=short`，12项通过；修改文件 pyflakes 通过。独立组合原失败证据由 `creative-comic-verification` 的 `test_story_comic_composition.py` 保留，修复后的组合结论待独立验证员回传，不预报通过。
+根工作区执行 `python -m pytest verification/tests/system/test_story_dlc.py -q --tb=short`，12项通过；修改文件 pyflakes 通过。独立组合原失败证据由 `creative-comic-verification` 的 `test_story_comic_composition.py` 保留。修复后的真实签名 Story→Comic 组合已独立通过：12次工具调用、13次模型边界HTTP、10个Comic Artifact，估算峰值19827/32768；缺失或其他世界授权拒绝、无world_id输入的关系提案，以及每次Invocation的精确Story scope均有断言。独立Comic/Story新增9项和工程45项通过，已分别合入根 `ac15914b` 与 `32693b8e` 的后端及原生报告。Story没有注册Representation；组合消费现有公开章节Tool观察，不伪造新的Story Representation或DERIVED_FROM。
 
 Story store 原有496行新增/59行删除的未提交改动保持原样。此次只对 HEAD 中也已存在的资源描述类型作精确 index 补丁（3行新增/16行删除），没有把既有章节持久化工作一并提交。修复前完整文件备份在任务外部 recovery 目录，可逐项核对。

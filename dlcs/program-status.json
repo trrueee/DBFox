@@ -29,8 +29,8 @@
       "test_files_passed": 10,
       "duration_seconds": 12.98
     },
-    "tracked_changes_unchanged_since_start": true,
-    "baseline_verification_note": "39 actual preexisting user files were byte-verified before new work. Story store subsequently received the precise descriptor fix ffea18d5; original 496 additions/59 deletions remain uncommitted and preserved. Other baseline files remain outside task commits."
+    "tracked_changes_unchanged_since_start": false,
+    "baseline_verification_note": "2026-09-07: 36 of 39 actual preexisting user files remain byte-identical to recovery baseline. Three Story files have precise source fixes ffea18d5/d4c98a6b; all unrelated preexisting changes remain uncommitted. Append-tool resource declaration is within preexisting uncommitted class, not claimed as a committed feature. Eight task-owned recovery paths are excluded from this user-baseline audit."
   },
   "policy": {
     "max_concurrent_agents": 4,
@@ -697,49 +697,90 @@
     },
     {
       "dlc_id": "dbfox.game",
-      "status": "independent_verification",
+      "status": "integrated",
       "scheduled": true,
       "wave": 1,
       "branch": "creative/game",
       "lead": "/root/game_finish",
       "canonical_model": {
-        "candidate": "GameProject",
-        "accepted": false
+        "candidate": "GameProject with scenes, entities/components, behaviors, rules, variables and immutable RGBA assets",
+        "accepted": true
       },
-      "resource_kinds": [],
-      "tools": [],
-      "artifacts": [],
-      "representations": [],
-      "frontend_views": [],
-      "tests": [],
-      "bench": [],
-      "architecture_review": null,
-      "known_blockers": [
-        "Initial generic Game Studio tab loses selected game after opening Artifact; author fix in codex/game-host-fix.",
-        "Shared Host available width below split minima produces 43px false-open Dock; source fix and independent native resize verification pending.",
-        "Final batch/composed-world acceptance pending; Game product not integrated into root."
+      "resource_kinds": [
+        "dbfox.game.library",
+        "dbfox.game.project"
       ],
-      "composition_candidates": [],
+      "tools": [
+        "game_create",
+        "game_inspect",
+        "game_modify",
+        "game_diff",
+        "game_undo",
+        "game_delete",
+        "game_export",
+        "scene_create",
+        "entity_create",
+        "entity_delete",
+        "component_add",
+        "component_modify",
+        "behavior_create",
+        "rule_create",
+        "variable_create",
+        "playtest",
+        "asset_import"
+      ],
+      "artifacts": [
+        "dbfox.game.project-revision",
+        "dbfox.game.playtest-report"
+      ],
+      "representations": [
+        "dbfox.game.document.v1",
+        "dbfox.game.playtest.v1"
+      ],
+      "frontend_views": [
+        "dbfox.game.workbench",
+        "dbfox.game.artifact"
+      ],
+      "tests": {
+        "root_selected_game_comic_story": "31 passed in combined 76-case run; sole failure was documentation header contract, corrected and all45 engineering rerun passed3.24s",
+        "production_build": "passed at32693b8e"
+      },
+      "bench": {
+        "cases": 13,
+        "report": "docs/quality/game-dlc-evidence.md",
+        "scope": "author deterministic production RunLoop; not live model"
+      },
+      "architecture_review": {
+        "status": "accepted",
+        "document": "docs/architecture/game-dlc.md"
+      },
+      "known_blockers": [],
+      "composition_candidates": [
+        "dbfox.pixel-game",
+        "dbfox.scene-game"
+      ],
       "worktree": "D:/Project/DBFox-worktrees/creative-game",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-game.md",
-      "phase": "independent_native_and_red_team_passed_ui_fixes_pending",
+      "phase": "integrated_after_independent_native_composition_and_red_team",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
-      "integrated": false,
+      "integrated": true,
       "preflight": "docs/architecture/game-dlc-preflight.md",
       "role_note": "Formally reassigned after Shader author commit4df3568d; full Lead scope retained; no independent review claimed.",
-      "implementation_progress": "Independent actual signed Pixel-to-Game composition, nine backend red-team attacks and real Electron/Phaser edit/undo/restart/loss/win/immutable-download checks passed. Two confirmed UI issues remain under author repair.",
+      "implementation_progress": "Root integrated product, independent Pixel composition, nine signed red-team attacks and actual production Electron/Phaser evidence. Game navigation and shared Host compact defects independently closed; final full-program acceptance remains pending.",
       "backend_progress": {
-        "status": "author_verification_reported",
-        "reported": "32 backend tests; full signed package used in author gates; native 8-call Agent create/design/playtest/fix/playtest/export loop reported. Root independent verification pending."
+        "status": "author_and_independent_verified",
+        "author_passed": 32,
+        "independent_red_team_passed": 9,
+        "real_pixel_composition_passed": 1
       },
       "candidate_commit": "737a1f1c72ca99ab350c47851ee5d5948b30f576",
-      "candidate_merged": false,
+      "candidate_merged": true,
       "handoff": "docs/quality/creative-handoff/game-author-handoff.md",
       "candidate_followup_commit": "031a5f11a7433ac94feda714421bd588f2002c27",
       "independent_verification": {
         "worktree": "D:/Project/DBFox-worktrees/creative-game-verification",
         "branch": "codex/game-verification",
-        "commit": "77d1deb5",
+        "commit": "ce891255",
         "report": "docs/quality/pixel-game-composition-verification.md",
         "core_baseline": "94294767",
         "backend_and_composition_passed": 33,
@@ -773,60 +814,141 @@
             4112,
             4338
           ],
-          "known_ui_defects": 2,
-          "final_acceptance": false
+          "known_ui_defects": 0,
+          "final_acceptance": false,
+          "ui_closure_commit": "383d07cf",
+          "updated_package_digest": "39abf5cf53ef5f2c70356af892f3d5230a87faf9cee62e4a3d3c0a948468c054"
         }
       },
       "ui_fix_worktree": "D:/Project/DBFox-worktrees/creative-game-host-fix",
-      "ui_fix_lead": "/root/game_host_fix"
+      "ui_fix_lead": "/root/game_host_fix",
+      "integration": {
+        "product": "b3c194da",
+        "navigation": "3612db26",
+        "host_layout": "d1563f55",
+        "tsx_build": "6561704a",
+        "independent_closure": "383d07cf",
+        "status": "scoped gates passed; full-program final acceptance pending"
+      },
+      "detail_path": "dlcs/dbfox.game/program-status.json"
     },
     {
       "dlc_id": "dbfox.comic",
-      "status": "independent_verification",
+      "status": "integrated",
       "scheduled": true,
       "wave": 1,
       "branch": "creative/comic",
       "lead": "/root/native_search_finish",
       "canonical_model": {
-        "candidate": "ComicProject",
-        "accepted": false
+        "candidate": "ComicProject: one canonical page/panel/element document shared by comic and storyboard views",
+        "accepted": true
       },
-      "resource_kinds": [],
-      "tools": [],
-      "artifacts": [],
-      "representations": [],
-      "frontend_views": [],
-      "tests": [],
-      "bench": [],
-      "architecture_review": null,
-      "known_blockers": [
-        "Shared Host 43px narrow Dock pending source fix.",
-        "Independent composition found Story private descriptor incompatible with public admission; root source fix ffea18d5 awaiting independent rerun."
+      "resource_kinds": [
+        "dbfox.comic.library",
+        "dbfox.comic.document"
       ],
-      "composition_candidates": [],
+      "tools": [
+        "comic_inspect",
+        "comic_create",
+        "comic_undo",
+        "comic_delete",
+        "comic_export",
+        "page_create",
+        "panel_create",
+        "panel_layout",
+        "shot_set",
+        "character_place",
+        "bubble_create",
+        "caption_create",
+        "note_create",
+        "element_update",
+        "panel_reorder",
+        "page_reorder",
+        "object_delete",
+        "page_update",
+        "panel_update",
+        "comic_diff"
+      ],
+      "artifacts": [
+        "dbfox.comic.revision"
+      ],
+      "representations": [
+        "dbfox.comic.document.v1"
+      ],
+      "frontend_views": [
+        "dbfox.comic.studio",
+        "dbfox.comic.revision-view"
+      ],
+      "tests": {
+        "author_backend_passed": 24,
+        "independent_backend_composition_passed": 9,
+        "engineering_passed": 45,
+        "root_selected_integration": "31 Game/Comic/Story tests passed; documentation header-only failure corrected;45 engineering passed"
+      },
+      "bench": {
+        "cases": 13,
+        "scope": "author deterministic production RunLoop, not live model"
+      },
+      "architecture_review": {
+        "status": "accepted",
+        "document": "docs/architecture/comic-dlc.md"
+      },
+      "known_blockers": [],
+      "composition_candidates": [
+        "dbfox.story-comic"
+      ],
       "worktree": "D:/Project/DBFox-worktrees/creative-comic",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-comic.md",
-      "phase": "author_candidate_committed_independent_story_composition_and_red_team",
+      "phase": "integrated_after_independent_story_composition_red_team_and_native",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
       "preflight": "docs/architecture/comic-dlc-preflight.md",
-      "implementation_note": "Author complete SVG/HTML page/storyboard Studio, 20 tools, 8 operations, CAS/receipt and immutable export. Author 24 tests and 13 capability cases reported. Independent signed Story-to-Comic composition and adversarial checks in progress.",
+      "implementation_note": "Complete signed Comic product integrated at51a3aaa5. Story admission/resource requirements fixed at existing public authority seams. Independent real Story composition, signed red team and original-CSP production Electron editing/history/restore/download/narrow-wide gates passed.",
       "candidate_commit": "196f949f1da802d95b3ad907d51e3e248f03a444",
-      "candidate_merged": false,
+      "candidate_merged": true,
       "independent_verification": {
         "worktree": "D:/Project/DBFox-worktrees/creative-comic-verification",
         "branch": "codex/comic-verification",
         "candidate_head": "52726fad",
         "author_baseline_passed": 24,
-        "final_acceptance": false
+        "final_acceptance": false,
+        "backend_commit": "ac15914b",
+        "native_commit": "32693b8e",
+        "report": "docs/quality/comic-independent-verification.md",
+        "native_report": "docs/quality/comic-independent-native.md",
+        "scoped_gates_passed": true,
+        "composition": {
+          "tool_calls": 12,
+          "provider_requests": 13,
+          "prompt_estimate_peak": 19827,
+          "default_prompt_budget": 32768,
+          "comic_artifacts": 10
+        },
+        "native": {
+          "production_csp": "verbatim original Host policy",
+          "errors": 0,
+          "warnings": 0,
+          "widths": [
+            960,
+            1440
+          ],
+          "immutable_json_bytes": 3012
+        }
+      },
+      "integrated": true,
+      "integration": {
+        "product": "51a3aaa5",
+        "backend_evidence": "ac15914b",
+        "native_evidence": "32693b8e",
+        "full_program_acceptance": false
       }
     },
     {
       "dlc_id": "dbfox.cad",
       "status": "research",
-      "scheduled": false,
+      "scheduled": true,
       "wave": 1,
       "branch": "creative/cad",
-      "lead": null,
+      "lead": "/root/cad_solver_build",
       "canonical_model": {
         "candidate": "CADDocument",
         "accepted": false
@@ -840,12 +962,13 @@
       "bench": [],
       "architecture_review": null,
       "known_blockers": [
-        "Geometry kernel feature/size/deployment proof pending. PlaneGCS published bindings require a verified CSP-compatible rebuild; local Docker Desktop did not reach a responsive build environment. This does not block other DLC implementation."
+        "Original Host CSP still rejects WASM; generic execution-policy decision pending actual geometry evidence.",
+        "Full solid kernel/feature/export proof and complete CAD product pending."
       ],
       "composition_candidates": [],
       "worktree": "D:/Project/DBFox-worktrees/creative-cad",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-cad.md",
-      "phase": "real_constraint_solver_verified_deployment_candidate_rejected",
+      "phase": "solver_rebuilt_geometry_kernel_build_active",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
       "preflight": "docs/architecture/cad-dlc-preflight.md",
       "deployment_investigation": "Real HeadlessChrome152 under exact appProtocol CSP rejects valid8-byte WASM;streaming separately needs application/wasm MIME. Published Replicad WASM exceeds20MiB. No policy/budget/dependency changes;kernel selection remains open.",
@@ -855,12 +978,14 @@
         "worktree": "D:/Project/DBFox-worktrees/creative-cad",
         "evidence": "docs/architecture/cad-dlc-preflight.md",
         "probe": "verification/testkit/cad_solver_probe/README.md",
-        "finding": "Published PlaneGCS 1.2.0 passes five real Node numerical cases including 200 same-sketch dimension changes; exact Host CSP rejects WASM, and adding only wasm-unsafe-eval still fails generated JavaScript bindings with EvalError. No product policy/dependency change; official no-dynamic-execution rebuild and full solid kernel remain pending."
+        "finding": "Pinned official PlaneGCS rebuilt with DYNAMIC_EXECUTION=0. Node and actual Chrome wasm-only candidate policy pass five solver cases including200 recomputations; new Function remains rejected. Original Host policy still rejects WASM. No production policy change; solid kernel build next.",
+        "rebuild_source_commit": "85513f2a",
+        "rebuild_root_commit": "9db6f23b"
       }
     },
     {
       "dlc_id": "dbfox.animation",
-      "status": "implementation",
+      "status": "independent_verification",
       "scheduled": true,
       "wave": 1,
       "branch": "creative/animation",
@@ -877,15 +1002,32 @@
       "tests": [],
       "bench": [],
       "architecture_review": null,
-      "known_blockers": [],
+      "known_blockers": [
+        "Independent adversarial test confirms persisted cancellation can permit owner revision/receipt in Core negative-cancel-cache window; shared source fix in progress.",
+        "Independent production native UI verification pending."
+      ],
       "composition_candidates": [],
       "worktree": "D:/Project/DBFox-worktrees/creative-animation",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-animation.md",
-      "phase": "author_native_final_verification",
+      "phase": "independent_composition_passed_core_cancel_fix_and_native_pending",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
       "preflight": "docs/architecture/animation-dlc-preflight.md",
       "engine_investigation": "Pinned real Three 0.185.1; author five tests include 20,000 keys and 10,000 seeks. Native evidence is author-owned, independent gates pending.",
-      "implementation_note": "Author reports full tools/Representation/Workbench with 19 backend, five real Three tests and 12 production RunLoop cases. Native timeline/marker/clip/curve edits, frame keys and fixed v9 native download tested; last narrow ruler density fix being re-signed. Candidate and independent Scene composition/red team still pending."
+      "implementation_note": "Author candidate1aa66a3 and engineering housekeeping57087c4 committed. Independent Scene composition passes10 calls/11HTTP peak20433; final backend29 passed/1 confirmed cancel failure. Engineering45 and realThree5 pass. Separate author fixes Core cancellation; separate non-author verifies native UI.",
+      "candidate_commit": "1aa66a3c5e0644ee619ed529c113291dac19090c",
+      "candidate_followup_commit": "57087c4bc776067750bae317ad2d35ab5ae4c0f8",
+      "candidate_merged": false,
+      "integrated": false,
+      "independent_verification": {
+        "worktree": "D:/Project/DBFox-worktrees/creative-animation-verification",
+        "commit": "d434be82",
+        "backend_passed": 29,
+        "backend_failed": 1,
+        "engineering_passed": 45,
+        "three_passed": 5,
+        "native_worktree": "D:/Project/DBFox-worktrees/creative-animation-native-verification",
+        "native_status": "active"
+      }
     },
     {
       "dlc_id": "dbfox.map",
@@ -1379,7 +1521,7 @@
     "status_file_location": "dlcs/program-status.json; docs naming contract intentionally retained",
     "latest_frontend": "70 Pixel/Scene/Voxel passed14.99s;typecheck passed7.02s",
     "creative_worktree": "D:/Project/DBFox-worktrees/creative-composition",
-    "creative_status": "Scene/Voxel/Pixel integrated. Shader CSS and independent completed-state layout evidence integrated; scoped native picker/full-program audit remain. Native tool search deterministic protocol/authority/default-budget gates passed and independently reviewed. Game,Comic,Animation implementations active; original20DLC program incomplete.",
+    "creative_status": "Scene,Voxel,Pixel,Shader,Game,Comic are integrated with documented scoped evidence. Animation awaiting shared Core cancel race closure and independent native gates; CAD real solver rebuild passed, geometry and product pending. Original20DLC and final world incomplete.",
     "creative_evidence": "D:/Project/DBFox-worktrees/creative-composition/docs/quality/creative-dlc-composition-verification.md",
     "creative_commit": "36224475",
     "latest_shader": {
@@ -1407,17 +1549,25 @@
         "four_owners": 32711
       },
       "limits": "No live paid model; full-system run preceded final shorthand estimate fix, covered by subsequent Core/targeted composition runs."
+    },
+    "latest_game_comic": {
+      "head": "32693b8e",
+      "selected_backend_passed": 31,
+      "original_combined_run": "75 passed/1 documentation header failure in47.83s",
+      "header_fix_engineering": "45 passed3.24s",
+      "production_build": "passed",
+      "baseline": "36 unchanged +3 precisely modified Story files"
     }
   },
   "execution_status": {
     "state": "active_implementation",
     "date": "2026-09-07",
     "scope": "Complete the original 20 capability DLCs and evidenced compositions, including UI/UX, without domain logic entering Core.",
-    "message": "Full original20DLC goal remains active. Native tool search and Shader Artifact layout checkpoints committed; Game/Comic/Animation continue in isolated worktrees. No paid API, publication or completion gate waiver.",
+    "message": "Full original20DLC goal active. Game/Comic integrated after scoped independent gates; Animation cancellation fix/native verification and CAD solid kernel work active.",
     "active_roles": [
-      "Game Lead: /root/game_finish",
-      "Comic Lead: /root/native_search_finish",
-      "Animation Lead: /root/shader_evidence_finish"
+      "Core cancellation author: /root/shader_evidence_finish",
+      "Animation independent native: /root/game_independent_review",
+      "CAD geometry build: /root/cad_solver_build"
     ],
     "handoff": "docs/quality/creative-program-handoff.md",
     "task_packets": "docs/quality/creative-handoff/task-packets.md",

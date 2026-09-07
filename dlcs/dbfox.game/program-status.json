@@ -1,8 +1,8 @@
 {
   "dlc": "dbfox.game",
-  "status": "independent_verification",
+  "status": "integrated",
   "completion": false,
-  "current_phase": "independent_gates_passed_ready_for_integration",
+  "current_phase": "integrated_after_independent_gates",
   "role_history": [
     {
       "role": "Game DLC Lead / Domain Architect",
@@ -122,7 +122,7 @@
     "Native overflow menu works but existing Radix inline-style CSP warning remains; no weakened Host CSP."
   ],
   "pending": [
-    "Root integration and final multi-capability composed-world acceptance"
+    "Final multi-capability composed-world acceptance"
   ],
   "core_changes": [],
   "architecture": "docs/architecture/game-dlc.md",
@@ -133,5 +133,13 @@
     "docs/quality/game-independent-redteam.md",
     "docs/quality/pixel-game-composition-verification.md",
     "docs/quality/workspace-compact-independent-review.md"
-  ]
+  ],
+  "integration": {
+    "product": "b3c194da",
+    "navigation": "3612db26",
+    "host_layout": "d1563f55",
+    "tsx_build": "6561704a",
+    "independent_closure": "383d07cf",
+    "status": "scoped gates passed; full-program final acceptance pending"
+  }
 }

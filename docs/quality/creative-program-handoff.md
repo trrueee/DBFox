@@ -33,17 +33,17 @@
 | Voxel | 产品与独立验收已合入；64³/128³、历史 chunk、真实下载与生命周期有证据 | 保持通过；参加组合与批次审计 |
 | Pixel | 实现、独立 Verification、49 项新增红队攻击及修复已合入；原组合预算问题已有原生 tool search 修复与确定性组合证明 | integrated；参加 Pixel→Game 真组合和最终批次验收，付费在线模型质量未测 |
 | Shader | CSS 修复 `88fcb110` 和独立原生窄/宽 Artifact、不可变下载证据 `df6a91fe` 已合入 | integration_verification；保留质量报告中的文件选择器、安装包及最终批次范围限制 |
-| Game | 作者候选已提交；独立树 `77d1deb5` 完成真实Pixel→Game组合、9项红队和原生编辑/撤销/重启/失败698/胜利3600/下载证据 | 两项真实UI问题正在修：通用Studio切换丢选择、Host窄窗43px；根产品尚未集成 |
-| Comic | 作者完整候选 `196f949f` 已提交，24项测试/13类bench和原生UI有作者证据 | 独立Story→Comic组合与红队进行中；Story授权入口已修 `ffea18d5`，待独立复跑 |
-| CAD | 真实 PlaneGCS 数值探针5项通过，发布包浏览器加载失败已复现，无完整产品 | 固定上游重新构建、几何内核及发布边界待解决；详见 CAD preflight 和复现脚本 |
-| Animation | 完整工具/Representation/Workbench进入作者原生收尾；19后端/5Three/12类生产bench报告通过 | 最后尺标密度修复重签验证，随后独立Scene组合、红队与原生验收 |
+| Game | 产品及独立Pixel组合、9项红队、原生Phaser/历史/下载证据已合入；定位与Host窄窗缺陷独立关闭 | integrated；参加后续组合与最终世界验收，范围见独立报告 |
+| Comic | 根 `51a3aaa5` 产品、`ac15914b` 独立Story组合/红队、`32693b8e` 原始CSP生产原生验收已合入 | integrated；参加最终组合，Story原有未提交章节工作不冒充本任务产品 |
+| CAD | 固定PlaneGCS成功禁止动态JS求值重建，Node与wasm-only浏览器5项通过，原Host CSP仍拒WASM | 正在构建官方精简OpenCascade几何内核；通用部署边界和完整CAD产品待完成 |
+| Animation | 作者 `1aa66a3` /整理 `57087c4` 已提交；独立Scene组合10工具/11HTTP通过，工程45/Three5通过 | 独立最终后端29通过/1取消竞态失败；Core作者修复及另一独立角色生产原生验收进行中 |
 | 第二波 12 项 | 原始范围和任务方向明确，未进入产品实施 | 先完成第一波稳定门禁；不得把空目录/架构稿计作产品 |
 
 Music、Story、Visualization、Data、Workspace、GitHub 是参考能力，不能把它们原有功能计入本次新增 20 项的完成量。用户原有 Story/Workspace 改动也不是本 Agent 的交付。
 
 ## 3. 根分支与已验收代码
 
-主工作区：`D:/Project/DBFox`，分支 `codex/creative-program`。最初交接时产品 HEAD 为 `e4732e46`；恢复后已新增真实产品修复 `88fcb110`、`e2a2c69f`，以及原生验证 `df6a91fe` 和 CAD 调查 `fc7e153e`。以下原始提交表保留追溯，不代表最新 HEAD；实时状态以 `git log`、机器状态和各项质量报告共同核对。
+主工作区：`D:/Project/DBFox`，分支 `codex/creative-program`。最初交接时产品 HEAD 为 `e4732e46`；恢复后已新增真实产品修复 `88fcb110`、`e2a2c69f`，以及原生验证 `df6a91fe` 和 CAD 调查 `fc7e153e`。随后根 `b3c194da`/`51a3aaa5` 集成Game/Comic，独立UI证据截止 `32693b8e`，求解器重建证据 `9db6f23b`。以下原始提交表保留追溯，不代表最新 HEAD；实时状态以 `git log`、机器状态和各项质量报告共同核对。
 
 | 项目 | 根分支可定位提交 / 证据 |
 | --- | --- |
@@ -75,17 +75,19 @@ Music、Story、Visualization、Data、Workspace、GitHub 是参考能力，不�
 
 根 `88fcb110` 与 `df6a91fe` 已完成Shader自己的grid约束、319/1440窄宽Artifact和1434bytes不可变下载复验。该补丁没有修通用Host布局。质量报告中原生文件选择、Frozen安装器、人工保存对话框、长期heap等边界仍保留。
 
-### 4.3 正在修复的真正阻断
+### 4.3 已关闭缺陷与当前阻断
 
-- **Host窄窗**：696px可用空间容不下420+320+8的分栏最小值，布局库自动折成44px而store仍认为打开。专门作者 `codex/game-host-fix` 在源头修分栏和显示一致性，不让各DLC各自加补丁。
-- **Game作品定位**：初次通用Studio tab切到报告再返回丢游戏选择；数据保留。修复复用既有Host具体作品target/authority，原生和独立复核待完成。
-- **Story授权**：独立真实Story→Comic组合发现自建WorldDescriptor缺SDK授权方法；根 `ffea18d5` 删除重复类型直接复用公开ProjectResourceDescriptor。原12项Story测试通过，组合独立复跑中。[修复说明](story-resource-admission-fix.md)。
-- **CAD内核部署**：数值计算真实通过不等于发布可用，现成PlaneGCS包同时触及Host WASM和动态JS策略限制。需固定上游重新构建并实测；不得放宽生产CSP来冒充部署完成。
+- **Host窄窗已关闭**：根 `d1563f55` 按实际容器宽度派生compact展示，沿用原Panel树与状态；`6561704a` 修正测试TSX进入生产类型检查的问题。真实960/1440、导航切换、草稿保留、20次Tab和320px键盘/拖动下限已独立验证，见[报告](workspace-compact-independent-review.md)。
+- **Game作品定位已关闭**：根 `3612db26` 复用既有具体作品target和主要对象locator；`383d07cf` 记录实际Artifact→Game/狐狸选择返回及v2..v5历史不变。不同标签卸载时未保存草稿不承诺保留。
+- **Story授权已关闭**：`ffea18d5` 直接复用公开ProjectResourceDescriptor；`d4c98a6b` 在工具权威声明处补required_resources。12项Story及真实签名Story→Comic/红队独立通过；没有扩大Invocation权限。[修复说明](story-resource-admission-fix.md)。
+- **取消竞态待关闭**：Animation独立验证确认，取消已持久化后Core仍可能在100ms负缓存窗口内允许owner写入。共享Core作者在原取消回调边界修复，独立失败断言保留；不在DLC私查Core数据库。
+- **CAD内核部署待完成**：根 `9db6f23b` 已消除PlaneGCS动态JS求值阻碍，原Host CSP仍不允许WASM。实际精简几何内核构建与通用部署方案裁决继续进行，探针通过不等于CAD产品完成。
 
 ## 5. 最近验证证据，避免重复烧额度
 
 | 验证 | 已完成结果 | 证明范围 |
 | --- | --- | --- |
+| 根Game/Comic集成检查 | 31项Game/Comic/Story通过；原组合共75通过/1报告头失败，修正后45工程通过3.24s；生产build通过 | 两份报告缺标准元信息，未发现新的产品回归；非全系统新回归 |
 | 根 Shader 作者+红队+bench+大调用恢复+工程 | 164 passed / 153.19s | 根合入代码的确定性回归；不是实际 GPU |
 | 根 Shader 独立 factory/fence/crash | 9 passed / 29.58s | 正式装配、真实 executor、提交前后恢复与不重放 |
 | 根 Shader 四个前端文件 | 38 passed / 10.92s，typecheck:test 通过 | UI 合同、读页、生命周期、负驱动边界；jsdom 不证明布局或 GPU |
@@ -100,8 +102,8 @@ Shader native Choose PNG 被点击，但 Windows computer-use 服务管道两次
 
 ## 6. 当前执行顺序
 
-1. 收束Game作品定位和Host布局修复，并做独立原生宽窄复核后再集成Game。
-2. 完成Comic独立红队与真实Story组合；接收Animation作者候选后独立验证Scene组合。
+1. Game/Comic已集成。保持现有独立证据，并在共享边界改变时复跑相关回归。
+2. 关闭共享Core取消竞态，由原Animation独立验证员复验；完成另一角色的生产原生Animation验收。
 3. 继续CAD固定上游构建、约束求解与几何内核实际部署，不将探针作为CAD产品。
 4. 第一波稳定后扩展Scene→Game、Music→Visual/Game、Map→Story等原始组合；普通Agent编排足够时不新建Composition DLC。
 5. 按依赖进入第二波12能力，最终执行蒸汽朋克狐狸世界任务和整体架构审计。

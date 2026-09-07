@@ -1,6 +1,10 @@
 # Comic independent native verification
 
-状态：当前
+> 文档类型：独立验证
+>
+> 状态：当前
+>
+> 最后核验：2026-09-07
 
 Date: 2026-09-07. Reviewer `/root/game_independent_review` did not implement
 Comic. The bounded native gate now passes: real editing, historical preview,
