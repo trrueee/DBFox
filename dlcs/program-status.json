@@ -701,7 +701,7 @@
       "scheduled": true,
       "wave": 1,
       "branch": "creative/game",
-      "lead": "/root/scene_lead/domain_architect",
+      "lead": "/root/game_finish",
       "canonical_model": {
         "candidate": "GameProject",
         "accepted": false
@@ -715,20 +715,20 @@
       "bench": [],
       "architecture_review": null,
       "known_blockers": [
-        "Complete and validate existing Studio; resolve author handoff risks; full signed frontend+backend lifecycle; production playtest bridge; capability bench/stress; independent Verification and Adversarial review."
+        "Independent Verification and Adversarial review pending; real Pixel-to-Game composition on current Core pending. Author results are not final acceptance."
       ],
       "composition_candidates": [],
       "worktree": "D:/Project/DBFox-worktrees/creative-game",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-game.md",
-      "phase": "backend_implementation_after_author_architecture_and_phaser_probe",
+      "phase": "author_native_candidate_preparing_independent_review",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
       "integrated": false,
       "preflight": "docs/architecture/game-dlc-preflight.md",
       "role_note": "Formally reassigned after Shader author commit4df3568d; full Lead scope retained; no independent review claimed.",
-      "implementation_progress": "User-paused WIP checkpoint: 32 prior author backend tests and real Phaser runtime probes; latest Studio has never mounted successfully and last runtime changes remain unverified.",
+      "implementation_progress": "Author reports full signed package, 13 capability bench cases, native production Agent/playtest, immutable Artifact download, Studio edit/undo. Not independently accepted; candidate checkpoint pending.",
       "backend_progress": {
-        "status": "author_implementation_active",
-        "reported": "24 author tests including actual product RunLoop/ActionRun and public Pixel Representation import;17 tools/16 incremental operations;native strict nullable-contract repair in progress;Workbench implementation pending"
+        "status": "author_verification_reported",
+        "reported": "32 backend tests; full signed package used in author gates; native 8-call Agent create/design/playtest/fix/playtest/export loop reported. Root independent verification pending."
       },
       "candidate_commit": "f54950ca",
       "candidate_merged": false,
@@ -757,7 +757,7 @@
       "composition_candidates": [],
       "worktree": "D:/Project/DBFox-worktrees/creative-comic",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-comic.md",
-      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
+      "phase": "canonical_model_and_incremental_operations_implementation",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
       "preflight": "docs/architecture/comic-dlc-preflight.md",
       "implementation_note": "Resumed from original preflight; real Chromium SVG/HTML vs Konva CJK/emoji/export probe completed. Native SVG/HTML layout selected without a new product dependency. Full product and independent gates remain pending."
@@ -781,19 +781,23 @@
       "tests": [],
       "bench": [],
       "architecture_review": null,
-      "known_blockers": [],
+      "known_blockers": [
+        "Geometry kernel feature/size/deployment proof pending. PlaneGCS published bindings require a verified CSP-compatible rebuild; local Docker Desktop did not reach a responsive build environment. This does not block other DLC implementation."
+      ],
       "composition_candidates": [],
       "worktree": "D:/Project/DBFox-worktrees/creative-cad",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-cad.md",
-      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
+      "phase": "real_constraint_solver_verified_deployment_candidate_rejected",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
       "preflight": "docs/architecture/cad-dlc-preflight.md",
       "deployment_investigation": "Real HeadlessChrome152 under exact appProtocol CSP rejects valid8-byte WASM;streaming separately needs application/wasm MIME. Published Replicad WASM exceeds20MiB. No policy/budget/dependency changes;kernel selection remains open.",
       "preflight_continuation": {
-        "commit": "5d4d0249",
+        "commit": "fc7e153e",
+        "source_commit": "2eb58f29",
         "worktree": "D:/Project/DBFox-worktrees/creative-cad",
         "evidence": "docs/architecture/cad-dlc-preflight.md",
-        "finding": "Official custom bindings build can reduce kernel size; final feature coverage/uncompressed size/CSP still need validation. Docker CLI installed but daemon was not running."
+        "probe": "verification/testkit/cad_solver_probe/README.md",
+        "finding": "Published PlaneGCS 1.2.0 passes five real Node numerical cases including 200 same-sketch dimension changes; exact Host CSP rejects WASM, and adding only wasm-unsafe-eval still fails generated JavaScript bindings with EvalError. No product policy/dependency change; official no-dynamic-execution rebuild and full solid kernel remain pending."
       }
     },
     {
@@ -819,11 +823,11 @@
       "composition_candidates": [],
       "worktree": "D:/Project/DBFox-worktrees/creative-animation",
       "lead_template": "D:/Project/DBFox-worktrees/creative-program/lead-animation.md",
-      "phase": "isolated_worktree_and_full_template_prepared_pending_specialist_slot",
+      "phase": "canonical_model_and_tools_workbench_implementation",
       "investigation": "docs/architecture/creative-dlc-next-wave-investigation.md",
       "preflight": "docs/architecture/animation-dlc-preflight.md",
       "engine_investigation": "Read-only pinnedThree0.185.1 Node probe:1001keys,exact0/2/4/6/8/0 seek;pausedAction/timeScale semantics;Bezier tangents omitted by nativeclone/toJSON. Product/UI/GPU/independent gates not started.",
-      "implementation_note": "Public Scene Artifact Representation seam verified; canonical timeline/curve and real Three playback implementation in progress; independent gates pending."
+      "implementation_note": "Author reports canonical model and SQLite CAS/receipt/undo/diff initial implementation, five real Three tests including 20,000 keys and 10,000 seeks; tools, representations and Workbench still in progress. Public Scene composition and independent gates pending."
     },
     {
       "dlc_id": "dbfox.map",
