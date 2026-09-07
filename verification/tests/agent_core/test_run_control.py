@@ -112,6 +112,33 @@ def test_lease_loss_preempts_user_cancellation_and_stops_external_probes() -> No
         control.checkpoint()
 
 
+@pytest.mark.parametrize("boundary", ["checkpoint", "external_probe"])
+def test_cancel_after_negative_probe_is_visible_without_clock_advance(
+    monkeypatch: pytest.MonkeyPatch, boundary: str,
+) -> None:
+    cancelled = False
+    monkeypatch.setattr("engine.agent.control.time.monotonic", lambda: 100.0)
+    control = RunControl(
+        run=_run(),
+        limits=RunLimits(),
+        cancellation_probe=lambda: cancelled,
+    )
+    assert control.is_cancel_requested() is False
+
+    # Cancellation may commit while HTTP is in flight, before the next clock
+    # tick. Both the Run checkpoint and the callback passed to tools must see it.
+    cancelled = True
+    if boundary == "checkpoint":
+        with pytest.raises(RunCancellationRequested):
+            control.checkpoint()
+    else:
+        assert control.is_cancel_requested() is True
+
+    # A Run cannot resume after its cancellation has already been observed.
+    cancelled = False
+    assert control.is_cancel_requested() is True
+
+
 def test_provider_backoff_is_cooperatively_cancellable(monkeypatch: pytest.MonkeyPatch) -> None:
     cancelled = False
     now = 0.0
