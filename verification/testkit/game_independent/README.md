@@ -26,3 +26,11 @@
 ## 边界
 
 本次没有 live LLM，没有付费 API；UI 正式 ActionRun 与独立 Pixel→Game scripted RunLoop 组合分别验证，不把两者合成一次模型端到端证据。下载仅由验证入口设置实际 DownloadItem 保存位置，不证明人工 Save 对话框。非冻结 Sidecar 安装器、任意恶意 renderer 的计算正确性、长期运行内存不是本项结论。已发现的工作区定位和窄窗问题见 [独立报告](../../../docs/quality/game-independent-native.md)。
+
+## UI修复后的增量验证
+
+原始签名包证据留在 `evidence/audit.json`。当前保留runtime已正常升级到后续UI补丁，其frontend digest不同；运行原始audit时需对应原候选源码与原包来源，不能拿当前源码冒充历史包。新包的独立尺寸、导航与源码校验记录在 `evidence/ui-audit.json`。
+
+测试专属Main支持同runtime下`window-size.json`中的白名单960/1024/1440×900尺寸，调用真实BrowserWindow.setSize；实际尺寸由`window-bounds.json`输出，DPI舍入使bounds高度可能为901而内容900。`layout.cjs`只读DOM尺寸/祖先inert/未提交草稿，分别捕获原生宽窄、导航收展、全屏、退出和关闭轨。
+
+`navigation.cjs`在只有具体Studio标签的v5保留数据集验证键盘End和指针最小320px，再选择狐狸、实际导出一个工件，通过320px Dock的真实标签溢出菜单返回，检查作品/对象定位。它创建导出Artifact，不改变canonical Game；已有多个同名工件tab时先从真实UI关闭对应工件tab，不能盲目重放整个测试。所有生命周期与夹具修正详见独立报告。

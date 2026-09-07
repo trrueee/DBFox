@@ -1,8 +1,8 @@
 {
   "dlc": "dbfox.game",
-  "status": "in_progress",
+  "status": "independent_verification",
   "completion": false,
-  "current_phase": "author_verified_waiting_independent_and_composition",
+  "current_phase": "independent_gates_passed_ready_for_integration",
   "role_history": [
     {
       "role": "Game DLC Lead / Domain Architect",
@@ -27,6 +27,24 @@
       "agent": "/root/game_finish",
       "independent": false,
       "result": "Mounted Studio, complete signed package, native Agent and ActionRun playtests, immutable Artifacts, actual downloads, canonical drag/undo audit, 13-case capability suite and ten-change stress verified"
+    },
+    {
+      "role": "Independent backend red team",
+      "agent": "/root/game_independent_review",
+      "independent": true,
+      "result": "Nine signed runtime and immutable report attacks passed; 45 engineering contracts passed"
+    },
+    {
+      "role": "Independent composition and native verification",
+      "agent": "/root",
+      "independent": true,
+      "result": "Real signed Pixel composition; native edit/undo/restart/698-loss/3600-win/downloads; UI fixes independently verified"
+    },
+    {
+      "role": "Independent Host and Game navigation review",
+      "agent": "/root/host_fix_review",
+      "independent": true,
+      "result": "40 tests; confirmed build failure repaired by 809fa7ea; no new authority or mirrored-state defect"
     }
   ],
   "resource_kinds": [
@@ -82,9 +100,9 @@
     "dbfox.game.playtest.v1"
   ],
   "views": {
-    "game_studio": "author verified in production Electron; independent review pending",
-    "immutable_revision": "author verified in production Electron; independent review pending",
-    "playtest_report": "author verified in production Electron; independent review pending"
+    "game_studio": "independently verified in production Electron; final composed-world acceptance pending",
+    "immutable_revision": "independently verified in production Electron; final composed-world acceptance pending",
+    "playtest_report": "independently verified in production Electron; final composed-world acceptance pending"
   },
   "verified": [
     "32 backend tests passed; backend mypy 11 files and pyflakes passed",
@@ -98,17 +116,22 @@
     "Editable fox/slime survival preset and actual exported example bundle included"
   ],
   "evidence_limits": [
-    "Author verification is not independent acceptance",
-    "Model choices use a loopback scripted Responses boundary; evidence does not measure live model reasoning",
-    "Pixel page transport fixture is not a multi-DLC production RunLoop proof; root will verify true Pixel to Game composition",
-    "Dense physics evidence proves bounded rejection, not sustained performance at every maximum"
+    "No live model reasoning evidence; external HTTP model boundary is scripted.",
+    "Host has no Project delete API/callback; automatic owner cleanup on Project deletion is not provided.",
+    "Dense physics proves bounded rejection, not sustained performance at every maximum.",
+    "Native overflow menu works but existing Radix inline-style CSP warning remains; no weakened Host CSP."
   ],
   "pending": [
-    "Independent verification and adversarial review on root current Core",
-    "True Pixel to Game production composition on root current Core"
+    "Root integration and final multi-capability composed-world acceptance"
   ],
   "core_changes": [],
   "architecture": "docs/architecture/game-dlc.md",
   "quality": "docs/quality/game-dlc-evidence.md",
-  "handoff": "docs/quality/game-dlc-handoff.md"
+  "handoff": "docs/quality/game-dlc-handoff.md",
+  "independent_reports": [
+    "docs/quality/game-independent-native.md",
+    "docs/quality/game-independent-redteam.md",
+    "docs/quality/pixel-game-composition-verification.md",
+    "docs/quality/workspace-compact-independent-review.md"
+  ]
 }
