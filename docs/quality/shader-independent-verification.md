@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-09-06
+> 最后核验：2026-09-07
 >
 > 适用范围：Shader DLC 独立验证、真实 Electron 取证与明确的环境限制
 
@@ -94,3 +94,27 @@ Final candidate commands/results: the three `test_shader_independent*` Python fi
 Native Choose PNG was clicked, but the computer-use service's Windows native pipe was unavailable on two attempts. No native file choice or import was completed; the task-owned Electron was closed normally to dismiss that dialog. The actual sampler/upload-domain and PNG codec evidence does not substitute for this uncompleted native picker scenario. This environment also does not establish human Save-dialog destination selection, packaged installer/frozen Sidecar behavior, or a long-run heap bound. The verifier has not authored product fixes or approved the separately staffed Adversarial stage.
 
 Final screenshot review observes horizontal clipping in the narrow Artifact preview/hash content (`final-cold-gpu.png`). This was reported to Director for layout investigation; it is distinct from the previously measured and repaired Studio container layout. The actual file/download/GPU checks passed, but this report does not claim all Artifact narrow layouts passed. After evidence capture, the task-owned Electron was closed through its native Host close button, its launcher exited cleanly, and the loopback model boundary was stopped. No other owner's processes or baseline files were changed.
+
+Director subsequently confirmed the long-hash intrinsic-width cause and committed CSS-only candidate `cd8c94a7` (integrated on the root branch as `88fcb110`). The verifier signed and installed package `7e6f64e5c84e6f190e0a12c59ffe414e65890024d518afff39b4b9239dde683c` in the retained profile. The initial attached endpoint became unavailable before measurement and the user paused work. That unsuccessful attempt is retained as history; the following explicitly authorized resumption closes its layout gap.
+
+## Artifact layout closure — 2026-09-07
+
+The independent continuation reused the same signed package and original profile in actual Electron Main/Preload/EngineSupervisor, with the existing production renderer and source Python Sidecar. It did not author product CSS. The actual loaded stylesheet's 15,517 bytes and SHA-256 `3c76ec7d7b122f8b2fbc1be37d6f04c5626695a719136b0761d14775db2717b6` match the signed archive. No new signing, dependency install, model request, document edit or GPU publication was needed.
+
+An intermediate capture had only waited for canvas presence, which precedes immutable pixel loading; its narrow preview still displayed a loading message and disabled Download PNG. The driver now waits for the actual download button to become enabled before measuring. The replacement native narrow screenshot displays the loaded red pixels, full wrapped hash and enabled controls. Wide preview is also loaded. This is an immutable representation read, not another Shader compile or render.
+
+| Native Artifact state | Client / scroll width (CSS px) | Result |
+| --- | --- | --- |
+| Loaded preview v24, narrow Dock | 319 / 319 | Canvas, full hash and enabled Download PNG fit |
+| Loaded preview v24, fullscreen | 1440 / 1440 | Canvas, hash and enabled controls fit |
+| Compile report v24, narrow Dock | 319 / 319 | Driver summary and diagnostic controls fit |
+| Historical document v1, narrow Dock | 319 / 319 | Counts, inspect and download controls fit |
+| Historical source v1, narrow Dock | 319 / 319 | Read-only source and stage selector remain accessible |
+
+Measured light-DOM controls stay within their Artifact bounds. CodeMirror intentionally scrolls long source lines inside its own editor; the outer Dock does not widen. The source's `contenteditable=false` and its rendered lines match the independently preserved canonical v1 source. The observer recorded no `documents.preview/compile/apply/create/delete/undo` POSTs during the phase; this is a bounded request observation, not a global network or heap claim.
+
+The actual DownloadItem completed a new 1,434-byte historical v1 JSON download. File modification time `2026-09-07T12:23:20.012671Z` follows this phase's download request, the final native event records all bytes received, and the entire JSON object equals the independently captured canonical snapshot plus textures. File SHA-256 remains `0c6b89119f18640a476e69a2efcd8322a2f21dec198a4ac29b6bc814ccedcae4`. The native destination remains fixture-controlled; human Save-dialog selection is still outside this evidence.
+
+Evidence: [measured browser output](../../verification/testkit/shader_independent/evidence/electron-artifact-layout.json), [independent archive/layout/download audit](../../verification/testkit/shader_independent/evidence/artifact-layout-audit.json), [narrow preview](evidence/shader-independent/artifact-preview-narrow.png), [wide preview](evidence/shader-independent/artifact-preview-wide.png), [report](evidence/shader-independent/artifact-report-narrow.png), [document](evidence/shader-independent/artifact-document-narrow.png), [source](evidence/shader-independent/artifact-source-narrow.png). All five screenshots were visually inspected; their hashes are in the audit.
+
+Validation: the native `browser-artifact-layout.cjs` phase and `python -m verification.testkit.shader_independent.audit_artifact_layout <retained-runtime>` passed. The phase was repeated once to persist its complete JSON output; both runs only read existing immutable representations and requested the same download. The task's native Host close button then closed Electron and its launcher exited with code 0. The CLI reported a missing target while reading post-close state, so termination was independently checked through the launcher and process/listener inventory. No other owner's processes were stopped. Earlier `8a412cdb` cold GPU/semantic results and the installer, picker, real-model and long-run heap limitations remain scoped as above; this supplement closes the separate CSS Artifact layout finding.
