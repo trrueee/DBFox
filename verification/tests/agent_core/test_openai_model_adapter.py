@@ -1073,3 +1073,74 @@ def test_fallback_to_chat_completion_on_responses_404_with_tool_call() -> None:
     assert "messages" in completions.request
     assert "input" not in completions.request
     assert "store" not in completions.request
+
+
+@pytest.mark.parametrize("model", ["gpt-5.4", "gpt-5.4-2026-03-05", "gpt-5.4-mini", "gpt-6-astra"])
+def test_native_search_preserves_full_function_contract_without_model_substitution(model: str) -> None:
+    schema = {
+        "type": "function", "name": "verification_inspect", "description": "Inspect",
+        "parameters": {"type": "object", "properties": {}}, "strict": True,
+    }
+    projected = OpenAIModelAdapter.prepare_tools(model_name=model, tools=[schema])
+    assert projected == [{**schema, "defer_loading": True}, {"type": "tool_search"}]
+    assert "defer_loading" not in schema
+
+
+@pytest.mark.parametrize("model", [None, "gpt-4o-mini", "gpt-5", "gpt-5.3-codex", "mimo-v2-pro", "custom-gpt-5.4"])
+def test_unknown_and_unsupported_models_keep_complete_schemas(model: str | None) -> None:
+    tools = [{"type": "function", "name": "inspect", "parameters": {"type": "object"}}]
+    assert OpenAIModelAdapter.prepare_tools(model_name=model, tools=tools) == tools
+
+
+@pytest.mark.parametrize("native_history", [False, True])
+@pytest.mark.parametrize("status,code", [
+    (400, FixedErrorCode.MODEL_PROVIDER_REQUEST_REJECTED),
+    (404, FixedErrorCode.MODEL_PROVIDER_MODEL_NOT_FOUND),
+])
+def test_native_search_never_falls_back_to_chat(native_history: bool, status: int, code: FixedErrorCode) -> None:
+    request = httpx.Request("POST", "https://provider.test/v1/responses")
+
+    class FailingResponses:
+        async def create(self, **_request: object) -> object:
+            raise APIStatusError(
+                "provider-secret-do-not-echo", response=httpx.Response(status, request=request),
+                body={"error": {"code": "route_not_found"}},
+            )
+
+    completions = _ChatCompletions([])
+    client = SimpleNamespace(responses=FailingResponses(), chat=SimpleNamespace(completions=completions))
+    items = list(OpenAIModelAdapter(client=client, model_name="gpt-5.4").stream(  # type: ignore[arg-type]
+        messages=[{"type": "tool_search_output", "execution": "server", "call_id": None, "tools": []}]
+        if native_history else [],
+        tools=[] if native_history else [{"type": "tool_search"}],
+    ))
+    assert items[-1].kind is TurnStreamKind.ERROR
+    assert items[-1].error_code == code.value
+    assert items[-1].error_message == fixed_error_message(code)
+    assert items[-1].error_retryable is False
+    assert completions.request is None
+
+
+@pytest.mark.parametrize("execution,call_id", [("server", None), ("client", "search_1")])
+def test_hosted_search_items_round_trip_without_becoming_runtime_invocations(execution: str, call_id: str | None) -> None:
+    output = [
+        {"id": "search_1", "type": "tool_search_call", "execution": execution,
+         "call_id": call_id, "status": "completed", "arguments": {"paths": ["inspect"]}},
+        {"id": "search_output_1", "type": "tool_search_output", "execution": execution,
+         "call_id": call_id, "status": "completed", "tools": [
+             {"type": "function", "name": "inspect", "description": "Inspect",
+              "parameters": {"type": "object", "properties": {}}, "defer_loading": True, "strict": True},
+         ]},
+    ]
+    client = _Client([_event({"type": "response.completed", "sequence_number": 1,
+                             "response": _response(status="completed", output=output)})])
+    items = list(OpenAIModelAdapter(client=client, model_name="gpt-5.4").stream(  # type: ignore[arg-type]
+        messages=[], tools=[{"type": "tool_search"}],
+    ))
+    if execution == "client":
+        assert items[-1].kind is TurnStreamKind.ERROR
+        assert not any(item.kind is TurnStreamKind.MODEL_OUTPUT_ITEM for item in items)
+    else:
+        result = TurnStreamAssembler().consume(iter(items))
+        assert result.output_items == output
+        assert result.tool_calls == []

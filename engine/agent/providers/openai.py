@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import suppress
@@ -164,6 +165,9 @@ def _completed_message_text(item: ResponseOutputMessage) -> str:
 
 def _dump_output_item(item: ResponseOutputItem) -> dict[str, Any]:
     value = item.model_dump(mode="json", exclude_none=True)
+    if value.get("type") in {"tool_search_call", "tool_search_output"}:
+        # Hosted search uses an explicit null call_id in the native protocol.
+        value["call_id"] = getattr(item, "call_id", None)
     return cast(dict[str, Any], value)
 
 
@@ -264,6 +268,8 @@ class _ResponsesEventTranslator:
                 phase=item.phase,
             )
         elif isinstance(item, ResponseFunctionToolCall):
+            if getattr(item, "namespace", None) not in {None, item.name}:
+                raise ResponsesProtocolError("Unexpected function namespace")
             item_id = item.id or item.call_id
             if item_id in self.calls:
                 raise ResponsesProtocolError(
@@ -455,6 +461,12 @@ class _ResponsesEventTranslator:
                 "Response completed with an open function-call item"
             )
         for output_index, output_item in enumerate(event.response.output):
+            if output_item.type in {"tool_search_call", "tool_search_output"}:
+                if (
+                    getattr(output_item, "execution", None) != "server"
+                    or getattr(output_item, "call_id", None) is not None
+                ):
+                    raise ResponsesProtocolError("Only hosted tool search is configured")
             item_id = getattr(output_item, "id", None) or f"output:{output_index}"
             yield self._emit(
                 TurnStreamKind.MODEL_OUTPUT_ITEM,
@@ -811,6 +823,29 @@ def _iter_tool_calls(value: Any) -> list[Any]:
 class OpenAIModelAdapter:
     """Lower official Responses SDK events into DBFox's provider-neutral Turn stream."""
 
+    @staticmethod
+    def prepare_tools(
+        *, model_name: str | None, tools: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Project a frozen inventory through the supported native search protocol.
+
+        No model is substituted. Unknown aliases and older models retain complete
+        schemas and the normal context budget. Endpoint support is fail-closed at
+        the Responses request, never inferred from a successful Chat fallback.
+        """
+        match = re.fullmatch(
+            r"gpt-(\d+)(?:\.(\d+))?(?:-(?:mini|nano|pro|astra|sol|terra|luna))?"
+            r"(?:-\d{4}-\d{2}-\d{2})?",
+            model_name or "",
+        )
+        if not match or (int(match[1]), int(match[2] or 0)) < (5, 4):
+            return tools
+        if not tools or any(tool.get("type") != "function" for tool in tools):
+            return tools
+        return [
+            {**tool, "defer_loading": True} for tool in tools
+        ] + [{"type": "tool_search"}]
+
     def __init__(
         self,
         *,
@@ -884,7 +919,12 @@ class OpenAIModelAdapter:
                     )),
                 )
             except APIStatusError as exc:
-                if not _responses_not_found_falls_back_to_chat(exc):
+                native_search = any(tool.get("type") == "tool_search" for tool in tools)
+                native_search = native_search or any(
+                    item.get("type") in {"tool_search_call", "tool_search_output"}
+                    for item in messages
+                )
+                if native_search or not _responses_not_found_falls_back_to_chat(exc):
                     raise
                 chat_request = dict(request)
                 chat_request["messages"] = messages

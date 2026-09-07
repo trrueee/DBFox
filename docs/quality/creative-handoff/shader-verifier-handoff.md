@@ -4,21 +4,11 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-09-06
+> 最后核验：2026-09-07
 >
 > 适用范围：Creative DLC AI handoff
 
-Source: creative/shader a293e46f, verification/testkit/shader_independent/HANDOFF.md. This copy preserves instructions; scripts and runtime data stay in their original worktree.
-
-# Shader independent verification handoff
-
-> 文档类型：验证交接
->
-> 状态：当前
->
-> 最后核验：2026-09-07
->
-> 适用范围：Shader 独立验证与保留的外部运行环境
+Source: creative/shader 81aba161, verification/testkit/shader_independent/HANDOFF.md. Root integration df6a91fe includes the scripts and evidence; private runtime data remains in the original external worktree.
 
 The user reauthorized development and verification after the 2026-09-06 pause. Focused Shader Artifact layout verification is complete. Current authoritative results are in `docs/quality/shader-independent-verification.md`; program integration remains the Director's responsibility.
 

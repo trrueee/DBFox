@@ -99,6 +99,7 @@ class _PreparedTurn:
     context: ContextSnapshot
     messages: list[dict[str, Any]]
     tools: ToolMaterialization
+    provider_tools: list[dict[str, Any]]
     provider_settings: ProviderSettings
 
 
@@ -466,7 +467,7 @@ class RunLoop:
                     control=state.control,
                     items=adapter.stream(
                         messages=prepared.messages,
-                        tools=prepared.tools.provider_schemas(),
+                        tools=prepared.provider_tools,
                         stream_timeouts=self._model_stream_timeouts(state),
                         cancellation_probe=state.control.is_cancel_requested,
                     ),
@@ -838,7 +839,10 @@ class RunLoop:
                 execution_mode=self.definition.execution_mode,
                 available_resource_kinds=frozenset(available_resource_kinds),
             )
-            tool_schemas = tools.provider_schemas()
+            tool_schemas = OpenAIModelAdapter.prepare_tools(
+                model_name=str(run.model_name or ""),
+                tools=tools.provider_schemas(),
+            )
             artifact_types = frozenset(
                 artifact.type for artifact in context.selected_artifacts
             )
@@ -886,6 +890,7 @@ class RunLoop:
                 messages=list(prompt.messages),
                 tools=tools,
                 provider_settings=settings,
+                provider_tools=tool_schemas,
             )
 
     def _complete(

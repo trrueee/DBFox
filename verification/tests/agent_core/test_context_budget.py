@@ -8,6 +8,65 @@ from engine.agent.context import (
 from engine.agent.context_budget import estimate_messages_tokens
 
 
+def test_responses_message_shorthand_uses_the_same_budget_as_explicit_messages() -> None:
+    from engine.agent.context_budget import estimate_input_item_tokens, estimate_message_tokens
+
+    for role in ("system", "developer", "user", "assistant"):
+        message = {"role": role, "content": "JSON and 中文 context"}
+        assert estimate_input_item_tokens(message) == estimate_input_item_tokens({"type": "message", **message})
+        assert estimate_input_item_tokens(message) == estimate_message_tokens(message)
+
+
+def test_deferred_schema_budget_counts_descriptions_and_loaded_history_in_full() -> None:
+    from engine.agent.context_budget import estimate_input_item_tokens, estimate_tool_schema_tokens
+
+    function = {"type": "function", "name": "inspect", "description": "inspect records",
+                "parameters": {"type": "object", "description": "x" * 12_000}, "strict": True}
+    deferred = {**function, "defer_loading": True}
+    loaded = {"type": "tool_search_output", "execution": "server", "call_id": None,
+              "status": "completed", "tools": [deferred]}
+    assert estimate_tool_schema_tokens([deferred]) >= estimate_tool_schema_tokens([function])
+    assert estimate_tool_schema_tokens([deferred, {"type": "tool_search"}]) < 100
+    assert estimate_input_item_tokens(loaded) > 4_000
+    assert estimate_tool_schema_tokens([
+        {**deferred, "description": "x" * 12_000}, {"type": "tool_search"},
+    ]) > 4_000
+
+
+def test_prompt_preserves_native_search_order_and_evicts_its_complete_turn() -> None:
+    from engine.agent.definition import AgentDefinition
+    from engine.agent.prompt import PromptAssembler
+    from engine.agent.run import RunLimits
+
+    tools = [{"type": "function", "name": "inspect", "description": "Inspect",
+              "parameters": {"type": "object", "properties": {}}, "defer_loading": True},
+             {"type": "tool_search"}]
+    items = [
+        {"type": "tool_search_call", "execution": "server", "call_id": None,
+         "status": "completed", "arguments": {"paths": ["inspect"]}},
+        {"type": "tool_search_output", "execution": "server", "call_id": None,
+         "status": "completed", "tools": [tools[0]]},
+        {"type": "function_call", "call_id": "call_1", "name": "inspect", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "call_1", "output": "x" * 20_000},
+    ]
+    snapshot = ContextSnapshot(
+        session_id="s", run_id="r", context_epoch=0, current_request="current request", messages=[],
+        response_batches=[ResponseItemBatch(turn_id="t", items=items)], sources=[], hash="hash",
+    )
+    full = PromptAssembler().assemble(definition=AgentDefinition(), context=snapshot, tool_schemas=tools)
+    assert full.messages[-4:] == items
+    assert full.budget["response_item_tokens"] > 6_000
+    reduced = PromptAssembler().assemble(
+        definition=AgentDefinition(limits=RunLimits(max_prompt_tokens=4_096)),
+        context=snapshot, tool_schemas=tools,
+    )
+    assert reduced.budget["omitted_response_batches"] == 1
+    assert not any(item.get("type") in {"tool_search_call", "tool_search_output", "function_call", "function_call_output"}
+                   for item in reduced.messages)
+    assert reduced.budget["estimated_prompt_tokens"] <= 4_096
+    assert snapshot.response_batches[0].items == items
+
+
 def test_budget_keeps_current_request_and_drops_old_history_first() -> None:
     snapshot = ContextSnapshot(
         session_id="session-budget",

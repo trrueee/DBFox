@@ -8,6 +8,8 @@
 >
 > 适用范围：用户因额度有限主动停止本轮开发，转交其他 AI 继续完成 Creative DLC Program
 
+用户已于 2026-09-07 明确恢复完整原始任务，并授权撤回自定义工具目录、重新设计与开发。下文暂停记录和交接时状态保留用于追溯；实时实施状态见[机器状态](../../dlcs/program-status.json)。原始 20 项能力与组合验收范围保持不变。
+
 ## 1. 先读这一页
 
 用户最后要求：**本 Agent 停止扩展实现，输出详细文档和指导，剩余任务由用户交给其他 AI。** 不要把这次交接理解为整个计划已经完成，也不要自动恢复全部并行工作。接手 AI 应先服从用户指定的任务包；没有指定时，从本文的依赖顺序选择一个有界任务。
@@ -82,7 +84,7 @@ D:/Project/DBFox/.venv/Scripts/python.exe -m pytest verification/tests/system/te
 
 候选草案：[按需工具发现](../architecture/bounded-tool-discovery.md)。方案仍未实现。独立审查另发现：ControlCommand 当前不计入普通工具调用预算，不贡献进展；ProgressGuard 忽略控制观察，默认停滞限制可能让“查询→选择→执行”在执行前提前终止。因此不能仅增加 discover 控制函数就宣布修复。需要明确有界成本、真正新发现的有限进展、重复调用防护和恢复语义。
 
-独立审计已以源 `d6419861`、根文档提交 `6331d1a1` 保存：[Pattern 审计](creative-platform-pattern-audit.md)、[工具发现独立审议](../architecture/bounded-tool-discovery-review.md)。它们明确未正式批准实现、未完成全面零泄漏证明；[补充交接](creative-handoff/agent-closeout.md)记录最终停止状态。没有审议闭合前不要改 Frozen Kernel。
+独立审计已以源 `d6419861`、根文档提交 `6331d1a1` 保存：[Pattern 审计](creative-platform-pattern-audit.md)、[工具发现独立审议](../archive/bounded-tool-discovery-control-review.md)。它们明确未正式批准实现、未完成全面零泄漏证明；[补充交接](creative-handoff/agent-closeout.md)记录最终停止状态。没有审议闭合前不要改 Frozen Kernel。
 
 ### 4.2 Shader 最后 CSS 补丁
 

@@ -35,7 +35,7 @@
 
 审查者已确认额外架构风险：控制函数在现有循环不计入 max_tool_invocations；Dispatcher 固定不贡献进展；ProgressGuard 跳过控制观察。因此普通 query→select→execute 可能先触发停滞/终止。必须明确预算、有限新信息/选择的进展和重复调用防护，不能用额外无限计数或反复翻页续命。
 
-根[设计调查](../../architecture/bounded-tool-discovery.md)仍是草案。审查者已仅提交两份交接文档，源 **`d6419861509bfda242635f6fa432fc565c9d9968`**，根文档合入 **`6331d1a1`**：[Pattern 审计](../creative-platform-pattern-audit.md)、[工具发现独立审议](../../architecture/bounded-tool-discovery-review.md)。已做 A/B/C/D 分类、源码路径核对和 Frozen 七问，**没有完成全面 Core 零泄漏证明，也没有正式批准候选实现**。目录/进展/预算/恢复/hash/guidance 仍需正反测试。用户停止后没有新增调查或测试，只有文档保存与 diff 检查；角色已结束。
+根[设计调查](../../architecture/bounded-tool-discovery.md)仍是草案。审查者已仅提交两份交接文档，源 **`d6419861509bfda242635f6fa432fc565c9d9968`**，根文档合入 **`6331d1a1`**：[Pattern 审计](../creative-platform-pattern-audit.md)、[工具发现独立审议](../../archive/bounded-tool-discovery-control-review.md)。已做 A/B/C/D 分类、源码路径核对和 Frozen 七问，**没有完成全面 Core 零泄漏证明，也没有正式批准候选实现**。目录/进展/预算/恢复/hash/guidance 仍需正反测试。用户停止后没有新增调查或测试，只有文档保存与 diff 检查；角色已结束。
 
 ## 当前工作的边界
 

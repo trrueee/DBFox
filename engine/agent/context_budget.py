@@ -25,7 +25,9 @@ def estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
 
 def estimate_input_item_tokens(item: dict[str, Any]) -> int:
     """Conservatively estimate any Responses input Item, not only messages."""
-    if item.get("type") == "message":
+    # Responses accepts both explicit message items and the role/content
+    # shorthand emitted by ContextBudgetPlanner. They must share one estimate.
+    if item.get("type") == "message" or ("type" not in item and "role" in item):
         return estimate_message_tokens(item)
     encoded = canonical_dumps(item)
     return 6 + estimate_text_tokens(encoded)
@@ -38,7 +40,17 @@ def estimate_input_items_tokens(items: list[dict[str, Any]]) -> int:
 def estimate_tool_schema_tokens(schemas: list[dict[str, Any]]) -> int:
     if not schemas:
         return 0
-    encoded = canonical_dumps(schemas)
+    # Deferred function parameters are request metadata, not initial model
+    # context. Their names/descriptions remain visible. Loaded definitions in
+    # tool_search_output history are charged in full by estimate_input_item_tokens.
+    search_enabled = any(schema.get("type") == "tool_search" for schema in schemas)
+    visible = [
+        {key: value for key, value in schema.items() if key not in {"parameters", "strict"}}
+        if search_enabled and schema.get("type") == "function"
+        and schema.get("defer_loading") is True else schema
+        for schema in schemas
+    ]
+    encoded = canonical_dumps(visible)
     return estimate_text_tokens(encoded)
 
 

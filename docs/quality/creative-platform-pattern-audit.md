@@ -12,7 +12,7 @@
 
 当前证据支持把多能力同时加载 schema 的容量问题交给通用工具物化边界继续设计；不支持把四个 owner 的文档、版本、undo、几何、像素或 GPU 状态统一搬进 Core。默认保留 A/B 分类。工具发现的候选属于 D，必须经过 Frozen Kernel 审议和实际默认工厂验证。
 
-用户因额度有限要求停止开发、转交其他 AI。本轮停止扩大调查和测试，只保存已读源码事实、候选约束和未完成项。没有编写产品或测试，没有运行新的联合验收；本报告不是四个 DLC 或整个 Creative Program 的完成证明。[工具发现审议交接](../architecture/bounded-tool-discovery-review.md)保留实现前必须解决的细节。
+用户因额度有限要求停止开发、转交其他 AI。本轮停止扩大调查和测试，只保存已读源码事实、候选约束和未完成项。没有编写产品或测试，没有运行新的联合验收；本报告不是四个 DLC 或整个 Creative Program 的完成证明。[工具发现审议交接](../archive/bounded-tool-discovery-control-review.md)保留实现前必须解决的细节。
 
 角色为 Creative Platform Pattern Auditor / Architecture Auditor。审查者此前参与 Voxel 后端，随后承担其他 owner 的非作者验证与红队；因此本轮不将对 Voxel 的模式分析冒充其产品质量独立终审。本轮未参与工具发现候选实现，候选也尚未实现。
 
