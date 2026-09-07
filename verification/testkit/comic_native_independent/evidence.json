@@ -1,0 +1,112 @@
+{
+  "fixture": {
+    "project_id": "comic-browser-project",
+    "comic_id": "comic-8d18979612b04f92a7314a192ac71cd0",
+    "package_digest": "7eba83e991ac08f61a7d46d92f458b17c17dd52f4a67d54844df34ed6a1aa5eb",
+    "summary": {
+      "id": "comic-8d18979612b04f92a7314a192ac71cd0",
+      "project_id": "comic-browser-project",
+      "title": "灯塔归途",
+      "version": 3,
+      "content_hash": "ac2d9ade81f29a82922a9cb676bfbf87b39b0ed008a8c16d47054987bfa4743e",
+      "status": "active",
+      "page_count": 2,
+      "panel_count": 4,
+      "element_count": 10
+    }
+  },
+  "csp": "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self' dlc-asset:; script-src-attr 'none'; style-src 'self' dlc-asset:; style-src-elem 'self' dlc-asset:; style-src-attr 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* dlc-asset:; img-src 'self' data: https: dlc-asset:; font-src 'self' dlc-asset:",
+  "downloads": [
+    {
+      "name": "comic-comic-8d18979612b04f92a7314a192ac71cd0-v4.html",
+      "bytes": 8264,
+      "sha256": "0be9303e816bf548bbd79e758c2ece0edf5bce8688b1a3ca38682a07088d6109"
+    },
+    {
+      "name": "comic-comic-8d18979612b04f92a7314a192ac71cd0-v4.json",
+      "bytes": 3012,
+      "sha256": "3813bed715944b480e020eebfff88c6420868b11684501be5af52da97bc864ae"
+    },
+    {
+      "name": "comic-comic-8d18979612b04f92a7314a192ac71cd0-v6.html",
+      "bytes": 8264,
+      "sha256": "926f0862652a051ce4cc3bf261308b4b82ea3fcabc1d199a939593dcb90f51f1"
+    },
+    {
+      "name": "comic-comic-8d18979612b04f92a7314a192ac71cd0-v6.json",
+      "bytes": 3012,
+      "sha256": "3813bed715944b480e020eebfff88c6420868b11684501be5af52da97bc864ae"
+    },
+    {
+      "name": "comic-comic-8d18979612b04f92a7314a192ac71cd0-v8.html",
+      "bytes": 8264,
+      "sha256": "dd5fb2bd839e67f584389e8f0ae9eefd30c6a45dde8855244260b50eb96d3519"
+    },
+    {
+      "name": "comic-comic-8d18979612b04f92a7314a192ac71cd0-v8.json",
+      "bytes": 3012,
+      "sha256": "3813bed715944b480e020eebfff88c6420868b11684501be5af52da97bc864ae"
+    }
+  ],
+  "exact_v4_v6_v8_json": true,
+  "rendering": "production dist HTTP preview with verbatim Host policy; actual Electron Main/Preload/EngineSupervisor, unpackaged Python sidecar",
+  "layouts": [
+    {
+      "phase": "initial native dev",
+      "viewport": 960,
+      "navigation": "expanded",
+      "studio": 719.3333740234375,
+      "client": 719,
+      "scroll": 719
+    },
+    {
+      "phase": "initial native dev",
+      "viewport": 960,
+      "navigation": "collapsed",
+      "studio": 483.3333435058594,
+      "client": 483,
+      "scroll": 483
+    },
+    {
+      "phase": "production renderer with Host CSP",
+      "viewport": 1440,
+      "navigation": "expanded",
+      "studio": 653.4166870117188,
+      "client": 653,
+      "scroll": 653
+    }
+  ],
+  "console": {
+    "native_dev": {
+      "errors": 0,
+      "warnings": 1,
+      "warning": "Electron development CSP warning"
+    },
+    "native_production_policy": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "export_browser": {
+      "errors": 1,
+      "reason": "favicon.ico HTTP 404 only"
+    }
+  },
+  "screenshots": [
+    {
+      "path": "docs/images/comic-independent/production-csp-studio.png",
+      "sha256": "db8fd1dce942d5a629d639c872c754766c37ad13e25982698db8e98590af2d25"
+    },
+    {
+      "path": "docs/images/comic-independent/production-csp-artifact.png",
+      "sha256": "292fc8c1c5fc736f800fca5f3b868491b9137741057b5c014300e4ffbefff629"
+    },
+    {
+      "path": "docs/images/comic-independent/production-csp-wide.png",
+      "sha256": "f7112e830b5fa74c70bec304fb93a256f3e76b0c01f8ee46df16fce0e874ffef"
+    },
+    {
+      "path": "docs/images/comic-independent/export-reopened.png",
+      "sha256": "2af765f78296f1267112ebd7d6ef205a882ac8ea649fad85028e6fe53505c6e2"
+    }
+  ]
+}

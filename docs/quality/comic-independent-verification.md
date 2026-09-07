@@ -152,3 +152,7 @@ window squeezing the shared Host Dock to 43 px remains a separate Host acceptanc
 item until its author's repair receives independent native verification. These
 backend results must not be used to close that UI gate or to declare the entire
 Comic DLC / 20-DLC program complete.
+
+Subsequent independent native follow-up: [comic-independent-native.md](comic-independent-native.md)
+closes the bounded Comic UI/Host reachability gate with actual native evidence
+and the verbatim Host CSP. The exclusions above describe this backend run's scope.
