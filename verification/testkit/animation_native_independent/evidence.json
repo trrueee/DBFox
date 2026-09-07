@@ -1,0 +1,159 @@
+{
+  "fixture": {
+    "project_id": "animation-browser-project",
+    "animation": {
+      "id": "6d6933bdbbcf4c65807c5786e6e8c647",
+      "project_id": "animation-browser-project",
+      "title": "Fox gesture",
+      "version": 7,
+      "content_hash": "83d4db55ab160e24c0d39d0029c4110c89db22790448f39281dfbb906c058cf9",
+      "status": "active",
+      "counts": {
+        "targets": 1,
+        "tracks": 1,
+        "keyframes": 3,
+        "curves": 1,
+        "clips": 1,
+        "markers": 1
+      }
+    },
+    "large_project_id": "animation-large-project",
+    "large_animation": {
+      "id": "fd615e227daf4fc4964347ea17b3608d",
+      "project_id": "animation-large-project",
+      "title": "2048 key timing study",
+      "version": 11,
+      "content_hash": "52be9fecb9e9c23602f1997ebe695f3301102915fd227135b0276035fbf3030e",
+      "status": "active",
+      "counts": {
+        "targets": 1,
+        "tracks": 1,
+        "keyframes": 2048,
+        "curves": 0,
+        "clips": 0,
+        "markers": 0
+      }
+    },
+    "package_digest": "6036bd40d9aa999b6f931d4a0cce4d7b9a9d7e94a5f047951759491d63ad0abc"
+  },
+  "downloads": [
+    {
+      "filename": "animation-6d6933bdbbcf4c65807c5786e6e8c647-v11.json",
+      "bytes": 781,
+      "sha256": "83d4db55ab160e24c0d39d0029c4110c89db22790448f39281dfbb906c058cf9"
+    },
+    {
+      "filename": "animation-6d6933bdbbcf4c65807c5786e6e8c647-v7.json",
+      "bytes": 781,
+      "sha256": "83d4db55ab160e24c0d39d0029c4110c89db22790448f39281dfbb906c058cf9"
+    },
+    {
+      "filename": "animation-6d6933bdbbcf4c65807c5786e6e8c647-v8.json",
+      "bytes": 781,
+      "sha256": "97aa96ede571b00b4ed953c1cebdceeb412530977f2d6bbd6c30a20889614bf7"
+    },
+    {
+      "filename": "animation-6d6933bdbbcf4c65807c5786e6e8c647-v9.json",
+      "bytes": 781,
+      "sha256": "83d4db55ab160e24c0d39d0029c4110c89db22790448f39281dfbb906c058cf9"
+    },
+    {
+      "filename": "animation-fd615e227daf4fc4964347ea17b3608d-v12.json",
+      "bytes": 148409,
+      "sha256": "92fc1d34228ab1c15c83a069d406cc47f91f2a5e5c743cb30d2912bffe04fdeb"
+    }
+  ],
+  "download_completed_events": 6,
+  "owner_revisions_verified": [
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "large_head": 12,
+  "csp_header": "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self' dlc-asset:; script-src-attr 'none'; style-src 'self' dlc-asset:; style-src-elem 'self' dlc-asset:; style-src-attr 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* dlc-asset:; img-src 'self' data: https: dlc-asset:; font-src 'self' dlc-asset:",
+  "playback_before_counts": {
+    "documents": 2,
+    "revisions": 20,
+    "entity_ids": 2058,
+    "receipts": 20
+  },
+  "playback_after_counts_observed": {
+    "documents": 2,
+    "revisions": 20,
+    "entity_ids": 2058,
+    "receipts": 20
+  },
+  "playback_result": {
+    "begin_translate_x": 0,
+    "contact_translate_x": 72,
+    "end_translate_x": 0,
+    "replay_tick_ms": 121,
+    "final_tick_ms": 0
+  },
+  "layouts": [
+    {
+      "viewport": 960,
+      "navigation": "expanded",
+      "width": 695.34375,
+      "client": 687,
+      "scroll": 687,
+      "descendants": 274,
+      "table_rows": 3
+    },
+    {
+      "viewport": 960,
+      "navigation": "collapsed",
+      "width": 483.3333435058594,
+      "client": 475,
+      "scroll": 475,
+      "descendants": 236,
+      "table_rows": 3
+    },
+    {
+      "viewport": 960,
+      "navigation": "expanded-large",
+      "width": 719.3333740234375,
+      "client": 711,
+      "scroll": 711,
+      "descendants": 456,
+      "table_rows": 50
+    },
+    {
+      "viewport": 1440,
+      "navigation": "expanded-large",
+      "width": 666.8541870117188,
+      "client": 659,
+      "scroll": 659,
+      "descendants": 432,
+      "table_rows": 50
+    }
+  ],
+  "known_host_console": {
+    "errors": 1,
+    "warnings": 0,
+    "trigger": "Host overflow tabs menu",
+    "directive": "style-src-elem 'self' dlc-asset:",
+    "blocked_style_hash": "sha256-nzTgYzXYDNe6BAHiiI7NNlfK8n/auuOAhh2t92YvuXo=",
+    "functional_result": "menu opened and older artifact selected/downloaded successfully"
+  },
+  "screenshots": [
+    {
+      "path": "docs/images/animation-independent/narrow-curve.png",
+      "sha256": "33a41cc17732a4fd3ab449d22357e5a25e717c051b5c8cc0ee0e21b5e0a576b8"
+    },
+    {
+      "path": "docs/images/animation-independent/historical-artifact.png",
+      "sha256": "79ac490d757dfc177fdc17e87350225c24ca458f00a043e46fefd28f966dec69"
+    },
+    {
+      "path": "docs/images/animation-independent/large-narrow.png",
+      "sha256": "2b19b43eb650dd582a00055c0d15f3500393fd150e3a96977ef0c6d0fa97d8cb"
+    },
+    {
+      "path": "docs/images/animation-independent/large-wide.png",
+      "sha256": "3b62f76e715eb9562eace512a3587efd908db4610d35605fc2867fa2d2711549"
+    }
+  ]
+}
