@@ -13,8 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
-from dbfox_dlc_api import ResourceScopeRef
-from pydantic import BaseModel, ConfigDict
+from dbfox_dlc_api import ProjectResourceDescriptor, ResourceScopeRef
 
 from .contracts import (
     ChapterOutput,
@@ -32,18 +31,6 @@ def _now() -> str:
 
 def _new_id() -> str:
     return uuid.uuid4().hex
-
-
-class WorldDescriptor(BaseModel):
-    """Resource discovery descriptor for the project's story world."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    kind: str
-    id: str
-    version: str
-    name: str
-    is_default: bool = True
 
 
 class WorldHandle:
@@ -196,12 +183,12 @@ class StoryStateStore:
 
     # ── Resource provider surface ──
 
-    def list_resources(self, project_id: str) -> tuple[WorldDescriptor, ...]:
+    def list_resources(self, project_id: str) -> tuple[ProjectResourceDescriptor, ...]:
         world = self.get_world(project_id)
         if world is None:
             return ()
         return (
-            WorldDescriptor(
+            ProjectResourceDescriptor(
                 kind=STORY_WORLD_KIND,
                 id=world.id,
                 version=str(world.generation),
