@@ -43,21 +43,33 @@ from engine.dlc.snapshot import (
     DlcActivationFailure,
     DlcOperationContribution,
     ResourceResolverContribution,
+    SessionResourceContribution,
     RuntimeContributionSnapshot,
     ToolContribution,
     compute_snapshot_id,
 )
 from engine.dlc.trust import DlcTrustStore
+from engine.attachments import ATTACHMENT_RESOURCE_KIND
 from engine.tools.runtime import ToolRegistry
 from engine.tools.runtime.base import BaseTool, ToolCapability
 
 logger = logging.getLogger(__name__)
 
-# Capabilities supported for installable in-process DLC Tools in v1
-SUPPORTED_DLC_CAPABILITIES: frozenset[ToolCapability] = frozenset(
+# Trusted package code may run in-process only with ambient read/network
+# capabilities. Mutation and subprocess tools must cross the existing worker
+# process boundary so timeout/cancellation can kill the entire attempt tree.
+SUPPORTED_IN_PROCESS_DLC_CAPABILITIES: frozenset[ToolCapability] = frozenset(
     {
         "network",
         "filesystem_read",
+    }
+)
+SUPPORTED_ISOLATED_DLC_CAPABILITIES: frozenset[ToolCapability] = frozenset(
+    {
+        "network",
+        "filesystem_read",
+        "filesystem_write",
+        "subprocess",
     }
 )
 
@@ -67,16 +79,17 @@ def _owned_resource_kind(owner_id: str, kind: str) -> bool:
 
 
 def _check_tool_resource_ownership(manifest: DlcManifest, tool: BaseTool[Any, Any]) -> None:
+    host_inputs = {ATTACHMENT_RESOURCE_KIND} if "filesystem_read" in tool.execution.capabilities else set()
     foreign = tuple(
         requirement.kind
         for requirement in tool.execution.required_resources
-        if not _owned_resource_kind(manifest.id, requirement.kind)
+        if not _owned_resource_kind(manifest.id, requirement.kind) and requirement.kind not in host_inputs
     )
     if foreign:
         raise DlcError(
             DlcErrorCode.PERMISSION_VIOLATION,
             f"Tool '{tool.name}' from DLC '{manifest.id}' requires foreign Resource kinds {foreign!r}. "
-            "Extension API v2 permits direct resolution only for Resource kinds owned by the same DLC; "
+            "Extension API v2 permits DLC-owned resources and explicitly scoped Host input snapshots; "
             "cross-capability work must use Agent composition.",
         )
 
@@ -84,12 +97,17 @@ def _check_tool_resource_ownership(manifest: DlcManifest, tool: BaseTool[Any, An
 def _check_tool_permissions(manifest: DlcManifest, tool: BaseTool[Any, Any]) -> None:
     """Validate that tool capabilities are covered by manifest permission scopes."""
     capabilities = set(tool.execution.capabilities)
+    supported = (
+        SUPPORTED_ISOLATED_DLC_CAPABILITIES
+        if tool.execution.backend == "isolated_process"
+        else SUPPORTED_IN_PROCESS_DLC_CAPABILITIES
+    )
     for cap in capabilities:
-        if cap not in SUPPORTED_DLC_CAPABILITIES:
+        if cap not in supported:
             raise DlcError(
                 DlcErrorCode.PERMISSION_VIOLATION,
                 f"Tool '{tool.name}' requested unsupported capability '{cap}' for DLC '{manifest.id}'. "
-                "Installable DLCs in v1 may only request 'network' or 'filesystem_read'.",
+                f"The '{tool.execution.backend}' backend does not grant that capability.",
             )
         # Check that manifest declares covering permission
         has_permission = False
@@ -136,8 +154,13 @@ def platform_builtin_contributions() -> BuiltinContributionSet:
     register_core_functions(registry)
     register_conversation_functions(registry)
     register_remote_job_extension(registry)
+    from engine.attachments import ATTACHMENT_RESOURCE_KIND, AttachmentService
     return BuiltinContributionSet(
         identifiers=("dbfox.core", "dbfox.conversation", "dbfox.remote_job"),
+        resource_resolvers=(ResourceResolverContribution(
+            kind=ATTACHMENT_RESOURCE_KIND, resolver=lambda db, ref: AttachmentService(db).resolve(ref),
+            owner_id="dbfox.core", binding="metadata_session",
+        ),),
         tools=tuple(
             ToolContribution(
                 tool=registry.require(name),  # type: ignore[arg-type]
@@ -230,6 +253,7 @@ class ContributionCompiler:
         active_dlcs: list[ActivatedDlcIdentity] = []
         all_tools: list[ToolContribution] = list(seed.tools)
         all_resource_providers: list[ProjectResourceProvider] = list(seed.resource_providers)
+        all_session_resource_contributions: list[SessionResourceContribution] = []
         all_resource_resolvers: list[ResourceResolverContribution] = list(seed.resource_resolvers)
         all_context_contributors: list[Callable[[Session], ContextContributor]] = list(seed.context_contributors)
         all_completion_constraints = list(seed.completion_constraints)
@@ -326,12 +350,11 @@ class ContributionCompiler:
                 candidate_tool_registry = _clone_tool_registry(accepted_tool_registry)
                 candidate_tools: list[ToolContribution] = []
                 for tool in staging.tools:
-                    # In R2 v1, installable DLC tools must use in_process execution backend
-                    if tool.execution.backend != "in_process":
+                    if tool.execution.backend not in {"in_process", "isolated_process"}:
                         raise DlcError(
                             DlcErrorCode.PERMISSION_VIOLATION,
                             f"Tool '{tool.name}' from DLC '{dlc_id}' requested backend '{tool.execution.backend}'. "
-                            "Dynamic DLC tools in v1 must use 'in_process' execution backend.",
+                            "DLC tools must use a registered execution backend.",
                         )
                     _check_tool_permissions(manifest, tool)
                     _check_tool_resource_ownership(manifest, tool)
@@ -419,6 +442,7 @@ class ContributionCompiler:
                         kind
                         for kind in guidance.applies_to_resource_kinds
                         if not _owned_resource_kind(dlc_id, kind)
+                        and not (kind == ATTACHMENT_RESOURCE_KIND and "filesystem_read" in manifest.permissions)
                     )
                     foreign_artifacts = tuple(
                         artifact_type
@@ -607,6 +631,10 @@ class ContributionCompiler:
                 known_resolver_kinds.update(candidate_resolver_kinds)
                 all_resource_resolvers.extend(candidate_resolvers)
                 all_resource_providers.extend(candidate_providers)
+                all_session_resource_contributions.extend(
+                    SessionResourceContribution(owner_id=dlc_id, provider=provider, retire=retire)
+                    for provider, retire in staging.session_resource_providers
+                )
 
                 # Promote context
                 all_context_contributors.extend(candidate_context)
@@ -685,6 +713,7 @@ class ContributionCompiler:
             active_dlcs=active_dlc_tuple,
             tools=tuple(all_tools),
             resource_providers=tuple(all_resource_providers),
+            session_resource_contributions=tuple(all_session_resource_contributions),
             resource_resolvers=tuple(all_resource_resolvers),
             context_contributors=tuple(all_context_contributors),
             completion_constraints=tuple(all_completion_constraints),

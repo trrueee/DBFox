@@ -1,7 +1,7 @@
 {
   "manifestSchemaVersion": 2,
   "id": "dbfox.workspace",
-  "version": "2.1.0",
+  "version": "3.0.2",
   "displayName": "DBFox Workspace",
   "publisher": "dbfox",
   "description": "Local workspace resources, bounded file tools, and file views for DBFox.",
@@ -12,6 +12,8 @@
     "frontend": "frontend/index.js"
   },
   "permissions": [
-    "filesystem_read:workspace"
+    "filesystem_read:workspace",
+    "filesystem_write:workspace",
+    "subprocess:workspace"
   ]
 }

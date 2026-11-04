@@ -8,6 +8,7 @@ import {
   getConversationHistory,
   getConversationRunArtifacts,
   listConversations,
+  patchConversation,
   resolveConversationApproval,
   resolveConversationQuestion,
   selectConversationArtifact,
@@ -46,6 +47,7 @@ import {
   upsertRun,
 } from "./conversationStoreReducer";
 import { useWorkspaceStore } from "./workspaceStore";
+import { conversationTitle } from "../features/conversation/conversationTitle";
 
 export interface ConversationState {
   summaries: ConversationSummary[];
@@ -62,6 +64,7 @@ export interface ConversationActions {
   loadOlderHistory: (conversationId: string) => Promise<boolean>;
   createAndOpenConversation: (question: string) => Promise<ConversationDetail>;
   deleteConversationById: (conversationId: string) => Promise<void>;
+  renameConversation: (conversationId: string, title: string) => Promise<void>;
   loadConversation: (detail: ConversationDetail) => void;
   loadRunArtifacts: (
     conversationId: string,
@@ -145,12 +148,13 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   },
 
   createAndOpenConversation: async (question) => {
-    requireConversationLlmPayload();
+    // A local draft/preview can exist before model configuration. Send owns
+    // credential validation and no Agent Run starts here.
     const projectId = useWorkspaceStore.getState().activeProjectId;
     if (!projectId) throw new Error("Please select a project first.");
     const detail = await createConversation({
       project_id: projectId,
-      title: question.slice(0, 80),
+      title: conversationTitle(question),
       resource_intents: [],
     });
     const summary: ConversationSummary = {
@@ -164,6 +168,16 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }));
     get().loadConversation(detail);
     return detail;
+  },
+
+  renameConversation: async (conversationId, title) => {
+    const detail = await patchConversation(conversationId, { title: title.trim() });
+    set(state => ({
+      summaries: state.summaries.map(item => item.id === conversationId ? { ...item, title: detail.title } : item),
+      detailById: state.detailById[conversationId] ? {
+        ...state.detailById, [conversationId]: { ...state.detailById[conversationId], title: detail.title },
+      } : state.detailById,
+    }));
   },
 
   deleteConversationById: async (conversationId) => {

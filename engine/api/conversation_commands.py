@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from engine.agent.approval import Approval, ApprovalConflict
 from engine.agent.references import ConversationInputReference
@@ -34,8 +35,14 @@ from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.json_codec import loads as json_loads
 from engine.llm.config import LlmConfigurationError, normalize_product_llm_preferences
-from engine.models import AgentRun, AgentRunItemRecord, AgentSession, Project
+from engine.models import AgentRun, AgentRunItemRecord, AgentSession, Project, ConversationAttachment, SessionResourceRetirement
 from engine.runtime_composition import authorize_project_resources
+from engine.runtime_composition import authorize_conversation_resources
+from engine.runtime_composition import deliver_session_resource_retirements
+from engine.runtime_composition import get_active_runtime_snapshot
+from engine.agent.repositories.write_transaction import begin_agent_write
+from engine.json_codec import dumps as json_dumps
+from engine.attachments import ATTACHMENT_RESOURCE_KIND, AttachmentService, AttachmentError
 from engine.schemas.api_responses import (
     ArtifactSelectionResponse,
     ConversationDeleteResponse,
@@ -174,6 +181,10 @@ def delete_conversation(
     request: Request,
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
+    begin_agent_write(db)
+    if db.get(SessionResourceRetirement, conversation_id) is None:
+        ids = list(db.scalars(select(ConversationAttachment.id).where(ConversationAttachment.session_id == conversation_id)))
+        db.add(SessionResourceRetirement(session_id=conversation_id, attachment_ids_json=json_dumps(ids)))
     deletion = SessionRepository(db).request_delete(session_id=conversation_id)
     active_coordinator = coordinator(request) if deletion.status == "deleting" else None
     db.commit()
@@ -181,6 +192,7 @@ def delete_conversation(
         active_coordinator.cancel_invocations(deletion.running_invocations)
     if active_coordinator is not None:
         active_coordinator.wake(conversation_id)
+    deliver_session_resource_retirements(db)
     return {"status": deletion.status}
 
 
@@ -203,20 +215,34 @@ def admit_conversation_input(
             detail={"code": "CONVERSATION_NOT_FOUND", "message": "Conversation not found."},
         )
 
+    if any(ref.object and ref.object.kind == ATTACHMENT_RESOURCE_KIND for ref in payload.references):
+        if not any(
+            requirement.kind == ATTACHMENT_RESOURCE_KIND
+            for contribution in get_active_runtime_snapshot().tools
+            for requirement in contribution.tool.execution.required_resources
+        ):
+            raise HTTPException(status_code=409, detail={
+                "code": "ATTACHMENT_PROCESSOR_UNAVAILABLE",
+                "message": "文件处理扩展未启用，请启用相应扩展后重试。",
+            })
+
     try:
         intent_refs = ConversationResourceIntentRepository(db).list(conversation_id)
         requested_identities = _merge_requested_resource_identities(
             intent_refs,
             _merge_requested_resource_identities(
                 tuple(payload.requested_resources or ()),
-                _reference_resource_identities(tuple(payload.references)),
+                _merge_requested_resource_identities(
+                    _reference_resource_identities(tuple(payload.references)),
+                    tuple(RequestedResourceRef(kind=r.object.kind, id=r.object.id) for r in payload.references
+                          if r.object is not None and r.object.kind == ATTACHMENT_RESOURCE_KIND),
+                ),
             ),
         )
-        resource_refs = authorize_project_resources(
-            db,
-            project_id=str(aggregate.project_id or ""),
-            requested=list(requested_identities),
-        )
+        attachment_objects = {r.object.id for r in payload.references if r.object and r.object.kind == ATTACHMENT_RESOURCE_KIND}
+        if any(r.kind == ATTACHMENT_RESOURCE_KIND and r.id not in attachment_objects for r in requested_identities):
+            raise ValueError("An attachment must be included as an explicit message reference")
+        resource_refs = authorize_conversation_resources(db, conversation_id, list(requested_identities))
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
@@ -246,6 +272,7 @@ def admit_conversation_input(
             selected_artifact_ids=payload.selected_artifact_ids,
             workspace_context=payload.workspace_context,
         )
+        AttachmentService(db).admit(conversation_id, admission.input_id, tuple(payload.references))
         db.commit()
         run = db.get(AgentRun, admission.run_id)
         user_item = db.get(AgentRunItemRecord, admission.user_message_id)
@@ -258,6 +285,9 @@ def admit_conversation_input(
             "items": [json_loads(str(user_item.item_json))],
             "runs": [project_run(run)],
         }
+    except AttachmentError as exc:
+        db.rollback()
+        raise HTTPException(exc.status, detail={"code": exc.code, "message": str(exc)}) from None
     except LlmConfigurationError as exc:
         db.rollback()
         raise HTTPException(

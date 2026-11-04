@@ -157,6 +157,11 @@ class DataStateStore:
     def _initialize(self) -> None:
         with self._connect() as connection, connection:
             connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("""CREATE TABLE IF NOT EXISTS workbook_datasets (
+                id TEXT PRIMARY KEY, session_id TEXT NOT NULL, project_id TEXT NOT NULL,
+                source_attachment_id TEXT NOT NULL, source_sha256 TEXT NOT NULL,
+                scope_version TEXT NOT NULL, handle_json TEXT NOT NULL
+            )""")
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS connection_profiles (
@@ -417,6 +422,12 @@ class DataStateStore:
     ) -> DatabaseHandle:
         """Resolve the exact database generation already fenced by an Artifact."""
 
+        workbook = self.get_workbook(database_id)
+        if workbook is not None:
+            if resource_version != workbook.scope_version:
+                raise ValueError("Workbook source version has changed")
+            self.check_workbook_files(workbook)
+            return workbook
         database = self.get_database(database_id)
         if database is None:
             raise KeyError("Database resource is unavailable")
@@ -584,6 +595,11 @@ class DataStateStore:
         )
 
     def catalog_state(self, database_id: str) -> dict[str, Any]:
+        workbook = self.get_workbook(database_id)
+        if workbook is not None:
+            return {"database_id": workbook.id, "database_name": workbook.display_name, "dialect": "duckdb",
+                    "catalog_revision": 1, "refreshed_at": workbook.created_at, "table_count": 1,
+                    "schema_count": 1, "schemas": [{"name": "main", "table_count": 1}]}
         with self._connect() as connection:
             database = connection.execute(
                 """
@@ -641,6 +657,10 @@ class DataStateStore:
         limit: int,
         name_filter: str | None,
     ) -> tuple[list[dict[str, Any]], bool]:
+        workbook = self.get_workbook(database_id)
+        if workbook is not None:
+            match = not after and (not name_filter or name_filter.casefold() in "data")
+            return ([workbook.catalog_table()] if match else []), False
         clauses = ["t.database_resource_id = ?"]
         parameters: list[object] = [database_id]
         if after is not None:
@@ -677,6 +697,11 @@ class DataStateStore:
         database_id: str,
         name: str,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        workbook = self.get_workbook(database_id)
+        if workbook is not None:
+            if name not in ("data", "main.data"):
+                raise KeyError("Table is unavailable in this workbook dataset")
+            return workbook.catalog_table(), workbook.catalog_columns()
         normalized = name.strip()
         if not normalized or "\x00" in normalized:
             raise ValueError("A valid catalog table name is required")
@@ -722,6 +747,12 @@ class DataStateStore:
         tokens: tuple[str, ...],
         limit: int,
     ) -> list[dict[str, Any]]:
+        workbook = self.get_workbook(database_id)
+        if workbook is not None:
+            return [{"type": "column", "schema_name": "main", "table_name": "data",
+                     "column_name": c.name, "name": "data." + c.name, "score": 1.0,
+                     "reasons": ["catalog_name_match"], "matched_fields": ["column_name"]}
+                    for c in workbook.columns if any(t.casefold() in c.name.casefold() for t in tokens)][:limit]
         if not tokens:
             return []
         token_patterns = tuple(f"%{token.casefold()}%" for token in tokens)
@@ -1407,9 +1438,15 @@ class DataStateStore:
                 )
         return tuple(descriptors)
 
-    def resolve(self, ref: ResourceScopeRef) -> DatabaseHandle:
+    def resolve(self, ref: ResourceScopeRef):
         if ref.kind != DATABASE_RESOURCE_KIND:
             raise KeyError(f"Unexpected resource kind: {ref.kind}")
+        workbook = self.get_workbook(ref.id)
+        if workbook is not None:
+            if ref.version != workbook.scope_version:
+                raise ValueError("Workbook resource version does not match its frozen scope")
+            self.check_workbook_files(workbook)
+            return workbook
         database = self.get_database(str(ref.id))
         if database is None:
             raise ValueError(f"Database resource '{ref.id}' does not exist")
@@ -1420,3 +1457,59 @@ class DataStateStore:
         if str(ref.version or "") != version:
             raise ValueError(f"Database resource '{ref.id}' version does not match authorized scope")
         return DatabaseHandle(profile=profile, database=database, scope_version=version)
+
+    def get_workbook(self, dataset_id: str):
+        from .contracts import WorkbookDatabaseHandle
+        with self._connect() as db:
+            row = db.execute("SELECT handle_json FROM workbook_datasets WHERE id = ?", (dataset_id,)).fetchone()
+        return WorkbookDatabaseHandle.model_validate_json(row[0]) if row else None
+
+    @staticmethod
+    def check_workbook_files(handle) -> None:
+        import hashlib
+        for path, expected in ((handle.path, handle.file_sha256), (handle.source_path, handle.source.content_sha256)):
+            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                raise ValueError("Workbook source or derived data is unavailable or changed")
+
+    def publish_workbook(self, handle, temporary: Path):
+        """Publish the closed file under the owner's existing SQLite write boundary."""
+        from .contracts import WorkbookDatabaseHandle
+        with self._connect() as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            prior = db.execute("SELECT handle_json FROM workbook_datasets WHERE id = ?", (handle.id,)).fetchone()
+            if prior is not None:
+                current = WorkbookDatabaseHandle.model_validate_json(prior[0])
+                try:
+                    self.check_workbook_files(current)
+                except ValueError:
+                    pass
+                else:
+                    temporary.unlink(missing_ok=True)
+                    return current
+            temporary.replace(handle.path)
+            db.execute("INSERT OR REPLACE INTO workbook_datasets VALUES (?, ?, ?, ?, ?, ?, ?)", (
+                handle.id, handle.session_id, handle.project_id, handle.source.attachment_id,
+                handle.source.content_sha256, handle.scope_version, handle.model_dump_json(),
+            ))
+        return handle
+
+    def session_workbooks(self, context):
+        from dbfox_dlc_api import ATTACHMENT_RESOURCE_KIND
+        visible = {(ref.id, str(ref.version)) for ref in context.resource_refs if ref.kind == ATTACHMENT_RESOURCE_KIND}
+        with self._connect() as db:
+            rows = db.execute("SELECT id, source_attachment_id, source_sha256, scope_version, handle_json FROM workbook_datasets WHERE session_id = ? AND project_id = ?", (context.session_id, context.project_id)).fetchall()
+        return tuple(ProjectResourceDescriptor(kind=DATABASE_RESOURCE_KIND, id=row["id"], version=row["scope_version"],
+                                              name=self.get_workbook(row["id"]).display_name)
+                     for row in rows if (row["source_attachment_id"], row["source_sha256"]) in visible)
+
+    def retire_session(self, session_id: str) -> None:
+        with self._connect() as db, db:
+            rows = db.execute("SELECT id FROM workbook_datasets WHERE session_id = ?", (session_id,)).fetchall()
+            for row in rows:
+                handle = self.get_workbook(row["id"])
+                if handle is not None:
+                    expected_root = (self.database_path.parent / "workbooks").resolve()
+                    if handle.path.parent.resolve() != expected_root:
+                        raise ValueError("Workbook cleanup path is outside owner storage")
+                    handle.path.unlink(missing_ok=True)
+            db.execute("DELETE FROM workbook_datasets WHERE session_id = ?", (session_id,))

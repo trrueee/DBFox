@@ -6,12 +6,13 @@
     "node": ">=22.18.0"
   },
   "packageManager": "npm@10.9.3",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "scripts": {
     "build:visualization-vendor": "node scripts/build-visualization-vendor.mjs",
     "dev": "vite",
-    "build": "npm run build:music-vendor && npm run build:visualization-vendor && tsc -b && node ./scripts/build-electron-host.mjs && node ./scripts/build.mjs && node ./scripts/check-production-token.mjs && node ./scripts/check-bundle-budget.mjs",
+    "build": "npm run build:music-vendor && npm run build:visualization-vendor && npm run build:workbook-vendor && tsc -b && node ./scripts/build-electron-host.mjs && node ./scripts/build.mjs && node ./scripts/check-production-token.mjs && node ./scripts/check-bundle-budget.mjs",
+    "build:workbook-vendor": "node scripts/build-workbook-vendor.mjs",
     "build:music-vendor": "node ./scripts/build-music-vendor.mjs",
     "build:electron-host": "tsc --project tsconfig.electron.json && node ./scripts/build-electron-host.mjs",
     "electron:dev": "npm run build:electron-host && node ./scripts/run-electron-dev.mjs",
@@ -34,9 +35,12 @@
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-sql": "^6.10.0",
     "@codemirror/language": "^6.12.4",
+    "@codemirror/language-data": "6.5.2",
     "@codemirror/search": "^6.7.1",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.8",
+    "@fortune-sheet/core": "1.0.4",
+    "@fortune-sheet/react": "1.0.4",
     "@hookform/resolvers": "^5.9.1",
     "@lezer/highlight": "^1.2.3",
     "@radix-ui/react-context-menu": "^2.3.1",
@@ -119,6 +123,9 @@
     "vitest": "^4.1.8"
   },
   "overrides": {
+    "@fortune-sheet/core": {
+      "uuid": "11.1.1"
+    },
     "@hey-api/json-schema-ref-parser": {
       "js-yaml": "4.3.1"
     }

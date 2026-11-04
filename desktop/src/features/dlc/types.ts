@@ -10,6 +10,8 @@ export type {
   CredentialEnrollmentInput,
   DlcOperationInvokeOptions,
   FrontendExtensionHost,
+  HostIconName,
+  HostResourceKind,
 } from "../../../../sdk/frontend/index";
 
 export interface ActiveDlcItem {

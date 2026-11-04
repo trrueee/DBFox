@@ -4,6 +4,7 @@ import type { ConversationArtifact, ConversationDetail } from "../../types/conve
 const mocks = vi.hoisted(() => ({
   admit: vi.fn(),
   create: vi.fn(),
+  patch: vi.fn(),
   get: vi.fn(),
   history: vi.fn(),
   getRunArtifacts: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock("../../features/conversation/conversationRepository", () => ({
   admitConversationInput: mocks.admit,
   cancelConversationRun: vi.fn(),
   createConversation: mocks.create,
+  patchConversation: mocks.patch,
   deleteConversation: vi.fn(),
   getConversation: mocks.get,
   getConversationHistory: mocks.history,
@@ -65,6 +67,7 @@ describe("conversationStore admission projection", () => {
   beforeEach(() => {
     mocks.admit.mockReset();
     mocks.create.mockReset();
+    mocks.patch.mockReset();
     mocks.get.mockReset();
     mocks.history.mockReset();
     mocks.getRunArtifacts.mockReset();
@@ -77,6 +80,15 @@ describe("conversationStore admission projection", () => {
       streamErrorById: {},
       streamStateById: {},
     });
+  });
+
+  it("renames metadata without replacing a live conversation projection with an older response", async () => {
+    mocks.patch.mockResolvedValue({ ...initialDetail, title: "订单核对", cursor: 1 });
+    useConversationStore.setState({ summaries: [{ id: initialDetail.id, project_id: "project-1", title: "Orders", updated_at: "2026-11-03T00:00:00Z" }] });
+    await useConversationStore.getState().renameConversation(initialDetail.id, "  订单核对  ");
+    expect(mocks.patch).toHaveBeenCalledWith(initialDetail.id, { title: "订单核对" });
+    expect(useConversationStore.getState().detailById[initialDetail.id]).toMatchObject({ title: "订单核对", cursor: 10 });
+    expect(useConversationStore.getState().summaries[0].title).toBe("订单核对");
   });
 
   it("clears a stale stream failure after refreshing a terminal snapshot", async () => {

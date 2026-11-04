@@ -125,12 +125,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.smart-query-home__empty {
-  margin: 0;
-  padding: var(--space-3) var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--ui-font-control);
-}
+
 
 @media (max-width: 720px) {
   .smart-query-home__content {

@@ -25,12 +25,16 @@ import { openArtifactDock } from "../../stores/artifactDockStore";
 import { getConversation } from "../conversation/conversationRepository";
 import { Tree } from "../../components/ui";
 import { CodeArtifactView } from "../workspace/artifacts/CodeArtifactView";
+import { ResourceIcon } from "../../components/resources/resourcePresentation";
+import { StandardIcon } from "../../components/resources/StandardIcon";
 import type { DlcOperationInvokeOptions } from "./types";
 import type {
   CredentialEnrollmentBatchResult,
   CredentialEnrollmentInput,
 } from "./types";
 import "./extension-host.css";
+
+const FileContent = React.lazy(() => import("../../components/resources/FileContent").then(module => ({ default: module.FileContent })));
 
 /**
  * Ensures global SDK object is mounted on window for dynamic DLC scripts.
@@ -73,15 +77,16 @@ interface ExtensionHostServices {
   ): Promise<CredentialEnrollmentBatchResult>;
 }
 
-async function invokeBoundDlcOperation<TOutput>(
+export async function invokeBoundDlcOperation<TOutput>(
   dlcId: string,
   operationName: string,
   input: unknown,
   options?: DlcOperationInvokeOptions,
 ): Promise<TOutput> {
-  const query = options?.projectId
-    ? `?project_id=${encodeURIComponent(options.projectId)}`
-    : "";
+  const parameters = new URLSearchParams();
+  if (options?.projectId) parameters.set("project_id", options.projectId);
+  if (options?.sessionId) parameters.set("session_id", options.sessionId);
+  const query = parameters.size ? `?${parameters.toString()}` : "";
   const response = await fetchEnginePath(
     `/dlcs/${encodeURIComponent(dlcId)}/operations/${encodeURIComponent(operationName)}${query}`,
     {
@@ -208,6 +213,9 @@ export function createStagedExtensionHost(
       version: "1.0.0",
       Tree,
       CodeArtifact: CodeArtifactView,
+      FileContent: (props) => React.createElement(React.Suspense, { fallback: React.createElement("p", null, "正在打开文件…") }, React.createElement(FileContent, props)),
+      ResourceIcon,
+      Icon: StandardIcon,
     },
     connectors: {
       register(contribution: ResourceConnectorContribution): void {
@@ -238,6 +246,10 @@ export function createStagedExtensionHost(
               }
             }
             : undefined,
+          onOpen: contribution.onOpen ? async (context: ConnectorContext) => {
+            try { await contribution.onOpen?.(context); }
+            catch (error) { reportCallbackFailure(dlcId, `connector:${contribution.id}:onOpen`, error); throw error; }
+          } : undefined,
           listResources: contribution.listResources
             ? async (context: ConnectorContext) => {
               try {
@@ -290,6 +302,14 @@ export function createStagedExtensionHost(
           throw new Error(`[DLC ${dlcId}] Invalid dock view registration: missing valid viewType`);
         }
         admitOwnedId(contribution.viewType, "dock view", dockViewTypes);
+        if (contribution.preferredWidth !== undefined && (
+          !Number.isFinite(contribution.preferredWidth) || contribution.preferredWidth < 320 || contribution.preferredWidth > 1200
+        )) {
+          throw new Error(`[DLC ${dlcId}] Dock preferredWidth must be between 320 and 1200 CSS pixels`);
+        }
+        if (contribution.objectKinds?.some(kind => typeof kind !== "string" || !kind.startsWith(`${dlcId}.`))) {
+          throw new Error(`[DLC ${dlcId}] Object preview kinds must belong to the owner's namespace`);
+        }
         const safeContribution: DockViewContribution = {
           ...contribution,
           icon(view: WorkspaceDockTab) {

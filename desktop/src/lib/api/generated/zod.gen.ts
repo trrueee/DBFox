@@ -188,6 +188,31 @@ export const zArtifactVisibility = z.enum([
 ]);
 
 /**
+ * AttachmentCapabilities
+ */
+export const zAttachmentCapabilities = z.object({
+    max_file_bytes: z.int(),
+    max_session_bytes: z.int(),
+    max_session_files: z.int()
+});
+
+/**
+ * AttachmentSummary
+ */
+export const zAttachmentSummary = z.object({
+    available: z.boolean(),
+    byte_count: z.int(),
+    content_sha256: z.string(),
+    created_at: z.iso.datetime(),
+    display_name: z.string(),
+    first_input_id: z.string().nullable(),
+    first_input_sequence: z.int().nullable(),
+    id: z.string(),
+    media_type: z.string(),
+    session_id: z.string()
+});
+
+/**
  * Body_clear_security_audit_api_v1_diagnostics_security_audit_clear_post
  */
 export const zBodyClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPost = z.object({
@@ -581,19 +606,6 @@ export const zLlmTestResponse = z.object({
 });
 
 /**
- * MessagePayload
- */
-export const zMessagePayload = z.object({
-    artifact_refs: z.array(zArtifactReference).optional(),
-    completion_disposition: zCompletionDisposition.nullish(),
-    content: z.string().optional().default(''),
-    evidence: z.array(zEvidenceReference).optional(),
-    limitation_codes: z.array(zCompletionLimitationCode).optional(),
-    phase: z.enum(['commentary', 'final_answer']).nullish(),
-    role: z.enum(['user', 'assistant'])
-});
-
-/**
  * PaginationCursorResponse
  */
 export const zPaginationCursorResponse = z.object({
@@ -663,6 +675,7 @@ export const zProblemDetails = z.object({
  */
 export const zProjectCreateRequest = z.object({
     description: z.string().nullish(),
+    idempotency_key: z.string().min(1).max(128).nullish(),
     name: z.string()
 });
 
@@ -845,6 +858,20 @@ export const zConversationSessionResponse = z.object({
 });
 
 /**
+ * MessagePayload
+ */
+export const zMessagePayload = z.object({
+    artifact_refs: z.array(zArtifactReference).optional(),
+    completion_disposition: zCompletionDisposition.nullish(),
+    content: z.string().optional().default(''),
+    evidence: z.array(zEvidenceReference).optional(),
+    limitation_codes: z.array(zCompletionLimitationCode).optional(),
+    phase: z.enum(['commentary', 'final_answer']).nullish(),
+    references: z.array(zConversationInputReference).max(12).optional(),
+    role: z.enum(['user', 'assistant'])
+});
+
+/**
  * ResourceScopeRef
  *
  * Stable identity and freshness fence for one execution resource.
@@ -907,7 +934,8 @@ export const zRunItemStatus = z.enum([
     'waiting',
     'completed',
     'failed',
-    'cancelled'
+    'cancelled',
+    'expired'
 ]);
 
 /**
@@ -1298,6 +1326,10 @@ export const zApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsG
     artifact_id: z.string()
 });
 
+export const zApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetQuery = z.object({
+    session_id: z.string().nullish()
+});
+
 /**
  * Response Api Artifact Representations Api V1 Artifacts  Artifact Id  Representations Get
  *
@@ -1312,6 +1344,10 @@ export const zApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentatio
     representation_type: z.string()
 });
 
+export const zApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPostQuery = z.object({
+    session_id: z.string().nullish()
+});
+
 /**
  * Successful Response
  */
@@ -1323,6 +1359,15 @@ export const zApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentat
     artifact_id: z.string(),
     representation_type: z.string()
 });
+
+export const zApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPostQuery = z.object({
+    session_id: z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zAttachmentCapabilitiesApiV1AttachmentCapabilitiesGetResponse = zAttachmentCapabilities;
 
 export const zListConversationsApiV1ConversationsGetQuery = z.object({
     limit: z.int().gte(1).lte(100).optional().default(50),
@@ -1462,6 +1507,36 @@ export const zStreamConversationApiV1ConversationsConversationIdStreamGetPath = 
 export const zStreamConversationApiV1ConversationsConversationIdStreamGetQuery = z.object({
     after_sequence: z.int().gte(0).optional().default(0)
 });
+
+export const zListAttachmentsApiV1ConversationsSessionIdAttachmentsGetPath = z.object({
+    session_id: z.string()
+});
+
+/**
+ * Response List Attachments Api V1 Conversations  Session Id  Attachments Get
+ *
+ * Successful Response
+ */
+export const zListAttachmentsApiV1ConversationsSessionIdAttachmentsGetResponse = z.array(zAttachmentSummary);
+
+export const zUploadAttachmentApiV1ConversationsSessionIdAttachmentsPostPath = z.object({
+    session_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zUploadAttachmentApiV1ConversationsSessionIdAttachmentsPostResponse = zAttachmentSummary;
+
+export const zRemoveAttachmentApiV1ConversationsSessionIdAttachmentsAttachmentIdDeletePath = z.object({
+    session_id: z.string(),
+    attachment_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zRemoveAttachmentApiV1ConversationsSessionIdAttachmentsAttachmentIdDeleteResponse = z.void();
 
 export const zApiEnrollCredentialApiV1CredentialsPostBody = zCredentialEnrollmentRequestWritable;
 

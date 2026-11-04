@@ -38,15 +38,14 @@ describe("ProjectResourceSidebar", () => {
     });
   });
 
-  it("nests each project's conversations and resources directly under its row", () => {
+  it("nests only conversations under each folder project", () => {
     renderSidebar();
 
     expect(screen.getByRole("button", { name: "新任务" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "主页" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "主页" })).not.toBeInTheDocument();
     expect(screen.getByText("项目")).toBeInTheDocument();
 
-    // The active project's group auto-expands: conversations and resource sections
-    // sit directly under the project row — no chevron, no sub-group headers.
+    // The active project expands to conversations; capabilities open from its menu.
     expect(screen.getByRole("button", { name: /^重构产品界面/ })).toBeInTheDocument();
     expect(screen.queryByText("最近工作")).not.toBeInTheDocument();
     expect(screen.queryByText("对话")).not.toBeInTheDocument();
@@ -94,10 +93,11 @@ describe("ProjectResourceSidebar", () => {
     expect(screen.queryByRole("button", { name: /^其他项目/ })).not.toBeInTheDocument();
   });
 
-  it("opens project management through the row's hover action", () => {
+  it("opens project settings through the visible project menu", async () => {
     renderSidebar();
 
-    fireEvent.click(screen.getByRole("button", { name: "管理项目 Research" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "管理项目 Research" }), { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "项目设置" }));
 
     expect(useWorkspaceStore.getState().activeProjectId).toBe("project-2");
     expect(useWorkspaceStore.getState().mainSurfaceByProject["project-2"]).toEqual({

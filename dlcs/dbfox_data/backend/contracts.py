@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
+from pathlib import Path
 
 from dbfox_dlc_api import BaseModel, ConfigDict, Field
 from pydantic import JsonValue
@@ -62,6 +63,95 @@ class DatabaseHandle(BaseModel):
     profile: ConnectionProfile
     database: DatabaseResource
     scope_version: str
+
+    @property
+    def id(self) -> str:
+        return self.database.id
+
+    @property
+    def dialect(self) -> str:
+        return self.profile.provider
+
+    @property
+    def project_id(self) -> str:
+        return self.profile.project_id
+
+    @property
+    def environment(self) -> str:
+        return self.profile.environment
+
+    @property
+    def is_read_only(self) -> bool:
+        return self.profile.is_read_only
+
+    @property
+    def display_name(self) -> str:
+        return self.database.display_name
+
+
+class WorkbookColumn(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    name: str
+    type: str
+    source_column: int | None
+
+
+class WorkbookRegion(BaseModel):
+    """Explicit detail rows; constant context comes from original sheet cells."""
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    data_range: str = Field(min_length=2, max_length=32, description="Detail cells only, e.g. A4:E13; uses the shared header_row and selected column positions.")
+    context_cells: dict[Annotated[str, Field(min_length=1, max_length=64)], Annotated[str, Field(min_length=2, max_length=16)]] = Field(default_factory=dict, max_length=4)
+
+
+class WorkbookSource(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    attachment_id: str
+    content_sha256: str
+    sheet: str
+    header_row: int
+    excluded_rows: dict[int, str] = Field(default_factory=dict)
+    null_counts: dict[str, int] = Field(default_factory=dict)
+    currency_values: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+    regions: tuple[WorkbookRegion, ...] = ()
+    unselected_nonempty_rows: int = 0
+
+
+class WorkbookDatabaseHandle(BaseModel):
+    """An immutable managed query source, without a synthetic connection profile."""
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    id: str
+    scope_version: str
+    project_id: str
+    session_id: str
+    display_name: str
+    path: Path
+    source_path: Path
+    file_sha256: str
+    source: WorkbookSource
+    columns: tuple[WorkbookColumn, ...]
+    row_count: int
+    created_at: str
+    dialect: Literal["duckdb"] = "duckdb"
+    environment: Literal["dev"] = "dev"
+    is_read_only: Literal[True] = True
+
+    def catalog_table(self) -> dict[str, JsonValue]:
+        return {"id": self.id + ":data", "database_resource_id": self.id,
+                "schema_name": "main", "table_name": "data", "object_type": "table",
+                "comment": self.display_name, "row_count_estimate": self.row_count,
+                "columns_count": len(self.columns) + 1}
+
+    def catalog_columns(self) -> list[dict[str, JsonValue]]:
+        return [{"column_name": column.name, "data_type": column.type, "ordinal_position": index + 1,
+                 "is_nullable": True, "is_primary_key": False,
+                 "comment": f"Excel列{column.source_column}" if column.source_column else "原表区块上下文，单元格来源见工作簿配方"}
+                for index, column in enumerate(self.columns)] + [{
+                    "column_name": "__source_row", "data_type": "BIGINT", "ordinal_position": len(self.columns) + 1,
+                    "is_nullable": False, "is_primary_key": False, "comment": "原始Excel行号",
+                }]
+
+
+QuerySourceHandle = DatabaseHandle | WorkbookDatabaseHandle
 
 
 class EmptyInput(BaseModel):

@@ -251,7 +251,7 @@ class SchemaSearchTool(
         for query in tool_input.queries:
             tokens = _tokens(query)
             results = self._store.search_catalog(
-                handle.database.id,
+                handle.id,
                 tokens,
                 tool_input.limit_per_query,
             )
@@ -290,7 +290,7 @@ class SchemaSearchTool(
                 str(item.get("name") or ""),
             ),
         )
-        state = self._store.catalog_state(handle.database.id)
+        state = self._store.catalog_state(handle.id)
         return SchemaSearchOutput(
             searches=searches,
             candidates=ranked,

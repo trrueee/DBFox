@@ -98,7 +98,11 @@ def test_data_package_owns_query_result_completion_semantics(tmp_path: Path) -> 
     assert [
         (item.owner_id, item.spec.id, item.spec.version)
         for item in snapshot.capability_guidance
-    ] == [("dbfox.data", "analytical_work", "1")]
+    ] == [
+        ("dbfox.data", "conversation_workbooks", "1"),
+        ("dbfox.data", "workbook_analysis", "1"),
+        ("dbfox.data", "analytical_work", "1"),
+    ]
 
 
 def test_data_package_owns_namespaced_artifact_payload_contracts(tmp_path: Path) -> None:
@@ -107,6 +111,7 @@ def test_data_package_owns_namespaced_artifact_payload_contracts(tmp_path: Path)
         (item.owner_id, item.artifact_type, item.schema_version)
         for item in snapshot.artifact_contracts
     ] == [
+        ("dbfox.data", "dbfox.data.workbook", 1),
         ("dbfox.data", "dbfox.data.sql", 1),
         ("dbfox.data", "dbfox.data.safety", 1),
         ("dbfox.data", "dbfox.data.result_view", 1),

@@ -196,7 +196,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
 
       expect(viewTypes).toContain("core.artifacts");
       expect(viewTypes).toContain("core.artifact");
-      expect(viewTypes).toEqual(["core.artifacts", "core.artifact"]);
+      expect(viewTypes).toEqual(["core.project-workbench", "core.artifacts", "core.artifact"]);
     });
 
     it("fails closed deterministically on duplicate viewType registration", () => {
@@ -257,7 +257,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       );
 
       expect(screen.getByText("没有打开的标签")).toBeTruthy();
-      expect(screen.getByText("从左侧资源或对话打开对象后，会在这里继续查看和操作。")).toBeTruthy();
+      expect(screen.getByText("从项目菜单打开文件与数据库，或点击对话中的引用和成果。")).toBeTruthy();
     });
   });
 

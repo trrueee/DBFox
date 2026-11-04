@@ -29,7 +29,7 @@ export function PromptInputSubmit({
 }: PromptInputSubmitProps) {
   const isGenerating = status === "submitted" || status === "streaming";
 
-  let icon = <ArrowUp size={16} aria-hidden="true" />;
+  let icon = <ArrowUp size={20} strokeWidth={1.75} aria-hidden="true" />;
   if (status === "submitted") {
     icon = <LoaderCircle className="animate-spin" size={16} aria-hidden="true" />;
   } else if (status === "streaming") {

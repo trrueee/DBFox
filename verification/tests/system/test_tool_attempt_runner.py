@@ -5,6 +5,8 @@ from __future__ import annotations
 import threading
 import time
 import sys
+import subprocess
+import json
 
 from sqlalchemy.orm import sessionmaker
 
@@ -43,6 +45,24 @@ class _Control:
 
     def is_cancelled(self) -> bool:
         return self.cancelled.is_set()
+
+
+def test_worker_entrypoint_dispatches_protocol_without_starting_http():
+    # This is the same entrypoint argument used by the Frozen executable.
+    child = subprocess.run(
+        [sys.executable, "-m", "engine.main", "--tool-worker"],
+        input=b'{"protocol_version":1,"kind":"handshake"}\n{"protocol_version":1,"kind":"request","request":{}}\n',
+        capture_output=True, timeout=20,
+    )
+    frames = [json.loads(line) for line in child.stdout.splitlines()]
+    assert frames[0]["kind"] == "ready"
+    assert frames[1]["error_code"] == "TOOL_WORKER_INVALID_REQUEST"
+    assert child.returncode == 2
+
+
+def test_frozen_worker_uses_explicit_sidecar_entrypoint(monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert default_isolated_worker_command() == (sys.executable, "--tool-worker")
 
 
 class _DatabaseProbeInput(ToolInputModel):

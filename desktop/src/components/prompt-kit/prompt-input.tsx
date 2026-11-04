@@ -47,7 +47,7 @@ export function PromptInput({
       <PromptInputContext.Provider value={{ disabled, textareaRef }}>
         <div
           className={cn(
-            "cursor-text rounded-2xl border border-[var(--control-border)] bg-[var(--agent-surface-elevated)] p-2 shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] duration-200 focus-within:border-[color-mix(in_srgb,var(--color-primary)_58%,var(--control-border))] focus-within:shadow-[var(--shadow-sm),var(--focus-ring)]",
+            "cursor-text rounded-[var(--radius-composer)] border border-[var(--control-border)] bg-[var(--agent-surface-elevated)] p-2 shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] duration-200 focus-within:border-[var(--control-border-hover)] focus-within:shadow-[var(--shadow-md)]",
             disabled && "cursor-not-allowed opacity-60",
             className,
           )}

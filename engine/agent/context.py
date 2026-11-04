@@ -465,6 +465,7 @@ class ContextAssembler:
         *,
         contributors: tuple[Callable[[Session], ContextContributor], ...] = (),
         resource_providers: tuple[ProjectResourceProvider, ...] = (),
+        resource_discovery: Callable[[Session, str], tuple[ProjectResourceDescriptor, ...]] | None = None,
         artifact_representation_describer: (
             Callable[[Artifact], tuple[ArtifactRepresentationDescriptor, ...]] | None
         ) = None,
@@ -472,6 +473,7 @@ class ContextAssembler:
         self.session = session
         self.contributors = contributors
         self.resource_providers = resource_providers
+        self.resource_discovery = resource_discovery
         self.artifact_representation_describer = artifact_representation_describer
 
     def build(self, run_id: str) -> ContextSnapshot:
@@ -520,7 +522,7 @@ class ContextAssembler:
         response_batches = self._response_batches(run, sources)
         selected_artifacts = self._selected_artifacts(aggregate, admitted, sources)
         discovered_resources = list(
-            discover_resources_from_providers(
+            self.resource_discovery(self.session, run_id) if self.resource_discovery else discover_resources_from_providers(
                 self.session,
                 str(aggregate.project_id or ""),
                 self.resource_providers,
@@ -540,7 +542,20 @@ class ContextAssembler:
         resource_directory_truncated = len(resource_directory) < len(
             discovered_resources
         )
-        input_references = list(load_input_references(str(admitted.references_json)))
+        reference_input = admitted
+        # A consumed in-run input can explicitly change the user's subject.
+        # Queued inputs must not change the running invocation's authority.
+        for supplemental in self.session.scalars(
+            select(AgentSessionInput).where(
+                AgentSessionInput.run_id == run.id,
+                AgentSessionInput.status == "consumed",
+                AgentSessionInput.delivery_mode.in_(["steer", "respond"]),
+                AgentSessionInput.reply_to_request_id.is_(None),
+            ).order_by(AgentSessionInput.sequence)
+        ):
+            if load_input_references(str(supplemental.references_json)):
+                reference_input = supplemental
+        input_references = list(load_input_references(str(reference_input.references_json)))
         sources.extend(
             (
                 ContextSource(
@@ -558,8 +573,8 @@ class ContextAssembler:
                 ),
                 ContextSource(
                     kind="input_references",
-                    source_id=str(admitted.id),
-                    version=str(admitted.sequence),
+                    source_id=str(reference_input.id),
+                    version=str(reference_input.sequence),
                     included=bool(input_references),
                     reason=(
                         f"included {len(input_references)} attached reference(s)"
@@ -722,9 +737,11 @@ class ContextAssembler:
         observations = (
             self.session.execute(
                 select(AgentObservationRecord)
+                .join(AgentRun, AgentRun.id == AgentObservationRecord.run_id)
                 .where(
                     AgentObservationRecord.session_id == run.session_id,
                     AgentObservationRecord.status == "succeeded",
+                    AgentRun.session_sequence <= run.session_sequence,
                 )
                 .order_by(
                     AgentObservationRecord.created_at.desc(),
@@ -752,7 +769,7 @@ class ContextAssembler:
         if not artifact_ids:
             return ()
 
-        artifacts = ArtifactRepository(self.session)
+        artifacts = ArtifactRepository(self.session, resource_discovery=self.resource_discovery)
         projected: list[ContextArtifactObservation] = []
         for observation, artifact_id in ordered_pairs:
             artifact = artifacts.available_artifact(
@@ -774,6 +791,7 @@ class ContextAssembler:
                         _json_strings(observation.semantic_capabilities_json)
                     ),
                     resource_refs=artifact.resource_refs,
+                    run_status=str(self.session.get(AgentRun, observation.run_id).status),
                     payload=payload,
                 )
             )
@@ -798,7 +816,7 @@ class ContextAssembler:
         ).scalar_one_or_none()
         result = _json_object(previous.result_json) if previous is not None else {}
         completion_disposition = str(result.get("completion_disposition") or "")
-        artifact_repository = ArtifactRepository(self.session)
+        artifact_repository = ArtifactRepository(self.session, resource_discovery=self.resource_discovery)
         available_results = []
         if previous is not None:
             candidates = self.session.execute(
@@ -1162,7 +1180,7 @@ class ContextAssembler:
             return []
 
         artifacts: list[ContextArtifact] = []
-        artifact_repository = ArtifactRepository(self.session)
+        artifact_repository = ArtifactRepository(self.session, resource_discovery=self.resource_discovery)
         for artifact_id in selected_ids:
             artifact = artifact_repository.available_artifact(
                 current_run_id=str(admitted.run_id), artifact_id=artifact_id,

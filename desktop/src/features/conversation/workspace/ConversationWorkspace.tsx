@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApprovalItem } from "../../../types/conversation";
-import { ErrorState, LoadingState } from "../../../components/ui";
+import { Button, ErrorState, ShadcnSkeleton as Skeleton } from "../../../components/ui";
 import { getUserErrorMessage } from "../../../lib/api/client";
 import { Composer } from "./Composer";
+import { ComposerContext } from "./ComposerContext";
 import { ApprovalCard } from "./ApprovalCard";
-import { ConversationHeader } from "./ConversationHeader";
 import { ConversationStreamNotice } from "./ConversationStreamNotice";
 import { MessageList } from "./MessageList";
 import { useConversationViewModel } from "./useConversationViewModel";
@@ -51,8 +51,8 @@ export function ConversationWorkspace({
     selectArtifact,
     loadRunArtifacts,
   } = useConversationViewModel(conversationId);
-  const [contentScrolled, setContentScrolled] = useState(false);
   const references = useWorkspaceStore(selectActiveWorkbenchReferences);
+  const [contentScrolled, setContentScrolled] = useState(false);
   const removeWorkbenchReference = useWorkspaceStore((state) => state.removeWorkbenchReference);
   const clearWorkbenchReferences = useWorkspaceStore((state) => state.clearWorkbenchReferences);
 
@@ -96,7 +96,10 @@ export function ConversationWorkspace({
   if (!detail) {
     return (
       <div className="conv-workspace">
+        <section className="conv-conversation-pane" aria-label="对话内容">
+        <div className="conv-loading-body" role={conversationLoadError ? undefined : "status"} aria-label={conversationLoadError ? undefined : "正在载入对话"}>
         {conversationLoadError ? (
+          <div>
           <ErrorState
             title="对话载入失败"
             description={getUserErrorMessage(conversationLoadError, "对话载入失败，请重试。")}
@@ -104,9 +107,16 @@ export function ConversationWorkspace({
             onRetry={() => void openConversation(conversationId)}
             retryLabel="重新载入"
           />
+          <Button type="button" variant="ghost" onClick={() => useWorkspaceStore.getState().showSmartQueryHome()}>返回新任务</Button>
+          </div>
         ) : (
-          <LoadingState label="正在载入对话" />
+          <div className="conv-loading-document"><Skeleton /><Skeleton /><Skeleton /><Skeleton /><span className="sr-only">正在载入对话</span></div>
         )}
+        </div>
+        <Composer key={conversationId} conversationId={conversationId} running={false}
+          disabled={conversationLoadError ? "对话暂不可用" : "正在载入对话…"}
+          onSend={async () => {}} onCancel={async () => {}} context={<ComposerContext busy />} />
+        </section>
       </div>
     );
   }
@@ -118,9 +128,8 @@ export function ConversationWorkspace({
     <section
       className="conv-conversation-pane"
       aria-label="Conversation"
-      data-content-scrolled={contentScrolled ? "true" : undefined}
+      data-content-scrolled={contentScrolled || undefined}
     >
-      <ConversationHeader detail={detail} />
       <ConversationStreamNotice
         state={streamState}
         error={streamError}
@@ -136,11 +145,11 @@ export function ConversationWorkspace({
         historyLoadError={historyLoadError}
         onLoadOlderHistory={loadOlderHistory}
         onOpenSqlConsole={onOpenSqlConsole}
+        onScrolledChange={setContentScrolled}
         onSelectArtifact={handleSelectArtifact}
         resolvingQuestionId={resolvingQuestionId}
         questionError={questionError}
         onResolveQuestion={resolveQuestion}
-        onScrolledChange={setContentScrolled}
       />
       {pendingApproval && runningRun && (
         <div className="conv-pinned-action">
@@ -154,6 +163,9 @@ export function ConversationWorkspace({
         </div>
       )}
       <Composer
+        key={conversationId}
+        conversationId={conversationId}
+        context={<ComposerContext busy={sending} />}
         running={Boolean(runningRun)}
         submitting={sending}
         cancelling={cancelling}

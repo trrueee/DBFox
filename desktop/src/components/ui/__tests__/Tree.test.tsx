@@ -27,6 +27,22 @@ afterEach(() => {
 });
 
 describe("Host Tree primitive", () => {
+  it("loads default-expanded lazy ancestors through Zag and keeps selection visible", async () => {
+    const nestedRoot = { id: "root", label: "", children: [{ id: "src", label: "src" }] };
+    const loadItemChildren = vi.fn(async (node: Node) => node.id === "src"
+      ? [{ id: "src/lib", label: "lib" }] : [{ id: "src/lib/main.py", label: "main.py" }]);
+    render(<Tree rootItem={nestedRoot} ariaLabel="Nested files"
+      getItemId={(node: Node) => node.id} getItemLabel={(node: Node) => node.label}
+      getItemChildren={(node: Node) => node.children}
+      getItemChildrenCount={(node: Node) => node.id.endsWith(".py") ? undefined : 1}
+      loadItemChildren={loadItemChildren} defaultExpandedIds={["src", "src/lib"]}
+      selectedIds={["src/lib/main.py"]} />);
+    expect((await screen.findByRole("treeitem", { name: "main.py" })).getAttribute("aria-selected")).toBe("true");
+    expect(loadItemChildren).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "src" }));
+    await waitFor(() => expect(screen.queryByRole("treeitem", { name: "main.py" })).toBeNull());
+    expect(loadItemChildren).toHaveBeenCalledTimes(2);
+  });
   it.each([2, 150])("reactivates a selected leaf after its tab closes (%i visible nodes)", async (count) => {
     vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(320);
     vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(448);

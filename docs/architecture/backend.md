@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-28
+> 最后核验：2026-08-31
 >
 > 适用范围：FastAPI、Runtime composition、Repository、DLC 与外部系统边界
 
@@ -283,7 +283,7 @@ SecurityAuditRecord 与普通诊断日志分离：前者记录安全动作和结
 
 ## 15. 条件能力
 
-- 高权限工具出现前交付 isolated-process backend；
+- 若未来接纳不可信 DLC，在现有可信包 isolated worker 之外交付真正的 OS sandbox、egress 与资源配额；
 - 多模型成为产品能力时建立 Provider Route aggregate；
 - 公网部署时重新设计身份、租户、任务和事件架构；
 - 发布渠道确定后补签名、商店凭据和自动更新。

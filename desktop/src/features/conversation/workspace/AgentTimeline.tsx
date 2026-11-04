@@ -1,4 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
+import { openWorkbenchReference } from "../../resources/openWorkbenchReference";
+import { ReferenceCard } from "../../../components/resources/ReferenceCard";
+import { artifactKind, referenceKind, resourceLabel } from "../../../components/resources/resourcePresentation";
+import { getUserErrorMessage } from "../../../lib/api/client";
 import type {
   AssistantMessageItem,
   ConversationArtifact,
@@ -197,9 +203,10 @@ export function AgentTimeline({
         />
       )}
       {capabilityArtifacts.length > 0 && (
-        <div className="conv-agent-capability-artifacts">
+        <div className="conv-agent-capability-artifacts" aria-label="本次成果">
+          <h3 className="conv-result-heading">成果</h3>
           {capabilityArtifacts.map((artifact) => (
-            <div key={artifact.id}>
+            <ArtifactResultCard key={artifact.id} artifact={artifact} onOpen={onSelectArtifact ? () => onSelectArtifact(artifact.id) : undefined}>
               <ArtifactViewHost
                 artifact={toArtifactEnvelope(artifact)}
                 surface="inline"
@@ -211,7 +218,7 @@ export function AgentTimeline({
                 }}
                 openArtifact={(value) => onSelectArtifact?.(value.id)}
               />
-            </div>
+            </ArtifactResultCard>
           ))}
         </div>
       )}
@@ -224,6 +231,18 @@ export function AgentTimeline({
       )}
     </section>
   );
+}
+
+function ArtifactResultCard({ artifact, onOpen, children }: { artifact: ConversationArtifact; onOpen?: () => void; children: ReactNode }) {
+  const kind = artifactKind(artifact.type);
+  const [expanded, setExpanded] = useState(["chart", "image", "audio"].includes(kind));
+  return <section className="conv-result-card">
+    <ReferenceCard name={artifact.title} kind={kind} description={artifact.summary || resourceLabel(kind)} onOpen={onOpen} />
+    <details className="conv-result-preview" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}>
+      <summary><ChevronDown size={14} aria-hidden="true" /><span>预览{resourceLabel(kind)}</span></summary>
+      {expanded ? children : null}
+    </details>
+  </section>;
 }
 
 function runWorkingStatus(
@@ -251,9 +270,20 @@ function runWorkingStatus(
 }
 
 function UserMessage({ item }: { item: UserMessageItem }) {
+  const [previewError, setPreviewError] = useState<string | null>(null);
   return (
     <Message from="user" className="conv-message">
-      <MessageContent className="conv-message-body"><p>{item.payload.content}</p></MessageContent>
+      <MessageContent className="conv-message-body">
+        <p>{item.payload.content}</p>
+        <div className="conv-message-references">{(item.payload.references ?? []).map((ref, index) => {
+          const reference = { label: ref.label, object: ref.object ?? undefined, authority: ref.authority ?? undefined, locator: ref.locator ?? undefined, artifactId: ref.artifact_id ?? undefined };
+          return <ReferenceCard key={ref.object?.id ?? ref.artifact_id ?? index} name={ref.label} kind={referenceKind(reference)} onOpen={() => {
+            try { openWorkbenchReference(reference, item.session_id); setPreviewError(null); }
+            catch (error) { setPreviewError(getUserErrorMessage(error, "此引用暂不可预览。")); }
+          }} />;
+        })}</div>
+        {previewError ? <p role="alert">{previewError}</p> : null}
+      </MessageContent>
     </Message>
   );
 }
@@ -306,6 +336,7 @@ function AssistantMessage({
           artifactRefs={item.payload.artifact_refs}
           onCitation={onSelectArtifact}
           renderArtifact={renderArtifact}
+          artifacts={artifacts}
         />
       </MessageContent>
     </Message>

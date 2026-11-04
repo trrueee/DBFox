@@ -1,6 +1,7 @@
 .dbfox-composer {
   width: 100%;
   min-width: 0;
+  container-type: inline-size;
 }
 
 .dbfox-composer__prompt-input {
@@ -20,59 +21,11 @@
   min-width: 0;
   flex-wrap: wrap;
   gap: var(--space-2);
+  padding: var(--space-1);
 }
 
-.dbfox-reference-chip {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  height: 28px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 4px 0 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-row);
-  background: var(--surface-auxiliary);
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-micro);
-}
-
-.dbfox-reference-chip__kind {
-  color: var(--color-text-muted);
-  text-transform: capitalize;
-}
-
-.dbfox-reference-chip__label {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dbfox-reference-chip__remove {
-  display: inline-grid;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-}
-
-.dbfox-reference-chip__remove:hover {
-  background: var(--control-bg-hover);
-  color: var(--color-text-primary);
-}
-
-.dbfox-reference-chip__remove:focus-visible {
-  outline: 0;
-  box-shadow: var(--focus-ring);
-}
+.dbfox-composer__loading { animation: composer-loading 1s linear infinite; }
+@keyframes composer-loading { to { transform: rotate(360deg); } }
 
 .dbfox-composer__toolbar {
   display: flex;
@@ -91,8 +44,45 @@
   color: var(--color-text-secondary);
 }
 
+.dbfox-composer__context { min-width: 0; max-width: 168px; gap: var(--space-1); padding-inline: var(--space-2); font-weight: 400; }
+.dbfox-composer__context > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dbfox-composer__context > svg { flex: 0 0 auto; }
+.dbfox-composer__context-menu { min-width: 220px; max-width: min(360px, calc(100vw - 32px)); max-height: 360px; overflow-y: auto; }
+.dbfox-composer__context-menu [role="menuitem"] > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dbfox-composer__model-status { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); color: var(--color-text-muted); font-size: var(--ui-font-caption); }
+
+@container (max-width: 520px) {
+  .dbfox-composer__project { max-width: 96px; }
+  .dbfox-composer__model { max-width: 112px; }
+  .dbfox-composer:has(.dbfox-composer__mode) .dbfox-composer__project > span,
+  .dbfox-composer__mode > span { display: none; }
+}
+
+.dbfox-composer__attachment-action,
 .dbfox-composer__primary-action {
-  border-radius: var(--radius-button);
+  width: calc(var(--density-control-height) + var(--space-1));
+  height: calc(var(--density-control-height) + var(--space-1));
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  box-shadow: none;
+}
+
+.dbfox-composer__attachment-action {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.dbfox-composer__attachment-action svg,
+.dbfox-composer__primary-action svg {
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+}
+
+.dbfox-composer__primary-action .lucide-square {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
 }
 
 .dbfox-composer__mode-option {
@@ -126,15 +116,9 @@
   padding: var(--prompt-input-compact-padding);
 }
 
-@media (max-width: 640px) {
-  .dbfox-composer__context span,
-  .dbfox-composer__mode > span {
-    display: none;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .dbfox-composer {
     transition: none;
   }
+  .dbfox-composer__loading { animation: none; }
 }

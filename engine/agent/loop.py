@@ -25,6 +25,7 @@ from engine.agent.context import ContextAssembler, ContextSnapshot
 from engine.agent.context_fragment import ContextContributor
 from engine.agent.resource_refs import (
     ProjectResourceProvider,
+    ProjectResourceDescriptor,
     load_resource_refs,
 )
 from engine.agent.guidance import (
@@ -178,6 +179,7 @@ class RunLoop:
         tool_executor: ToolExecutor | None = None,
         resource_resolver: CompositeResourceResolver | None = None,
         resource_providers: tuple[ProjectResourceProvider, ...] = (),
+        resource_discovery: Callable[[Session, str], tuple[ProjectResourceDescriptor, ...]] | None = None,
         artifact_representation_provider_resolver: (
             ArtifactRepresentationProviderResolver | None
         ) = None,
@@ -209,6 +211,7 @@ class RunLoop:
         self.prompts = PromptAssembler()
         self.context_contributors = context_contributors
         self.resource_providers = resource_providers
+        self.resource_discovery = resource_discovery
         self.artifact_representation_describer = artifact_representation_describer
         self.capability_guidance = capability_guidance or ()
         self.completion = completion
@@ -219,6 +222,7 @@ class RunLoop:
             executor=self.tool_executor,
             resource_resolver=resource_resolver,
             resource_providers=resource_providers,
+            resource_discovery=resource_discovery,
             artifact_representation_provider_resolver=(
                 artifact_representation_provider_resolver
             ),
@@ -813,6 +817,7 @@ class RunLoop:
                 db,
                 contributors=self.context_contributors,
                 resource_providers=self.resource_providers,
+                resource_discovery=self.resource_discovery,
                 artifact_representation_describer=self.artifact_representation_describer,
             ).build(run_id)
             state = RunWorkingStateAssembler(
@@ -988,6 +993,8 @@ class RunLoop:
             snapshot = context or ContextAssembler(
                 db,
                 contributors=self.context_contributors,
+                resource_providers=self.resource_providers,
+                resource_discovery=self.resource_discovery,
                 artifact_representation_describer=self.artifact_representation_describer,
             ).build(run_id)
             decision = self.completion.evaluate_bounded_partial(
@@ -1048,6 +1055,8 @@ class RunLoop:
             snapshot = context or ContextAssembler(
                 db,
                 contributors=self.context_contributors,
+                resource_providers=self.resource_providers,
+                resource_discovery=self.resource_discovery,
                 artifact_representation_describer=self.artifact_representation_describer,
             ).build(run_id)
             decision = self.completion.evaluate_bounded_partial(

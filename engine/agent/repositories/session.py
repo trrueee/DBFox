@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from uuid import uuid4
@@ -178,6 +179,14 @@ class SessionRepository:
         references: tuple[ConversationInputReference, ...] = (),
         reply_to_request_id: str | None = None,
     ) -> Admission:
+        request_fingerprint = hashlib.sha256(_json({
+            "content": content, "delivery_mode": delivery_mode.value,
+            "resources": [{"kind": ref.kind, "id": ref.id} for ref in resource_refs],
+            "references": [ref.model_dump(mode="json") for ref in references],
+            "selected_artifact_ids": selected_artifact_ids or [],
+            "workspace_context": workspace_context or {}, "llm_credential_id": llm_credential_id,
+            "api_base": api_base, "model_name": model_name, "request_payload": request_payload,
+        }).encode("utf-8")).hexdigest()
         begin_agent_write(self.session)
         existing = self.session.execute(
             select(AgentSessionInput).where(
@@ -186,6 +195,8 @@ class SessionRepository:
             )
         ).scalar_one_or_none()
         if existing is not None:
+            if existing.request_fingerprint != request_fingerprint:
+                raise ValueError("Input idempotency key already belongs to a different request")
             return self._admission_from_input(existing)
 
         aggregate = self._session_for_update(session_id)
@@ -210,6 +221,7 @@ class SessionRepository:
                     selected_artifact_ids=selected_artifact_ids,
                     workspace_context=workspace_context,
                     references=references,
+                    request_fingerprint=request_fingerprint,
                 )
 
         if delivery_mode is DeliveryMode.CANCEL_AND_REPLACE:
@@ -238,6 +250,7 @@ class SessionRepository:
             workspace_context_json=_json(workspace_context or {}),
             resource_refs_json=dump_resource_refs(resource_refs),
             references_json=dump_input_references(references),
+            request_fingerprint=request_fingerprint,
             reply_to_request_id=reply_to_request_id,
             status=SessionInputStatus.ADMITTED.value,
             admitted_at=now,
@@ -309,7 +322,7 @@ class SessionRepository:
             aggregate,
             RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=run_id,
-            payload={"item": dump_run_item(user_message_item(user_message, run_id=run_id))},
+            payload={"item": dump_run_item(user_message_item(user_message, run_id=run_id, references=references))},
             now=now,
         )
         self.session.flush()
@@ -623,6 +636,7 @@ class SessionRepository:
         selected_artifact_ids: list[str] | None,
         workspace_context: dict[str, Any] | None,
         references: tuple[ConversationInputReference, ...],
+        request_fingerprint: str,
     ) -> Admission:
         # Inherit frozen resource refs from the run's original input.
         # A steer cannot change the active Run's resource authority.
@@ -662,6 +676,7 @@ class SessionRepository:
             workspace_context_json=_json(workspace_context or {}),
             resource_refs_json=inherited_refs_json,
             references_json=dump_input_references(references),
+            request_fingerprint=request_fingerprint,
             status=SessionInputStatus.ADMITTED.value,
             admitted_at=now,
         )
@@ -671,7 +686,7 @@ class SessionRepository:
             aggregate,
             RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=str(run.id),
-            payload={"item": dump_run_item(user_message_item(message, run_id=str(run.id)))},
+            payload={"item": dump_run_item(user_message_item(message, run_id=str(run.id), references=references))},
             now=now,
         )
         self.session.flush()

@@ -7,7 +7,7 @@
   box-sizing: border-box;
   border-right: 1px solid var(--hairline);
   background: var(--sidebar-bg);
-  padding: 12px;
+  padding: 0 12px 12px;
 }
 
 .settings-sidebar__back,
@@ -23,7 +23,7 @@
 
 .settings-sidebar__back {
   display: flex;
-  min-height: 36px;
+  min-height: var(--app-chrome-height);
   align-items: center;
   gap: 8px;
   border-radius: 8px;

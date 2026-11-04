@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from engine.api.projects import router as projects_router
 from engine.api.agent import router as agent_router
 from engine.api.conversations import router as conversations_router
+from engine.api.attachments import router as attachments_router
 from engine.api.diagnostics import router as diagnostics_router
 from engine.api.credentials import router as credentials_router
 from engine.api.dlc_operations import router as dlc_operations_router
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/api/v1")
 router.include_router(projects_router)
 router.include_router(agent_router)
 router.include_router(conversations_router)
+router.include_router(attachments_router)
 router.include_router(diagnostics_router)
 router.include_router(credentials_router)
 router.include_router(dlc_operations_router)

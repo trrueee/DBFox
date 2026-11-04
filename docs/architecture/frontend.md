@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-30
+> 最后核验：2026-11-03
 >
 > 适用范围：`desktop/src/` 的工作区、传输、状态和用户交互
 >
@@ -25,7 +25,7 @@ flowchart TB
   end
 
   subgraph Shell["应用外壳"]
-    SIDEBAR["Datasource Sidebar"]
+    SIDEBAR["Folder Projects / Conversations"]
     CENTER["ConversationCenter"]
     DOCK["WorkspaceDock"]
   end
@@ -47,7 +47,6 @@ flowchart TB
 
   subgraph State["状态与投影"]
     WORKSPACE["workspaceStore"]
-    DATASOURCE["datasourceStore"]
     STORE["conversationStore"]
     REDUCER["conversationStoreReducer"]
     VM["useConversationViewModel"]
@@ -74,49 +73,59 @@ flowchart TB
   DOCK --> RESULT --> API
   CENTER --> WORKSPACE
   DOCK --> WORKSPACE
-  SIDEBAR --> DATASOURCE
+  SIDEBAR --> WORKSPACE
 ```
 
 ## 3. 工作区组件关系
 
 ```mermaid
 flowchart LR
-  APP["App Shell"] --> TREE["项目侧栏（项目 → 对话/资源）"]
+  APP["App Shell"] --> TREE["文件夹项目 → 对话"]
   APP --> CENTER["ConversationCenter"]
   APP --> DOCK["WorkspaceDock"]
-  APP --> MODAL["连接管理 Dialog"]
-
-  CENTER --> HOME["智能问数首页"]
-  CENTER --> CONV["Conversation Workspace"]
-  CENTER --> PROJECT["新建项目"]
-
-  MODAL --> DS["Datasource Management"]
-
-  DOCK --> SQL["SQL Console"]
-  DOCK --> TABLE["Table Workspace"]
-  DOCK --> FILE["只读项目文件"]
-  DOCK --> ARTIFACTS["✦ 工件总览"]
-  DOCK --> ARTIFACT["工件 Tab"]
-
-  ARTIFACTS --> RESULT["Result View"]
-  ARTIFACTS --> VIZ["Visualization Artifact"]
-  ARTIFACTS --> NOTE["Markdown Artifact"]
+  TREE --> MENU["右键 / 更多菜单"]
+  MENU --> DOCK
+  CENTER --> COMPOSER["UnifiedComposer / ReferenceCard"]
+  CENTER --> TIMELINE["AgentTimeline / ArtifactCard"]
+  COMPOSER --> DOCK
+  TIMELINE --> DOCK
+  DOCK --> FILE["文件树 + FileContent"]
+  DOCK --> DATA["数据库列表 + 表结构 / 数据 / 连接配置"]
+  DOCK --> DOMAIN["其他 DLC 工作台"]
+  DOCK --> ARTIFACT["成果总览 / 单个成果"]
+  FILE --> COMPOSER
+  DATA --> COMPOSER
 ```
 
-布局原则：
+布局与交互合同：
 
-- 左侧是项目分组树：每个项目一行（点击聚焦并展开），行内直接列出该项目对话（预览 5 条 + 显示更多）与各 DLC 资源 section；行尾 hover 齿轮进入项目管理页。切换项目不会卸载左侧容器，资源 View 仍由已激活 DLC 贡献并内嵌在所属项目分组下。
-- 中间只放对话与「新建项目」表单。Project 只创建名称与可选描述；本地目录由 `dbfox.workspace` Connector 在创建后通过通用 DLC operation 建立 binding，不进入 Project API。
-- 新建连接采用 Navicat 式 `Dialog` 弹窗承载 `DataSourcesPage`，不再让数据源管理页占满中间对话区；旧 `centerMode === "datasource"` 分支和 `openDatasourceCenter`/`centerDatasourceMode` Shell 状态已删除，命令面板的「管理连接」动作改为打开该 Dialog。
-- Workspace 资源树由 `dbfox.workspace` frontend contribution 提供；目录选择走 Host 的 `nativeDialogs.pickFolder`，列举/读取走 typed DLC operations，文件 Artifact/Dock renderer 也归该包。Core Shell 只拥有常驻 Resource View Container、Connector/Dock/Artifact contribution slots，以及版本化 `host.ui@1.0.0` Tree 的焦点、选择、折叠和键盘视觉语法；路径、文件动作和数据仍归 DLC。
-- 顶部不再显示项目名与连接状态。
-- 右侧 `WorkspaceDock` 是统一 Tab 容器：SQL 控制台、表详情、只读项目文件、工件总览和工件 Tab 都在这里。项目文件 Tab 按 `projectId` 对当前 Project 可见，切换 Project 后其他 Project 的文件 Tab 隐藏。
-- Shell/View 状态已分 owner：`workspaceStore.mainSurfaceByProject` 是 Project/Conversation 当前选择的唯一事实源，`conversationStore` 只缓存公共 Conversation 投影，不再维护全局 active ID。`workspaceStore` 还保存 Workbench scope、Dock identity/layout 和通用 `openDockTab`/`updateDockTab`；领域 payload 与临时编辑状态归 DLC。未知 view 走统一 fallback。
-- 对话历史只保留在左侧项目卡内的对话列表；不再提供独立的「历史记录」入口，也不再作为 Dock Tab。
-- 「✦ 工件」Tab 的内容是 `ArtifactDock` 的列表 + 预览结构，工件事实仍属于 Conversation Store 与后端制品，不作为独立事实源。
-- Dock 可展开/收起；窄窗口下保持对话可用，打开或关闭 Dock 不丢失选中 Artifact ID。
-- 设置页复用统一 scaffold，状态色只表达状态，品牌色只表达选中和主操作。
-- 旧 `WorkspaceTabs` / `WorkspaceRouter` 及其测试已删除；`AppCommandPalette` 保留并由 `Ctrl/Cmd+K` 接线到新 Shell actions（`showSmartQueryHome` / 连接管理 Dialog / `openDockTable`），历史页命令不再存在。`workspaceStore` 的 legacy `tabs` 状态、`openXxxTab()` actions、`openSqlConsole` 与 `_tabSeq` 已删除。`ConversationWorkspace` 已不再拥有内部 `ArtifactDock` layout container，工件只在右栏 Dock 渲染。`ContextDrawer` 改收 `WorkspaceDockTab`，`WorkspaceTab`/`WorkspaceTabType` legacy 类型已从生产路径移除。
+- 左侧只展示文件夹项目与所属对话（默认预览 5 条，支持显示更多）。项目行有展开箭头、文件夹图标和始终可发现的更多按钮；右键和更多菜单提供相同的能力入口。DLC 不再常驻左侧资源分组，旧 `ResourceViewContainer` 已删除。
+- “打开文件夹”使用 Host native picker 返回的 canonical root；项目默认显示文件夹名。先核对已有 Workspace binding，再以 canonical path 的 SHA-256 派生 opaque Project idempotency key，重新打开同一文件夹复用项目与对话。Project API 仍不保存路径；绑定通过原有 `dbfox.workspace` operations 创建，失败后由用户显式重试并先核实 binding，不自动重放写入。
+- 同名文件夹可位于不同路径。迁移 `f8a9b0c1d2ee` 仅移除 Project name 唯一约束，保持 Project / Conversation ID；降级遇到同名项目会拒绝执行，要求先人工改名，不删除数据。旧的未绑定项目继续可见，可在文件工作台关联目录。
+- 中间承担对话。`ReferenceCard` 在已发送消息、输入框、数据引用面板中使用相同的图标、名称、类型说明和操作区域；移除引用不触发打开，也不把输入焦点交给外层容器。添加附件时保留输入与按钮忙碌反馈，移除“正在添加文件…”文字；发送在处理完成前禁用。
+- 右侧是通用工作区。项目菜单通过 Connector `onOpen` 或 Host 的 `core.project-workbench` 打开已注册视图；领域数据与行为始终由 DLC 所有。数据库列表、表结构、数据样例和连接配置位于同一 Dock，连接配置采用内嵌表单。文件工作台展示按需加载的树及内容；两种导航器均可收起。
+- 同一 viewer 的新预览替换旧的未固定预览；双击标签或点击固定按钮保留标签。已固定标签、其他 viewer 以及其他会话 scope 不受替换影响。Tab overflow、键盘焦点、全屏与折叠沿用原 Dock 实现。
+- `openWorkbenchReference` 通过 viewer 声明的 `objectKinds` 定位对象视图；必须唯一匹配，且 SDK admission 检查类型属于 owner namespace。精确 object/version、authority、locator 和会话 scope 决定标签身份。附件与成果沿用各自已有导航和校验链。查看或展开不会增加 Agent authority；“加入对话”才交付 typed reference，由后端 admission 校验。
+- `workspaceStore.mainSurfaceByProject` 是当前项目/会话选择的唯一事实源；Store 只保存 scope、Tab 身份、布局和待发送引用。文件正文、目录数据、连接配置与表内容留在 owner 组件和 DLC 内，Core 不复制业务资源模型。
+
+### 3.1 设计系统与复用决策
+
+全局复用 `styles/tokens.css` 的颜色、字体、密度、阴影与圆角。默认界面正文/控件为 14px，说明为 12px，图标使用 14/16/20 的既有尺度；代码与表格分别使用可调的 code/data 字体角色。三栏以低对比表面和细分隔线组织，卡片与操作使用统一圆角，保留清晰键盘焦点和 reduced-motion 支持。
+
+窗口 chrome 融入工作区：左侧导航从窗口顶部开始，品牌与收起按钮占同一个 48px 首行；右侧 `TitleBar` 位于实际可调整宽度的 workspace 内，以同色背景承载当前对话标题和窗口控制。首页不重复品牌，主题选择沿用“设置 → 外观”。删除原独立 `ConversationHeader` 及其失效样式，标题直接投影 `mainSurfaceByProject` 选定的 Conversation，不新增标题 Store。窗口拖动、最大化与关闭复用已有 Electron IPC；拖动区与按钮 `no-drag` 按 [Electron 官方规则](https://www.electronjs.org/docs/latest/tutorial/custom-window-interactions)区分，控制按钮的双击不会冒泡触发最大化。默认 UI 栈优先本机 Segoe UI Variable Text，保留离线中文 fallback 和用户字体偏好；没有新增字体下载、组件库或窗口控制层。
+
+浅色主题的中性底色统一提亮：默认侧栏 `#F7F8FA`、辅助面 `#FAFBFC`、工作区白色；悬停、按下、分隔线和三种 neutral tone 同步使用更轻的灰阶。文字颜色与深色主题色阶保持原值，Tab 分组背景使用 subtle 而非 pressed 角色。
+
+- 导航继续使用现有 [shadcn Sidebar](https://ui.shadcn.com/docs/components/sidebar) anatomy、Radix menu/tab 和 [Lucide](https://lucide.dev/) 图标，不另加 UI 框架。
+- 文件身份优先采用微软官方 [Fluent 文件图标](https://github.com/microsoft/fluentui-system-icons/tree/9eb184e96268d3293462f9d9d19225b4c7b07774/packages/react-icons-file-type)，固定 CDN 版本 `fabric-cdn-prod_20261014.001` 的 18 个原始 SVG，按原生 16/20px 分别用于树与引用卡片。Markdown 用已有 Simple Icons 的标准标志（CC0），21 个代码语言标志沿用 [VS Code Icons](https://github.com/vscode-icons/vscode-icons) 的原始素材（MIT，固定 `f0a0c40aeae5eba2917ada14ad59b7e7f729e396`）。通用于树、消息引用、输入框与 Dock；CSV 使用中性表格符号，显式文件夹/数据表语义优先于同名扩展名。来源、SHA-256 与许可说明随安装包置于 `licenses/`，素材从本地加载，不增加 npm 依赖或远程请求。未采用整套图标主题运行时，也不自绘品牌标志。
+- 操作图标沿用 Lucide；`host.ui.Icon` 仅向隔离 DLC 提供静态白名单 SVG，替换数据库、音乐、故事界面的字符按钮，不传递状态或领域数据。播放/暂停、停止、循环、刷新、增删和章节排序使用标准符号及可访问名称；资源文件夹展开时采用打开文件夹图标。该 UI 合同为增量能力，不改变 Core Kernel、资源权限或持久化协议，不增加兼容层。
+- 统一输入框采用无常驻底色、边框或阴影的加号，保留悬停和键盘焦点反馈；发送/停止共用圆形主按钮，向上箭头代表发送、方形代表停止。按钮随现有密度变化，不改变上传期间的输入能力、发送保护、IME 或 Enter/Shift+Enter 合同。
+- 树继续使用现有 [Zag Tree View](https://zagjs.com/components/react/tree-view) 与 TanStack Virtual。默认展开的 lazy ancestors 通过官方 `api.expand()` 逐级加载，I/O、取消和错误仍归原树状态机。
+- 只读代码以现有 CodeMirror / Lezer 加官方 [`@codemirror/language-data`](https://codemirror.net/docs/ref/#language-data) 6.5.2（MIT）提供语法树和高亮；语言包按需加载，Host `FileContent` 自身也 lazy import。不引入完整 Monaco 编辑器，不手写语法解析器；语言包无法加载时仍展示可读源码。新增成本是语言 chunks 与依赖维护，受锁文件、许可证治理和生产 bundle 预算检查约束。
+- Markdown 复用现有 sanitized `MarkdownContent`，默认渲染，可切换源码或分栏；窄 Dock 上分栏纵向排列。HTML 代码按文本呈现，不执行。此组件只读，未实现代码编辑/保存。
+- 当前文件树读取沿用 Workspace 的有界 UTF-8 operation；二进制、非 UTF-8 和过大文件保留明确错误。Excel 附件仍由 Data 已有 workbook viewer 处理，未另建跨 DLC 文件解析链；统一图标不表示所有文件类型已能预览。
+
+这些增量扩展 Host UI 与注册合同，不引入兼容 mapper、镜像资源 Store、第二套权限或 SQL 执行链。源码与验证索引见 [implementation-map](./implementation-map.md#42-app-shell-与-workspace)。
 
 ## 4. 会话数据流
 
@@ -329,11 +338,12 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 |---|---|
 | 启动 | `desktop/src/components/EngineStartupGate.tsx` |
 | Workspace Shell | `desktop/src/stores/workspaceStore.ts`、`desktop/src/features/appShell/WorkspaceDock.tsx` |
+| 共享资源呈现 | `desktop/src/components/resources/ReferenceCard.tsx`、`resourcePresentation.tsx`、`FileContent.tsx` |
 | Dock Composition | `desktop/src/features/dock/dockViewComposition.ts`、`dockViewContent.tsx` |
 | Workspace presentation shell | `desktop/src/features/workspace/WorkspaceShell.tsx` |
 | Core 导航与 Project Context | `desktop/src/features/resources/ProjectResourceSidebar.tsx`、`desktop/src/features/projects/ProjectOverview.tsx` |
-| 新建项目/本地文件边界 | `desktop/src/features/projects/ProjectCreateForm.tsx`、`desktop/src/lib/projectFolder.ts`、`desktop/src/lib/desktopHost.ts`、`desktop/main/index.ts` |
-| Data 连接、资源树与 SQL/Table View | `dlcs/dbfox_data/frontend/index.js` |
+| 打开文件夹/本地文件边界 | `desktop/src/features/projects/ProjectCreateForm.tsx`、`desktop/src/lib/projectFolder.ts`、`desktop/src/lib/desktopHost.ts`、`desktop/main/index.ts` |
+| Data Dock 内连接、资源树与 SQL/Table View | `dlcs/dbfox_data/frontend/index.js` |
 | Workspace 文件 Connector、Dock 与 Artifact View | `dlcs/dbfox.workspace/frontend/index.js` |
 | Conversation | `desktop/src/features/conversation/workspace/ConversationWorkspace.tsx` |
 | Reducer | `desktop/src/stores/conversationStoreReducer.ts` |
@@ -350,4 +360,16 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 
 `ConversationWorkspaceLayout` 在 Host 的真实 stage 边界测量可用宽度。低于 748px（对话 420 + 分隔条 8 + Dock 320）时，打开的 Dock 独占 stage，隐藏的对话保持挂载并设置 `inert`/`aria-hidden`；收起 Dock 后显示对话和 44px 工作区入口。窗口或导航宽度恢复后自动重新分栏，同一个组件树不因布局模式切换而卸载。
 
-宽屏分隔条复用 `react-resizable-panels` 的指针和键盘交互，Dock 在 320px 最小宽度停住。收起只由已有 Host 工作区按钮更新 `workspaceStore`，不再让 Panel 自行 collapse 后留下仍为 open 的 store。无需新的持久布局状态、DLC 特例或 SDK 合同。实际 Electron 作者矩阵见 [工作区布局验证](../quality/workspace-compact-layout-verification.md)。
+宽屏分隔条复用 `react-resizable-panels` 的指针和键盘交互，Dock 在 320px 最小宽度停住。收起只由已有 Host 工作区按钮更新 `workspaceStore`，不再让 Panel 自行 collapse 后留下仍为 open 的 store。实际 Electron 作者矩阵见 [工作区布局验证](../quality/workspace-compact-layout-verification.md)。
+
+### 工作区连续性与界面层级
+
+- 左侧统一为文件夹项目与对话，只有一个“新任务”入口。当前项目与当前对话使用不同层级的中性选中背景；项目能力继续由已有菜单进入。
+- `ComposerContext` 显示当前项目和模型。项目选择直接更新 Shell；模型列表按需使用现有 models API，选择只修改已有安全配置元数据。`useSavedApiConfig` 通过浏览器事件订阅同一配置源，不建立第二份配置 Store，不读取或复制 API Key。
+- 对话名在创建时从首个有效句子截短，按 grapheme 保留完整字符；完整提问仍保存为消息。已有长标题只在导航显示时截短。重命名复用已有 PATCH 合同，仅更新标题，不覆盖正在变化的 Run/History 投影。
+- `workspacePersistence.ts` 复用现有 Zustand persist 与 Zod，仅保存项目、对话、Dock Tab 身份、开合、手动宽度和导航折叠偏好。最多 40 个项目/工作区、每个 12 个 Tab，优先保留当前项。恢复后由原资源 owner 重新读取内容；不保存消息、SQL、Artifact payload、输入草稿、References、授权租约或执行状态，也不自动发送或重放任务。
+- `DockViewContribution.preferredWidth` 是可选的展示建议（320–1200 CSS px），由 Host 在真实布局边界解析并夹到可用空间；手动宽度优先。数据库表、SQL、Excel 和文件分别声明适合的默认宽度。Data DLC 自己贡献数据库浏览器，避免 Core Connector frame 的重复标题；低于 520px 切换列表/详情单栏。
+- 引用和成果卡复用 `ResourceIcon`、`ReferenceCard` 与现有 Artifact 身份。表格等预览按需挂载；图表、图片、音频默认展示已有 Renderer。点击继续进入同一个 Dock Tab，不建立 payload 镜像。
+- 外观设置保留 Fluent 2 语义 Token、Lucide/标准文件图标与本机字体栈，常用选项在前，高级选项折叠。即时预览由真实展示组件组成并设置 inert，预览不创建任务。加载时保留窗口控件和输入区，读取失败在对应区域重试。
+
+本轮未新增依赖、后端接口、Kernel 合同、兼容层或迁移双写。持久布局是可丢弃的 UI 偏好，耐久任务事实仍来自 SQLite/API/SSE。设计与验证记录见 [2026-11-03 工作区界面优化](../quality/2026-11-03-workspace-ui-polish.md)。

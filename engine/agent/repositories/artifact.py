@@ -26,6 +26,7 @@ from engine.agent.resource_refs import (
     dump_resource_refs,
     load_resource_refs,
     resource_refs_for_run,
+    RunResourceDiscovery,
 )
 from engine.agent.run import SessionLeaseConflict
 from engine.agent.session import SessionLease
@@ -195,10 +196,12 @@ class ArtifactRepository:
         session: Session,
         *,
         payload_contract_resolver: ArtifactPayloadContractResolver | None = None,
+        resource_discovery: RunResourceDiscovery | None = None,
     ) -> None:
         self.session = session
         self.sessions = SessionRepository(session)
         self.payload_contract_resolver = payload_contract_resolver
+        self.resource_discovery = resource_discovery
 
     def get_for_run(
         self,
@@ -547,7 +550,11 @@ class ArtifactRepository:
             # Same-Run public work products are not private Resource handles.
             # Cross-Run context retains the consumer's exact admission fence.
             if str(owner_run.id) != str(current_run.id):
-                current_refs = resource_refs_for_run(self.session, current_run)
+                current_refs = (
+                    tuple(d.to_scope_ref() for d in self.resource_discovery(self.session, current_run_id))
+                    if self.resource_discovery is not None
+                    else resource_refs_for_run(self.session, current_run)
+                )
                 if any(ref not in current_refs for ref in artifact_refs):
                     return None
         except (JsonCodecError, ValueError):

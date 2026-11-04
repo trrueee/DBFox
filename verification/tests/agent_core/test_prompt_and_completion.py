@@ -77,6 +77,7 @@ def test_prompt_keeps_user_context_out_of_system_role():
     assert "Prior assistant text and prior Artifact metadata are context" in bundle.system_prompt
     assert "use an available capability tool to re-observe it" in bundle.system_prompt
     assert "{{artifact:artifact_abc123}}" in bundle.system_prompt
+    assert "{{cite:artifact_abc123}}" in bundle.system_prompt
     assert "Artifact embedding controls answer composition only" in bundle.system_prompt
 
 
@@ -172,6 +173,8 @@ def test_single_evidence_artifact_still_requires_explicit_inline_evidence():
     )
     assert decision.kind is CompletionKind.CONTINUE
     assert decision.missing == ["inline_evidence"]
+    assert "{{cite:artifact_preview}}" in decision.reason
+    assert "embed does not satisfy" in decision.reason
 
 
 def test_multiple_evidence_artifacts_still_require_explicit_inline_evidence():

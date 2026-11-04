@@ -35,8 +35,8 @@ describe("app shell layout", () => {
     const css = read("App.css");
 
     expect(css).toMatch(/\.app-shell\s*{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*width:\s*100vw;[^}]*height:\s*100vh;/s);
-    expect(css).toMatch(/\.app-shell-inner\s*{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);[^}]*background:\s*var\(--surface-canvas\);/s);
-    expect(css).toMatch(/\.app-body\s*{[^}]*grid-row:\s*2;/s);
+    expect(css).toMatch(/\.app-shell-inner\s*{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*minmax\(0,\s*1fr\);[^}]*background:\s*var\(--surface-canvas\);/s);
+    expect(css).toMatch(/\.app-body\s*{[^}]*grid-row:\s*1;/s);
 
     // Quiet Workbench: the primary workspace is a contiguous surface, not a raised card.
     const appMain = css.match(/\.app-main\s*{([^}]*)}/)?.[1] ?? "";
@@ -56,17 +56,22 @@ describe("app shell layout", () => {
   it("keeps lazy workspace boundaries visibly loading instead of flashing blank", () => {
     const app = read("App.tsx");
 
-    expect(app).toContain("<TitleBarFallback />");
+    expect(app).toMatch(/function AppLayoutFallback\(\)[\s\S]*?<TitleBar \/>/);
+    expect(app).toContain('import TitleBar from "./components/TitleBar"');
     expect(app).toContain("<AppLayoutFallback />");
     expect(app).toContain('<LoadingState label="正在载入工作区" />');
   });
 
-  it("keeps window controls inside the Electron titlebar", () => {
+  it("places draggable window chrome inside the workspace rather than above navigation", () => {
+    const app = read("App.tsx");
     const titlebar = read("components/TitleBar.tsx");
     const css = read("components/TitleBar.css");
 
     expect(titlebar).toContain('className="titlebar"');
-    expect(css).toMatch(/\.titlebar\s*{[^}]*grid-row:\s*1;/s);
+    expect(app).toMatch(/workspace=\{\s*<div className="app-workspace">\s*<TitleBar/s);
+    expect(titlebar).not.toContain("FoxIcon");
+    expect(titlebar).not.toContain("ThemeToggle");
+    expect(css).toMatch(/\.titlebar\s*{[^}]*-webkit-app-region:\s*drag;/s);
     expect(css).toMatch(/\.titlebar-controls\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
   });
 });

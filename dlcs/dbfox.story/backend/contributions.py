@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-from dbfox_dlc_api import DlcOperationSpec
+from dbfox_dlc_api import DlcOperationError, DlcOperationSpec
 
-from .store import StoryStateStore
+from .store import ChapterConflictError, StoryStateStore
 from .contracts import (
     ChapterCreateInput,
+    ChapterAppendInput,
+    ChapterCatalogListOutput,
     ChapterIdInput,
-    ChapterListOutput,
     ChapterMoveInput,
     ChapterOutput,
     ChapterUpdateInput,
+    ChapterVersionIdInput,
+    ChapterVersionListOutput,
+    ChapterVersionOutput,
+    ChapterVersionRestoreInput,
     DeleteOutput,
     EntityCreateInput,
     EntityIdInput,
@@ -32,11 +37,13 @@ from .contracts import (
 )
 from .resource_kind import STORY_WORLD_KIND
 from .chapter_tools import (
+    StoryAppendChapterTool,
     StoryChapterReadTool,
     StoryChaptersListTool,
     StoryUpsertEntityTool,
     StoryWriteChapterTool,
 )
+from .consistency import StoryChapterConsistencyConstraint
 from .tools import (
     StoryGraphQueryTool,
     StoryProposeRelationsTool,
@@ -51,12 +58,21 @@ def _project_id(context) -> str:
     return project_id
 
 
+def _chapter_conflict(exc: ChapterConflictError) -> DlcOperationError:
+    return DlcOperationError(
+        code="STORY_CHAPTER_CONFLICT",
+        message=str(exc),
+        status_code=409,
+    )
+
+
 def register(host) -> None:
     store = StoryStateStore(host.runtime_info.data_path)
     host.resources.register_provider(store.list_resources)
     host.resources.register_resolver(STORY_WORLD_KIND, store.resolve)
     _register_operations(host, store)
     _register_tools(host, store)
+    host.completion.register_constraint(StoryChapterConsistencyConstraint())
 
 
 def _register_operations(host, store: StoryStateStore) -> None:
@@ -144,8 +160,13 @@ def _register_operations(host, store: StoryStateStore) -> None:
     def revisions_list(_input, context) -> RevisionListOutput:
         return RevisionListOutput(revisions=store.list_revisions(_project_id(context)))
 
-    def chapters_list(_input, context) -> ChapterListOutput:
-        return ChapterListOutput(chapters=store.list_chapters(_project_id(context)))
+    def chapters_list(_input, context) -> ChapterCatalogListOutput:
+        return ChapterCatalogListOutput(
+            chapters=store.list_chapter_catalog(_project_id(context))
+        )
+
+    def chapters_read(input: ChapterIdInput, context) -> ChapterOutput:
+        return store.get_chapter(_project_id(context), input.chapter_id)
 
     def chapters_create(input: ChapterCreateInput, context) -> ChapterOutput:
         return store.create_chapter(
@@ -153,22 +174,76 @@ def _register_operations(host, store: StoryStateStore) -> None:
         )
 
     def chapters_update(input: ChapterUpdateInput, context) -> ChapterOutput:
-        return store.update_chapter(
-            _project_id(context),
-            input.chapter_id,
-            title=input.title,
-            content=input.content,
-            author="author",
-        )
+        try:
+            return store.update_chapter(
+                _project_id(context),
+                input.chapter_id,
+                title=input.title,
+                content=input.content,
+                author="author",
+                expected_sha256=input.expected_sha256,
+            )
+        except ChapterConflictError as exc:
+            raise _chapter_conflict(exc) from exc
+
+    def chapters_append(input: ChapterAppendInput, context) -> ChapterOutput:
+        try:
+            return store.append_chapter(
+                _project_id(context),
+                input.chapter_id,
+                content=input.content,
+                author="author",
+                expected_sha256=input.expected_sha256,
+            )
+        except ChapterConflictError as exc:
+            raise _chapter_conflict(exc) from exc
 
     def chapters_delete(input: ChapterIdInput, context) -> DeleteOutput:
         return DeleteOutput(deleted=store.delete_chapter(_project_id(context), input.chapter_id))
 
-    def chapters_move(input: ChapterMoveInput, context) -> ChapterListOutput:
+    def chapters_move(input: ChapterMoveInput, context) -> ChapterCatalogListOutput:
         store.move_chapter(_project_id(context), input.chapter_id, input.direction)
-        return ChapterListOutput(chapters=store.list_chapters(_project_id(context)))
+        return ChapterCatalogListOutput(
+            chapters=store.list_chapter_catalog(_project_id(context))
+        )
 
-    specs = (
+    def chapter_versions_list(
+        input: ChapterIdInput,
+        context,
+    ) -> ChapterVersionListOutput:
+        return ChapterVersionListOutput(
+            versions=store.list_chapter_versions(
+                _project_id(context),
+                input.chapter_id,
+            )
+        )
+
+    def chapter_versions_read(
+        input: ChapterVersionIdInput,
+        context,
+    ) -> ChapterVersionOutput:
+        return store.get_chapter_version(
+            _project_id(context),
+            input.chapter_id,
+            input.version_id,
+        )
+
+    def chapter_versions_restore(
+        input: ChapterVersionRestoreInput,
+        context,
+    ) -> ChapterOutput:
+        try:
+            return store.restore_chapter_version(
+                _project_id(context),
+                input.chapter_id,
+                input.version_id,
+                expected_sha256=input.expected_sha256,
+                author="author",
+            )
+        except ChapterConflictError as exc:
+            raise _chapter_conflict(exc) from exc
+
+    specs: tuple[DlcOperationSpec, ...] = (
         DlcOperationSpec(name="worlds.ensure", input_model=WorldEnsureInput, output_model=WorldOutput, handler=worlds_ensure, scope="project"),
         DlcOperationSpec(name="worlds.get", input_model=WorldEnsureInput, output_model=WorldOutput, handler=worlds_get, scope="project"),
         DlcOperationSpec(name="entities.list", input_model=StoryEmptyInput, output_model=EntityListOutput, handler=entities_list, scope="project"),
@@ -183,11 +258,16 @@ def _register_operations(host, store: StoryStateStore) -> None:
         DlcOperationSpec(name="revisions.list", input_model=StoryEmptyInput, output_model=RevisionListOutput, handler=revisions_list, scope="project"),
     )
     specs = specs + (
-        DlcOperationSpec(name="chapters.list", input_model=StoryEmptyInput, output_model=ChapterListOutput, handler=chapters_list, scope="project"),
-        DlcOperationSpec(name="chapters.create", input_model=ChapterCreateInput, output_model=ChapterOutput, handler=chapters_create, scope="project"),
-        DlcOperationSpec(name="chapters.update", input_model=ChapterUpdateInput, output_model=ChapterOutput, handler=chapters_update, scope="project"),
-        DlcOperationSpec(name="chapters.delete", input_model=ChapterIdInput, output_model=DeleteOutput, handler=chapters_delete, scope="project"),
-        DlcOperationSpec(name="chapters.move", input_model=ChapterMoveInput, output_model=ChapterListOutput, handler=chapters_move, scope="project"),
+        DlcOperationSpec(name="chapters.list", input_model=StoryEmptyInput, output_model=ChapterCatalogListOutput, handler=chapters_list, scope="project"),
+        DlcOperationSpec(name="chapters.read", input_model=ChapterIdInput, output_model=ChapterOutput, handler=chapters_read, scope="project"),
+        DlcOperationSpec(name="chapters.create", input_model=ChapterCreateInput, output_model=ChapterOutput, handler=chapters_create, scope="project", capabilities=("filesystem_write",)),
+        DlcOperationSpec(name="chapters.update", input_model=ChapterUpdateInput, output_model=ChapterOutput, handler=chapters_update, scope="project", capabilities=("filesystem_write",)),
+        DlcOperationSpec(name="chapters.append", input_model=ChapterAppendInput, output_model=ChapterOutput, handler=chapters_append, scope="project", capabilities=("filesystem_write",)),
+        DlcOperationSpec(name="chapters.delete", input_model=ChapterIdInput, output_model=DeleteOutput, handler=chapters_delete, scope="project", capabilities=("filesystem_write",)),
+        DlcOperationSpec(name="chapters.move", input_model=ChapterMoveInput, output_model=ChapterCatalogListOutput, handler=chapters_move, scope="project"),
+        DlcOperationSpec(name="chapter_versions.list", input_model=ChapterIdInput, output_model=ChapterVersionListOutput, handler=chapter_versions_list, scope="project"),
+        DlcOperationSpec(name="chapter_versions.read", input_model=ChapterVersionIdInput, output_model=ChapterVersionOutput, handler=chapter_versions_read, scope="project"),
+        DlcOperationSpec(name="chapter_versions.restore", input_model=ChapterVersionRestoreInput, output_model=ChapterOutput, handler=chapter_versions_restore, scope="project", capabilities=("filesystem_write",)),
     )
     for spec in specs:
         host.operations.register(spec)
@@ -201,3 +281,4 @@ def _register_tools(host, store: StoryStateStore) -> None:
     host.tools.register(StoryChaptersListTool(store))
     host.tools.register(StoryChapterReadTool(store))
     host.tools.register(StoryWriteChapterTool(store))
+    host.tools.register(StoryAppendChapterTool(store))

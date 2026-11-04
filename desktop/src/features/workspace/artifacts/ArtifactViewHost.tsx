@@ -51,18 +51,19 @@ export function ArtifactViewHost({
     artifact.id,
     artifact.version ?? 0,
     canDiscoverRepresentations,
+    artifact.session_id,
   );
   const representations = discovery.representations;
   const representationAccess = useMemo<ArtifactRepresentationAccess>(() => ({
     available: representations,
-    list: (artifactId, signal) => agentApi.listArtifactRepresentations(artifactId, signal),
+    list: (artifactId, signal) => agentApi.listArtifactRepresentations(artifactId, signal, artifact.session_id),
     read: (artifactId, representationType, request, signal) => (
-      agentApi.readArtifactRepresentation(artifactId, representationType, request, signal)
+      agentApi.readArtifactRepresentation(artifactId, representationType, request, signal, artifact.session_id)
     ),
     stream: (artifactId, representationType, request, signal) => (
-      agentApi.streamArtifactRepresentation(artifactId, representationType, request, signal)
+      agentApi.streamArtifactRepresentation(artifactId, representationType, request, signal, artifact.session_id)
     ),
-  }), [representations]);
+  }), [representations, artifact.session_id]);
   const views = useMemo(
     () => matchingArtifactViews(artifact, representations, surface, registry.all()),
     [artifact, registry, representations, surface],
@@ -164,6 +165,7 @@ function useArtifactRepresentations(
   artifactId: string,
   artifactVersion: number,
   enabled: boolean,
+  sessionId?: string,
 ): {
   status: "idle" | "loading" | "ready" | "error";
   representations: readonly ArtifactRepresentationDescriptor[];
@@ -182,7 +184,7 @@ function useArtifactRepresentations(
       return undefined;
     }
     const controller = new AbortController();
-    void agentApi.listArtifactRepresentations(artifactId, controller.signal).then(
+    void agentApi.listArtifactRepresentations(artifactId, controller.signal, sessionId).then(
       (representations) => {
         if (!controller.signal.aborted) {
           setState({ key, status: "ready", representations, error: null });
@@ -195,7 +197,7 @@ function useArtifactRepresentations(
       },
     );
     return () => controller.abort();
-  }, [artifactId, artifactVersion, enabled, key]);
+  }, [artifactId, artifactVersion, enabled, key, sessionId]);
 
   if (!enabled) {
     return { status: "idle", representations: [], error: null };

@@ -1,4 +1,4 @@
-import type { RequestedResourceRef, RunProjection } from "../lib/api/generated/types.gen";
+import type { RequestedResourceRef, RunProjection, ConversationInputReference } from "../lib/api/generated/types.gen";
 
 /**
  * Product projection types consumed by the timeline and artifact workspace.
@@ -114,6 +114,7 @@ export type MessageItem = RunItemBase<"message", {
   role: "user" | "assistant";
   phase?: "commentary" | "final_answer" | null;
   content: string;
+  references?: ConversationInputReference[];
   evidence: ConversationEvidence[];
   artifact_refs: ArtifactReference[];
   completion_disposition?: CompletionDisposition | null;

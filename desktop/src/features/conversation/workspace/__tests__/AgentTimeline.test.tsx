@@ -253,9 +253,10 @@ describe("AgentTimeline", () => {
 
     expect(screen.getByText("引用的数据来源")).toBeTruthy();
     fireEvent.click(screen.getByText("引用的数据来源").closest("summary")!);
-    expect(screen.getByText("查询结果 result-2")).toBeTruthy();
-    expect(screen.queryByText("查询结果 result-1")).toBeNull();
-    expect(screen.queryByText("已保存结果")).toBeNull();
+    const sources = screen.getByText("引用的数据来源").closest("details")!;
+    expect(sources.textContent).toContain("查询结果 result-2");
+    expect(sources.textContent).not.toContain("查询结果 result-1");
+    expect(sources.textContent).not.toContain("已保存结果");
   });
 
   it("routes Plan step evidence through the existing artifact selection action", () => {

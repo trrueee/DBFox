@@ -3,6 +3,7 @@ import { validateApiConfig } from "./api/types";
 import { DEFAULT_LLM_API_BASE } from "./llmProviders";
 
 export const API_CONFIG_STORAGE_KEY = "dbfox-api-config";
+export const API_CONFIG_CHANGED_EVENT = "dbfox-api-config-changed";
 
 export const DEFAULT_API_CONFIG: ApiConfig = {
   credentialId: "",
@@ -69,6 +70,9 @@ export function saveStoredApiConfig(
 ): void {
   if (!storage) return;
   storage.setItem(API_CONFIG_STORAGE_KEY, JSON.stringify(normalizedStoredConfig(config)));
+  if (typeof window !== "undefined" && storage === browserStorage()) {
+    window.dispatchEvent(new Event(API_CONFIG_CHANGED_EVENT));
+  }
 }
 
 export function createLlmConfigDraft(config: ApiConfig): LlmConfigDraft {

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from .contracts import WorkbookSource
 
 SQL_ARTIFACT_TYPE = "dbfox.data.sql"
 SAFETY_ARTIFACT_TYPE = "dbfox.data.safety"
@@ -20,6 +21,7 @@ class SqlArtifactPayload(BaseModel):
     dialect: str
     query_fingerprint: str = Field(alias="queryFingerprint")
     parameters: dict[str, JsonValue] = Field(default_factory=dict)
+    source: WorkbookSource | None = None
 
 
 class SafetyArtifactPayload(BaseModel):
@@ -66,6 +68,7 @@ class ResultViewArtifactPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     backend: Literal["sql_reexecution"]
+    source: WorkbookSource | None = None
     source_sql_artifact_id: str = Field(alias="sourceSqlArtifactId", min_length=1)
     query_fingerprint: str = Field(alias="queryFingerprint", min_length=1)
     datasource_generation: str | int = Field(alias="datasourceGeneration")

@@ -18,6 +18,7 @@ from dbfox_dlc_api import (
     ToolPolicy,
     ToolPresentation,
     ToolResourceRequirement,
+    ToolSemanticSpec,
 )
 
 from .contracts import (
@@ -50,6 +51,7 @@ class StoryGraphQueryTool(BaseTool[StoryGraphQueryInput, GraphFactsOutput]):
         required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
         capabilities=(),
     )
+    semantics = ToolSemanticSpec(produces=("dbfox.story.graph_check",))
     presentation = ToolPresentation(title="查询故事设定", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -66,19 +68,24 @@ class StoryGraphQueryTool(BaseTool[StoryGraphQueryInput, GraphFactsOutput]):
             entity_kind=tool_input.entity_kind,
             name_contains=tool_input.name_contains,
         )
-        return GraphFactsOutput(entities=entities, relations=relations)
+        return GraphFactsOutput(
+            world_generation=world.generation,
+            entities=entities,
+            relations=relations,
+        )
 
     def project_observation(self, *, status, output, artifacts):
         if status != "success":
             return ToolObservationProjection(summary="故事设定查询失败。")
         return ToolObservationProjection(
             summary=(
-                f"已读取故事设定：{len(output.entities)} 个实体、"
-                f"{len(output.relations)} 条既定关系。"
+                f"已读取故事设定：{len(output.get('entities') or [])} 个实体、"
+                f"{len(output.get('relations') or [])} 条既定关系。"
             ),
             facts={
-                "entities": list(output.entities),
-                "relations": list(output.relations),
+                "world_generation": output.get("world_generation"),
+                "entities": list(output.get("entities") or []),
+                "relations": list(output.get("relations") or []),
             },
         )
 
@@ -148,10 +155,10 @@ class StoryProposeRelationsTool(BaseTool[RelationProposeInput, StoryProposeOutpu
             return ToolObservationProjection(summary="关系提案提交失败。")
         return ToolObservationProjection(
             summary=(
-                f"已提交 {output.created_count} 条关系提案，等待作者批量审阅。"
+                f"已提交 {int(output.get('created_count') or 0)} 条关系提案，等待作者批量审阅。"
                 "提案在确认前不是世界事实。"
             ),
-            facts={"created": list(output.created)},
+            facts={"created": list(output.get("created") or [])},
         )
 
 
@@ -188,6 +195,6 @@ class StoryRevisionsTool(BaseTool[StoryRevisionsInput, RevisionListOutput]):
         if status != "success":
             return ToolObservationProjection(summary="修订历史查询失败。")
         return ToolObservationProjection(
-            summary=f"故事世界共有 {len(output.revisions)} 个不可变修订。",
+            summary=f"故事世界共有 {len(output.get('revisions') or [])} 个不可变修订。",
             facts={},
         )

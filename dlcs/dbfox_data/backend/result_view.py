@@ -388,6 +388,11 @@ class DataResultRepresentation:
                 status_code=409,
             ) from exc
         parameters = dict(sql_payload.parameters)
+        if handle.dialect == "duckdb" and (
+            artifact.session_id != handle.session_id or sql_payload.source != handle.source
+            or artifact.payload.get("source") != handle.source.model_dump(mode="json")
+        ):
+            raise _error("SOURCE_UNAVAILABLE", "Workbook evidence does not belong to this conversation or source.", status_code=409)
         fingerprint = query_fingerprint(resource_ref, sql_payload.safe_sql, parameters)
         if (
             not sql_payload.safe_sql
@@ -395,7 +400,7 @@ class DataResultRepresentation:
             or str(artifact.payload.get("queryFingerprint") or "") != fingerprint
             or str(artifact.payload.get("datasourceGeneration") or "")
             != resource_version
-            or sql_payload.dialect != handle.profile.provider
+            or sql_payload.dialect != handle.dialect
         ):
             raise _error(
                 "SOURCE_CHANGED",

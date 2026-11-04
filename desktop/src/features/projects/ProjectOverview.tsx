@@ -17,6 +17,7 @@ import { useDlcStore } from "../dlc/extensionStore";
 import { useProjectState } from "./useProjectState";
 import type { ConnectorProjectResource } from "../resources/types";
 import "./ProjectOverview.css";
+import { openProjectWorkbench } from "../resources/ProjectWorkbench";
 
 interface InventoryState {
   loading: boolean;
@@ -90,6 +91,8 @@ export function ProjectOverview() {
     setAddError(null);
     setAddingId(connectorId);
     try {
+      const connector = connectors.find(item => item.id === connectorId);
+      if (connector) await openProjectWorkbench(connector, activeProject.id);
       await onAdd({ projectId: activeProject.id });
     } catch (error) {
       setAddError(error);

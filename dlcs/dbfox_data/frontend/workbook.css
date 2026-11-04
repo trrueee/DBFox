@@ -1,0 +1,8 @@
+.dbfox-workbook-view { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--text-primary); background: var(--agent-surface); }
+.dbfox-workbook-grid { flex: 1; min-height: 0; overflow: hidden; }
+.dbfox-workbook-caption { padding: 8px 12px; color: var(--text-secondary); font-size: var(--ui-font-caption); border-bottom: 1px solid var(--border-default); }
+.dbfox-workbook-state { flex: 1; display: grid; place-content: center; padding: 20px; color: var(--text-secondary); }
+.dbfox-workbook-tabs { display: flex; gap: 4px; overflow-x: auto; padding: 6px 10px; border-top: 1px solid var(--border-default); }
+.dbfox-workbook-tabs button { flex-shrink: 0; padding: 6px 12px; border: 1px solid var(--border-default); border-radius: 4px; background: var(--agent-surface); color: inherit; cursor: pointer; }
+.dbfox-workbook-tabs button[aria-selected="true"] { background: var(--agent-surface-subtle); font-weight: 600; }
+.dbfox-workbook-tabs button:disabled { opacity: .5; cursor: default; }

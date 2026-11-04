@@ -1,7 +1,7 @@
 {
   "manifestSchemaVersion": 2,
   "id": "dbfox.story",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "displayName": "DBFox Story",
   "publisher": "dbfox",
   "description": "Long-form fiction workbench: queryable story worlds, AI-proposed relationship graphs with batch review, and immutable revisions.",
@@ -11,5 +11,7 @@
     "backend": "backend/entry.py",
     "frontend": "frontend/index.js"
   },
-  "permissions": []
+  "permissions": [
+    "filesystem_write:story"
+  ]
 }

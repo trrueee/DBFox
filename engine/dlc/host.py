@@ -23,6 +23,7 @@ from engine.dlc.api import (
     ExtensionCredentialsHost as IExtensionCredentialsHost,
     ExtensionOperationsHost as IExtensionOperationsHost,
     ExtensionProjectResourceProvider,
+    ExtensionSessionResourceProvider,
     ExtensionResourcesHost as IExtensionResourcesHost,
     ExtensionToolsHost as IExtensionToolsHost,
 )
@@ -50,6 +51,7 @@ class StagedDlcContributions:
     runtime_info: DlcRuntimeInfo
     tools: list[BaseTool[Any, Any]] = field(default_factory=list)
     resource_providers: list[ExtensionProjectResourceProvider] = field(default_factory=list)
+    session_resource_providers: list[tuple[ExtensionSessionResourceProvider, Callable[[str], None] | None]] = field(default_factory=list)
     resource_resolvers: list[tuple[str, ScopedResourceResolver]] = field(default_factory=list)
     context_contributors: list[
         ExtensionContextContributor
@@ -102,6 +104,13 @@ class _StagedResourcesHost:
                 f"DLC '{self._staging.dlc_id}' registered a non-callable resource provider",
             )
         self._staging.resource_providers.append(provider)
+
+    def register_session_provider(
+        self, provider: ExtensionSessionResourceProvider, *, retire: Callable[[str], None] | None = None,
+    ) -> None:
+        if not callable(provider) or (retire is not None and not callable(retire)):
+            raise DlcError(DlcErrorCode.REGISTRATION_CONFLICT, "Session resources require callable discovery/retirement")
+        self._staging.session_resource_providers.append((provider, retire))
 
     def register_resolver(self, kind: str, resolver: ScopedResourceResolver) -> None:
         if not isinstance(kind, str) or not kind.strip():
@@ -339,7 +348,7 @@ class _StagedOperationsHost:
                 f"DLC '{self._staging.dlc_id}' operation name '{spec.name}' is invalid. "
                 "Operation names must use lowercase alphanumeric and underscores/dashes.",
             )
-        if spec.scope not in ("machine", "project"):
+        if spec.scope not in ("machine", "project", "session"):
             raise DlcError(
                 DlcErrorCode.REGISTRATION_CONFLICT,
                 f"DLC '{self._staging.dlc_id}' operation '{spec.name}' has invalid scope '{spec.scope}'. Must be 'machine' or 'project'.",

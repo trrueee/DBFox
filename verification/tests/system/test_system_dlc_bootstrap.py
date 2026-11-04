@@ -263,8 +263,9 @@ def test_release_builder_emits_exact_first_party_capability_package_pins(
         "dbfox.workspace",
         "dbfox.music",
         "dbfox.visualization",
+        "dbfox.story",
     ]
-    assert [item.default_enabled for item in manifest.packages] == [True, True, True, True]
+    assert [item.default_enabled for item in manifest.packages] == [True, True, True, True, True]
     assert all((output_dir / item.filename).is_file() for item in manifest.packages)
 
     storage_root = tmp_path / "installed-release-bundle"
@@ -285,9 +286,11 @@ def test_release_builder_emits_exact_first_party_capability_package_pins(
     assert installed["dbfox.workspace"].desired_enabled is True
     assert installed["dbfox.music"].desired_enabled is True
     assert installed["dbfox.visualization"].desired_enabled is True
+    assert installed["dbfox.story"].desired_enabled is True
     assert [item.dlc_id for item in snapshot.active_dlcs] == [
         "dbfox.data",
         "dbfox.music",
+        "dbfox.story",
         "dbfox.visualization",
         "dbfox.workspace",
     ]
@@ -296,3 +299,4 @@ def test_release_builder_emits_exact_first_party_capability_package_pins(
     assert "file_read" in {item.tool.name for item in snapshot.tools}
     assert "music_compose_piano" in {item.tool.name for item in snapshot.tools}
     assert "visualization_create" in {item.tool.name for item in snapshot.tools}
+    assert "story_append_chapter" in {item.tool.name for item in snapshot.tools}

@@ -70,6 +70,7 @@ export function Tree<T>({
   const nodeRowIndexesRef = useRef<readonly number[]>([]);
   const deferredFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentRootRef = useRef(rootItem);
+  const initialExpansionRef = useRef<{ rootItem: T; pending: Set<string> } | null>(null);
   currentRootRef.current = rootItem;
   const baseCollection = useMemo(
     () => treeView.collection<T>({
@@ -98,7 +99,7 @@ export function Tree<T>({
   const service = useMachine(treeView.machine, {
     id,
     collection,
-    defaultExpandedValue: [...defaultExpandedIds],
+    defaultExpandedValue: loadItemChildren ? [] : [...defaultExpandedIds],
     ...(selectedIds ? { selectedValue: [...selectedIds] } : {}),
     selectionMode: "single",
     expandOnClick: true,
@@ -162,6 +163,19 @@ export function Tree<T>({
     },
   });
   const api = treeView.connect(service, normalizeProps);
+  // Zag loads branches through expand(), not defaultExpandedValue. Apply initial
+  // lazy expansion as nodes become available; its machine still owns all I/O,
+  // cancellation, loading errors, and subsequent user-controlled expansion.
+  useEffect(() => {
+    if (!loadItemChildren) return;
+    if (initialExpansionRef.current?.rootItem !== rootItem) {
+      initialExpansionRef.current = { rootItem, pending: new Set(defaultExpandedIds) };
+    }
+    const pending = initialExpansionRef.current.pending;
+    const available = [...pending].filter(value => api.collection.findNode(value));
+    available.forEach(value => pending.delete(value));
+    if (available.length) api.expand(available);
+  }, [api, defaultExpandedIds, loadItemChildren, rootItem]);
   const collectionRoot = api.collection.rootNode as T;
   const rootChildren = api.collection.getNodeChildren(collectionRoot) as T[];
   const visibleNodes = api.getVisibleNodes() as Array<{ node: T; indexPath: number[] }>;

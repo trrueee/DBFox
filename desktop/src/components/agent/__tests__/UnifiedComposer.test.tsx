@@ -25,6 +25,26 @@ function renderComposer(value = "hello", props: Partial<ComponentProps<typeof Un
 }
 
 describe("UnifiedComposer", () => {
+  it("keeps typing available during file upload without adding status text", () => {
+    const { getByRole, queryByText, onSubmit } = renderComposer("draft", { attachmentBusy: true, onAddAttachment: vi.fn() });
+    expect(getByRole("textbox").hasAttribute("disabled")).toBe(false);
+    expect(queryByText("正在添加文件…")).toBeNull();
+    expect(getByRole("button", { name: "添加本地文件" }).getAttribute("aria-busy")).toBe("true");
+    fireEvent.keyDown(getByRole("textbox"), { key: "Enter" });
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("opens and removes the exact reference without focusing the textarea", () => {
+    const reference = { label: "培养方案.xlsx", object: { kind: "dbfox.core.attachment", id: "att-1" } };
+    const onOpenReference = vi.fn();
+    const onRemoveReference = vi.fn();
+    const { getByRole } = renderComposer("", { references: [reference], onOpenReference, onRemoveReference });
+    fireEvent.click(getByRole("button", { name: "培养方案.xlsx" }));
+    expect(onOpenReference).toHaveBeenCalledWith(reference);
+    fireEvent.click(getByRole("button", { name: "移除上下文：培养方案.xlsx" }));
+    expect(onRemoveReference).toHaveBeenCalledWith(reference);
+    expect(document.activeElement).not.toBe(getByRole("textbox"));
+  });
   it("focuses the textarea when the Prompt Kit surface is clicked", () => {
     const { container, getByRole } = renderComposer();
     const composer = container.querySelector(".dbfox-composer__prompt-input");

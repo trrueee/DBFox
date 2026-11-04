@@ -28,7 +28,7 @@
   align-items: center;
   gap: 7px;
   color: var(--agent-text);
-  font-size: var(--ui-font-label);
+  font-size: var(--ui-font-control);
   font-weight: 600;
 }
 

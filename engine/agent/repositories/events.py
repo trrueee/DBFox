@@ -220,7 +220,7 @@ class EventRepository:
         next_revision = int(item.get("revision") or record.revision or 0)
         if next_revision < int(record.revision or 0):
             raise ValueError("RunItem revision cannot regress")
-        terminal_statuses = {"completed", "failed", "cancelled"}
+        terminal_statuses = {"completed", "failed", "cancelled", "expired"}
         if str(record.status) in terminal_statuses and str(item.get("status") or "") != str(record.status):
             raise ValueError("Terminal RunItem status is immutable")
         item["sequence"] = int(record.sequence or 0)

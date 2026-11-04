@@ -8,7 +8,7 @@ export function openArtifactsDock(conversationId: string, activate = true): void
       {
         viewKey,
         viewType: "core.artifacts",
-        title: "✦ 工件",
+        title: "成果",
         closeable: false,
         target: {
           type: "conversation",

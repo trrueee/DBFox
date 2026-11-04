@@ -4,13 +4,27 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-28
+> 最后核验：2026-08-31
 >
 > 适用范围：启动、Agent Core、Capability DLC、Workbench、工具、事件、取消和恢复链路
 >
 > 配套总览：[当前系统架构](./system-overview.md)
+>
+> 边界治理：[DBFox Core Kernel 宪章](./core-kernel-constitution.md)
+
+Workbench 导出后打开正式 Artifact 的调用链见[DLC 工件导航](./dlc-artifact-navigation.md)：
+`sdk/frontend` → `extensionHost` → 现有 Session/Run Artifact repository → `conversationStore`
+→ Artifact Dock。导航只读取和校验持久身份，不产生新的 Run 或导出写入；门禁见
+[Host 验证记录](../quality/dlc-artifact-navigation-validation.md)。
 
 ## 1. 分析范围
+
+对话 xlsx 附件链路：`useAttachmentInput` → 原生一次性文件授权 →
+`engine/api/attachments.py` / `engine/attachments.py` → 持久 Input reference →
+`runtime_composition.discover_run_resources` → Data `workbook_inspect/workbook_prepare` →
+既有 `sql_validate/sql_execute_readonly` → Artifact / Representation。
+输入框与历史消息经 `attachmentDock.ts` 打开 Data `workbook.js`，使用 session Operation 按表读取
+原始格式。用例、预算、文件清单及实际验证见[实施记录](../archive/reviews/conversation-attachments-implementation.md)。
 
 本文从“入口 → 领域状态 → 副作用 → 持久化 → 产品反馈”的角度描述当前模块和完整执行管线。它不再描述已删除的 LangGraph、Graph node、checkpoint SQLite、旧 `agent_runtime` 或前端 RunTrace。
 
@@ -24,6 +38,9 @@
 6. 用户最终看到什么。
 
 ## 2. 模块总图
+
+当前模块按 `Frozen Core Kernel → Stable Extension Runtime / Public SDK → Capability DLC`
+治理。冻结的是 Kernel 职责和外部语义，不是禁止正确性、安全和内部重构；任何新增业务能力默认落入 DLC。
 
 ```mermaid
 flowchart TB
@@ -60,8 +77,10 @@ flowchart TB
 | Typed API Client | token、错误映射、AbortSignal、SSE | request DTO | response/event DTO | 无 | 静默 fallback、业务重试 |
 | API Middleware | loopback 安全、输入限制、错误边界 | HTTP | 安全 response | 无 | 返回秘密/异常原文 |
 | Data System DLC | ConnectionProfile/DatabaseResource、Catalog、SQL safety/execution、Result view、Backup | typed operation + frozen ResourceRef | Data resources/artifacts/views | `dbfox.data/state.sqlite3` + vault refs | 向 Core 泄露 SQL/连接领域状态 |
-| Workspace System DLC | workspace binding、路径 containment、file read/search tools | Project binding + frozen `dbfox.workspace.root` | file artifacts/dock views | `dbfox.workspace/state.sqlite3` | 把 workspace root 写回 Project |
+| Workspace System DLC | workspace binding、路径 containment、file read/write/edit/grep、受批准确认的 argv command | Project binding + frozen `dbfox.workspace.root` | file/patch artifacts、bounded command result、dock views | `dbfox.workspace/state.sqlite3` + 用户绑定目录 | 把 workspace root 写回 Project、执行 shell 字符串 |
+| Story System DLC | 故事实体/关系/修订、Markdown 章节、版本历史与一致性完成约束 | frozen `dbfox.story.world` | 章节、确认事实、关系提案 | `dbfox.story/state.sqlite3` + private chapter Markdown | 读取待审/否决关系作为事实、跨 DLC 私取 Workspace resolver |
 | Music System DLC | Score/Audio Resource、不可变 Revision、作曲/转录 Tools、Piano Studio | Project + frozen Music ResourceRef | score/audio artifacts、notation/playback | `dbfox.music/state.sqlite3` + private audio | 向 Core 泄露 Note/Score/Piano 概念 |
+| Extension Runtime / Public SDK | 签名包校验、装载、贡献快照、Host 注册入口、API v2 与前端注入合同 | manifest + verified package + public contribution | owner-bound Tool/Resource/View contributions | installed registry + frozen runtime snapshot | 领域规则、跨 DLC 私有调用、第二套 Loop |
 | Session Core | input admission、sequence、lease、event | user command | stable IDs/snapshot | canonical tables | 内存 queue 作为事实源 |
 | ReAct Harness | Turn、model、tool、completion、response | admitted Run | answer/artifacts/evidence | Run/Turn records | 固定 graph、第二 checkpoint |
 | Tool Runtime | owner-aware `ToolKey` 注册、provider wire 物化、授权、有界执行、结算 | tool call | transient result/observation | Invocation/Observation | 任意函数反射调用、跨 DLC 私有 Resource handle |
@@ -89,17 +108,17 @@ flowchart TB
 
 ### 4.2 App Shell 与 Workspace
 
-App Shell 组织 Project/Conversation、常驻 Host-owned Resource View Container、固定 Main Surface、Dock registry、命令面板和设置。Resource tree、SQL/Table Dock 与连接 Dialog 由已激活 DLC 贡献；Shell 只保存 focus/layout/tab identity，不复制领域状态。`mainSurfaceByProject` 是活动 Conversation 的唯一事实源，Conversation Store 只保存公共投影。Workbench 以 Conversation（或 new-conversation draft）的稳定 scope 为唯一事实源，Tabs 与 DLC view state 同 scope 隔离。Frontend activation 以 epoch/generation fence 提交，贡献 ID 必须属于 owner namespace，disable 时执行 deactivate 并清除失效 Tab。Dock 折叠态是独立 rail layout，Composer 与消息内容列共用版心。左侧资源 focus 只导航；Workbench `Ask DBFox` 通过 Host typed reference 把 parent authority、object 与 locator 原子交给 Composer，不把 table/file/measure 伪装成 Resource。
+App Shell 组织文件夹项目与对话、固定 Main Surface、Dock registry、命令面板和设置。左侧只展示项目与对话；项目右键/更多菜单通过 Connector 打开右侧工作台。Host 的 `ProjectWorkbench` 只提供统一 chrome，文件树/内容、数据库列表/表详情/连接配置和其他领域工作台由已激活 DLC 贡献。
 
-本地项目文件链路由 `dbfox.workspace` 使用 Host 的 native picker/credential 等窄 OS boundary 并保持有界：
+`mainSurfaceByProject` 是活动 Conversation 的唯一事实源。Workbench 以 Conversation 或 new-conversation draft 的稳定 scope 隔离 Tabs、引用和 DLC view state。Frontend activation 保留 epoch/generation fence、owner namespace admission、deactivate 与失效 Tab 清理。`WorkspaceDock` 支持预览替换、固定、overflow、全屏、折叠；只保存 identity/layout，不保存文件或表内容。
 
-- Project 创建只需名称与可选描述；workspace folder 是创建后的 DLC binding，不是 Project 字段；
-- `list_project_folder`：文件树按需读取单层，跳过 `.git`/`node_modules`/`target` 等重目录，最多 600 项；
-- `read_project_file`：只读 UTF-8 文本，≤ 1 MiB；二进制/超大/非 UTF-8 返回明确错误；
-- `list_project_folder` / `read_project_file` 在 Main 侧 realpath 路径并拒绝不在任何已选择授权根之内的路径（含 symlink 逃逸）；
-- 文件内容只进入 `WorkspaceFileDockContent` 的组件内状态，不进入 Shell Store。
+- `ProjectCreateForm` 打开 native canonical folder，以文件夹名创建/复用项目。opaque idempotency key 防止重复项目；路径仍只归 Workspace binding。不同路径可有相同项目名，迁移仅放开 name 唯一约束。
+- `dlcs/dbfox.workspace/frontend/index.js` 通过原有 `binding.get/create`、`files.list/read` 操作提供文件树与只读内容；有界目录/文本与 containment 校验保持在 owner 后端。过大目录明确显示部分结果，嵌套 lazy ancestors 用 Host Tree 加载。
+- `components/resources/ReferenceCard` / `ResourceIcon` 统一消息、输入框和结果引用；`FileContent` 复用 CodeMirror 官方 grammar 与已有 Markdown renderer，支持预览/源码/分栏。
+- `features/resources/openWorkbenchReference` 唯一匹配 `DockViewContribution.objectKinds`，按精确 object/version、authority、locator 和 scope 复用标签。附件/Artifact 继续走原 navigation boundary。打开只导航；Dock 的“加入对话”经 `onAsk` 把 typed reference 交给 Composer，后端决定 authority。
+- `dlcs/dbfox_data/frontend/index.js` 在 Dock 内组合数据库树、表结构、数据样例和内嵌连接配置，复用既有 owner operations 与凭据边界。
 
-Dock 的折叠/恢复属于 UI preference；Artifact 本身、选择关系、Result 数据和项目文件内容不属于 Shell Store。
+完整交互与复用决策见 [前端架构 §3](./frontend.md#3-工作区组件关系)。回归入口：`workspaceStore.test.ts`、`openWorkbenchReference.test.ts`、`Tree.test.tsx`、`FileContent.test.tsx`、Project/Composer/Dock 测试，以及 `test_projects_api.py` / `test_folder_project_migration.py`。
 
 ### 4.3 Conversation Product Layer
 
@@ -171,7 +190,7 @@ Prompt 和 Context 在 Turn 创建时保存 hash；工具 schema 也物化并冻
 
 Registry 以 `ToolKey(owner_id, local_name)` 注册工具定义、input/output schema、版本、capability、execution spec、状态消费和 Artifact spec。Turn 在 provider 边界确定性生成唯一 wire name 并物化为稳定快照；同 local name 的不同 DLC 不冲突。Platform built-in 显式保留原 wire name。
 
-Resource kind 必须 namespaced；DLC provider/resolver 和 Tool 只能直接使用 `owner_id.*`。跨 capability 由 Agent 编排 Artifact/用户意图，不能把另一个 DLC 的私有 resolver 对象作为隐式 service locator。Installable in-process Tool 只接受 `network`/`filesystem_read`；`filesystem_write` 继续要求尚未开放给 DLC Tool 的 isolated backend。
+Resource kind 必须 namespaced；DLC provider/resolver 和 Tool 只能直接使用 `owner_id.*`。跨 capability 由 Agent 编排 Artifact/用户意图，不能把另一个 DLC 的私有 resolver 对象作为隐式 service locator。Installable in-process Tool 只接受 `network`/`filesystem_read`；`filesystem_write` 与 `subprocess` 必须使用现有 isolated worker，并由签名 manifest permission、Invocation Approval、frozen package digest、超时和进程树取消共同约束。该 worker 不构成不可信代码 OS sandbox。
 
 Project discovery kind 只决定 Tool discoverability，不授予整个 Project。模型直接调用真实领域 Tool；Dispatcher 从 validated selector 或同一 Run Artifact 绑定精确 `(kind,id,version)`，写入 `agent_tool_invocations.resource_refs_json`，随后 Policy、Approval、resolver、retry 与 recovery 都只消费该 Invocation authority。已接纳 Input 不在 Run 中修改，也没有用户可见的 `select_project_resources` 控制步骤。
 
@@ -381,7 +400,7 @@ terminal state 不可逆；cancelled Run 不能完成。预算耗尽但存在可
 
 ## 10. 条件扩展路线
 
-- isolated-process backend：在真实高权限工具出现时实现进程协议、filesystem roots、network egress、resource quotas 和 kill/reconcile。
+- isolated worker hardening：若未来接纳不可信 DLC，必须另行实现 OS sandbox、network egress、CPU/memory quotas 与 secret isolation；当前 worker 只面向可信发布者包。
 - Provider Route：在真实多模型需求出现时实现能力探测、路由原因、成本预算、fallback 条件和用户披露。
 - Remote Web：独立设计服务端身份、tenant、queue、distributed lease、broker 和远程数据库连接。
 - Eval depth：持续增加 injection、crash point、cancel latency、evidence coverage 和成本/质量基准。

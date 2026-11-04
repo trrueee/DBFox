@@ -83,11 +83,11 @@
   font-weight: 500;
 }
 
-.dbfox-tree__row[data-focus] {
+.dbfox-tree:has(:focus-visible) .dbfox-tree__row[data-focus] {
   box-shadow: var(--focus-ring);
 }
 
-.dbfox-tree__item-shell[data-focus] {
+.dbfox-tree__item-shell[data-focus]:focus-visible {
   box-shadow: var(--focus-ring);
 }
 

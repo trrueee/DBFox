@@ -4,11 +4,13 @@
 >
 > 状态：已接受
 >
-> 最后核验：2026-08-28
+> 最后核验：2026-08-31
 >
 > 适用范围：Project、Conversation、Run authority、Resource Runtime、Capability DLC、Workbench resource/context composition
 >
 > 实施状态：已完成；切换证据见 [`../quality/2026-08-22-agent-core-dlc-workbench-review.md`](../quality/2026-08-22-agent-core-dlc-workbench-review.md)
+>
+> 上位治理：[DBFox Core Kernel 宪章](./core-kernel-constitution.md)
 
 ## 1. 决策
 
@@ -192,6 +194,12 @@ Input admission 失败。
 
 ## 7. Conversation Intent 与 authority
 
+对话附件在 Host 输入层保存字节与身份，Data DLC 解释工作簿；详见
+[当前附件合同](./conversation-attachments.md)。产品资源目录现在组合 Project provider 与可选
+session provider，并以 Run 已消费输入作为会话可见性上界；`project_resource_search` 复用同一
+目录。Artifact 历史证据也使用该当前目录与精确版本验证，仍检查生产者与 Run 顺序。
+这不创建可变 active file，不修改初始 Input refs，也不让目录本身替代执行策略或审批。
+
 Core 持久化通用 `ConversationResourceIntent`，内容只允许无 version 的 Resource identity：
 
 ```json
@@ -309,8 +317,14 @@ locator，由 Backend 在消息 admission 时校验。
 执行迁移的第一条垂直链已经完成：Catalog、Preview、SQL validate/execute 的输入使用显式
 `database_id` 选择 frozen `(kind,id)`；SQL validation Artifact 与审批能力都绑定完整
 `ResourceScopeRef`，不再只绑定一个整数 generation。Artifact envelope 新增通用
-`resource_refs_json`，写入时必须是 Run authority 的精确子集；Result/Visualization 可据此在同一 Run
-含多个数据库时恢复来源。Resource version 保持 `str | int` 原值，Core 不解析 Data DLC 的
+`resource_refs_json`，直接写入必须是持久生产者 ToolInvocation authority 的精确子集；派生成果
+另可继承显式同 Run `DERIVED_FROM` 已完成成果的精确 refs，逐边校验生产者 provenance、身份
+和有界依赖图。来源继承不写回 Invocation，也不授予其他 owner 的私有 ResourceHandle；
+Result/Visualization 可据此在同一 Run 含多个数据库时恢复来源。跨 Run 消费仍受消费者初始
+Input 精确引用、来源 Run 终态、先后顺序和 visibility 约束。缺失历史生产者证据时 Agent
+消费拒绝，不从 Run 初始引用补权；用户历史展示保留。审议与验证见
+[Artifact 权威修复](../quality/artifact-invocation-authority-verification.md)。
+Resource version 保持 `str | int` 原值，Core 不解析 Data DLC 的
 复合 generation，也不把它强转成整数。
 
 Run/Memory 的旧 datasource compatibility 存储也已完成物理清理。历史迁移
@@ -507,7 +521,7 @@ Data capability 的 Resource kind 已统一冻结为 namespaced `dbfox.data.data
 
 Workspace DLC 自有 Project workspace binding、Resource Provider/Resolver、file read/search/write tools、Workspace Context、File/Patch Artifact、Connector 和 File/Patch Dock。Core `Project` 已不再包含 Workspace 字段。
 
-**实施状态（2026-08-22）：阶段 D 已完成 cutover 与物理清理。** Project 创建合同已只接受名称与可选描述；
+**实施状态（2026-08-22）：阶段 D 已完成 cutover 与物理清理。** Project 创建合同保持名称与可选描述；现另接受 opaque idempotency key（不保存路径）；
 历史 `workspace_root` 通过可重放、验证后清源的 Alembic import 进入
 `dbfox.workspace/state.sqlite3`；最终 Alembic cutover 会再次幂等导入初次迁移后由旧版本写入的目录，验证后删除 `projects.workspace_root`。默认 Core snapshot 不再注册 Workspace Tool、Provider、Resolver
 或 Context contributor；`engine.workspace`、Core Workspace builtin、Core Workspace Context contributor
@@ -517,13 +531,13 @@ Workspace 新写入的 File/Patch Artifact 同样使用 Core Artifact envelope �
 contributor 优先按该通用绑定校验 frozen Workspace authority。payload 内旧 workspace identity 只用于
 读取迁移前历史 Artifact，不再是新 authority 的事实源。
 
-Extension API v2 当前只允许 installable DLC Tool 使用 in-process backend，而 Tool Runtime 又要求
-`filesystem_write` 使用 isolated process。Compiler 因此明确只接受 DLC Tool 的 `network` 与
-`filesystem_read` capability；即使 manifest 声明 write permission，模型 Tool 注册仍会 fail closed。
-System Workspace DLC 当前正式注册 file read/search，不注册 file write；已删除未注册的 write Tool 与
-私有 patch service，避免源码/API 暗示一条不存在的执行链。typed Workbench Operation 的 manifest
-permission 是另一条 Host operation 边界，不会使模型 Tool 获得 write。删除该限制的条件是 isolated worker 能按
-冻结的 package digest 装载签名 DLC Tool，并通过 frozen Sidecar 与 package mismatch 回归。
+**实施状态（2026-08-31）：可信 DLC 的 isolated Tool 链已启用。** Compiler 允许已验证签名包声明
+`isolated_process`，worker 会按 frozen package digest 重新编译相同 Runtime snapshot，并在执行前校验
+owner、digest、Tool contract 和 ResourceRef。Workspace 正式注册 `file_write / file_edit / file_delete /
+file_move / command_run`；这些工具逐 Invocation 进入 Approval，文件编辑还要求此前读取的 SHA-256。
+`command_run` 只接受 argv，不调用 shell，cwd 只能位于绑定根内，超时会终止进程树，stdout/stderr 合并后
+只保留 64 KiB 尾部，并仅传递路径、区域和临时目录等明确白名单环境变量。isolated worker 的作用是隔离崩溃、
+超时和取消，不声称限制可信包的全部 OS 权限；R8A 对不可信 DLC 的 NO-GO 结论保持不变。
 
 Native file/folder picker 与 Credential Broker 属于 Electron/Core OS boundary；DLC 通过窄 Host service 使用，不能获得 application container、任意 Session 或全局 credential vault。
 Backend Extension Host 已提供无枚举能力的 `credentials.get(opaque_ref, kind=...)`；每次读取都要求
@@ -617,7 +631,7 @@ points 的 Host-owned Workbench 原则，但不引入完整 IDE framework。
 - Core HTTP 不再注册 DataSource、Schema、Query、Backup 业务路由；Data Workbench 通过 typed DLC operations 和 Artifact views 工作。
 - Alembic `e2f3a4b5c6d8` 将历史 Connection/DataSource identity 与 opaque credential refs 幂等导入 `dbfox.data/state.sqlite3`，验证后删除 Core Data 表和 Data FTS；当前 head `f3a4b5c6d7e9` 又移除最后的 Run/Data compatibility columns。Catalog 与显式 Snapshot 是 capability-owned 领域状态；普通 Result rows 不进入 Core 或 Data 元数据存储。
 - Project 当前模型只保留 identity/metadata；Conversation 只保留 Project 归属和 generic resource intent；Run 只从 frozen refs 获得权限。
-- Data Connector 以 `ConnectionProfile → DatabaseResource → provider objects` 展示资源；左侧 focus 只导航，Workbench Reference 才把对象与 locator 交给 Composer。
+- Data Connector 以 `ConnectionProfile → DatabaseResource → provider objects` 展示资源；项目菜单在右侧 Dock 打开数据库树，focus 只导航，Workbench Reference 才把对象与 locator 交给 Composer。
 - Dock collapsed state 使用独立 rail layout，不压缩 expanded tab strip；Composer 与 Conversation content column 共用版心，不作为 footer panel。
 - 迁移没有引入新依赖、双写、通用 `ProjectResourceBinding(config_json)`、service locator 或 Data 兼容 API；SQLite/Alembic、现有 DLC verifier/compiler、Credential Broker、Tool Runtime 与 Artifact envelope 被直接复用。
 

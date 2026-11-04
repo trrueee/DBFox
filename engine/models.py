@@ -34,7 +34,6 @@ class Project(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "projects"
     __table_args__ = (
         Index("ix_projects_status", "status"),
-        UniqueConstraint("name", name="uq_projects_name"),
     )
 
     id = Column(String, primary_key=True, default=generate_uuid)
@@ -368,6 +367,37 @@ class AgentArtifactRecord(Base):  # type: ignore[misc,valid-type]
     run = relationship("AgentRun", back_populates="artifacts")
 
 
+class SessionResourceRetirement(Base):  # type: ignore[misc,valid-type]
+    """Deletion outbox survives physical Session removal and disabled owners."""
+    __tablename__ = "session_resource_retirements"
+    session_id = Column(String, primary_key=True)
+    attachment_ids_json = Column(Text, nullable=False, default="[]")
+    delivered_owners_json = Column(Text, nullable=False, default="[]")
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class ConversationAttachment(Base):  # type: ignore[misc,valid-type]
+    """Host-owned immutable input bytes; format semantics belong to DLCs."""
+
+    __tablename__ = "conversation_attachments"
+    __table_args__ = (
+        UniqueConstraint("session_id", "upload_key", name="uq_attachment_upload"),
+        Index("ix_attachment_session_input", "session_id", "first_input_id"),
+        CheckConstraint("byte_count > 0", name="ck_attachment_nonempty"),
+    )
+
+    id = Column(String, primary_key=True)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    display_name = Column(String(255), nullable=False)
+    media_type = Column(String(255), nullable=False)
+    byte_count = Column(Integer, nullable=False)
+    content_sha256 = Column(String(64), nullable=False)
+    upload_key = Column(String(128), nullable=False)
+    first_input_id = Column(String, nullable=True)
+    first_input_sequence = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
 class AgentSessionInput(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "agent_session_inputs"
     __table_args__ = (
@@ -389,6 +419,7 @@ class AgentSessionInput(Base):  # type: ignore[misc,valid-type]
     workspace_context_json = Column(Text, nullable=False, default="{}")
     resource_refs_json = Column(Text, nullable=False, default="[]")
     references_json = Column(Text, nullable=False, default="[]")
+    request_fingerprint = Column(String(64), nullable=True)
     reply_to_request_id = Column(String, nullable=True)
     status = Column(String, nullable=False, default="admitted")
     admitted_at = Column(DateTime, nullable=False, default=utcnow)

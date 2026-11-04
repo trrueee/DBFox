@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell, type IpcMainInvokeEvent } from "electron";
-import { appendFile, mkdir, open, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -381,12 +381,13 @@ if (!primaryInstance) {
           dlcId: item.dlc_id,
           assetUrl: `dlc-asset://localhost/${item.package_digest.replace(/^sha256[:-]/i, "")}/frontend/${item.frontend_entrypoint?.replace(/^\/+/, "").replace(/^frontend\//, "")}`,
         }));
-      const requiredSystemDlcs = [
-        "dbfox.data",
-        "dbfox.music",
-        "dbfox.visualization",
-        "dbfox.workspace",
-      ];
+      const smokeBundle = JSON.parse(await readFile(join(process.resourcesPath, "system-dlcs", "system-dlcs.json"), "utf8")) as {
+        packages: Array<{ dlc_id: string; default_enabled: boolean }>;
+      };
+      const requiredSystemDlcs = smokeBundle.packages.filter(item => item.default_enabled).map(item => item.dlc_id);
+      if (!requiredSystemDlcs.length || new Set(requiredSystemDlcs).size !== requiredSystemDlcs.length) {
+        throw new Error("System DLC smoke manifest has no unique expected packages");
+      }
       if (!requiredSystemDlcs.every((dlcId) => frontendTargets.some((item) => item.dlcId === dlcId))) {
         throw new Error("Packaged runtime did not activate every required system DLC frontend");
       }
@@ -399,17 +400,18 @@ if (!primaryInstance) {
           do {
             loadedLinks = [...document.querySelectorAll("link[data-dbfox-dlc]")]
               .filter((link) => expectedIds.has(link.dataset.dbfoxDlc));
-            if (loadedLinks.length === expectedIds.size) break;
+            if (new Set(loadedLinks.map(link => link.dataset.dbfoxDlc)).size === expectedIds.size) break;
             await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
           } while (Date.now() < deadline);
           const activeDlcAssetStatuses = Object.fromEntries(await Promise.all(
             targets.map(async (item) => [item.dlcId, await fetch(item.assetUrl).then((response) => response.status)])
           ));
           const stylesheetStatuses = Object.fromEntries(await Promise.all(
-            loadedLinks.map(async (link) => [
-              link.dataset.dbfoxDlc,
-              await fetch(link.href).then((response) => response.status)
-            ])
+            targets.map(async (item) => {
+              const links = loadedLinks.filter(link => link.dataset.dbfoxDlc === item.dlcId);
+              const statuses = await Promise.all(links.map(link => fetch(link.href).then(response => response.status)));
+              return [item.dlcId, statuses.length && statuses.every(status => status === 200) ? 200 : statuses.find(status => status !== 200) || 0];
+            })
           ));
           return {
             runtime: window.dbfoxDesktop?.runtime,
@@ -419,7 +421,7 @@ if (!primaryInstance) {
             ).then((response) => response.status),
             extensionHostVersion: window.__DBFOX_EXTENSION_HOST__?.version,
             activeDlcIds: targets.map((item) => item.dlcId).sort(),
-            loadedFrontendDlcIds: loadedLinks.map((link) => link.dataset.dbfoxDlc).sort(),
+            loadedFrontendDlcIds: [...new Set(loadedLinks.map((link) => link.dataset.dbfoxDlc))].sort(),
             activeDlcAssetStatuses,
             stylesheetStatuses
           };

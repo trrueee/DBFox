@@ -221,6 +221,7 @@ frame-ancestors 'none';
 ### Host SDK Binding & Error Isolation
 - **Global Runtime SDK**: DBFox Host initializes `window.__DBFOX_EXTENSION_HOST__` with only React, ReactDOM and runtime version so package-free frontend entrypoints share one renderer realm. It does not expose stores, tokens, native bridges, UI primitives or registries globally.
 - **Transactional Registration Host**: The Host passes a scoped `FrontendExtensionHost` into each DLC `register()` call. That object owns contribution registries, typed operations/native dialogs and versioned `ui` primitives. `ui@1.0.0` exposes the Zag-backed generic `Tree<T>`; DLCs pass their original items and id/label/children accessors, while the Host owns keyboard/focus/selection/expansion and official async-child presentation. Workspace, GitHub and Data use it without a resource DTO or per-DLC Tree runtime; Data keeps catalog refresh/pagination and SQL/Table Dock actions on its existing typed operations.
+- **Workbench presentation additions (2026-10-29)**: `ui@1.0.0` also exposes shared `ResourceIcon` and read-only `FileContent`. Connector `onOpen` optionally opens a complete domain workbench; otherwise the Host uses `core.project-workbench`. `DockViewContribution.objectKinds` declares exact object preview selectors within the owner's namespace; missing or ambiguous viewers fail closed. `WorkspaceDockTab.preview` is presentation metadata only. Project menus replace persistent left resource sections; object authority and content stay with the owner. See [frontend interaction contract](./frontend.md#3-工作区组件关系).
 - **Single React Instance**: DLC frontend bundles mark `react` and `react-dom` as external, sharing the host React runtime to avoid duplicate instance and Hook ABI mismatch bugs.
 - **Error Boundaries**: Every dynamic Dock view, Connector, and Artifact card is wrapped in a `DlcErrorBoundary`. Render crashes are isolated with a fallback UI and disable action, preventing host white-screens.
 
@@ -236,10 +237,11 @@ frame-ancestors 'none';
 
 ### Deterministic Coverage Mapping
 Core Tool protocol continues to define the full capability vocabulary. Installable Extension API v2
-Tools are a narrower trusted in-process profile: the compiler accepts only `network` and
-`filesystem_read`. In particular, `filesystem_write` is rejected even when the manifest declares it,
-because write remains an isolated-process capability. Manifest write permissions may still cover a
-typed Host Operation; they do not upgrade an in-process model Tool.
+Tools have two trusted-code profiles: `in_process` accepts `network` and `filesystem_read`;
+`isolated_process` additionally accepts `filesystem_write` and `subprocess`. A manifest permission
+never upgrades an in-process Tool. The isolated worker revalidates the frozen package identity and
+provides killable timeout/cancellation isolation, but it does not make publisher code untrusted or
+claim a hostile-code OS sandbox.
 
 When a DLC registers a Tool with `ToolExecutionSpec.capabilities`:
 - `ToolCapability.network` $\implies$ Requires package permission `network` or matching `network:<domain>`.
@@ -427,4 +429,3 @@ Error States:
 - **R7.1**: Developer SDK & Packaging CLI (`dbfox-dlc build/sign/test`) (CLOSED).
 - **R8A**: Untrusted Isolation Gate (CLOSED — NO-GO; trusted-publisher-only remains authoritative).
 - **R8B**: Not authorized. Reopens only if every criterion in `r8-untrusted-isolation-gate.md` can be proved on Windows, macOS, and Linux.
-

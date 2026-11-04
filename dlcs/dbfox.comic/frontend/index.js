@@ -69,7 +69,7 @@ function PageCanvas({ page, selected, showNotes, onSelect, onTransform, onGestur
     if (current?.moved && current.next && !disabled) onTransform(current.object, current.panel, current.next, current.version);
   };
   React.useEffect(() => { cleanups.add(cancel); return () => { cleanups.delete(cancel); gesture.current = null; }; }, [page, showNotes]);
-  return h(React.Fragment, null, h("div", { className: "comic-canvas", ref: mount, tabIndex: 0, role: "group", "aria-label": "画布：拖动移动，方向键微调，Escape 取消拖动",
+  return h(React.Fragment, null, h("div", { className: "dbfox-comic-canvas", ref: mount, tabIndex: 0, role: "group", "aria-label": "画布：拖动移动，方向键微调，Escape 取消拖动",
     onPointerDown: start, onPointerMove: move, onPointerUp: finish, onPointerCancel: cancel,
     onKeyDown: (event) => {
       if (event.key === "Escape") { cancel(); return; }
@@ -79,7 +79,7 @@ function PageCanvas({ page, selected, showNotes, onSelect, onTransform, onGestur
       const axis = ["ArrowLeft", "ArrowRight"].includes(event.key) ? "x" : "y";
       next[axis] = Math.max(0, Math.min(1 - next[axis === "x" ? "width" : "height"], next[axis] + (["ArrowLeft", "ArrowUp"].includes(event.key) ? -step : step)));
       onTransform(found.object, found.panel, next, snapshotVersion);
-    } }), overflow.length > 0 && h("p", { className: "comic-feedback", role: "status" }, `以下文字超出框内空间，请放大对象或缩小字号：${overflow.join("、")}`));
+    } }), overflow.length > 0 && h("p", { className: "dbfox-comic-feedback", role: "status" }, `以下文字超出框内空间，请放大对象或缩小字号：${overflow.join("、")}`));
 }
 
 function Studio({ projectId, initialId, context }) {
@@ -184,66 +184,66 @@ function Studio({ projectId, initialId, context }) {
     const cols = page.panels.length === 1 ? 1 : 2, rows = Math.ceil(page.panels.length / cols), gap = .035;
     apply({ kind: "panel_layout", page_id: page.id, placements: page.panels.map((p, i) => ({ panel_id: p.id, rect: rect(gap + i % cols * ((1 - gap) / cols), gap + Math.floor(i / cols) * ((1 - gap) / rows), (1 - gap) / cols - gap, (1 - gap) / rows - gap) })) });
   };
-  const field = (label, value, onChange, props = {}) => h("label", { className: "comic-field" }, h("span", null, label), h("input", { value, onChange: (e) => onChange(e.target.value), ...props }));
+  const field = (label, value, onChange, props = {}) => h("label", { className: "dbfox-comic-field" }, h("span", null, label), h("input", { value, onChange: (e) => onChange(e.target.value), ...props }));
   const draftField = (key, value) => setDraft((d) => ({ ...d, data: { ...d.data, [key]: value } }));
 
-  if (!comicId) return h("section", { className: "dbfox-comic comic-library" }, h("header", null, h("p", { className: "comic-eyebrow" }, "VISUAL NARRATIVE"), h("h2", null, "Comic Studio"), h("p", null, "从一页分镜开始，让镜头、角色和对白成为可继续编辑的作品。")),
+  if (!comicId) return h("section", { className: "dbfox-comic dbfox-comic-library" }, h("header", null, h("p", { className: "dbfox-comic-eyebrow" }, "VISUAL NARRATIVE"), h("h2", null, "Comic Studio"), h("p", null, "从一页分镜开始，让镜头、角色和对白成为可继续编辑的作品。")),
     h("form", { onSubmit: (e) => { e.preventDefault(); if (title.trim()) write("comics.create", { title: title.trim() }); } }, field("作品名称", title, setTitle, { maxLength: 160, placeholder: "例如：灯塔归途" }), h("button", { type: "submit", disabled: busy || !title.trim() }, "新建作品")),
-    error && h("p", { role: "alert" }, error), h("div", { className: "comic-projects" }, ...comics.map((comic) => button(`${comic.title} · ${comic.page_count} 页 · v${comic.version}`, () => open(projectId, comic), busy, { key: comic.id }))));
+    error && h("p", { role: "alert" }, error), h("div", { className: "dbfox-comic-projects" }, ...comics.map((comic) => button(`${comic.title} · ${comic.page_count} 页 · v${comic.version}`, () => open(projectId, comic), busy, { key: comic.id }))));
 
-  return h("section", { className: "dbfox-comic comic-studio" },
-    h("header", { className: "comic-topbar" }, h("div", null, h("p", { className: "comic-eyebrow" }, "COMIC / STORYBOARD"), h("h2", null, snapshot?.title || "加载作品")),
-      h("span", { className: "comic-version" }, snapshot ? `v${snapshot.version} · ${snapshot.page_count} 页` : ""),
+  return h("section", { className: "dbfox-comic dbfox-comic-studio" },
+    h("header", { className: "dbfox-comic-topbar" }, h("div", null, h("p", { className: "dbfox-comic-eyebrow" }, "COMIC / STORYBOARD"), h("h2", null, snapshot?.title || "加载作品")),
+      h("span", { className: "dbfox-comic-version" }, snapshot ? `v${snapshot.version} · ${snapshot.page_count} 页` : ""),
       button("刷新", () => read(), busy || !!draft), button("导出工件", () => write("comics.artifact", {}), disabled),
       button("交给 Agent", () => context.onAsk({ label: `${snapshot.title} · ${selected || pageId}`, authority: { kind: KIND, id: comicId }, object: { kind: selected ? "dbfox.comic.object" : KIND, id: selected || comicId, version: snapshot.version }, locator: selected ? `/objects/${encodeURIComponent(selected)}` : "/" }), disabled),
       button("作品库", () => open(projectId), disabled || !!draft)),
-    h("div", { className: "comic-toolbar" }, h("div", { role: "group", "aria-label": "视图" }, button("页面", () => setView("page"), false, { "aria-pressed": view === "page" }), button("分镜", () => setView("storyboard"), false, { "aria-pressed": view === "storyboard" })),
+    h("div", { className: "dbfox-comic-toolbar" }, h("div", { role: "group", "aria-label": "视图" }, button("页面", () => setView("page"), false, { "aria-pressed": view === "page" }), button("分镜", () => setView("storyboard"), false, { "aria-pressed": view === "storyboard" })),
       button("添加页", () => apply({ kind: "page_create", page: { id: id("page"), title: `第 ${pages.length + 1} 页`, width: 720, height: 960, background: "#FFFFFF", panels: [] } }), disabled),
       button("添加面板", () => apply({ kind: "panel_create", page_id: page.id, panels: [{ id: id("panel"), title: `镜头 ${page.panels.length + 1}`, rect: rect(.05, .05, .9, .4), background: "#E8EDF0", elements: [] }] }), disabled || !page),
       button("整理布局", layout, disabled || !page?.panels.length),
       h("label", null, "拖动 ", h("select", { value: mode, onChange: (e) => setMode(e.target.value) }, h("option", { value: "move" }, "移动"), h("option", { value: "resize" }, "调整大小"))),
       h("label", null, "缩放 ", h("select", { value: zoom, onChange: (e) => setZoom(Number(e.target.value)) }, ...[50, 75, 100, 125, 150].map((n) => h("option", { value: n, key: n }, `${n}%`)))),
       h("label", null, h("input", { type: "checkbox", checked: notes, onChange: (e) => setNotes(e.target.checked) }), "视觉注释")),
-    error && h("p", { className: "comic-feedback comic-error", role: "alert" }, error), notice && h("p", { className: "comic-feedback", role: "status" }, notice),
-    h("div", { className: "comic-workspace" },
-      h("nav", { className: "comic-pages", "aria-label": "作品页面" }, h("h3", null, "页面"), ...pages.map((p, i) => button(`${String(i + 1).padStart(2, "0")}  ${p.title}`, () => { setPageId(p.id); setSelected(""); }, busy || !!draft, { key: p.id, "aria-current": p.id === pageId ? "page" : undefined })),
-        page && h("div", { className: "comic-page-actions" }, button("页面属性", () => setDraft({ type: "page", data: { page_id: page.id, title: page.title, background: page.background, width: page.width, height: page.height }, version: snapshot.version }), disabled || !!draft), button("上移页", () => { const order = pages.map((p) => p.id), at = order.indexOf(pageId); if (at > 0) { [order[at - 1], order[at]] = [order[at], order[at - 1]]; apply({ kind: "page_reorder", page_ids: order }); } }, disabled || pages[0]?.id === pageId), button("删除页", () => apply({ kind: "object_delete", object_id: pageId }), disabled))),
-      h("main", { className: "comic-stage", "aria-label": "作品区", style: { "--comic-zoom": zoom / 100 } },
-        !page ? h("div", { className: "comic-empty" }, h("h3", null, "第一幕，从这里开始"), h("p", null, "添加页面，然后放置面板、角色与对白。")) :
-          view === "page" ? h("div", { className: "comic-paper" }, h(PageCanvas, { page, selected, showNotes: notes, onSelect: select, onTransform: transform, onGesture: (value) => { live.current.gesture = value; }, mode, disabled: disabled || !!draft, snapshotVersion: snapshot.version })) :
-            h("div", { className: "comic-storyboard" }, ...page.panels.map((panel, index) => h("article", { key: panel.id, className: "comic-shot-card" },
+    error && h("p", { className: "dbfox-comic-feedback dbfox-comic-error", role: "alert" }, error), notice && h("p", { className: "dbfox-comic-feedback", role: "status" }, notice),
+    h("div", { className: "dbfox-comic-workspace" },
+      h("nav", { className: "dbfox-comic-pages", "aria-label": "作品页面" }, h("h3", null, "页面"), ...pages.map((p, i) => button(`${String(i + 1).padStart(2, "0")}  ${p.title}`, () => { setPageId(p.id); setSelected(""); }, busy || !!draft, { key: p.id, "aria-current": p.id === pageId ? "page" : undefined })),
+        page && h("div", { className: "dbfox-comic-page-actions" }, button("页面属性", () => setDraft({ type: "page", data: { page_id: page.id, title: page.title, background: page.background, width: page.width, height: page.height }, version: snapshot.version }), disabled || !!draft), button("上移页", () => { const order = pages.map((p) => p.id), at = order.indexOf(pageId); if (at > 0) { [order[at - 1], order[at]] = [order[at], order[at - 1]]; apply({ kind: "page_reorder", page_ids: order }); } }, disabled || pages[0]?.id === pageId), button("删除页", () => apply({ kind: "object_delete", object_id: pageId }), disabled))),
+      h("main", { className: "dbfox-comic-stage", "aria-label": "作品区", style: { "--comic-zoom": zoom / 100 } },
+        !page ? h("div", { className: "dbfox-comic-empty" }, h("h3", null, "第一幕，从这里开始"), h("p", null, "添加页面，然后放置面板、角色与对白。")) :
+          view === "page" ? h("div", { className: "dbfox-comic-paper" }, h(PageCanvas, { page, selected, showNotes: notes, onSelect: select, onTransform: transform, onGesture: (value) => { live.current.gesture = value; }, mode, disabled: disabled || !!draft, snapshotVersion: snapshot.version })) :
+            h("div", { className: "dbfox-comic-storyboard" }, ...page.panels.map((panel, index) => h("article", { key: panel.id, className: "dbfox-comic-shot-card" },
               h("header", null, button(`${String(index + 1).padStart(2, "0")} · ${panel.title}`, () => select(panel.id)), h("span", null, `${panel.shot.framing} · ${panel.shot.duration_seconds}s`)),
               h(PageCanvas, { page: { ...page, width: Math.round(panel.rect.width * page.width), height: Math.round(panel.rect.height * page.height), panels: [{ ...panel, rect: { x: 0, y: 0, width: 1, height: 1 } }] }, selected, showNotes: notes, onSelect: select,
                 onTransform: (object, parent, next, version) => { if (parent) transform(object, panel, next, version); }, onGesture: (value) => { live.current.gesture = value; }, panelTransforms: false, mode, disabled: disabled || !!draft, snapshotVersion: snapshot.version }),
               h("p", null, panel.shot.description || "为这个镜头添加视觉描述"))))),
-      h("aside", { className: "comic-inspector", "aria-label": "面板与对白编辑器" }, h("h3", null, "镜头与对白"),
-        page && h("div", { className: "comic-object-list" }, ...page.panels.map((panel) => h("div", { key: panel.id }, button(panel.title, () => select(panel.id), false, { "aria-pressed": selected === panel.id }), ...panel.elements.map((element) => button(`${labels[element.kind]} · ${(element.label || element.text || "空白").slice(0, 22)}`, () => select(element.id), false, { key: element.id, "aria-pressed": selected === element.id, className: "comic-child" }))))),
-        selectedPanel && h("div", { className: "comic-add-elements" }, ...["character", "bubble", "caption", "note"].map((kind) => button(`+ ${labels[kind]}`, () => createElement(kind), disabled || !!draft, { key: kind }))),
-        selectedPanel && !draft && h("div", { className: "comic-details" }, h("p", null, selectedElement ? `${labels[selectedElement.kind]} · ${selectedElement.id}` : `${selectedPanel.title} · ${selectedPanel.shot.framing}`),
+      h("aside", { className: "dbfox-comic-inspector", "aria-label": "面板与对白编辑器" }, h("h3", null, "镜头与对白"),
+        page && h("div", { className: "dbfox-comic-object-list" }, ...page.panels.map((panel) => h("div", { key: panel.id }, button(panel.title, () => select(panel.id), false, { "aria-pressed": selected === panel.id }), ...panel.elements.map((element) => button(`${labels[element.kind]} · ${(element.label || element.text || "空白").slice(0, 22)}`, () => select(element.id), false, { key: element.id, "aria-pressed": selected === element.id, className: "dbfox-comic-child" }))))),
+        selectedPanel && h("div", { className: "dbfox-comic-add-elements" }, ...["character", "bubble", "caption", "note"].map((kind) => button(`+ ${labels[kind]}`, () => createElement(kind), disabled || !!draft, { key: kind }))),
+        selectedPanel && !draft && h("div", { className: "dbfox-comic-details" }, h("p", null, selectedElement ? `${labels[selectedElement.kind]} · ${selectedElement.id}` : `${selectedPanel.title} · ${selectedPanel.shot.framing}`),
           button(selectedElement ? "编辑对象" : "编辑镜头", () => setDraft({ type: selectedElement ? "element" : "shot", panelId: selectedPanel.id, data: structuredClone(selectedElement || selectedPanel.shot), version: snapshot.version }), disabled),
           button("面板属性", () => setDraft({ type: "panel", data: { panel_id: selectedPanel.id, title: selectedPanel.title, background: selectedPanel.background }, version: snapshot.version }), disabled),
           button("删除所选", () => apply({ kind: "object_delete", object_id: selectedElement?.id || selectedPanel.id }), disabled),
           button("镜头前移", () => { const order = page.panels.map((p) => p.id), at = order.indexOf(selectedPanel.id); if (at > 0) { [order[at - 1], order[at]] = [order[at], order[at - 1]]; apply({ kind: "panel_reorder", page_id: page.id, panel_ids: order }); } }, disabled || page.panels[0]?.id === selectedPanel.id)),
-        draft && h("form", { className: "comic-edit-form", onSubmit: (e) => { e.preventDefault(); apply(["page", "panel"].includes(draft.type) ? { kind: `${draft.type}_update`, ...draft.data } : draft.type === "shot" ? { kind: "shot_set", panel_id: draft.panelId, shot: draft.data } : { kind: "element_update", panel_id: draft.panelId, element: draft.data }, draft.version); } },
+        draft && h("form", { className: "dbfox-comic-edit-form", onSubmit: (e) => { e.preventDefault(); apply(["page", "panel"].includes(draft.type) ? { kind: `${draft.type}_update`, ...draft.data } : draft.type === "shot" ? { kind: "shot_set", panel_id: draft.panelId, shot: draft.data } : { kind: "element_update", panel_id: draft.panelId, element: draft.data }, draft.version); } },
           h("p", null, `基于 v${draft.version} 的编辑草稿`),
           ["page", "panel"].includes(draft.type) ? h(React.Fragment, null,
             field("标题", draft.data.title, (value) => draftField("title", value), { maxLength: 120, required: true }),
             field("背景颜色", draft.data.background, (value) => draftField("background", value), { type: "color" }),
             draft.type === "page" && h(React.Fragment, null, ...[["width", "页面宽度"], ["height", "页面高度"]].map(([key, label]) => field(label, draft.data[key], (value) => draftField(key, Number(value)), { key, type: "number", min: 240, max: 2400, step: 1 })))) :
           draft.type === "shot" ? h(React.Fragment, null,
-            ...[["framing", "景别", ["wide", "full", "medium", "close", "detail"]], ["angle", "角度", ["eye", "high", "low", "overhead"]], ["movement", "运镜", ["static", "pan", "tilt", "track", "zoom"]]].map(([key, label, options]) => h("label", { key, className: "comic-field" }, label, h("select", { value: draft.data[key], onChange: (e) => draftField(key, e.target.value) }, ...options.map((v) => h("option", { key: v, value: v }, v))))),
+            ...[["framing", "景别", ["wide", "full", "medium", "close", "detail"]], ["angle", "角度", ["eye", "high", "low", "overhead"]], ["movement", "运镜", ["static", "pan", "tilt", "track", "zoom"]]].map(([key, label, options]) => h("label", { key, className: "dbfox-comic-field" }, label, h("select", { value: draft.data[key], onChange: (e) => draftField(key, e.target.value) }, ...options.map((v) => h("option", { key: v, value: v }, v))))),
             field("时长（秒）", draft.data.duration_seconds, (v) => draftField("duration_seconds", Number(v)), { type: "number", min: .1, max: 600, step: .1 }),
-            h("label", { className: "comic-field" }, "视觉描述", h("textarea", { value: draft.data.description, maxLength: 2000, onChange: (e) => draftField("description", e.target.value) }))) : h(React.Fragment, null,
-            draft.data.kind === "character" ? field("角色视觉标签", draft.data.label, (v) => draftField("label", v), { maxLength: 120, required: true }) : h("label", { className: "comic-field" }, "文字内容", h("textarea", { value: draft.data.text, maxLength: 2000, onChange: (e) => draftField("text", e.target.value) })),
+            h("label", { className: "dbfox-comic-field" }, "视觉描述", h("textarea", { value: draft.data.description, maxLength: 2000, onChange: (e) => draftField("description", e.target.value) }))) : h(React.Fragment, null,
+            draft.data.kind === "character" ? field("角色视觉标签", draft.data.label, (v) => draftField("label", v), { maxLength: 120, required: true }) : h("label", { className: "dbfox-comic-field" }, "文字内容", h("textarea", { value: draft.data.text, maxLength: 2000, onChange: (e) => draftField("text", e.target.value) })),
             ...Object.entries(draft.data.rect).map(([key, value]) => field(key, value, (v) => draftField("rect", { ...draft.data.rect, [key]: Number(v) }), { key, type: "number", step: .01, min: 0, max: 1 })),
             draft.data.font_size && field("字号", draft.data.font_size, (v) => draftField("font_size", Number(v)), { type: "number", min: 10, max: 72 }),
             draft.data.color && field("颜色", draft.data.color, (v) => draftField("color", v), { type: "color" }),
-            draft.data.kind === "character" && h(React.Fragment, null, ...[["pose", "姿态", ["standing", "walking", "seated", "reaching"]], ["facing", "朝向", ["left", "right", "front"]]].map(([key, label, options]) => h("label", { className: "comic-field", key }, label, h("select", { value: draft.data[key], onChange: (e) => draftField(key, e.target.value) }, ...options.map((value) => h("option", { key: value, value }, value)))))),
-            draft.data.kind === "bubble" && h(React.Fragment, null, h("label", { className: "comic-field" }, "气泡样式", h("select", { value: draft.data.style, onChange: (e) => draftField("style", e.target.value) }, ...["speech", "thought", "shout"].map((value) => h("option", { key: value, value }, value)))), ...["tail_x", "tail_y"].map((key) => field(key, draft.data[key], (value) => draftField(key, Number(value)), { key, type: "number", min: 0, max: 1, step: .01 }))),
-            draft.data.kind === "bubble" && h("label", { className: "comic-field" }, "说话角色", h("select", { value: draft.data.speaker_id || "", onChange: (e) => draftField("speaker_id", e.target.value || null) }, h("option", { value: "" }, "不指定"), ...selectedPanel.elements.filter((e) => e.kind === "character").map((e) => h("option", { key: e.id, value: e.id }, e.label))))),
+            draft.data.kind === "character" && h(React.Fragment, null, ...[["pose", "姿态", ["standing", "walking", "seated", "reaching"]], ["facing", "朝向", ["left", "right", "front"]]].map(([key, label, options]) => h("label", { className: "dbfox-comic-field", key }, label, h("select", { value: draft.data[key], onChange: (e) => draftField(key, e.target.value) }, ...options.map((value) => h("option", { key: value, value }, value)))))),
+            draft.data.kind === "bubble" && h(React.Fragment, null, h("label", { className: "dbfox-comic-field" }, "气泡样式", h("select", { value: draft.data.style, onChange: (e) => draftField("style", e.target.value) }, ...["speech", "thought", "shout"].map((value) => h("option", { key: value, value }, value)))), ...["tail_x", "tail_y"].map((key) => field(key, draft.data[key], (value) => draftField(key, Number(value)), { key, type: "number", min: 0, max: 1, step: .01 }))),
+            draft.data.kind === "bubble" && h("label", { className: "dbfox-comic-field" }, "说话角色", h("select", { value: draft.data.speaker_id || "", onChange: (e) => draftField("speaker_id", e.target.value || null) }, h("option", { value: "" }, "不指定"), ...selectedPanel.elements.filter((e) => e.kind === "character").map((e) => h("option", { key: e.id, value: e.id }, e.label))))),
           h("button", { type: "submit", disabled: busy }, "保存修改"), button("取消草稿", () => { setDraft(null); live.current.draft = null; read(); }, busy)),
-        snapshot && h("details", { className: "comic-history" }, h("summary", null, "历史与恢复"), field("目标版本", revision, (v) => setRevision(Number(v)), { type: "number", min: 1, max: snapshot.version }), button("比较当前版本", () => compare(), disabled || !!draft), button("恢复为新版本", () => write("comics.undo", { target_version: revision }), disabled || !!draft), h("p", null, "历史版本保持不变，恢复会产生新版本。"),
-          differences && h("div", { className: "comic-diff", role: "status" }, h("p", null, `${differences.total} 项差异`), ...differences.differences.map((item, index) => h("pre", { key: index }, JSON.stringify(item, null, 2))), differences.next_offset < differences.total && button("下一页差异", () => compare(differences.next_offset), disabled)),
+        snapshot && h("details", { className: "dbfox-comic-history" }, h("summary", null, "历史与恢复"), field("目标版本", revision, (v) => setRevision(Number(v)), { type: "number", min: 1, max: snapshot.version }), button("比较当前版本", () => compare(), disabled || !!draft), button("恢复为新版本", () => write("comics.undo", { target_version: revision }), disabled || !!draft), h("p", null, "历史版本保持不变，恢复会产生新版本。"),
+          differences && h("div", { className: "dbfox-comic-diff", role: "status" }, h("p", null, `${differences.total} 项差异`), ...differences.differences.map((item, index) => h("pre", { key: index }, JSON.stringify(item, null, 2))), differences.next_offset < differences.total && button("下一页差异", () => compare(differences.next_offset), disabled)),
           button("删除作品", () => write("comics.delete", {}), disabled || !!draft)))));
 }
 
@@ -270,14 +270,14 @@ function ComicArtifact({ artifact, payload, context }) {
       if (!state.current.alive || controller.signal.aborted) return;
       if (state.current.url) URL.revokeObjectURL(state.current.url);
       const url = URL.createObjectURL(blob); state.current.url = url;
-      const link = document.createElement("a"); link.href = url; link.download = `comic-${payload.id}-v${payload.version}.${format}`; document.body.append(link); link.click(); link.remove();
+      const link = document.createElement("a"); link.href = url; link.download = `dbfox-comic-${payload.id}-v${payload.version}.${format}`; document.body.append(link); link.click(); link.remove();
     } catch (e) { if (state.current.alive && !controller.signal.aborted) setError(message(e)); }
   };
-  return h("article", { className: "dbfox-comic comic-artifact" }, h("h3", null, `${payload.title} · v${payload.version}`), h("p", null, `${payload.page_count} 页 · ${payload.panel_count} 面板 · 不可变快照`),
-    h("div", { className: "comic-toolbar" }, button("下载 HTML", () => download("html")), button("下载 JSON", () => download("json")),
+  return h("article", { className: "dbfox-comic dbfox-comic-artifact" }, h("h3", null, `${payload.title} · v${payload.version}`), h("p", null, `${payload.page_count} 页 · ${payload.panel_count} 面板 · 不可变快照`),
+    h("div", { className: "dbfox-comic-toolbar" }, button("下载 HTML", () => download("html")), button("下载 JSON", () => download("json")),
       h("label", null, "页面 ", h("select", { value: page?.id || "", onChange: (e) => select(e.target.value) }, ...pages.map((p) => h("option", { key: p.id, value: p.id }, p.title))))),
     error && h("p", { role: "alert" }, error), page && h(PageCanvas, { page, disabled: true, showNotes: false, selected: null }),
-    h("p", { className: "comic-fingerprint" }, payload.content_hash));
+    h("p", { className: "dbfox-comic-fingerprint" }, payload.content_hash));
 }
 
 export function register(extensionHost) {

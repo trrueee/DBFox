@@ -7,9 +7,10 @@ import {
   getStoredApiConfig,
   saveStoredApiConfig,
 } from "../lib/llmConfig";
+import { useSavedApiConfig } from "./useSavedApiConfig";
 
 export function useApiConfig() {
-  const [config, setConfig] = useState<ApiConfig>(getStoredApiConfig);
+  const config = useSavedApiConfig();
   const [draft, setDraft] = useState<LlmConfigDraft>(() => createLlmConfigDraft(getStoredApiConfig()));
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -31,7 +32,6 @@ export function useApiConfig() {
       modelName: draft.modelName.trim(),
     };
     saveStoredApiConfig(next);
-    setConfig(next);
     setDraft(createLlmConfigDraft(next));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);

@@ -41,6 +41,7 @@ if (sourceDatabase) {
 const smokeSourcePath = join(runtimeDir, "smoke-source.sqlite");
 createSmokeSourceDatabase(smokeSourcePath);
 const dlcFixture = buildPackagedDlcFixture(join(runtimeDir, "fixture-packages"));
+verifyFrozenWorkerEntrypoint();
 const githubDlcFixture = buildPackagedGithubDlcFixture(join(runtimeDir, "fixture-packages"));
 const port = await reservePort();
 let token = randomBytes(32).toString("hex");
@@ -156,6 +157,7 @@ try {
     result_artifact: "ok",
     durable_turns: reloadedConversation.runs.length,
     restart_reload: "ok",
+    isolated_worker_protocol: "ok",
     packaged_dlc: dlcEvidence,
     packaged_github_dlc: githubDlcEvidence,
     target_triplet: targetTriplet,
@@ -189,6 +191,23 @@ function platformTargetTriplet() {
     throw new Error(`Unsupported Sidecar target: ${process.platform}/${process.arch}`);
   }
   return `${architecture}-${suffix}`;
+}
+
+function verifyFrozenWorkerEntrypoint() {
+  const frames = [
+    { protocol_version: 1, kind: "handshake" },
+    { protocol_version: 1, kind: "request", request: {} },
+  ];
+  const probe = spawnSync(sidecarPath, ["--tool-worker"], {
+    input: frames.map(frame => JSON.stringify(frame)).join("\n") + "\n",
+    encoding: "utf8", timeout: 20_000, windowsHide: true,
+    env: { ...process.env, DBFOX_RUNTIME_DIR: runtimeDir },
+  });
+  const output = probe.stdout.trim().split(/\r?\n/).map(line => JSON.parse(line));
+  if (probe.status !== 2 || output.length !== 2 || output[0].kind !== "ready"
+    || output[1].error_code !== "TOOL_WORKER_INVALID_REQUEST") {
+    throw new Error("Frozen isolated worker failed its protocol admission check");
+  }
 }
 
 function assertControlProtocol(output, selectedPort) {

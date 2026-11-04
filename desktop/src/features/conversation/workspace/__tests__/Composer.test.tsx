@@ -88,7 +88,7 @@ describe("Composer", () => {
     );
 
     expect(screen.getByText("orders (table)")).toBeTruthy();
-    expect(screen.getByText("dbfox.data.table")).toBeTruthy();
+    expect(screen.getByText("数据表")).toBeTruthy();
     const input = screen.getByRole("textbox", { name: "继续提问" });
     fireEvent.change(input, {
       target: { value: "统计总金额" },

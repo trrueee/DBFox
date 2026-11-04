@@ -11,16 +11,17 @@
   min-height: 0;
   flex-direction: column;
   border-left: 1px solid var(--line-subtle);
-  background: var(--surface-auxiliary);
+  background: var(--surface-workspace);
   box-shadow: none;
   overflow: hidden;
 }
 
 .workspace-dock[data-fullscreen="true"] {
   position: fixed;
-  inset: 34px 0 0;
+  inset: var(--app-chrome-height) 0 0;
   z-index: 190;
   width: auto;
+  height: auto;
   max-width: none;
   min-width: 0;
   border-left: 0;
@@ -69,7 +70,7 @@
   min-width: 0;
   max-width: 200px;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--radius-row);
   color: var(--color-text-secondary);
 }
 
@@ -92,9 +93,9 @@
 
 /* Active = text emphasis + soft 2px indicator (not color-only, not a card). */
 .workspace-dock__tab.is-active {
-  background: transparent;
+  background: var(--surface-workspace);
   color: var(--color-text-primary);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .workspace-dock__tab.is-active::after {
@@ -150,6 +151,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.workspace-dock__tab.is-preview .workspace-dock__tab-title { font-style: italic; }
+.workspace-dock__tab-icon > :is(svg, img) { width: 16px; height: 16px; }
 
 .workspace-dock__tab-close {
   display: inline-flex;
@@ -208,6 +212,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   overflow: hidden;
+  container-type: inline-size;
 }
 
 .workspace-dock__body-slot {

@@ -3,8 +3,8 @@
  * (@fluentui/tokens 1.0.0-alpha.24). Optional accent/warm presets use established
  * Tailwind palette ramps without introducing another theme runtime.
  *
- * Elevation, easing, and the neutral surface ramps are derived from the same
- * Fluent 2 ramps; no values here are invented ad hoc.
+ * Elevation and easing follow Fluent 2. Light neutral surfaces are tuned for
+ * the quieter DBFox workspace; text colors retain their existing contrast ramp.
  */
 
 :root {
@@ -33,12 +33,12 @@
   --color-text-muted: #5F6875;
   --color-text-tertiary: var(--color-text-muted);
 
-  --color-border: #D3D9E2;
-  --color-border-hover: #BCC5D3;
+  --color-border: #E1E6ED;
+  --color-border-hover: #C9D1DC;
   --color-border-subtle: var(--line-subtle);
-  --color-bg: #F4F6F9;
+  --color-bg: #FAFBFC;
   --color-panel: #FFFFFF;
-  --color-bg-subtle: #F2F4F8;
+  --color-bg-subtle: #F7F8FA;
   --color-surface-subtle: var(--color-bg-subtle);
 
   --color-primary-soft: #EFF6FC;
@@ -55,7 +55,7 @@
   --color-console-accent: #0284C7;
 
   /* Fluent 2 global font tokens, extended only with offline CJK fallbacks. */
-  --font-family-ui: "Segoe UI", "Segoe UI Variable Text", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+  --font-family-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
   --font-family-data: Bahnschrift, "Segoe UI", "Segoe UI Variable Text", "PingFang SC", "Microsoft YaHei UI", sans-serif;
   --font-family-code: Consolas, "Cascadia Mono", "Cascadia Code", "Courier New", Courier, monospace;
   --font-family: var(--font-family-ui);
@@ -115,7 +115,7 @@
   --bg-secondary: var(--color-bg);
   --bg-surface: var(--color-panel);
   --bg-active: var(--color-primary-soft);
-  --bg-hover: rgba(15, 23, 42, 0.06);
+  --bg-hover: rgba(15, 23, 42, 0.035);
   --bg-elevated: var(--surface-raised);
 
   --text-primary: var(--color-text-primary);
@@ -128,8 +128,8 @@
   --border-default: var(--control-border);
   --border-subtle: var(--agent-border);
 
-  --app-bg: #F4F6F9;
-  --sidebar-bg: #EBEEF3;
+  --app-bg: #FAFBFC;
+  --sidebar-bg: #F7F8FA;
   --surface-raised: #FFFFFF;
   --surface-workspace: var(--color-panel);
   --surface-elevated: var(--surface-raised);
@@ -140,8 +140,8 @@
   --surface-overlay: var(--color-panel);
 
   --control-bg: #FFFFFF;
-  --control-bg-hover: #F2F4F8;
-  --control-bg-pressed: #E7EBF1;
+  --control-bg-hover: #F3F5F8;
+  --control-bg-pressed: #ECEFF4;
   --control-bg-subtle: var(--color-bg-subtle);
   --control-border: var(--color-border);
   --control-border-hover: var(--color-border-hover);
@@ -162,6 +162,8 @@
   --motion-duration-normal: var(--motion-normal);
   --icon-size-sm: 14px;
   --icon-size-md: 16px;
+  --icon-size-lg: 20px;
+  --app-chrome-height: 48px;
   --density-toolbar-min-height: 40px;
   --density-control-height: 36px;
   --density-control-height-sm: 32px;
@@ -182,8 +184,8 @@
   --ui-space-sm: var(--space-2);
   --ui-space-md: var(--space-3);
 
-  --hairline: rgba(13, 20, 33, 0.07);
-  --hairline-strong: rgba(13, 20, 33, 0.12);
+  --hairline: rgba(13, 20, 33, 0.055);
+  --hairline-strong: rgba(13, 20, 33, 0.09);
   --top-highlight: rgba(255, 255, 255, 0.7);
   --overlay-scrim: rgba(11, 16, 26, 0.44);
 
@@ -195,12 +197,12 @@
   --intent-warning: var(--color-warning);
   --intent-danger: var(--color-danger);
 
-  --radius-panel: 12px;
+  --radius-panel: 16px;
   --radius-card: 12px;
-  --radius-row: 6px;
+  --radius-row: 8px;
   --radius-button: 8px;
-  --radius-input: 8px;
-  --radius-composer: 16px;
+  --radius-input: 10px;
+  --radius-composer: 18px;
   --radius-control: var(--radius-button);
 
   /* Elevation ladder: one physics for the whole product.
@@ -215,8 +217,8 @@
 
   /* Agent workspace tokens */
   --agent-surface: var(--color-panel);
-  --agent-surface-muted: #F6F8FB;
-  --agent-surface-subtle: #EEF1F6;
+  --agent-surface-muted: #FAFBFC;
+  --agent-surface-subtle: #F5F7FA;
   --agent-surface-raised: var(--surface-raised);
   --agent-surface-elevated: #FFFFFF;
   --agent-border: var(--color-border);
@@ -227,7 +229,7 @@
   --agent-text-muted: var(--color-text-muted);
   --agent-accent: var(--color-primary);
   --agent-accent-soft: var(--color-primary-soft);
-  --agent-user-bg: #EEF1F6;
+  --agent-user-bg: #F5F7FA;
   --agent-user-text: #2A313D;
   --agent-shadow-soft: var(--shadow-sm);
   --agent-shadow-hover: var(--shadow-md);
@@ -259,7 +261,7 @@
   --agent-chart-4: var(--trust-safe);
   --agent-chart-5: #DB2777;
   --agent-chart-6: #7C3AED;
-  --agent-chart-grid: #EEF1F6;
+  --agent-chart-grid: #F1F4F8;
   --agent-chart-area-start: rgba(37, 99, 235, 0.15);
   --agent-chart-area-end: rgba(37, 99, 235, 0);
   --agent-chart-tooltip-shadow: var(--shadow-lg);
@@ -272,8 +274,8 @@
   --trust-danger: #B42318;
   --trust-danger-bg: #FEF3F2;
   --trust-danger-border: #FECDCA;
-  --sql-code-surface: #F6F8FA;
-  --sql-code-border: #D8DEE7;
+  --sql-code-surface: #FAFBFC;
+  --sql-code-border: #E1E6ED;
   --sql-code-text: #253047;
   --sql-code-keyword: #5544C7;
   --sql-code-function: #6554D9;
@@ -286,16 +288,16 @@
   --primary: 208 85% 40%;
   --primary-foreground: 0 0% 100%;
   --destructive: 354 86% 42%;
-  --muted: 220 14% 96%;
+  --muted: 220 14% 98%;
   --muted-foreground: 220 9% 42%;
-  --accent: 220 14% 95%;
+  --accent: 220 14% 97%;
   --accent-foreground: 220 15% 14%;
   --card: 0 0% 100%;
   --card-foreground: 220 15% 14%;
   --popover: 0 0% 100%;
   --popover-foreground: 220 15% 14%;
-  --border: 220 13% 89%;
-  --input: 220 13% 89%;
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
   --ring: 208 85% 40%;
   --radius: 8px;
 }
@@ -791,22 +793,22 @@
   --color-text-secondary: #424242;
   --color-text-muted: #616161;
   --color-text-tertiary: var(--color-text-muted);
-  --color-border: #D1D1D1;
-  --color-border-hover: #C7C7C7;
+  --color-border: #E4E4E4;
+  --color-border-hover: #D4D4D4;
   --color-bg: #FAFAFA;
   --color-panel: #FFFFFF;
-  --color-bg-subtle: #F5F5F5;
+  --color-bg-subtle: #F8F8F8;
   --app-bg: #FAFAFA;
-  --sidebar-bg: #F0F0F0;
+  --sidebar-bg: #F6F6F6;
   --surface-raised: #FFFFFF;
   --control-bg: #FFFFFF;
-  --control-bg-hover: #F5F5F5;
-  --control-bg-pressed: #E0E0E0;
+  --control-bg-hover: #F8F8F8;
+  --control-bg-pressed: #ECECEC;
   --agent-surface-muted: #FAFAFA;
-  --agent-surface-subtle: #F0F0F0;
-  --agent-user-bg: #F0F0F0;
+  --agent-surface-subtle: #F6F6F6;
+  --agent-user-bg: #F6F6F6;
   --agent-user-text: #363636;
-  --agent-chart-grid: #F0F0F0;
+  --agent-chart-grid: #F6F6F6;
   --background: 0 0% 98%;
   --muted: 0 0% 96%;
   --muted-foreground: 0 0% 38%;
@@ -816,9 +818,9 @@
   --card-foreground: 0 0% 14%;
   --popover: 0 0% 100%;
   --popover-foreground: 0 0% 14%;
-  --border: 0 0% 82%;
-  --input: 0 0% 82%;
-  --sidebar-background: 0 0% 94%;
+  --border: 0 0% 89%;
+  --input: 0 0% 89%;
+  --sidebar-background: 0 0% 97%;
 }
 
 :root.dark[data-neutral-tone="neutral"] {
@@ -860,24 +862,24 @@
   --color-border-hover: #D6D3D1;
   --color-bg: #FAFAF9;
   --color-panel: #FFFFFF;
-  --color-bg-subtle: #F5F5F4;
+  --color-bg-subtle: #F9F9F7;
   --app-bg: #FAFAF9;
-  --sidebar-bg: #F0EEEA;
+  --sidebar-bg: #F8F7F5;
   --surface-raised: #FFFFFF;
   --control-bg: #FFFFFF;
-  --control-bg-hover: #F5F5F4;
-  --control-bg-pressed: #E9E6E1;
+  --control-bg-hover: #F9F9F7;
+  --control-bg-pressed: #F0EEEA;
   --agent-surface-muted: #FAFAF9;
-  --agent-surface-subtle: #F5F5F4;
-  --agent-user-bg: #F5F5F4;
+  --agent-surface-subtle: #F9F9F7;
+  --agent-user-bg: #F9F9F7;
   --agent-user-text: #44403C;
-  --agent-chart-grid: #F0EEEA;
+  --agent-chart-grid: #F8F7F5;
   --background: 60 9% 98%;
   --card: 0 0% 100%;
   --muted: 60 5% 96%;
   --border: 20 6% 90%;
   --input: 20 6% 90%;
-  --sidebar-background: 60 5% 95%;
+  --sidebar-background: 60 5% 97%;
 }
 
 :root.dark[data-neutral-tone="warm"] {

@@ -12,6 +12,7 @@ import {
   Minimize2,
   PanelRightClose,
   PanelRightOpen,
+  Pin,
   X,
 } from "lucide-react";
 import {
@@ -48,6 +49,7 @@ export interface WorkspaceDockProps {
   activeConversationId: string | null;
   showToast: (message: string, type?: "success" | "error" | "warning" | "info") => void;
   registry?: DockViewRegistry;
+  onPreferredWidthChange?: (width: number | undefined) => void;
 }
 
 const OVERFLOW_TRIGGER_RESERVE_PX = 30;
@@ -114,6 +116,7 @@ export function WorkspaceDock({
   activeConversationId,
   showToast,
   registry = DEFAULT_REGISTRY,
+  onPreferredWidthChange,
 }: WorkspaceDockProps) {
   const dockOpen = useWorkspaceStore(selectActiveDockOpen);
   const dockTabs = useWorkspaceStore(selectActiveDockTabs);
@@ -123,6 +126,7 @@ export function WorkspaceDock({
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
   const setDockActiveTab = useWorkspaceStore((s) => s.setDockActiveTab);
   const closeDockTab = useWorkspaceStore((s) => s.closeDockTab);
+  const updateDockTab = useWorkspaceStore((s) => s.updateDockTab);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
   // Subscribe so active runtime contributions are reflected in production Dock consumers.
   const dlcDockViews = useDlcStore((s) => s.contributions.dockViews);
@@ -135,15 +139,18 @@ export function WorkspaceDock({
         return true;
       }
       return contribution.isVisible(tab, {
+        workbenchScopeId,
         activeProjectId,
         activeConversationId,
       });
     });
-  }, [activeConversationId, activeProjectId, dlcDockViews, dockTabs, registry]);
+  }, [activeConversationId, activeProjectId, dlcDockViews, dockTabs, registry, workbenchScopeId]);
 
   const activeKey = activeViewKey;
   const activeTab =
     visibleTabs.find((tab) => tab.viewKey === activeKey) ?? visibleTabs.at(-1) ?? null;
+  const preferredWidth = activeTab ? resolveDockView(activeTab.viewType, registry, dlcDockViews)?.preferredWidth : undefined;
+  useLayoutEffect(() => { onPreferredWidthChange?.(preferredWidth); }, [onPreferredWidthChange, preferredWidth]);
 
   // ── Tab strip windowing: direct tabs + overflow menu (no hidden scrollbar) ──
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -275,7 +282,7 @@ export function WorkspaceDock({
               <div
                 key={tab.viewKey}
                 ref={registerTabNode(tab.viewKey)}
-                className={`workspace-dock__tab ${active ? "is-active" : ""}`}
+                className={`workspace-dock__tab ${active ? "is-active" : ""} ${tab.preview ? "is-preview" : ""}`}
               >
                 <TabsTrigger
                   ref={registerTabTrigger(tab.viewKey)}
@@ -283,6 +290,7 @@ export function WorkspaceDock({
                   className="workspace-dock__tab-main"
                   title={tab.title}
                   onClick={() => setDockActiveTab(tab.viewKey)}
+                  onDoubleClick={() => updateDockTab(tab.viewKey, { preview: false })}
                 >
                   <span className="workspace-dock__tab-icon" aria-hidden="true">
                     {dockTabIcon(tab, registry, dlcDockViews)}
@@ -326,6 +334,7 @@ export function WorkspaceDock({
               <DropdownMenuContent align="end">
                 {overflowTabs.map((tab) => (
                   <DropdownMenuItem key={tab.viewKey} onClick={() => setDockActiveTab(tab.viewKey)}>
+                    {dockTabIcon(tab, registry, dlcDockViews)}
                     {tab.title}
                   </DropdownMenuItem>
                 ))}
@@ -333,6 +342,7 @@ export function WorkspaceDock({
             </DropdownMenu>
           )}
         </TabsList>
+        {activeTab?.preview ? <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label="固定当前标签" onClick={() => updateDockTab(activeTab.viewKey, { preview: false })}><Pin size={14} aria-hidden="true" /></Button></TooltipTrigger><TooltipContent>固定标签 · 也可双击标签</TooltipContent></Tooltip> : null}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -414,7 +424,7 @@ function renderDockTab(
     return (
       <EmptyState
         title="没有打开的标签"
-        description="从左侧资源或对话打开对象后，会在这里继续查看和操作。"
+        description="从项目菜单打开文件与数据库，或点击对话中的引用和成果。"
       />
     );
   }

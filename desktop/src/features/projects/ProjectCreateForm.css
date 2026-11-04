@@ -10,6 +10,10 @@
   margin-top: 8px;
 }
 
+.project-create__folder-summary { display: grid; justify-items: center; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--line-subtle); border-radius: var(--radius-panel); background: var(--surface-auxiliary); color: var(--color-text-primary); font-size: var(--ui-font-control); }
+.project-create__folder-summary > svg { color: var(--color-text-muted); }
+.project-create__folder-summary p { max-width: 100%; margin: 0; color: var(--color-text-muted); font-size: var(--ui-font-caption); text-align: center; overflow-wrap: anywhere; }
+
 .project-create__field {
   display: flex;
   flex-direction: column;

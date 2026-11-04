@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertCircle,
   ChevronRight,
-  Folder,
-  Home,
+  ChevronDown,
   PackageOpen,
   PanelLeftClose,
+  PanelLeftOpen,
   Plus,
-  Settings2,
+  MoreHorizontal,
   Settings,
 } from "lucide-react";
 
@@ -27,6 +27,8 @@ import {
   TooltipContent,
   TooltipTrigger,
   ErrorDetails,
+  ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from "../../components/ui";
 import { getUserErrorMessage } from "../../lib/api/client";
 import { useConversationStore } from "../../stores/conversationStore";
@@ -35,7 +37,9 @@ import { selectActiveConversationId } from "../../stores/workspaceStore";
 import { useProjectState } from "../projects/useProjectState";
 import type { ConversationSummary } from "../../types/conversation";
 import type { ResourceConnectorContribution } from "./types";
-import { ResourceViewContainer } from "./ResourceViewContainer";
+import { openProjectWorkbench } from "./ProjectWorkbench";
+import { ResourceIcon } from "../../components/resources/resourcePresentation";
+import { conversationTitle } from "../conversation/conversationTitle";
 import "./ProjectResourceSidebar.css";
 
 /** Conversations shown per project before the "show more" overflow. */
@@ -66,7 +70,7 @@ export function ProjectResourceSidebar({
   const mainSurface = useWorkspaceStore((state) => (
     state.activeProjectId ? state.mainSurfaceByProject[state.activeProjectId] : undefined
   ));
-  const { projects, loadingProjects, projectError } = useProjectState(activeProjectId);
+  const { projects, loadingProjects, projectError, refreshProjects } = useProjectState(activeProjectId);
   const summaries = useConversationStore((state) => state.summaries);
   const openConversation = useConversationStore((state) => state.openConversation);
   const activeConversationId = useWorkspaceStore(selectActiveConversationId);
@@ -74,10 +78,10 @@ export function ProjectResourceSidebar({
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (activeProjectId || loadingProjects || projects.length === 0) return;
-    setActiveProject(projects[0].id);
+    if (loadingProjects || projectError || projects.some(project => project.id === activeProjectId)) return;
+    setActiveProject(projects[0]?.id ?? "");
     useWorkspaceStore.getState().showSmartQueryHome();
-  }, [activeProjectId, loadingProjects, projects, setActiveProject]);
+  }, [activeProjectId, loadingProjects, projectError, projects, setActiveProject]);
 
   // The active project's group follows focus so its conversations stay reachable.
   useEffect(() => {
@@ -115,6 +119,7 @@ export function ProjectResourceSidebar({
     try {
       if (projectId !== activeProjectId) setActiveProject(projectId);
       await openConversation(conversationId);
+      if (useWorkspaceStore.getState().activeProjectId !== projectId) return;
       openConversationCenter(conversationId);
       useWorkspaceStore.getState().setProjectActiveConversation(projectId, conversationId);
     } catch (error) {
@@ -126,7 +131,7 @@ export function ProjectResourceSidebar({
     return (
       <Sidebar className="product-sidebar product-sidebar--collapsed" aria-label="主导航">
         <SidebarHeader>
-          <CollapsedAction label="展开导航" onClick={onToggleCollapse} icon={<ChevronRight />} />
+          <CollapsedAction label="展开导航" onClick={onToggleCollapse} icon={<PanelLeftOpen />} />
           <CollapsedAction label="新任务" onClick={() => showSmartQueryHome()} icon={<Plus />} primary />
         </SidebarHeader>
         <SidebarFooter>
@@ -141,7 +146,7 @@ export function ProjectResourceSidebar({
     <Sidebar className="product-sidebar" aria-label="主导航">
       <SidebarHeader>
         <div className="product-sidebar__topline">
-          <span className="product-sidebar__title">工作</span>
+          <span className="product-sidebar__title">DBFox</span>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button type="button" variant="ghost" size="icon-sm" onClick={onToggleCollapse} aria-label="收起导航">
@@ -155,11 +160,6 @@ export function ProjectResourceSidebar({
           className="product-sidebar__new-task"
           icon={<Plus />}
           label="新任务"
-          onClick={() => showSmartQueryHome()}
-        />
-        <SidebarNavRow
-          icon={<Home />}
-          label="主页"
           active={mainSurface?.kind === "new-conversation"}
           onClick={() => showSmartQueryHome()}
         />
@@ -171,11 +171,11 @@ export function ProjectResourceSidebar({
             action={(
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon-sm" onClick={onNewProject} aria-label="新建项目">
+                  <Button type="button" variant="ghost" size="icon-sm" onClick={onNewProject} aria-label="打开文件夹">
                     <Plus size={14} aria-hidden="true" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>新建项目</TooltipContent>
+                <TooltipContent>打开文件夹</TooltipContent>
               </Tooltip>
             )}
           >
@@ -188,6 +188,7 @@ export function ProjectResourceSidebar({
                 <AlertTitle>读取项目失败</AlertTitle>
                 <AlertDescription>
                   <span>{getUserErrorMessage(projectError, "读取项目失败，请重试。")}</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => void refreshProjects()}>重试读取项目</Button>
                   <ErrorDetails error={projectError} />
                 </AlertDescription>
             </Alert>
@@ -216,6 +217,12 @@ export function ProjectResourceSidebar({
                 : null}
               onSelect={() => selectProject(project.id)}
               onOpenManagement={() => openManagement(project.id)}
+              onNewConversation={() => { setActiveProject(project.id); showSmartQueryHome(); }}
+              onOpenWorkbench={(connector, configure) => {
+                setActiveProject(project.id);
+                void Promise.resolve().then(() => openProjectWorkbench(connector, project.id))
+                  .then(() => configure ? connector.onAdd?.({ projectId: project.id }) : undefined).catch(setNavigationError);
+              }}
               onOpenConversation={(conversationId) => void openRecent(conversationId, project.id)}
             />
           ))}
@@ -239,14 +246,14 @@ interface ProjectGroupProps {
   isConversationActive: string | null;
   onSelect: () => void;
   onOpenManagement: () => void;
+  onNewConversation: () => void;
+  onOpenWorkbench: (connector: ResourceConnectorContribution, configure?: boolean) => void;
   onOpenConversation: (conversationId: string) => void;
 }
 
 /**
- * One project node: clicking the row focuses the project and toggles the group;
- * the hover gear opens project management. Conversations (preview + overflow)
- * and resource sections sit directly under the row. Conversation text aligns
- * with the project's label through an empty icon column — no conversation icon.
+ * Folder projects contain conversations. Capabilities open from the shared
+ * context menu and visible menu button into their registered Dock workbenches.
  */
 function ProjectGroup({
   project,
@@ -257,6 +264,8 @@ function ProjectGroup({
   isConversationActive,
   onSelect,
   onOpenManagement,
+  onNewConversation,
+  onOpenWorkbench,
   onOpenConversation,
 }: ProjectGroupProps) {
   const [showAllConversations, setShowAllConversations] = useState(false);
@@ -265,44 +274,48 @@ function ProjectGroup({
     ? conversations
     : conversations.slice(0, CONVERSATION_PREVIEW_LIMIT);
   const hiddenCount = conversations.length - visibleConversations.length;
+  const actions = [
+    { label: "新对话", icon: <Plus size={16} aria-hidden="true" />, run: onNewConversation },
+    ...connectors.flatMap(connector => [
+      { label: `查看${connector.title}`, icon: connector.icon, run: () => onOpenWorkbench(connector) },
+      ...(connector.onAdd ? [{ label: connector.addLabel ?? `添加${connector.title}`, icon: <Plus size={16} aria-hidden="true" />, run: () => onOpenWorkbench(connector, true) }] : []),
+    ]),
+  ];
 
   return (
     <div className="project-group">
-      <div className="project-group__header" data-active={isActive || undefined}>
+      <ContextMenu><ContextMenuTrigger asChild><div className="project-group__header" data-active={isActive || undefined}>
         <SidebarNavRow
           className="project-group__name"
-          icon={<Folder />}
-          label={project.name}
+          icon={expanded ? <ChevronDown /> : <ChevronRight />}
+          label={<span className="project-group__identity"><ResourceIcon kind="folder" expanded={expanded} size={16} /><span>{project.name}</span></span>}
           active={isActive}
+          aria-expanded={expanded}
           onClick={onSelect}
           title={project.name}
         />
-        <Tooltip>
-          <TooltipTrigger asChild>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
               className="project-group__manage"
               aria-label={`管理项目 ${project.name}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onOpenManagement();
-              }}
             >
-              <Settings2 size={14} aria-hidden="true" />
+              <MoreHorizontal size={16} aria-hidden="true" />
             </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">项目管理与资源</TooltipContent>
-        </Tooltip>
-      </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">{actions.map(action => <DropdownMenuItem key={action.label} onSelect={action.run}>{action.icon}{action.label}</DropdownMenuItem>)}<DropdownMenuSeparator /><DropdownMenuItem onSelect={onOpenManagement}><Settings size={16} aria-hidden="true" />项目设置</DropdownMenuItem></DropdownMenuContent>
+        </DropdownMenu>
+      </div></ContextMenuTrigger><ContextMenuContent>{actions.map(action => <ContextMenuItem key={action.label} onSelect={action.run}>{action.icon}{action.label}</ContextMenuItem>)}<ContextMenuSeparator /><ContextMenuItem onSelect={onOpenManagement}><Settings size={16} aria-hidden="true" />项目设置</ContextMenuItem></ContextMenuContent></ContextMenu>
       {expanded ? (
         <div className="project-group__body">
           {visibleConversations.map((conversation) => (
             <SidebarNavRow
               key={conversation.id}
               icon={<span aria-hidden="true" />}
-              label={conversation.title || "未命名任务"}
+              label={conversationTitle(conversation.title)}
               meta={formatRelativeTime(conversation.updated_at)}
               active={conversation.id === isConversationActive}
               onClick={() => onOpenConversation(conversation.id)}
@@ -328,9 +341,8 @@ function ProjectGroup({
             </button>
           ) : null}
           {conversations.length === 0 ? (
-            <p className="project-group__empty">这个项目还没有对话。</p>
+            <p className="project-group__empty">暂无对话</p>
           ) : null}
-          <ResourceViewContainer projectId={project.id} connectors={connectors} showGroupLabel={false} />
         </div>
       ) : null}
     </div>

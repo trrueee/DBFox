@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from engine.schemas import _to_iso
 
@@ -8,6 +8,7 @@ from engine.schemas import _to_iso
 class ProjectCreateRequest(BaseModel):
     name: str
     description: str | None = None
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class ProjectResponse(BaseModel):

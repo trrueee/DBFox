@@ -52,7 +52,7 @@ describe("dock view registry", () => {
   });
 
   it("resolves titles through the contribution instead of a central switch", () => {
-    expect(dockViewTitle(tab({ viewType: "core.artifacts", title: "ignored" }))).toBe("✦ 工件");
+    expect(dockViewTitle(tab({ viewType: "core.artifacts", title: "ignored" }))).toBe("成果");
     expect(dockViewTitle(tab())).toBe("orders");
   });
 

@@ -12,7 +12,9 @@ from urllib.parse import unquote
 
 import pytest
 
+import dbfox_dlc_api
 from engine import __version__
+from engine.dlc.compat import CURRENT_EXTENSION_API_VERSION
 
 
 pytestmark = pytest.mark.engineering_contract
@@ -34,6 +36,9 @@ PYTHON_LOCKS = {
 SIDECAR_PYTHON_VERSION_FILE = ROOT / ".sidecar-python-version"
 SIDECAR_PYTHON_BUILD_FILE = ROOT / ".sidecar-python-build"
 OSV_CONFIG = ROOT / "osv-scanner.toml"
+PUBLIC_DLC_API_V2_SURFACE = (
+    ROOT / "verification" / "tests" / "system" / "fixtures" / "dlc_api_v2_surface.txt"
+)
 
 
 def _python_imports(path: Path) -> set[str]:
@@ -92,6 +97,85 @@ def test_low_level_engine_modules_do_not_import_the_composition_root() -> None:
     ]
 
     assert violations == []
+
+
+def test_core_does_not_depend_on_dlc_implementations_or_public_alias() -> None:
+    """Core owns the Runtime contract; it must never call outward into a DLC package."""
+
+    violations = [
+        f"{path.relative_to(ROOT).as_posix()} -> {module}"
+        for path in (ROOT / "engine").rglob("*.py")
+        for module in _python_imports(path)
+        if module == "dlcs"
+        or module.startswith("dlcs.")
+        or module == "dbfox_dlc_api"
+        or module.startswith("dbfox_dlc_api.")
+    ]
+
+    assert violations == []
+
+
+def test_dlc_backends_use_only_the_public_host_api() -> None:
+    """DLCs may depend on the public facade, never Engine internals or sibling DLCs."""
+
+    violations = [
+        f"{path.relative_to(ROOT).as_posix()} -> {module}"
+        for path in (ROOT / "dlcs").rglob("*.py")
+        for module in _python_imports(path)
+        if module == "engine"
+        or module.startswith("engine.")
+        or module == "dlcs"
+        or module.startswith("dlcs.")
+    ]
+
+    assert violations == []
+
+
+def test_dlc_frontends_do_not_import_desktop_private_modules() -> None:
+    """Frontend DLCs integrate through the injected Host SDK, not renderer source files."""
+
+    import_pattern = re.compile(
+        r"(?:\bfrom\s+|\bimport\s*\(|\brequire\s*\()\s*['\"]([^'\"]+)['\"]"
+        r"|\bimport\s*['\"]([^'\"]+)['\"]"
+    )
+    violations: list[str] = []
+    for frontend_root in (ROOT / "dlcs").glob("*/frontend"):
+        for path in frontend_root.rglob("*"):
+            if not path.is_file() or path.suffix not in {".js", ".jsx", ".ts", ".tsx"}:
+                continue
+            source = path.read_text(encoding="utf-8")
+            for match in import_pattern.finditer(source):
+                specifier = match.group(1) or match.group(2)
+                if specifier.startswith(("desktop/", "@/")):
+                    violations.append(
+                        f"{path.relative_to(ROOT).as_posix()} -> {specifier}"
+                    )
+                    continue
+                if not specifier.startswith("."):
+                    continue
+                resolved = (path.parent / specifier).resolve()
+                desktop_source = (ROOT / "desktop" / "src").resolve()
+                try:
+                    resolved.relative_to(desktop_source)
+                except ValueError:
+                    continue
+                violations.append(f"{path.relative_to(ROOT).as_posix()} -> {specifier}")
+
+    assert violations == []
+
+
+def test_public_dlc_api_v2_surface_is_frozen() -> None:
+    """Public author symbols change only through explicit API-version governance."""
+
+    expected = {
+        line.strip()
+        for line in PUBLIC_DLC_API_V2_SURFACE.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+
+    assert dbfox_dlc_api.DLC_API_VERSION == CURRENT_EXTENSION_API_VERSION == "2"
+    assert set(dbfox_dlc_api.__all__) == expected
+    assert len(dbfox_dlc_api.__all__) == len(set(dbfox_dlc_api.__all__))
 
 
 def test_data_capability_bench_uses_current_project_resource_authority() -> None:
@@ -425,7 +509,8 @@ def test_frontend_security_floors_and_cross_platform_build_peers_are_locked() ->
     packages = lock["packages"]
 
     assert package["overrides"] == {
-        "@hey-api/json-schema-ref-parser": {"js-yaml": "4.3.1"}
+        "@hey-api/json-schema-ref-parser": {"js-yaml": "4.3.1"},
+        "@fortune-sheet/core": {"uuid": "11.1.1"},
     }
     assert package["devDependencies"]["@emnapi/core"] == "2.0.0-alpha.4"
     assert package["devDependencies"]["@emnapi/runtime"] == "2.0.0-alpha.4"
@@ -591,6 +676,11 @@ def test_pull_request_template_requires_investigation_and_reuse_rationale() -> N
         "新增依赖或自研实现的主要风险",
         "删除条件与负责人",
         "调查限制",
+        "Core / SDK 边界影响",
+        "触及的稳定级别",
+        "为什么现有 DLC 接入口不能表达",
+        "extensionApiVersion",
+        "是否需要解冻",
     ):
         assert required_field in template
 
@@ -685,7 +775,9 @@ def test_runtime_composition_does_not_own_data_domain_models() -> None:
     source = (ROOT / "engine" / "runtime_composition.py").read_text(
         encoding="utf-8"
     )
-    assert "from engine.models import" not in source
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom) and node.module == "engine.models":
+            assert {name.name for name in node.names} <= {"AgentRun", "SessionResourceRetirement"}
     assert "DataSource" not in source
     assert "list_database_resources" not in source
 

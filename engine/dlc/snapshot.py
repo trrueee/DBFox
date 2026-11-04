@@ -14,7 +14,7 @@ from engine.agent.context_fragment import ContextContributor
 from engine.agent.completion import CompletionConstraint, CompletionSupport
 from engine.agent.guidance import CapabilityGuidanceContribution
 from engine.agent.resource_refs import ProjectResourceProvider
-from engine.dlc.api import DlcOperationSpec
+from engine.dlc.api import DlcOperationSpec, ExtensionSessionResourceProvider
 from engine.dlc.compat import CURRENT_DBFOX_VERSION
 from engine.dlc.integrity import canonical_json_bytes
 from engine.representation import ArtifactRepresentationProvider
@@ -144,6 +144,13 @@ class RuntimeDlcActivationProjection:
 
 
 @dataclass(frozen=True)
+class SessionResourceContribution:
+    owner_id: str
+    provider: ExtensionSessionResourceProvider
+    retire: Callable[[str], None] | None = None
+
+
+@dataclass(frozen=True)
 class RuntimeContributionSnapshot:
     """The central immutable composition result of all active built-in and DLC contributions.
 
@@ -165,6 +172,7 @@ class RuntimeContributionSnapshot:
     artifact_representations: tuple[ArtifactRepresentationContribution, ...] = ()
     credential_reference_probes: tuple[CredentialReferenceProbeContribution, ...] = ()
     activation_failures: tuple[DlcActivationFailure, ...] = ()
+    session_resource_contributions: tuple[SessionResourceContribution, ...] = ()
 
 
     def derive_r3_projection(self) -> RuntimeDlcActivationProjection:

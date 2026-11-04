@@ -459,6 +459,70 @@ export type ArtifactStatus = 'creating' | 'completed' | 'failed' | 'stale';
 export type ArtifactVisibility = 'primary' | 'supporting' | 'internal';
 
 /**
+ * AttachmentCapabilities
+ */
+export type AttachmentCapabilities = {
+    /**
+     * Max File Bytes
+     */
+    max_file_bytes: number;
+    /**
+     * Max Session Bytes
+     */
+    max_session_bytes: number;
+    /**
+     * Max Session Files
+     */
+    max_session_files: number;
+};
+
+/**
+ * AttachmentSummary
+ */
+export type AttachmentSummary = {
+    /**
+     * Available
+     */
+    available: boolean;
+    /**
+     * Byte Count
+     */
+    byte_count: number;
+    /**
+     * Content Sha256
+     */
+    content_sha256: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * First Input Id
+     */
+    first_input_id: string | null;
+    /**
+     * First Input Sequence
+     */
+    first_input_sequence: number | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Media Type
+     */
+    media_type: string;
+    /**
+     * Session Id
+     */
+    session_id: string;
+};
+
+/**
  * Body_clear_security_audit_api_v1_diagnostics_security_audit_clear_post
  */
 export type BodyClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPost = {
@@ -1615,6 +1679,10 @@ export type MessagePayload = {
      */
     phase?: 'commentary' | 'final_answer' | null;
     /**
+     * References
+     */
+    references?: Array<ConversationInputReference>;
+    /**
      * Role
      */
     role: 'user' | 'assistant';
@@ -1784,6 +1852,10 @@ export type ProjectCreateRequest = {
      * Description
      */
     description?: string | null;
+    /**
+     * Idempotency Key
+     */
+    idempotency_key?: string | null;
     /**
      * Name
      */
@@ -2127,7 +2199,7 @@ export type RunError = {
 /**
  * RunItemStatus
  */
-export type RunItemStatus = 'pending' | 'in_progress' | 'waiting' | 'completed' | 'failed' | 'cancelled';
+export type RunItemStatus = 'pending' | 'in_progress' | 'waiting' | 'completed' | 'failed' | 'cancelled' | 'expired';
 
 /**
  * RunPhase
@@ -2626,7 +2698,12 @@ export type ApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGet
          */
         artifact_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Session Id
+         */
+        session_id?: string | null;
+    };
     url: '/api/v1/artifacts/{artifact_id}/representations';
 };
 
@@ -2690,7 +2767,12 @@ export type ApiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentations
          */
         representation_type: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Session Id
+         */
+        session_id?: string | null;
+    };
     url: '/api/v1/artifacts/{artifact_id}/representations/{representation_type}/read';
 };
 
@@ -2752,7 +2834,12 @@ export type ApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentatio
          */
         representation_type: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Session Id
+         */
+        session_id?: string | null;
+    };
     url: '/api/v1/artifacts/{artifact_id}/representations/{representation_type}/stream';
 };
 
@@ -2799,6 +2886,59 @@ export type ApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentatio
      */
     200: unknown;
 };
+
+export type AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/attachment-capabilities';
+};
+
+export type AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetError = AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetErrors[keyof AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetErrors];
+
+export type AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AttachmentCapabilities;
+};
+
+export type AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetResponse = AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetResponses[keyof AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetResponses];
 
 export type ListConversationsApiV1ConversationsGetData = {
     body?: never;
@@ -3548,6 +3688,186 @@ export type StreamConversationApiV1ConversationsConversationIdStreamGetResponses
      */
     200: unknown;
 };
+
+export type ListAttachmentsApiV1ConversationsSessionIdAttachmentsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{session_id}/attachments';
+};
+
+export type ListAttachmentsApiV1ConversationsSessionIdAttachmentsGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ListAttachmentsApiV1ConversationsSessionIdAttachmentsGetError = ListAttachmentsApiV1ConversationsSessionIdAttachmentsGetErrors[keyof ListAttachmentsApiV1ConversationsSessionIdAttachmentsGetErrors];
+
+export type ListAttachmentsApiV1ConversationsSessionIdAttachmentsGetResponses = {
+    /**
+     * Response List Attachments Api V1 Conversations  Session Id  Attachments Get
+     *
+     * Successful Response
+     */
+    200: Array<AttachmentSummary>;
+};
+
+export type ListAttachmentsApiV1ConversationsSessionIdAttachmentsGetResponse = ListAttachmentsApiV1ConversationsSessionIdAttachmentsGetResponses[keyof ListAttachmentsApiV1ConversationsSessionIdAttachmentsGetResponses];
+
+export type UploadAttachmentApiV1ConversationsSessionIdAttachmentsPostData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{session_id}/attachments';
+};
+
+export type UploadAttachmentApiV1ConversationsSessionIdAttachmentsPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type UploadAttachmentApiV1ConversationsSessionIdAttachmentsPostError = UploadAttachmentApiV1ConversationsSessionIdAttachmentsPostErrors[keyof UploadAttachmentApiV1ConversationsSessionIdAttachmentsPostErrors];
+
+export type UploadAttachmentApiV1ConversationsSessionIdAttachmentsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: AttachmentSummary;
+};
+
+export type UploadAttachmentApiV1ConversationsSessionIdAttachmentsPostResponse = UploadAttachmentApiV1ConversationsSessionIdAttachmentsPostResponses[keyof UploadAttachmentApiV1ConversationsSessionIdAttachmentsPostResponses];
+
+export type RemoveAttachmentApiV1ConversationsSessionIdAttachmentsAttachmentIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+        /**
+         * Attachment Id
+         */
+        attachment_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{session_id}/attachments/{attachment_id}';
+};
+
+export type RemoveAttachmentApiV1ConversationsSessionIdAttachmentsAttachmentIdDeleteErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type RemoveAttachmentApiV1ConversationsSessionIdAttachmentsAttachmentIdDeleteError = RemoveAttachmentApiV1ConversationsSessionIdAttachmentsAttachmentIdDeleteErrors[keyof RemoveAttachmentApiV1ConversationsSessionIdAttachmentsAttachmentIdDeleteErrors];
+
+export type RemoveAttachmentApiV1ConversationsSessionIdAttachmentsAttachmentIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RemoveAttachmentApiV1ConversationsSessionIdAttachmentsAttachmentIdDeleteResponse = RemoveAttachmentApiV1ConversationsSessionIdAttachmentsAttachmentIdDeleteResponses[keyof RemoveAttachmentApiV1ConversationsSessionIdAttachmentsAttachmentIdDeleteResponses];
 
 export type ApiEnrollCredentialApiV1CredentialsPostData = {
     body: CredentialEnrollmentRequestWritable;

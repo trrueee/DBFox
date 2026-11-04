@@ -239,6 +239,8 @@ flowchart TB
 不得再次复制最近问题和回答；需要压缩长历史时，应只概括被预算淘汰的旧消息，
 不能与仍在窗口内的原文重复。
 
+结构化 Artifact 上下文统一通过 `ArtifactRepository.available_artifact` 证明可用性：用户选中/附带引用、DLC 近期贡献者输入、上一轮结果索引、工具结果引用与计划步骤引用均遵守同一来源和资源版本边界。选中状态不授予执行权限，已完成但没有可用工件的 Run 不宣称有可复用成果。普通对话历史和恢复摘要仍按原预算保留；详见 [上下文可用性验证](../quality/artifact-context-availability-verification.md)。
+
 ## 10. Artifact、Evidence 与回答
 
 ```mermaid
@@ -392,13 +394,17 @@ DataFrame Representation 重新执行时返回 `live_reexecution`、original/rea
 
 工具定义包含 PolicySpec 与 ExecutionSpec。ExecutionSpec 明确 timeout、idempotent、retryable、max retries、concurrency、max output bytes、backend 和 capabilities。
 
-当前 `in_process` backend 只允许：
+当前 `in_process` backend 允许：
 
 - metadata_read；
 - metadata_write；
-- database_read。
+- filesystem_read；
+- network。
 
-database_write、filesystem_read/write、任意 network 和 subprocess 必须声明 `isolated_process`。当前生产 Registry 未提供该 backend，所以高权限工具注册会失败。这是 fail-closed 产品边界，不是待兼容错误。
+`filesystem_write` 与 `subprocess` 必须声明 `isolated_process`。生产 Registry 和 Tool Dispatcher 已提供该 backend；
+签名 DLC 还必须在 manifest 中声明覆盖权限。isolated worker 按 frozen owner/package digest/Tool contract
+重新物化实现，父进程负责 deadline、取消、输出帧上限和进程树终止。它不是不可信代码 sandbox；没有签名信任、
+manifest capability、ResourceRef 或 Approval 中任何一项时仍 fail closed。
 
 Approval 对 canonical input 授权。批准后不能更换 SQL、datasource、generation 或工具版本。拒绝/过期会把 Invocation 结算为 rejected Observation，并让 Agent 继续解释限制或选择更安全方案。
 
@@ -430,6 +436,6 @@ Turn start/finish 本身不生成“已完成分析”之类的推测性 Activit
 仍需增强但不应伪装为已有：
 
 1. Prompt Injection、crash point、cancel latency、Evidence coverage 和成本质量联合评测；
-2. 真实高权限工具出现后的 isolated-process backend；
+2. 不可信 DLC 出现前所需的真实 OS sandbox、egress 与资源配额；
 3. 多 Provider 产品需求出现后的显式 Provider Route；
 4. 远程多租户形态需要的 distributed session/queue/event 架构。

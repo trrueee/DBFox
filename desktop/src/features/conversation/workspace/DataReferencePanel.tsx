@@ -1,4 +1,5 @@
-import { BookOpen, Braces, ChevronDown, Database, Table2 } from "lucide-react";
+import { BookOpen, ChevronDown } from "lucide-react";
+import { ReferenceCard } from "../../../components/resources/ReferenceCard";
 import {
   Sources,
   SourcesContent,
@@ -9,7 +10,6 @@ import {
   buildDataReferences,
   referenceKey,
   referenceTitle,
-  type DataReference,
 } from "./dataReferences";
 
 interface DataReferencePanelProps {
@@ -37,40 +37,11 @@ export function DataReferencePanel({
       </SourcesTrigger>
       <SourcesContent className="conv-data-ref-list">
         {references.map((reference) => {
-          const content = (
-            <>
-              {referenceIcon(reference.type)}
-              <span>{reference.label}</span>
-            </>
-          );
-          const className = `conv-data-ref conv-data-ref-${reference.type}`;
-          const title = referenceTitle(reference);
-          if ("artifactId" in reference && reference.artifactId && onSelectArtifact) {
-            return (
-              <button
-                key={referenceKey(reference)}
-                type="button"
-                className={className}
-                onClick={() => onSelectArtifact(reference.artifactId!)}
-                title={title}
-              >
-                {content}
-              </button>
-            );
-          }
-          return (
-            <span key={referenceKey(reference)} className={className} title={title}>
-              {content}
-            </span>
-          );
+          return <ReferenceCard key={referenceKey(reference)} name={reference.label}
+            kind={reference.type === "sql" ? "code" : "table"} description={referenceTitle(reference)}
+            onOpen={"artifactId" in reference && reference.artifactId && onSelectArtifact ? () => onSelectArtifact(reference.artifactId) : undefined} />;
         })}
       </SourcesContent>
     </Sources>
   );
-}
-
-function referenceIcon(type: DataReference["type"]) {
-  if (type === "table") return <Database size={14} aria-hidden="true" />;
-  if (type === "column") return <Braces size={14} aria-hidden="true" />;
-  return <Table2 size={14} aria-hidden="true" />;
 }

@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { restoreWorkspaceSnapshot, workspaceSnapshot, workspaceStorage, WORKSPACE_STORAGE_KEY } from "./workspacePersistence";
 import type { WorkbenchReference } from "../types/workspace";
 import type {
   MainSurfaceRef,
@@ -13,6 +15,9 @@ export interface ConversationWorkbenchState {
   activeViewKey: string | null;
   tabs: WorkspaceDockTab[];
   references: WorkbenchReference[];
+  draftConversationId?: string;
+  dockWidth?: number;
+  draftInput?: string;
 }
 
 interface WorkspaceState {
@@ -25,6 +30,7 @@ interface WorkspaceState {
   settingsOpen: boolean;
   settingsSection: AppSettingsSection;
   projectCreateOpen: boolean;
+  sidebarCollapsed: boolean;
 }
 
 interface WorkspaceActions {
@@ -36,6 +42,9 @@ interface WorkspaceActions {
   closeSettings: () => void;
   setSettingsSection: (section: AppSettingsSection) => void;
   setDockOpen: (open: boolean) => void;
+  setDockWidth: (width: number) => void;
+  setDraftInput: (value: string) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   setDockActiveTab: (viewKey: string) => void;
   closeDockTab: (viewKey: string) => void;
   reconcileDockViewTypes: (allowedViewTypes: readonly string[]) => void;
@@ -55,6 +64,7 @@ interface WorkspaceActions {
   removeWorkbenchReference: (reference: WorkbenchReference) => void;
   clearWorkbenchReferences: () => void;
   ensureActiveWorkbenchScope: () => string;
+  setDraftConversationId: (conversationId: string) => void;
 }
 
 export type WorkspaceStore = WorkspaceState & WorkspaceActions;
@@ -143,7 +153,7 @@ function updateActiveWorkbench(
   };
 }
 
-export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
+export const useWorkspaceStore = create<WorkspaceStore>()(persist((set, get) => ({
   activeProjectId: "",
   mainSurfaceByProject: {},
   workbenchByConversation: {},
@@ -153,6 +163,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   settingsOpen: false,
   settingsSection: "appearance",
   projectCreateOpen: false,
+  sidebarCollapsed: false,
+  setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
 
   setActiveProject: (activeProjectId) => set({ activeProjectId }),
 
@@ -191,6 +203,12 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
 
   setDockOpen: (open) =>
     set((state) => updateActiveWorkbench(state, (workbench) => ({ ...workbench, open }))),
+  setDockWidth: (dockWidth) => {
+    if (!Number.isFinite(dockWidth)) return;
+    set((state) => updateActiveWorkbench(state, (workbench) => ({ ...workbench, dockWidth: Math.min(2400, Math.max(320, Math.round(dockWidth))) })));
+  },
+  setDraftInput: (draftInput) =>
+    set((state) => updateActiveWorkbench(state, (workbench) => ({ ...workbench, draftInput }))),
 
   setDockActiveTab: (activeViewKey) =>
     set((state) => ({
@@ -243,9 +261,10 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
             `Cannot open tab with viewKey "${tab.viewKey}" and viewType "${tab.viewType}": already registered with viewType "${existing.viewType}".`,
           );
         }
+        const opened = existing && tab.preview ? { ...tab, preview: existing.preview } : tab;
         const tabs = existing
-          ? workbench.tabs.map((item) => item.viewKey === tab.viewKey ? { ...item, ...tab } : item)
-          : [...workbench.tabs, tab];
+          ? workbench.tabs.map((item) => item.viewKey === tab.viewKey ? { ...item, ...opened } : item)
+          : [...workbench.tabs.filter(item => !(tab.preview && item.preview && item.viewType === tab.viewType)), opened];
         return {
           ...workbench,
           tabs,
@@ -292,6 +311,9 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
       ...workbench,
       references: [],
     }))),
+
+  setDraftConversationId: (draftConversationId) =>
+    set((state) => updateActiveWorkbench(state, (workbench) => ({ ...workbench, draftConversationId }))),
 
   ensureActiveWorkbenchScope: () => {
     const state = get();
@@ -369,6 +391,12 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
       settingsOpen: projectCreateOpen ? false : state.settingsOpen,
     })),
   clearPendingAsk: () => set({ pendingAsk: null }),
+}), {
+  name: WORKSPACE_STORAGE_KEY,
+  version: 1,
+  storage: workspaceStorage,
+  partialize: workspaceSnapshot,
+  merge: restoreWorkspaceSnapshot,
 }));
 
 function workbenchReferenceKey(reference: WorkbenchReference): string {

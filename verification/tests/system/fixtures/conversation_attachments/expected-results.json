@@ -1,0 +1,253 @@
+{
+  "currency": "CNY",
+  "amount_unit": "cent",
+  "status": "independent fixture oracle; execution evidence is recorded separately in the acceptance report",
+  "cases": {
+    "original_oct": {
+      "total_cents": 103030,
+      "detail_count": 10,
+      "order_count": 9,
+      "detail_ids": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006",
+        "L007",
+        "L008",
+        "L016",
+        "L017"
+      ],
+      "top_products": [
+        {
+          "sku": "P03",
+          "cents": 45000
+        }
+      ],
+      "products": {
+        "P01": 18000,
+        "P02": 20000,
+        "P03": 45000,
+        "P04": 20000,
+        "P05": 0,
+        "P06": 30
+      }
+    },
+    "original_oct_home": {
+      "total_cents": 38030,
+      "detail_count": 7,
+      "order_count": 6,
+      "detail_ids": [
+        "L001",
+        "L002",
+        "L003",
+        "L005",
+        "L008",
+        "L016",
+        "L017"
+      ],
+      "top_products": [
+        {
+          "sku": "P02",
+          "cents": 20000
+        }
+      ],
+      "products": {
+        "P01": 18000,
+        "P02": 20000,
+        "P05": 0,
+        "P06": 30
+      }
+    },
+    "original_sep_home": {
+      "total_cents": 18000,
+      "detail_count": 2,
+      "order_count": 2,
+      "detail_ids": [
+        "L012",
+        "L013"
+      ],
+      "top_products": [
+        {
+          "sku": "P01",
+          "cents": 9000
+        },
+        {
+          "sku": "P02",
+          "cents": 9000
+        }
+      ],
+      "products": {
+        "P01": 9000,
+        "P02": 9000
+      }
+    },
+    "original_oct_completed_date": {
+      "total_cents": 97030,
+      "detail_count": 10,
+      "order_count": 9,
+      "detail_ids": [
+        "L001",
+        "L002",
+        "L003",
+        "L005",
+        "L006",
+        "L007",
+        "L008",
+        "L012",
+        "L016",
+        "L017"
+      ],
+      "top_products": [
+        {
+          "sku": "P03",
+          "cents": 30000
+        }
+      ],
+      "products": {
+        "P01": 27000,
+        "P02": 20000,
+        "P04": 20000,
+        "P03": 30000,
+        "P05": 0,
+        "P06": 30
+      }
+    },
+    "revised_oct": {
+      "total_cents": 105030,
+      "detail_count": 10,
+      "order_count": 9,
+      "detail_ids": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006",
+        "L007",
+        "L008",
+        "L016",
+        "L017"
+      ],
+      "top_products": [
+        {
+          "sku": "P03",
+          "cents": 45000
+        }
+      ],
+      "products": {
+        "P01": 20000,
+        "P02": 20000,
+        "P03": 45000,
+        "P04": 20000,
+        "P05": 0,
+        "P06": 30
+      }
+    },
+    "revised_oct_home": {
+      "total_cents": 40030,
+      "detail_count": 7,
+      "order_count": 6,
+      "detail_ids": [
+        "L001",
+        "L002",
+        "L003",
+        "L005",
+        "L008",
+        "L016",
+        "L017"
+      ],
+      "top_products": [
+        {
+          "sku": "P01",
+          "cents": 20000
+        },
+        {
+          "sku": "P02",
+          "cents": 20000
+        }
+      ],
+      "products": {
+        "P01": 20000,
+        "P02": 20000,
+        "P05": 0,
+        "P06": 30
+      }
+    },
+    "zero_gift": {
+      "total_cents": 0,
+      "detail_count": 1,
+      "order_count": 1,
+      "detail_ids": [
+        "L008"
+      ],
+      "top_products": [
+        {
+          "sku": "P05",
+          "cents": 0
+        }
+      ],
+      "products": {
+        "P05": 0
+      }
+    },
+    "no_match": {
+      "total_cents": null,
+      "detail_count": 0,
+      "order_count": 0,
+      "detail_ids": [],
+      "top_products": [],
+      "products": {}
+    },
+    "sheet_franchise": {
+      "total_cents": 21000,
+      "detail_count": 2,
+      "order_count": 2,
+      "detail_ids": [
+        "L003",
+        "L004"
+      ],
+      "top_products": [
+        {
+          "sku": "P03",
+          "cents": 15000
+        }
+      ],
+      "products": {
+        "P01": 6000,
+        "P03": 15000
+      }
+    },
+    "invalid_after_explicit_exclusion": {
+      "total_cents": 97030,
+      "detail_count": 9,
+      "order_count": 8,
+      "detail_ids": [
+        "L001",
+        "L002",
+        "L004",
+        "L005",
+        "L006",
+        "L007",
+        "L008",
+        "L016",
+        "L017"
+      ],
+      "top_products": [
+        {
+          "sku": "P03",
+          "cents": 45000
+        }
+      ],
+      "products": {
+        "P01": 12000,
+        "P02": 20000,
+        "P03": 45000,
+        "P04": 20000,
+        "P05": 0,
+        "P06": 30
+      }
+    }
+  }
+}

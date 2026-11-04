@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import type { PanelImperativeHandle } from "react-resizable-panels";
 
 import {
   ResizableHandle,
@@ -10,6 +11,10 @@ interface ConversationWorkspaceLayoutProps {
   dockOpen: boolean;
   conversation: ReactNode;
   dock: ReactNode;
+  preferredWidth?: number;
+  defaultWidthPercent?: number;
+  savedWidth?: number;
+  onWidthChange?: (width: number) => void;
 }
 
 /**
@@ -21,9 +26,16 @@ export function ConversationWorkspaceLayout({
   dockOpen,
   conversation,
   dock,
+  preferredWidth = 480,
+  defaultWidthPercent = 28,
+  savedWidth,
+  onWidthChange,
 }: ConversationWorkspaceLayoutProps) {
   const stageRef = useRef<HTMLDivElement>(null);
-  const [compact, setCompact] = useState(false);
+  const dockRef = useRef<PanelImperativeHandle>(null);
+  const latestWidthRef = useRef(savedWidth ?? preferredWidth);
+  const [stageWidth, setStageWidth] = useState(0);
+  const compact = stageWidth > 0 && stageWidth < 420 + 8 + 320;
 
   useLayoutEffect(() => {
     const stage = stageRef.current;
@@ -32,7 +44,7 @@ export function ConversationWorkspaceLayout({
     // resize. Keep the same panels mounted so layout changes retain drafts.
     const measure = () => {
       const width = stage.getBoundingClientRect().width;
-      if (width > 0) setCompact(width < 420 + 8 + 320);
+      if (width > 0) setStageWidth(Math.round(width));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -41,6 +53,20 @@ export function ConversationWorkspaceLayout({
   }, []);
   const conversationHidden = compact && dockOpen;
 
+  useLayoutEffect(() => {
+    if (!dockOpen) return;
+    // Panel registers its changed min/max constraints in a nested layout
+    // commit. Resize once that commit has settled, using its public API.
+    const frame = requestAnimationFrame(() => {
+      const width = stageRef.current?.getBoundingClientRect().width ?? 0;
+      if (!width) return;
+      if (compact) { dockRef.current?.resize("100%"); return; }
+      const desiredWidth = savedWidth ?? Math.max(preferredWidth, width * defaultWidthPercent / 100);
+      dockRef.current?.resize(Math.max(320, Math.min(desiredWidth, width - 428)));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [dockOpen, compact, stageWidth, preferredWidth, defaultWidthPercent, savedWidth]);
+
   return (
     <ResizablePanelGroup
       id="conversation-workspace-split"
@@ -48,6 +74,9 @@ export function ConversationWorkspaceLayout({
       data-compact={compact ? "true" : undefined}
       direction="horizontal"
       className="app-v3-stage"
+      onLayoutChanged={(_layout, meta) => {
+        if (meta.isUserInteraction && dockOpen && !compact) onWidthChange?.(latestWidthRef.current);
+      }}
     >
       <ResizablePanel
         id="conversation-workspace-panel"
@@ -71,10 +100,12 @@ export function ConversationWorkspaceLayout({
       <ResizablePanel
         id="conversation-dock-panel"
         className="app-dock-panel"
-        defaultSize={dockOpen ? 440 : 44}
+        panelRef={dockRef}
+        defaultSize={dockOpen ? (savedWidth ?? preferredWidth) : 44}
         minSize={dockOpen ? (compact ? "100%" : 320) : 44}
-        maxSize={dockOpen ? (compact ? "100%" : "56%") : 44}
+        maxSize={dockOpen ? "100%" : 44}
         groupResizeBehavior="preserve-pixel-size"
+        onResize={size => { if (dockOpen && !compact) latestWidthRef.current = size.inPixels; }}
       >
         {dock}
       </ResizablePanel>

@@ -16,14 +16,14 @@
   min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   background: var(--surface-canvas);
   position: relative;
 }
 
 /* Main body: sidebar split | main surface | right drawer */
 .app-body {
-  grid-row: 2;
+  grid-row: 1;
   min-height: 0;
   min-width: 0;
   display: flex;
@@ -55,6 +55,25 @@
   min-width: 0;
   min-height: 0;
 }
+
+.app-workspace {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: var(--surface-workspace);
+}
+
+.app-workspace__body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.app-workspace:has([data-content-scrolled="true"]) > .titlebar { box-shadow: 0 1px 0 var(--line-subtle); }
 
 .app-main {
   flex: 1;
@@ -89,13 +108,6 @@
 
 /* ── Loading fallbacks (must match their real counterparts' geometry) ── */
 
-.app-titlebar-fallback {
-  grid-row: 1;
-  height: 40px;
-  border-bottom: 1px solid var(--hairline);
-  background: var(--sidebar-bg);
-}
-
 .app-layout-fallback {
   min-width: 0;
   min-height: 0;
@@ -119,8 +131,11 @@
   min-height: 0;
   flex: 1;
   display: flex;
+  flex-direction: column;
   background: var(--surface-workspace);
 }
+
+.app-layout-fallback__loading { display: grid; flex: 1; place-items: center; }
 
 .app-dock-fallback {
   display: flex;
@@ -184,10 +199,9 @@
 
 /* Electron inactive-window state dimming. */
 .window-inactive .titlebar {
-  opacity: 0.72;
-  filter: grayscale(15%);
-  transition: opacity 0.25s ease, filter 0.25s ease;
+  color: var(--color-text-muted);
 }
-.window-inactive .titlebar-title {
+.window-inactive .titlebar-title,
+.window-inactive .titlebar-btn {
   color: var(--color-text-muted);
 }

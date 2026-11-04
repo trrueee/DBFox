@@ -43,8 +43,10 @@ function openFile(projectId, binding, path) {
   host.dockViews.open({
     viewKey: `workspace-file:${stateKey}`,
     viewType: FILE_VIEW_TYPE,
+    preferredWidth: 520,
     title: path.split("/").pop() || path,
     closeable: true,
+    preview: true,
     projectId,
     stateKey,
     target: {
@@ -56,10 +58,11 @@ function openFile(projectId, binding, path) {
   });
 }
 
-function WorkspaceConnector({ projectId }) {
+function WorkspaceConnector({ projectId, view, context }) {
   useVersion();
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+  const [explorerOpen, setExplorerOpen] = React.useState(true);
   React.useEffect(() => {
     let active = true;
     setLoading(true);
@@ -84,47 +87,42 @@ function WorkspaceConnector({ projectId }) {
       setLoading(false);
     }
   }
-  async function removeFolder() {
-    setLoading(true);
-    try {
-      await invoke("binding.delete", {}, projectId);
-      await loadBinding(projectId);
-    } finally {
-      setLoading(false);
-    }
-  }
   if (loading && !binding) return React.createElement("p", { className: "dbfox-workspace__status" }, "正在读取工作区…");
   if (!binding) return React.createElement("div", { className: "dbfox-workspace__empty" },
-    React.createElement("p", null, "这个 Project 还没有本地工作区。"),
+    React.createElement("p", null, "关联文件夹后即可浏览项目文件。"),
     React.createElement("button", { type: "button", onClick: () => void chooseFolder() }, "选择文件夹"),
     error ? React.createElement("p", { role: "alert" }, error) : null,
   );
   return React.createElement("section", { className: "dbfox-workspace" },
     React.createElement("header", null,
+      React.createElement("button", { type: "button", className: "dbfox-workspace__tree-toggle", "aria-label": explorerOpen ? "收起文件树" : "显示文件树", "aria-expanded": explorerOpen, onClick: () => setExplorerOpen((value) => !value) }, React.createElement(host.ui.ResourceIcon, { kind: "folder", size: 16 })),
       React.createElement("span", { title: binding.root_path }, binding.root_path),
-      React.createElement("button", { type: "button", onClick: () => void removeFolder(), title: "移除工作区" }, "×"),
     ),
-    React.createElement(FileBrowser, { projectId, binding, path: "" }),
+    React.createElement("div", { className: `dbfox-workspace__panes${explorerOpen ? "" : " dbfox-workspace__panes--collapsed"}` },
+      explorerOpen ? React.createElement("aside", { className: "dbfox-workspace__explorer", "aria-label": "文件浏览器" }, React.createElement(FileBrowser, { projectId, binding, path: "", selectedPath: view?.target?.locator })) : null,
+      React.createElement("div", { className: "dbfox-workspace__preview" }, view
+        ? React.createElement(FilePreview, { key: view.target?.locator, view, context })
+        : React.createElement("div", { className: "dbfox-workspace__welcome" }, React.createElement(host.ui.ResourceIcon, { kind: "folder", size: 20 }), React.createElement("p", null, "选择文件查看内容"), React.createElement("small", null, "代码高亮 · Markdown 预览")))),
     error ? React.createElement("p", { className: "dbfox-workspace__error", role: "alert" }, error) : null,
   );
 }
 
-function FileBrowser({ projectId, binding, path }) {
-  const [current, setCurrent] = React.useState(path);
+function FileBrowser({ projectId, binding, path, selectedPath }) {
   const [entries, setEntries] = React.useState([]);
   const [status, setStatus] = React.useState("loading");
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [truncated, setTruncated] = React.useState(false);
   React.useEffect(() => {
     let active = true;
     setStatus("loading");
-    invoke("files.list", { path: current }, projectId)
-      .then((result) => { if (active) { setEntries(result?.entries || []); setStatus("ready"); } })
+    invoke("files.list", { path }, projectId)
+      .then((result) => { if (active) { setEntries(result?.entries || []); setTruncated(Boolean(result?.truncated)); setStatus("ready"); } })
       .catch(() => active && setStatus("error"));
     return () => { active = false; };
-  }, [projectId, binding.root_digest, current, reloadKey]);
-  const rootItem = { path: `__root__:${current}`, name: "", is_dir: true, children: entries };
+  }, [projectId, binding.root_digest, path, reloadKey]);
+  const rootItem = React.useMemo(() => ({ path: `__root__:${path}`, name: "", is_dir: true, children: entries }), [path, entries]);
   return React.createElement("div", { className: "dbfox-workspace__files" },
-    current ? React.createElement("button", { type: "button", onClick: () => setCurrent(current.includes("/") ? current.slice(0, current.lastIndexOf("/")) : "") }, "← 上一级") : null,
+    truncated ? React.createElement("p", { className: "dbfox-workspace__status", role: "status" }, "目录过大，当前仅显示部分条目。") : null,
     status === "loading" ? React.createElement("p", { className: "dbfox-workspace__status", role: "status" }, "正在读取…") : null,
     status === "error" ? React.createElement("div", { className: "dbfox-workspace__error", role: "alert" },
       React.createElement("span", null, "无法读取这个目录。"),
@@ -133,20 +131,27 @@ function FileBrowser({ projectId, binding, path }) {
       ? React.createElement("p", { className: "dbfox-workspace__status" }, "这个目录是空的。") : null,
     status === "ready" && entries.length > 0
       ? React.createElement(host.ui.Tree, {
-          key: current,
+          key: `${binding.root_digest}:${reloadKey}`,
           rootItem,
-          ariaLabel: current ? `工作区目录 ${current}` : "工作区目录",
+          ariaLabel: path ? `工作区目录 ${path}` : "工作区目录",
           getItemId: (entry) => entry.path,
           getItemLabel: (entry) => entry.name,
           getItemChildren: (entry) => entry.children,
-          onItemSelect: (entry) => entry.is_dir
-            ? setCurrent(entry.path)
-            : openFile(projectId, binding, entry.path),
+          getItemChildrenCount: (entry) => entry.children?.length ?? (entry.is_dir ? 1 : undefined),
+          loadItemChildren: async (entry, signal) => {
+            const result = await host.operations.invoke("files.list", { path: entry.path }, { projectId, signal });
+            if (result.truncated) throw new Error("目录条目超过浏览上限，请使用文件搜索。");
+            return result.entries;
+          },
+          renderItemIcon: (entry, state) => React.createElement(host.ui.ResourceIcon, { name: entry.name, ...(entry.is_dir ? { kind: "folder", expanded: state.expanded } : {}), size: 16 }),
+          selectedIds: selectedPath ? [selectedPath] : [],
+          defaultExpandedIds: selectedPath ? selectedPath.split("/").slice(0, -1).map((_, index, parts) => parts.slice(0, index + 1).join("/")) : [],
+          onItemSelect: (entry) => { if (!entry.is_dir) openFile(projectId, binding, entry.path); },
         }) : null,
   );
 }
 
-function FileDock({ view }) {
+function FilePreview({ view, context }) {
   const stateKey = view.stateKey || "";
   let state = fileState.get(stateKey);
   if (
@@ -169,6 +174,7 @@ function FileDock({ view }) {
   }
   const [result, setResult] = React.useState(null);
   const [error, setError] = React.useState("");
+  const [readingMore, setReadingMore] = React.useState(false);
   React.useEffect(() => {
     if (!state) return;
     let active = true;
@@ -180,10 +186,27 @@ function FileDock({ view }) {
   if (!state) return React.createElement("p", null, "文件状态不可用。");
   if (error) return React.createElement("p", { className: "dbfox-workspace__error" }, error);
   if (!result) return React.createElement("p", null, "正在读取文件…");
+  const loadedCharacters = Array.from(result.content).length;
   return React.createElement("article", { className: "dbfox-workspace-file" },
-    React.createElement("header", null, React.createElement("strong", null, state.path), React.createElement("small", null, `${result.size_bytes} bytes · ${result.sha256.slice(0, 12)}`)),
-    React.createElement("pre", null, React.createElement("code", null, result.content)),
+    React.createElement(host.ui.FileContent, { name: state.path, content: result.content,
+      onAsk: context?.onAsk ? () => context.onAsk({ label: state.path.split("/").pop(), authority: { kind: "dbfox.workspace.root", id: state.binding.id }, object: { kind: "dbfox.workspace.file", id: state.path, version: state.binding.root_digest }, locator: state.path }) : undefined }),
+    result.content_truncated ? React.createElement("div", { className: "dbfox-workspace__read-more" },
+      React.createElement("span", null, `已显示 ${loadedCharacters.toLocaleString()} 字符`),
+      React.createElement("button", { type: "button", disabled: readingMore, onClick: async () => {
+        if (readingMore) return;
+        setReadingMore(true);
+        try {
+          const next = await invoke("files.read", { path: state.path, offset: loadedCharacters }, state.projectId);
+          if (next.sha256 !== result.sha256) throw new Error("文件已变更，请关闭后重新打开。");
+          setResult({ ...next, content: result.content + next.content });
+        } catch (reason) { setError(reason instanceof Error ? reason.message : "读取失败。"); }
+        finally { setReadingMore(false); }
+      } }, readingMore ? "读取中…" : "继续读取")) : null,
   );
+}
+
+function FileDock({ view, context }) {
+  return React.createElement(WorkspaceConnector, { projectId: view.projectId || context.activeProjectId, view, context });
 }
 
 function artifactPayload(value, requiredFields, label) {
@@ -229,8 +252,7 @@ export function register(extensionHost) {
   host.connectors.register({
     id: DLC_ID,
     title: "文件",
-    icon: React.createElement("span", { "aria-hidden": true }, "▱"),
-    addLabel: "选择工作区",
+    icon: React.createElement(host.ui.ResourceIcon, { kind: "folder", size: 16 }),
     listResources: async ({ projectId }) => {
       const result = await invoke("binding.get", {}, projectId);
       const binding = result?.binding;
@@ -245,21 +267,15 @@ export function register(extensionHost) {
     removeResource: async ({ projectId }) => {
       await invoke("binding.delete", {}, projectId);
     },
-    onAdd: ({ projectId }) => {
-      void host.nativeDialogs.pickFolder().then(async (rootPath) => {
-        if (!rootPath) return;
-        await invoke("binding.create", { root_path: rootPath }, projectId);
-        await loadBinding(projectId);
-      });
-    },
     render: ({ projectId }) => React.createElement(WorkspaceConnector, { projectId }),
   });
   host.dockViews.register({
     viewType: FILE_VIEW_TYPE,
-    icon: () => React.createElement("span", { "aria-hidden": true }, "·"),
+    objectKinds: ["dbfox.workspace.file"],
+    icon: (view) => React.createElement(host.ui.ResourceIcon, { name: view.title, size: 16 }),
     resolveTitle: (view) => fileState.get(view.stateKey || "")?.path.split("/").pop() || view.title,
     isVisible: (view, context) => !view.projectId || view.projectId === context.activeProjectId,
-    render: (view) => React.createElement(FileDock, { view }),
+    render: (view, context) => React.createElement(FileDock, { view, context }),
   });
   host.artifactViews.register({
     id: "dbfox.workspace.file-snapshot",
