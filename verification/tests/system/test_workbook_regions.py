@@ -10,6 +10,9 @@ import pytest
 
 from dbfox_dlc_api import AttachmentResourceHandle, ToolInputError
 from engine.agent.progress_guard import observation_evidence_signatures
+from engine.agent.artifact import Artifact
+from engine.resource import ResourceScopeRef
+from engine.tools.runtime import ToolRunContext
 from verification.testkit.workbook_fixtures import sectioned_plan
 from verification.tests.system.test_workbook_analysis import build_runtime, query, tool
 
@@ -187,3 +190,37 @@ def test_inspection_byte_budget_pages_without_skipping_rows(runtime, tmp_path):
         seen.extend(row["row"] for row in report["table"]["samples"])
         cell_range = report["table"]["next_range"]
     assert seen == list(range(1, 42))
+
+
+def test_distinct_valid_queries_make_progress_without_counting_artifact_churn(runtime, plan):
+    handle = prepare(runtime, plan)
+    validate = tool(runtime, "sql_validate")
+    ref = ResourceScopeRef(kind="dbfox.data.database", id=handle.id, version=handle.scope_version)
+    context = ToolRunContext.for_invocation(request=None, tool_name="sql_validate",
+        invocation_id="validation-progress", idempotency_key="validation-progress",
+        scope_refs=(ref,), resources={ref.canonical(): handle})
+
+    def signature(sql):
+        outcome = validate.run(validate.input_model(database_id=handle.id, sql=sql), context)
+        assert outcome.output.can_execute
+        artifacts = tuple(Artifact(id="artifact_" + uuid4().hex, session_id=handle.session_id,
+            run_id="validation-progress", type=draft.type, title=draft.title, payload=draft.payload,
+            resource_refs=(ref,), visibility=draft.visibility) for draft in outcome.artifacts)
+        observation = validate.project_observation(status="success", output=outcome.output.model_dump(), artifacts=artifacts)
+        return observation_evidence_signatures(tool_name="sql_validate", status="success",
+                                               facts=observation.facts, error_code="")
+
+    first = signature('SELECT SUM("学分") AS credits FROM main.data')
+    second = signature('SELECT "课程类别", SUM("学分") AS credits FROM main.data GROUP BY "课程类别"')
+    assert first != second
+    assert signature('SELECT SUM("学分") AS credits FROM main.data') == first
+
+
+def test_requirement_labels_use_native_text_extraction_in_validated_sql(runtime, plan):
+    handle = prepare(runtime, plan)
+    result, _, _ = query(runtime, handle,
+        'SELECT TRIM(REGEXP_REPLACE("课程类别", \'（.*\', \'\')) AS module, '
+        'CAST(REGEXP_EXTRACT("课程类别", \'（([0-9.]+)\', 1) AS DECIMAL(10,2)) AS required '
+        'FROM main.data GROUP BY "课程类别" ORDER BY MIN(__source_row)')
+    assert [row["module"] for row in result.output.rows] == ["公共基础课程", "通识教育必修", "专业必修课程", "专业选修课程"]
+    assert [Decimal(row["required"]) for row in result.output.rows] == [Decimal("38"), Decimal("35.5"), Decimal("49.5"), Decimal("31")]

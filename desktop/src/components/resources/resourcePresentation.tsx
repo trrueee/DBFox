@@ -1,18 +1,35 @@
-import { Archive, AudioLines, ChartNoAxesCombined, Database, File, FileCode2, FileImage, FileSpreadsheet, FileText, Film, Folder, FolderOpen, Package, Table2, type LucideIcon } from "lucide-react";
+import {
+  ArchiveIcon,
+  WaveformIcon,
+  ChartLineUpIcon,
+  DatabaseIcon,
+  FileIcon,
+  FileCodeIcon,
+  FileImageIcon,
+  FileXlsIcon,
+  FileTextIcon,
+  FilmStripIcon,
+  FolderSimpleIcon,
+  FolderOpenIcon,
+  PackageIcon,
+  TableIcon,
+  type IconComponent,
+} from "@/components/icons";
 import type { WorkbenchReference } from "../../types/workspace";
+import type { ConversationArtifact } from "../../types/conversation";
 import "./resources.css";
 
 export type ResourceKind = import("../../features/dlc/types").HostResourceKind;
 
-const PRESENTATION: Record<ResourceKind, { icon: LucideIcon; label: string }> = {
-  file: { icon: File, label: "文件" }, folder: { icon: Folder, label: "文件夹" },
-  code: { icon: FileCode2, label: "代码" }, markdown: { icon: FileText, label: "Markdown" },
-  spreadsheet: { icon: FileSpreadsheet, label: "电子表格" }, database: { icon: Database, label: "数据库" },
-  table: { icon: Table2, label: "数据表" }, chart: { icon: ChartNoAxesCombined, label: "图表" },
-  image: { icon: FileImage, label: "图片" }, audio: { icon: AudioLines, label: "音频" },
-  video: { icon: Film, label: "视频" }, document: { icon: FileText, label: "文档" },
-  archive: { icon: Archive, label: "压缩文件" }, artifact: { icon: Package, label: "成果" },
-  resource: { icon: File, label: "引用" },
+const PRESENTATION: Record<ResourceKind, { icon: IconComponent; label: string }> = {
+  file: { icon: FileIcon, label: "文件" }, folder: { icon: FolderSimpleIcon, label: "文件夹" },
+  code: { icon: FileCodeIcon, label: "代码" }, markdown: { icon: FileTextIcon, label: "Markdown" },
+  spreadsheet: { icon: FileXlsIcon, label: "电子表格" }, database: { icon: DatabaseIcon, label: "数据库" },
+  table: { icon: TableIcon, label: "数据表" }, chart: { icon: ChartLineUpIcon, label: "图表" },
+  image: { icon: FileImageIcon, label: "图片" }, audio: { icon: WaveformIcon, label: "音频" },
+  video: { icon: FilmStripIcon, label: "视频" }, document: { icon: FileTextIcon, label: "文档" },
+  archive: { icon: ArchiveIcon, label: "压缩文件" }, artifact: { icon: PackageIcon, label: "成果" },
+  resource: { icon: FileIcon, label: "引用" },
 };
 
 // Unmodified official Fluent file artwork, canonical Markdown and code-language
@@ -64,9 +81,9 @@ function filePresentation(name: string): { kind: ResourceKind; icon?: string; si
 
 export function fileKind(name: string): ResourceKind { return filePresentation(name).kind; }
 
-export function referenceKind(reference: WorkbenchReference): ResourceKind {
+export function referenceKind(reference: WorkbenchReference, artifact?: Pick<ConversationArtifact, "type" | "title">): ResourceKind {
   if (reference.object?.kind === "dbfox.core.attachment") return fileKind(reference.label);
-  if (reference.artifactId) return "artifact";
+  if (reference.artifactId) return artifact ? artifactKind(artifact.type, artifact.title) : "artifact";
   const subject = reference.object?.kind.split(".").at(-1);
   if (subject === "file") return fileKind(reference.locator ?? reference.label);
   if (subject && Object.hasOwn(PRESENTATION, subject)) return subject as ResourceKind;
@@ -75,8 +92,10 @@ export function referenceKind(reference: WorkbenchReference): ResourceKind {
 
 export function resourceLabel(kind: ResourceKind): string { return PRESENTATION[kind].label; }
 
-export function artifactKind(type: string): ResourceKind {
+export function artifactKind(type: string, title = ""): ResourceKind {
   const name = type.split(".").at(-1) ?? "";
+  if (["file_snapshot", "code_patch"].includes(name) && title) return fileKind(title);
+  if (type === "dbfox.visualization.document") return "chart";
   if (["dataframe", "result_view", "snapshot"].includes(name)) return "table";
   if (["chart", "visualization"].includes(name)) return "chart";
   if (["sql", "code_patch"].includes(name)) return "code";
@@ -96,6 +115,6 @@ export function ResourceIcon({ name = "", kind = fileKind(name), size = 16, clas
   const source = asset ? `${import.meta.env.BASE_URL}assets/file-icons/file_type_${asset}${suffix}.svg` : undefined;
   const classes = `resource-icon resource-icon--${kind} ${className}`;
   if (source) return <img src={source} alt="" aria-hidden="true" width={size} height={size} draggable={false} className={classes} />;
-  const Icon = kind === "folder" && expanded ? FolderOpen : PRESENTATION[kind]?.icon ?? File;
-  return <Icon size={size} strokeWidth={1.75} aria-hidden="true" className={classes} />;
+  const Icon = kind === "folder" && expanded ? FolderOpenIcon : PRESENTATION[kind]?.icon ?? FileIcon;
+  return <Icon size={size} weight="regular" aria-hidden="true" className={classes} />;
 }

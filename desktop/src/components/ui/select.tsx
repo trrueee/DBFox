@@ -5,7 +5,11 @@
  */
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  CheckIcon,
+  CaretDownIcon,
+  CaretUpIcon,
+} from "@/components/icons";
 
 import { cn } from "../../lib/utils";
 import "./select.css";
@@ -35,7 +39,7 @@ const SelectTrigger = React.forwardRef<
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="dbfox-select-icon" aria-hidden="true" />
+      <CaretDownIcon className="dbfox-select-icon" aria-hidden="true" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -90,7 +94,7 @@ const SelectItem = React.forwardRef<
   >
     <span data-slot="select-item-indicator" className="dbfox-select-item-indicator">
       <SelectPrimitive.ItemIndicator>
-        <Check size={14} aria-hidden="true" />
+        <CheckIcon size={16} aria-hidden="true" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
@@ -121,7 +125,7 @@ function SelectScrollUpButton({
       className={cn("dbfox-select-scroll-button", className)}
       {...props}
     >
-      <ChevronUp size={14} aria-hidden="true" />
+      <CaretUpIcon size={16} aria-hidden="true" />
     </SelectPrimitive.ScrollUpButton>
   );
 }
@@ -136,7 +140,7 @@ function SelectScrollDownButton({
       className={cn("dbfox-select-scroll-button", className)}
       {...props}
     >
-      <ChevronDown size={14} aria-hidden="true" />
+      <CaretDownIcon size={16} aria-hidden="true" />
     </SelectPrimitive.ScrollDownButton>
   );
 }

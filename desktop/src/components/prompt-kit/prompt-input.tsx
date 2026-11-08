@@ -47,7 +47,7 @@ export function PromptInput({
       <PromptInputContext.Provider value={{ disabled, textareaRef }}>
         <div
           className={cn(
-            "cursor-text rounded-[var(--radius-composer)] border border-[var(--control-border)] bg-[var(--agent-surface-elevated)] p-2 shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] duration-200 focus-within:border-[var(--control-border-hover)] focus-within:shadow-[var(--shadow-md)]",
+            "cursor-text rounded-[var(--radius-composer)] border border-[var(--control-border)] bg-[var(--agent-surface-elevated)] p-3 shadow-[var(--shadow-md)] transition-[border-color,box-shadow] [transition-duration:var(--motion-normal)] focus-within:border-[var(--control-border-focus)]",
             disabled && "cursor-not-allowed opacity-60",
             className,
           )}
@@ -69,7 +69,7 @@ export function PromptInputTextarea({ className, ...props }: PromptInputTextarea
     <textarea
       ref={textareaRef}
       className={cn(
-        "min-h-12 max-h-40 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 pt-1 text-[length:var(--ui-font-body)] leading-[1.55] text-[var(--color-text-primary)] shadow-none outline-none [field-sizing:content] placeholder:text-[var(--color-text-muted)] focus-visible:ring-0",
+        "min-h-14 max-h-40 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 pt-1 text-[length:var(--agent-font-input)] leading-[1.55] text-[var(--color-text-primary)] shadow-none outline-none [field-sizing:content] placeholder:text-[var(--color-text-muted)] focus-visible:ring-0",
         className,
       )}
       disabled={disabled || props.disabled}

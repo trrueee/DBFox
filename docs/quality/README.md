@@ -4,10 +4,18 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-30
+> 最后核验：2026-11-08
 
 ## 当前整改
 
+- [Apple HIG 工作台设计与验收](./apple-hig-workbench-20261107.md)：当前全产品设计基础；覆盖逐功能任务、渐进展开、焦点与反馈、统一图标和 13 个内置 DLC，并记录真实客户端发现的数据样例合同缺口。
+- [前期全局设计实施记录](../archive/reviews/global-design-20261107.md)：历史视觉方案与窗口、协议、图标来源修复证据；外观方向已由 Apple HIG 工作台替代。
+- [全局图标与界面比例诊断](./icon-system-review-20261107.md)：覆盖 Core、SDK、DLC 和品牌/文件资产的实施前盘点、比例问题与真实开源图形对照。
+- [界面调研与信息层级重构](./interface-refresh-20261107.md)：基于现代产品与现有开源组件，简化扩展列表、统一设置排版和对话成果入口，记录 Dock/弹窗焦点、主题、窄窗口与实际客户端验证。
+- [连续产品使用与共享链路修复](./continuous-product-use-20261107.md)：记录人工工作台与内部 Agent 创作各自的证据；第六阶段核验真实 Agent 场景/动画交付、计划空转与原生上下文丢失修复，保留成本和视觉验收限制。
+- [培养方案学分分析真实客户端验收](./business-journey-20261107.md)：真实模型、原工作簿副本和正常界面操作中发现的进展误判、数值类型、搜索、跨轮读取与证据保存等问题，以及源头修复和复验记录。
+- [源码功能审查与修复设计](./functional-source-review-20261106.md)：基线7670e346的22项已确认缺陷、源码与独立复现证据、复用决策、修复顺序和验收矩阵；含11月7日的修复台账与验证状态。
+- [逐功能逻辑与验收清单](./functional-checklist-20261106.md)：28组271项操作的核验状态、已读范围、保留空白和逐项行为合同，不代表全部功能已通过。
 - [桌面 UI 全面改造与 Harness 边界审计证据](./2026-08-30-ui-overhaul-and-boundary-audit.md)：记录视觉系统、项目分组侧栏、动态模型目录、资源清单合同与边界审计的提交区间、门禁结果和边界决定。
 - [Artifact、Visualization 与 Dock 重构证据](./2026-08-28-artifact-visualization-dock-refactor.md)：记录正文 Artifact 编排、Representation、SQL Backend、独立 Visualization DLC、View/Tab/Dock 边界、成熟组件采用和聚焦验证结果。
 - [Agent Core、Capability DLC 与 Workbench 深度质量评审](./2026-08-22-agent-core-dlc-workbench-review.md)：记录 Resource authority、多同类资源、Project/Data/Workspace 边界，以及 Dock、Sidebar、Composer 的证据、复用决策和安全施工顺序。

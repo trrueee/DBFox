@@ -3,15 +3,18 @@
 
 .dbfox-story-workbench {
   display: grid;
+  min-width: 0;
   min-height: 0;
   height: 100%;
-  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
   gap: var(--space-3);
   padding: var(--space-3);
+  overflow: hidden;
 }
 
 .dbfox-story-workbench__tree {
   display: flex;
+  min-width: 0;
   min-height: 0;
   flex-direction: column;
   gap: var(--space-2);
@@ -44,29 +47,57 @@
   display: grid;
   gap: 6px;
   padding-top: var(--space-2);
-  border-top: 1px solid var(--hairline);
+}
+
+.dbfox-story-disclosure > summary {
+  min-height: var(--density-control-height-sm);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-row);
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-body);
+  line-height: 1.5;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.dbfox-story-disclosure > summary:hover {
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.dbfox-story-disclosure > summary:focus-visible,
+.dbfox-story-toolbar__refresh:focus-visible,
+.dbfox-story-mode:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.dbfox-story-disclosure[open] > summary {
+  color: var(--color-text-primary);
 }
 
 .dbfox-story-entity-form select,
 .dbfox-story-entity-form input {
   min-width: 0;
-  height: 30px;
+  height: var(--density-control-height-sm);
   padding: 0 8px;
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-row);
+  border-radius: var(--radius-control);
   background: var(--control-bg);
   color: var(--color-text-primary);
   font-size: var(--ui-font-caption);
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-story-entity-form button {
-  min-height: 28px;
+  min-height: var(--density-control-height-sm);
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-row);
+  border-radius: var(--radius-control);
   background: var(--control-bg);
   color: var(--color-text-primary);
   font-size: var(--ui-font-caption);
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-story-entity-form button:disabled {
@@ -95,11 +126,12 @@
   justify-self: start;
   padding: 2px 8px;
   border: 1px solid var(--trust-danger-border);
-  border-radius: var(--radius-row);
+  border-radius: var(--radius-control);
   background: var(--trust-danger-bg);
   color: var(--trust-danger);
   font-size: var(--ui-font-caption);
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-story-workbench__error {
@@ -113,7 +145,9 @@
 
 .dbfox-story-workbench__main {
   display: grid;
+  min-width: 0;
   min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   gap: var(--space-3);
   overflow-y: auto;
@@ -121,6 +155,7 @@
 
 .dbfox-story-canvas-card {
   display: flex;
+  min-width: 0;
   min-height: 320px;
   flex-direction: column;
   padding: var(--space-2);
@@ -210,6 +245,8 @@
 
 .dbfox-story-review {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
 }
 
@@ -222,6 +259,7 @@
 
 .dbfox-story-review__header {
   display: flex;
+  flex-wrap: wrap;
   min-height: 30px;
   align-items: center;
   justify-content: space-between;
@@ -232,29 +270,34 @@
 
 .dbfox-story-review__header form {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .dbfox-story-review__header input {
+  min-width: 0;
   height: 28px;
   padding: 0 8px;
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-row);
+  border-radius: var(--radius-control);
   background: var(--control-bg);
   color: var(--color-text-primary);
   font-size: var(--ui-font-caption);
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-story-review__header button,
 .dbfox-story-review__row button {
-  min-height: 26px;
+  min-height: var(--density-control-height-sm);
   padding: 0 10px;
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-row);
+  border-radius: var(--radius-control);
   background: var(--control-bg);
   color: var(--color-text-primary);
   font-size: var(--ui-font-caption);
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-story-review__header button:hover,
@@ -326,10 +369,11 @@
   height: 28px;
   padding: 0 8px;
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-row);
+  border-radius: var(--radius-control);
   background: var(--control-bg);
   color: var(--color-text-primary);
   font-size: var(--ui-font-caption);
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-story-connector {
@@ -361,8 +405,15 @@
 }
 
 /* 目录形态切换（逻辑 / 章节） */
+.dbfox-story-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .dbfox-story-mode-toggle {
   display: inline-flex;
+  flex: 1;
   gap: 2px;
   padding: 2px;
   border-radius: var(--radius-control);
@@ -370,14 +421,41 @@
 }
 
 .dbfox-story-mode {
-  min-height: 24px;
+  flex: 1;
+  min-height: var(--density-control-height-sm);
   padding: 0 10px;
   border: 0;
   border-radius: calc(var(--radius-control) - 2px);
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: var(--ui-font-caption);
+  font-size: var(--ui-font-body);
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.dbfox-story-toolbar__refresh {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--density-control-height-sm);
+  height: var(--density-control-height-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.dbfox-story-toolbar__refresh:hover {
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.dbfox-story-toolbar__refresh:disabled {
+  opacity: var(--control-disabled-opacity);
+  cursor: default;
 }
 
 .dbfox-story-mode:hover {
@@ -410,11 +488,12 @@
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-row);
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-muted);
   font-size: var(--ui-font-caption);
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-story-chapter-actions button:hover {
@@ -425,6 +504,7 @@
 /* 章节阅读器 */
 .dbfox-story-reader {
   display: grid;
+  min-width: 0;
   min-height: 0;
   align-content: start;
   gap: var(--space-2);
@@ -432,16 +512,20 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-card);
   background: var(--surface-card);
+  overflow: auto;
 }
 
 .dbfox-story-reader__toolbar {
   display: flex;
+  flex-wrap: wrap;
   min-height: 32px;
   align-items: center;
   gap: var(--space-2);
 }
 
 .dbfox-story-reader__title {
+  min-width: 0;
+  flex-basis: 100%;
   color: var(--color-text-primary);
   font-size: var(--ui-font-title);
   font-weight: 600;
@@ -449,21 +533,23 @@
 }
 
 .dbfox-story-reader__meta {
-  flex: 1;
+  flex: 1 1 180px;
   color: var(--color-text-muted);
   font-size: var(--ui-font-caption);
   font-variant-numeric: tabular-nums;
 }
 
 .dbfox-story-reader__toolbar button {
-  min-height: 26px;
+  flex: 0 0 auto;
+  min-height: var(--density-control-height-sm);
   padding: 0 10px;
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-row);
+  border-radius: var(--radius-control);
   background: var(--control-bg);
   color: var(--color-text-primary);
   font-size: var(--ui-font-caption);
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-story-reader__toolbar button:hover {
@@ -483,6 +569,7 @@
   color: var(--agent-text);
   font-size: var(--agent-font-body);
   line-height: var(--agent-line-height);
+  overflow-wrap: anywhere;
 }
 
 .dbfox-story-reader__content p {
@@ -523,18 +610,23 @@
 
 .dbfox-story-versions__list button,
 .dbfox-story-version-compare > button {
-  min-height: 26px;
+  max-width: 100%;
+  font: inherit;
+  font-size: var(--ui-font-caption);
+  min-height: var(--density-control-height-sm);
   padding: 0 10px;
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   color: var(--color-text-secondary);
   background: var(--control-bg);
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-story-versions__list button.is-active {
   border-color: var(--color-primary);
   color: var(--color-primary);
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-story-version-compare {
@@ -566,4 +658,21 @@
 .dbfox-story-version-compare > button {
   grid-column: 1 / -1;
   justify-self: start;
+}
+
+/* The Host Dock is the sizing boundary, including when its pane is expanded. */
+@container (max-width: 680px) {
+  .dbfox-story-workbench {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .dbfox-story-workbench__tree {
+    max-height: 240px;
+  }
+
+  .dbfox-story-version-compare {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

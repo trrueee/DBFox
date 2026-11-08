@@ -67,12 +67,12 @@ describe("master product UI contract", () => {
     expect(layout).toContain("defaultSize={sidebarCollapsed ? 48 : sidebarDefaultWidth}");
     expect(layout).toContain("minSize={sidebarCollapsed ? 48 : 240}");
     expect(layout).toContain("maxSize={sidebarCollapsed ? 48 : settingsOpen ? 320 : 336}");
-    expect(tokens).toContain("--ui-font-control: calc(14px + var(--appearance-ui-font-adjust))");
-    expect(tokens).toContain("--ui-font-body: calc(14px + var(--appearance-ui-font-adjust))");
-    expect(tokens).toContain("--agent-font-body: calc(14px + var(--appearance-agent-font-adjust))");
+    expect(tokens).toContain("--ui-font-control: calc(15px + var(--appearance-ui-font-adjust))");
+    expect(tokens).toContain("--ui-font-body: calc(15px + var(--appearance-ui-font-adjust))");
+    expect(tokens).toContain("--agent-font-body: calc(16px + var(--appearance-agent-font-adjust))");
   });
 
-  it("keeps Fluent-derived semantic color roles readable in light and dark themes", () => {
+  it("keeps HIG-informed semantic color roles readable in light and dark themes", () => {
     const tokens = readFileSync(join(sourceRoot, "styles/tokens.css"), "utf8");
     const button = readFileSync(join(sourceRoot, "components/ui/button.css"), "utf8");
     const themes = [cssBlock(tokens, ":root"), cssBlock(tokens, ".dark")];
@@ -85,17 +85,18 @@ describe("master product UI contract", () => {
       expect(contrastRatio(hexVariable(theme, "--color-on-danger"), hexVariable(theme, "--color-danger-fill"))).toBeGreaterThanOrEqual(4.5);
     }
 
-    expect(tokens).toContain("Default semantic colors follow Fluent 2");
+    expect(tokens).toContain("informed by Apple Human Interface Guidelines");
     expect(button).toContain("background: var(--color-primary-fill)");
     expect(button).not.toContain("background: var(--color-primary);");
   });
 
-  it("uses only the 14/16/20 Lucide size scale in production UI", () => {
+  it("uses bundled Host artwork and a bounded icon scale in production UI", () => {
     const failures = productionSourceFiles(sourceRoot).flatMap((file) => {
       const source = readFileSync(file, "utf8");
+      expect(source).not.toMatch(/from\s+["'](?:lucide-react|@phosphor-icons\/react)["']/);
       const invalid = [...source.matchAll(/\bsize=\{(\d+)\}/g)]
         .map((match) => Number(match[1]))
-        .filter((size) => ![14, 16, 20].includes(size));
+        .filter((size) => ![14, 16, 18, 20, 22].includes(size));
       const isBrandIcon = file.endsWith(join("components", "TitleBar.tsx"))
         || file.endsWith(join("components", "EngineStartupGate.tsx"));
       return invalid.filter((size) => !(isBrandIcon && [24, 52].includes(size))).map(

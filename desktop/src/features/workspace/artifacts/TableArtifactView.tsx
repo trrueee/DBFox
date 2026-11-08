@@ -1,4 +1,11 @@
-import { AlertCircle, AlertTriangle, Copy, Download, ExternalLink, RefreshCw } from "lucide-react";
+import {
+  WarningCircleIcon,
+  WarningIcon,
+  CopyIcon,
+  DownloadSimpleIcon,
+  ArrowSquareOutIcon,
+  ArrowsClockwiseIcon,
+} from "@/components/icons";
 import {
   Alert,
   AlertDescription,
@@ -77,7 +84,7 @@ export function TableArtifactView({
         {toolbar}
         {table.consistency === "live_reexecution" && table.viewExecutedAt && (
           <div className="artifact-table-alert artifact-table-alert-live">
-            <RefreshCw size={14} className="artifact-table-alert-icon" />
+            <ArrowsClockwiseIcon size={16} className="artifact-table-alert-icon" />
             <span>
               {table.originalExecutedAt
                 ? `分析取数 ${formatExecutionTime(table.originalExecutedAt)} · 当前重查 ${formatExecutionTime(table.viewExecutedAt)}`
@@ -88,7 +95,7 @@ export function TableArtifactView({
         )}
         {Boolean(table.fetchError) && (
           <Alert className="artifact-table-alert artifact-table-alert-error" variant="destructive">
-            <AlertCircle size={14} className="artifact-table-alert-icon" />
+            <WarningCircleIcon size={16} className="artifact-table-alert-icon" />
             <AlertTitle>分页数据未更新</AlertTitle>
             <AlertDescription>
               <p>{getUserErrorMessage(table.fetchError, "获取分页数据失败；已保留上次成功结果。")}</p>
@@ -98,7 +105,7 @@ export function TableArtifactView({
         )}
         {(table.warnings.length > 0 || table.notices.length > 0) && (
           <div className="artifact-table-alert artifact-table-alert-notice">
-            <AlertTriangle size={14} className="artifact-table-alert-icon" />
+            <WarningIcon size={16} className="artifact-table-alert-icon" />
             <span>{[...table.warnings, ...table.notices].join("；")}</span>
           </div>
         )}
@@ -145,16 +152,16 @@ export function TableArtifactView({
           className="artifact-table-action-button"
           onClick={() => onOpenArtifact(artifact)}
         >
-          <ExternalLink size={14} />
+          <ArrowSquareOutIcon size={16} />
           打开为 Tab
         </Button>
       )}
       <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={handleCopy}>
-        <Copy size={14} />
+        <CopyIcon size={16} />
         复制 CSV
       </Button>
       <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={() => void handleExport()}>
-        <Download size={14} />
+        <DownloadSimpleIcon size={16} />
         导出 CSV
       </Button>
     </>
@@ -173,7 +180,7 @@ export function TableArtifactView({
         {toolbar}
         {Boolean(table.fetchError) && (
           <Alert className="artifact-table-inline-error" variant="destructive">
-            <AlertCircle size={14} className="artifact-table-alert-icon" />
+            <WarningCircleIcon size={16} className="artifact-table-alert-icon" />
             <AlertTitle>分页数据未更新</AlertTitle>
             <AlertDescription>
               <p>{getUserErrorMessage(table.fetchError, "获取分页数据失败；已保留上次成功结果。")}</p>

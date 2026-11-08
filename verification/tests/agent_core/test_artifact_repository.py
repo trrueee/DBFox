@@ -3,6 +3,7 @@
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.orm import sessionmaker
 
 from engine.agent.artifact import (
     ArtifactDraft,
@@ -20,11 +21,21 @@ from engine.agent.repositories.artifact import (
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.observation import ObservationStatus
-from engine.agent.resource_refs import dump_resource_refs
-from engine.agent.run import SessionLeaseConflict
+from engine.agent.resource_refs import ProjectResourceDescriptor, dump_resource_refs
+from engine.agent.run import RunLimits, SessionLeaseConflict
+from engine.agent.control import LeaseAwareRunControl
+from engine.agent.definition import AgentDefinition
+from engine.agent.response import CompletionDisposition, CompletionLimitationCode
+from engine.agent.terminalizer import Terminalizer
+from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
+from engine.agent.turn import ModelToolCall, ModelTurnResult, TurnAssistantMessage, TurnTermination
+from engine.agent.loop import RunLoop
+from engine.agent.completion import CompletionGate, CompletionPolicy
+from engine.json_codec import loads
 from engine.models import AgentArtifactRecord, AgentRun, AgentSession, AgentSessionInput, AgentToolInvocation, AgentTurn
 from engine.resource import ResourceScopeRef
 from engine.tools.materialization import materialize_tools
+from engine.tools.runtime import ToolExecutionSpec, ToolExecutor, ToolResourceRequirement
 from verification.support.agent_tools import verification_registry
 
 
@@ -65,7 +76,7 @@ def _settle(repository, *, lease, invocation, drafts):
     return artifacts
 
 
-def _active_run(db_session, session_id: str):
+def _active_run(db_session, session_id: str, *, materialization=None):
     db_session.add(AgentSession(id=session_id, title="Artifacts"))
     db_session.commit()
     sessions = SessionRepository(db_session)
@@ -82,6 +93,7 @@ def _active_run(db_session, session_id: str):
     lease = sessions.claim(session_id=session_id, owner="worker")
     assert lease is not None
     sessions.promote_next_input(lease=lease)
+    tools = materialization or _tools()
     turn = sessions.start_turn(
         lease=lease,
         run_id=admission.run_id,
@@ -90,12 +102,67 @@ def _active_run(db_session, session_id: str):
         prompt_hash="prompt",
         context_snapshot={},
         context_hash="context",
-        tool_materialization=_tools().model_dump(mode="json"),
-        tool_materialization_hash=_tools().hash,
+        tool_materialization=tools.model_dump(mode="json"),
+        tool_materialization_hash=tools.hash,
         provider="test",
         model_name="test",
     )
     return admission, lease, turn
+
+
+@pytest.mark.parametrize("boundary", ["removed", "changed_version"])
+@pytest.mark.parametrize("interrupted", [False, True])
+def test_resource_change_after_admission_is_settled_without_crashing_the_run(db_session, boundary, interrupted):
+    registry = verification_registry()
+    registry.require("verification_read").execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=RESOURCE.kind),),
+        recovery="reconcile" if interrupted else "never_retry",
+    )
+    tools = materialize_tools(registry, allowed_groups={"verification"}, execution_mode="user_requested_read")
+    admission, lease, turn = _active_run(db_session, f"scope-race-{boundary}", materialization=tools)
+    db_session.commit()
+    current = [ProjectResourceDescriptor(kind=RESOURCE.kind, id=RESOURCE.id, version=1, name="Resource")]
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    executor = ToolExecutor(max_workers=1)
+    dispatcher = ToolDispatcher(
+        session_factory=factory, registry=registry, executor=executor,
+        definition=AgentDefinition(allowed_tool_groups=("verification",), execution_mode="user_requested_read"),
+        resource_discovery=lambda _db, _run: tuple(current),
+    )
+    control = LeaseAwareRunControl(
+        run=db_session.get(AgentRun, admission.run_id), limits=RunLimits(),
+        cancellation_probe=lambda: False, lease_lost_probe=lambda: False,
+    )
+    try:
+        dispatch = dispatcher.request(
+            lease=lease, run_id=admission.run_id, turn_id=str(turn.id),
+            call=ModelToolCall(id="resource-race", name="verification_read", arguments={}),
+            materialization=tools, control=control,
+        )
+        assert dispatch.outcome is ToolDispatchOutcome.REQUESTED
+        assert dispatch.invocation is not None
+        assert dispatch.invocation.resource_refs == (RESOURCE,)
+        invocation = dispatch.invocation
+        if interrupted:
+            invocation = ToolInvocationRepository(db_session).mark_running(lease=lease, invocation_id=invocation.id)
+            db_session.commit()
+        current[:] = [] if boundary == "removed" else [
+            ProjectResourceDescriptor(kind=RESOURCE.kind, id=RESOURCE.id, version=2, name="Resource")
+        ]
+
+        output = dispatcher.execute_requested(lease, invocation, control=control)
+
+        assert output is not None
+        expected_code = "TOOL_OUTCOME_UNKNOWN" if interrupted else "TOOL_INPUT_ERROR"
+        assert expected_code in output.output
+        assert "unavailable or changed" in output.output
+        db_session.expire_all()
+        persisted = db_session.get(AgentToolInvocation, dispatch.invocation.id)
+        assert persisted.status == ("unknown" if interrupted else "failed")
+        assert persisted.attempt_count == 1
+        assert db_session.get(AgentRun, admission.run_id).status == "running"
+    finally:
+        executor.close(wait=False)
 
 
 def _markdown(
@@ -136,6 +203,143 @@ def test_get_for_run_never_exposes_cross_run_or_cross_session_artifacts(db_sessi
     assert repository.get_for_run(
         session_id="other", run_id=artifact.run_id, artifact_id=artifact.id
     ) is None
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    ["available", "changed_version", "removed", "internal", "other_session", "active_owner"],
+)
+def test_tool_artifact_selector_uses_proven_prior_result_with_current_resource_fence(
+    db_session, boundary,
+):
+    admission, lease, turn = _active_run(db_session, "artifact-selector-owner")
+    repository = ArtifactRepository(db_session)
+    artifact = _markdown(
+        repository, lease=lease, run_id=admission.run_id, turn_id=str(turn.id),
+        visibility=(
+            ArtifactVisibility.INTERNAL if boundary == "internal" else ArtifactVisibility.PRIMARY
+        ),
+    )
+    db_session.commit()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    assert Terminalizer(session_factory=factory).complete(
+        lease, admission.run_id, ModelTurnResult(),
+        disposition=CompletionDisposition.COMPLETE, limitation_codes=[], evidence_artifact_ids=[],
+    )
+    db_session.expire_all()
+    SessionRepository(db_session).release(lease=lease)
+    db_session.commit()
+    session_id = "artifact-selector-owner"
+    if boundary == "other_session":
+        session_id = "artifact-selector-other"
+        db_session.add(AgentSession(id=session_id, title="Other"))
+        db_session.commit()
+    sessions = SessionRepository(db_session)
+    consumer = sessions.admit(
+        session_id=session_id, resource_refs=(), content="Use the selected result.",
+        idempotency_key="artifact-selector-consumer", llm_credential_id="credential",
+        api_base=None, model_name="model", request_payload={},
+    )
+    consumer_lease = sessions.claim(session_id=session_id, owner="consumer")
+    assert consumer_lease is not None
+    sessions.promote_next_input(lease=consumer_lease)
+    registry = verification_registry()
+    tool = registry.get("verification_read")
+    tool.execution = ToolExecutionSpec(required_resources=(ToolResourceRequirement(
+        kind=RESOURCE.kind, artifact_selector_field="value",
+    ),))
+    tools = materialize_tools(
+        registry, allowed_groups={"verification"}, execution_mode="user_requested_read",
+    )
+    consumer_turn = sessions.start_turn(
+        lease=consumer_lease, run_id=consumer.run_id, agent_definition_version="1",
+        prompt_version="1", prompt_hash="prompt", context_snapshot={}, context_hash="context",
+        tool_materialization=tools.model_dump(mode="json"), tool_materialization_hash=tools.hash,
+        provider="test", model_name="test",
+    )
+    if boundary == "active_owner":
+        db_session.get(AgentRun, admission.run_id).status = "running"
+    db_session.commit()
+    descriptor = ProjectResourceDescriptor(
+        kind=RESOURCE.kind, id=RESOURCE.id,
+        version=2 if boundary == "changed_version" else RESOURCE.version, name="Resource",
+    )
+    executor = ToolExecutor(max_workers=1)
+    dispatcher = ToolDispatcher(
+        session_factory=factory, registry=registry,
+        definition=AgentDefinition(
+            allowed_tool_groups=("verification",), execution_mode="user_requested_read",
+        ),
+        executor=executor,
+        resource_discovery=lambda _db, _run: () if boundary == "removed" else (descriptor,),
+    )
+    try:
+        result = dispatcher.request(
+            lease=consumer_lease, run_id=consumer.run_id, turn_id=str(consumer_turn.id),
+            call=ModelToolCall(id="selected-result", name="verification_read", arguments={"value": artifact.id}),
+            materialization=tools,
+            control=LeaseAwareRunControl(
+                run=db_session.get(AgentRun, consumer.run_id), limits=RunLimits(),
+                cancellation_probe=lambda: False, lease_lost_probe=lambda: False,
+            ),
+        )
+    finally:
+        executor.close(wait=False)
+    if boundary == "available":
+        assert result.outcome is ToolDispatchOutcome.REQUESTED
+        assert result.invocation.resource_refs == (RESOURCE,)
+        ToolInvocationRepository(db_session).settle(
+            lease=consumer_lease, invocation_id=result.invocation.id,
+            status=ObservationStatus.SUCCEEDED, model_visible_summary="Read prior work product",
+            artifact_ids=[artifact.id],
+        )
+        db_session.commit()
+        loop = RunLoop(
+            session_factory=factory, registry=registry, context_contributors=(),
+            completion=CompletionGate(CompletionPolicy((), ())), tool_executor=executor,
+            resource_discovery=dispatcher.resource_discovery,
+        )
+        text = "来源已核验。{{cite:" + artifact.id + "}}"
+        assert loop.terminalizer.complete(
+            consumer_lease, consumer.run_id,
+            ModelTurnResult(
+                messages=[TurnAssistantMessage(
+                    item_id="answer", output_index=0, phase="final_answer", status="completed", text=text,
+                )],
+                termination=TurnTermination.COMPLETED,
+            ),
+            disposition=CompletionDisposition.COMPLETE, limitation_codes=[],
+            evidence_artifact_ids=[artifact.id],
+        )
+        db_session.expire_all()
+        answer = loads(db_session.get(AgentRun, consumer.run_id).result_json)["answer"]
+        assert answer["text"] == text
+        assert [item["artifact_id"] for item in answer["evidence"]] == [artifact.id]
+    else:
+        assert result.outcome is ToolDispatchOutcome.SETTLED
+        assert result.provider_output is not None
+        assert '"TOOL_RESOURCE_UNAVAILABLE"' in result.provider_output.output
+
+
+def test_bounded_partial_summary_counts_primary_work_products_only(db_session):
+    admission, lease, turn = _active_run(db_session, "partial-work-product-count")
+    repository = ArtifactRepository(db_session)
+    for visibility in ArtifactVisibility:
+        _markdown(
+            repository, lease=lease, run_id=admission.run_id, turn_id=str(turn.id),
+            visibility=visibility,
+        )
+    db_session.commit()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    assert Terminalizer(session_factory=factory).complete(
+        lease, admission.run_id, ModelTurnResult(),
+        disposition=CompletionDisposition.BOUNDED_PARTIAL,
+        limitation_codes=[CompletionLimitationCode.NO_PROGRESS], evidence_artifact_ids=[],
+    )
+    db_session.expire_all()
+    response = db_session.get(AgentRun, admission.run_id).result_json
+    assert "本次已生成 1 项成果" in response
+    assert "查询结果" not in response
 
 
 def test_relation_lookup_is_exactly_scoped_to_current_run(db_session):

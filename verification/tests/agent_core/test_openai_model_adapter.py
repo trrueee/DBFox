@@ -825,6 +825,12 @@ def test_responses_adapter_classifies_rate_limit_and_preserves_retry_after() -> 
             False,
         ),
         (
+            402,
+            {"error": {"code": "invalid_request_error"}},
+            "MODEL_PROVIDER_QUOTA_EXCEEDED",
+            False,
+        ),
+        (
             403,
             {"error": {"code": "permission_denied"}},
             "MODEL_PROVIDER_PERMISSION_DENIED",
@@ -986,93 +992,31 @@ def test_responses_stream_watchdog_distinguishes_first_event_and_idle_timeout(
     assert client.responses.stream.closed
 
 
-def test_fallback_to_chat_completion_on_responses_404_with_tool_call() -> None:
-    request = httpx.Request("POST", "https://provider.test/v1/responses")
-    response = httpx.Response(404, request=request)
+def test_unsupported_responses_does_not_send_native_items_to_chat() -> None:
+    import json
+    from openai import AsyncOpenAI
 
-    class _FailingResponses:
-        async def create(self, **_request: object) -> object:
-            raise APIStatusError(
-                "route not found",
-                response=response,
-                body={"error": {"code": "route_not_found"}},
-            )
+    requests = []
 
-    completions = _ChatCompletions(
-        [
-            {
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {
-                            "tool_calls": [
-                                {
-                                    "index": 0,
-                                    "id": "call_1",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "verification_inspect",
-                                        "arguments": "{\"table_name\":\"orders\"}",
-                                    },
-                                }
-                            ]
-                        },
-                        "finish_reason": "tool_calls",
-                    }
-                ],
-                "usage": {
-                    "prompt_tokens": 8,
-                    "completion_tokens": 3,
-                    "total_tokens": 11,
-                },
-            }
-        ]
-    )
-    client = SimpleNamespace(
-        responses=_FailingResponses(),
-        chat=SimpleNamespace(completions=completions),
-    )
+    def transport(request):
+        requests.append((request.url.path, json.loads(request.content)))
+        return httpx.Response(404, json={"error": {"code": "route_not_found", "message": "synthetic"}})
 
-    result = TurnStreamAssembler().consume(
-        OpenAIModelAdapter(
-            client=client,  # type: ignore[arg-type]
-            model_name="mimo-v2-pro",
-        ).stream(
-            messages=[{"role": "user", "content": "读取订单表结构"}],
-            tools=[
-                {
-                    "type": "function",
-                    "name": "verification_inspect",
-                    "description": "读取表结构",
-                    "parameters": {"type": "object", "properties": {}},
-                }
-            ],
-        )
-    )
-
-    assert result.tool_calls[0].id == "call_1"
-    assert result.tool_calls[0].name == "verification_inspect"
-    assert result.tool_calls[0].arguments == {"table_name": "orders"}
-    assert result.output_items == [
-        {
-            "type": "function_call",
-            "id": "call_1",
-            "call_id": "call_1",
-            "name": "verification_inspect",
-            "arguments": "{\"table_name\":\"orders\"}",
-            "status": "completed",
-        }
-    ]
-    assert result.messages == []
-    assert result.usage == {
-        "prompt_tokens": 8,
-        "completion_tokens": 3,
-        "total_tokens": 11,
-    }
-    assert completions.request is not None
-    assert "messages" in completions.request
-    assert "input" not in completions.request
-    assert "store" not in completions.request
+    client = AsyncOpenAI(api_key="synthetic", base_url="https://provider.test/v1", max_retries=0,
+                         http_client=httpx.AsyncClient(transport=httpx.MockTransport(transport)))
+    messages = [{"role": "user", "content": "inspect"},
+                {"type": "function_call", "call_id": "call", "name": "inspect", "arguments": "{}"},
+                {"type": "function_call_output", "call_id": "call", "output": "ok"}]
+    tools = [{"type": "function", "name": "inspect", "parameters": {"type": "object", "properties": {}}}]
+    items = list(OpenAIModelAdapter(client=client, model_name="synthetic", owns_client=True).stream(
+        messages=messages, tools=tools,
+    ))
+    assert [path for path, _ in requests] == ["/v1/responses"]
+    assert requests[0][1]["input"] == messages
+    assert requests[0][1]["tools"] == tools
+    assert requests[0][1]["store"] is False
+    assert items[-1].kind is TurnStreamKind.ERROR
+    assert not any(item.kind is TurnStreamKind.TOOL_CALL_END for item in items)
 
 
 @pytest.mark.parametrize("model", ["gpt-5.4", "gpt-5.4-2026-03-05", "gpt-5.4-mini", "gpt-6-astra"])

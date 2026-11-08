@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import React from "react";
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -31,6 +31,78 @@ afterEach(() => {
 });
 
 describe("dbfox.data System DLC frontend fixture", () => {
+  it.each([false, true])("keeps catalog loading consistent when source changed=%s", async (sourceChanged) => {
+    initExtensionHostGlobalSdk();
+    const source = await fixtureSource();
+    const module = await import(/* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(source).toString("base64")}#catalog-generation-${sourceChanged}`) as DlcModule;
+    let generation = 1;
+    let catalogCalls = 0;
+    let releaseCatalog!: (value: unknown) => void;
+    const catalog = (name: string) => ({ catalog_status: "ready", tables: [{ table_id: name, qualified_name: name, columns_count: 1 }], has_more: false, next_cursor: null });
+    const staged = createStagedExtensionHost("dbfox.data", { openDockTab: vi.fn(),
+      invokeOperation: async <TOutput,>(_id: string, operation: string) => {
+        if (operation === "profiles.list") return { profiles: [{
+          profile: { id: "profile", name: "Warehouse", provider: "sqlite", status: "active", connection_generation: 1 },
+          databases: [{ id: "database", display_name: "analytics", database_name: generation === 1 ? "A" : "B", status: "active", resource_generation: generation }],
+        }] } as TOutput;
+        if (operation === "catalog.refresh") return { status: "ready" } as TOutput;
+        if (operation === "catalog.tables") {
+          if (++catalogCalls === 1) return await new Promise<TOutput>(resolve => { releaseCatalog = value => resolve(value as TOutput); });
+          return catalog("only_in_B") as TOutput;
+        }
+        throw new Error(`Unexpected operation ${operation}`);
+      },
+    });
+    vi.stubGlobal("document", undefined);
+    await module.register?.(staged.host);
+    vi.unstubAllGlobals();
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    const connector = staged.getContributions().connectors[0];
+    render(React.createElement(React.Fragment, null, connector.render({ projectId: "catalog-generation" })));
+    await screen.findByRole("treeitem", { name: "Warehouse" });
+    fireEvent.click(await screen.findByRole("button", { name: "analytics" }));
+    await waitFor(() => expect(catalogCalls).toBe(1));
+    generation = sourceChanged ? 2 : 1;
+    await act(async () => { await connector.listResources!({ projectId: "catalog-generation" }); });
+    await act(async () => { releaseCatalog(catalog("only_in_A")); });
+    if (sourceChanged) {
+      const branch = screen.getByRole("treeitem", { name: "analytics" });
+      if (branch.getAttribute("aria-expanded") !== "true") fireEvent.click(screen.getByRole("button", { name: "analytics" }));
+    }
+    expect(await screen.findByRole("treeitem", { name: sourceChanged ? "only_in_B" : "only_in_A" })).toBeTruthy();
+    if (sourceChanged) expect(screen.queryByRole("treeitem", { name: "only_in_A" })).toBeNull();
+    expect(catalogCalls).toBe(sourceChanged ? 2 : 1);
+    await module.deactivate?.();
+  });
+
+  it("does not replace a newer database generation with a late profile response", async () => {
+    initExtensionHostGlobalSdk();
+    const source = await fixtureSource();
+    const module = await import(/* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(source).toString("base64")}#profile-generation`) as DlcModule;
+    const replies: Array<(value: unknown) => void> = [];
+    const staged = createStagedExtensionHost("dbfox.data", {
+      openDockTab: vi.fn(),
+      invokeOperation: async <TOutput,>() => new Promise<TOutput>(resolve => {
+        replies.push(value => resolve(value as TOutput));
+      }),
+    });
+    vi.stubGlobal("document", undefined);
+    await module.register?.(staged.host);
+    const connector = staged.getContributions().connectors[0];
+    const older = connector.listResources!({ projectId: "project-generation" });
+    const newer = connector.listResources!({ projectId: "project-generation" });
+    await vi.waitFor(() => expect(replies).toHaveLength(2));
+    const result = (generation: number, databaseName: string) => ({ profiles: [{
+      profile: { id: "profile", name: "profile", provider: "sqlite", status: "active", connection_generation: 1 },
+      databases: [{ id: "database", display_name: databaseName, database_name: databaseName, status: "active", resource_generation: generation }],
+    }] });
+    replies[1](result(2, "B"));
+    expect(await newer).toMatchObject([{ id: "database", name: "B" }]);
+    replies[0](result(1, "A"));
+    expect(await older).toMatchObject([{ id: "database", name: "B" }]);
+    await module.deactivate?.();
+  });
+
   it("registers the hosted Connection → Database → Table workbench", async () => {
     initExtensionHostGlobalSdk();
     vi.stubGlobal("document", undefined);

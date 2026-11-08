@@ -70,7 +70,7 @@ def test_prompt_keeps_user_context_out_of_system_role():
         definition=DEFAULT_AGENT_DEFINITION,
         context=_context(),
     ).hash
-    assert bundle.version == "4.0"
+    assert bundle.version == "4.1"
     assert "requested outcome, explicit constraints" in bundle.system_prompt
     assert "denominator" not in bundle.system_prompt
     assert "authorized Resource" in bundle.system_prompt
@@ -293,6 +293,7 @@ def test_observed_artifact_can_be_embedded_in_final_answer():
     [
         "正文内 {{artifact:artifact_visualization}} 不是独立块。",
         "{{artifact:artifact_visualization_???}}",
+        "{{artifact:f6309cf059814aa19d9c7fae2b4ee821}}",
         "{{artifact:artifact_visualization}}\n\n{{artifact:artifact_visualization}}",
     ],
 )

@@ -1,4 +1,7 @@
-import { Folder, Plus } from "lucide-react";
+import {
+  FolderSimpleIcon,
+  PlusIcon,
+} from "@/components/icons";
 import { Sidebar, SidebarContent, SidebarHeader, SidebarNavRow } from "../../components/ui";
 import { ReferenceCard } from "../../components/resources/ReferenceCard";
 import { UnifiedComposer } from "../../components/agent/UnifiedComposer";
@@ -11,8 +14,8 @@ export function AppearancePreview() {
       <Sidebar className="appearance-workspace-preview__nav">
         <SidebarHeader><strong>DBFox</strong></SidebarHeader>
         <SidebarContent>
-          <SidebarNavRow icon={<Plus />} label="新任务" active />
-          <SidebarNavRow icon={<Folder />} label="项目" />
+          <SidebarNavRow icon={<PlusIcon />} label="新任务" active />
+          <SidebarNavRow icon={<FolderSimpleIcon />} label="项目" />
         </SidebarContent>
       </Sidebar>
       <div className="appearance-workspace-preview__main">
@@ -23,7 +26,7 @@ export function AppearancePreview() {
           <tbody><tr><td>1024</td><td>已完成</td><td>¥ 328</td></tr></tbody></table></div>
         <code>SELECT * FROM orders;</code>
         <UnifiedComposer value="" onChange={() => {}} onSubmit={() => {}} onAddAttachment={() => {}}
-          placeholder="输入你的问题…" ariaLabel="预览输入框" compact />
+          placeholder="" ariaLabel="预览输入框" compact />
       </div>
     </div>
   </aside>;

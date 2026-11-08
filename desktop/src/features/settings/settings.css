@@ -6,7 +6,9 @@
   flex-direction: column;
   box-sizing: border-box;
   border-right: 1px solid var(--hairline);
-  background: var(--sidebar-bg);
+  background: var(--surface-chrome);
+  background-image: var(--surface-sheen);
+  backdrop-filter: var(--material-filter);
   padding: 0 12px 12px;
 }
 
@@ -26,7 +28,7 @@
   min-height: var(--app-chrome-height);
   align-items: center;
   gap: 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   padding: 0 9px;
   font-size: var(--ui-font-control);
 }
@@ -52,7 +54,7 @@
 }
 
 .settings-sidebar__title svg {
-  color: var(--color-primary);
+  color: var(--color-text-secondary);
 }
 
 .settings-sidebar__title h2 {
@@ -72,7 +74,7 @@
   min-height: 40px;
   align-items: center;
   gap: 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   padding: 0 9px;
   font-size: var(--ui-font-control);
   font-weight: 500;
@@ -86,45 +88,55 @@
 }
 
 .settings-sidebar__item.is-active {
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  background: var(--nav-active-bg);
+  background-image: var(--surface-sheen);
+  box-shadow: var(--shadow-selection);
   color: var(--color-text-primary);
   font-weight: 600;
 }
 
 .settings-sidebar__item.is-active svg {
-  color: var(--color-primary);
+  color: var(--color-text-primary);
 }
+
+.settings-sidebar__item:focus-visible { box-shadow: var(--focus-ring); }
 
 .settings-page {
   display: block;
   width: 100%;
   height: 100%;
   overflow: auto;
-  background: var(--surface-workspace);
+  background: var(--surface-canvas);
 }
 
 .settings-page__inner {
   box-sizing: border-box;
-  width: min(100%, 920px);
+  width: min(100%, 1120px);
   min-height: 100%;
   margin: 0 auto;
-  padding: 48px 28px 64px;
+  padding: 32px 40px 64px;
 }
 
 .settings-page__header {
-  padding: 0 0 38px;
+  padding: 0 0 12px;
 }
 
 .settings-page__header h1 {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: var(--ui-font-page-title);
+  font-size: var(--ui-font-display);
+  font-weight: 600;
   line-height: 32px;
 }
 
 .settings-page__content {
   width: 100%;
   min-height: 0;
+}
+
+.settings-sidebar__back,
+.settings-sidebar__item {
+  transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out);
 }
 
 .settings-page__loading {

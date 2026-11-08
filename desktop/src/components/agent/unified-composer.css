@@ -7,6 +7,12 @@
 .dbfox-composer__prompt-input {
   display: grid;
   gap: var(--space-2);
+  background-image: var(--surface-sheen);
+  transition: border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out);
+}
+
+.dbfox-composer__prompt-input:focus-within {
+  box-shadow: var(--shadow-md), 0 0 0 3px color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 .dbfox-composer textarea {
@@ -52,6 +58,7 @@
 .dbfox-composer__model-status { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); color: var(--color-text-muted); font-size: var(--ui-font-caption); }
 
 @container (max-width: 520px) {
+  .dbfox-composer__prompt-input { padding: var(--space-2); }
   .dbfox-composer__project { max-width: 96px; }
   .dbfox-composer__model { max-width: 112px; }
   .dbfox-composer:has(.dbfox-composer__mode) .dbfox-composer__project > span,
@@ -74,13 +81,21 @@
   color: var(--color-text-secondary);
 }
 
+.dbfox-composer__primary-action {
+  transition: background-color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out), opacity var(--motion-fast) var(--ease-out);
+}
+
+.dbfox-composer__primary-action:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
 .dbfox-composer__attachment-action svg,
 .dbfox-composer__primary-action svg {
   width: var(--icon-size-lg);
   height: var(--icon-size-lg);
 }
 
-.dbfox-composer__primary-action .lucide-square {
+.dbfox-composer__primary-action [data-ui-icon="square"] {
   width: var(--icon-size-sm);
   height: var(--icon-size-sm);
 }

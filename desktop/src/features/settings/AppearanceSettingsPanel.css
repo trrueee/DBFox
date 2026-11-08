@@ -41,7 +41,7 @@
   align-items: center;
   gap: 10px;
   border: 1px solid var(--control-border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
   outline: none;
   background: var(--control-bg);
   color: var(--color-text-secondary);
@@ -65,9 +65,9 @@
 
 .appearance-theme-option[data-state="checked"],
 .appearance-neutral-option[data-state="checked"] {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 55%, var(--line-subtle));
+  background: var(--surface-raised);
+  color: var(--color-text-primary);
 }
 
 .appearance-theme-option__copy,

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from alembic import command
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 
 from engine.db import build_alembic_config, build_metadata_engine
@@ -207,7 +208,7 @@ def test_alembic_revision_commits_dlc_data_before_recording_head(
         ).fetchone()[0] == 1
         assert source.execute("SELECT version_num FROM alembic_version").fetchone()[
             0
-        ] == ("f7a8b9c0d0ed")
+        ] == ScriptDirectory.from_config(config).get_current_head()
     target_path = tmp_path / "dlcs" / "data" / "dbfox.github" / "state.sqlite3"
     with sqlite3.connect(target_path) as target:
         assert target.execute(

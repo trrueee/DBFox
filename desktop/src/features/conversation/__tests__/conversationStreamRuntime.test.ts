@@ -35,6 +35,28 @@ function snapshot(status: "running" | "completed"): ConversationDetail {
 }
 
 describe("ConversationStreamRuntime", () => {
+  it("continues with a queued successor when the original run finishes", async () => {
+    const first = snapshot("completed");
+    const next = { ...first.runs[0], id: "run-2", input_id: "input-2", session_sequence: 2,
+      status: "queued" as const };
+    const stream = vi.fn().mockResolvedValue(8);
+    const runtime = new ConversationStreamRuntime({
+      stream,
+      snapshot: vi.fn()
+        .mockResolvedValueOnce({ ...first, cursor: 8, runs: [...first.runs, next] })
+        .mockResolvedValueOnce({ ...first, cursor: 12, runs: [...first.runs, { ...next, status: "completed" }] }),
+      wait: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await runtime.follow("conversation-1", "run-1", 0, { applyEvents: vi.fn(), loadSnapshot: vi.fn() });
+
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(stream).toHaveBeenNthCalledWith(2, "conversation-1", expect.objectContaining({
+      targetRunId: "run-2", afterSequence: 8,
+    }));
+    expect(runtime.lifecycle.get("conversation-1")).toBeUndefined();
+  });
+
   it("owns retries and finishes lifecycle from an authoritative snapshot", async () => {
     const stream = vi.fn()
       .mockRejectedValueOnce(new TypeError("temporary disconnect"))

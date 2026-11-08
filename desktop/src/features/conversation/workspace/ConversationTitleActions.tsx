@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Pencil } from "lucide-react";
+import {
+  PencilSimpleIcon,
+} from "@/components/icons";
 import { Alert, AlertDescription, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label } from "../../../components/ui";
 import { useConversationStore } from "../../../stores/conversationStore";
 import { getUserErrorMessage } from "../../../lib/api/client";
@@ -12,7 +14,7 @@ export function ConversationTitleActions({ conversationId, title }: { conversati
   const rename = useConversationStore(state => state.renameConversation);
   return <>
     <Button type="button" variant="ghost" size="icon-sm" className="titlebar-rename" aria-label="重命名对话" title="重命名对话"
-      onClick={() => { setValue(title); setError(null); setOpen(true); }}><Pencil size={14} aria-hidden="true" /></Button>
+      onClick={() => { setValue(title); setError(null); setOpen(true); }}><PencilSimpleIcon size={16} aria-hidden="true" /></Button>
     <Dialog open={open} onOpenChange={value => { if (!saving) setOpen(value); }}>
       <DialogContent>
         <form onSubmit={async event => {

@@ -145,7 +145,6 @@ def platform_builtin_contributions() -> BuiltinContributionSet:
     from engine.tools.builtin.registry import (
         register_conversation_functions,
         register_core_functions,
-        register_remote_job_extension,
     )
 
     registry = ToolRegistry(
@@ -153,10 +152,9 @@ def platform_builtin_contributions() -> BuiltinContributionSet:
     )
     register_core_functions(registry)
     register_conversation_functions(registry)
-    register_remote_job_extension(registry)
     from engine.attachments import ATTACHMENT_RESOURCE_KIND, AttachmentService
     return BuiltinContributionSet(
-        identifiers=("dbfox.core", "dbfox.conversation", "dbfox.remote_job"),
+        identifiers=("dbfox.core", "dbfox.conversation"),
         resource_resolvers=(ResourceResolverContribution(
             kind=ATTACHMENT_RESOURCE_KIND, resolver=lambda db, ref: AttachmentService(db).resolve(ref),
             owner_id="dbfox.core", binding="metadata_session",

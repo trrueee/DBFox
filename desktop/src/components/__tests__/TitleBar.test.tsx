@@ -15,7 +15,7 @@ vi.mock("../../lib/desktopHost", () => ({
   getDesktopWindowMaximized: vi.fn().mockResolvedValue(false),
   isEngineDesktopHost: vi.fn().mockReturnValue(true),
   minimizeDesktopWindow: vi.fn().mockResolvedValue(undefined),
-  subscribeDesktopWindowState: vi.fn().mockResolvedValue(() => {}),
+  subscribeDesktopWindowState: vi.fn().mockReturnValue(() => {}),
   toggleMaximizeDesktopWindow: vi.fn().mockResolvedValue(true),
 }));
 
@@ -54,5 +54,26 @@ describe("workspace window chrome", () => {
     expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
     expect(getDesktopWindowMaximized).not.toHaveBeenCalled();
+  });
+
+  it("releases the native listener when unmounted before the initial IPC read completes", async () => {
+    let finish!: (value: boolean) => void;
+    const unlisten = vi.fn();
+    vi.mocked(getDesktopWindowMaximized).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    vi.mocked(subscribeDesktopWindowState).mockReturnValueOnce(unlisten);
+    const view = render(<TitleBar />);
+    view.unmount();
+    expect(unlisten).toHaveBeenCalledOnce();
+    await act(async () => finish(true));
+    expect(subscribeDesktopWindowState).toHaveBeenCalledOnce();
+  });
+
+  it("does not overwrite a newer native event with a stale initial read", async () => {
+    let finish!: (value: boolean) => void;
+    vi.mocked(getDesktopWindowMaximized).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    render(<TitleBar />);
+    act(() => vi.mocked(subscribeDesktopWindowState).mock.calls[0][0](true));
+    await act(async () => finish(false));
+    expect(screen.getByRole("button", { name: "还原" })).toBeTruthy();
   });
 });

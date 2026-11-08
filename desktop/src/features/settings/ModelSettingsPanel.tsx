@@ -1,6 +1,7 @@
 import { LlmConfigPanel } from "../../components/LlmConfigPanel";
 import { useApiConfig } from "../../hooks/useApiConfig";
 import { testDraftLlmConnection } from "../appShell/llmDraftConnection";
+import { ApiError } from "../../lib/api/client";
 
 interface ModelSettingsPanelProps {
   showToast: (message: string) => void;
@@ -25,7 +26,11 @@ export function ModelSettingsPanel({ showToast }: ModelSettingsPanelProps) {
           return true;
         }
         showToast(`连接失败 [${result.error_code || "UNKNOWN"}]: ${result.error_message || "未知错误"}`);
-        return false;
+        throw new ApiError(
+          result.error_message || "模型连接测试未通过，请检查服务地址、凭据和模型名称。",
+          undefined,
+          result.error_code || "LLM_CONNECTION_FAILED",
+        );
       }}
     />
   );

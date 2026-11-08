@@ -40,7 +40,7 @@ class PathInput(Contract):
 
 class FileReadInput(Contract):
     path: str = Field(min_length=1, max_length=1024)
-    offset: int = Field(default=0, ge=0, le=1_000_000)
+    offset: int = Field(default=0, ge=0, le=1_048_576)
     limit: int = Field(default=12_000, ge=1, le=12_000)
 
 
@@ -66,7 +66,7 @@ class FileReadOutput(Contract):
 
 
 class FileSearchInput(Contract):
-    query: str = Field(min_length=1, max_length=200)
+    query: str = Field(default="", max_length=200, description="Literal case-insensitive name/path substring for recursive search; empty lists immediate children of path_prefix.")
     path_prefix: str = Field(default="", max_length=1024)
     limit: int = Field(default=20, ge=1, le=100)
 
@@ -82,7 +82,10 @@ class FileSearchOutput(Contract):
 class FileWriteInput(Contract):
     path: str = Field(min_length=1, max_length=1024)
     content: str = Field(max_length=1_048_576)
-    expected_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    expected_sha256: str | None = Field(
+        default=None, min_length=64, max_length=64,
+        description="Omit only to create a new file; replacing an existing file requires its current sha256 from file_read.",
+    )
 
 
 class FileEditInput(Contract):

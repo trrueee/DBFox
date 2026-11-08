@@ -45,7 +45,7 @@ class DataCatalogWorkbench:
         return self._store.resolve_project_database(project_id, database_id)
 
     def overview(self, handle: QuerySourceHandle) -> CatalogOverviewOutput:
-        state = self._store.catalog_state(handle.id)
+        state = self._store.catalog_state(handle.id, expected_resource_version=handle.scope_version)
         initialized = state["refreshed_at"] is not None
         return CatalogOverviewOutput(
             database_id=handle.id,
@@ -74,7 +74,7 @@ class DataCatalogWorkbench:
         handle: QuerySourceHandle,
         request: SchemaListInput,
     ) -> SchemaListOutput:
-        state = self._store.catalog_state(handle.id)
+        state = self._store.catalog_state(handle.id, expected_resource_version=handle.scope_version)
         cursor = request.cursor
         rows, has_more = self._store.list_catalog_tables(
             handle.id,
@@ -85,6 +85,7 @@ class DataCatalogWorkbench:
             ),
             limit=request.limit,
             name_filter=request.name_filter,
+            expected_resource_version=handle.scope_version,
         )
         tables = [self._table_summary(row) for row in rows]
         return SchemaListOutput(
@@ -107,8 +108,8 @@ class DataCatalogWorkbench:
         )
 
     def table(self, handle: QuerySourceHandle, name: str) -> CatalogTableDetail:
-        table, columns = self._store.resolve_catalog_table(handle.id, name)
-        state = self._store.catalog_state(handle.id)
+        table, columns = self._store.resolve_catalog_table(handle.id, name, expected_resource_version=handle.scope_version)
+        state = self._store.catalog_state(handle.id, expected_resource_version=handle.scope_version)
         return CatalogTableDetail(
             database_id=handle.id,
             table={key: value for key, value in table.items() if key != "database_resource_id"},
@@ -136,8 +137,8 @@ class DataCatalogWorkbench:
             invocation_id=invocation_id,
             cancellation_probe=cancellation_probe,
         )
-        result = self._store.replace_catalog(inventory)
-        state = self._store.catalog_state(handle.id)
+        result = self._store.replace_catalog(inventory, expected_resource_version=handle.scope_version)
+        state = self._store.catalog_state(handle.id, expected_resource_version=handle.scope_version)
         return CatalogRefreshOutput(
             database_id=handle.id,
             status="ready",

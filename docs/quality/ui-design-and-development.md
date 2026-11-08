@@ -4,12 +4,11 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-28
+> 最后核验：2026-11-07
 >
 > 适用范围：Desktop Core UI、Agent Workspace、Workbench、Dock、Artifact Renderer 与内置 DLC 前端
 
-本文定义 DBFox 在已完成第一轮市场驱动重构后的 UI 开发方式。目标是持续直接采用成熟、可核验的
-设计和实现，删除较弱的重复实现，同时保持 Core/DLC、Runtime、状态和安全边界不被展示组件反向控制。
+本文以 Apple Human Interface Guidelines 为全产品的设计基础。每个功能先设计用户任务、信息层级、默认状态、渐进展开、反馈和恢复路径，再落实控件与材质；不把 HIG 简化为换色或叠加玻璃。实现继续复用成熟、可核验的组件，保持 Core/DLC、Runtime、状态和安全边界。
 
 ## 1. 总原则
 
@@ -45,17 +44,36 @@ UI 变更必须遵守以下顺序：
 
 | 变化轴 | 权威方案 | 禁止新增 |
 | --- | --- | --- |
-| 字体、字号、行高、默认颜色 | Fluent 2 tokens 和 `desktop/src/styles/tokens.css` | Feature 字体栈、在线字体、第二主题系统 |
+| 字体、字号、行高、默认颜色 | HIG 启发的 `desktop/src/styles/tokens.css` 与本机字体 | Feature 字体栈、在线字体、第二主题系统 |
 | Button、Dialog、Tabs、Select、Toolbar、Feedback | shadcn + Radix UI | 同职责自研 primitives |
 | Composer、Message、Sources、Approval | Prompt Kit + AI Elements | 第二套 Chat/Message Runtime |
 | ToolGroup、Plan、Question | Agent Elements | 把 RunItem 映射成第三方 AI SDK 消息模型 |
 | Tree | Zag Tree View | DLC 自建 Tree 状态机 |
 | DataGrid | TanStack Table + Virtual | 第二表格引擎、结果数据副本 |
 | Work Surface 与 Dock | react-resizable-panels + Radix Tabs | 自研 resize、第二布局 Store |
-| 图标 | Lucide | emoji 或混合图标体系 |
+| 功能图标 | 选定的 Phosphor 官方 SVG → 原生 SVG sprite；Core `components/icons`、DLC `host.ui.Icon` | 字符按钮、手绘通用图标、额外图标 runtime |
+| 文件与品牌图标 | 既有标准文件资产、Simple Icons + 固定版本 Lobe 品牌资产 | 自造品牌标记、在线图标服务、微小字母占位 |
 
 具体来源、许可证和本地落点见[组件采用报告](../ui/component-adoption-report.md)。字体与颜色只以
-[字体与颜色审计](../ui/typography-color-audit.md)和生产 token 为准。
+[Apple HIG 工作台](apple-hig-workbench-20261107.md)和生产 token 为准；旧字体审计仅保留历史证据。
+
+2026-11-07 的比例、材质与动效约定：界面默认 15px、对话正文 16px，数据/代码默认 14px；
+常规功能图标 20px，紧凑动作 16/18px，标题图标可用 22px，原生窗口控件保留平台比例。
+合法的已保存字号与布局偏好保持原值。设置标题和内容共享容器；Dock 初始宽度按剩余舞台的
+38% 和视图 preferredWidth 的较小者请求，并满足对话 520px、Dock 340px 与分隔条约束；
+用户拖动尺寸优先。舞台不足 868px 时使用紧凑切换，保持编辑器挂载与草稿。
+
+导航、工具栏和临时浮层构成独立的功能层；对话、表格、编辑器、审批内容使用稳定的内容表面。支持 backdrop-filter 且系统允许时启用轻透材质；高对比度、forced colors 与减少透明度回到实色。进入、反馈和退出复用 140/200/260ms 令牌，不动画化分栏宽度和流式 token。当前逐功能设计与证据见 [Apple HIG 工作台](apple-hig-workbench-20261107.md)。
+
+### 2.1 每个功能的设计顺序
+
+1. 明确用户要完成的任务、当前对象和权威状态。
+2. 给出最短可恢复路径，选择一个主动作；频繁操作就近完成。
+3. 只默认展示足以判断和行动的信息；高级选项、原始参数和历史细节按需展开。
+4. 分别设计等待、空内容、成功、失败、取消和返回路径，不能用动画预测成功。
+5. 用位置、形状、文字或图标形成层级；图标保持统一细节、重量与光学尺寸，品牌和文件身份使用真实标志。
+6. 完成键盘、焦点、窄窗口和辅助功能设计；后台请求不得抢走未完成输入。
+7. 通过实际功能路径检查。专业内容如乐谱、像素画布、代码和图表保留领域语义，玻璃不覆盖可读内容。
 
 ## 3. 何时需要新调查
 
@@ -87,7 +105,7 @@ UI 变更必须遵守以下顺序：
 只允许在真实边界适配，例如：
 
 - 将上游组件接到 DBFox 的权威 props 和事件；
-- 将上游视觉值替换为现有 Fluent/DBFox semantic tokens；
+- 将上游视觉值替换为现有 DBFox semantic tokens；
 - 在 DLC Host 与 Renderer sandbox 的正式边界注入能力；
 - 移除上游强制依赖的第二套 Runtime 或主题。
 
@@ -120,7 +138,7 @@ Core 拥有：
 
 - App Shell、Main Surface 和 Dock 容器；
 - DLC View/Renderer/Command contribution 的 Host registry、激活/卸载和通用 chrome；
-- Fluent typography、semantic colors、spacing 和 focus grammar；
+- HIG-informed typography、semantic colors、spacing 和 focus grammar；
 - Button、Dialog、Tabs、Toolbar、Toast、Empty、Loading、Error；
 - Agent Timeline、Composer、Artifact frame 和通用 Renderer context；
 - 全局响应式、缩放、高对比度和 reduced-motion 合同。
@@ -145,7 +163,7 @@ payload 镜像。相同 Artifact 在不同 Surface 共享身份：
 - `fullscreen`：只在真实分析需求存在时提供，不创建新的 Artifact 内容副本。
 
 可视化新增能力采用成熟 Vega-Lite/Vega 图形运行时；KPI、标题、说明、Toolbar、错误和表格继续直接
-使用现有 React、Fluent、Radix 和 TanStack 基线。不得为图表重新建立字体、颜色、布局 Store 或 DataGrid。
+使用现有 React、Radix 和 TanStack 基线。不得为图表重新建立字体、颜色、布局 Store 或 DataGrid。
 
 生产 CSP 禁止 inline style element。`style-src-attr` 仅为经过版本固定和源码审计的 Vega Canvas/SVG
 renderer 保留；这不是业务组件的通用许可。Host 与 DLC 业务 UI 继续使用共享 token、静态 class 或受控

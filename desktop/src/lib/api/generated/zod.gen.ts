@@ -247,17 +247,6 @@ export const zConversationDeleteResponse = z.object({
 });
 
 /**
- * ConversationSummaryResponse
- */
-export const zConversationSummaryResponse = z.object({
-    id: z.string(),
-    project_id: z.string().nullish(),
-    selected_artifact_id: z.string().nullish(),
-    title: z.string(),
-    updated_at: z.string()
-});
-
-/**
  * CredentialKind
  */
 export const zCredentialKind = z.enum([
@@ -1051,6 +1040,19 @@ export const zRunStatus = z.enum([
 ]);
 
 /**
+ * ConversationSummaryResponse
+ */
+export const zConversationSummaryResponse = z.object({
+    cursor: z.int().gte(0).optional().default(0),
+    id: z.string(),
+    project_id: z.string().nullish(),
+    run_status: zRunStatus.nullish(),
+    selected_artifact_id: z.string().nullish(),
+    title: z.string(),
+    updated_at: z.string()
+});
+
+/**
  * RunProjection
  *
  * Canonical public Run state shared by snapshots and lifecycle events.
@@ -1709,6 +1711,16 @@ export const zApiCreateProjectApiV1ProjectsPostBody = zProjectCreateRequest;
  * Successful Response
  */
 export const zApiCreateProjectApiV1ProjectsPostResponse = zProjectResponse;
+
+export const zApiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGetPath = z.object({
+    project_id: z.string(),
+    artifact_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zApiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGetResponse = zArtifact;
 
 export const zApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetPath = z.object({
     project_id: z.string()

@@ -42,10 +42,18 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 2px;
-  padding: 4px 6px 4px 8px;
-  border-bottom: 1px solid var(--hairline);
-  background: var(--agent-surface-muted);
+  margin: var(--space-2);
+  padding: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-chrome);
+  background-image: var(--surface-sheen);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--top-highlight);
+  backdrop-filter: var(--material-filter);
 }
+
+.workspace-dock__return-conversation { display: none; }
+.app-v3-stage[data-compact="true"] .workspace-dock__return-conversation { display: inline-flex; flex-shrink: 0; }
 
 .workspace-dock__tabs {
   display: flex;
@@ -55,6 +63,17 @@
   gap: 2px;
   /* Visibility is planned by the tab window (direct tabs + overflow menu),
      not by a hidden horizontal scrollbar. */
+  overflow: hidden;
+}
+
+.workspace-dock__tab-list {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: stretch;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
   overflow: hidden;
 }
 
@@ -72,18 +91,7 @@
   border: 0;
   border-radius: var(--radius-row);
   color: var(--color-text-secondary);
-}
-
-.workspace-dock__tab::after {
-  content: "";
-  position: absolute;
-  right: 8px;
-  bottom: 0;
-  left: 8px;
-  height: 2px;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  transition: background-color var(--motion-fast) ease-out;
+  transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out);
 }
 
 .workspace-dock__tab:hover {
@@ -91,15 +99,13 @@
   color: var(--color-text-primary);
 }
 
-/* Active = text emphasis + soft 2px indicator (not color-only, not a card). */
+/* One selection material across navigation, tabs and view switches. */
 .workspace-dock__tab.is-active {
-  background: var(--surface-workspace);
+  background: var(--surface-raised);
+  background-image: var(--surface-sheen);
+  box-shadow: var(--shadow-sm);
   color: var(--color-text-primary);
   font-weight: 500;
-}
-
-.workspace-dock__tab.is-active::after {
-  background: var(--intent-accent);
 }
 
 .workspace-dock__tab-main {
@@ -119,7 +125,7 @@
 }
 
 .workspace-dock__tab-main:focus-visible,
-.workspace-dock__tab-close:focus-visible,
+.workspace-dock__close:focus-visible,
 .workspace-dock__collapse:focus-visible,
 .workspace-dock__fullscreen:focus-visible,
 .workspace-dock__expand:focus-visible,
@@ -155,29 +161,7 @@
 .workspace-dock__tab.is-preview .workspace-dock__tab-title { font-style: italic; }
 .workspace-dock__tab-icon > :is(svg, img) { width: 16px; height: 16px; }
 
-.workspace-dock__tab-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 auto;
-  margin-right: 3px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  opacity: 0.62;
-}
-
-.workspace-dock__tab-close:hover {
-  background: var(--control-bg-hover);
-  color: var(--color-text-primary);
-  opacity: 1;
-}
-
+.workspace-dock__close,
 .workspace-dock__collapse,
 .workspace-dock__fullscreen,
 .workspace-dock__expand,
@@ -197,6 +181,7 @@
   cursor: pointer;
 }
 
+.workspace-dock__close:hover,
 .workspace-dock__collapse:hover,
 .workspace-dock__fullscreen:hover,
 .workspace-dock__expand:hover,

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  CheckCircle2,
-  CircleAlert,
-  Database,
-  FileCode2,
-  FolderTree,
-  Inbox,
-  TriangleAlert,
-} from "lucide-react";
+  CheckCircleIcon,
+  WarningCircleIcon,
+  DatabaseIcon,
+  FileCodeIcon,
+  TreeStructureIcon,
+  TrayIcon,
+  WarningIcon,
+} from "@/components/icons";
 
 import { AgentPlan } from "../components/agent-elements/AgentPlan";
 import { AgentQuestion } from "../components/agent-elements/AgentQuestion";
@@ -200,7 +200,7 @@ export function ComponentComparison() {
           <p>这里只展示实际采用的上游源码；没有真实实现的类别明确标为待调研。</p>
         </div>
         <div className="component-comparison__decision" role="note">
-          <CircleAlert size={16} aria-hidden="true" />
+          <WarningCircleIcon size={16} aria-hidden="true" />
           <span>禁止手写候选仿制</span>
         </div>
       </header>
@@ -310,7 +310,7 @@ function FeedbackComparison({ state }: { state: ComparisonState }) {
         ) : state === "empty" ? (
           <Empty className="component-comparison__empty">
             <EmptyHeader>
-              <EmptyMedia variant="icon"><Inbox aria-hidden="true" /></EmptyMedia>
+              <EmptyMedia variant="icon"><TrayIcon aria-hidden="true" /></EmptyMedia>
               <EmptyTitle>暂无查询结果</EmptyTitle>
               <EmptyDescription>运行只读查询后，结果会显示在这里。</EmptyDescription>
             </EmptyHeader>
@@ -336,7 +336,7 @@ function FeedbackComparison({ state }: { state: ComparisonState }) {
             onRetry={() => undefined}
           />
         ) : (
-          <Alert role="status"><CheckCircle2 aria-hidden="true" /><AlertTitle>结果已保存</AlertTitle><AlertDescription>已保留 3 个可复核结果，可在工作区继续查看。</AlertDescription></Alert>
+          <Alert role="status"><CheckCircleIcon aria-hidden="true" /><AlertTitle>结果已保存</AlertTitle><AlertDescription>已保留 3 个可复核结果，可在工作区继续查看。</AlertDescription></Alert>
         )}
       </ComparisonCandidate>
     </ComparisonGrid>
@@ -616,7 +616,7 @@ function RuntimeComparison({ state }: { state: ComparisonState }) {
       <ComparisonCandidate title="Adopted production" source="Radix Progress + shadcn/ui Alert / Spinner" decision="ADOPT">
         <div className="component-comparison__runtime" aria-busy={live || undefined}>
           <Alert variant={state === "failed" ? "destructive" : "default"} role={state === "failed" ? "alert" : "status"}>
-            {live ? <Spinner role="presentation" aria-hidden="true" aria-label={undefined} /> : state === "failed" ? <TriangleAlert aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+            {live ? <Spinner role="presentation" aria-hidden="true" aria-label={undefined} /> : state === "failed" ? <WarningIcon aria-hidden="true" /> : <CheckCircleIcon aria-hidden="true" />}
             <AlertTitle>{title}</AlertTitle>
             <AlertDescription>{state === "failed" ? "可重试启动；诊断信息不会公开凭据或运行时令牌。" : live ? "正在检查本地 Sidecar 与协议版本。" : "当前状态来自 Electron Host 的权威投影。"}</AlertDescription>
           </Alert>
@@ -687,7 +687,7 @@ function SurfaceComparison({ state }: { state: ComparisonState }) {
         <ResizablePanelGroup key={state} direction="horizontal" className="component-comparison__surface" aria-label="工作区面板预览">
           <ResizablePanel defaultSize={32} minSize={22}>
             <div className="component-comparison__tree-stage">
-              <div className="component-comparison__tree-title"><FolderTree aria-hidden="true" />对象树</div>
+              <div className="component-comparison__tree-title"><TreeStructureIcon aria-hidden="true" />对象树</div>
               <Tree
                 rootItem={treeFixture}
                 ariaLabel="数据库对象树"
@@ -698,8 +698,8 @@ function SurfaceComparison({ state }: { state: ComparisonState }) {
                   ? ["large-analytics", "large-analytics/main"]
                   : ["analytics", "analytics/main"]}
                 renderItemIcon={(item) => item.kind === "table"
-                  ? <FileCode2 aria-hidden="true" />
-                  : <Database aria-hidden="true" />}
+                  ? <FileCodeIcon aria-hidden="true" />
+                  : <DatabaseIcon aria-hidden="true" />}
                 renderItemMeta={(item) => item.count == null ? null : item.count}
               />
             </div>
@@ -708,8 +708,8 @@ function SurfaceComparison({ state }: { state: ComparisonState }) {
           <ResizablePanel defaultSize={68} minSize={40}>
             <Tabs defaultValue={state === "sql" ? "sql" : "result"} className="component-comparison__surface-tabs">
               <TabsList aria-label="工作区标签">
-                <TabsTrigger value="result"><Database aria-hidden="true" />查询结果</TabsTrigger>
-                <TabsTrigger value="sql"><FileCode2 aria-hidden="true" />SQL</TabsTrigger>
+                <TabsTrigger value="result"><DatabaseIcon aria-hidden="true" />查询结果</TabsTrigger>
+                <TabsTrigger value="sql"><FileCodeIcon aria-hidden="true" />SQL</TabsTrigger>
               </TabsList>
               <TabsContent value="result">
                 <ArtifactTableGrid

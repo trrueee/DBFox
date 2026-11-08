@@ -3,6 +3,7 @@ from __future__ import annotations
 from engine.agent.repositories.plan import (
     PlanArtifactUnavailableError,
     PlanRepository,
+    PlanTransitionError,
 )
 from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
@@ -103,6 +104,8 @@ class UpdatePlanCommand(ControlCommand[UpdatePlanInput, UpdatePlanOutput]):
                 "The Task Plan references a result that is not available in this Run. "
                 "Inspect the saved result before attaching its Artifact ID."
             ) from exc
+        except PlanTransitionError as exc:
+            raise ToolInputError(str(exc)) from exc
         output = UpdatePlanOutput(
             plan_id=plan.id,
             version=plan.version,

@@ -59,8 +59,10 @@ class StoryChapterConsistencyConstraint:
             return CompletionConstraintResult(
                 kind="missing",
                 reason=(
-                    "The written chapter must be followed by a confirmed-facts check "
-                    "for the same world generation."
+                    "Call story_graph_query now for the written chapter's world and verify "
+                    f"world_generation {last_generation} before the final answer. A chapter read "
+                    "or revisions list is not this check. Do not rewrite the saved chapter; "
+                    "repeating the answer cannot satisfy the missing observation."
                 ),
                 requirements=["story_graph_query_after_chapter_write"],
             )

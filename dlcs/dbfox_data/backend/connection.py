@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
 from sqlalchemy.pool import NullPool
+from dbfox_dlc_api import ToolInputError
 
 from .connection_primitives import (
     existing_regular_file,
@@ -19,12 +20,13 @@ from .connection_primitives import (
     open_network_connection,
 )
 from .contracts import DatabaseHandle, WorkbookDatabaseHandle, QuerySourceHandle
-from .workbook_query import open_workbook_query, validate_workbook_query
+from .workbook_query import WorkbookQueryError, open_workbook_query, validate_workbook_query
 from .sql.dry_run_contracts import DryRunResult, classify_dry_run_error
 from .sql.bound_parameters import render_dbapi_sql
 from .sql.readonly_query import ReadonlyQueryError, parse_single_readonly_query
 from .sql.result_limits import QUERY_TIMEOUT_MS
 from .sql.row_serializer import (
+    DuplicateResultColumnsError,
     QueryExecutionResult,
     _fetch_and_serialize,
 )
@@ -112,6 +114,8 @@ class DataConnectionBoundary:
                 with open_workbook_query(handle) as connection:
                     connection.execute("EXPLAIN " + sql)
                 return DryRunResult(ok=True)
+            except WorkbookQueryError as exc:
+                return DryRunResult(ok=False, blocked_reason="syntax_error", message=str(exc))
             except Exception:
                 return DryRunResult(ok=False, blocked_reason="schema_error", message="Workbook query is unsupported or references unavailable data.")
         dialect = handle.dialect
@@ -208,6 +212,8 @@ class DataConnectionBoundary:
                     execution_id,
                     bound_parameters,
                 )
+        except DuplicateResultColumnsError as exc:
+            raise ToolInputError(str(exc)) from exc
         except Exception as exc:
             raise RuntimeError("Read-only database execution failed.") from exc
         finally:
@@ -342,7 +348,7 @@ class DataConnectionBoundary:
             execute_started = time.perf_counter()
             cursor = connection.execute(sql, parameters)
             execute_ms = int((time.perf_counter() - execute_started) * 1_000)
-            fetched = _fetch_and_serialize(cursor)
+            fetched = _fetch_and_serialize(cursor, row_mapper=self._row_mapper(cursor))
             return QueryExecutionResult.from_fetch_result(
                 fetched,
                 connect_ms=connect_ms,

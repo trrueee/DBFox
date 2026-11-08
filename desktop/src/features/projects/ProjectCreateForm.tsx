@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { FolderOpen } from "lucide-react";
+import {
+  FolderOpenIcon,
+} from "@/components/icons";
 import { Alert, AlertDescription, AlertTitle, Button, ErrorDetails } from "../../components/ui";
 import { getUserErrorMessage } from "../../lib/api/client";
 import { pickDesktopProjectFolder } from "../../lib/desktopHost";
@@ -58,10 +60,10 @@ export function ProjectCreateForm({ onCreated, onCancel }: ProjectCreateFormProp
   };
 
   return <div className="project-create__form">
-    <div className="project-create__folder-summary"><FolderOpen size={20} aria-hidden="true" /><span>{path ? path.split(/[\\/]/).filter(Boolean).at(-1) : "选择你的工作文件夹"}</span>
+    <div className="project-create__folder-summary"><FolderOpenIcon size={20} aria-hidden="true" /><span>{path ? path.split(/[\\/]/).filter(Boolean).at(-1) : "选择你的工作文件夹"}</span>
       <p>{path || "对话、文件和成果围绕这个文件夹组织。"}</p></div>
     {error ? <Alert variant="destructive"><AlertTitle>打开文件夹失败</AlertTitle><AlertDescription><p>{getUserErrorMessage(error, "文件夹打开未完成，请重试。")}</p><ErrorDetails error={error} /></AlertDescription></Alert> : null}
     <div className="project-create__actions"><Button type="button" variant="ghost" onClick={onCancel} disabled={submitting}>取消</Button>
-      <Button type="button" onClick={() => void openFolder()} disabled={submitting || loadingProjects}><FolderOpen size={16} aria-hidden="true" />{submitting ? "正在打开…" : path ? "重试打开" : "打开文件夹"}</Button></div>
+      <Button type="button" onClick={() => void openFolder()} disabled={submitting || loadingProjects}><FolderOpenIcon size={16} aria-hidden="true" />{submitting ? "正在打开…" : path ? "重试打开" : "打开文件夹"}</Button></div>
   </div>;
 }

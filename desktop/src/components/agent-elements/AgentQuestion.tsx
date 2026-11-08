@@ -11,13 +11,13 @@
  */
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import {
-  CheckCircle2,
-  CircleOff,
-  Clock3,
-  HelpCircle,
-  LoaderCircle,
-  TriangleAlert,
-} from "lucide-react";
+  CheckCircleIcon,
+  ProhibitIcon,
+  ClockIcon,
+  QuestionIcon,
+  CircleNotchIcon,
+  WarningIcon,
+} from "@/components/icons";
 import { useEffect, useRef, useState } from "react";
 
 import type { QuestionItem } from "../../types/conversation";
@@ -25,6 +25,7 @@ import { getUserErrorMessage } from "../../lib/api/client";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { ErrorDetails } from "../ui/error-details";
+import "./agent-interaction.css";
 
 export function AgentQuestion({
   question,
@@ -43,7 +44,7 @@ export function AgentQuestion({
   const firstControlRef = useRef<HTMLButtonElement | HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (pending) firstControlRef.current?.focus({ preventScroll: true });
+    if (pending && document.activeElement === document.body) firstControlRef.current?.focus({ preventScroll: true });
   }, [pending, question.id]);
 
   const responseText = text.trim();
@@ -58,7 +59,7 @@ export function AgentQuestion({
 
   return (
     <section
-      className="my-2 overflow-hidden rounded-[10px] border border-[var(--agent-border)] bg-[var(--agent-surface)]"
+      className="agent-question"
       aria-label="需要补充信息"
       aria-live="polite"
       aria-busy={submitting || undefined}
@@ -69,13 +70,11 @@ export function AgentQuestion({
           <QuestionStatusIcon status={question.status} />
           {questionStatusLabel(question.status)}
         </span>
-        <span>1 / 1</span>
       </header>
 
       {pending ? (
         <div className="grid gap-3 bg-[var(--agent-surface-elevated)] p-3">
-          <div className="grid grid-cols-[20px_minmax(0,1fr)] items-start gap-2">
-            <span className="inline-flex size-5 items-center justify-center rounded text-sm font-medium text-[var(--agent-text-muted)]">1</span>
+          <div className="grid gap-2">
             <div className="grid gap-1">
               <strong className="text-sm font-medium text-[var(--agent-text)]">{question.payload.question}</strong>
               {question.payload.reason ? <span className="text-xs text-[var(--agent-text-muted)]">{question.payload.reason}</span> : null}
@@ -97,17 +96,17 @@ export function AgentQuestion({
                   <label
                     key={option.value}
                     htmlFor={optionId}
-                    className="grid min-h-9 cursor-pointer grid-cols-[24px_minmax(0,1fr)] items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-[var(--control-bg-hover)] has-[:focus-visible]:shadow-[var(--focus-ring)]"
+                    className="agent-question__option"
+                    data-selected={selected || undefined}
                   >
                     <RadioGroup.Item
                       ref={index === 0 ? firstControlRef as React.Ref<HTMLButtonElement> : undefined}
                       id={optionId}
                       value={option.value}
                       aria-describedby={option.description ? `${optionId}-description` : undefined}
-                      className="inline-flex size-5 items-center justify-center rounded border border-[var(--agent-border)] text-sm font-medium text-[var(--agent-text-muted)] outline-none data-[state=checked]:border-[var(--color-primary-fill)] data-[state=checked]:bg-[var(--color-primary-fill)] data-[state=checked]:text-[var(--color-on-accent)]"
+                      className="agent-question__radio"
                     >
-                      {String.fromCharCode(65 + index)}
-                      <RadioGroup.Indicator className="sr-only">已选择</RadioGroup.Indicator>
+                      <RadioGroup.Indicator className="agent-question__radio-dot" />
                     </RadioGroup.Item>
                     <span className="grid gap-0.5 text-sm text-[var(--agent-text)]">
                       <span>{option.label}</span>
@@ -144,7 +143,7 @@ export function AgentQuestion({
 
           <div className="flex justify-end">
             <Button type="button" size="sm" onClick={submit} disabled={!canSubmit}>
-              {submitting ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
+              {submitting ? <CircleNotchIcon className="animate-spin" aria-hidden="true" /> : null}
               {submitting ? "正在提交…" : "继续任务"}
             </Button>
           </div>
@@ -180,11 +179,11 @@ function QuestionOutcome({ question }: { question: QuestionItem }) {
 }
 
 function QuestionStatusIcon({ status }: { status: QuestionItem["status"] }) {
-  if (status === "completed") return <CheckCircle2 className="size-3.5 text-[var(--color-success)]" aria-hidden="true" />;
-  if (status === "expired") return <Clock3 className="size-3.5 text-[var(--color-warning)]" aria-hidden="true" />;
-  if (status === "cancelled") return <CircleOff className="size-3.5" aria-hidden="true" />;
-  if (status === "failed") return <TriangleAlert className="size-3.5 text-[var(--color-danger)]" aria-hidden="true" />;
-  return <HelpCircle className="size-3.5" aria-hidden="true" />;
+  if (status === "completed") return <CheckCircleIcon className="size-3.5 text-[var(--color-success)]" aria-hidden="true" />;
+  if (status === "expired") return <ClockIcon className="size-3.5 text-[var(--color-warning)]" aria-hidden="true" />;
+  if (status === "cancelled") return <ProhibitIcon className="size-3.5" aria-hidden="true" />;
+  if (status === "failed") return <WarningIcon className="size-3.5 text-[var(--color-danger)]" aria-hidden="true" />;
+  return <QuestionIcon className="size-3.5" aria-hidden="true" />;
 }
 
 function questionStatusLabel(status: QuestionItem["status"]): string {

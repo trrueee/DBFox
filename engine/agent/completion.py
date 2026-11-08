@@ -252,7 +252,11 @@ class CompletionPolicy:
                 kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
                 reason=(
                     "The answer contains malformed, repeated, or excessive DBFox "
-                    "Artifact embed markup."
+                    "Artifact embed markup. Rewrite the complete answer and preserve "
+                    "its inline evidence citations. Put each embed on its own Markdown "
+                    "line using {{artifact:artifact_abc123}}, replacing artifact_abc123 "
+                    "with the full ID from a successful observation, including its "
+                    f"artifact_ prefix. Embed each Artifact once, at most {MAX_ARTIFACT_EMBEDS} total."
                 ),
                 missing=["valid_artifact_embeds"],
             )

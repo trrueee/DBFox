@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
+import {
+  CaretDownIcon,
+  ClockIcon,
+} from "@/components/icons";
 import { openWorkbenchReference } from "../../resources/openWorkbenchReference";
 import { ReferenceCard } from "../../../components/resources/ReferenceCard";
 import { artifactKind, referenceKind, resourceLabel } from "../../../components/resources/resourcePresentation";
@@ -18,7 +21,7 @@ import { AgentPlan } from "../../../components/agent-elements/AgentPlan";
 import { AgentQuestion } from "../../../components/agent-elements/AgentQuestion";
 import { AgentTool, AgentToolGroup } from "../../../components/agent-elements/AgentToolGroup";
 import { Message, MessageContent } from "../../../components/ai-elements/message";
-import { Alert, AlertDescription, AlertTitle, Spinner } from "../../../components/ui";
+import { Alert, AlertDescription, AlertTitle, Button, Spinner } from "../../../components/ui";
 import { MarkdownContent } from "../../workspace/queryResult/MarkdownContent";
 import { artifactEmbedIds } from "../../workspace/queryResult/remarkDbfoxCitations";
 import { ArtifactViewHost } from "../../workspace/artifacts/ArtifactViewHost";
@@ -108,7 +111,7 @@ export function AgentTimeline({
   );
   const currentItem = activeItem(items);
   const renderableItems = useMemo(() => groupTimelineItems(items), [items]);
-  const workingStatus = runWorkingStatus(run.phase ?? null, items.length);
+  const workingStatus = runWorkingStatus(run.status, run.phase ?? null, items.length);
 
   return (
     <section className="conv-agent-timeline" aria-label={ariaLabel}>
@@ -191,7 +194,9 @@ export function AgentTimeline({
       />
       {["created", "queued", "running"].includes(run.status) && !currentItem && (
         <Alert className="conv-run-alert" role="status" aria-live="polite">
-          <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />
+          {run.status === "queued"
+            ? <ClockIcon aria-hidden="true" />
+            : <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />}
           <AlertTitle>{workingStatus.title}</AlertTitle>
           <AlertDescription>{workingStatus.detail}</AlertDescription>
         </Alert>
@@ -203,8 +208,9 @@ export function AgentTimeline({
         />
       )}
       {capabilityArtifacts.length > 0 && (
-        <div className="conv-agent-capability-artifacts" aria-label="本次成果">
-          <h3 className="conv-result-heading">成果</h3>
+        <div className="conv-agent-capability-artifacts" role="group" aria-label="本次成果">
+          <h3 className="conv-result-heading">成果 <span className="conv-result-count">{capabilityArtifacts.length}</span></h3>
+          <div className="conv-result-list">
           {capabilityArtifacts.map((artifact) => (
             <ArtifactResultCard key={artifact.id} artifact={artifact} onOpen={onSelectArtifact ? () => onSelectArtifact(artifact.id) : undefined}>
               <ArtifactViewHost
@@ -220,6 +226,7 @@ export function AgentTimeline({
               />
             </ArtifactResultCard>
           ))}
+          </div>
         </div>
       )}
       {evidenceArtifacts.length === 0 && preservedArtifacts.length > 0 && (
@@ -234,21 +241,35 @@ export function AgentTimeline({
 }
 
 function ArtifactResultCard({ artifact, onOpen, children }: { artifact: ConversationArtifact; onOpen?: () => void; children: ReactNode }) {
-  const kind = artifactKind(artifact.type);
+  const kind = artifactKind(artifact.type, artifact.title);
   const [expanded, setExpanded] = useState(["chart", "image", "audio"].includes(kind));
+  const previewId = useId();
   return <section className="conv-result-card">
-    <ReferenceCard name={artifact.title} kind={kind} description={artifact.summary || resourceLabel(kind)} onOpen={onOpen} />
-    <details className="conv-result-preview" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}>
-      <summary><ChevronDown size={14} aria-hidden="true" /><span>预览{resourceLabel(kind)}</span></summary>
+    <div className="conv-result-card__header">
+      <ReferenceCard name={artifact.title} kind={kind} description={artifact.summary || resourceLabel(kind)} onOpen={onOpen} />
+      <Button type="button" variant="ghost" size="icon-sm" className="conv-result-toggle"
+        aria-label={`预览${resourceLabel(kind)}：${artifact.title}`} title={expanded ? "收起预览" : "展开预览"}
+        aria-expanded={expanded} aria-controls={previewId} onClick={() => setExpanded((value) => !value)}>
+        <CaretDownIcon size={16} aria-hidden="true" />
+      </Button>
+    </div>
+    <div id={previewId} className="conv-result-preview" hidden={!expanded}>
       {expanded ? children : null}
-    </details>
+    </div>
   </section>;
 }
 
 function runWorkingStatus(
+  status: ConversationRun["status"],
   phase: ConversationRun["phase"],
   itemCount: number,
 ): { title: string; detail: string } {
+  if (status === "queued") {
+    return { title: "已排队", detail: "当前任务结束后将自动开始" };
+  }
+  if (status === "created") {
+    return { title: "正在准备任务", detail: "任务已接收，正在准备运行" };
+  }
   switch (phase) {
     case "streaming_answer":
       return { title: "正在生成回复", detail: "内容会在生成后持续显示" };

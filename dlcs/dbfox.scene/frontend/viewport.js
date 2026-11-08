@@ -2,11 +2,12 @@ import * as THREE from "./vendor/three.js";
 
 // The entire Three graph is disposable derived view state, never durable truth.
 export function createViewport(container, callbacks) {
+  const readOnly = callbacks.readOnly === true;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   const canvas = renderer.domElement;
-  canvas.setAttribute("aria-label", "三维场景视口；拖动旋转，滚轮缩放，F 聚焦，W/E/R 变换");
+  canvas.setAttribute("aria-label", readOnly ? "固定版本三维预览；拖动旋转，滚轮缩放，F 聚焦" : "三维场景视口；拖动旋转，滚轮缩放，F 聚焦，W/E/R 变换");
   canvas.tabIndex = 0;
   container.append(canvas);
   const scene = new THREE.Scene();
@@ -21,10 +22,13 @@ export function createViewport(container, callbacks) {
   transform.setSpace("local");
   scene.add(transform.getHelper());
   const grid = new THREE.GridHelper(20, 20, 0x526070, 0x303944);
+  grid.visible = !readOnly;
   scene.add(grid);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x596478, 2));
+  const hemisphere = new THREE.HemisphereLight(0xffffff, 0x596478, 2);
+  scene.add(hemisphere);
   const fill = new THREE.DirectionalLight(0xffffff, 2);
   fill.position.set(5, 10, 8);
+  hemisphere.visible = fill.visible = callbacks.studioLighting !== false;
   scene.add(fill);
   const selectionBox = new THREE.Box3Helper(new THREE.Box3(), 0x70b8ff);
   selectionBox.visible = false;
@@ -37,7 +41,7 @@ export function createViewport(container, callbacks) {
   let selectedId = null;
   let frame = 0;
   let disposed = false;
-  let enabled = true;
+  let enabled = !readOnly;
   let dragging = null;
   let pointerDown = null;
   let skipClick = false;
@@ -145,13 +149,13 @@ export function createViewport(container, callbacks) {
         node.userData.lightType = item.light_type;
         node.userData.sceneObjectId = item.id;
         nodes.set(item.id, node);
-        if (item.kind !== "mesh") {
+        if (item.kind !== "mesh" && !readOnly) {
           // Markers share one geometry and three materials across the whole scene.
           const marker = new THREE.Mesh(markerGeometry, markerMaterials.get(item.kind));
           marker.userData.sceneObjectId = item.id;
           node.add(marker);
         }
-        if (item.kind === "camera") {
+        if (item.kind === "camera" && !readOnly) {
           const helper = new THREE.CameraHelper(node);
           scene.add(helper);
           helpers.push(helper);
@@ -189,13 +193,14 @@ export function createViewport(container, callbacks) {
     draw();
   }
   function setEnabled(value) {
-    enabled = value;
-    transform.enabled = value && !viewCameraId;
+    enabled = value && !readOnly;
+    transform.enabled = enabled && !viewCameraId;
     select(selectedId);
   }
   function focus(id = selectedId) {
     viewCameraId = null;
     orbit.enabled = true;
+    callbacks.onFocus?.();
     const box = new THREE.Box3().setFromObject(nodes.get(id) || content);
     const center = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
     const size = box.isEmpty() ? 4 : Math.max(box.getSize(new THREE.Vector3()).length(), 1);
@@ -266,7 +271,7 @@ export function createViewport(container, callbacks) {
   function key(event) {
     if (event.key === "Escape") { cancelDrag(); event.preventDefault(); }
     else if (event.key.toLowerCase() === "f") { focus(); event.preventDefault(); }
-    else if (!dragging) callbacks.onKey?.(event);
+    else if (!dragging && !readOnly) callbacks.onKey?.(event);
   }
   function lost() { cancelDrag(); }
   function contextLost(event) { event.preventDefault(); callbacks.onError("WebGL 上下文已丢失，请重新打开工作台。"); }
@@ -282,6 +287,7 @@ export function createViewport(container, callbacks) {
   resize();
   return {
     update, select, setEnabled, focus, setCamera,
+    setStudioLighting(value) { hemisphere.visible = fill.visible = value; draw(); },
     setMode(mode, space) { transform.setMode(mode); transform.setSpace(space); draw(); },
     dispose() {
       if (disposed) return;

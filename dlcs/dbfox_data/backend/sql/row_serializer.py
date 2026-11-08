@@ -6,7 +6,7 @@ import datetime
 import decimal
 import json
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .result_limits import MAX_CELL_CHARS, MAX_COLUMNS, MAX_RESPONSE_BYTES, MAX_ROWS
@@ -14,6 +14,15 @@ from .result_limits import MAX_CELL_CHARS, MAX_COLUMNS, MAX_RESPONSE_BYTES, MAX_
 JSON_OVERHEAD_BYTES = 2
 JSON_ARRAY_ITEM_SEPARATOR_BYTES = 1
 TRUNCATION_SUFFIX = "..."
+
+
+class DuplicateResultColumnsError(ValueError):
+    """Named JSON rows require a unique, lossless output schema."""
+
+
+def _require_unique_columns(columns: list[str]) -> None:
+    if len(set(columns)) != len(columns):
+        raise DuplicateResultColumnsError("Result columns must be unique; use explicit SQL aliases.")
 
 
 @dataclass(frozen=True)
@@ -42,6 +51,7 @@ class SerializedRows:
     columns: list[str]
     truncation: ResultTruncation
     response_bytes: int
+    column_types: list[str] = field(default_factory=list, kw_only=True)
 
     @property
     def truncated(self) -> bool:
@@ -72,6 +82,7 @@ class QueryExecutionResult(SerializedRows):
         return cls(
             rows=result.rows,
             columns=result.columns,
+            column_types=result.column_types,
             truncation=result.truncation,
             response_bytes=result.response_bytes,
             connect_ms=connect_ms,
@@ -100,6 +111,7 @@ def _fetch_and_serialize(
         )
 
     columns = [str(column[0]) for column in cursor.description]
+    _require_unique_columns(columns)
     fetch_started = time.perf_counter()
     raw_rows = list(cursor.fetchmany(max_rows + 1))
     row_limit_exceeded = len(raw_rows) > max_rows
@@ -120,6 +132,7 @@ def _fetch_and_serialize(
     return FetchSerializationResult(
         rows=processed.rows,
         columns=processed.columns,
+        column_types=[str(column[1] or "") for column in cursor.description][:len(processed.columns)],
         truncation=processed.truncation,
         response_bytes=processed.response_bytes,
         fetch_ms=fetch_ms,
@@ -162,6 +175,7 @@ def serialize_rows(
         )
 
     original_columns = columns
+    _require_unique_columns(original_columns)
     columns = original_columns[:max_columns]
     rows: list[dict[str, Any]] = []
     response_bytes = JSON_OVERHEAD_BYTES

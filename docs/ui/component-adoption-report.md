@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-28
+> 最后核验：2026-11-07
 >
 > 对应评审：[`component-market-review.md`](component-market-review.md)
 
@@ -12,11 +12,16 @@
 > 字体/字号/颜色和错误协同设计，并进一步明确：必须采用真实成熟组件源码；即使已有自研实现也默认替换。
 > 该调研基线记录在
 > [`ui-runtime-inventory.md`](ui-runtime-inventory.md)、
-> [`typography-color-audit.md`](typography-color-audit.md) 和
+> [字体与颜色历史审计](../archive/reviews/typography-color-audit.md) 和
 > [`plan-error-design.md`](plan-error-design.md)。下表只记录已经核验来源、许可证、runtime 边界并实际进入
 > 生产的组件；尚未覆盖的真实辅助技术状态继续显式保留，不以 accessibility tree 或手写替身冒充。
 
 ## 1. 结果
+
+2026-11-07 更新：通用功能图标已统一切换到固定提交的 Phosphor 官方 SVG。Core 使用原生
+`svg/use`，DLC 使用既有 Host UI 入口，不运行第三方图标框架。标准文件图形继续复用既有资产；
+模型服务补齐五个 Lobe 品牌标志。以下早期组件记录中的 Lucide 描述由本次共享图标入口取代。
+阶段选型、体积比较、验证和维护方式见[全局设计实施记录](../archive/reviews/global-design-20261107.md)。
 
 本轮实现按已归档的[UI 市场驱动重构任务](../archive/reviews/ui-market-driven-refactor-task.md)执行
 “先调查、核验源码和许可证、再替换”。新增的
@@ -33,9 +38,9 @@ npm 依赖只有上游源码直接需要的 UI utility/primitive，同时实际 
 | Plan | **ADOPT Agent Elements PlanTool + TodoTool 源码** | 用真实上游 card/disclosure/todo status anatomy 替换旧 Plan；直接消费 `PlanItem`，扩展 blocked/skipped、summary、终态文案和 Lucide 图标；完成证据直接选择现有 Artifact，缺失证据明确显示，不建立 AI SDK `part` mapper |
 | Empty / Error / Loading / Skeleton | **ADOPT shadcn registry 源码** | Empty、Alert、Spinner、Skeleton 接管生产呈现；旧 `state.css` 删除；现有 `title/description/action` 仅作为产品组合合同保留 |
 | Engine startup / recovery | **ADOPT shadcn Empty/Alert/Spinner + Radix Progress** | 启动使用 CSP-safe indeterminate progress，失败使用带恢复动作的 Alert；保留 Electron supervisor、generation、retry、日志和错误码合同 |
-| Typography / default colors | **ADOPT Fluent 2 tokens** | 字号/行高/字体角色与默认 light/dark semantic colors 采用 Fluent 官方值；拆分 brand foreground/fill 和 danger foreground/fill；可选 accent/warm 使用 Tailwind 官方色阶 |
+| Typography / default colors | **ADAPT existing tokens to Apple HIG** | 内容层/功能层、类型比例、对比度与状态角色统一在 `tokens.css`；优先本机字体。沿用既有偏好存储与语义接口，不引入字体包或第二主题系统 |
 | Approval | **ADOPT AI Elements Confirmation 源码** | 真实 compound-component request/accepted/rejected/actions anatomy 接管待审批与审计呈现；直接消费 `ApprovalItem`，不引入 `ToolUIPart`；提交态暴露 `aria-busy`，默认焦点落在更安全的“拒绝”操作 |
-| Question | **ADOPT Agent Elements QuestionTool / QuestionPrompt 源码 + Radix RadioGroup** | 真实 question header、编号、字母选项、说明和 action anatomy 替换旧卡片；直接消费单个 durable `QuestionItem`，保留 Radix 单选键盘语义，不复制上游多页答案 registry |
+| Question | **ADOPT Agent Elements + Radix RadioGroup; ADAPT HIG interaction** | 单问题直接呈现业务问题与圆形单选，删除 1/1 和字母装饰；高级信息按需展开，等待项保留可操作内容，后台请求不抢输入焦点 |
 | Conversation stream feedback | **ADOPT shadcn Alert/Spinner；KEEP production SSE runtime** | connecting/live/reconnecting/recovering_snapshot/recovered/failed 由现有 stream runtime 投影；临时断线、409 游标恢复与终止错误分层呈现。mutation 失败后只读刷新且提交恰好一次，不增加 replay、第二连接状态机或全局错误事实源 |
 | Message | **ADOPT AI Elements Message presentation source** | User/Assistant Timeline 使用真实 `Message` / `MessageContent` anatomy；继续复用现有 `react-markdown + remark-gfm + rehype-sanitize` 安全管线，不引入 Streamdown、AI SDK 消息类型或第二套 Markdown runtime |
 | Evidence / Sources | **ADOPT AI Elements Sources anatomy + HTML disclosure** | 引用与已保存结果保留真实 `Sources` / `SourcesTrigger` / `SourcesContent` compound anatomy，折叠 runtime 改由 Chromium 原生 `details/summary` 管理；内部按钮仍直接选择 DBFox Artifact，不把耐久证据降级为 URL citation，不增加 evidence DTO 或兼容状态 |

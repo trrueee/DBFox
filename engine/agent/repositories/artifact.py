@@ -38,6 +38,7 @@ from engine.models import (
     AgentSession,
     AgentToolInvocation,
     AgentTurn,
+    Project,
 )
 from engine.tools.runtime.attempt import ResourceScopeRef
 
@@ -227,6 +228,21 @@ class ArtifactRepository:
         """Return one durable Artifact envelope by its opaque identity."""
 
         row = self.session.get(AgentArtifactRecord, artifact_id)
+        return self._domain(row) if row is not None else None
+
+    def get_for_project(self, project_id: str, artifact_id: str) -> Artifact | None:
+        """Recover an envelope without depending on an active chat projection."""
+        row = self.session.execute(
+            select(AgentArtifactRecord)
+            .join(AgentRun, AgentArtifactRecord.run_id == AgentRun.id)
+            .join(AgentSession, AgentRun.session_id == AgentSession.id)
+            .join(Project, AgentSession.project_id == Project.id)
+            .where(
+                AgentArtifactRecord.id == artifact_id,
+                AgentArtifactRecord.session_id == AgentSession.id,
+                Project.id == project_id,
+            )
+        ).scalar_one_or_none()
         return self._domain(row) if row is not None else None
 
     def artifacts_relating_to_for_run(

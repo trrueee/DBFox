@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -303,9 +304,9 @@ class ToolDispatcher:
                             continue
                         artifact_id = str(normalized_input.get(field) or "").strip()
                         artifact = (
-                            ArtifactRepository(db, resource_discovery=self.resource_discovery).get_for_run(
+                            ArtifactRepository(db, resource_discovery=self.resource_discovery).available_artifact(
                                 session_id=str(run.session_id),
-                                run_id=str(run.id),
+                                current_run_id=str(run.id),
                                 artifact_id=artifact_id,
                             )
                             if artifact_id
@@ -515,12 +516,25 @@ class ToolDispatcher:
         prepared = self._prepare_execution(lease, invocation)
         if prepared is None:
             return None
-        result = self._run_prepared_execution(
-            lease,
-            invocation,
-            prepared=prepared,
-            control=control,
-        )
+        started = time.monotonic()
+        try:
+            result = self._run_prepared_execution(
+                lease,
+                invocation,
+                prepared=prepared,
+                control=control,
+            )
+        except ToolInputError as exc:
+            # Scope revalidation happens before the tool leaf. Settle its refusal
+            # like any other expected tool failure, preserving the frozen refs.
+            unknown = prepared.needs_reconciliation
+            result = ToolResult(
+                name=invocation.tool_name, status="failed",
+                error=(f"The interrupted action could not be reconciled: {exc} Do not repeat it until its outcome is verified."
+                       if unknown else str(exc)),
+                error_code="TOOL_OUTCOME_UNKNOWN" if unknown else exc.code,
+                latency_ms=int((time.monotonic() - started) * 1_000),
+            )
         if result is None:
             return None
         return _CompletedToolExecution(

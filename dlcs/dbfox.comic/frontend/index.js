@@ -4,6 +4,7 @@ const OWNER = "dbfox.comic", KIND = "dbfox.comic.document", ARTIFACT = "dbfox.co
 let React, host, stylesheet, active = false, epoch = 0;
 const cleanups = new Set();
 const h = (...args) => React.createElement(...args);
+const icon = () => h(host.ui.ResourceIcon, { kind: "document", size: 16 });
 const id = (prefix) => `${prefix}-${crypto.randomUUID()}`;
 const button = (label, onClick, disabled = false, extra = {}) => h("button", { type: "button", onClick, disabled, ...extra }, label);
 const message = (error) => String(error?.message || "分镜操作失败，请检查当前版本。").slice(0, 360);
@@ -285,12 +286,12 @@ export function register(extensionHost) {
   if (!React) throw new Error("Comic Studio requires the public Host React API.");
   active = true; epoch += 1;
   stylesheet?.remove(); stylesheet = document.createElement("link"); stylesheet.rel = "stylesheet"; stylesheet.href = new URL("./index.css", import.meta.url).href; document.head.append(stylesheet);
-  host.connectors.register({ id: OWNER, title: "Comic Studio", icon: h("span", { "aria-hidden": true }, "▤"), addLabel: "新建漫画作品", onAdd: ({ projectId }) => open(projectId),
+  host.connectors.register({ id: OWNER, title: "Comic Studio", icon: icon(), addLabel: "新建漫画作品", onOpen: ({ projectId }) => open(projectId), onAdd: ({ projectId }) => open(projectId),
     render: ({ projectId }) => h("div", { className: "dbfox-comic" }, h("p", null, "漫画页面、镜头与对白"), button("打开 Comic Studio", () => open(projectId))),
     listResources: async ({ projectId }) => { const all = []; let offset = 0; const generation = epoch;
       for (;;) { const result = await host.operations.invoke("comics.list", { offset, limit: 32 }, { projectId }); if (!active || generation !== epoch) return []; all.push(...result.comics); if (result.next_offset >= result.total) break; offset = result.next_offset; }
       return all.map((c) => ({ kind: KIND, id: c.id, name: c.title, detail: `v${c.version} · ${c.page_count} 页` })); } });
-  host.dockViews.register({ viewType: VIEW, resolveTitle: (view) => view.title, icon: () => h("span", { "aria-hidden": true }, "▤"), isVisible: (view, context) => view.projectId === context.activeProjectId,
+  host.dockViews.register({ viewType: VIEW, objectKinds: [KIND], resolveTitle: (view) => view.title, icon, isVisible: (view, context) => view.projectId === context.activeProjectId,
     render: (view, context) => h(Studio, { key: `${view.projectId}:${view.viewKey}`, projectId: view.projectId, initialId: view.target?.type === "object" ? view.target.object.id : null, context }) });
   host.artifactViews.register({ id: "dbfox.comic.revision-view", title: "Comic 作品", priority: 100, surfaces: ["inline", "workspace"], artifactTypes: [{ type: ARTIFACT, schemaVersions: [1] }], representationTypes: [REP],
     parsePayload(value) { if (!value || typeof value.id !== "string" || typeof value.title !== "string" || !Number.isInteger(value.version) || !/^[a-f0-9]{64}$/.test(value.content_hash)) throw new Error("Invalid Comic revision Artifact"); return value; },

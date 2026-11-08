@@ -218,7 +218,8 @@ def _search_expression(
     expressions: list[exp.Expression] = []
     for column in searchable_columns:
         _ensure_column_allowed(column, allowed_columns, "FILTER_COLUMN_NOT_ALLOWED")
-        expressions.append(exp.Like(this=_column(column), expression=exp.Literal.string(f"%{normalized_search}%")))
+        expressions.append(exp.Like(this=exp.cast(_column(column), "TEXT"),
+                                    expression=exp.Literal.string(f"%{normalized_search}%")))
     if not expressions:
         return None
 

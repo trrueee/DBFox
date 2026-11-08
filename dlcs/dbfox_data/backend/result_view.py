@@ -156,10 +156,10 @@ def _apply_view(
     return viewed
 
 
-def _field_type(artifact: Artifact, column: str, values: list[Any]) -> str:
-    declared = ""
+def _field_type(artifact: Artifact, column: str, values: list[Any], *, database_type: str = "") -> str:
+    declared = database_type.casefold()
     payload_columns = artifact.payload.get("columns")
-    if isinstance(payload_columns, list):
+    if not declared and isinstance(payload_columns, list):
         for candidate in payload_columns:
             if isinstance(candidate, dict) and str(candidate.get("name") or "") == column:
                 declared = str(candidate.get("type") or "").casefold()
@@ -601,12 +601,14 @@ class DataResultRepresentation:
         has_next_page: bool,
         latency_ms: int,
         source_truncated: bool,
+        column_types: list[str] | None = None,
     ) -> dict[str, Any]:
         fields = [
             DataFrameField(
                 key=f"field_{index}",
                 name=column,
-                type=_field_type(artifact, column, [row.get(column) for row in rows]),
+                type=_field_type(artifact, column, [row.get(column) for row in rows],
+                                 database_type=column_types[index] if column_types else ""),
                 nullable=True,
                 values=[row.get(column) for row in rows],
             )
@@ -721,6 +723,7 @@ class DataResultRepresentation:
                 has_next_page=has_next_page,
                 latency_ms=latency_ms,
                 source_truncated=result.truncated,
+                column_types=result.column_types,
             ),
             consistency="live_reexecution",
             original_observed_at=str(artifact.payload.get("executedAt") or "") or None,

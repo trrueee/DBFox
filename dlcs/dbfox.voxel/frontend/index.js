@@ -21,8 +21,7 @@ function own(cleanup) {
 }
 
 function Icon() {
-  return h("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, "aria-hidden": true },
-    h("path", { d: "M12 2 22 7.5v9L12 22 2 16.5v-9L12 2Zm0 11L2 7.5M12 13l10-5.5M12 13v9M7 4.75l10 5.5" }));
+  return h(host.ui.Icon, { name: "box", size: 20 });
 }
 
 function Button({ children, primary, ...props }) {

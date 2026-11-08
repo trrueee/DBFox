@@ -11,7 +11,7 @@ const button = (label, onClick, disabled = false, props = {}) => h("button", { t
 const field = (label, props) => h("label", { className: "dbfox-pixel__field" }, h("span", null, label), h("input", { "aria-label": label, ...props }));
 const number = (label, value, onChange, min, max) => field(label, { type: "number", value, min, max, step: 1, required: true, onChange: (event) => onChange(event.target.value) });
 const check = (label, checked, onChange) => h("label", { className: "dbfox-pixel__check" }, h("input", { type: "checkbox", checked, onChange: (event) => onChange(event.target.checked) }), label);
-function icon() { return h("svg", { viewBox: "0 0 24 24", width: 18, height: 18, fill: "none", stroke: "currentColor", strokeWidth: 1.6, "aria-hidden": true }, h("path", { d: "M4 4h16v16H4zM4 10h16M10 4v16M16 4v16M4 16h16" })); }
+function icon() { return h(runtime.host.ui.ResourceIcon, { kind: "image", size: 16 }); }
 function openWorkbench(rt, projectId, summary) {
   if (!rt.active) return;
   rt.host.dockViews.open({ viewKey: `${VIEW}:${projectId}:${summary?.document_id || "library"}`, viewType: VIEW, title: summary?.title || "Pixel Studio", projectId, closeable: true,
@@ -79,7 +79,7 @@ function Library({ rt, projectId, scope, onOpen }) {
     try {
       const result = await life.invoke(name, { ...input, mutation_id }, controller.signal);
       if (!life.valid() || controller.signal.aborted) return;
-      onOpen(result.document_id);
+      onOpen(result);
     } catch (caught) { if (life.valid() && !controller.signal.aborted) { setError(`${errorText(caught)} 请求 ${mutation_id} 未自动重发。`); setRefresh((value) => value + 1); } }
     finally { life.release(controller); working.current = false; if (life.valid()) setBusy(false); }
   }
@@ -94,14 +94,13 @@ function Library({ rt, projectId, scope, onOpen }) {
     error ? h("p", { role: "alert", className: "dbfox-pixel__error" }, error) : null,
     loading ? h("p", { role: "status" }, "正在读取作品目录…") : items.length ? h("div", { className: "dbfox-pixel__document-list" }, items.map((item) => h("div", { key: item.document_id, className: "dbfox-pixel__document-card" },
       h("div", null, h("strong", null, item.title), h("small", null, `${item.width} × ${item.height} · ${item.frame_count} 帧 · ${item.layer_count} 层 · r${item.revision}${item.status === "deleted" ? " · 已删除" : ""}`)),
-      button(item.status === "deleted" ? "恢复作品" : "打开作品", () => item.status === "deleted" ? mutate("documents.restore", { document_id: item.document_id, expected_version: item.revision }) : onOpen(item.document_id), busy)))) : h("p", { className: "dbfox-pixel__empty" }, "此项目还没有像素作品。创建作品后即可绘制，也可交给 Agent 继续修改。"));
+      button(item.status === "deleted" ? "恢复作品" : "打开作品", () => item.status === "deleted" ? mutate("documents.restore", { document_id: item.document_id, expected_version: item.revision }) : onOpen(item), busy)))) : h("p", { className: "dbfox-pixel__empty" }, "此项目还没有像素作品。创建作品后即可绘制，也可交给 Agent 继续修改。"));
 }
 
 function Studio({ rt, projectId, initialId, context }) {
-  const [documentId, setDocumentId] = React.useState(initialId || "");
-  return h("div", { className: "dbfox-pixel" }, documentId
-    ? h(Editor, { key: `${context.workbenchScopeId}:${projectId}:${documentId}`, rt, projectId, documentId, context, onLibrary: () => setDocumentId("") })
-    : h(Library, { rt, projectId, scope: context.workbenchScopeId, onOpen: setDocumentId }));
+  return h("div", { className: "dbfox-pixel" }, initialId
+    ? h(Editor, { key: `${context.workbenchScopeId}:${projectId}:${initialId}`, rt, projectId, documentId: initialId, context, onLibrary: () => openWorkbench(rt, projectId) })
+    : h(Library, { rt, projectId, scope: context.workbenchScopeId, onOpen: (summary) => openWorkbench(rt, projectId, summary) }));
 }
 
 function MiniCanvas({ document, frame, label, zoom = 2, className = "" }) {
@@ -122,11 +121,11 @@ function PixelCanvas({ rt, snapshot, frame, frameId, layerId, tool, color, zoom,
     if (gesture && ref.current?.hasPointerCapture?.(gesture.pointerId)) ref.current.releasePointerCapture(gesture.pointerId);
     setPreview(null); onDraft(false);
   }, [onDraft]);
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     rt.stops.add(clear);
     return () => { clear(); rt.stops.delete(clear); };
   }, [rt, clear]);
-  React.useEffect(() => { clear(); }, [snapshot.summary.revision, frameId, layerId, tool, clear]);
+  React.useLayoutEffect(() => { clear(); }, [snapshot.summary.revision, frameId, layerId, tool, clear]);
   React.useEffect(() => {
     try {
       drawFrame(ref.current, document, frame, zoom);
@@ -154,7 +153,7 @@ function PixelCanvas({ rt, snapshot, frame, frameId, layerId, tool, color, zoom,
     } catch (caught) { onError(errorText(caught)); }
   }, [document, frame, zoom, preview, selection, onError]);
   function start(event) {
-    if (event.button !== 0 || draft.current || disabled || !frame || (locked && tool !== "select")) return;
+    if (!rt.active || event.button !== 0 || draft.current || disabled || !frame || (locked && tool !== "select")) return;
     const point = pointAt(event, ref.current, document.canvas, false);
     if (!point) return;
     event.preventDefault(); ref.current.focus();
@@ -185,6 +184,7 @@ function PixelCanvas({ rt, snapshot, frame, frameId, layerId, tool, color, zoom,
     else onApply(gestureOperations(gesture), gesture.revision);
   }
   function keyboard(event) {
+    if (!rt.active) return;
     if (event.key === "Escape") { clear(); onSelect(null); event.preventDefault(); return; }
     if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
       event.preventDefault(); event.stopPropagation();
@@ -214,6 +214,13 @@ function Editor({ rt, projectId, documentId, context, onLibrary }) {
   current.current.frameId = frameId; current.current.layerId = layerId;
   const setDraft = React.useCallback((value) => { current.current.drafting = value; setDrafting(value); }, []);
   const reportError = React.useCallback((message) => setError(message), []);
+  const finishRead = React.useCallback((controller) => {
+    life.release(controller);
+    if (current.current.read !== controller) return;
+    current.current.read = null;
+    current.current.loading = false;
+    if (life.valid()) setLoading(false);
+  }, [life]);
   const fitCanvas = React.useCallback(() => {
     const area = root.current?.querySelector(".dbfox-pixel__canvas-scroll");
     const size = current.current.snapshot?.document.canvas;
@@ -262,9 +269,9 @@ function Editor({ rt, projectId, documentId, context, onLibrary }) {
   React.useEffect(() => {
     const controller = life.controller(); current.current.read = controller;
     refresh(controller.signal).catch((caught) => { if (life.valid() && !controller.signal.aborted) setError(errorText(caught)); })
-      .finally(() => { life.release(controller); if (life.valid() && !controller.signal.aborted) { current.current.loading = false; setLoading(false); } });
-    return () => { controller.abort(); current.current.fill?.abort(); };
-  }, [refresh, life]);
+      .finally(() => finishRead(controller));
+    return () => { controller.abort(); current.current.fill?.abort(); finishRead(controller); };
+  }, [refresh, life, finishRead]);
   React.useEffect(() => {
     if (!visible) return undefined;
     let stopped = false, timer, controller;
@@ -275,20 +282,21 @@ function Editor({ rt, projectId, documentId, context, onLibrary }) {
         if (!stopped && life.valid() && previous && !current.current.busy && !current.current.drafting && !current.current.loading && !editingText) {
           controller = life.controller();
           const head = await life.invoke("documents.head", { document_id: documentId }, controller.signal);
-          if (!stopped && life.valid() && !controller.signal.aborted && previous === current.current.snapshot && !current.current.busy && !current.current.drafting && head.revision !== previous.summary.revision) {
+          if (!stopped && life.valid() && !controller.signal.aborted && previous === current.current.snapshot && !current.current.busy && !current.current.drafting && !current.current.loading && head.revision !== previous.summary.revision) {
+            current.current.read = controller;
             current.current.loading = true; setLoading(true);
             await refresh(controller.signal);
             if (!stopped && life.valid()) setNotice(`已同步外部修改 · r${head.revision}`);
           }
         }
       } catch (caught) { if (!stopped && life.valid() && !controller?.signal.aborted) setError(`同步失败：${errorText(caught)}`); }
-      finally { if (controller) life.release(controller); if (!stopped && life.valid()) { current.current.loading = false; setLoading(false); timer = setTimeout(poll, 1000); } }
+      finally { if (controller) finishRead(controller); if (!stopped && life.valid()) timer = setTimeout(poll, 1000); }
     };
     timer = setTimeout(poll, 1000);
-    const stop = () => { stopped = true; clearTimeout(timer); controller?.abort(); };
+    const stop = () => { stopped = true; clearTimeout(timer); if (controller) { controller.abort(); finishRead(controller); } };
     rt.stops.add(stop);
     return () => { stop(); rt.stops.delete(stop); };
-  }, [visible, life, refresh, documentId, rt]);
+  }, [visible, life, refresh, finishRead, documentId, rt]);
   const mutate = React.useCallback(async (name, input, expectedVersion) => {
     const before = current.current.snapshot;
     if (!before || !life.valid() || current.current.busy || current.current.loading) return;
@@ -397,7 +405,7 @@ function Editor({ rt, projectId, documentId, context, onLibrary }) {
   return h("section", { className: "dbfox-pixel__editor", ref: root, onKeyDown: keyboard, "aria-label": "Pixel 工作台" },
     h("header", { className: "dbfox-pixel__header" }, button("作品目录", onLibrary, busy || drafting), h("div", { className: "dbfox-pixel__heading" }, h("strong", null, snapshot?.summary.title || "Pixel Studio"), h("small", null, snapshot ? `${snapshot.summary.width} × ${snapshot.summary.height} · ${document.frames.length} 帧 · ${document.layers.length} 层 · r${snapshot.summary.revision}` : "读取作品")),
       button("撤销", undo, locked || !snapshot?.summary.parent_revision, { "aria-keyshortcuts": "Control+Z Meta+Z" }), button("历史", () => loadHistory(), locked || !snapshot),
-      button("刷新", async () => { if (locked) return; const controller = life.controller(); current.current.loading = true; setLoading(true); try { await refresh(controller.signal); } catch (caught) { if (life.valid()) setError(errorText(caught)); } finally { life.release(controller); current.current.loading = false; if (life.valid()) setLoading(false); } }, locked),
+      button("刷新", async () => { if (locked) return; const controller = life.controller(); current.current.read = controller; current.current.loading = true; setLoading(true); try { await refresh(controller.signal); } catch (caught) { if (life.valid()) setError(errorText(caught)); } finally { finishRead(controller); } }, locked),
       button(unknownExport ? "导出待查证" : "导出成果", exportArtifact, locked || !snapshot || unknownExport, { className: "dbfox-pixel__primary" }), exportTarget ? button("打开已导出成果", reopenExport, locked) : null),
     error ? h("div", { className: "dbfox-pixel__error", role: "alert" }, error, button("关闭提示", () => setError(""))) : null,
     notice ? h("div", { className: "dbfox-pixel__notice", role: "status" }, notice) : null,
@@ -565,11 +573,11 @@ export function register(host) {
   if (!React) throw new Error("Pixel Studio requires the public Host React API.");
   const rt = { host, active: true, stops: new Set(), epoch: ++epoch }; runtime = rt;
   if (typeof document !== "undefined") { stylesheet?.remove(); stylesheet = document.createElement("link"); stylesheet.rel = "stylesheet"; stylesheet.href = new URL("./index.css", import.meta.url).href; stylesheet.dataset.dbfoxDlc = "dbfox.pixel"; document.head.append(stylesheet); }
-  host.connectors.register({ id: "dbfox.pixel", title: "Pixel Studio", icon: icon(), addLabel: "创建像素作品", onAdd: ({ projectId }) => openWorkbench(rt, projectId),
+  host.connectors.register({ id: "dbfox.pixel", title: "Pixel Studio", icon: icon(), addLabel: "创建像素作品", onOpen: ({ projectId }) => openWorkbench(rt, projectId), onAdd: ({ projectId }) => openWorkbench(rt, projectId),
     render: ({ projectId }) => h("div", { className: "dbfox-pixel dbfox-pixel__connector" }, h("p", null, "像素画 · 图层 · Sprite 动画"), button("打开 Pixel Studio", () => openWorkbench(rt, projectId))),
     listResources: async ({ projectId }) => (await listDocuments((name, input, signal) => rt.host.operations.invoke(name, input, { projectId, signal }))).map((item) => ({ kind: DOCUMENT, id: item.document_id, name: item.title, detail: `${item.width}×${item.height} · ${item.frame_count} 帧 · r${item.revision}` })),
   });
-  host.dockViews.register({ viewType: VIEW, icon, resolveTitle: (view) => view.title, isVisible: (view, context) => view.projectId === context.activeProjectId,
+  host.dockViews.register({ viewType: VIEW, objectKinds: [DOCUMENT], icon, resolveTitle: (view) => view.title, isVisible: (view, context) => view.projectId === context.activeProjectId,
     render: (view, context) => h(Studio, { key: `${rt.epoch}:${context.workbenchScopeId}:${view.projectId}:${view.viewKey}`, rt, projectId: view.projectId, initialId: view.target?.type === "object" ? view.target.object.id : "", context }) });
   host.artifactViews.register({ id: "dbfox.pixel.revision-view", title: "Pixel Sprite", priority: 100, surfaces: ["inline", "workspace"], artifactTypes: [{ type: ARTIFACT, schemaVersions: [1] }], representationTypes: [REPRESENTATION], parsePayload: parseSummary,
     render: (artifact, payload, context) => h(PixelArtifact, { key: `${rt.epoch}:${artifact.id}`, rt, artifact, payload, context }) });

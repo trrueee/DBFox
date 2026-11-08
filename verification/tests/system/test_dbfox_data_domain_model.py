@@ -423,9 +423,11 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
     assert profiled.profiles[0]["kind"] == "number"
     assert profiled.profiles[0]["numeric"]["mean"] == 32.5
 
-def test_data_console_operation_uses_durable_action_run_and_owned_tool_chain(
+@pytest.mark.parametrize("operation", ["console.execute", "table.preview"])
+def test_data_workbench_read_uses_durable_action_run_and_owned_tool_chain(
     tmp_path: Path,
     db_session,
+    operation: str,
 ) -> None:
     database_path = tmp_path / "console.sqlite3"
     connection = sqlite3.connect(database_path)
@@ -454,7 +456,9 @@ def test_data_console_operation_uses_durable_action_run_and_owned_tool_chain(
         },
     )
     database = created.databases[0]
-    contribution = snapshot.get_operation("dbfox.data", "console.execute")
+    if operation == "table.preview":
+        _invoke(snapshot, "catalog.refresh", "project-console", {"database_id": database.id})
+    contribution = snapshot.get_operation("dbfox.data", operation)
     assert contribution is not None
     factory = sessionmaker(bind=db_session.get_bind())
     action_runs = build_dlc_action_runs_host(
@@ -471,11 +475,15 @@ def test_data_console_operation_uses_durable_action_run_and_owned_tool_chain(
                     "database_id": database.id,
                     "sql": "SELECT id, total FROM orders ORDER BY id",
                     "execution_id": "console-execution-1",
+                } if operation == "console.execute" else {
+                    "database_id": database.id,
+                    "table": "main.orders",
+                    "limit": 20,
                 }
             ),
             DlcOperationContext(
                 dlc_id="dbfox.data",
-                operation_name="console.execute",
+                operation_name=operation,
                 project_id="project-console",
                 action_runs=action_runs,
             ),
@@ -484,7 +492,8 @@ def test_data_console_operation_uses_durable_action_run_and_owned_tool_chain(
         set_active_runtime_snapshot(None)
 
     output = contribution.spec.output_model.model_validate(result)
-    assert output.status == "success"
+    if operation == "console.execute":
+        assert output.status == "success"
     assert output.rows == [
         {"id": "1", "total": "25"},
         {"id": "2", "total": "40"},
@@ -495,11 +504,19 @@ def test_data_console_operation_uses_durable_action_run_and_owned_tool_chain(
         assert run is not None
         assert run.status == "completed"
         artifacts = ArtifactRepository(db).list_for_run(output.run_id)
-    assert [artifact.type for artifact in artifacts] == [
+    assert sorted(artifact.type for artifact in artifacts) == sorted([
         "dbfox.data.safety",
         "dbfox.data.sql",
         "dbfox.data.result_view",
-    ]
+    ] if operation == "console.execute" else ["dbfox.data.sql", "dbfox.data.snapshot"])
+    selected = next(artifact for artifact in artifacts if artifact.id == output.result_artifact_id)
+    if operation == "table.preview":
+        assert selected.payload["evidenceKind"] == "sample_rows"
+        assert selected.payload_ref
+        source = next(artifact for artifact in artifacts if artifact.type == "dbfox.data.sql")
+        assert selected.payload["sourceSqlArtifactId"] == source.id
+    else:
+        assert selected.type == "dbfox.data.result_view"
     assert all(artifact.resource_refs[0].id == database.id for artifact in artifacts)
 
 

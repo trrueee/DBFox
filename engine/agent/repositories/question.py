@@ -19,6 +19,7 @@ from engine.agent.question import (
     QuestionStatus,
 )
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.run import RunStatus
@@ -62,7 +63,11 @@ class QuestionRepository:
         ).scalar_one()
         if str(run.session_id) != lease.session_id or int(run.lease_token or 0) != lease.token:
             raise QuestionConflict("Question request is fenced by another Session owner")
-        if run.status != RunStatus.RUNNING.value:
+        if run.status not in {
+            RunStatus.RUNNING.value,
+            RunStatus.WAITING_INPUT.value,
+            RunStatus.WAITING_APPROVAL.value,
+        }:
             raise QuestionConflict(f"Run cannot ask a question from {run.status}")
         invocation = self.session.get(AgentToolInvocation, tool_invocation_id)
         if (
@@ -77,8 +82,7 @@ class QuestionRepository:
             )
         existing = self.session.execute(
             select(AgentQuestionRequest).where(
-                AgentQuestionRequest.run_id == run_id,
-                AgentQuestionRequest.turn_id == turn_id,
+                AgentQuestionRequest.tool_invocation_id == tool_invocation_id,
                 AgentQuestionRequest.status == QuestionStatus.PENDING.value,
             )
         ).scalar_one_or_none()
@@ -106,7 +110,7 @@ class QuestionRepository:
         )
         value = self._domain(row)
         self.session.add(row)
-        run.status = RunStatus.WAITING_INPUT.value
+        RunRepository(self.session).refresh_waiting_status(lease=lease, run_id=run_id)
         run.version = int(run.version or 0) + 1
         run.updated_at = now
         self.session.flush()
@@ -241,7 +245,7 @@ class QuestionRepository:
         run = self.session.execute(
             select(AgentRun).where(AgentRun.id == row.run_id).with_for_update()
         ).scalar_one()
-        if run.status != RunStatus.WAITING_INPUT.value:
+        if run.status not in {RunStatus.WAITING_INPUT.value, RunStatus.WAITING_APPROVAL.value}:
             raise QuestionConflict(f"Question cannot be resolved while Run is {run.status}")
         lease = self.sessions.claim(session_id=str(run.session_id), owner=f"question:{question_id}")
         if lease is None:
@@ -277,7 +281,7 @@ class QuestionRepository:
             },
             contributes_progress=True,
         )
-        run.status = RunStatus.RUNNING.value
+        RunRepository(self.session).refresh_waiting_status(lease=lease, run_id=str(run.id))
         run.version = int(run.version or 0) + 1
         run.updated_at = now
         self.session.flush()

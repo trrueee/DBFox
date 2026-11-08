@@ -1,19 +1,19 @@
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import {
-  Accessibility,
-  Check,
-  ChevronDown,
-  Download,
-  Monitor,
-  Moon,
-  Palette,
-  RotateCcw,
-  Rows3,
-  SlidersHorizontal,
-  Sun,
-  Type,
-  Upload,
-} from "lucide-react";
+  PersonArmsSpreadIcon,
+  CheckIcon,
+  CaretDownIcon,
+  DownloadSimpleIcon,
+  MonitorIcon,
+  MoonIcon,
+  PaletteIcon,
+  ArrowCounterClockwiseIcon,
+  RowsIcon,
+  SlidersHorizontalIcon,
+  SunIcon,
+  TextAaIcon,
+  UploadSimpleIcon,
+} from "@/components/icons";
 import { useRef } from "react";
 
 import {
@@ -58,23 +58,23 @@ const THEME_OPTIONS: readonly {
   value: ThemeMode;
   label: string;
   description: string;
-  icon: typeof Monitor;
+  icon: typeof MonitorIcon;
 }[] = [
-  { value: "system", label: "跟随系统", description: "随 Windows 外观自动切换", icon: Monitor },
-  { value: "light", label: "浅色", description: "适合明亮环境", icon: Sun },
-  { value: "dark", label: "深色", description: "降低暗光环境眩光", icon: Moon },
+  { value: "system", label: "跟随系统", description: "随系统外观自动切换", icon: MonitorIcon },
+  { value: "light", label: "浅色", description: "适合明亮环境", icon: SunIcon },
+  { value: "dark", label: "深色", description: "降低暗光环境眩光", icon: MoonIcon },
 ];
 
 const ACCENT_OPTIONS: readonly { value: AccentColor; label: string }[] = [
-  { value: "violet", label: "DBFox 紫" },
-  { value: "blue", label: "数据蓝" },
+  { value: "violet", label: "紫色" },
+  { value: "blue", label: "蓝色" },
   { value: "teal", label: "青绿色" },
   { value: "emerald", label: "翡翠绿" },
   { value: "rose", label: "玫瑰红" },
 ];
 
 const NEUTRAL_OPTIONS: readonly { value: NeutralTone; label: string; description: string }[] = [
-  { value: "cool", label: "冷灰蓝", description: "DBFox 默认" },
+  { value: "cool", label: "柔和灰", description: "默认" },
   { value: "neutral", label: "中性灰", description: "克制、低色偏" },
   { value: "warm", label: "暖灰", description: "柔和、低眩光" },
 ];
@@ -190,14 +190,14 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
   return (
     <SettingsContent className="appearance-layout">
       <div className="appearance-controls">
-      <p className="appearance-save-status"><Check size={14} aria-hidden="true" />自动保存</p>
+      <p className="appearance-save-status"><CheckIcon size={16} aria-hidden="true" />自动保存</p>
 
       <SettingsSection
-        icon={Palette}
+        icon={PaletteIcon}
         title="显示与布局"
         trailing={(
           <Button variant="outline" size="sm" onClick={reset}>
-            <RotateCcw size={14} aria-hidden="true" />
+            <ArrowCounterClockwiseIcon size={16} aria-hidden="true" />
             恢复默认
           </Button>
         )}
@@ -224,7 +224,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
                     <span>{option.description}</span>
                   </span>
                   <RadioGroup.Indicator className="appearance-choice-indicator">
-                    <Check size={14} aria-hidden="true" />
+                    <CheckIcon size={16} aria-hidden="true" />
                   </RadioGroup.Indicator>
                 </RadioGroup.Item>
               );
@@ -247,6 +247,12 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
           </Select>
         </SettingsField>
 
+
+      </SettingsSection>
+
+      <details className="appearance-advanced">
+      <summary><SlidersHorizontalIcon size={16} aria-hidden="true" /><span>高级外观设置</span><span className="appearance-advanced__hint">颜色、字体与辅助功能</span><CaretDownIcon className="appearance-advanced__chevron" size={16} aria-hidden="true" /></summary>
+      <SettingsSection icon={PaletteIcon} title="颜色">
         <fieldset className="appearance-field">
           <legend className="appearance-field__legend">强调色</legend>
           <RadioGroup.Root
@@ -267,7 +273,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
                 <span className="appearance-accent-option__swatch" aria-hidden="true" />
                 <span>{option.label}</span>
                 <RadioGroup.Indicator className="appearance-accent-option__indicator">
-                  <Check size={14} aria-hidden="true" />
+                  <CheckIcon size={16} aria-hidden="true" />
                 </RadioGroup.Indicator>
               </RadioGroup.Item>
             ))}
@@ -298,7 +304,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
                   <small>{option.description}</small>
                 </span>
                 <RadioGroup.Indicator className="appearance-choice-indicator">
-                  <Check size={14} aria-hidden="true" />
+                  <CheckIcon size={16} aria-hidden="true" />
                 </RadioGroup.Indicator>
               </RadioGroup.Item>
             ))}
@@ -306,10 +312,8 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
         </fieldset>
       </SettingsSection>
 
-      <details className="appearance-advanced">
-      <summary><SlidersHorizontal size={16} aria-hidden="true" /><span>高级外观设置</span><span className="appearance-advanced__hint">字体、行高与辅助功能</span><ChevronDown className="appearance-advanced__chevron" size={14} aria-hidden="true" /></summary>
       <SettingsSection
-        icon={SlidersHorizontal}
+        icon={SlidersHorizontalIcon}
         title="字体"
         description="分别选择界面、数据和代码的字体。"
       >
@@ -340,7 +344,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
       </SettingsSection>
 
       <SettingsSection
-        icon={Rows3}
+        icon={RowsIcon}
         title="行高与数据表"
         description="调整阅读与表格的信息密度。"
       >
@@ -384,7 +388,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
       </SettingsSection>
 
       <SettingsSection
-        icon={Accessibility}
+        icon={PersonArmsSpreadIcon}
         title="辅助功能"
         description="按阅读与操作习惯调整。"
       >
@@ -409,7 +413,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
       </SettingsSection>
 
       <SettingsSection
-        icon={Monitor}
+        icon={MonitorIcon}
         title="工作区尺寸"
         description="也可以拖动面板边缘调整尺寸。"
       >
@@ -432,13 +436,13 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
       </SettingsSection>
 
       <SettingsSection
-        icon={Download}
+        icon={DownloadSimpleIcon}
         title="导入与导出"
         description="备份或迁移你的外观偏好。"
       >
         <div className="appearance-transfer-actions">
-          <Button variant="outline" onClick={exportSettings}><Download size={16} aria-hidden="true" />导出设置</Button>
-          <Button variant="outline" onClick={() => importInputRef.current?.click()}><Upload size={16} aria-hidden="true" />导入设置</Button>
+          <Button variant="outline" onClick={exportSettings}><DownloadSimpleIcon size={16} aria-hidden="true" />导出设置</Button>
+          <Button variant="outline" onClick={() => importInputRef.current?.click()}><UploadSimpleIcon size={16} aria-hidden="true" />导入设置</Button>
           <input
             ref={importInputRef}
             className="appearance-file-input"
@@ -451,7 +455,7 @@ export function AppearanceSettingsPanel({ showToast }: AppearanceSettingsPanelPr
       </SettingsSection>
 
       <SettingsSection
-        icon={Type}
+        icon={TextAaIcon}
         title="分区字号（px）"
         description="分别调整数据、代码和对话文字。"
       >

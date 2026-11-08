@@ -1,22 +1,21 @@
 .settings-content {
   display: flex;
-  width: min(100%, 880px);
+  width: 100%;
   flex: 1 1 auto;
   flex-direction: column;
   gap: 0;
-  margin: 0 auto;
+  margin: 0;
   padding: 0 0 48px;
 }
 
-/* Flat sections separated by hairlines — settings are part of the Workbench,
-   not a stack of admin cards. */
+/* HIG-style grouped preferences: related choices share one content surface. */
 .settings-section {
   background: transparent;
-  padding: 26px 2px;
+  padding: 24px 0;
 }
 
 .settings-section + .settings-section {
-  border-top: 1px solid var(--hairline);
+  border-top: 0;
 }
 
 .settings-section__header {
@@ -24,7 +23,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 2px 10px;
+  padding: 0 var(--space-1) var(--space-3);
 }
 
 .settings-section__identity {
@@ -46,7 +45,7 @@
 .settings-section__title {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: var(--ui-font-input);
+  font-size: var(--ui-font-section-title);
   font-weight: 600;
   line-height: 1.35;
 }
@@ -67,8 +66,10 @@
   flex-direction: column;
   gap: 0;
   overflow: hidden;
-  background: transparent;
-  padding: 4px 22px;
+  background: var(--surface-workspace);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-card);
+  padding: 4px var(--space-5);
 }
 
 .settings-field {
@@ -95,7 +96,7 @@
   margin: 0;
   color: var(--color-text-primary);
   font-size: var(--ui-font-control);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.4;
 }
 
@@ -147,7 +148,7 @@
 .settings-toggle__label {
   color: var(--color-text-primary);
   font-size: var(--ui-font-control);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .settings-toggle__description {
@@ -212,7 +213,7 @@
   gap: 16px;
   border-top: 0;
   background: transparent;
-  padding: 12px 20px;
+  padding: 16px 0;
 }
 
 .settings-action-bar__status {
@@ -251,7 +252,7 @@
   }
 
   .settings-section__body {
-    padding: 4px 16px;
+    padding: 4px var(--space-3);
   }
 
   .settings-field {

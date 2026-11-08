@@ -1,9 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
-import { MessageSquarePlus } from "lucide-react";
-import { Button, EmptyState, LoadingState } from "../../components/ui";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AtIcon,
+  CheckIcon,
+} from "@/components/icons";
+import { Button, EmptyState, LoadingState, Tooltip, TooltipTrigger, TooltipContent } from "../../components/ui";
 import { openArtifactDock } from "../../stores/artifactDockStore";
 import { useConversationStore } from "../../stores/conversationStore";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { selectActiveWorkbenchReferences, useWorkspaceStore } from "../../stores/workspaceStore";
 import { useConversationViewModel } from "../conversation/workspace/useConversationViewModel";
 import { isPrimaryConversationArtifact } from "../conversation/workspace/conversationArtifactSelectors";
 import { ArtifactViewHost } from "../workspace/artifacts/ArtifactViewHost";
@@ -11,6 +14,7 @@ import { WorkspaceShell } from "../workspace/WorkspaceShell";
 import type { WorkspaceDockTab } from "../../types/workspace";
 import type { DockShowToast } from "./types";
 import { toArtifactEnvelope } from "../workspace/artifacts/artifactEnvelope";
+import { getRuntimeSession } from "../../lib/api/client";
 
 const ArtifactDock = lazy(() =>
   import("../conversation/workspace/ArtifactDock").then((module) => ({ default: module.ArtifactDock })),
@@ -115,8 +119,33 @@ export function ArtifactDockContent({
   onAsk: (reference: import("../../../../sdk/frontend/index").WorkbenchReference) => void;
 }) {
   const artifactId = tab.target?.type === "artifact" ? tab.target.id : "";
+  const referenced = useWorkspaceStore(state => selectActiveWorkbenchReferences(state).some(reference => reference.artifactId === artifactId));
   const artifact = useConversationStore((s) => s.artifactsById[artifactId]);
+  const loadArtifact = useConversationStore((s) => s.loadArtifact);
   const updateDockTab = useWorkspaceStore((s) => s.updateDockTab);
+  const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
+  const projectId = tab.projectId ?? activeProjectId;
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [readAttempt, setReadAttempt] = useState(0);
+
+  useEffect(() => {
+    if (artifact || !artifactId || !projectId) return;
+    const controller = new AbortController();
+    const generation = getRuntimeSession().generation;
+    void loadArtifact(projectId, artifactId, {
+      signal: controller.signal,
+      beforeCommit: () => {
+        controller.signal.throwIfAborted();
+        if (generation !== getRuntimeSession().generation
+          || useWorkspaceStore.getState().activeProjectId !== projectId) {
+          throw new Error("Artifact read is no longer active in this project.");
+        }
+      },
+    }).catch(() => {
+      if (!controller.signal.aborted) setLoadFailed(true);
+    });
+    return () => controller.abort();
+  }, [artifact, artifactId, projectId, loadArtifact, readAttempt]);
 
   if (!artifact) {
     return (
@@ -127,10 +156,20 @@ export function ArtifactDockContent({
         aria-label={tab.title}
         bodyClassName="workspace-shell__body--artifact"
       >
-        <EmptyState
-          title="工件不可用"
-          description="该工件已关闭或尚未在当前会话中载入。"
-        />
+        {loadFailed || !artifactId || !projectId ? (
+          <div>
+            <EmptyState
+              title="无法载入成果"
+              description="请确认成果仍属于当前项目，或重试读取。"
+            />
+            <Button variant="outline" size="sm" onClick={() => {
+              setLoadFailed(false);
+              setReadAttempt((attempt) => attempt + 1);
+            }}>
+              重试
+            </Button>
+          </div>
+        ) : <LoadingState label="正在读取成果" />}
       </WorkspaceShell>
     );
   }
@@ -146,21 +185,23 @@ export function ArtifactDockContent({
       bodyClassName="workspace-shell__body--artifact"
     >
       <div className="workspace-artifact-context-action">
+        <Tooltip><TooltipTrigger asChild>
         <Button
           type="button"
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={referenced ? "已加入对话上下文" : "加入对话上下文"}
+          disabled={referenced}
           onClick={() => {
             onAsk({
               label: artifact.title,
               artifactId: artifact.id,
             });
-            showToast("已加入对话上下文", "success");
           }}
         >
-          <MessageSquarePlus size={14} aria-hidden="true" />
-          加入对话上下文
+          {referenced ? <CheckIcon size={20} aria-hidden="true" /> : <AtIcon size={20} aria-hidden="true" />}
         </Button>
+        </TooltipTrigger><TooltipContent>{referenced ? "已加入对话上下文" : "加入对话上下文"}</TooltipContent></Tooltip>
       </div>
       <ArtifactViewHost
         artifact={envelope}

@@ -4,9 +4,35 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmConfigPanel } from "../LlmConfigPanel";
 import { ApiError } from "../../lib/api/client";
 import { DEFAULT_LLM_API_BASE } from "../../lib/llmProviders";
+import { ModelSettingsPanel } from "../../features/settings/ModelSettingsPanel";
+import { testDraftLlmConnection } from "../../features/appShell/llmDraftConnection";
+
+vi.mock("../../features/appShell/llmDraftConnection", () => ({
+  listDraftLlmModels: vi.fn().mockResolvedValue({ ok: true, models: ["deepseek-chat", "deepseek-reasoner"] }),
+  testDraftLlmConnection: vi.fn(),
+}));
+
+vi.mock("../../hooks/useApiConfig", () => ({
+  useApiConfig: () => ({
+    draft: { credentialId: "credential-test", apiKey: "", apiBase: DEFAULT_LLM_API_BASE, modelName: "test-model" },
+    updateDraft: vi.fn(), handleSave: vi.fn(),
+  }),
+}));
 
 describe("LlmConfigPanel", () => {
   afterEach(() => cleanup());
+
+  it("keeps a provider quota rejection visible in the settings form", async () => {
+    const message = "模型服务额度或账单限制已阻止请求，请检查账户额度。";
+    vi.mocked(testDraftLlmConnection).mockResolvedValueOnce({
+      ok: false, model: "test-model", api_base: DEFAULT_LLM_API_BASE, latency_ms: 1,
+      error_code: "MODEL_PROVIDER_QUOTA_EXCEEDED", error_message: message,
+    });
+    render(<ModelSettingsPanel showToast={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(screen.queryByText("请检查凭据、端点和模型名称。")).toBeNull();
+  });
 
   it("renders one focused settings flow without duplicate summaries", () => {
     render(
@@ -66,5 +92,14 @@ describe("LlmConfigPanel", () => {
     expect(screen.getByText("model-request-8")).toBeTruthy();
     expect(document.body.textContent).not.toContain("credential backend path");
     expect(document.body.textContent).not.toContain("must-not-render");
+  });
+
+  it("keeps a saved model visible when the service list does not contain its alias", async () => {
+    render(<LlmConfigPanel
+      config={{ credentialId: "cred_llm_api_key_test", apiKey: "", apiBase: "https://api.deepseek.com/v1", modelName: "deepseek-v4-flash" }}
+      onChange={vi.fn()}
+    />);
+    await screen.findByText("已获取 2 个模型。");
+    expect(screen.getByRole("combobox", { name: "默认模型" })).toHaveTextContent("deepseek-v4-flash");
   });
 });

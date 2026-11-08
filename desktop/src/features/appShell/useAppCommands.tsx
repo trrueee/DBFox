@@ -1,5 +1,14 @@
 import { useMemo } from "react";
-import { Bug, Cpu, FolderKanban, Home, MessageSquare, PackageOpen, Palette, Plus } from "lucide-react";
+import {
+  PulseIcon,
+  BrainIcon,
+  FoldersIcon,
+  HouseIcon,
+  ChatCircleIcon,
+  PuzzlePieceIcon,
+  PaletteIcon,
+  PlusIcon,
+} from "@/components/icons";
 import type { CommandItem } from "../../components/CommandPalette";
 import type { ConversationSummary } from "../../types/conversation";
 import type { AppSettingsSection } from "../../types/settings";
@@ -25,14 +34,14 @@ export function useAppCommands({
         id: "new-task",
         name: "新任务",
         category: "新任务",
-        icon: <Plus size={16} />,
+        icon: <PlusIcon size={16} />,
         action: () => showSmartQueryHome(),
       },
       {
         id: "home",
         name: "主页",
         category: "前往",
-        icon: <Home size={16} />,
+        icon: <HouseIcon size={16} />,
         action: () => showSmartQueryHome(),
       },
       {
@@ -40,35 +49,35 @@ export function useAppCommands({
         name: "项目管理",
         description: "配置项目资源，查看最近工作",
         category: "前往",
-        icon: <FolderKanban size={16} />,
+        icon: <FoldersIcon size={16} />,
         action: () => showProjectOverview(),
       },
       {
         id: "extensions",
         name: "打开扩展",
         category: "操作",
-        icon: <PackageOpen size={16} />,
+        icon: <PuzzlePieceIcon size={16} />,
         action: () => openSettings("dlc"),
       },
       {
         id: "appearance-settings",
         name: "外观与字号设置",
         category: "设置",
-        icon: <Palette size={16} />,
+        icon: <PaletteIcon size={16} />,
         action: () => openSettings("appearance"),
       },
       {
         id: "llm-config",
         name: "模型服务设置",
         category: "设置",
-        icon: <Cpu size={16} />,
+        icon: <BrainIcon size={16} />,
         action: () => openSettings("model"),
       },
       {
         id: "diagnostics-logs",
         name: "系统诊断",
         category: "设置",
-        icon: <Bug size={16} />,
+        icon: <PulseIcon size={16} />,
         action: () => openSettings("diagnostics"),
       },
     ];
@@ -78,7 +87,7 @@ export function useAppCommands({
         name: conversation.title || "新对话",
         description: conversationCommandDescription(conversation),
         category: "最近工作",
-        icon: <MessageSquare size={16} />,
+        icon: <ChatCircleIcon size={16} />,
         action: () => openConversation(conversation.id),
       });
     });

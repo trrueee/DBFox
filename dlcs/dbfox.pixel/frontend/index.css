@@ -1,6 +1,6 @@
 .dbfox-pixel { color: var(--color-text-primary); background: var(--surface-panel); font: var(--ui-font-body)/1.5 var(--font-family-ui); height: 100%; min-height: 0; min-width: 0; container-type: inline-size; }
 .dbfox-pixel *, .dbfox-pixel *::before, .dbfox-pixel *::after { box-sizing: border-box; }
-.dbfox-pixel :is(button,input,select) { font: inherit; font-size: var(--ui-font-caption); color: var(--color-text-primary); background: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); min-height: 30px; max-width: 100%; }
+.dbfox-pixel :is(button,input,select) { font: inherit; font-size: var(--ui-font-caption); color: var(--color-text-primary); background: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); min-height: var(--density-control-height-sm); max-width: 100%; transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .dbfox-pixel button { padding: 4px 9px; cursor: pointer; white-space: nowrap; }
 .dbfox-pixel button:hover:enabled { background: var(--control-bg-hover); }
 .dbfox-pixel button[aria-pressed="true"], .dbfox-pixel .dbfox-pixel__primary { border-color: var(--color-primary); color: var(--color-primary); background: var(--control-bg-pressed); }
@@ -37,10 +37,10 @@
 .dbfox-pixel__field { display: grid; gap: 4px; font-size: var(--ui-font-caption); color: var(--color-text-secondary); min-width: 0; }
 .dbfox-pixel__field input { width: 100%; font-variant-numeric: tabular-nums; }
 .dbfox-pixel__check { display: flex; align-items: center; gap: 5px; font-size: var(--ui-font-caption); color: var(--color-text-secondary); }
-.dbfox-pixel__check input { min-height: 16px; width: 16px; accent-color: var(--color-primary); }
+.dbfox-pixel__check input { min-height: var(--density-control-height-sm); width: 16px; accent-color: var(--color-primary); }
 .dbfox-pixel__grid-two { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: var(--space-2); }
 .dbfox-pixel__palette { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 4px; max-height: 210px; overflow: auto; padding: 3px; }
-.dbfox-pixel__palette button { padding: 3px; min-width: 0; min-height: 30px; }
+.dbfox-pixel__palette button { padding: 3px; min-width: 0; min-height: var(--density-control-height-sm); }
 .dbfox-pixel__palette button[aria-pressed="true"] { outline: 2px solid var(--color-primary); outline-offset: 0; }
 .dbfox-pixel__swatch { display: grid; place-items: center; width: 100%; height: 22px; border-radius: 2px; font-size: var(--ui-font-caption); }
 .dbfox-pixel__layers { display: flex; flex-direction: column; gap: 4px; }

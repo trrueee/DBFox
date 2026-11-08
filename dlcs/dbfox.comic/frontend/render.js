@@ -28,7 +28,7 @@ export function renderPage(page, { showNotes = false } = {}) {
         item.append(node("path", { d: `M${cx},${body} L${cx},${ey + eh * .65} M${cx},${body + eh * .08} L${ex + ew * .12},${ey + eh * (element.pose === "reaching" ? .18 : .58)} M${cx},${body + eh * .08} L${ex + ew * .88},${ey + eh * .58} ${element.pose === "seated" ? `M${cx},${ey + eh * .65} L${ex + ew * .85},${ey + eh * .65} L${ex + ew * .85},${ey + eh * .9} M${cx},${ey + eh * .65} L${ex + ew * .15},${ey + eh * .65} L${ex + ew * .15},${ey + eh * .9}` : `M${cx},${ey + eh * .65} L${ex + ew * .25},${ey + eh * .93} M${cx},${ey + eh * .65} L${ex + ew * .8},${ey + eh * (element.pose === "walking" ? .8 : .93)}`}`,
           stroke: element.color, "stroke-width": Math.max(4, ew * .13), "stroke-linecap": "round", fill: "none" }));
         if (element.facing !== "front") item.append(node("circle", { cx: cx + (element.facing === "left" ? -1 : 1) * head * .5, cy: hy - head * .1, r: Math.max(1, head * .13), fill: "#FFFFFF" }));
-        item.append(node("text", { x: cx, y: ey + eh - 2, "text-anchor": "middle", "font-size": Math.min(16, ew / 5), "font-family": "sans-serif", fill: "#25323A" }, element.label));
+        item.append(node("text", { x: cx, y: ey + eh - 2, "text-anchor": "middle", "font-size": Math.min(16, ew / 5), "font-family": "sans-serif", fill: "#25323A", stroke: "#FFFFFF", "stroke-width": 3, "stroke-linejoin": "round", "paint-order": "stroke" }, element.label));
       } else {
         if (element.kind === "bubble") {
           item.append(node("path", { d: `M${ex + ew * .4},${ey + eh * .7} L${element.tail_x * width},${element.tail_y * height} L${ex + ew * .65},${ey + eh * .7} Z`, fill: "#FFFFFF", stroke: "#25323A", "stroke-width": 2 }));

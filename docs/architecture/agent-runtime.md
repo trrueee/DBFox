@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-28
+> 最后核验：2026-11-07
 >
 > 适用范围：`engine/agent/`、`engine/tools/runtime/` 和 Agent 持久化
 >
@@ -169,6 +169,8 @@ stateDiagram-v2
 
 waiting 状态是持久实体，不依赖进程内 Promise/Future。批准、拒绝或回答后恢复同一个 Run，而不是创建隐藏的新执行链。预算耗尽但存在可验证工作时，CompletionPolicy 可生成带限制说明的 partial answer；持久 Run 仍以 `completed` 结算，因为 `partial` 是回答质量语义，不是当前 RunStatus。
 
+同一原生调用批次可以产生多个待批请求、多个独立问题，或混合两种交互。问题按唯一 ToolInvocation 关联，不能按整个 Turn 复用另一条提问。单项批准、拒绝、回答或审批过期后，Run 必须继续等待其余未结算的 Approval/Question；全部结算后才恢复执行和模型请求。客户端依据耐久快照续接同一会话的后继 Run，取消前一项不能使排队任务失去事件流。执行前资源重验中的预期拒绝也必须结算为对应调用的失败 Observation，保留冻结版本，不能升级权限或因一项拒绝丢失整批原生输出。已开始执行的操作若无法核对，则保持 unknown，不能误报为明确失败后重放。
+
 ## 7. ToolInvocation 状态机
 
 ```mermaid
@@ -241,6 +243,8 @@ flowchart TB
 
 结构化 Artifact 上下文统一通过 `ArtifactRepository.available_artifact` 证明可用性：用户选中/附带引用、DLC 近期贡献者输入、上一轮结果索引、工具结果引用与计划步骤引用均遵守同一来源和资源版本边界。选中状态不授予执行权限，已完成但没有可用工件的 Run 不宣称有可复用成果。普通对话历史和恢复摘要仍按原预算保留；详见 [上下文可用性验证](../quality/artifact-context-availability-verification.md)。
 
+Agent ToolDispatcher 的 Artifact selector 与最终 Evidence 收尾复用同一可用性证明，并从 RunLoop 注入相同的 Run resource discovery。可读的历史成果仍须满足当前资源版本、同会话、来源已终结及先后顺序；不得仅在工具侧放行，再在持久化回答时删掉已证明的来源引用。
+
 ## 10. Artifact、Evidence 与回答
 
 ```mermaid
@@ -311,6 +315,11 @@ Run 创建时固定 `RunLimits` 和原始 deadline。恢复后的 worker 继续�
 
 Provider adapter 只负责规范化 stream 和 usage；是否重试、是否还有预算由 RunControl 决定，不能由 SDK 内部不可见重试改变工具调用次数。
 
+OpenAI SDK 的 HTTP 失败语义集中在 `engine/llm/providers/openai.py`，Agent adapter、连接测试和
+模型列表共用固定安全分类。HTTP 402 与已知结构化账单限制不可重试；暂时 429 使用既有
+Retry-After 和 Runtime 预算。上游正文不直接展示。诊断页保留该分类原因，不把所有失败归为
+参数错误，也不通过切换协议或更换模型来自动重试。
+
 终态由公共 `CompletionDisposition` 表达：`complete` 不允许 limitation；`bounded_partial` 必须携带稳定 limitation code。Turn、Tool、Token、Cost、Deadline、Provider 和 Repair 达限时，Runtime 检查是否已有可交付正文或成功工件；如果当前 Run 产生了 verified result，回答还必须带有效引用。满足才提交受限回答，否则明确失败，不能把“只生成了 SQL”包装成数据结论。
 
 ProgressGuard 在每个继续边界对 Observation、Artifact 和 Plan 的业务事实生成稳定指纹，排除 record ID、执行时间和 latency 等记录抖动。相同指纹连续达到阈值后停止重复尝试；计数写入 Run 工作状态，因此进程恢复不会重置。已有可交付工作时 limitation 为 `NO_PROGRESS`，否则终态为 `AGENT_NO_PROGRESS`。
@@ -334,6 +343,7 @@ stateDiagram-v2
 Plan 约束：
 
 - 每个 Run 最多一个当前版本 Plan，更新时 version 递增；
+- 全部步骤进入终态后 Plan 关闭；相同内容重复更新保持原版本，不新增事件；关闭后再增加或重开步骤返回可修复的工具输入错误，不重开终态 RunItem；
 - step ID 在计划调整中保持稳定，不用数组下标表示身份；
 - 最多一个 step 为 `in_progress`；
 - `evidence_required=true` 的 completed step 必须引用当前 Run 产生的 Artifact；
@@ -390,9 +400,22 @@ Result Artifact 允许字段：
 
 DataFrame Representation 重新执行时返回 `live_reexecution`、original/read time、read ID、generation 和 fingerprint。它表达的是“当前数据库视图”，不是历史快照。Evidence 的 `observedAt` 表达回答当时使用的少量事实，两者必须同时存在，不能互相冒充。
 
+Dock 成果标签只保存身份与布局。冷启动时，如果当前投影尚无该成果，通过
+`GET /projects/{project_id}/artifacts/{artifact_id}` 读取原有 `Artifact` 信封。Repository 在读取
+payload 前核对 Artifact→Run→Session→Project 的耐久归属及 Artifact 的 Session 一致性；不存在、
+归属不同或 Project 已删除时均返回 404。不要求 Action Run 所属 Session 成为当前聊天。
+客户端继续使用原 `artifactsById` 投影，异步读取受取消、Project 与 generation 检查约束；失败显示
+显式重试，不重新导出成果。标签不保存完整信封、领域文档或第二份内容模型，实际结果内容仍走 owner
+Representation 的来源、权限与预算校验。该读取没有增加 SDK 符号、数据库迁移或另一条执行链。
+
 ## 17. 权限与 Tool capability
 
 工具定义包含 PolicySpec 与 ExecutionSpec。ExecutionSpec 明确 timeout、idempotent、retryable、max retries、concurrency、max output bytes、backend 和 capabilities。
+
+默认批准理由采用已有 `ToolPresentation.title`，避免将 Provider wire name 当作用户操作名称。
+风险、目标和决策直接展示，非 SQL 操作的内部编号与完整参数可在详情中核对；历史批准理由保持原记录。
+这不改变批准条件、规则顺序或耐久身份。排队 Run 的界面状态先取 `Run.status`，只有运行后才使用
+`phase` 展示进度，不能把 queued 推断为模型已经开始响应。
 
 当前 `in_process` backend 允许：
 

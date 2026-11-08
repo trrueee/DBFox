@@ -54,7 +54,7 @@ function SidebarGroupLabel({ action, children, className }: {
 }
 
 const sidebarMenuButtonVariants = cva(
-  "peer/menu-button grid h-8 w-full min-w-0 grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-[var(--radius-row)] px-2 text-left text-[length:var(--ui-font-control)] text-[var(--color-text-secondary)] outline-none transition-colors hover:bg-[var(--control-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:shadow-[var(--focus-ring)] disabled:pointer-events-none disabled:opacity-50 data-[active=true]:bg-[var(--nav-active-bg)] data-[active=true]:font-medium data-[active=true]:text-[var(--color-text-primary)] [&>svg]:size-4 [&>svg]:shrink-0",
+  "peer/menu-button grid h-9 w-full min-w-0 grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-[var(--radius-row)] px-2 text-left text-[length:var(--ui-font-control)] text-[var(--color-text-secondary)] outline-none transition-colors hover:bg-[var(--control-bg-hover)] hover:text-[var(--color-text-primary)] focus-visible:shadow-[var(--focus-ring)] disabled:pointer-events-none disabled:opacity-50 data-[active=true]:bg-[var(--nav-active-bg)] data-[active=true]:font-medium data-[active=true]:text-[var(--color-text-primary)] [&>svg]:size-5 [&>svg]:shrink-0",
   {
     variants: {
       emphasis: {
@@ -84,7 +84,7 @@ function SidebarNavRow({ icon, label, meta, active = false, emphasis, className,
       className={cn(sidebarMenuButtonVariants({ emphasis }), className)}
       {...props}
     >
-      <span data-sidebar="menu-button-icon" className="inline-flex size-4 items-center justify-center text-[var(--color-text-muted)] [&>svg]:size-4 [&>svg]:stroke-[1.75]" aria-hidden="true">{icon}</span>
+      <span data-sidebar="menu-button-icon" className="inline-flex size-5 items-center justify-center text-[var(--color-text-secondary)] [&>svg]:size-5" aria-hidden="true">{icon}</span>
       <span data-sidebar="menu-button-label" className="min-w-0 truncate">{label}</span>
       {meta ? <span data-sidebar="menu-button-badge" className="min-w-0 truncate text-[length:var(--ui-font-micro)] tabular-nums text-[var(--color-text-muted)]">{meta}</span> : null}
     </button>

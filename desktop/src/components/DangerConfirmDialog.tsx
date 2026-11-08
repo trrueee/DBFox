@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { ShieldAlert, Loader2 } from "lucide-react";
+import {
+  ShieldWarningIcon,
+  CircleNotchIcon,
+} from "@/components/icons";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +52,7 @@ function DangerConfirmDialogContent({ details }: { details: ConfirmationDetails 
     <DialogContent className="danger-confirm-dialog-content">
       <DialogHeader>
         <div className="danger-confirm-dialog-title-row">
-          <ShieldAlert size={20} className="danger-confirm-dialog-title-icon" />
+          <ShieldWarningIcon size={20} className="danger-confirm-dialog-title-icon" />
           <DialogTitle>安全中心：高危操作二次确认</DialogTitle>
         </div>
       </DialogHeader>
@@ -76,7 +79,7 @@ function DangerConfirmDialogContent({ details }: { details: ConfirmationDetails 
 
         {error && (
           <div className="danger-confirm-dialog-warning">
-            <ShieldAlert size={14} /> {error}
+            <ShieldWarningIcon size={16} /> {error}
           </div>
         )}
       </div>
@@ -84,7 +87,7 @@ function DangerConfirmDialogContent({ details }: { details: ConfirmationDetails 
       <DialogFooter>
         <Button variant="outline" onClick={details.onCancel} disabled={loading}>取消</Button>
         <Button variant="destructive" onClick={handleConfirm} disabled={loading || inputText.trim() !== details.expected_confirm_text}>
-          {loading && <Loader2 size={14} className="danger-confirm-dialog-loading-icon" />}
+          {loading && <CircleNotchIcon size={16} className="danger-confirm-dialog-loading-icon" />}
           确认执行
         </Button>
       </DialogFooter>

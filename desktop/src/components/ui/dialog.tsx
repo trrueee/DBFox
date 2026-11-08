@@ -1,6 +1,8 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
+import {
+  XIcon,
+} from "@/components/icons";
 import { cn } from "../../lib/utils";
 import { getDialogContainer } from "./dialogContainer";
 import "./dialog.css";
@@ -35,7 +37,7 @@ const DialogContent = React.forwardRef<
     >
       {children}
       <DialogPrimitive.Close className="dbfox-dialog-close">
-        <X className="dbfox-dialog-close-icon" />
+        <XIcon className="dbfox-dialog-close-icon" />
         <span className="dbfox-dialog-close-label">Close</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>

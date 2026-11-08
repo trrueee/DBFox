@@ -9,7 +9,10 @@
  * Renderer's no-ad-hoc-inline-style application contract.
  */
 import { cn } from "../../lib/utils";
-import { BookOpen, ChevronDown } from "lucide-react";
+import {
+  BookOpenIcon,
+  CaretDownIcon,
+} from "@/components/icons";
 import type { ComponentProps } from "react";
 import "./sources.css";
 
@@ -35,9 +38,9 @@ export const SourcesTrigger = ({
   >
     {children ?? (
       <>
-        <BookOpen size={14} aria-hidden="true" />
+        <BookOpenIcon size={16} aria-hidden="true" />
         <span>使用了 {count} 个来源</span>
-        <ChevronDown className="dbfox-sources__chevron" size={14} aria-hidden="true" />
+        <CaretDownIcon className="dbfox-sources__chevron" size={16} aria-hidden="true" />
       </>
     )}
   </summary>
@@ -67,7 +70,7 @@ export const Source = ({ href, title, children, className, ...props }: SourcePro
   >
     {children ?? (
       <>
-        <BookOpen size={14} aria-hidden="true" />
+        <BookOpenIcon size={16} aria-hidden="true" />
         <span>{title}</span>
       </>
     )}

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,7 @@ import { useConversationStore } from "../../../stores/conversationStore";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import type { ConversationDetail } from "../../../types/conversation";
 import { ProjectResourceSidebar } from "../ProjectResourceSidebar";
+import type { ResourceConnectorContribution } from "../types";
 
 vi.mock("../../projects/useProjectState", () => ({
   useProjectState: () => ({
@@ -30,6 +31,7 @@ describe("ProjectResourceSidebar", () => {
       mainSurfaceByProject: { "project-1": { kind: "new-conversation" } },
     });
     useConversationStore.setState({
+      detailById: {},
       summaries: [
         { id: "conv-1", project_id: "project-1", title: "重构产品界面", updated_at: "2026-08-15T08:00:00Z" },
         { id: "conv-2", project_id: "project-2", title: "其他项目", updated_at: "2026-08-16T08:00:00Z" },
@@ -79,6 +81,41 @@ describe("ProjectResourceSidebar", () => {
     expect(screen.queryByRole("button", { name: /^任务 5/ })).not.toBeInTheDocument();
   });
 
+  it("keeps waiting and running threads reachable ahead of historical overflow", () => {
+    useConversationStore.setState({ summaries: [
+      ...Array.from({ length: 6 }, (_, index) => ({ id: `old-${index}`, project_id: "project-1", title: `历史 ${index}`, updated_at: null, run_status: "completed" as const })),
+      { id: "waiting", project_id: "project-1", title: "需要确认的修改", updated_at: null, run_status: "waiting_approval" },
+      { id: "running", project_id: "project-1", title: "长任务", updated_at: null, run_status: "running" },
+    ] });
+    renderSidebar();
+    expect(screen.getByRole("button", { name: /^需要确认的修改/ })).toHaveAccessibleDescription("等待审批");
+    expect(screen.getByRole("button", { name: /^长任务/ })).toHaveAccessibleDescription("运行中");
+    expect(screen.getByRole("status", { name: "线程状态概览" })).toHaveTextContent("1 待介入");
+    expect(screen.queryByRole("button", { name: /^历史 5/ })).not.toBeInTheDocument();
+  });
+
+  it("updates a beacon from the durable run without waiting for an index refresh", () => {
+    useConversationStore.setState({ summaries: [{ id: "conv-1", project_id: "project-1", title: "正在修改", updated_at: null, run_status: "completed" }] });
+    renderSidebar();
+    expect(screen.getByRole("button", { name: /^正在修改/ })).toHaveAccessibleDescription("本轮已结束");
+    act(() => useConversationStore.getState().loadConversation({
+      protocol_version: 2, id: "conv-1", project_id: "project-1", title: "正在修改", resource_intents: [], items: [],
+      runs: [{ id: "run-1", session_id: "conv-1", input_id: "input-1", session_sequence: 1, user_message_id: "message-1",
+        question: "修改文件", status: "waiting_approval", version: 1, cancel_requested: false, result: {}, error: null }],
+    }));
+    expect(screen.getByRole("button", { name: /^正在修改/ })).toHaveAccessibleDescription("等待审批");
+    expect(screen.getByRole("status", { name: "线程状态概览" })).toHaveTextContent("1 待介入");
+    expect(useConversationStore.getState().summaries[0].run_status).toBe("completed");
+  });
+
+  it("keeps waiting threads accessible from the collapsed navigation", async () => {
+    useConversationStore.setState({ summaries: [{ id: "conv-1", project_id: "project-1", title: "需要批准", updated_at: null, run_status: "waiting_approval" }] });
+    renderSidebar({ collapsed: true });
+    fireEvent.click(screen.getByRole("button", { name: "1 个对话待介入" }));
+    await waitFor(() => expect(openConversation).toHaveBeenCalledWith("conv-1"));
+    expect(useWorkspaceStore.getState().mainSurfaceByProject["project-1"]).toEqual({ kind: "conversation", conversationId: "conv-1" });
+  });
+
   it("focuses a project on row click and toggles its group without forcing a surface", () => {
     renderSidebar();
 
@@ -116,6 +153,23 @@ describe("ProjectResourceSidebar", () => {
     });
   });
 
+  it.each([false, true])("invokes an owner's creation action without opening another workbench first (%s)", async (directWorkbench) => {
+    const onAdd = vi.fn(async () => {});
+    const onOpen = vi.fn();
+    const openDock = vi.spyOn(useWorkspaceStore.getState(), "openDockTab").mockImplementation(() => {});
+    try {
+      renderSidebar({ connectors: [{
+        id: "example.creation", title: "Studio", icon: null, render: () => null,
+        addLabel: "创建作品", onAdd, ...(directWorkbench ? { onOpen } : {}),
+      }] });
+      fireEvent.pointerDown(screen.getByRole("button", { name: "管理项目 Research" }), { button: 0, ctrlKey: false, pointerType: "mouse" });
+      fireEvent.click(await screen.findByRole("menuitem", { name: "创建作品" }));
+      await waitFor(() => expect(onAdd).toHaveBeenCalledWith({ projectId: "project-2" }));
+      expect(onOpen).not.toHaveBeenCalled();
+      expect(openDock).not.toHaveBeenCalled();
+    } finally { openDock.mockRestore(); }
+  });
+
   it("routes Extensions and Settings through Core-owned destinations", () => {
     const onOpenExtensions = vi.fn();
     const onOpenSettings = vi.fn();
@@ -140,6 +194,7 @@ describe("ProjectResourceSidebar", () => {
 });
 
 function renderSidebar(overrides: {
+  connectors?: ResourceConnectorContribution[];
   collapsed?: boolean;
   onOpenSettings?: () => void;
   onOpenExtensions?: () => void;
@@ -147,7 +202,7 @@ function renderSidebar(overrides: {
   return render(
     <TooltipProvider>
       <ProjectResourceSidebar
-        connectors={[]}
+        connectors={overrides.connectors ?? []}
         collapsed={overrides.collapsed ?? false}
         onToggleCollapse={vi.fn()}
         onNewProject={vi.fn()}

@@ -43,8 +43,8 @@
 }
 
 .dbfox-select-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
   color: var(--color-text-muted);
 }
@@ -55,10 +55,12 @@
   max-height: min(320px, var(--radix-select-content-available-height));
   overflow: hidden;
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-md);
-  background: var(--surface-elevated);
+  border-radius: var(--radius-card);
+  background: var(--surface-popover);
   color: var(--color-text-primary);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 var(--top-highlight);
+  backdrop-filter: var(--material-filter);
+  background-image: var(--surface-sheen);
 }
 
 .dbfox-select-viewport {

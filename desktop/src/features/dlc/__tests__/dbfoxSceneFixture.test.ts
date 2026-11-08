@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStagedExtensionHost, initExtensionHostGlobalSdk } from "../extensionHost";
 import type { DlcModule } from "../types";
+import type { ArtifactRepresentationRequest, ArtifactRepresentationResult } from "../../../../../sdk/frontend/index";
 
 const frontend = resolve(process.cwd(), "../dlcs/dbfox.scene/frontend");
 type Input = Record<string, unknown>;
@@ -21,7 +22,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function fixture(options: { objects?: Node[]; reject?: boolean; deferred?: boolean; deferredExport?: boolean; missingNavigation?: boolean; styles?: boolean } = {}) {
+async function fixture(options: { objects?: Node[]; reject?: boolean; deferred?: boolean; deferredExport?: boolean; missingNavigation?: boolean; styles?: boolean; library?: boolean } = {}) {
   initExtensionHostGlobalSdk();
   let version = 7;
   let objects = options.objects || [cube()];
@@ -29,7 +30,8 @@ async function fixture(options: { objects?: Node[]; reject?: boolean; deferred?:
   let release: (() => void) | undefined;
   const onAsk = vi.fn();
   const openArtifact = vi.fn(async () => undefined);
-  const view = { update: vi.fn(), select: vi.fn(), setEnabled: vi.fn(), setMode: vi.fn(), setCamera: vi.fn(), focus: vi.fn(), dispose: vi.fn() };
+  const openDockTab = vi.fn();
+  const view = { update: vi.fn(), select: vi.fn(), setEnabled: vi.fn(), setMode: vi.fn(), setCamera: vi.fn(), setStudioLighting: vi.fn(), focus: vi.fn(), dispose: vi.fn() };
   let callbacks: Record<string, Callback> = {};
   let viewportElement: HTMLElement | undefined;
   vi.stubGlobal("__sceneViewport", (element: HTMLElement, values: Record<string, Callback>) => { viewportElement = element; callbacks = values; return view; });
@@ -73,21 +75,63 @@ async function fixture(options: { objects?: Node[]; reject?: boolean; deferred?:
   });
   const pageDocument = document;
   if (!options.styles) vi.stubGlobal("document", undefined);
-  await module.register?.({ ...staged.host, workbench: {
+  await module.register?.({ ...staged.host, dockViews: { ...staged.host.dockViews, open: openDockTab }, workbench: {
     currentScopeId: () => "scope-1", ...(options.missingNavigation ? {} : { openArtifact }),
   } });
   vi.stubGlobal("document", pageDocument);
   const dock = staged.getContributions().dockViews[0];
-  const rendered = render(dock.render({ viewKey: "scene:p1", viewType: "dbfox.scene.workbench", title: "Scene", closeable: true, projectId: "p1", target: { type: "object", object: { kind: "dbfox.scene.document", id: "scene-1" } } },
+  const rendered = render(dock.render({ viewKey: "scene:p1", viewType: "dbfox.scene.workbench", title: "Scene", closeable: true, projectId: "p1", ...(options.library ? {} : { target: { type: "object" as const, object: { kind: "dbfox.scene.document", id: "scene-1" } } }) },
     { activeProjectId: "p1", activeConversationId: null, showToast: vi.fn(), workbenchScopeId: "scope-1", onAsk }));
-  await waitFor(() => expect(view.update).toHaveBeenCalled());
-  await waitFor(() => expect((screen.getByRole("button", { name: "导出工件" }) as HTMLButtonElement).disabled).toBe(false));
-  return { invoke, view, callbacks: () => callbacks, viewportElement: () => viewportElement, onAsk, openArtifact, staged, module, rendered,
+  if (options.library) await waitFor(() => expect((screen.getByLabelText("打开场景") as HTMLSelectElement).options.length).toBe(2));
+  else {
+    await waitFor(() => expect(view.update).toHaveBeenCalled());
+    await waitFor(() => expect((screen.getByRole("button", { name: "导出工件" }) as HTMLButtonElement).disabled).toBe(false));
+  }
+  return { invoke, view, callbacks: () => callbacks, viewportElement: () => viewportElement, onAsk, openArtifact, openDockTab, staged, module, rendered,
     changeHead: (next: number, nodes = objects) => { version = next; objects = nodes; },
     reject: (next: boolean) => { reject = next; }, release: () => release?.() };
 }
 
 describe("dbfox.scene production frontend fixture", () => {
+  it.each(["create", "select"])("opens a named, durable object tab after %s from the library", async (action) => {
+    const { openDockTab } = await fixture({ library: true });
+    if (action === "create") {
+      fireEvent.change(screen.getByLabelText("新场景名称"), { target: { value: "Test Scene" } });
+      fireEvent.click(screen.getByRole("button", { name: "创建场景" }));
+    } else fireEvent.change(screen.getByLabelText("打开场景"), { target: { value: "scene-1" } });
+    await waitFor(() => expect(openDockTab).toHaveBeenCalledWith(expect.objectContaining({
+      viewKey: "dbfox.scene.workbench:p1:scene-1", title: "Test Scene", projectId: "p1",
+      target: { type: "object", object: { kind: "dbfox.scene.document", id: "scene-1" }, authority: { kind: "dbfox.scene.document", id: "scene-1" } },
+    })));
+  });
+
+  it.each([false, true])("previews only the Artifact revision and rejects inconsistent representation metadata: %s", async (inconsistent) => {
+    const { staged, rendered, invoke, view, callbacks, changeHead } = await fixture();
+    rendered.unmount();
+    invoke.mockClear(); view.update.mockClear();
+    changeHead(8, [{ ...cube(), name: "New live head" }]);
+    const payload = { scene_id: "scene-1", project_id: "p1", version: 7, content_hash: "a".repeat(64), title: "Fixed Scene", object_count: 1, material_count: 0 };
+    const read = vi.fn(async (_id: string, _type: string, request: ArtifactRepresentationRequest): Promise<ArtifactRepresentationResult> => {
+      const section = { objects_page: "objects", materials_page: "materials", geometry_catalog: "geometries" }[request.operation];
+      const values = section === "objects" ? [cube()] : section === "geometries" ? [{ id: "geometry.box", primitive: "box" }] : [];
+      return { representation_type: "dbfox.scene.document.v1", representation_version: 1, operation: request.operation, read_at: "2026-11-08T00:00:00Z", read_id: "fixed-read", consistency: "durable_snapshot", source_version: inconsistent ? "8" : "7", source_fingerprint: payload.content_hash,
+        payload: { scene: { id: "scene-1", project_id: "p1", version: 7, content_hash: payload.content_hash }, settings: { background: [0, 0, 0] },
+          objects: [], materials: [], geometries: [], [section!]: values, offset: request.parameters?.offset, total: values.length } };
+    });
+    const artifactView = staged.getContributions().artifactViews[0];
+    render(artifactView.render({ id: "fixed", type: "dbfox.scene.revision", title: "Fixed Scene", payload }, artifactView.parsePayload(payload),
+      { surface: "workspace", onToast: vi.fn(), representations: { available: [], list: vi.fn(), read, stream: vi.fn() } }));
+    if (inconsistent) {
+      await screen.findByRole("alert");
+      expect(view.update).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(view.update).toHaveBeenCalledWith(expect.objectContaining({ scene: expect.objectContaining({ version: 7 }), objects: [cube()] })));
+      expect(callbacks()).toMatchObject({ readOnly: true });
+      expect(read.mock.calls.map(([, , request]) => request.operation)).toEqual(["objects_page", "materials_page", "geometry_catalog"]);
+    }
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it("disconnects viewport controls before React detaches their DOM root", async () => {
     const target = await fixture();
     let connectedDuringDispose = false;
@@ -235,9 +279,9 @@ describe("dbfox.scene production frontend fixture", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     const stream = vi.fn(async () => new Blob(["glTF"], { type: "model/gltf-binary" }));
     const artifactView = staged.getContributions().artifactViews[0];
-    const payload = { scene_id: "scene-1", project_id: "p1", version: 7, title: "Fixed Scene", object_count: 1, material_count: 0 };
+    const payload = { scene_id: "scene-1", project_id: "p1", version: 7, content_hash: "a".repeat(64), title: "Fixed Scene", object_count: 1, material_count: 0 };
     const artifact = { id: "artifact-fixed", type: "dbfox.scene.revision", title: "Fixed Scene", payload };
-    const shown = render(artifactView.render(artifact, artifactView.parsePayload(payload), { surface: "workspace", onToast: vi.fn(), representations: { available: [], list: vi.fn(), read: vi.fn(), stream } }));
+    const shown = render(artifactView.render(artifact, artifactView.parsePayload(payload), { surface: "inline", onToast: vi.fn(), representations: { available: [], list: vi.fn(), read: vi.fn(), stream } }));
     fireEvent.click(screen.getByRole("button", { name: "下载 GLB" }));
     await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
     expect(stream).toHaveBeenCalledWith("artifact-fixed", "dbfox.scene.document.v1", { operation: "export_glb", parameters: {} }, expect.any(AbortSignal));
@@ -245,8 +289,8 @@ describe("dbfox.scene production frontend fixture", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:scene-export");
   });
 
-  it.each([false, true])("applies real Three hierarchy and releases native controls (Control held: %s)", async (controlHeld) => {
-    type RenderNode = { matrixWorld: { elements: number[] }; geometry: { dispose(): void }; material: { dispose(): void }; getObjectByName(name: string): RenderNode };
+  it.each([{ controlHeld: false, readOnly: false }, { controlHeld: true, readOnly: false }, { controlHeld: false, readOnly: true }])("applies real Three hierarchy and releases native controls: %o", async ({ controlHeld, readOnly }) => {
+    type RenderNode = { children: unknown[]; matrixWorld: { elements: number[] }; geometry: { dispose(): void }; material: { dispose(): void }; getObjectByName(name: string): RenderNode };
     const frames: FrameRequestCallback[] = [];
     vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => { frames.push(callback); return frames.length; });
     const disconnected = vi.fn();
@@ -258,12 +302,14 @@ describe("dbfox.scene production frontend fixture", () => {
     const proxyUrl = `data:text/javascript;base64,${Buffer.from(`export * from ${JSON.stringify(vendorUrl)}; export class WebGLRenderer { constructor() { return globalThis.__sceneRenderer; } }`).toString("base64")}`;
     const viewportSource = (await readFile(resolve(frontend, "viewport.js"), "utf8")).replace('"./vendor/three.js"', JSON.stringify(proxyUrl));
     const viewportUrl = `data:text/javascript;base64,${Buffer.from(viewportSource).toString("base64")}`;
-    const module = await import(/* @vite-ignore */ viewportUrl) as { createViewport(container: HTMLElement, callbacks: Record<string, Callback>): { update(snapshot: unknown): void; select(id: string): void; dispose(): void } };
+    const module = await import(/* @vite-ignore */ viewportUrl) as { createViewport(container: HTMLElement, callbacks: Record<string, unknown>): { update(snapshot: unknown): void; select(id: string): void; setEnabled(value: boolean): void; dispose(): void } };
     const container = document.createElement("div");
     document.body.append(container);
     const added = vi.spyOn(document, "addEventListener");
     const removed = vi.spyOn(document, "removeEventListener");
-    const view = module.createViewport(container, { onSelect: vi.fn(), onDragEnd: vi.fn(), onError: vi.fn() });
+    const onKey = vi.fn();
+    const onFocus = vi.fn();
+    const view = module.createViewport(container, { readOnly, onKey, onFocus, onSelect: vi.fn(), onDragEnd: vi.fn(), onError: vi.fn() });
     if (controlHeld) document.dispatchEvent(new KeyboardEvent("keydown", { key: "Control", code: "ControlLeft", ctrlKey: true }));
     const snapshot = { scene: { id: "scene-1", version: 1 }, settings: { background: [0.02, 0.03, 0.04] },
       objects: [{ ...cube("parent"), kind: "group", position: [4, 0, 0], rotation: [0, Math.PI / 2, 0] }, { ...cube(), parent_id: "parent", position: [1, 0, 0] }],
@@ -272,6 +318,13 @@ describe("dbfox.scene production frontend fixture", () => {
     frames.shift()?.(0);
     const scene = renderer.render.mock.calls.at(-1)?.[0];
     expect(scene).toBeDefined();
+    expect(scene!.getObjectByName("parent").children).toHaveLength(readOnly ? 1 : 2);
+    view.setEnabled(true);
+    view.select("cube");
+    canvas.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+    expect(onKey).toHaveBeenCalledTimes(readOnly ? 0 : 1);
+    canvas.dispatchEvent(new KeyboardEvent("keydown", { key: "f" }));
+    expect(onFocus).toHaveBeenCalledOnce();
     const mesh = scene!.getObjectByName("Cube");
     expect(mesh.matrixWorld.elements[12]).toBeCloseTo(4);
     expect(mesh.matrixWorld.elements[14]).toBeCloseTo(-1);

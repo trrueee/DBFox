@@ -27,10 +27,10 @@ def test_builtin_seed_identity_participates_in_snapshot_id(tmp_path: Path) -> No
         built_ins=BuiltinContributionSet(identifiers=("legacy.dbfox.data",))
     )
     reordered_a = compiler.compile(
-        built_ins=BuiltinContributionSet(identifiers=("dbfox.core", "dbfox.remote_job"))
+        built_ins=BuiltinContributionSet(identifiers=("dbfox.core", "dbfox.conversation"))
     )
     reordered_b = compiler.compile(
-        built_ins=BuiltinContributionSet(identifiers=("dbfox.remote_job", "dbfox.core"))
+        built_ins=BuiltinContributionSet(identifiers=("dbfox.conversation", "dbfox.core"))
     )
 
     assert empty.snapshot_id != legacy_data.snapshot_id
@@ -42,15 +42,20 @@ def test_product_registry_is_frozen_and_keeps_owner_and_backend_contracts() -> N
     registry = build_product_tool_registry()
 
     assert registry.frozen is True
-    assert registry.owner_of("remote_job_submit") == "dbfox.remote_job"
+    assert registry.owner_of("conversation_read") == "dbfox.conversation"
     assert {
         registry.require(name).execution.backend
         for name in (
-            "remote_job_submit",
-            "remote_job_status",
-            "remote_job_cancel",
+            "conversation_read",
+            "conversation_search",
         )
     } == {"in_process"}
+
+
+def test_product_registry_does_not_offer_remote_jobs_without_an_executor() -> None:
+    registry = build_product_tool_registry()
+
+    assert not any(name.startswith("remote_job_") for name in registry.tool_names())
 
 
 def test_default_attempt_resolver_does_not_reintroduce_workspace_domain() -> None:

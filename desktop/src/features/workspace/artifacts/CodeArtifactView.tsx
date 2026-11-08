@@ -1,4 +1,7 @@
-import { Copy, Download } from "lucide-react";
+import {
+  CopyIcon,
+  DownloadSimpleIcon,
+} from "@/components/icons";
 import { Button } from "../../../components/ui";
 import { ArtifactCard } from "./ArtifactCard";
 import { SqlCodeBlock } from "./SqlCodeBlock";
@@ -56,11 +59,11 @@ export function CodeArtifactView({
       actions={
         <>
           <Button type="button" variant="outline" size="sm" className="artifact-action-button" onClick={handleCopy}>
-            <Copy size={14} />
+            <CopyIcon size={16} />
             复制 SQL
           </Button>
           <Button type="button" variant="outline" size="sm" className="artifact-action-button" onClick={handleDownload}>
-            <Download size={14} />
+            <DownloadSimpleIcon size={16} />
             下载
           </Button>
         </>

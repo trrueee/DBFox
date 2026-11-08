@@ -34,7 +34,7 @@ export function AskInputBox({
       onSubmit={onSubmit}
       context={context}
       submitting={submitting}
-      placeholder="让 DBFox 分析、创建、修改或研究任何事情…"
+      placeholder=""
       ariaLabel="新任务"
       references={references}
       onRemoveReference={onRemoveReference}

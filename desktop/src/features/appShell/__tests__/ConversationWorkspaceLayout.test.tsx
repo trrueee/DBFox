@@ -1,9 +1,18 @@
 import { useEffect } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ConversationWorkspaceLayout } from '../ConversationWorkspaceLayout';
+import { ConversationWorkspaceLayout, initialDockWidth } from '../ConversationWorkspaceLayout';
 
 afterEach(() => {cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals();});
+
+it('balances the initial Dock against the conversation and preserves an explicit resize', () => {
+  expect(initialDockWidth(1176, 600, 38)).toBeCloseTo(446.88);
+  expect(initialDockWidth(1176, 680, 28)).toBe(340);
+  expect(initialDockWidth(1600, 480, 38)).toBe(480);
+  expect(initialDockWidth(1176, 600, 38, 560)).toBe(560);
+  expect(initialDockWidth(904, 680, 38, 680)).toBe(376);
+  expect(initialDockWidth(696, 680, 38)).toBe(696);
+});
 it('uses actual stage width and retains mounted drafts across compact/split transitions', () => {
   let width = 1176;
   const observers = new Set<() => void>();

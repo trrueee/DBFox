@@ -6,7 +6,7 @@
 
 .dbfox-data-workbench { display: grid; grid-template-columns: minmax(210px, 32%) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; height: 100%; color: var(--color-text-primary); font: var(--ui-font-control)/var(--ui-line-body) var(--font-family-ui); container-type: inline-size; }
 .dbfox-data-workbench .dbfox-data-workbench__toolbar { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-2); min-height: var(--density-toolbar-min-height); padding: 6px var(--space-3); border-bottom: 1px solid var(--line-subtle); color: var(--color-text-muted); font-size: var(--ui-font-caption); }
-.dbfox-data-workbench__toolbar button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); flex: 0 0 auto; min-height: var(--density-control-height-sm); min-width: var(--density-control-height-sm); padding: 0 var(--space-2); border: 0; border-radius: var(--radius-button); background: transparent; color: var(--color-text-secondary); font: inherit; cursor: pointer; }
+.dbfox-data-workbench__toolbar button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); flex: 0 0 auto; min-height: var(--density-control-height-sm); min-width: var(--density-control-height-sm); padding: 0 var(--space-2); border: 0; border-radius: var(--radius-control); background: transparent; color: var(--color-text-secondary); font: inherit; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .dbfox-data-workbench__toolbar button:hover { background: var(--control-bg-hover); }
 .dbfox-data-workbench__toolbar button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .dbfox-data-workbench__toolbar .dbfox-data-workbench__connect { margin-left: auto; }
@@ -20,7 +20,7 @@
 .dbfox-data-workbench__welcome { display: flex; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-5); color: var(--color-text-muted); text-align: center; }
 .dbfox-data-workbench__welcome p { max-width: 260px; margin: 0 0 var(--space-2); line-height: 1.6; }
 .dbfox-data-workbench__welcome strong { color: var(--color-text-primary); font-size: var(--ui-font-section-title); font-weight: 500; }
-.dbfox-data-workbench__welcome button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--density-control-height); padding: var(--space-1) var(--space-3); border: 1px solid var(--control-border); border-radius: var(--radius-button); background: var(--control-bg); color: var(--color-text-primary); font: inherit; cursor: pointer; }
+.dbfox-data-workbench__welcome button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--density-control-height); padding: var(--space-1) var(--space-3); border: 1px solid var(--control-border); border-radius: var(--radius-control); background: var(--control-bg); color: var(--color-text-primary); font: inherit; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .dbfox-data-workbench__welcome button:hover { background: var(--control-bg-hover); }
 .dbfox-data-table__retry { min-height: var(--density-control-height-sm); padding: var(--space-1) var(--space-3); border: 1px solid var(--control-border); border-radius: var(--radius-button); background: var(--control-bg); color: var(--color-text-primary); font: inherit; cursor: pointer; }
 .dbfox-data-table__retry:hover { background: var(--control-bg-hover); }
@@ -47,6 +47,7 @@
   background: transparent;
   color: inherit;
   font: inherit;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-data__provider {
@@ -67,7 +68,7 @@
   width: 22px;
   height: 22px;
   padding: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   color: var(--color-text-muted);
   cursor: pointer;
   opacity: 0.62;
@@ -109,9 +110,9 @@
 
 .dbfox-data__catalog-empty button,
 .dbfox-data__load-more {
-  min-height: 26px;
+  min-height: var(--density-control-height-sm);
   padding: 3px 7px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   cursor: pointer;
 }
 
@@ -151,20 +152,24 @@
 .dbfox-data-table__tabs {
   display: flex;
   gap: 2px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border-subtle);
+  width: fit-content;
+  margin: var(--space-2) var(--space-3);
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--control-bg-hover);
 }
 
 .dbfox-data-table__tabs button {
-  min-height: 34px;
+  min-height: var(--density-control-height-sm);
   padding: 0 8px;
   border: 0;
-  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
   font: inherit;
   font-size: var(--ui-font-caption);
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-data-table__tabs button:hover {
@@ -172,7 +177,8 @@
 }
 
 .dbfox-data-table__tabs button.is-active {
-  border-bottom-color: var(--color-primary);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
   color: var(--color-text-primary);
 }
 
@@ -474,6 +480,7 @@
   resize: vertical;
   tab-size: 2;
   white-space: pre;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 /* Execution Status and Inline Output */
@@ -643,6 +650,7 @@
   outline: 2px solid var(--color-primary);
   outline-offset: -2px;
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-data-result__scroll td.is-null {
@@ -767,6 +775,7 @@
   box-shadow: none;
   color: var(--color-text-primary);
   font-weight: 600;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-data-dialog__providers label:has(input:focus-visible) span {
@@ -809,11 +818,12 @@
   min-height: 36px;
   padding: 7px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   outline: none;
   background: var(--surface-panel);
   color: var(--color-text-primary);
   font: inherit;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-data-dialog__input:focus {
@@ -822,6 +832,9 @@
 }
 
 .dbfox-data-dialog__disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   justify-self: start;
   padding: 6px 8px;
   border: 0;
@@ -831,6 +844,9 @@
   cursor: pointer;
   font: inherit;
 }
+
+.dbfox-data-dialog__disclosure > svg { transition: transform var(--motion-normal) var(--ease-out); }
+.dbfox-data-dialog__disclosure[aria-expanded="true"] > svg { transform: rotate(90deg); }
 
 .dbfox-data-dialog__advanced {
   display: grid;
@@ -871,20 +887,22 @@
 }
 
 .dbfox-data-dialog__button {
-  min-height: 34px;
+  min-height: var(--density-control-height-sm);
   padding: 0 14px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-primary);
   cursor: pointer;
   font: inherit;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-data-dialog__button.is-primary {
   border-color: var(--color-primary);
   background: var(--color-primary);
   color: var(--color-on-primary);
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-data-dialog__button:disabled {

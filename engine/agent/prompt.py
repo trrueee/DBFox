@@ -19,7 +19,7 @@ from engine.agent.model.system_prompt import build_system_prompt
 from engine.json_codec import canonical_dumps
 
 
-PROMPT_VERSION = "4.0"
+PROMPT_VERSION = "4.1"
 MAX_EVIDENCE_LEDGER_OBSERVATIONS = 8
 MAX_EVIDENCE_LEDGER_FACT_CHARS = 512
 
@@ -105,6 +105,10 @@ class PromptAssembler:
             except ContextBudgetExceeded:
                 if not response_batches:
                     raise
+                if len(response_batches) == 1:
+                    raise ContextBudgetExceeded(
+                        "The latest complete model/tool turn cannot fit the input budget"
+                    ) from None
                 omitted = response_batches.pop(0)
                 omitted_turn_ids.add(omitted.turn_id)
                 omitted_response_items += len(omitted.items)
@@ -113,6 +117,10 @@ class PromptAssembler:
             # Do not truncate the active user request merely to retain an old
             # model/tool transcript. Drop the oldest complete model Turn first.
             if plan.truncated_messages and response_batches:
+                if len(response_batches) == 1:
+                    raise ContextBudgetExceeded(
+                        "The latest complete model/tool turn and active request cannot fit the input budget"
+                    )
                 omitted = response_batches.pop(0)
                 omitted_turn_ids.add(omitted.turn_id)
                 omitted_response_items += len(omitted.items)

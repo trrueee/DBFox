@@ -7,7 +7,7 @@ const h = (...args) => React.createElement(...args);
 const button = (label, onClick, disabled = false, props = {}) => h("button", { type: "button", onClick, disabled, ...props }, label);
 const errorText = (error) => String(error?.message || "动画操作失败").slice(0, 400);
 const input = (label, value, onChange, props = {}) => h("label", { className: "dbfox-animation__field" }, h("span", null, label), h("input", { "aria-label": label, value, type: "number", onChange: (event) => onChange(event.target.value), ...props }));
-const select = (label, value, onChange, options) => h("label", { className: "dbfox-animation__field" }, h("span", null, label), h("select", { "aria-label": label, value, onChange: (event) => onChange(event.target.value) }, options.map(([id, title]) => h("option", { key: id, value: id }, title))));
+const select = (label, value, onChange, options, props = {}) => h("label", { className: "dbfox-animation__field" }, h("span", null, label), h("select", { "aria-label": label, value, onChange: (event) => onChange(event.target.value), ...props }, options.map(([id, title]) => h("option", { key: id, value: id }, title))));
 function open(projectId, animation) {
   host.dockViews.open({ viewKey: `${VIEW}:${projectId}:${animation?.id || "library"}`, viewType: VIEW, title: animation?.title || "Animation Studio", projectId, closeable: true,
     ...(animation ? { target: { type: "object", object: { kind: KIND, id: animation.id }, authority: { kind: KIND, id: animation.id } } } : {}) });
@@ -43,8 +43,11 @@ function Workbench({ projectId, initialId, context }) {
   React.useEffect(() => {
     const controller = new AbortController(), generation = ++live.current.generation;
     live.current.read?.abort(); live.current.read = controller;
-    setSnapshot(null); setPlaying(false); setDraft(null); setExported(null); setError("");
-    if (!animationId) return () => controller.abort();
+    // Keep the same document mounted while its next durable revision loads.
+    // Clearing it on every save discarded disclosure, focus and timeline state.
+    setSnapshot((value) => value?.animation.id === animationId ? value : null);
+    setPlaying(false); setDraft(null); setExported(null); setError("");
+    if (!animationId) { setLoading(false); return () => controller.abort(); }
     setLoading(true);
     readDocument(invoke, animationId, controller.signal).then((value) => {
       if (!live.current.alive || generation !== live.current.generation) return;
@@ -54,7 +57,7 @@ function Workbench({ projectId, initialId, context }) {
       setWindowSpan((span) => Math.min(span, value.timing.duration));
       setWindowStart((start) => Math.min(start, Math.max(0, value.timing.duration - 1)));
       setClipId((id) => value.clips.some((item) => item.id === id) ? id : "");
-    }).catch((caught) => { if (!controller.signal.aborted) setError(errorText(caught)); })
+    }).catch((caught) => { if (!controller.signal.aborted) { setError(errorText(caught)); setSnapshot(null); } })
       .finally(() => { if (generation === live.current.generation) setLoading(false); });
     return () => controller.abort();
   }, [animationId, refresh, invoke]);
@@ -108,7 +111,7 @@ function Workbench({ projectId, initialId, context }) {
       if (name === "animations.artifact" && !host.workbench.openArtifact) throw new Error("当前 Host 不支持打开导出工件。");
       const result = await invoke(name, { ...body, request_id: identity("action") }, controller.signal);
       if (!live.current.alive) return;
-      if (name === "animations.create") { await refreshList(); setAnimationId(result.animation.id); }
+      if (name === "animations.create") { await refreshList(); if (live.current.alive) open(projectId, result.animation); }
       else if (name === "animations.artifact") {
         setExported(result);
         await host.workbench.openArtifact({ projectId, sessionId: result.session_id, runId: result.run_id, artifactId: result.artifact_id }, { workbenchScopeId: scope, signal: controller.signal });
@@ -134,7 +137,7 @@ function Workbench({ projectId, initialId, context }) {
   const viewEnd = snapshot ? Math.min(snapshot.timing.duration, windowStart + windowSpan) : windowSpan;
   return h("section", { className: "dbfox-animation", ref: root, onKeyDown: keyboard, tabIndex: 0, "aria-label": "Animation Studio" },
     h("header", { className: "dbfox-animation__toolbar" }, h("strong", null, "Animation Studio"),
-      select("动画", animationId, (id) => { setAnimationId(id); setSelectedKey(""); }, [["", "选择动画"], ...animations.map((item) => [item.id, `${item.title} · v${item.version}`])]),
+      select("动画", animationId, (id) => open(projectId, animations.find((item) => item.id === id)), [["", "选择动画"], ...animations.map((item) => [item.id, `${item.title} · v${item.version}`])], { disabled: locked || !!draft }),
       h(NewDocument, { busy: locked, create: (title) => action("animations.create", { title }) }),
       button("刷新", () => { setRefresh((value) => value + 1); void refreshList(); }, locked),
       button("撤销", undo, locked || !snapshot || snapshot.animation.version <= 1 || !!draft),
@@ -281,8 +284,8 @@ function ArtifactView({artifact,payload,context}){
 
 export function register(extensionHost){host=extensionHost;React=globalThis.__DBFOX_EXTENSION_HOST__?.React;if(!React)throw new Error("Animation Studio requires public Host React.");active=true;
   stylesheet=document.createElement("link");stylesheet.rel="stylesheet";stylesheet.href=new URL("./index.css",import.meta.url).href;stylesheet.dataset.dbfoxDlc="dbfox.animation";document.head.append(stylesheet);
-  host.connectors.register({id:"dbfox.animation",title:"Animation Studio",icon:h("span",{"aria-hidden":true},"◈"),addLabel:"创建动画",onAdd:({projectId})=>open(projectId),render:({projectId})=>h("div",{className:"dbfox-animation"},button("打开 Animation Studio",()=>open(projectId))),listResources:async({projectId})=>(await host.operations.invoke("animations.list",{offset:0,limit:100},{projectId})).animations.map((item)=>({kind:KIND,id:item.id,name:item.title,detail:`v${item.version} · ${item.counts.keyframes} keys`}))});
-  host.dockViews.register({viewType:VIEW,icon:()=>h("span",{"aria-hidden":true},"◈"),resolveTitle:(view)=>view.title,isVisible:(view,context)=>view.projectId===context.activeProjectId,render:(view,context)=>h(Workbench,{key:`${view.projectId}:${view.viewKey}`,projectId:view.projectId,initialId:view.target?.type==="object"?view.target.object.id:null,context})});
+  host.connectors.register({id:"dbfox.animation",title:"Animation Studio",icon:h(host.ui.Icon,{name:"clapperboard",size:20}),addLabel:"创建动画",onAdd:({projectId})=>open(projectId),render:({projectId})=>h("div",{className:"dbfox-animation"},button("打开 Animation Studio",()=>open(projectId))),listResources:async({projectId})=>(await host.operations.invoke("animations.list",{offset:0,limit:100},{projectId})).animations.map((item)=>({kind:KIND,id:item.id,name:item.title,detail:`v${item.version} · ${item.counts.keyframes} keys`}))});
+  host.dockViews.register({viewType:VIEW,icon:()=>h(host.ui.Icon,{name:"clapperboard",size:20}),resolveTitle:(view)=>view.title,isVisible:(view,context)=>view.projectId===context.activeProjectId,render:(view,context)=>h(Workbench,{key:`${view.projectId}:${view.viewKey}`,projectId:view.projectId,initialId:view.target?.type==="object"?view.target.object.id:null,context})});
   host.artifactViews.register({id:"dbfox.animation.revision-view",title:"Animation 导出",priority:100,surfaces:["inline","workspace"],artifactTypes:[{type:ARTIFACT,schemaVersions:[1]}],representationTypes:[REPRESENTATION],parsePayload(value){if(!value||typeof value.animation_id!=="string"||typeof value.project_id!=="string"||!Number.isInteger(value.version)||typeof value.content_hash!=="string")throw new Error("Invalid Animation Artifact");return value;},render:(artifact,payload,context)=>h(ArtifactView,{key:artifact.id,artifact,payload,context})});
 }
 export function deactivate(){active=false;for(const stop of lifecycle)stop();lifecycle.clear();stylesheet?.remove();stylesheet=null;}

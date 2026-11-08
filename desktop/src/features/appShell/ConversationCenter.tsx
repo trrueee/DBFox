@@ -1,5 +1,7 @@
 import { lazy, Suspense, useCallback, useState } from "react";
-import { Plus } from "lucide-react";
+import {
+  PlusIcon,
+} from "@/components/icons";
 import { useConversationStore } from "../../stores/conversationStore";
 import {
   selectActiveWorkbenchReferences,
@@ -136,7 +138,7 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
           description="在文件夹中对话、查看文件和处理数据。"
           action={(
             <Button type="button" onClick={onNewProject}>
-              <Plus size={14} aria-hidden="true" />
+              <PlusIcon size={16} aria-hidden="true" />
               打开文件夹
             </Button>
           )}
@@ -162,7 +164,7 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
   if (effectiveSurface.kind === "project-overview") {
     return (
       <section className="conversation-center" aria-label="项目上下文">
-        <ProjectOverview />
+        <ProjectOverview key={activeProjectId} />
       </section>
     );
   }

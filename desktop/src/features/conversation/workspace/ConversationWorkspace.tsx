@@ -120,9 +120,10 @@ export function ConversationWorkspace({
       </div>
     );
   }
-  const pendingApproval = items.findLast(
-    (item): item is ApprovalItem => item.type === "approval" && item.status === "waiting",
+  const pendingApprovals = items.filter(
+    (item): item is ApprovalItem => item.type === "approval" && item.status === "waiting" && item.run_id === runningRun?.id,
   );
+  const pendingApproval = pendingApprovals[0];
 
   const conversationPane = (
     <section
@@ -155,6 +156,7 @@ export function ConversationWorkspace({
         <div className="conv-pinned-action">
           <ApprovalCard
             approval={pendingApproval}
+            pendingCount={pendingApprovals.length}
             onOpenSqlConsole={onOpenSqlConsole}
             submitting={resolvingApprovalId === pendingApproval.id}
             error={approvalError}
@@ -172,7 +174,7 @@ export function ConversationWorkspace({
         error={sendError}
         references={references}
         onRemoveReference={removeWorkbenchReference}
-        onClearReferences={clearWorkbenchReferences}
+        onClearReferences={() => clearWorkbenchReferences(conversationId)}
         onSend={async (text, mode, references) => {
           await sendMessage(
             conversationId,

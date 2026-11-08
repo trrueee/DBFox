@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dbfox_dlc_api import DlcOperationError, DlcOperationSpec
+from dbfox_dlc_api import CapabilityGuidanceSpec, DlcOperationError, DlcOperationSpec, ToolKey
 
 from .store import ChapterConflictError, StoryStateStore
 from .contracts import (
@@ -33,6 +33,7 @@ from .contracts import (
     RevisionOutput,
     StoryEmptyInput,
     WorldEnsureInput,
+    WorldLookupOutput,
     WorldOutput,
 )
 from .resource_kind import STORY_WORLD_KIND
@@ -73,14 +74,38 @@ def register(host) -> None:
     _register_operations(host, store)
     _register_tools(host, store)
     host.completion.register_constraint(StoryChapterConsistencyConstraint())
+    host.agent_guidance.register(CapabilityGuidanceSpec(
+        id="story_authoring", version="1",
+        instructions=(
+            "Save requested story entities, relation proposals and chapters with the Story tools; "
+            "a Workspace Markdown file is not a Story chapter.\n"
+            "For each chapter write or append, call story_graph_query first and use its current "
+            "world_generation. After the write, call story_graph_query again for the same world "
+            "before answering. A chapter read or a revisions list does not perform this check.\n"
+            "Mutations change the world version: issue dependent mutations sequentially. If a "
+            "frozen invocation is refused because the world changed, query the current facts and "
+            "make a new call. Never assume the rejected mutation ran.\n"
+            "After an interruption, inspect entities and chapters before creating them again. "
+            "Keep pending relation proposals distinct from confirmed facts: the author reviews "
+            "them in the workbench. Do not claim they are confirmed.\n"
+            "When completion guidance requires story_graph_query_after_chapter_write, actually "
+            "call story_graph_query now; repeating the answer cannot satisfy it. Do not rewrite "
+            "an already saved chapter merely to perform this final check."
+        ),
+        applies_to_resource_kinds=(STORY_WORLD_KIND,),
+        tool_refs=tuple(ToolKey(owner_id="dbfox.story", local_name=name) for name in (
+            "story_graph_query", "story_upsert_entity", "story_propose_relations",
+            "story_write_chapter", "story_append_chapter",
+        )),
+    ))
 
 
 def _register_operations(host, store: StoryStateStore) -> None:
     def worlds_ensure(input: WorldEnsureInput, context) -> WorldOutput:
         return store.ensure_world(_project_id(context), input.title)
 
-    def worlds_get(_input, context) -> WorldOutput | None:
-        return store.get_world(_project_id(context))
+    def worlds_get(_input, context) -> WorldLookupOutput:
+        return WorldLookupOutput(world=store.get_world(_project_id(context)))
 
     def entities_list(_input, context) -> EntityListOutput:
         return EntityListOutput(entities=store.list_entities(_project_id(context)))
@@ -112,15 +137,7 @@ def _register_operations(host, store: StoryStateStore) -> None:
         )
 
     def relations_propose(input: RelationProposeInput, context) -> RelationListOutput:
-        items = [
-            dict(relation) if isinstance(relation, dict) else {
-                "from_name": relation.from_name,
-                "to_name": relation.to_name,
-                "kind": relation.kind,
-                "reason": relation.reason,
-            }
-            for relation in input.relations
-        ]
+        items = [relation.model_dump(exclude_none=True) for relation in input.relations]
         created, unknown = store.propose_relations(_project_id(context), items)
         if unknown:
             raise ValueError(
@@ -245,7 +262,7 @@ def _register_operations(host, store: StoryStateStore) -> None:
 
     specs: tuple[DlcOperationSpec, ...] = (
         DlcOperationSpec(name="worlds.ensure", input_model=WorldEnsureInput, output_model=WorldOutput, handler=worlds_ensure, scope="project"),
-        DlcOperationSpec(name="worlds.get", input_model=WorldEnsureInput, output_model=WorldOutput, handler=worlds_get, scope="project"),
+        DlcOperationSpec(name="worlds.get", input_model=WorldEnsureInput, output_model=WorldLookupOutput, handler=worlds_get, scope="project"),
         DlcOperationSpec(name="entities.list", input_model=StoryEmptyInput, output_model=EntityListOutput, handler=entities_list, scope="project"),
         DlcOperationSpec(name="entities.create", input_model=EntityCreateInput, output_model=EntityOutput, handler=entities_create, scope="project"),
         DlcOperationSpec(name="entities.update", input_model=EntityUpdateInput, output_model=EntityOutput, handler=entities_update, scope="project"),

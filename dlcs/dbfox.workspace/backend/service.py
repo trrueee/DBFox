@@ -4,11 +4,13 @@ import hashlib
 import heapq
 import os
 import signal
+import sqlite3
 import subprocess
 import tempfile
 import threading
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -52,6 +54,10 @@ _COMMAND_ENV_ALLOWLIST = frozenset({
 
 class WorkspaceError(ValueError):
     pass
+
+
+class WorkspaceConflict(WorkspaceError):
+    """A fixed, safe precondition failure; no mutation was committed."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +109,8 @@ class CommandRunResult:
 
 
 class WorkspaceService:
-    def __init__(self, root: str | Path) -> None:
+    def __init__(self, root: str | Path, *, mutation_database: Path) -> None:
+        self._mutation_database = mutation_database
         try:
             self.root = Path(root).expanduser().resolve(strict=True)
         except OSError as exc:
@@ -137,6 +144,33 @@ class WorkspaceService:
         if candidate != self.root and not candidate.is_relative_to(self.root):
             raise WorkspaceError("Workspace path escapes the authorized root")
         return candidate
+
+    def _entry_path(self, relative_path: str) -> Path:
+        """Authorize the parent without replacing the final directory entry."""
+        normalized = self.normalize(relative_path)
+        if normalized == ".":
+            return self.root
+        entry = self.root / normalized
+        parent = entry.parent.resolve(strict=False)
+        if not parent.is_relative_to(self.root):
+            raise WorkspaceError("Workspace path escapes the authorized root")
+        return parent / entry.name
+
+    @contextmanager
+    def _mutation(self) -> Iterator[None]:
+        # Tool workers and Dock operations share this owner's existing SQLite
+        # file. Its write lock covers hash validation through file replacement,
+        # including separate processes; no lock state is stored in the project.
+        connection = sqlite3.connect(self._mutation_database, timeout=5.0)
+        try:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+            except sqlite3.OperationalError as exc:
+                raise WorkspaceError("Workspace is busy; retry the operation") from exc
+            yield
+        finally:
+            connection.rollback()
+            connection.close()
 
     def list_directory(self, relative_path: str = "") -> WorkspaceDirectory:
         directory = self.resolve(relative_path)
@@ -203,6 +237,18 @@ class WorkspaceService:
             truncated=False,
         )
 
+    def search_files(self, query: str, *, path_prefix: str = "", limit: int = 20) -> WorkspaceDirectory:
+        if not 1 <= limit <= 100:
+            raise WorkspaceError("Search limit must be between 1 and 100")
+        directory = self.list_directory(path_prefix) if not query else self._scan_tree(self.resolve(path_prefix))
+        needle = query.casefold()
+        matches = heapq.nsmallest(
+            limit + 1,
+            (entry for entry in directory.entries if not needle or needle in entry.relative_path.casefold()),
+            key=lambda entry: (not entry.is_dir, entry.relative_path.casefold()),
+        )
+        return WorkspaceDirectory(tuple(matches[:limit]), directory.truncated or len(matches) > limit)
+
     def write_text_file(
         self,
         relative_path: str,
@@ -210,38 +256,56 @@ class WorkspaceService:
         *,
         expected_sha256: str | None = None,
     ) -> WorkspaceFile:
-        path = self.resolve(relative_path)
-        if path == self.root or (path.exists() and path.is_dir()):
-            raise WorkspaceError("Target path is a directory")
         data = content.encode("utf-8")
         if len(data) > MAX_WORKSPACE_FILE_BYTES:
             raise WorkspaceError("Write exceeds the 1 MiB file limit")
-        if expected_sha256 is not None:
-            if not path.exists():
-                raise WorkspaceError("Expected file does not exist")
-            current = self.read_text_file(relative_path)
-            if current.sha256 != expected_sha256:
-                raise WorkspaceError("File changed since it was read")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path: Path | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="wb",
-                dir=path.parent,
-                prefix=f".{path.name}.",
-                suffix=".tmp",
-                delete=False,
-            ) as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-                temporary_path = Path(stream.name)
-            os.replace(temporary_path, path)
-        except OSError as exc:
-            if temporary_path is not None:
-                temporary_path.unlink(missing_ok=True)
-            raise WorkspaceError("Workspace file cannot be written") from exc
-        return self.read_text_file(relative_path)
+        with self._mutation():
+            path = self.resolve(relative_path)
+            if path == self.root or (path.exists() and path.is_dir()):
+                raise WorkspaceError("Target path is a directory")
+            if expected_sha256 is None and path.exists():
+                raise WorkspaceConflict("覆盖已有文件前必须先读取并提供当前 sha256。")
+            if expected_sha256 is not None and not path.exists():
+                raise WorkspaceConflict("原文件已不存在，本次修改未执行。请重新确认目标。")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path: Path | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="wb", dir=path.parent, prefix=f".{path.name}.",
+                    suffix=".tmp", delete=False,
+                ) as stream:
+                    temporary_path = Path(stream.name)
+                    stream.write(data)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                if expected_sha256 is not None:
+                    # An external editor does not hold our SQLite writer lock.
+                    # Validate after staging, immediately before publication.
+                    current = self.read_text_file(relative_path)
+                    if current.sha256 != expected_sha256:
+                        raise WorkspaceConflict("文件已变更，本次修改未执行。请保留当前内容，等待新的修改指令。")
+                    os.replace(temporary_path, path)
+                elif os.name == "nt":
+                    # Windows rename refuses an existing destination, including
+                    # one created by an external editor after our preflight.
+                    os.rename(temporary_path, path)
+                else:
+                    # Publish the staged file without replacement on POSIX.
+                    os.link(temporary_path, path)
+            except FileExistsError as exc:
+                raise WorkspaceConflict("目标文件已存在，本次创建未执行。请保留现有内容。") from exc
+            except OSError as exc:
+                raise WorkspaceError("Workspace file cannot be written") from exc
+            finally:
+                if temporary_path is not None:
+                    temporary_path.unlink(missing_ok=True)
+            return WorkspaceFile(
+                relative_path=self.normalize(relative_path),
+                content=content,
+                size_bytes=len(data),
+                sha256=hashlib.sha256(data).hexdigest(),
+                truncated=False,
+            )
 
     def edit_text_file(
         self,
@@ -256,7 +320,7 @@ class WorkspaceService:
         if snapshot.truncated:
             raise WorkspaceError("Files larger than 1 MiB cannot be edited")
         if snapshot.sha256 != expected_sha256:
-            raise WorkspaceError("File changed since it was read")
+            raise WorkspaceConflict("文件已变更，本次修改未执行。请保留当前内容，等待新的修改指令。")
         if not old_string:
             raise WorkspaceError("old_string must not be empty")
         occurrences = snapshot.content.count(old_string)
@@ -280,33 +344,37 @@ class WorkspaceService:
         )
 
     def delete_path(self, relative_path: str) -> None:
-        path = self.resolve(relative_path)
-        if path == self.root:
-            raise WorkspaceError("Refusing to delete the workspace root")
-        if not path.exists():
-            raise WorkspaceError("Workspace path does not exist")
-        try:
-            if path.is_dir():
-                path.rmdir()
-            else:
-                path.unlink()
-        except OSError as exc:
-            raise WorkspaceError("Only files and empty directories can be deleted") from exc
+        with self._mutation():
+            path = self._entry_path(relative_path)
+            if path == self.root:
+                raise WorkspaceError("Refusing to delete the workspace root")
+            if not os.path.lexists(path):
+                raise WorkspaceError("Workspace path does not exist")
+            try:
+                if path.is_junction() or (path.is_dir() and not path.is_symlink()):
+                    path.rmdir()
+                else:
+                    path.unlink()
+            except OSError as exc:
+                raise WorkspaceError("Only files and empty directories can be deleted") from exc
 
     def move_path(self, source_path: str, destination_path: str) -> None:
-        source = self.resolve(source_path)
-        destination = self.resolve(destination_path)
-        if source == self.root or destination == self.root:
-            raise WorkspaceError("Refusing to move the workspace root")
-        if not source.exists():
-            raise WorkspaceError("Source path does not exist")
-        if destination.exists():
-            raise WorkspaceError("Destination path already exists")
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            source.replace(destination)
-        except OSError as exc:
-            raise WorkspaceError("Workspace path cannot be moved") from exc
+        with self._mutation():
+            source = self._entry_path(source_path)
+            destination = self._entry_path(destination_path)
+            if source == self.root or destination == self.root:
+                raise WorkspaceError("Refusing to move the workspace root")
+            if not os.path.lexists(source):
+                raise WorkspaceError("Source path does not exist")
+            if os.path.lexists(destination):
+                raise WorkspaceConflict("目标路径已存在，本次移动未执行。")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                source.rename(destination)
+            except FileExistsError as exc:
+                raise WorkspaceConflict("目标路径已存在，本次移动未执行。") from exc
+            except OSError as exc:
+                raise WorkspaceError("Workspace path cannot be moved") from exc
 
     def grep_text_files(
         self,
@@ -320,16 +388,20 @@ class WorkspaceService:
         start = self.resolve(path_prefix)
         if not start.exists():
             raise WorkspaceError("Search path does not exist")
-        candidates: Iterator[Path] = iter((start,)) if start.is_file() else self._walk_files(start)
+        directory = None if start.is_file() else self._scan_tree(start)
+        candidates: Iterator[Path] = iter((start,)) if directory is None else (
+            self.root / entry.relative_path for entry in directory.entries if not entry.is_dir
+        )
         matches: list[WorkspaceGrepMatch] = []
         scanned_files = 0
         scanned_bytes = 0
-        truncated = False
+        truncated = directory.truncated if directory is not None else False
         needle = query.casefold()
         for path in candidates:
             if scanned_files >= MAX_GREP_FILES or scanned_bytes >= MAX_GREP_BYTES:
                 truncated = True
                 break
+            scanned_files += 1
             try:
                 size = path.stat().st_size
             except OSError:
@@ -339,10 +411,11 @@ class WorkspaceService:
                 continue
             try:
                 with path.open("rb") as stream:
-                    data = stream.read(MAX_WORKSPACE_FILE_BYTES + 1)
+                    data = stream.read(min(MAX_WORKSPACE_FILE_BYTES + 1, MAX_GREP_BYTES - scanned_bytes))
+                scanned_bytes += len(data)
                 if (
                     len(data) > MAX_WORKSPACE_FILE_BYTES
-                    or scanned_bytes + len(data) > MAX_GREP_BYTES
+                    or len(data) < size
                 ):
                     truncated = True
                     continue
@@ -351,8 +424,6 @@ class WorkspaceService:
                 text = data.decode("utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            scanned_files += 1
-            scanned_bytes += len(data)
             relative_path = path.relative_to(self.root).as_posix()
             for line_number, line in enumerate(text.splitlines(), start=1):
                 if needle in line.casefold():
@@ -444,19 +515,47 @@ class WorkspaceService:
             output_limit_exceeded=output_limit.is_set(),
         )
 
-    def _walk_files(self, start: Path) -> Iterator[Path]:
-        for root, directories, names in os.walk(start, followlinks=False):
-            directories[:] = sorted(
-                name for name in directories if name not in _SKIPPED_DIR_NAMES
-            )
-            for name in sorted(names):
-                path = Path(root) / name
-                try:
-                    canonical = path.resolve(strict=True)
-                except OSError:
+    def _scan_tree(self, start: Path) -> WorkspaceDirectory:
+        """Bound all entries, including empty directories, before reading content."""
+        if not start.is_dir():
+            raise WorkspaceError("Search directory does not exist")
+        pending = [start]
+        entries: list[WorkspaceEntry] = []
+        scanned = 0
+        truncated = False
+        while pending:
+            directory = pending.pop()
+            try:
+                if not directory.resolve(strict=True).is_relative_to(self.root):
+                    truncated = True
                     continue
-                if canonical.is_relative_to(self.root) and canonical.is_file():
-                    yield canonical
+                with os.scandir(directory) as iterator:
+                    children = []
+                    for item in iterator:
+                        scanned += 1
+                        if scanned > MAX_WORKSPACE_DIR_SCAN_ENTRIES:
+                            return WorkspaceDirectory(tuple(entries), True)
+                        try:
+                            path = Path(item.path)
+                            canonical = path.resolve(strict=True)
+                            if not canonical.is_relative_to(self.root):
+                                continue
+                            is_dir = canonical.is_dir()
+                            if is_dir and item.name in _SKIPPED_DIR_NAMES:
+                                continue
+                            if not is_dir and not canonical.is_file():
+                                continue
+                            entries.append(WorkspaceEntry(item.name, path.relative_to(self.root).as_posix(), is_dir))
+                            if is_dir and not item.is_symlink() and not path.is_junction():
+                                children.append(path)
+                        except (OSError, RuntimeError):
+                            truncated = True
+                    pending.extend(sorted(children, reverse=True))
+            except (OSError, RuntimeError) as exc:
+                if directory == start:
+                    raise WorkspaceError("Search directory cannot be read") from exc
+                truncated = True
+        return WorkspaceDirectory(tuple(sorted(entries, key=lambda entry: entry.relative_path.casefold())), truncated)
 
 
 def _read_command_output(

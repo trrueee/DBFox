@@ -67,6 +67,7 @@ afterEach(async () => {
 
 async function setup(options: { empty?: boolean; locked?: boolean; reject?: boolean; hold?: string; navigation?: boolean; frameMismatch?: boolean; huge?: boolean; frameCount?: number; exportFailure?: boolean; navigationFailure?: boolean } = {}) {
   let doc = makeDocument(), revision = 1, scope = "scope1", released: (() => void) | undefined;
+  let holdNext: string | undefined;
   if (options.locked) doc.layers[0].locked = true;
   if (options.frameCount) doc.frames = Array.from({ length: options.frameCount }, (_, index) => ({ ...structuredClone(doc.frames[0]), id: `frame_${index + 1}` }));
   if (options.huge) {
@@ -77,7 +78,10 @@ async function setup(options: { empty?: boolean; locked?: boolean; reject?: bool
   const calls: Call[] = [];
   const invokeOperation = async <TOutput,>(_owner: string, name: string, input: unknown, operationOptions?: DlcOperationInvokeOptions): Promise<TOutput> => {
     const request = input as Record<string, unknown>; calls.push({ name, input: structuredClone(request), options: operationOptions });
-    if (name === options.hold) await new Promise<void>((resolve) => { released = resolve; });
+    if (name === options.hold || name === holdNext) {
+      holdNext = undefined;
+      await new Promise<void>((resolve) => { released = resolve; });
+    }
     if (name === "documents.list") return { documents: [summary(doc, revision)], has_more: false } as TOutput;
     if (name === "documents.head") return { document_id: "pixel_fixture", revision, content_hash: summary(doc, revision).content_hash, status: "active" } as TOutput;
     if (name === "documents.get") { const at = request.revision as number || revision; const stored = history.get(at)!; return { summary: summary(stored, at), document: metadata(stored) } as TOutput; }
@@ -111,7 +115,8 @@ async function setup(options: { empty?: boolean; locked?: boolean; reject?: bool
     throw new Error(`Unexpected operation ${name}`);
   };
   initExtensionHostGlobalSdk();
-  const staged = createStagedExtensionHost("dbfox.pixel", { invokeOperation, openDockTab: vi.fn() });
+  const openDock = vi.fn<(view: object) => void>();
+  const staged = createStagedExtensionHost("dbfox.pixel", { invokeOperation, openDockTab: openDock });
   const openArtifact = vi.fn(async () => { if (options.navigationFailure) throw new Error("Navigation unavailable"); });
   const extensionHost = { ...staged.host, workbench: { currentScopeId: () => scope, ...(options.navigation === false ? {} : { openArtifact }) } };
   await module.register?.(extensionHost);
@@ -121,7 +126,8 @@ async function setup(options: { empty?: boolean; locked?: boolean; reject?: bool
     ...(!options.empty ? { target: { type: "object" as const, object: { kind: "dbfox.pixel.document", id: "pixel_fixture" } } } : {}) };
   const rendered = render(contributions.dockViews[0].render(view, context));
   if (!options.empty && !options.frameMismatch && options.hold !== "documents.get") await ready();
-  return { calls, context, contributions, rendered, extensionHost, openArtifact, doc: () => doc, release: () => released?.(),
+  return { calls, context, contributions, rendered, extensionHost, openArtifact, openDock, view, doc: () => doc, release: () => released?.(),
+    holdNext: (name: string) => { holdNext = name; },
     changeScope: (value: string) => { scope = value; rendered.rerender(contributions.dockViews[0].render(view, { ...context, workbenchScopeId: scope })); },
     externalEdit: () => { revision++; doc = structuredClone(doc); doc.title = "Agent 新版本"; history.set(revision, structuredClone(doc)); },
   };
@@ -170,11 +176,19 @@ describe("Pixel immutable frontend projection", () => {
     expect(screen.queryByRole("application")).toBeNull();
   });
   it("creates documents with strict integers and unique mutation identity, then opens the real canvas", async () => {
-    const { calls } = await setup({ empty: true });
+    const fixture = await setup({ empty: true });
     await screen.findByText("项目作品");
     fireEvent.change(screen.getByLabelText("宽度"), { target: { value: "32" } });
-    await clickSave("创建像素作品");
-    expect(calls.find((call) => call.name === "documents.create")?.input).toMatchObject({ width: 32, height: 32, expected_version: 0, title: "狐狸骑士", mutation_id: expect.stringMatching(/^pixel_/) });
+    fireEvent.click(screen.getByRole("button", { name: "创建像素作品" }));
+    await waitFor(() => expect(fixture.openDock).toHaveBeenCalledOnce());
+    expect(fixture.calls.find((call) => call.name === "documents.create")?.input).toMatchObject({ width: 32, height: 32, expected_version: 0, title: "狐狸骑士", mutation_id: expect.stringMatching(/^pixel_/) });
+    expect(fixture.openDock).toHaveBeenCalledOnce();
+    const opened = fixture.openDock.mock.calls[0][0] as typeof fixture.view;
+    expect(opened.title).toBe("狐狸骑士");
+    expect(opened.target).toMatchObject({ type: "object", object: { kind: "dbfox.pixel.document", id: "pixel_fixture" } });
+    fixture.rendered.unmount();
+    render(fixture.contributions.dockViews[0].render(opened, fixture.context));
+    await ready();
     expect(screen.getByRole("application")).toBeInTheDocument();
   });
   it("commits one atomic stroke using down-time frame/layer/revision and scaled coordinates", async () => {
@@ -291,6 +305,34 @@ describe("Pixel immutable frontend projection", () => {
     await setup({ huge: true });
     expect(screen.getByRole("button", { name: "新建帧" })).toBeDisabled(); expect(screen.getByRole("button", { name: "创建图层" })).toBeDisabled();
     expect(screen.getByText("262,144 / 262,144 像素槽")).toBeInTheDocument();
+  });
+  it("keeps a manual read locked when an idle background poll finishes", async () => {
+    const fixture = await setup(); vi.useFakeTimers();
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" }); fireEvent(document, new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" }); fireEvent(document, new Event("visibilitychange"));
+    fixture.holdNext("documents.get");
+    fireEvent.click(screen.getByRole("button", { name: /^刷新$/ }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1001); });
+    expect(screen.getByRole("button", { name: "导出成果" })).toBeDisabled();
+    expect(screen.getByRole("application")).toHaveAttribute("aria-disabled", "true");
+    await act(async () => fixture.release());
+    expect(screen.getByRole("button", { name: "导出成果" })).toBeEnabled();
+  });
+  it("does not discard a live stroke when an older background head read returns", async () => {
+    const fixture = await setup({ hold: "documents.head" }); fixture.externalEdit(); vi.useFakeTimers();
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" }); fireEvent(document, new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" }); fireEvent(document, new Event("visibilitychange"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1001); });
+    expect(fixture.calls.filter((call) => call.name === "documents.head")).toHaveLength(1);
+    const element = pixelCanvas() as HTMLCanvasElement;
+    fireEvent.pointerDown(element, { pointerId: 7, button: 0, clientX: 25, clientY: 45 });
+    expect(element.hasPointerCapture(7)).toBe(true);
+    await act(async () => fixture.release());
+    expect(element.hasPointerCapture(7)).toBe(true);
+    expect(screen.getByText("临时笔迹 · 未提交")).toBeInTheDocument();
+    expect(fixture.calls.filter((call) => call.name === "documents.get")).toHaveLength(1);
+    fireEvent.pointerCancel(element, { pointerId: 7 });
+    expect(writes(fixture.calls)).toHaveLength(0);
   });
   it("checks missing Host navigation before export and passes one captured signal across successful export/navigation", async () => {
     const missing = await setup({ navigation: false }); fireEvent.click(screen.getByRole("button", { name: "导出成果" }));

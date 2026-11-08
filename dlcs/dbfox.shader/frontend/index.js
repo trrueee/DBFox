@@ -27,7 +27,7 @@ export function register(host) {
   }
   const components = studioComponents(React, host, activation);
   const { View } = artifactComponents(React, host, activation, components);
-  const icon = h('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, 'aria-hidden': true }, h('path', { d: 'M8 6 2 12l6 6m8-12 6 6-6 6M14 3l-4 18' }));
+  const icon = h(host.ui.ResourceIcon, { kind: 'code', size: 20 });
   host.connectors.register({ id: 'dbfox.shader', title: 'Shader Studio', icon, render: ({ projectId }) => h(components.Connector, { projectId }), addLabel: 'Open Shader Studio', onAdd: ({ projectId }) => components.open(projectId), listResources: async ({ projectId }) => [{ kind: 'dbfox.shader.studio', id: projectId, name: 'Shader Studio', detail: 'Procedural GLSL documents' }] });
   host.dockViews.register({ viewType: 'dbfox.shader.studio', icon: () => icon, resolveTitle: (view) => view.title || 'Shader Studio', isVisible: (view, context) => view.projectId === context.activeProjectId, render: (view, context) => h(components.Studio, { view, context, key: `${view.viewKey}:${context.workbenchScopeId}` }) });
   for (const [suffix, type, title] of [['document', 'document-revision', 'Shader document'], ['report', 'compile-report', 'Shader compile report'], ['preview', 'preview', 'Shader preview']]) {

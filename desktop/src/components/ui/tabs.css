@@ -3,7 +3,7 @@
   align-items: center;
   gap: 2px;
   padding: 2px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   background: var(--control-bg-subtle);
 }
 
@@ -14,14 +14,14 @@
   white-space: nowrap;
   min-height: var(--density-control-height-sm);
   padding: 0 12px;
-  border-radius: calc(var(--radius-control) - 2px);
+  border-radius: var(--radius-pill);
   color: var(--color-text-secondary);
   font-size: var(--ui-font-control);
   font-weight: 500;
   outline: none;
   transition:
     color var(--motion-fast) var(--ease-out),
-    background var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out),
     box-shadow var(--motion-fast) var(--ease-out);
 }
 
@@ -37,8 +37,11 @@
 .dbfox-tabs-trigger[data-state="active"] {
   color: var(--color-text-primary);
   background: var(--surface-raised);
+  background-image: var(--surface-sheen);
   box-shadow: var(--shadow-sm);
 }
+
+.dbfox-tabs-trigger[data-state="active"]:focus-visible { box-shadow: var(--focus-ring); }
 
 .dbfox-tabs-trigger:disabled {
   pointer-events: none;

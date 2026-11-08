@@ -98,7 +98,8 @@ class StoryProposeRelationsTool(BaseTool[RelationProposeInput, StoryProposeOutpu
         "proposal needs from_name, to_name, a short relation kind (for example "
         "师徒/宿敌/同盟), and a reason grounded in the story. Proposals land in "
         "the author's batch-review queue as pending edges; they do NOT become "
-        "world facts until the author confirms them."
+        "world facts until the author confirms them. Use from_id/to_id to "
+        "select exact entities when names are ambiguous."
     )
     input_model = RelationProposeInput
     output_model = StoryProposeOutput
@@ -119,16 +120,11 @@ class StoryProposeRelationsTool(BaseTool[RelationProposeInput, StoryProposeOutpu
         context: ExtensionToolRunContext,
     ) -> StoryProposeOutput:
         _ref, world = select_world(context, None)
-        items = [
-            {
-                "from_name": relation.from_name,
-                "to_name": relation.to_name,
-                "kind": relation.kind,
-                "reason": relation.reason,
-            }
-            for relation in tool_input.relations
-        ]
-        created, unknown = self._store.propose_relations(world.project_id, items)
+        items = [relation.model_dump(exclude_none=True) for relation in tool_input.relations]
+        try:
+            created, unknown = self._store.propose_relations(world.project_id, items)
+        except ValueError as exc:
+            raise ToolInputError(str(exc)) from exc
         if unknown:
             raise ToolInputError(
                 "以下实体名不存在于故事世界中，请先用实体创建流程补充："

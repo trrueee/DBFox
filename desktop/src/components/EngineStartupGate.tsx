@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, FolderOpen, RefreshCw } from "lucide-react";
+import {
+  WarningIcon,
+  FolderOpenIcon,
+  ArrowsClockwiseIcon,
+} from "@/components/icons";
 import {
   ApiError,
   getRuntimeSession,
@@ -251,17 +255,17 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
 
         {stage === "failed" ? (
           <Alert variant="destructive" className="max-w-md text-left">
-            <AlertTriangle aria-hidden="true" />
+            <WarningIcon aria-hidden="true" />
             <AlertTitle>DBFox 未能启动</AlertTitle>
             <AlertDescription>
               <p>{failure?.summary ?? startupMessage(stage, enginePhase)}</p>
               <div className="flex flex-wrap gap-2 pt-1">
                 <Button type="button" onClick={() => void retry()}>
-                  <RefreshCw aria-hidden="true" />
+                  <ArrowsClockwiseIcon aria-hidden="true" />
                   重试启动
                 </Button>
                 <Button type="button" variant="outline" onClick={() => void openDiagnosticLogs()}>
-                  <FolderOpen aria-hidden="true" />
+                  <FolderOpenIcon aria-hidden="true" />
                   打开诊断日志
                 </Button>
               </div>

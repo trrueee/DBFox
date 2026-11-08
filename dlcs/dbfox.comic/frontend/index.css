@@ -1,6 +1,6 @@
 .dbfox-comic { --comic-zoom: 1; color: var(--color-text-primary); font-family: var(--font-family-ui, system-ui, sans-serif); font-size: var(--ui-font-body, 14px); line-height: 1.5; min-width: 0; box-sizing: border-box; }
 .dbfox-comic *, .dbfox-comic *::before, .dbfox-comic *::after { box-sizing: border-box; }
-.dbfox-comic button, .dbfox-comic input, .dbfox-comic select, .dbfox-comic textarea { font: inherit; color: inherit; border: 1px solid var(--color-border); background: var(--surface-workspace); border-radius: var(--radius-md, 6px); padding: 6px 9px; min-height: 34px; }
+.dbfox-comic button, .dbfox-comic input, .dbfox-comic select, .dbfox-comic textarea { font: inherit; color: inherit; border: 1px solid var(--color-border); background: var(--surface-workspace); border-radius: var(--radius-control); padding: 6px 9px; min-height: var(--density-control-height-sm); transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .dbfox-comic button { cursor: pointer; transition: background 160ms, border-color 160ms; }
 .dbfox-comic button:hover:not(:disabled), .dbfox-comic button[aria-pressed="true"], .dbfox-comic button[aria-current] { border-color: var(--color-primary); background: var(--control-bg-hover); }
 .dbfox-comic :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
@@ -32,7 +32,7 @@
 .dbfox-comic-shot-card header { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 8px; font-size: var(--ui-font-caption); flex-wrap: wrap; }
 .dbfox-comic-shot-card > p { padding: 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-text-secondary); }
 .dbfox-comic-object-list { max-height: 280px; overflow-y: auto; margin-bottom: 12px; }
-.dbfox-comic-object-list button { display: block; width: 100%; text-align: left; border-color: transparent; padding: 4px 7px; overflow-wrap: anywhere; }
+.dbfox-comic-object-list button { display: block; width: 100%; text-align: left; border-color: transparent; padding: 4px 7px; overflow-wrap: anywhere; transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .dbfox-comic-object-list .dbfox-comic-child { padding-left: 18px; font-size: var(--ui-font-caption); }
 .dbfox-comic-add-elements { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 12px 0; border-top: 1px solid var(--color-border); }
 .dbfox-comic-details { display: flex; flex-wrap: wrap; gap: 6px; }

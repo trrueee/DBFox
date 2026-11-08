@@ -11,6 +11,7 @@ let openWorkbookSource;
 let dialogProjectId = null;
 const groupsByProject = new Map();
 const loadedProjects = new Set();
+const profileLoads = new Map();
 const catalogByDatabase = new Map();
 const catalogLoading = new Set();
 const catalogErrors = new Map();
@@ -43,12 +44,22 @@ function ensureStylesheet() {
 }
 
 async function loadProfiles(projectId) {
-  const result = await host.operations.invoke("profiles.list", {}, { projectId });
-  const groups = Array.isArray(result?.profiles) ? result.profiles : [];
-  groupsByProject.set(projectId, groups);
-  loadedProjects.add(projectId);
-  emit();
-  return groups;
+  const request = Symbol();
+  profileLoads.set(projectId, request);
+  try {
+    const result = await host.operations.invoke("profiles.list", {}, { projectId });
+    if (profileLoads.get(projectId) !== request) return groupsByProject.get(projectId) || [];
+    const groups = Array.isArray(result?.profiles) ? result.profiles : [];
+    groupsByProject.set(projectId, groups);
+    loadedProjects.add(projectId);
+    emit();
+    return groups;
+  } catch (error) {
+    if (profileLoads.get(projectId) !== request) return groupsByProject.get(projectId) || [];
+    throw error;
+  } finally {
+    if (profileLoads.get(projectId) === request) profileLoads.delete(projectId);
+  }
 }
 
 function providerLabel(provider) {
@@ -58,7 +69,13 @@ function providerLabel(provider) {
 }
 
 function databaseKey(projectId, databaseId) {
-  return `${projectId}:${databaseId}`;
+  for (const group of groupsByProject.get(projectId) || []) {
+    const database = (group.databases || []).find(item => item.id === databaseId);
+    if (database) {
+      return `${projectId}:${databaseId}:${group.profile.connection_generation}:${database.resource_generation}`;
+    }
+  }
+  return `${projectId}:${databaseId}:unavailable`;
 }
 
 async function loadCatalog(projectId, databaseId, options = {}) {
@@ -76,6 +93,7 @@ async function loadCatalog(projectId, databaseId, options = {}) {
       limit: 100,
       cursor,
     }, { projectId });
+    if (key !== databaseKey(projectId, databaseId)) return;
     if (append) {
       const previous = catalogByDatabase.get(key);
       const previousTables = Array.isArray(previous?.tables) ? previous.tables : [];
@@ -87,6 +105,7 @@ async function loadCatalog(projectId, databaseId, options = {}) {
       catalogByDatabase.set(key, result);
     }
   } catch (reason) {
+    if (key !== databaseKey(projectId, databaseId)) return;
     catalogErrors.set(key, reason instanceof Error ? reason.message : "读取数据库目录失败。");
     throw reason;
   } finally {
@@ -279,7 +298,7 @@ function ConnectionDialog({ projectId, embedded = false }) {
                 field("数据库", input({ value: database, onChange: (event) => setDatabase(event.target.value), placeholder: "billing" })),
                 field("用户名", input({ value: username, onChange: (event) => setUsername(event.target.value), placeholder: "analyst" }))),
               field("密码", input({ value: password, onChange: (event) => setPassword(event.target.value), type: "password", autoComplete: "new-password" }))),
-        React.createElement("button", { type: "button", className: "dbfox-data-dialog__disclosure", "aria-expanded": advanced, onClick: () => setAdvanced((value) => !value) }, `${advanced ? "⌄" : "›"} 连接选项`),
+        React.createElement("button", { type: "button", className: "dbfox-data-dialog__disclosure", "aria-expanded": advanced, onClick: () => setAdvanced((value) => !value) }, React.createElement(host.ui.Icon, { name: "caret-right", size: 16 }), "连接选项"),
         advanced ? React.createElement("div", { className: "dbfox-data-dialog__advanced" },
           field("环境", React.createElement("select", { className: "dbfox-data-dialog__input", value: environment, onChange: (event) => setEnvironment(event.target.value) },
             [["dev", "开发"], ["test", "测试"], ["staging", "预发布"], ["prod", "生产"]].map(([value, label]) => React.createElement("option", { key: value, value }, label)))),
@@ -387,7 +406,7 @@ function SqlBlock({
           disabled: block.running || !(block.sql || "").trim(),
           onClick: () => onExecute(block.id),
           title: "运行此语句 (Ctrl/⌘ + Enter)",
-        }, React.createElement(host.ui.Icon, { name: "play", size: 14 }), block.running ? "执行中…" : "运行"),
+        }, React.createElement(host.ui.Icon, { name: "play", size: 16 }), block.running ? "执行中…" : "运行"),
         React.createElement("button", {
           type: "button",
           className: "dbfox-data-block__btn",
@@ -401,7 +420,7 @@ function SqlBlock({
           onClick: () => onDelete(block.id),
           title: "移除此查询",
           "aria-label": "移除此查询",
-        }, React.createElement(host.ui.Icon, { name: "x", size: 14 })) : null)),
+        }, React.createElement(host.ui.Icon, { name: "x", size: 16 })) : null)),
 
     React.createElement("div", { className: "dbfox-data-block__editor-row" },
       React.createElement("div", { className: "dbfox-data-block__gutter", "aria-hidden": true },
@@ -445,7 +464,7 @@ function SqlBlock({
         : React.createElement(ResultGrid, { columns, rows })) : null,
 
     !block.result && !block.running && !block.error ? React.createElement("div", { className: "dbfox-data-block__empty-hint" },
-      React.createElement("span", null, "按 Ctrl/⌘ + Enter 或点击上方 ▶ 运行，查询结果将直接呈现在下方。")) : null);
+      React.createElement("span", null, "按 Ctrl/⌘ + Enter 或点击上方运行按钮，查询结果将直接呈现在下方。")) : null);
 }
 
 function SqlConsoleDock({ view }) {
@@ -565,13 +584,13 @@ function SqlConsoleDock({ view }) {
           className: "dbfox-data-console__btn is-primary",
           onClick: addBlock,
           title: "新建查询 (Append Query Entry)",
-        }, React.createElement(host.ui.Icon, { name: "plus", size: 14 }), "新建查询"),
+        }, React.createElement(host.ui.Icon, { name: "plus", size: 16 }), "新建查询"),
         React.createElement("button", {
           type: "button",
           className: "dbfox-data-console__btn",
           onClick: () => void executeAll(),
           title: "顺序执行控制台中的所有查询",
-        }, React.createElement(host.ui.Icon, { name: "play", size: 14 }), "全部运行"),
+        }, React.createElement(host.ui.Icon, { name: "play", size: 16 }), "全部运行"),
         React.createElement("button", {
           type: "button",
           className: "dbfox-data-console__btn",
@@ -598,7 +617,7 @@ function SqlConsoleDock({ view }) {
           type: "button",
           className: "dbfox-data-console__add-card-btn",
           onClick: addBlock,
-        }, React.createElement(host.ui.Icon, { name: "plus", size: 14 }), "添加新查询"))));
+        }, React.createElement(host.ui.Icon, { name: "plus", size: 16 }), "添加新查询"))));
 }
 
 function CatalogTableDock({ view, context }) {
@@ -725,7 +744,11 @@ function isDatabase(item) {
 }
 
 function DataResourceTree({ projectId, groups, selectedDatabaseId, onSelectTable }) {
-  const root = React.useMemo(() => ({ groups }), [groups]);
+  const treeVersion = JSON.stringify([projectId, groups.map(group => [
+    group.profile.id, group.profile.connection_generation,
+    group.databases.map(database => [database.id, database.resource_generation]),
+  ])]);
+  const root = React.useMemo(() => ({ id: treeVersion }), [treeVersion]);
   const itemId = (item) => {
     if (item === root) return `data-root:${projectId}`;
     if (isProfileGroup(item)) return `profile:${item.profile.id}`;
@@ -763,6 +786,7 @@ function DataResourceTree({ projectId, groups, selectedDatabaseId, onSelectTable
   }
 
   return React.createElement(host.ui.Tree, {
+    key: treeVersion,
     rootItem: root,
     ariaLabel: "数据库资源",
     getItemId: itemId,
@@ -808,7 +832,7 @@ function DataResourceTree({ projectId, groups, selectedDatabaseId, onSelectTable
           onClick: () => openSqlConsole(projectId, item),
           title: "打开 SQL Console",
           "aria-label": `打开 SQL Console：${item.display_name}`,
-        }, React.createElement(host.ui.Icon, { name: "terminal", size: 14 })),
+        }, React.createElement(host.ui.Icon, { name: "terminal", size: 16 })),
         React.createElement("button", {
           type: "button",
           className: "dbfox-data__refresh",
@@ -816,7 +840,7 @@ function DataResourceTree({ projectId, groups, selectedDatabaseId, onSelectTable
           disabled: loading,
           title: "刷新数据库目录",
           "aria-label": `刷新数据库目录：${item.display_name}`,
-        }, React.createElement(host.ui.Icon, { name: "refresh-cw", size: 14 })));
+        }, React.createElement(host.ui.Icon, { name: "refresh-cw", size: 16 })));
     },
     renderBranchFooter: (item, state) => {
       if (isProfileGroup(item)) {
@@ -1077,6 +1101,7 @@ export function deactivate() {
   dialogProjectId = null;
   groupsByProject.clear();
   loadedProjects.clear();
+  profileLoads.clear();
   catalogByDatabase.clear();
   catalogLoading.clear();
   catalogErrors.clear();

@@ -1,6 +1,6 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { fileKind, ResourceIcon } from "../resourcePresentation";
+import { fileKind, referenceKind, ResourceIcon } from "../resourcePresentation";
 
 afterEach(cleanup);
 
@@ -28,8 +28,12 @@ describe("recognizable file presentation", () => {
   it("preserves resource semantics when a folder or table happens to have a file-like name", () => {
     const { container } = render(<><ResourceIcon kind="folder" name="reports.xlsx" expanded /><ResourceIcon kind="table" name="events.csv" /></>);
     expect(container.querySelector("img")).toBeNull();
-    expect(container.querySelector(".lucide-folder-open")).not.toBeNull();
+    expect(container.querySelector('[data-ui-icon="folder-open"]')).not.toBeNull();
     expect(container.querySelector(".resource-icon--table")).not.toBeNull();
+    const reference = { artifactId: "result", label: "report.md" };
+    expect(referenceKind(reference, { type: "dbfox.workspace.file_snapshot", title: "report.md" })).toBe("markdown");
+    expect(referenceKind(reference, { type: "dbfox.data.dataframe", title: "report.md" })).toBe("table");
+    expect(referenceKind(reference)).toBe("artifact");
   });
 
   it("uses native Fluent artwork sizes for tree rows and attachment cards", () => {

@@ -14,7 +14,7 @@ class AgentDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: str = "dbfox.workbench_agent"
-    version: str = "4.0"
+    version: str = "4.1"
     behavior: str = "autonomous_evidence_grounded_analysis"
     allowed_tool_groups: tuple[str, ...] = ()
     execution_mode: str = "agent_autonomous_read"

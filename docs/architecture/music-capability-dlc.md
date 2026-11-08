@@ -35,6 +35,12 @@ Score 写入采用 compare-and-swap：只有授权的 frozen head revision 仍�
 
 模型创作输入不是完整 `ScoreDocument.notes[]`，而是每小节一个紧凑的 `PianoMeasurePlan`：旋律事件、和弦符号、和弦音与有限伴奏型。Music Tool 确定性展开左手伴奏并生成 canonical `ScoreDocument`。这样仍只有 Core Agent 的一次模型调用，没有隐藏 Music LLM，也不会让 16 小节双手逐音 JSON 长时间占据 Provider Turn。
 
+`music_compose_piano` v3 在既有展开器中支持 `sustain_bass`：每小节只演奏
+`chord_pitches` 的第一个音，持续 `meter.beats`，适用于 3/4、4/4、6/8 等拍号。
+其余四种伴奏型保持原行为；根音/五度型仍要求至少两个音。旋律拍位从 0 起，
+时值与拍位使用同一记谱拍单位，不能越过小节。能力指导 v2 明确这些约束，
+同时说明当前 Studio 仅支持谱面和播放，尚无 MusicXML/MIDI 文件导出。
+
 ## 音频转录
 
 ```text

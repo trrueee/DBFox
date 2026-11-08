@@ -1,4 +1,5 @@
 import json
+import pytest
 
 from engine.agent.context import (
     ContextObservation,
@@ -56,15 +57,33 @@ def test_prompt_preserves_native_search_order_and_evicts_its_complete_turn() -> 
     full = PromptAssembler().assemble(definition=AgentDefinition(), context=snapshot, tool_schemas=tools)
     assert full.messages[-4:] == items
     assert full.budget["response_item_tokens"] > 6_000
-    reduced = PromptAssembler().assemble(
-        definition=AgentDefinition(limits=RunLimits(max_prompt_tokens=4_096)),
-        context=snapshot, tool_schemas=tools,
-    )
-    assert reduced.budget["omitted_response_batches"] == 1
-    assert not any(item.get("type") in {"tool_search_call", "tool_search_output", "function_call", "function_call_output"}
-                   for item in reduced.messages)
-    assert reduced.budget["estimated_prompt_tokens"] <= 4_096
+    from engine.agent.context_budget import ContextBudgetExceeded
+    with pytest.raises(ContextBudgetExceeded, match="latest complete"):
+        PromptAssembler().assemble(
+            definition=AgentDefinition(limits=RunLimits(max_prompt_tokens=4_096)),
+            context=snapshot, tool_schemas=tools,
+        )
     assert snapshot.response_batches[0].items == items
+
+
+def test_default_budget_keeps_latest_native_turn_with_a_large_capability_inventory() -> None:
+    from engine.agent.definition import AgentDefinition
+    from engine.agent.prompt import PromptAssembler
+
+    schemas = [{"type": "function", "name": f"operation_{index}", "description": "Inspect or edit a resource",
+                "parameters": {"type": "object", "properties": {"value": {"type": "string", "description": "structured input context " * 60}}}}
+               for index in range(52)]
+    items = [
+        {"type": "reasoning", "encrypted_content": "opaque-state", "summary": [{"type": "summary_text", "text": "reasoning " * 3_200}]},
+        {"type": "function_call", "call_id": "latest-call", "name": "operation_0", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "latest-call", "output": '{"revision":3,"changed":true}'},
+    ]
+    snapshot = ContextSnapshot(session_id="s", run_id="r", context_epoch=0, current_request="Continue building the new result",
+                               messages=[], response_batches=[ResponseItemBatch(turn_id="latest", items=items)], sources=[], hash="hash")
+    bundle = PromptAssembler().assemble(definition=AgentDefinition(), context=snapshot, tool_schemas=schemas)
+    assert bundle.messages[-3:] == items
+    assert bundle.budget["omitted_response_batches"] == 0
+    assert bundle.budget["estimated_prompt_tokens"] <= AgentDefinition().limits.max_prompt_tokens
 
 
 def test_budget_keeps_current_request_and_drops_old_history_first() -> None:
@@ -155,14 +174,14 @@ def test_budget_accounts_for_typed_response_items_and_drops_complete_old_pairs()
     from engine.agent.run import RunLimits
 
     bundle = PromptAssembler().assemble(
-        definition=AgentDefinition(limits=RunLimits(max_prompt_tokens=4_096)),
+        definition=AgentDefinition(limits=RunLimits(max_prompt_tokens=8_192)),
         context=snapshot,
     )
 
     encoded = json.dumps(bundle.messages, ensure_ascii=False)
     assert "current" in encoded
     assert "old " not in encoded
-    assert bundle.budget["estimated_prompt_tokens"] <= 4_096
+    assert bundle.budget["estimated_prompt_tokens"] <= 8_192
     assert bundle.budget["omitted_response_items"] > 0
     assert bundle.budget["omitted_response_batches"] > 0
     assert "durable_evidence_ledger" in encoded
@@ -178,6 +197,7 @@ def test_budget_accounts_for_typed_response_items_and_drops_complete_old_pairs()
         if item.get("type") == "function_call_output"
     }
     assert retained_call_ids == retained_output_ids
+    assert retained_call_ids == {"call-1"}
 
 
 def test_consumed_steer_follows_the_response_batch_it_updates() -> None:

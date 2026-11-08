@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { FolderKanban, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  FoldersIcon,
+  PlusIcon,
+  ArrowsClockwiseIcon,
+  TrashIcon,
+} from "@/components/icons";
 
 import {
   Alert,
@@ -17,7 +22,6 @@ import { useDlcStore } from "../dlc/extensionStore";
 import { useProjectState } from "./useProjectState";
 import type { ConnectorProjectResource } from "../resources/types";
 import "./ProjectOverview.css";
-import { openProjectWorkbench } from "../resources/ProjectWorkbench";
 
 interface InventoryState {
   loading: boolean;
@@ -91,8 +95,6 @@ export function ProjectOverview() {
     setAddError(null);
     setAddingId(connectorId);
     try {
-      const connector = connectors.find(item => item.id === connectorId);
-      if (connector) await openProjectWorkbench(connector, activeProject.id);
       await onAdd({ projectId: activeProject.id });
     } catch (error) {
       setAddError(error);
@@ -126,7 +128,7 @@ export function ProjectOverview() {
       <header className="project-overview__header">
         <div className="project-overview__identity">
           <span className="project-overview__icon" aria-hidden="true">
-            <FolderKanban size={20} />
+            <FoldersIcon size={20} />
           </span>
           <div>
             <h1>{activeProject.name}</h1>
@@ -134,7 +136,7 @@ export function ProjectOverview() {
           </div>
         </div>
         <Button type="button" size="sm" onClick={() => showSmartQueryHome()}>
-          <Plus size={16} aria-hidden="true" />
+          <PlusIcon size={16} aria-hidden="true" />
           新任务
         </Button>
       </header>
@@ -143,12 +145,11 @@ export function ProjectOverview() {
         <section className="project-overview__section" aria-labelledby="project-resources-title">
           <div className="project-overview__section-header">
             <div>
-              <h2 id="project-resources-title">资源</h2>
+              <h2 id="project-resources-title">项目配置</h2>
             </div>
             {connectors.length ? (
-              <Button type="button" variant="ghost" size="sm" onClick={() => void loadInventory()}>
-                <RefreshCw size={14} aria-hidden="true" />
-                刷新
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="刷新项目配置" title="刷新项目配置" onClick={() => void loadInventory()}>
+                <ArrowsClockwiseIcon size={16} aria-hidden="true" />
               </Button>
             ) : null}
           </div>
@@ -182,9 +183,7 @@ export function ProjectOverview() {
                       </span>
                       <span className="project-overview__resource-copy">
                         <span className="project-overview__resource-title">{connector.title}</span>
-                        <small className="project-overview__resource-desc">
-                          由 {connector.title} 扩展提供，配置仅作用于当前项目。
-                        </small>
+                        {state.entries.length > 0 ? <small className="project-overview__resource-desc">{state.entries.length} 项</small> : null}
                       </span>
                       {connector.onAdd ? (
                         <Button
@@ -194,12 +193,12 @@ export function ProjectOverview() {
                           disabled={addingId !== null}
                           onClick={() => void configureResource(connector.id, connector.onAdd!)}
                         >
-                          <Plus size={14} aria-hidden="true" />
+                          <PlusIcon size={16} aria-hidden="true" />
                           {connector.addLabel ?? "配置"}
                         </Button>
                       ) : null}
                     </div>
-                    {connector.listResources ? (
+                    {connector.listResources && (state.loading || state.error || state.entries.length > 0) ? (
                       <div className="project-overview__inventory">
                         {state.loading ? (
                           <p className="project-overview__inventory-empty">正在载入资源…</p>
@@ -232,7 +231,7 @@ export function ProjectOverview() {
                                     void removeResource(connector.id, connector.removeResource!, entry)
                                   }
                                 >
-                                  <Trash2 size={14} aria-hidden="true" />
+                                  <TrashIcon size={16} aria-hidden="true" />
                                 </Button>
                               ) : null}
                             </div>
@@ -245,13 +244,10 @@ export function ProjectOverview() {
                   </div>
                 );
               })}
-              <p className="project-overview__resource-hint">
-                每个扩展在此项目中的连接与配置相互独立；已配置的资源常驻左侧边栏，可从任意任务访问。
-              </p>
             </div>
           ) : (
             <p className="project-overview__empty">
-              安装并启用 DLC 后，可在这里为项目配置数据、文件等资源。
+              启用扩展后，可在这里配置文件夹和数据库等功能。
             </p>
           )}
         </section>

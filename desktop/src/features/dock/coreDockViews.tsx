@@ -1,4 +1,7 @@
-import { FileText, Sparkles } from "lucide-react";
+import {
+  FileTextIcon,
+  SparkleIcon,
+} from "@/components/icons";
 import {
   ArtifactDockContent,
   ArtifactsDockContent,
@@ -10,14 +13,22 @@ import { CORE_DOCK_VIEW_TYPES } from "../dlc/coreContributionIds";
 import { ProjectWorkbench } from "../resources/ProjectWorkbench";
 import { useDlcStore } from "../dlc/extensionStore";
 import { artifactKind, ResourceIcon } from "../../components/resources/resourcePresentation";
+import type { WorkspaceDockTab } from "../../types/workspace";
 
-const iconProps = { size: 13, "aria-hidden": true as const };
+const iconProps = { size: 16, "aria-hidden": true as const };
+
+function ArtifactTabIcon({ view }: { view: WorkspaceDockTab }) {
+  const artifactId = view.target?.type === "artifact" ? view.target.id : undefined;
+  const artifact = useConversationStore(state => artifactId ? state.artifactsById[artifactId] : undefined);
+  return <ResourceIcon size={16} name={artifact?.title ?? view.title}
+    kind={artifact ? artifactKind(artifact.type, artifact.title) : undefined} />;
+}
 
 export const coreDockViews: readonly DockViewContribution[] = [
   {
     viewType: CORE_DOCK_VIEW_TYPES.projectWorkbench,
     preferredWidth: 560,
-    icon: (view) => useDlcStore.getState().contributions.connectors.find(item => item.id === view.stateKey)?.icon ?? <FileText {...iconProps} />,
+    icon: (view) => useDlcStore.getState().contributions.connectors.find(item => item.id === view.stateKey)?.icon ?? <FileTextIcon {...iconProps} />,
     resolveTitle: (view) => view.title,
     isVisible: (view, context) => view.projectId === context.activeProjectId,
     render: (view) => <ProjectWorkbench connectorId={view.stateKey ?? ""} projectId={view.projectId ?? ""} />,
@@ -25,7 +36,7 @@ export const coreDockViews: readonly DockViewContribution[] = [
   {
     viewType: CORE_DOCK_VIEW_TYPES.artifacts,
     preferredWidth: 560,
-    icon: () => <Sparkles {...iconProps} />,
+    icon: () => <SparkleIcon {...iconProps} />,
     resolveTitle: () => "成果",
     isVisible: (view, context) =>
       Boolean(context.activeConversationId)
@@ -42,7 +53,7 @@ export const coreDockViews: readonly DockViewContribution[] = [
   {
     viewType: CORE_DOCK_VIEW_TYPES.artifact,
     preferredWidth: 600,
-    icon: (view) => <ResourceIcon size={16} kind={artifactKind(view.target?.type === "artifact" ? useConversationStore.getState().artifactsById[view.target.id]?.type ?? "" : "")} />,
+    icon: (view) => <ArtifactTabIcon view={view} />,
     resolveTitle: (view) => view.title,
     isVisible: (view, context) => {
       if (view.target?.type !== "artifact") return false;
@@ -59,6 +70,7 @@ export const coreDockViews: readonly DockViewContribution[] = [
     render: (view, context) => (
       <DockSuspense>
         <ArtifactDockContent
+          key={`${view.viewKey}:${context.activeProjectId ?? ""}`}
           tab={view}
           showToast={context.showToast}
           onAsk={context.onAsk}

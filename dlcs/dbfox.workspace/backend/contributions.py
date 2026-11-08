@@ -4,6 +4,7 @@ from dbfox_dlc_api import (
     ArtifactDraft,
     BackendExtensionHost,
     BaseTool,
+    CapabilityGuidanceSpec,
     ContextContributionInput,
     ContextFragment,
     DlcOperationContext,
@@ -19,6 +20,7 @@ from dbfox_dlc_api import (
     ToolPolicy,
     ToolPresentation,
     ToolSemanticSpec,
+    ToolKey,
 )
 
 from .contracts import (
@@ -50,10 +52,12 @@ from .contracts import (
     WorkspaceFileSnapshotPayload,
 )
 from .service import (
+    WorkspaceConflict,
     WorkspaceError,
     WorkspaceService,
 )
 from .store import WORKSPACE_RESOURCE_KIND, WorkspaceBindingStore
+from .representation import FILE_REPRESENTATION, WorkspaceFileRepresentation
 
 FILE_SNAPSHOT = "dbfox.workspace.file_snapshot"
 CODE_PATCH = "dbfox.workspace.code_patch"
@@ -77,10 +81,14 @@ def _scope(context: ExtensionToolRunContext) -> ResourceScopeRef:
 class WorkspaceFileSearchTool(BaseTool[FileSearchInput, FileSearchOutput]):
     name = "file_search"
     group = "workspace"
-    description = "Search bounded file names inside the authorized local workspace."
+    description = (
+        "Find files and directories recursively by a literal name or relative-path substring. "
+        "An empty query lists immediate children of path_prefix. Skips dependency/build folders; "
+        "truncated means the bounded scan or result limit was reached."
+    )
     input_model = FileSearchInput
     output_model = FileSearchOutput
-    version = "1"
+    version = "2"
     policy = ToolPolicy(risk_level="safe", requires_approval=False)
     execution = ToolExecutionSpec(
         recovery="retry_safe",
@@ -95,14 +103,10 @@ class WorkspaceFileSearchTool(BaseTool[FileSearchInput, FileSearchOutput]):
 
     def run(self, input: FileSearchInput, context: ExtensionToolRunContext) -> FileSearchOutput:
         try:
-            directory = _workspace(context).list_directory(input.path_prefix)
+            directory = _workspace(context).search_files(input.query, path_prefix=input.path_prefix, limit=input.limit)
         except WorkspaceError as exc:
             raise ToolInputError("无法读取该项目文件夹。") from exc
-        needle = input.query.casefold()
-        all_matches = [
-            entry for entry in directory.entries if needle in entry.name.casefold()
-        ]
-        matches = all_matches[: input.limit]
+        matches = directory.entries
         return FileSearchOutput(
             query=input.query,
             path_prefix=input.path_prefix,
@@ -111,7 +115,7 @@ class WorkspaceFileSearchTool(BaseTool[FileSearchInput, FileSearchOutput]):
                 for item in matches
             ],
             returned_count=len(matches),
-            truncated=directory.truncated or len(all_matches) > len(matches),
+            truncated=directory.truncated,
         )
 
     def project_observation(self, *, status, output, artifacts):
@@ -144,7 +148,7 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
     description = "Read one bounded UTF-8 file from the authorized local workspace."
     input_model = FileReadInput
     output_model = FileReadOutput
-    version = "1"
+    version = "2"
     policy = ToolPolicy(risk_level="safe", requires_approval=False)
     execution = ToolExecutionSpec(
         recovery="retry_safe",
@@ -261,7 +265,7 @@ class WorkspaceFileWriteTool(BaseTool[FileWriteInput, FileMutationOutput]):
     )
     input_model = FileWriteInput
     output_model = FileMutationOutput
-    version = "1"
+    version = "2"
     policy = ToolPolicy(risk_level="warning", requires_approval=True)
     execution = ToolExecutionSpec(
         backend="isolated_process",
@@ -275,20 +279,18 @@ class WorkspaceFileWriteTool(BaseTool[FileWriteInput, FileMutationOutput]):
 
     def run(self, input: FileWriteInput, context: ExtensionToolRunContext):
         workspace = _workspace(context)
-        path = workspace.resolve(input.path)
-        created = not path.exists()
-        if not created and input.expected_sha256 is None:
-            raise ToolInputError("覆盖已有文件前必须先读取并提供当前 sha256。")
         try:
             snapshot = workspace.write_text_file(
                 input.path,
                 input.content,
                 expected_sha256=input.expected_sha256,
             )
+        except WorkspaceConflict as exc:
+            raise ToolInputError(str(exc)) from exc
         except WorkspaceError as exc:
             raise ToolInputError("无法写入该项目文件。") from exc
         return _patch_outcome(
-            _mutation_output(snapshot, created=created),
+            _mutation_output(snapshot, created=input.expected_sha256 is None),
             workspace_ref=_scope(context),
             old_sha256=input.expected_sha256,
         )
@@ -311,7 +313,7 @@ class WorkspaceFileEditTool(BaseTool[FileEditInput, FileMutationOutput]):
     )
     input_model = FileEditInput
     output_model = FileMutationOutput
-    version = "1"
+    version = "2"
     policy = ToolPolicy(risk_level="warning", requires_approval=True)
     execution = ToolExecutionSpec(
         backend="isolated_process",
@@ -332,6 +334,8 @@ class WorkspaceFileEditTool(BaseTool[FileEditInput, FileMutationOutput]):
                 expected_sha256=input.expected_sha256,
                 replace_all=input.replace_all,
             )
+        except WorkspaceConflict as exc:
+            raise ToolInputError(str(exc)) from exc
         except WorkspaceError as exc:
             raise ToolInputError("无法精确编辑该项目文件，请重新读取并使用唯一锚点。") from exc
         return _patch_outcome(
@@ -381,7 +385,7 @@ class WorkspaceFileMoveTool(BaseTool[FileMoveInput, FileMoveOutput]):
     description = "Move or rename one path inside the authorized workspace without overwrite."
     input_model = FileMoveInput
     output_model = FileMoveOutput
-    version = "1"
+    version = "2"
     policy = ToolPolicy(risk_level="warning", requires_approval=True)
     execution = ToolExecutionSpec(
         backend="isolated_process",
@@ -396,6 +400,8 @@ class WorkspaceFileMoveTool(BaseTool[FileMoveInput, FileMoveOutput]):
     def run(self, input: FileMoveInput, context: ExtensionToolRunContext):
         try:
             _workspace(context).move_path(input.source_path, input.destination_path)
+        except WorkspaceConflict as exc:
+            raise ToolInputError(str(exc)) from exc
         except WorkspaceError as exc:
             raise ToolInputError("无法移动该项目路径。") from exc
         return FileMoveOutput(
@@ -597,7 +603,7 @@ def _register_operations(host: BackendExtensionHost, store: WorkspaceBindingStor
         binding = store.get_project_binding(_project_id(context))
         if binding is None:
             raise _operation_error("Workspace binding not found", code="WORKSPACE_NOT_FOUND", status=404)
-        return WorkspaceService(binding.root_path)
+        return WorkspaceService(binding.root_path, mutation_database=store.database_path)
 
     def get_binding(_input: EmptyInput, context: DlcOperationContext) -> BindingOutput:
         return BindingOutput(binding=store.get_project_binding(_project_id(context)))
@@ -647,16 +653,17 @@ def _register_operations(host: BackendExtensionHost, store: WorkspaceBindingStor
 
     def write_file(input: FileWriteInput, context: DlcOperationContext) -> FileMutationOutput:
         workspace = project_workspace(context)
-        created = not workspace.resolve(input.path).exists()
         try:
             snapshot = workspace.write_text_file(
                 input.path,
                 input.content,
                 expected_sha256=input.expected_sha256,
             )
+        except WorkspaceConflict as exc:
+            raise _operation_error(str(exc), code="WORKSPACE_CONFLICT", status=409) from exc
         except WorkspaceError as exc:
             raise _operation_error("Workspace file cannot be written") from exc
-        return _mutation_output(snapshot, created=created)
+        return _mutation_output(snapshot, created=input.expected_sha256 is None)
 
     def edit_file(input: FileEditInput, context: DlcOperationContext) -> FileMutationOutput:
         try:
@@ -667,6 +674,8 @@ def _register_operations(host: BackendExtensionHost, store: WorkspaceBindingStor
                 expected_sha256=input.expected_sha256,
                 replace_all=input.replace_all,
             )
+        except WorkspaceConflict as exc:
+            raise _operation_error(str(exc), code="WORKSPACE_CONFLICT", status=409) from exc
         except WorkspaceError as exc:
             raise _operation_error("Workspace file cannot be edited") from exc
         return _mutation_output(snapshot, created=False)
@@ -681,6 +690,8 @@ def _register_operations(host: BackendExtensionHost, store: WorkspaceBindingStor
     def move_file(input: FileMoveInput, context: DlcOperationContext) -> FileMoveOutput:
         try:
             project_workspace(context).move_path(input.source_path, input.destination_path)
+        except WorkspaceConflict as exc:
+            raise _operation_error(str(exc), code="WORKSPACE_CONFLICT", status=409) from exc
         except WorkspaceError as exc:
             raise _operation_error("Workspace path cannot be moved") from exc
         return FileMoveOutput(
@@ -737,6 +748,25 @@ def register(host: BackendExtensionHost) -> None:
     host.resources.register_provider(store.list_resources)
     host.resources.register_resolver(WORKSPACE_RESOURCE_KIND, store.resolve)
     host.context.register(WorkspaceContextContributor(store))
+    host.agent_guidance.register(CapabilityGuidanceSpec(
+        id="workspace_evidence", version="1",
+        applies_to_resource_kinds=(WORKSPACE_RESOURCE_KIND,),
+        applies_to_artifact_types=(FILE_SNAPSHOT, CODE_PATCH),
+        tool_refs=tuple(ToolKey(owner_id="dbfox.workspace", local_name=name) for name in (
+            "file_search", "file_read", "file_write", "file_edit", "file_grep", "command_run",
+        )),
+        instructions=(
+            "Distinguish a file's assertions, static code review, saved changes, and observed execution. "
+            "A document saying completed or a successful file write does not prove a feature works. "
+            "Report verification as unverified unless supported by available execution evidence, and state its scope. "
+            "Never turn a search with no matches or a truncated listing into proof that the entire project lacks a file, test, or implementation. "
+            "Use file_search with a nonempty literal name/path query for bounded recursive discovery, or an empty query to list direct children. "
+            "Read the required remaining file pages before concluding from truncated content. "
+            "Do not repeat an interrupted mutation or command until its outcome is verified; a rejection is not authorization to resubmit it."
+        ),
+    ))
     host.artifacts.register(FILE_SNAPSHOT, 1, WorkspaceFileSnapshotPayload)
     host.artifacts.register(CODE_PATCH, 1, WorkspaceCodePatchPayload)
+    for artifact_type in (FILE_SNAPSHOT, CODE_PATCH):
+        host.artifacts.register_representation(artifact_type, FILE_REPRESENTATION, WorkspaceFileRepresentation(store))
     _register_operations(host, store)

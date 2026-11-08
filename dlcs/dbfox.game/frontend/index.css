@@ -1,6 +1,6 @@
 .dbfox-game { color:var(--color-text-primary); font:var(--ui-font-body)/var(--ui-line-body) var(--font-family-ui); }
 .dbfox-game * { box-sizing:border-box; }
-.dbfox-game button, .dbfox-game input, .dbfox-game select { font:inherit; color:inherit; border:1px solid var(--color-border); border-radius:6px; background:var(--color-panel); min-height:32px; padding:5px 9px; max-width:100%; }
+.dbfox-game button, .dbfox-game input, .dbfox-game select { font:inherit; color:inherit; border:1px solid var(--color-border); border-radius:var(--radius-control); background:var(--color-panel); min-height:var(--density-control-height-sm); padding:5px 9px; max-width:100%; transition:background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .dbfox-game button { cursor:pointer; transition:background 120ms; }
 .dbfox-game button:hover:not(:disabled) { background:var(--color-bg-subtle); border-color:var(--color-border-hover); }
 .dbfox-game button:disabled, .dbfox-game input:disabled, .dbfox-game select:disabled { opacity:.5; cursor:default; }
@@ -22,9 +22,9 @@
 .dbfox-game .game-badge { font-size:var(--ui-font-caption); color:var(--color-text-secondary); padding:2px 6px; border:1px solid var(--color-border); border-radius:4px; white-space:nowrap; }
 .dbfox-game .game-workspace { display:grid; grid-template-columns:220px minmax(280px,1fr) 286px; min-height:540px; align-items:stretch; }
 .dbfox-game .game-library-panel { min-width:0; padding:12px; border-right:1px solid var(--color-border); background:var(--color-panel); max-height:800px; overflow:auto; }
-.dbfox-game .game-tabs { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:12px; }
-.dbfox-game .game-tabs button { border-color:transparent; background:transparent; padding:4px 8px; font-size:var(--ui-font-caption); }
-.dbfox-game .game-tabs button[aria-pressed="true"] { color:var(--color-primary); border-color:var(--color-border); background:var(--color-primary-soft); }
+.dbfox-game .game-tabs { display:flex; width:fit-content; flex-wrap:wrap; gap:3px; padding:3px; margin-bottom:12px; border-radius:var(--radius-pill); background:var(--control-bg-hover); }
+.dbfox-game .game-tabs button { border-color:transparent; background:transparent; padding:4px 8px; font-size:var(--ui-font-caption); transition:background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
+.dbfox-game .game-tabs button[aria-pressed="true"] { color:var(--color-text-primary); border-color:transparent; background:var(--surface-raised); box-shadow:var(--shadow-card); }
 .dbfox-game .game-preview-panel { padding:14px; min-width:0; display:flex; flex-direction:column; gap:12px; }
 .dbfox-game .game-preview-toolbar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
 .dbfox-game .game-preview-toolbar select { max-width:240px; }
@@ -33,8 +33,8 @@
 .dbfox-game .game-canvas-parent { position:absolute; inset:0; }
 .dbfox-game .game-canvas-parent canvas { display:block; width:100%; height:100%; object-fit:contain; }
 .dbfox-game .game-viewport-loading { position:absolute; inset:0; display:grid; place-items:center; background:var(--color-panel); }
-.dbfox-game .game-selection-box { position:absolute; border:2px solid var(--color-primary); pointer-events:none; }
-.dbfox-game .game-selection-box > span { position:absolute; left:-2px; bottom:100%; padding:0 4px; background:var(--color-primary-fill); color:var(--color-on-primary); white-space:nowrap; font-size:var(--ui-font-caption); }
+.dbfox-game .game-selection-box { position:absolute; border:2px solid var(--color-primary); pointer-events:none; transition:background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
+.dbfox-game .game-selection-box > span { position:absolute; left:-2px; bottom:100%; padding:0 4px; background:var(--color-primary-fill); color:var(--color-on-primary); white-space:nowrap; font-size:var(--ui-font-caption); transition:background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .dbfox-game .game-preview-stats { display:flex; gap:12px; flex-wrap:wrap; color:var(--color-text-secondary); font-size:var(--ui-font-caption); }
 .dbfox-game .game-playtest-row { display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin-top:auto; }
 .dbfox-game .game-playtest-row label { display:flex; flex-direction:column; gap:4px; font-size:var(--ui-font-caption); }
@@ -51,7 +51,7 @@
 .dbfox-game .game-fields label, .dbfox-game .game-spec > label { display:flex; flex-direction:column; gap:4px; font-size:var(--ui-font-caption); min-width:0; }
 .dbfox-game .game-fields input, .dbfox-game .game-fields select { width:100%; }
 .dbfox-game .game-fields .game-check { flex-direction:row; align-items:center; justify-content:space-between; grid-column:1/-1; }
-.dbfox-game .game-check input { width:18px; min-height:18px; }
+.dbfox-game .game-check input { width:18px; min-height:var(--density-control-height-sm); }
 .dbfox-game .game-fields input[type="color"] { padding:2px; height:32px; }
 .dbfox-game fieldset { min-width:0; margin:10px 0; padding:10px; border:1px solid var(--color-border); border-radius:6px; }
 .dbfox-game legend { color:var(--color-text-secondary); font-size:var(--ui-font-caption); padding:0 5px; }

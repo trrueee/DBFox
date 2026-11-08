@@ -65,7 +65,8 @@ def _stream_response(items, tools):
     return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=body)
 
 
-def _coordinator(db_session, registry, handler, *, model="gpt-5.4"):
+def _coordinator(db_session, registry, handler, *, model="gpt-5.4", limits=None):
+    from engine.agent.run import RunLimits
     factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
     db_session.add(AgentSession(id="review-session", title="Independent search review"))
     db_session.commit()
@@ -83,7 +84,7 @@ def _coordinator(db_session, registry, handler, *, model="gpt-5.4"):
         ), model_name=settings.model_name, owns_client=True)
 
     loop = RunLoop(session_factory=factory, model_factory=adapter, registry=registry,
-                   definition=AgentDefinition(allowed_tool_groups=("review",)),
+                   definition=AgentDefinition(allowed_tool_groups=("review",), limits=limits or RunLimits()),
                    context_contributors=default_context_contributors(),
                    completion=CompletionGate(build_default_completion_policy()))
     return SessionCoordinator(session_factory=factory, run_loop=loop), admission.run_id
@@ -144,7 +145,8 @@ def test_unsupported_model_schema_overflow_is_terminalized_by_coordinator(db_ses
         requests.append(request)
         raise AssertionError("Overflow must fail before provider admission")
 
-    coordinator, run_id = _coordinator(db_session, ToolRegistry().register(LargeProbe()), handler, model="gpt-4o-mini")
+    from engine.agent.run import RunLimits
+    coordinator, run_id = _coordinator(db_session, ToolRegistry().register(LargeProbe()), handler, model="gpt-4o-mini", limits=RunLimits(max_prompt_tokens=32_768))
     try:
         coordinator._drain_session("review-session", Event())
     finally:
@@ -152,7 +154,7 @@ def test_unsupported_model_schema_overflow_is_terminalized_by_coordinator(db_ses
     db_session.expire_all()
     run = db_session.get(AgentRun, run_id)
     assert run.status == "failed"
-    assert run.error_code
+    assert run.error_code == "AGENT_CONTEXT_BUDGET_EXCEEDED"
     assert requests == []
     sessions = SessionRepository(db_session)
     lease = sessions.claim(session_id="review-session", owner="next-worker", ttl_seconds=30)

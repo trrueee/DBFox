@@ -1,4 +1,4 @@
-import type { RequestedResourceRef, RunProjection, ConversationInputReference } from "../lib/api/generated/types.gen";
+import type { RequestedResourceRef, RunProjection, ConversationInputReference, ConversationSummaryResponse } from "../lib/api/generated/types.gen";
 
 /**
  * Product projection types consumed by the timeline and artifact workspace.
@@ -21,14 +21,13 @@ export type CompletionLimitationCode =
   | "NO_PROGRESS";
 export type ConversationDeliveryMode = "queue" | "steer" | "cancel_and_replace";
 
-export interface ConversationSummary {
+export interface ConversationSummary extends Pick<ConversationSummaryResponse, "run_status" | "cursor"> {
   id: string;
   title: string;
   project_id?: string | null;
   updated_at: string | null;
   selected_artifact_id?: string | null;
   last_message?: string;
-  run_status?: AgentRunStatus | null;
   message_count?: number;
   artifact_count?: number;
 }

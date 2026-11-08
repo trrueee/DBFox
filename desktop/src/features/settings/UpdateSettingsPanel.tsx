@@ -1,4 +1,10 @@
-import { AlertTriangle, Download, RefreshCw, RotateCcw, ShieldCheck } from "lucide-react";
+import {
+  WarningIcon,
+  DownloadSimpleIcon,
+  ArrowsClockwiseIcon,
+  ArrowCounterClockwiseIcon,
+  ShieldCheckIcon,
+} from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 
 import { SettingsContent, SettingsSection, SettingsStatus } from "../../components/settings";
@@ -120,12 +126,12 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
       )}
 
       <SettingsSection
-        icon={Download}
+        icon={DownloadSimpleIcon}
         title="应用更新"
         description="仅在你手动触发时检查；DBFox 不接受 Renderer 提供的更新 URL。"
         trailing={(
           <Button variant="outline" size="sm" disabled={!configured || checking} onClick={() => void checkForUpdate()}>
-            <RefreshCw size={14} aria-hidden="true" />
+            <ArrowsClockwiseIcon size={16} aria-hidden="true" />
             {checking ? "检查中…" : "检查更新"}
           </Button>
         )}
@@ -146,7 +152,7 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
             </div>
             {update.body ? <p>{update.body}</p> : null}
             <Button disabled={installing} onClick={() => void installUpdate()}>
-              <Download size={14} aria-hidden="true" />
+              <DownloadSimpleIcon size={16} aria-hidden="true" />
               {installing ? "正在准备安装…" : "下载、验证并安装"}
             </Button>
           </div>
@@ -160,7 +166,7 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
       </SettingsSection>
 
       <SettingsSection
-        icon={recovery?.previousUncleanExit ? AlertTriangle : RotateCcw}
+        icon={recovery?.previousUncleanExit ? WarningIcon : ArrowCounterClockwiseIcon}
         title="异常退出恢复"
         description="启动标记只记录上一次是否正常退出，不包含窗口内容、SQL、会话、Token 或凭据。"
       >
@@ -174,7 +180,7 @@ export function UpdateSettingsPanel({ showToast }: UpdateSettingsPanelProps) {
       </SettingsSection>
 
       <SettingsSection
-        icon={ShieldCheck}
+        icon={ShieldCheckIcon}
         title="发布安全边界"
         description="更新元数据完整性、平台代码签名与发布 provenance 是相互独立的门禁。"
       >

@@ -41,6 +41,20 @@ def test_world_is_singleton_per_project_and_default_resource(store: StoryStateSt
     assert store.list_resources("other") == ()
 
 
+def test_world_lookup_has_a_valid_empty_and_populated_operation_contract(store: StoryStateStore) -> None:
+    operations = []
+    contributions._register_operations(SimpleNamespace(operations=SimpleNamespace(register=operations.append)), store)
+    operation = next(spec for spec in operations if spec.name == "worlds.get")
+    context = SimpleNamespace(project_id="new-project")
+
+    empty = operation.output_model.model_validate(operation.handler(operation.input_model(), context))
+    assert empty.model_dump(mode="json") == {"world": None}
+
+    created = store.ensure_world("new-project", "雨夜修表铺")
+    populated = operation.output_model.model_validate(operation.handler(operation.input_model(), context))
+    assert populated.world == created
+
+
 def test_propose_creates_pending_edges_and_reports_unknown_names(
     store: StoryStateStore,
 ) -> None:
@@ -362,6 +376,7 @@ class _FakeHost:
     tools = _FakeTools()
     completion = _FakeCompletion()
     runtime_info = _FakeRuntimeInfo()
+    agent_guidance = _FakeTools()
 
 
 class _FakeContext:
@@ -426,9 +441,9 @@ def test_operation_surface_covers_world_entities_relations_revisions() -> None:
         type("I", (), {"kind": "character", "name": "沈青梧", "summary": ""})(), context
     )
     proposed = host.operations.specs["relations.propose"].handler(
-        type("I", (), {"relations": (
+        host.operations.specs["relations.propose"].input_model(relations=(
             {"from_name": "沈青梧", "to_name": "林晚", "kind": "庇护", "reason": ""},
-        )})(), context
+        )), context
     )
     decided = host.operations.specs["relations.decide"].handler(
         type("I", (), {"edge_id": proposed.edges[0].id, "decision": "confirmed"})(), context

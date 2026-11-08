@@ -6,6 +6,7 @@ import json
 
 from dbfox_dlc_api import BaseModel, ConfigDict, Field
 from pydantic import JsonValue, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 OWNER = "dbfox.pixel"
 DOCUMENT_KIND = OWNER + ".document"
@@ -180,13 +181,21 @@ class Rectangle(PixelTarget):
 class Stamp(PixelTarget):
     kind: Literal["stamp"]
     rect: Rect
-    pixels: list[Index] = Field(min_length=1, max_length=4096)
+    pixels: list[Index] = Field(
+        min_length=1, max_length=4096,
+        description=("Flat row-major palette indices, exactly rect.width * rect.height entries. "
+                     "A 16 by 16 rectangle requires exactly 256 indices; slot 0 is transparent. "
+                     "Use smaller rectangular stamps when the full list is difficult to count."),
+    )
     transparent_mode: Literal["replace", "over"] = "replace"
 
     @model_validator(mode="after")
     def shape(self):
         if len(self.pixels) != self.rect.width * self.rect.height:
-            raise ValueError("Stamp pixel count must equal its rectangle area")
+            raise PydanticCustomError(
+                "pixel_stamp_pixel_count_must_equal_rectangle_area",
+                "Stamp pixel count must equal its rectangle area",
+            )
         return self
 
 

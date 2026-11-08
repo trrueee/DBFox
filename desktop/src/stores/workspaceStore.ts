@@ -43,7 +43,7 @@ interface WorkspaceActions {
   setSettingsSection: (section: AppSettingsSection) => void;
   setDockOpen: (open: boolean) => void;
   setDockWidth: (width: number) => void;
-  setDraftInput: (value: string) => void;
+  setDraftInput: (value: string, workbenchKey?: string) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setDockActiveTab: (viewKey: string) => void;
   closeDockTab: (viewKey: string) => void;
@@ -62,7 +62,7 @@ interface WorkspaceActions {
   ) => void;
   addWorkbenchReference: (reference: WorkbenchReference) => void;
   removeWorkbenchReference: (reference: WorkbenchReference) => void;
-  clearWorkbenchReferences: () => void;
+  clearWorkbenchReferences: (workbenchKey?: string) => void;
   ensureActiveWorkbenchScope: () => string;
   setDraftConversationId: (conversationId: string) => void;
 }
@@ -142,8 +142,8 @@ export const selectActiveWorkbenchReferences = (
 function updateActiveWorkbench(
   state: WorkspaceState,
   update: (workbench: ConversationWorkbenchState) => ConversationWorkbenchState,
+  key = getActiveWorkbenchKey(state),
 ): Pick<WorkspaceState, "workbenchByConversation"> {
-  const key = getActiveWorkbenchKey(state);
   const current = state.workbenchByConversation[key] ?? createWorkbench();
   return {
     workbenchByConversation: {
@@ -207,8 +207,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()(persist((set, get) => 
     if (!Number.isFinite(dockWidth)) return;
     set((state) => updateActiveWorkbench(state, (workbench) => ({ ...workbench, dockWidth: Math.min(2400, Math.max(320, Math.round(dockWidth))) })));
   },
-  setDraftInput: (draftInput) =>
-    set((state) => updateActiveWorkbench(state, (workbench) => ({ ...workbench, draftInput }))),
+  setDraftInput: (draftInput, workbenchKey) =>
+    set((state) => updateActiveWorkbench(state, (workbench) => ({ ...workbench, draftInput }), workbenchKey)),
 
   setDockActiveTab: (activeViewKey) =>
     set((state) => ({
@@ -306,11 +306,11 @@ export const useWorkspaceStore = create<WorkspaceStore>()(persist((set, get) => 
       ),
     }))),
 
-  clearWorkbenchReferences: () =>
+  clearWorkbenchReferences: (workbenchKey) =>
     set((state) => updateActiveWorkbench(state, (workbench) => ({
       ...workbench,
       references: [],
-    }))),
+    }), workbenchKey)),
 
   setDraftConversationId: (draftConversationId) =>
     set((state) => updateActiveWorkbench(state, (workbench) => ({ ...workbench, draftConversationId }))),

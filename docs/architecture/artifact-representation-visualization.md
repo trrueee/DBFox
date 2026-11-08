@@ -103,7 +103,7 @@ snapshot、DLC Host、权限、Tool Runtime 和 React UI；整体引入会制造
 - 不让 Core 理解 SQL、line/bar、x/y、Vega、音乐或其他 DLC 领域语义；
 - 不把 AI 生成的 JavaScript、React、SQL 或任意 URL 作为可执行可视化规范；
 - 不因为 Artifact 可以多视图，就把语义不同的 SQL、执行结果和可视化合并成一个对象；
-- 不重做已采用的 Fluent 2、Radix、shadcn、TanStack 和 Agent Elements；Dock layout 只有在成熟引擎
+- 不重做已采用的 HIG 展示规则、Radix、shadcn、TanStack 和 Agent Elements；Dock layout 只有在成熟引擎
   通过门禁后才整体替换，不自行扩写第二套布局状态机；
 - 不维持 ECharts 与 Vega 两套新建图表链路。
 
@@ -421,7 +421,7 @@ Evidence”子视图。这保留用户感知上的“语句与表格双视图”
 | --- | --- |
 | `dbfox.dataframe.v1` schema 和互操作合同 | DLC SDK/Host 平台合同 |
 | 通用 DataFrame Table View、Grid ARIA、Cell preview、virtualization | Frontend Host/Core UI |
-| TanStack Table/Virtual engine 与 Fluent/DBFox presentation | Frontend Host/Core UI |
+| TanStack Table/Virtual engine 与 DBFox HIG presentation | Frontend Host/Core UI |
 | Result 数据、字段类型、分页、排序、过滤和聚合 | 提供 Artifact 的 Source DLC |
 | 数据库 Schema、SQL、连接、profile、数据库专属动作 | Data DLC |
 | Visualization 的 data-table fallback | Visualization DLC 组合 Host Table View |
@@ -470,7 +470,7 @@ VisualizationDocument
 ```
 
 - 图形默认使用 Vega-Lite；高级场景使用经过更严格策略限制的 Vega；
-- KPI、标题、说明、Toolbar、Error 和布局外壳使用现有 React/Fluent/Radix 组件；
+- KPI、标题、说明、Toolbar、Error 和布局外壳使用现有 React/Radix 组件；
 - 完整 Result 检查继续打开 Host 的 TanStack DataFrame View；Visualization 文档内的有界 table block 和
   无障碍 fallback 使用语义化只读表格，不另建分页/筛选状态机；
 - 模型不能提供任意 CSS、JS、React、网络 loader 或可执行 ECharts option；
@@ -641,7 +641,7 @@ fence。未来若加入数据点级 drill-down，也必须沿用同一取消、�
 - 图表提供数据表 fallback，空、加载、错误和 stale 都有明确状态；
 - Heavy renderer 按 DLC chunk 延迟加载，卸载后释放资源；
 - inline 以阅读稳定性为优先，workspace 才开放高密度控制；
-- UI 直接使用[现行 UI 设计与开发规范](../quality/ui-design-and-development.md)和 Fluent 2 tokens。
+- UI 直接使用[现行 UI 设计与开发规范](../quality/ui-design-and-development.md)和 DBFox semantic tokens。
 
 ## 14. 当前实现状态
 

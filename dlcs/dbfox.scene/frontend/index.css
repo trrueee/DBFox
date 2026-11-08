@@ -4,6 +4,7 @@
   height: 100%;
   min-height: 0;
   min-width: 0;
+  container-type: inline-size;
   color: var(--color-text-primary);
   background: var(--surface-panel);
   font-family: var(--font-family-ui);
@@ -11,7 +12,7 @@
 }
 .dbfox-scene *, .dbfox-scene *::before, .dbfox-scene *::after { box-sizing: border-box; }
 .dbfox-scene button, .dbfox-scene select, .dbfox-scene input {
-  min-height: 30px;
+  min-height: var(--density-control-height-sm);
   max-width: 100%;
   border: 1px solid var(--control-border);
   border-radius: var(--radius-control);
@@ -19,6 +20,7 @@
   color: var(--color-text-primary);
   font: inherit;
   font-size: var(--ui-font-caption);
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 .dbfox-scene button { padding: 4px 9px; cursor: pointer; white-space: nowrap; }
 .dbfox-scene input, .dbfox-scene select { min-width: 0; padding: 4px 6px; }
@@ -56,7 +58,7 @@
 .dbfox-scene__vector .dbfox-scene__field { flex: 1; }
 .dbfox-scene__vector .dbfox-scene__field > span { color: var(--color-text-muted); font-size: var(--ui-font-caption); }
 .dbfox-scene__check { display: flex; align-items: center; gap: var(--space-2); font-size: var(--ui-font-caption); }
-.dbfox-scene__check input { min-height: 16px; width: 16px; accent-color: var(--color-primary); }
+.dbfox-scene__check input { min-height: var(--density-control-height-sm); width: 16px; accent-color: var(--color-primary); }
 .dbfox-scene details summary { padding: var(--space-2) 0; cursor: pointer; color: var(--color-text-secondary); font-size: var(--ui-font-caption); }
 .dbfox-scene__object-id { margin: 0; overflow-wrap: anywhere; }
 .dbfox-scene__error, .dbfox-scene__notice, .dbfox-scene__loading, .dbfox-scene__export { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--hairline); font-size: var(--ui-font-caption); }
@@ -73,9 +75,20 @@
 .dbfox-scene__connector, .dbfox-scene__artifact { height: auto; padding: var(--space-3); gap: var(--space-2); }
 .dbfox-scene__connector p, .dbfox-scene__artifact p { margin: 0; color: var(--color-text-secondary); }
 .dbfox-scene__connector button { align-self: start; }
-@media (max-width: 900px) {
+.dbfox-scene__preview { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.dbfox-scene__preview > .dbfox-scene__viewport-shell { flex: none; height: clamp(260px, 52vh, 480px); overflow: hidden; border: 1px solid var(--hairline); border-radius: var(--radius-card); }
+.dbfox-scene__preview-controls { flex-wrap: wrap; }
+@container (max-width: 900px) {
   .dbfox-scene__body { grid-template-columns: 150px minmax(280px, 1fr) 230px; overflow: auto; }
   .dbfox-scene__header { padding: var(--space-2); }
   .dbfox-scene__header > div:first-child { flex-basis: 100%; }
+}
+@container (max-width: 680px) {
+  .dbfox-scene__body { display: flex; flex-direction: column; overflow: auto; min-height: 0; }
+  .dbfox-scene__hierarchy { max-height: 240px; flex: 0 0 auto; border-right: 0; border-bottom: 1px solid var(--hairline); }
+  .dbfox-scene__main { flex: 0 0 auto; min-height: 340px; }
+  .dbfox-scene__inspector { flex: 0 0 auto; border-left: 0; border-top: 1px solid var(--hairline); }
+  .dbfox-scene__library { padding: var(--space-3); }
+  .dbfox-scene__library form { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { .dbfox-scene * { scroll-behavior: auto; } }

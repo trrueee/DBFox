@@ -13,6 +13,7 @@ import { openArtifactsDock } from "./stores/artifactDockStore";
 import { useConversationStore } from "./stores/conversationStore";
 import { DesktopLifecycleMonitor } from "./features/appShell/DesktopLifecycleMonitor";
 import { LoadingState } from "./components/ui";
+import { SidebarSimpleIcon } from "./components/icons";
 import { ConversationCenter } from "./features/appShell/ConversationCenter";
 import { ConversationWorkspaceLayout } from "./features/appShell/ConversationWorkspaceLayout";
 import { ResizableWorkspaceLayout } from "./features/appShell/ResizableWorkspaceLayout";
@@ -27,6 +28,8 @@ import {
 import { getRuntimeSession, subscribeEngineState } from "./lib/api/client";
 import TitleBar from "./components/TitleBar";
 import { ConversationTitleActions } from "./features/conversation/workspace/ConversationTitleActions";
+import { ThreadBeacon } from "./features/conversation/ThreadBeacon";
+import { threadRunStatus } from "./features/conversation/runPresentation";
 import { conversationTitle as shortConversationTitle } from "./features/conversation/conversationTitle";
 import { useTheme } from "./hooks/themeContext";
 
@@ -55,10 +58,10 @@ const SettingsSidebar = lazy(() =>
     default: module.SettingsSidebar,
   })),
 );
-function WorkspaceDockFallback() {
+function WorkspaceDockFallback({ open }: { open: boolean }) {
   return (
-    <div className="app-dock-fallback" role="status" aria-label="正在载入工作区">
-      <LoadingState label="正在载入工作区" />
+    <div className="app-dock-fallback" data-collapsed={!open || undefined} role="status" aria-label="正在载入工作区">
+      {open ? <LoadingState label="正在载入工作区" /> : <SidebarSimpleIcon size={20} mirrored aria-hidden="true" />}
     </div>
   );
 }
@@ -100,9 +103,13 @@ export default function App() {
   // ── Store initialization (mount once) ──
   useEffect(() => {
     installClientErrorLogging();
-    void useConversationStore.getState().initConversations().catch((error) => {
-      recordClientLog("error", "初始化对话列表失败", error);
-    });
+    const refreshConversationIndex = () => {
+      void useConversationStore.getState().initConversations().catch((error) => {
+        recordClientLog("error", "读取对话列表失败", error);
+      });
+    };
+    refreshConversationIndex();
+    window.addEventListener("focus", refreshConversationIndex);
     void fetchAndLoadActiveExtensions().catch((error) => {
       recordClientLog("warning", "加载 DLC 扩展失败", error);
     });
@@ -119,6 +126,7 @@ export default function App() {
       const generation = status.generation ?? 0;
       if (generation <= loadedEngineGenerationRef.current) return;
       loadedEngineGenerationRef.current = generation;
+      refreshConversationIndex();
       void fetchAndLoadActiveExtensions().catch((error) => {
         recordClientLog("warning", "重新加载 DLC 扩展失败", error);
       });
@@ -129,6 +137,7 @@ export default function App() {
 
     return () => {
       disposed = true;
+      window.removeEventListener("focus", refreshConversationIndex);
       unsubscribe?.();
     };
   }, []);
@@ -142,6 +151,9 @@ export default function App() {
       ?? "").trim() || "新对话";
   });
   const dockOpen = useWorkspaceStore(selectActiveDockOpen);
+  const conversationStatus = useConversationStore(state => activeConversationId
+    ? threadRunStatus(state.detailById[activeConversationId], state.summaries.find(summary => summary.id === activeConversationId))
+    : null);
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
   const dockWidth = useWorkspaceStore(state => selectActiveWorkbench(state).dockWidth);
   const setDockWidth = useWorkspaceStore(state => state.setDockWidth);
@@ -248,6 +260,7 @@ export default function App() {
               workspace={
                 <div className="app-workspace">
                   <TitleBar title={settingsOpen || !conversationTitle ? undefined : shortConversationTitle(conversationTitle)} titleHint={conversationTitle}
+                    leading={activeConversationId ? <ThreadBeacon status={conversationStatus} /> : undefined}
                     actions={!settingsOpen && activeConversationId && conversationTitle
                       ? <ConversationTitleActions conversationId={activeConversationId} title={conversationTitle} /> : undefined} />
                   <div className="app-workspace__body">
@@ -276,7 +289,7 @@ export default function App() {
                           </section>
                         )}
                         dock={(
-                          <Suspense fallback={<WorkspaceDockFallback />}>
+                          <Suspense fallback={<WorkspaceDockFallback open={dockOpen} />}>
                             <WorkspaceDock
                               activeConversationId={activeConversationId}
                               showToast={toast}

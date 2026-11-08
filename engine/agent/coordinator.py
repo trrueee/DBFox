@@ -15,10 +15,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.agent.loop import RunLoop
+from engine.agent.lease_heartbeat import heartbeat_session_lease
 from engine.agent.repositories.approval import ApprovalRepository
 from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.session import SessionRepository
-from engine.agent.run import RunStatus, SessionLeaseConflict
+from engine.agent.run import RunStatus
 from engine.agent.session import SessionInputStatus, SessionLease
 from engine.models import (
     AgentApproval,
@@ -135,8 +136,10 @@ class SessionCoordinator:
                 return
             heartbeat_stop = Event()
             heartbeat = Thread(
-                target=self._heartbeat,
-                args=(lease, heartbeat_stop, interrupt),
+                target=heartbeat_session_lease,
+                kwargs={"session_factory": self.session_factory, "lease": lease,
+                        "stop": heartbeat_stop, "lease_lost": interrupt,
+                        "ttl_seconds": self.lease_ttl_seconds},
                 name=f"dbfox-agent-heartbeat-{session_id[:12]}",
                 daemon=True,
             )
@@ -222,45 +225,21 @@ class SessionCoordinator:
             db.commit()
             return True
 
-    def _heartbeat(self, lease: SessionLease, stop: Event, lease_lost: Event | None = None) -> None:
-        interval = max(1.0, self.lease_ttl_seconds / 3)
-        delay = interval
-        failures = 0
-        while not stop.wait(delay):
-            try:
-                with self.session_factory() as db:
-                    SessionRepository(db).heartbeat(
-                        lease=lease, ttl_seconds=self.lease_ttl_seconds
-                    )
-                    db.commit()
-                failures = 0
-                delay = interval
-            except SessionLeaseConflict:
-                if lease_lost is not None:
-                    lease_lost.set()
-                logger.warning(
-                    "Agent Session lease was lost session_id=%s owner=%s token=%s",
-                    lease.session_id,
-                    lease.owner,
-                    lease.token,
-                )
-                return
-            except Exception:
-                failures += 1
-                delay = min(interval, float(2 ** min(failures - 1, 5)))
-                logger.exception(
-                    "Agent Session heartbeat failed; retrying session_id=%s attempt=%s",
-                    lease.session_id,
-                    failures,
-                )
+    @staticmethod
+    def _runnable_inputs():
+        waiting = select(AgentRun.id).where(
+            AgentRun.session_id == AgentSessionInput.session_id,
+            AgentRun.status.in_([RunStatus.WAITING_APPROVAL.value, RunStatus.WAITING_INPUT.value]),
+        ).exists()
+        return select(AgentSessionInput.session_id).where(
+            AgentSessionInput.status == SessionInputStatus.ADMITTED.value, ~waiting,
+        )
 
     def _recoverable_sessions(self) -> list[str]:
         with self.session_factory() as db:
             now = datetime.now(UTC)
             input_sessions = db.execute(
-                select(AgentSessionInput.session_id).where(
-                    AgentSessionInput.status == SessionInputStatus.ADMITTED.value
-                ).distinct()
+                self._runnable_inputs().distinct()
             ).scalars()
             run_sessions = db.execute(
                 select(AgentRun.session_id).where(
@@ -311,9 +290,8 @@ class SessionCoordinator:
     def _has_work(self, session_id: str) -> bool:
         with self.session_factory() as db:
             return db.execute(
-                select(AgentSessionInput.id).where(
+                self._runnable_inputs().where(
                     AgentSessionInput.session_id == session_id,
-                    AgentSessionInput.status == SessionInputStatus.ADMITTED.value,
                 ).limit(1)
             ).scalar_one_or_none() is not None
 

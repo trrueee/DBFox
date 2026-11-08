@@ -1,8 +1,8 @@
 .dbfox-switch {
   position: relative;
   display: inline-flex;
-  width: 40px;
-  height: 24px;
+  width: 42px;
+  height: 26px;
   flex: 0 0 auto;
   align-items: center;
   border: 1px solid transparent;
@@ -14,8 +14,8 @@
 }
 
 .dbfox-switch[data-size="sm"] {
-  width: 34px;
-  height: 20px;
+  width: 36px;
+  height: 22px;
 }
 
 .dbfox-switch[data-state="checked"] {
@@ -35,18 +35,18 @@
 
 .dbfox-switch__thumb {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: var(--radius-pill);
-  background: var(--surface-elevated);
+  background: var(--color-on-primary);
   box-shadow: var(--shadow-sm), 0 0 0 1px var(--hairline);
   transform: translateX(0);
   transition: transform var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-switch[data-size="sm"] .dbfox-switch__thumb {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .dbfox-switch[data-state="checked"] .dbfox-switch__thumb {

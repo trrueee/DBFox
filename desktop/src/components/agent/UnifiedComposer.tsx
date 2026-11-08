@@ -1,5 +1,12 @@
 import type { FormEvent, KeyboardEvent, ReactNode } from "react";
-import { AlertCircle, ChevronDown, LoaderCircle, Plus } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
+import { useConversationStore } from "../../stores/conversationStore";
+import {
+  WarningCircleIcon,
+  CaretDownIcon,
+  CircleNotchIcon,
+  PlusIcon,
+} from "@/components/icons";
 import { ReferenceCard } from "../resources/ReferenceCard";
 import { referenceKind } from "../resources/resourcePresentation";
 
@@ -82,6 +89,9 @@ export function UnifiedComposer({
   compact = false,
   context,
 }: UnifiedComposerProps) {
+  const referenceKinds = useConversationStore(useShallow(state => references.map(reference => referenceKind(
+    reference, reference.artifactId ? state.artifactsById[reference.artifactId] : undefined,
+  ))));
   const unavailable = Boolean(disabled) || submitting || attachmentBusy;
   const hasInput = value.trim().length > 0;
   const errorMessage = typeof error === "string"
@@ -124,9 +134,9 @@ export function UnifiedComposer({
     >
       <PromptInput disabled={Boolean(disabled)} className="dbfox-composer__prompt-input">
         {references.length > 0 ? (
-          <div className="dbfox-composer__references" aria-label="当前上下文">
-            {references.map((reference) => <ReferenceCard key={referenceKey(reference)}
-              name={reference.label} kind={referenceKind(reference)}
+          <div className="dbfox-composer__references" role="group" aria-label="当前上下文">
+            {references.map((reference, index) => <ReferenceCard key={referenceKey(reference)}
+              name={reference.label} kind={referenceKinds[index]} compact
               onOpen={onOpenReference ? () => onOpenReference(reference) : undefined}
               onRemove={onRemoveReference ? () => onRemoveReference(reference) : undefined} />)}
           </div>
@@ -145,7 +155,7 @@ export function UnifiedComposer({
         <PromptInputActions className="dbfox-composer__toolbar">
           {onAddAttachment ? <PromptInputAction tooltip="添加本地文件">
             <Button type="button" variant="ghost" size="icon" className="dbfox-composer__attachment-action" aria-label="添加本地文件" aria-busy={attachmentBusy || undefined} disabled={unavailable} onClick={onAddAttachment}>
-              {attachmentBusy ? <LoaderCircle className="dbfox-composer__loading" size={20} strokeWidth={1.75} aria-hidden="true" /> : <Plus size={20} strokeWidth={1.75} aria-hidden="true" />}
+              {attachmentBusy ? <CircleNotchIcon className="dbfox-composer__loading" size={20} aria-hidden="true" /> : <PlusIcon size={20} aria-hidden="true" />}
             </Button>
           </PromptInputAction> : null}
           <span className="dbfox-composer__spacer" aria-hidden="true" />
@@ -163,7 +173,7 @@ export function UnifiedComposer({
                   onClick={(event) => event.stopPropagation()}
                 >
                   <span>{DELIVERY_LABELS[deliveryMode]}</span>
-                  <ChevronDown size={14} aria-hidden="true" />
+                  <CaretDownIcon size={16} aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -196,7 +206,7 @@ export function UnifiedComposer({
         </Alert> : null}
         {error ? (
           <Alert className="dbfox-composer__error" variant="destructive">
-            <AlertCircle aria-hidden="true" />
+            <WarningCircleIcon aria-hidden="true" />
             <AlertDescription>
               <p>{errorMessage}</p>
               <ErrorDetails error={error} />

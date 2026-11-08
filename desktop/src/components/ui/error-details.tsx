@@ -1,4 +1,6 @@
-import { ChevronRight } from "lucide-react";
+import {
+  CaretRightIcon,
+} from "@/components/icons";
 
 import { ApiError } from "../../lib/api/client";
 import "./error-details.css";
@@ -44,7 +46,7 @@ export function ErrorDetails({ error, label = "技术详情" }: ErrorDetailsProp
   return (
     <details className="error-details">
       <summary className="error-details__trigger">
-        <ChevronRight className="error-details__chevron" size={14} aria-hidden="true" />
+        <CaretRightIcon className="error-details__chevron" size={16} aria-hidden="true" />
         {label}
       </summary>
       <div className="error-details__content">

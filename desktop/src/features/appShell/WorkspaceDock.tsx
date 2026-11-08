@@ -6,15 +6,15 @@ import {
   useState,
 } from "react";
 import {
-  HelpCircle,
-  Maximize2,
-  MoreHorizontal,
-  Minimize2,
-  PanelRightClose,
-  PanelRightOpen,
-  Pin,
-  X,
-} from "lucide-react";
+  QuestionIcon,
+  ArrowsOutSimpleIcon,
+  DotsThreeIcon,
+  ArrowsInSimpleIcon,
+  SidebarSimpleIcon,
+  PushPinIcon,
+  XIcon,
+  ArrowLeftIcon,
+} from "@/components/icons";
 import {
   Button,
   DropdownMenu,
@@ -109,7 +109,7 @@ function dockTabIcon(
   dlcDockViews: readonly DockViewContribution[],
 ) {
   return resolveDockView(tab.viewType, registry, dlcDockViews)?.icon(tab)
-    ?? <HelpCircle size={14} aria-hidden="true" />;
+    ?? <QuestionIcon size={16} aria-hidden="true" />;
 }
 
 export function WorkspaceDock({
@@ -241,7 +241,7 @@ export function WorkspaceDock({
               onClick={() => setDockOpen(true)}
               aria-label="展开工作区"
             >
-              <PanelRightOpen size={16} aria-hidden="true" />
+              <SidebarSimpleIcon size={20} mirrored aria-hidden="true" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>展开工作区</TooltipContent>
@@ -275,7 +275,20 @@ export function WorkspaceDock({
       data-fullscreen={fullscreen ? "true" : undefined}
     >
       <header className="workspace-dock__tabbar">
-        <TabsList className="workspace-dock__tabs" aria-label="工作区标签" ref={tabsRef}>
+        <Tooltip><TooltipTrigger asChild>
+        <Button type="button" variant="ghost" size="icon-sm" className="workspace-dock__return-conversation"
+          onClick={() => {
+            const composer = document.querySelector<HTMLTextAreaElement>(".app-conversation-panel .dbfox-composer textarea:not(:disabled)");
+            setDockOpen(false);
+            requestAnimationFrame(() => {
+              if (composer?.isConnected && !composer.closest("[inert]")) composer.focus({ preventScroll: true });
+            });
+          }} aria-label="返回对话">
+          <ArrowLeftIcon size={20} aria-hidden="true" />
+        </Button>
+        </TooltipTrigger><TooltipContent>返回对话</TooltipContent></Tooltip>
+        <div className="workspace-dock__tabs" ref={tabsRef}>
+        <TabsList className="workspace-dock__tab-list" aria-label="工作区标签">
           {directTabs.map((tab) => {
             const active = tab.viewKey === activeTab?.viewKey;
             return (
@@ -291,32 +304,23 @@ export function WorkspaceDock({
                   title={tab.title}
                   onClick={() => setDockActiveTab(tab.viewKey)}
                   onDoubleClick={() => updateDockTab(tab.viewKey, { preview: false })}
+                  aria-keyshortcuts={tab.closeable ? "Delete" : undefined}
+                  onKeyDown={(event) => {
+                    if (event.key === "Delete" && tab.closeable) {
+                      event.preventDefault();
+                      handleCloseTab(tab.viewKey);
+                    }
+                  }}
                 >
                   <span className="workspace-dock__tab-icon" aria-hidden="true">
                     {dockTabIcon(tab, registry, dlcDockViews)}
                   </span>
                   <span className="workspace-dock__tab-title">{tab.title}</span>
                 </TabsTrigger>
-                {tab.closeable && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        className="workspace-dock__tab-close"
-                        aria-label={`关闭 ${tab.title}`}
-                        onClick={() => handleCloseTab(tab.viewKey)}
-                      >
-                        <X size={14} aria-hidden="true" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>关闭 {tab.title}</TooltipContent>
-                  </Tooltip>
-                )}
               </div>
             );
           })}
+        </TabsList>
           {overflowTabs.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -328,7 +332,7 @@ export function WorkspaceDock({
                   className="workspace-dock__overflow"
                   aria-label={`更多标签（${overflowTabs.length} 个）`}
                 >
-                  <MoreHorizontal size={16} aria-hidden="true" />
+                  <DotsThreeIcon size={16} aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -341,8 +345,19 @@ export function WorkspaceDock({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-        </TabsList>
-        {activeTab?.preview ? <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label="固定当前标签" onClick={() => updateDockTab(activeTab.viewKey, { preview: false })}><Pin size={14} aria-hidden="true" /></Button></TooltipTrigger><TooltipContent>固定标签 · 也可双击标签</TooltipContent></Tooltip> : null}
+        </div>
+        {activeTab?.closeable ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button type="button" size="icon-sm" variant="ghost" className="workspace-dock__close"
+                aria-label={`关闭 ${activeTab.title}`} onClick={() => handleCloseTab(activeTab.viewKey)}>
+                <XIcon size={16} aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>关闭当前标签 · Delete</TooltipContent>
+          </Tooltip>
+        ) : null}
+        {activeTab?.preview ? <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label="固定当前标签" onClick={() => updateDockTab(activeTab.viewKey, { preview: false })}><PushPinIcon size={16} aria-hidden="true" /></Button></TooltipTrigger><TooltipContent>固定标签 · 也可双击标签</TooltipContent></Tooltip> : null}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -353,7 +368,7 @@ export function WorkspaceDock({
               onClick={() => setFullscreen((value) => !value)}
               aria-label={fullscreen ? "退出工作区全屏" : "工作区全屏"}
             >
-              {fullscreen ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
+              {fullscreen ? <ArrowsInSimpleIcon size={16} aria-hidden="true" /> : <ArrowsOutSimpleIcon size={16} aria-hidden="true" />}
             </Button>
           </TooltipTrigger>
           <TooltipContent>{fullscreen ? "退出全屏" : "全屏"}</TooltipContent>
@@ -372,7 +387,7 @@ export function WorkspaceDock({
               }}
               aria-label="收起工作区"
             >
-              <PanelRightClose size={16} aria-hidden="true" />
+              <SidebarSimpleIcon size={20} mirrored aria-hidden="true" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>收起工作区</TooltipContent>

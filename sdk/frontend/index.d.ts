@@ -54,7 +54,7 @@ export interface HostCodeArtifactComponent {
 
 export type HostResourceKind = "file" | "folder" | "code" | "markdown" | "spreadsheet" | "database" | "table" | "chart" | "image" | "audio" | "video" | "document" | "archive" | "artifact" | "resource";
 
-export type HostIconName = "plus" | "x" | "refresh-cw" | "play" | "pause" | "square" | "repeat" | "terminal" | "at-sign" | "music" | "book-open" | "box" | "image" | "clapperboard" | "arrow-up" | "arrow-down" | "trash-2";
+export type HostIconName = "plus" | "x" | "refresh-cw" | "play" | "pause" | "square" | "repeat" | "terminal" | "at-sign" | "music" | "book-open" | "box" | "image" | "clapperboard" | "arrow-up" | "arrow-down" | "trash-2" | "game-controller" | "lightbulb" | "table" | "caret-right";
 
 export interface HostUiPrimitives {
   readonly version: "1.0.0";
@@ -62,9 +62,9 @@ export interface HostUiPrimitives {
   /** Host-themed, accessible, read-only code Artifact with copy/download actions. */
   readonly CodeArtifact: HostCodeArtifactComponent;
   /** Read-only, language-aware text and rendered Markdown. The owner supplies the content. */
-  readonly FileContent: (props: { name: string; content: string; onAsk?: () => void }) => ReactNode;
+  readonly FileContent: (props: { name: string; content: string; onAsk?: () => void; showIdentity?: boolean }) => ReactNode;
   readonly ResourceIcon: (props: { name?: string; kind?: HostResourceKind; size?: number; className?: string; expanded?: boolean }) => ReactNode;
-  /** Standard decorative Lucide symbols. The containing control supplies its accessible name. */
+  /** Host-owned decorative symbols. The containing control supplies its accessible name. */
   readonly Icon: (props: { name: HostIconName; size?: number; className?: string }) => ReactNode;
 }
 

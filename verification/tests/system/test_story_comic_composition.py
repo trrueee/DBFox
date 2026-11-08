@@ -137,7 +137,7 @@ def test_story_public_observation_becomes_immutable_comic(tmp_path, record_prope
         peak = max(estimate_input_items_tokens(r["input"]) + estimate_tool_schema_tokens(r["tools"]) for r in model.requests)
         record_property("prompt_estimate_peak", peak)
         record_property("package_digests", json.dumps(runtime.digests))
-        assert peak <= loop.definition.limits.max_prompt_tokens == 32768
+        assert peak <= loop.definition.limits.max_prompt_tokens == 65536
         with runtime.factory() as db:
             assert db.get(AgentRun, admission.run_id).status == "completed"
             invocations = db.query(AgentToolInvocation).filter_by(run_id=admission.run_id).all()

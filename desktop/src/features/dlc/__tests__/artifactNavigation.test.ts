@@ -15,11 +15,12 @@ import { WorkspaceDock } from "../../appShell/WorkspaceDock";
 import { agentApi } from "../../../lib/api/agent";
 import { zConversationInputReference } from "../../../lib/api/generated/zod.gen";
 
-const reads = vi.hoisted(() => ({ session: vi.fn(), artifacts: vi.fn() }));
+const reads = vi.hoisted(() => ({ session: vi.fn(), artifacts: vi.fn(), projectArtifact: vi.fn() }));
 vi.mock("../../../lib/api/generated/sdk.gen", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../../lib/api/generated/sdk.gen")>(),
   getConversationApiV1ConversationsConversationIdGet: reads.session,
   getRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGet: reads.artifacts,
+  apiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGet: reads.projectArtifact,
 }));
 
 const target: ArtifactNavigationTarget = {
@@ -75,6 +76,7 @@ describe("Host Artifact navigation through the canonical repository and store", 
     vi.restoreAllMocks();
     reads.session.mockReset().mockResolvedValue({ data: snapshot });
     reads.artifacts.mockReset().mockResolvedValue({ data: [artifact] });
+    reads.projectArtifact.mockReset().mockResolvedValue({ data: artifact });
     invalidateActiveFrontendExtensions();
     useWorkspaceStore.setState({
       activeProjectId: target.projectId,
@@ -122,6 +124,56 @@ describe("Host Artifact navigation through the canonical repository and store", 
     act(() => { useWorkspaceStore.getState().setActiveProject(target.projectId); });
     expect(await screen.findByRole("tab", { name: artifact.title })).toBeTruthy();
     expect(await screen.findByTestId("actual-result-view")).toBeTruthy();
+  });
+
+  it.each(["loaded", "retry", "switch-project", "generation"])("restores a persisted Action Run artifact from an empty projection: %s", async (scenario) => {
+    vi.spyOn(agentApi, "listArtifactRepresentations").mockResolvedValue([]);
+    let host!: FrontendExtensionHost;
+    await activate({ register(value) {
+      host = value;
+      value.artifactViews.register({
+        id: "example.navigation.restore", title: "Restored viewer", surfaces: ["workspace"],
+        artifactTypes: [{ type: artifact.type, schemaVersions: [1] }],
+        parsePayload: (payload) => payload,
+        render: (envelope) => createElement("div", { "data-testid": "restored-result-view" }, envelope.title),
+      });
+    } });
+    await host.workbench.openArtifact!(target, options());
+    useConversationStore.setState({ artifactsById: {} });
+    const pending = deferred<{ data: ConversationArtifact }>();
+    if (["switch-project", "generation"].includes(scenario)) reads.projectArtifact.mockReturnValueOnce(pending.promise);
+    if (scenario === "retry") reads.projectArtifact.mockRejectedValueOnce(new Error("private transport diagnostic"));
+    render(createElement(TooltipProvider, null,
+      createElement(WorkspaceDock, { activeConversationId: "chat-session", showToast: vi.fn() })));
+
+    if (scenario === "switch-project") {
+      expect(await screen.findByText("正在读取成果")).toBeTruthy();
+      act(() => { useWorkspaceStore.getState().setActiveProject("another-project"); });
+      await act(async () => { pending.resolve({ data: artifact }); });
+      expect(useConversationStore.getState().artifactsById).toEqual({});
+      expect(reads.projectArtifact.mock.calls[0][0].signal.aborted).toBe(true);
+      return;
+    }
+    if (scenario === "retry") {
+      expect(await screen.findByText("无法载入成果")).toBeTruthy();
+      expect(screen.queryByText("private transport diagnostic")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    }
+    if (scenario === "generation") {
+      expect(await screen.findByText("正在读取成果")).toBeTruthy();
+      vi.spyOn(apiClient, "getRuntimeSession").mockReturnValue({ ...apiClient.getRuntimeSession(), generation: 99 });
+      await act(async () => { pending.resolve({ data: artifact }); });
+      expect(useConversationStore.getState().artifactsById).toEqual({});
+      expect(await screen.findByText("无法载入成果")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    }
+    expect(await screen.findByTestId("restored-result-view")).toBeTruthy();
+    expect(reads.projectArtifact.mock.calls[0][0]).toMatchObject({
+      path: { project_id: target.projectId, artifact_id: artifact.id },
+    });
+    expect(useConversationStore.getState().artifactsById[artifact.id].payload).toEqual(artifact.payload);
+    expect(useConversationStore.getState().detailById).toEqual({});
+    expect(selectActiveDockTabs(useWorkspaceStore.getState())[0].target).toEqual({ type: "artifact", id: artifact.id });
   });
 
   it("opens an older Action Run from another session with the server's identity and payload", async () => {

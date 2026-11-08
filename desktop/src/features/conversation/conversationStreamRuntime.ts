@@ -43,7 +43,7 @@ const DEFAULT_DEPENDENCIES: ConversationStreamDependencies = {
 };
 
 /**
- * Transport runtime for one active Run per conversation.
+ * One transport per conversation, following its durable Run queue.
  *
  * Zustand remains a projection store: connection ownership, retries, batching
  * and authoritative snapshot recovery live here.
@@ -83,7 +83,7 @@ export class ConversationStreamRuntime {
         try {
           cursor = await this.dependencies.stream(conversationId, {
             afterSequence: cursor,
-            targetRunId: runId,
+            targetRunId: active.runId,
             signal: active.controller.signal,
             onEvent: (event) => {
               reportConnectionState("live");
@@ -135,11 +135,15 @@ export class ConversationStreamRuntime {
           continue;
         }
         cursor = Math.max(cursor, snapshot.cursor || 0);
-        const run = snapshot.runs.find((item) => item.id === runId);
-        if (!run || !isFollowableRun(run.status)) {
+        const run = snapshot.runs.find((item) => item.id === active.runId);
+        const next = run && isFollowableRun(run.status)
+          ? run
+          : snapshot.runs.findLast((item) => isFollowableRun(item.status));
+        if (!next) {
           reportConnectionState("idle");
           return;
         }
+        active.runId = next.id;
         reportConnectionState("recovered");
         await this.dependencies.wait(
           Math.min(4_000, 250 * (2 ** Math.min(attempt, 4))),

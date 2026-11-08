@@ -27,6 +27,10 @@ class PlanArtifactUnavailableError(ValueError):
     """A Task Plan referenced an Artifact unavailable to the current Run."""
 
 
+class PlanTransitionError(ValueError):
+    """A terminal plan cannot mutate its immutable public RunItem."""
+
+
 class PlanRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -59,6 +63,10 @@ class PlanRepository:
         ).scalar_one_or_none()
         now = _utcnow()
         status = self._status(steps)
+        if row is not None and str(row.status) not in {PlanStatus.ACTIVE.value, PlanStatus.BLOCKED.value}:
+            if row.objective == objective and row.steps_json == canonical_dumps(steps) and row.summary == summary:
+                return self._domain(row)
+            raise PlanTransitionError("The Task Plan is already terminal. Do not reopen it; keep steps pending until their work is complete.")
         if row is None:
             row = AgentTaskPlanRecord(
                 id=f"plan_{uuid4().hex}",

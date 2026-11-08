@@ -33,6 +33,7 @@ class FixedErrorCode(str, Enum):
     AGENT_REQUEST_ERROR = "AGENT_REQUEST_ERROR"
     AGENT_RUNTIME_ERROR = "AGENT_RUNTIME_ERROR"
     AGENT_CONTEXT_UNAVAILABLE = "AGENT_CONTEXT_UNAVAILABLE"
+    AGENT_CONTEXT_BUDGET_EXCEEDED = "AGENT_CONTEXT_BUDGET_EXCEEDED"
     AGENT_CANCELLED = "AGENT_CANCELLED"
     AGENT_LEASE_LOST = "AGENT_LEASE_LOST"
     AGENT_USAGE_UNAVAILABLE = "AGENT_USAGE_UNAVAILABLE"
@@ -91,6 +92,10 @@ _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
     FixedErrorCode.AGENT_REQUEST_ERROR: "The agent request could not be completed.",
     FixedErrorCode.AGENT_RUNTIME_ERROR: "The agent run could not be completed.",
     FixedErrorCode.AGENT_CONTEXT_UNAVAILABLE: "Agent context is temporarily unavailable.",
+    FixedErrorCode.AGENT_CONTEXT_BUDGET_EXCEEDED: (
+        "工具定义或必要上下文超过本次输入预算。请减少引用，或停用不需要的扩展并重启引擎后继续。"
+        "已保存的成果仍可使用。"
+    ),
     FixedErrorCode.AGENT_CANCELLED: "分析已取消。",
     FixedErrorCode.AGENT_LEASE_LOST: "分析执行权已转移。",
     FixedErrorCode.AGENT_USAGE_UNAVAILABLE: "模型未返回可核算的用量信息。",

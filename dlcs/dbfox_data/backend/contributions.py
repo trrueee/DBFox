@@ -464,14 +464,15 @@ def register(host: BackendExtensionHost) -> None:
                 (
                     item
                     for item in preview.artifacts
-                    if item.type == RESULT_VIEW_ARTIFACT_TYPE
+                    # A preview is immutable sample evidence, not a full query result.
+                    if item.type == SNAPSHOT_ARTIFACT_TYPE
                 ),
                 None,
             )
             if result_artifact is None:
                 raise DlcOperationError(
                     code="DATA_RESULT_ARTIFACT_MISSING",
-                    message="Table preview did not produce a durable Result Artifact.",
+                    message="数据样例未能保存，请重新读取。",
                     status_code=409,
                 )
             completed = action.complete(

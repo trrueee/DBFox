@@ -168,6 +168,18 @@ def _bounded_chunks(chunks: Iterator[str | bytes]) -> Iterator[str | bytes]:
         yield chunk
 
 
+@router.get("/projects/{project_id}/artifacts/{artifact_id}", response_model=Artifact)
+def api_project_artifact(
+    project_id: str,
+    artifact_id: str,
+    db: Session = Depends(get_db),
+) -> Artifact:
+    artifact = ArtifactRepository(db).get_for_project(project_id, artifact_id)
+    if artifact is None:
+        raise _representation_error("NOT_FOUND", status_code=404)
+    return artifact
+
+
 @router.get(
     "/artifacts/{artifact_id}/representations",
     response_model=list[ArtifactRepresentationDescriptor],

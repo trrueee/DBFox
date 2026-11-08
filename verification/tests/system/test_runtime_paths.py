@@ -26,6 +26,24 @@ def test_private_runtime_dir_rejects_multi_component_names() -> None:
         private_runtime_dir("data/../outside")
 
 
+@pytest.mark.parametrize("child", [None, "data"])
+def test_runtime_write_probe_does_not_share_a_file_with_other_initializers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, child: str | None,
+) -> None:
+    runtime_root = tmp_path / "runtime"
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_root))
+    directory = runtime_root / child if child else runtime_root
+    directory.mkdir(parents=True)
+    shared_probe = directory / ".write_test"
+    with shared_probe.open("w", encoding="utf-8") as other_initializer:
+        other_initializer.write("another initializer still owns this file")
+        other_initializer.flush()
+        actual = private_runtime_dir(child) if child else private_runtime_root()
+        assert actual == directory
+    assert shared_probe.read_text(encoding="utf-8") == "another initializer still owns this file"
+    assert sorted(path.name for path in directory.iterdir()) == [".write_test"]
+
+
 def test_private_runtime_root_fails_closed_when_default_location_is_unwritable(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

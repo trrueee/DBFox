@@ -2,14 +2,22 @@
 
 > 文档类型：UI 基础视觉审计
 >
-> 状态：当前
+> 状态：历史
 >
-> 最后核验：2026-08-28
+> 最后核验：2026-11-07
 >
 > 范围：`desktop/src/**/*.css`、`src/styles/tokens.css`、`src/boot.css`、内置 DLC CSS  
 > 本轮已完成 Fluent 字体角色与默认语义颜色接入；未完成的局部硬编码清理继续按本文门禁处理。
 
+本轮历史审计已由 [Apple HIG 工作台设计与验收](../../quality/apple-hig-workbench-20261107.md) 替代。当前视觉规范见 [UI 设计与开发规范](../../quality/ui-design-and-development.md)；以下扫描与选型保留作实施证据。
+
 ## 1. 结论
+
+2026-11-07 比例更新：继续使用本机字体和 Fluent 角色语义，在真实中文桌面界面中调整默认
+界面基线为 15px、对话正文为 16px，数据和代码保持 14px；新首页标题为 32px。
+这些数值是 DBFox 的阅读比例适配，不宣称逐字照搬 Fluent 的字号表。所有分区字号仍从
+单一 token 文件与既有外观合同导出，已保存的合法数值不会被覆盖。以下 8 月的选型和扫描
+保留作调查基线，当前数值以生产 token 和[11 月实施记录](global-design-20261107.md)为准。
 
 2026-08-26 采用决策已更新：不再把现有自研字号梯度作为最终方案。生产 token 已采用 Fluent 2
 官方 `fontSizeBase100–600`、对应 line-height 和 Segoe UI / Consolas / Bahnschrift 字体角色；仅为

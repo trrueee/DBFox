@@ -12,10 +12,10 @@ export const CONTRAST_MODES = ["system", "high"] as const;
 export const MOTION_MODES = ["system", "reduce"] as const;
 
 export const FONT_SIZE_RANGES = Object.freeze({
-  ui: Object.freeze({ min: 11, max: 16, defaultValue: 14 }),
+  ui: Object.freeze({ min: 11, max: 16, defaultValue: 15 }),
   data: Object.freeze({ min: 10, max: 18, defaultValue: 14 }),
   code: Object.freeze({ min: 11, max: 22, defaultValue: 14 }),
-  agent: Object.freeze({ min: 13, max: 24, defaultValue: 14 }),
+  agent: Object.freeze({ min: 13, max: 24, defaultValue: 16 }),
 });
 
 export const APPEARANCE_RANGES = Object.freeze({
@@ -23,7 +23,7 @@ export const APPEARANCE_RANGES = Object.freeze({
   codeLineHeight: Object.freeze({ min: 1.3, max: 2, defaultValue: 1.6, step: 0.1 }),
   tableRowHeight: Object.freeze({ min: 24, max: 44, defaultValue: 32, step: 2 }),
   sidebarWidth: Object.freeze({ min: 240, max: 336, defaultValue: 264, step: 8 }),
-  artifactDockWidth: Object.freeze({ min: 22, max: 50, defaultValue: 28, step: 2 }),
+  artifactDockWidth: Object.freeze({ min: 22, max: 50, defaultValue: 38, step: 2 }),
 });
 
 export type ThemeMode = (typeof THEME_MODES)[number];

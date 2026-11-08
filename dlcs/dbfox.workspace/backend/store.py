@@ -59,7 +59,7 @@ class WorkspaceBindingStore:
         return self._binding(row) if row is not None else None
 
     def create_binding(self, project_id: str, root_path: str) -> WorkspaceBinding:
-        service = WorkspaceService(root_path)
+        service = WorkspaceService(root_path, mutation_database=self.database_path)
         now = datetime.now(UTC).isoformat()
         with self._connect() as connection, connection:
             existing = connection.execute(
@@ -104,7 +104,7 @@ class WorkspaceBindingStore:
         binding = self.get_project_binding(str(ref.id))
         if binding is None:
             raise ValueError("Workspace binding does not exist")
-        service = WorkspaceService(binding.root_path)
+        service = WorkspaceService(binding.root_path, mutation_database=self.database_path)
         if binding.root_digest != str(ref.version or "") or service.root_digest != binding.root_digest:
             raise ValueError("Workspace binding version no longer matches its canonical root")
         return service

@@ -175,7 +175,7 @@ def test_real_pixel_frames_become_immutable_game_assets(tmp_path, record_propert
         record_property("prompt_estimate_peak", peak)
         record_property("provider_requests", len(model.requests))
         record_property("signed_owners", len(digests))
-        assert peak <= loop.definition.limits.max_prompt_tokens == 32768
+        assert peak <= loop.definition.limits.max_prompt_tokens == 65536
         with factory() as db:
             assert db.get(AgentRun, admission.run_id).status == "completed"
             invocations = db.query(AgentToolInvocation).filter_by(run_id=admission.run_id).all()

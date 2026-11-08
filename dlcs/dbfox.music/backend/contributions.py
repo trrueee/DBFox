@@ -177,7 +177,7 @@ class ComposePianoTool(BaseTool[ComposePianoInput, ScoreRevisionOutput]):
     description = "Expand a compact per-measure piano composition plan and commit it as a new immutable score revision."
     input_model = ComposePianoInput
     output_model = ScoreRevisionOutput
-    version = "2"
+    version = "3"
     policy = ToolPolicy(risk_level="warning", requires_approval=False)
     execution = ToolExecutionSpec(
         recovery="reconcile",
@@ -824,7 +824,7 @@ def register(host: BackendExtensionHost) -> None:
         host.tools.register(tool)
     host.agent_guidance.register(CapabilityGuidanceSpec(
         id="piano_composition",
-        version="1",
+        version="2",
         instructions=(
             "When the active request asks to create a score and an authorized Music Library is available, "
             "produce a durable piano score instead of only describing what it could sound like.\n"
@@ -833,7 +833,12 @@ def register(host: BackendExtensionHost) -> None:
             "Translate form boundaries exactly. Keep the piano writing playable for the requested difficulty, "
             "and use the requested roles for right and left hand rather than mechanically duplicating material.\n"
             "For an existing authorized score, prefer a focused revision over replacing unrelated measures.\n"
-            "Do not claim that a score was created or revised until a successful score-revision observation returns."
+            "Use the structured composition object with a measures array, not a prose string. Melody beat "
+            "positions start at 0; in 4/4 a note on the last beat starts at 3. For exactly one bass "
+            "note per measure, use sustain_bass; do not substitute a multi-note accompaniment.\n"
+            "Do not claim that a score was created or revised until a successful score-revision observation returns. "
+            "The Studio supports score display and playback. MusicXML/MIDI export is not currently implemented "
+            "by the Music tools or Studio; state that limit rather than inventing an export button or download."
         ),
         applies_to_resource_kinds=(LIBRARY_KIND, SCORE_KIND, AUDIO_KIND),
         applies_to_artifact_types=(SCORE_REVISION_ARTIFACT, TRANSCRIPTION_ARTIFACT),

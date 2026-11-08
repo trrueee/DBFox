@@ -29,7 +29,9 @@ from engine.agent.session import DeliveryMode, SessionInputStatus, SessionLease
 from engine.agent.turn import ModelTurnResult, TurnAssistantMessage, TurnTermination
 from engine.json_codec import JsonCodecError, canonical_dumps as _json, loads
 from engine.models import (
+    AgentApproval,
     AgentMessage,
+    AgentQuestionRequest,
     AgentRun,
     AgentSession,
     AgentSessionInput,
@@ -65,6 +67,30 @@ class RunRepository:
             RunStatus.CANCELLING.value,
             RunStatus.CANCELLED.value,
         }
+
+    def refresh_waiting_status(self, *, lease: SessionLease, run_id: str) -> None:
+        """Keep a Run suspended until every durable interaction is resolved.
+
+        Callers own the interaction transaction, version bump and event emission.
+        An individual approval/answer must not resume an incomplete tool batch.
+        """
+        self.session.flush()
+        run = self.get(run_id)
+        self._require_lease(run, lease)
+        if RunStatus(str(run.status)) in TERMINAL_RUN_STATUSES:
+            raise ValueError("A terminal Run cannot resume after an interaction")
+        pending_question = self.session.scalar(select(AgentQuestionRequest.id).where(
+            AgentQuestionRequest.run_id == run_id, AgentQuestionRequest.status == "pending",
+        ).limit(1))
+        pending_approval = self.session.scalar(select(AgentApproval.id).where(
+            AgentApproval.run_id == run_id, AgentApproval.status == "pending",
+        ).limit(1))
+        run.status = (
+            RunStatus.CANCELLING.value if run.cancel_requested
+            else RunStatus.WAITING_INPUT.value if pending_question is not None
+            else RunStatus.WAITING_APPROVAL.value if pending_approval is not None
+            else RunStatus.RUNNING.value
+        )
 
     def set_phase(
         self,

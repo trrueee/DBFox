@@ -320,9 +320,6 @@ def test_product_registry_contains_only_kernel_tools_without_system_dlcs():
         "conversation_read",
         "conversation_search",
         "project_resource_search",
-        "remote_job_cancel",
-        "remote_job_status",
-        "remote_job_submit",
         "request_clarification",
         "update_plan",
     }

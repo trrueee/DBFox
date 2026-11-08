@@ -31,6 +31,7 @@
   border: 0;
   color: inherit;
   font: inherit;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-music__resource-main {
@@ -142,12 +143,13 @@
   justify-content: center;
   gap: var(--space-2);
   min-width: 32px;
-  min-height: 28px;
+  min-height: var(--density-control-height-sm);
   padding: 4px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-music-transport button:hover,
@@ -161,6 +163,7 @@
 .dbfox-music-ab button.is-active {
   background: var(--color-primary-soft);
   color: var(--color-primary);
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-music-transport span {
@@ -219,6 +222,7 @@
 .dbfox-music-measure.is-selected {
   border-color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary-soft) 50%, transparent);
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-music-measure.is-uncertain::after {
@@ -270,14 +274,15 @@
 }
 
 .dbfox-music-keyboard header button {
-  min-height: 26px;
+  min-height: var(--density-control-height-sm);
   padding: 2px 7px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-muted);
   font-size: var(--ui-font-micro);
   letter-spacing: 0;
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-music-keyboard__scroll {
@@ -406,10 +411,11 @@
 .dbfox-music-start button {
   min-height: 38px;
   padding: 7px 12px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--color-primary);
   color: var(--color-on-primary);
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-music-start {
@@ -474,12 +480,13 @@
 }
 
 .dbfox-music-artifact button {
-  min-height: 32px;
+  min-height: var(--density-control-height-sm);
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-primary);
   cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-music-artifact button:hover {

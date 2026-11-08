@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Copy, Download, FileWarning, MoreHorizontal, RefreshCw, Search, Trash2, X } from "lucide-react";
+import {
+  CheckCircleIcon,
+  CopyIcon,
+  DownloadSimpleIcon,
+  FileXIcon,
+  DotsThreeIcon,
+  ArrowsClockwiseIcon,
+  MagnifyingGlassIcon,
+  TrashIcon,
+  XIcon,
+} from "@/components/icons";
 import {
   Button,
   DropdownMenu,
@@ -208,30 +218,30 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
         compact
       />
       <span className="diagnostics-badge">
-        <CheckCircle2 size={14} />
+        <CheckCircleIcon size={16} />
         已脱敏
       </span>
       <Button type="button" variant="outline" size="sm" onClick={loadLogs} disabled={loading}>
-        <RefreshCw size={14} />
+        <ArrowsClockwiseIcon size={16} />
         刷新
       </Button>
       <Button type="button" size="sm" onClick={() => void handleExport()} disabled={!logs}>
-        <Download size={14} />
+        <DownloadSimpleIcon size={16} />
         导出诊断包
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button type="button" variant="outline" size="icon-sm" aria-label="更多诊断操作">
-            <MoreHorizontal size={14} />
+            <DotsThreeIcon size={16} />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuItem onSelect={() => void handleCopy()} disabled={!logs}>
-            <Copy size={14} />
+            <CopyIcon size={16} />
             复制诊断内容
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void handleClearLogs()} disabled={loading}>
-            <Trash2 size={14} />
+            <TrashIcon size={16} />
             清空日志
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -239,7 +249,7 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
             onSelect={requestAuditClear}
             disabled={loading}
           >
-            <Trash2 size={14} />
+            <TrashIcon size={16} />
             清空审计
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -333,7 +343,7 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
               </div>
               <ToolbarGroup className="diagnostics-view-controls" aria-label="筛选与显示">
                 <div className="diagnostics-search-field">
-                  <Search size={14} aria-hidden="true" />
+                  <MagnifyingGlassIcon size={16} aria-hidden="true" />
                   <Input
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
@@ -342,7 +352,7 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
                   />
                   {searchQuery ? (
                     <Button type="button" size="icon-sm" variant="ghost" aria-label="清除日志搜索" onClick={() => setSearchQuery("")}>
-                      <X size={14} aria-hidden="true" />
+                      <XIcon size={16} aria-hidden="true" />
                     </Button>
                   ) : null}
                 </div>
@@ -414,7 +424,7 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
                         </span>
                         <span role="cell" className="diagnostics-log-action">
                           <Button type="button" size="icon-sm" variant="ghost" aria-label={`复制日志行 ${formatLogTime(entry.timestamp)}`} onClick={() => void handleCopyEntry(entry)}>
-                            <Copy size={14} aria-hidden="true" />
+                            <CopyIcon size={16} aria-hidden="true" />
                           </Button>
                         </span>
                       </div>
@@ -434,7 +444,7 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
             {!loading && visibleGroups.length === 0 ? (
               <EmptyState
                 className="diagnostics-empty"
-                icon={<FileWarning size={16} />}
+                icon={<FileXIcon size={16} />}
                 title="暂无有效日志（包含内容的日志源）"
               />
             ) : null}

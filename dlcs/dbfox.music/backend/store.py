@@ -61,6 +61,9 @@ class MusicStore:
 
     def _initialize(self) -> None:
         with self._connect() as connection, connection:
+            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            if version > 4:
+                raise RuntimeError("Music state schema is newer than this DBFox build")
             connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS scores (
@@ -86,8 +89,6 @@ class MusicStore:
                     PRIMARY KEY(score_id, revision),
                     FOREIGN KEY(score_id) REFERENCES scores(id)
                 );
-                CREATE UNIQUE INDEX IF NOT EXISTS ux_music_score_revision_hash
-                    ON score_revisions(score_id, content_hash);
                 CREATE TABLE IF NOT EXISTS audio_sources (
                     id TEXT PRIMARY KEY,
                     project_id TEXT NOT NULL,
@@ -133,7 +134,9 @@ class MusicStore:
                 "CREATE UNIQUE INDEX IF NOT EXISTS ux_music_scores_creation_invocation "
                 "ON scores(creation_invocation_id) WHERE creation_invocation_id IS NOT NULL"
             )
-            connection.execute("PRAGMA user_version = 3")
+            if version < 4:
+                connection.execute("DROP INDEX IF EXISTS ux_music_score_revision_hash")
+                connection.execute("PRAGMA user_version = 4")
 
     @staticmethod
     def _revision(row: sqlite3.Row) -> ScoreRevision:
@@ -232,8 +235,8 @@ class MusicStore:
                 connection.rollback()
                 raise ValueError("score revision is stale")
             duplicate = connection.execute(
-                "SELECT revision FROM score_revisions WHERE score_id = ? AND content_hash = ?",
-                (score_id, digest),
+                "SELECT revision FROM score_revisions WHERE score_id = ? AND revision = ? AND content_hash = ?",
+                (score_id, expected_revision, digest),
             ).fetchone()
             if duplicate is not None:
                 connection.rollback()

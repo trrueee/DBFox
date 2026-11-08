@@ -1,4 +1,4 @@
-import { SCENE_KIND, LIBRARY_KIND, ARTIFACT_TYPE, REPRESENTATION_TYPE, requestId, listScenes, readScene, hierarchy, parentCandidates, referenceFor } from "./model.js";
+import { SCENE_KIND, LIBRARY_KIND, ARTIFACT_TYPE, REPRESENTATION_TYPE, requestId, listScenes, readScene, readSceneArtifact, hierarchy, parentCandidates, referenceFor } from "./model.js";
 
 const DLC_ID = "dbfox.scene";
 const VIEW = "dbfox.scene.workbench";
@@ -190,6 +190,8 @@ function Workbench({ projectId, initialSceneId, context }) {
         setNotice("已打开固定版本导出工件，可下载 GLB / glTF。");
       } else if (name === "scenes.delete") {
         accept(null); setSceneId("");
+      } else if (name === "scenes.create") {
+        openWorkbench(projectId, result.scene);
       } else {
         const controller = new AbortController();
         live.current.readController = controller;
@@ -245,7 +247,7 @@ function Workbench({ projectId, initialSceneId, context }) {
   return h("section", { className: "dbfox-scene", ref: rootRef, "aria-label": "Scene Studio 工作台" },
     h("header", { className: "dbfox-scene__header" },
       h("div", null, h("strong", null, "Scene Studio"), h("span", { className: "dbfox-scene__muted" }, snapshot ? ` v${snapshot.scene.version} · ${snapshot.objects.length} 个对象` : " 本地三维创作")),
-      h("select", { "aria-label": "打开场景", value: sceneId, disabled: busy || !!editing, onChange: (event) => { accept(null); setExported(null); setSceneId(event.target.value); } },
+      h("select", { "aria-label": "打开场景", value: sceneId, disabled: busy || !!editing, onChange: (event) => openWorkbench(projectId, scenes.find((scene) => scene.id === event.target.value)) },
         h("option", { value: "" }, "场景库"), scenes.map((scene) => h("option", { key: scene.id, value: scene.id }, scene.title))),
       button(editing ? "放弃草稿并刷新" : "刷新", refresh, busy),
       button("撤销上一版本", undo, disabled || snapshot?.scene.version <= 1),
@@ -265,7 +267,7 @@ function Workbench({ projectId, initialSceneId, context }) {
         h("input", { "aria-label": "新场景名称", placeholder: "场景名称", value: title, maxLength: 160, required: true, onChange: (event) => setTitle(event.target.value), disabled: busy }),
         h("button", { type: "submit", disabled: busy || loading || !title.trim() }, "创建场景")),
       !loading && !scenes.length ? h("p", { className: "dbfox-scene__muted" }, "尚无场景。也可以引用 Scene Library 让 Agent 创建。") : null,
-      h("div", { className: "dbfox-scene__cards" }, scenes.map((scene) => button(`${scene.title} · v${scene.version} · ${scene.object_count} 对象`, () => setSceneId(scene.id), busy, { key: scene.id })))) : null,
+      h("div", { className: "dbfox-scene__cards" }, scenes.map((scene) => button(`${scene.title} · v${scene.version} · ${scene.object_count} 对象`, () => openWorkbench(projectId, scene), busy, { key: scene.id })))) : null,
     sceneId && snapshot ? h("div", { className: "dbfox-scene__body", "aria-busy": busy || loading },
       h("aside", { className: "dbfox-scene__hierarchy", "aria-label": "场景层级" },
         h("h3", null, "层级"),
@@ -288,7 +290,7 @@ function Workbench({ projectId, initialSceneId, context }) {
           button("聚焦 F", () => viewportRef.current?.focus(selectedId), !snapshot),
           h("select", { "aria-label": "视角", value: cameraId, disabled: !!editing, onChange: (event) => setCameraId(event.target.value) }, h("option", { value: "" }, "编辑视角"), snapshot.objects.filter((item) => item.kind === "camera").map((item) => h("option", { key: item.id, value: item.id }, item.name)))),
         h(Viewport, { snapshot, selectedId, mode, space, cameraId, visible, disabled: busy || loading || (!!editing && editing !== "drag"), dragging: editing === "drag", viewportRef,
-          onSelect: choose, onKey: keys, onError: setError,
+          onSelect: choose, onKey: keys, onError: setError, onFocus: () => setCameraId(""),
           onDragStart: () => lockEditing("drag"), onDragCancel: () => lockEditing(null),
           onDragEnd: (transform, version) => { void apply({ kind: "object_transform", transforms: [transform] }, { version, drag: true }); },
         }),
@@ -313,9 +315,11 @@ function Viewport(props) {
     import("./viewport.js").then(({ createViewport }) => {
       if (stopped || !active) return;
       view = createViewport(ref.current, {
-        onSelect: (id) => current.current.onSelect(id), onKey: (event) => current.current.onKey(event),
-        onDragStart: () => current.current.onDragStart(), onDragEnd: (...args) => current.current.onDragEnd(...args),
-        onDragCancel: () => current.current.onDragCancel(), onError: (message) => setFailure(message),
+        readOnly: props.readOnly === true, studioLighting: current.current.studioLighting,
+        onSelect: (id) => current.current.onSelect?.(id), onKey: (event) => current.current.onKey?.(event),
+        onDragStart: () => current.current.onDragStart?.(), onDragEnd: (...args) => current.current.onDragEnd?.(...args),
+        onDragCancel: () => current.current.onDragCancel?.(), onError: (message) => setFailure(message),
+        onFocus: () => current.current.onFocus?.(),
       });
       props.viewportRef.current = view;
       view.update(current.current.snapshot);
@@ -327,13 +331,14 @@ function Viewport(props) {
     const stop = () => { stopped = true; view?.dispose(); props.viewportRef.current = null; if (current.current.dragging) current.current.onDragCancel(); };
     lifecycle.add(stop);
     return () => { stop(); lifecycle.delete(stop); };
-  }, [props.visible, props.viewportRef]);
+  }, [props.visible, props.viewportRef, props.readOnly]);
   React.useEffect(() => { props.viewportRef.current?.update(props.snapshot); }, [props.snapshot, props.viewportRef]);
   React.useEffect(() => { props.viewportRef.current?.select(props.selectedId); }, [props.selectedId, props.viewportRef]);
   React.useEffect(() => { props.viewportRef.current?.setMode(props.mode, props.space); }, [props.mode, props.space, props.viewportRef]);
   React.useEffect(() => { props.viewportRef.current?.setCamera(props.cameraId); }, [props.cameraId, props.viewportRef]);
   // During a drag the selected object stays attached until mouseUp; busy fences only the commit.
   React.useEffect(() => { props.viewportRef.current?.setEnabled(!props.disabled); }, [props.disabled, props.viewportRef]);
+  React.useEffect(() => { props.viewportRef.current?.setStudioLighting(props.studioLighting !== false); }, [props.studioLighting, props.viewportRef]);
   return h("div", { className: "dbfox-scene__viewport-shell" }, h("div", { ref, className: "dbfox-scene__viewport" }), failure ? h("div", { role: "alert", className: "dbfox-scene__viewport-error" }, failure) : null);
 }
 
@@ -404,6 +409,45 @@ function Inspector({ snapshot, selected, ...editingProps }) {
   );
 }
 
+function SceneArtifactPreview({ artifactId, payload, representations }) {
+  const rootRef = React.useRef(null);
+  const viewportRef = React.useRef(null);
+  const access = React.useRef(representations);
+  access.current = representations;
+  const visible = useVisible(rootRef);
+  const [snapshot, setSnapshot] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [retry, setRetry] = React.useState(0);
+  const [cameraId, setCameraId] = React.useState("");
+  const [studioLighting, setStudioLighting] = React.useState(false);
+  React.useEffect(() => {
+    const controller = new AbortController();
+    const stop = () => controller.abort();
+    lifecycle.add(stop);
+    setSnapshot(null); setError("");
+    readSceneArtifact(access.current, artifactId, payload, controller.signal).then((next) => {
+      if (controller.signal.aborted || !active) return;
+      setCameraId(next.settings.default_camera_id || "");
+      setStudioLighting(!next.objects.some((item) => item.kind === "light" && item.visible));
+      setSnapshot(next);
+    }).catch((caught) => { if (!controller.signal.aborted && active) setError(errorText(caught)); });
+    return () => { stop(); lifecycle.delete(stop); };
+  }, [artifactId, payload.scene_id, payload.project_id, payload.version, payload.content_hash, retry]);
+  return h("section", { ref: rootRef, className: "dbfox-scene__preview", "aria-label": `固定版本三维预览 v${payload.version}` },
+    error ? h("div", { role: "alert", className: "dbfox-scene__error" }, error, button("重新读取", () => setRetry((value) => value + 1))) : null,
+    !snapshot && !error ? h("p", { role: "status", className: "dbfox-scene__muted" }, "正在读取固定版本…") : null,
+    snapshot ? h(React.Fragment, null,
+      h("div", { className: "dbfox-scene__row dbfox-scene__preview-controls" },
+        h("select", { "aria-label": "预览视角", value: cameraId, onChange: (event) => {
+          setCameraId(event.target.value);
+          if (!event.target.value) viewportRef.current?.focus(null);
+        } }, h("option", { value: "" }, "自由视角"), snapshot.objects.filter((item) => item.kind === "camera").map((item) => h("option", { key: item.id, value: item.id }, item.name))),
+        h("select", { "aria-label": "预览灯光", value: studioLighting ? "studio" : "scene", onChange: (event) => setStudioLighting(event.target.value === "studio") },
+          h("option", { value: "scene" }, "场景灯光"), h("option", { value: "studio" }, "工作室补光")),
+        button("聚焦", () => { setCameraId(""); viewportRef.current?.focus(null); })),
+      h(Viewport, { snapshot, viewportRef, visible, readOnly: true, disabled: true, cameraId, studioLighting, selectedId: null, mode: "translate", space: "local", onFocus: () => setCameraId("") })) : null);
+}
+
 function SceneArtifact({ artifact, payload, context }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -434,6 +478,7 @@ function SceneArtifact({ artifact, payload, context }) {
   }
   return h("article", { className: "dbfox-scene dbfox-scene__artifact" }, h("h3", null, `${payload.title} · v${payload.version}`),
     h("p", null, `${payload.object_count} 个对象 · ${payload.material_count} 个材质 · 固定版本`),
+    context.surface === "workspace" ? h(SceneArtifactPreview, { artifactId: artifact.id, payload, representations: context.representations }) : null,
     h("div", { className: "dbfox-scene__row" }, button("下载 GLB", () => download("glb"), busy), button("下载 glTF", () => download("gltf"), busy), button("编辑当前场景", () => openWorkbench(payload.project_id, { id: payload.scene_id, title: payload.title }), busy)),
     error ? h("p", { role: "alert" }, error) : null);
 }
@@ -451,18 +496,18 @@ export function register(extensionHost) {
     stylesheet.dataset.dbfoxDlc = DLC_ID;
     document.head.append(stylesheet);
   }
-  host.connectors.register({ id: DLC_ID, title: "Scene Studio", icon: h("span", { "aria-hidden": true }, "◇"),
+  host.connectors.register({ id: DLC_ID, title: "Scene Studio", icon: h(host.ui.Icon, { name: "box", size: 20 }),
     addLabel: "创建三维场景", onAdd: ({ projectId }) => openWorkbench(projectId),
     render: ({ projectId }) => h("div", { className: "dbfox-scene dbfox-scene__connector" }, h("p", null, "三维场景 · 材质 · 光线 · 相机"), button("打开 Scene Studio", () => openWorkbench(projectId))),
     listResources: async ({ projectId }) => (await listScenes((name, input, signal) => host.operations.invoke(name, input, { projectId, signal }))).map((scene) => ({ kind: SCENE_KIND, id: scene.id, name: scene.title, detail: `v${scene.version} · ${scene.object_count} 对象` })),
   });
-  host.dockViews.register({ viewType: VIEW, icon: () => h("span", { "aria-hidden": true }, "◇"), resolveTitle: (view) => view.title,
+  host.dockViews.register({ viewType: VIEW, icon: () => h(host.ui.Icon, { name: "box", size: 20 }), resolveTitle: (view) => view.title,
     isVisible: (view, context) => view.projectId === context.activeProjectId,
     render: (view, context) => h(Workbench, { key: `${view.projectId}:${view.viewKey}`, projectId: view.projectId, initialSceneId: view.target?.type === "object" ? view.target.object.id : null, context }),
   });
   host.artifactViews.register({ id: "dbfox.scene.revision-view", title: "Scene 导出", priority: 100, surfaces: ["inline", "workspace"], artifactTypes: [{ type: ARTIFACT_TYPE, schemaVersions: [1] }], representationTypes: [REPRESENTATION_TYPE],
     parsePayload(value) {
-      if (!value || typeof value.scene_id !== "string" || typeof value.project_id !== "string" || !Number.isInteger(value.version) || value.version < 1 || typeof value.title !== "string") throw new Error("Invalid Scene revision Artifact");
+      if (!value || typeof value.scene_id !== "string" || typeof value.project_id !== "string" || !Number.isInteger(value.version) || value.version < 1 || typeof value.title !== "string" || typeof value.content_hash !== "string" || !/^[a-f0-9]{64}$/.test(value.content_hash)) throw new Error("Invalid Scene revision Artifact");
       return value;
     },
     render: (artifact, payload, context) => h(SceneArtifact, { key: artifact.id, artifact, payload, context }),

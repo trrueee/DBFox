@@ -1,10 +1,43 @@
 from types import SimpleNamespace
 
 import pytest
+import httpx
 from openai import APIStatusError
 from pydantic import ValidationError
 
 import engine.api.agent as agent_module
+from engine.app.safe_errors import fixed_error_detail
+
+
+@pytest.mark.parametrize("diagnostic", ["test", "models"])
+@pytest.mark.parametrize("status,code", [
+    (401, "MODEL_PROVIDER_AUTHENTICATION_FAILED"),
+    (402, "MODEL_PROVIDER_QUOTA_EXCEEDED"),
+    (429, "MODEL_PROVIDER_RATE_LIMITED"),
+])
+def test_llm_diagnostics_preserve_safe_provider_failure(monkeypatch, diagnostic, status, code):
+    def reject(**_kwargs):
+        raise APIStatusError(
+            "private provider payload with secret-token",
+            response=httpx.Response(status, request=httpx.Request("POST", "https://provider.test/responses")),
+            body={"error": {"code": "invalid_request_error"}},
+        )
+
+    monkeypatch.setattr(agent_module, "resolve_product_llm_config_from_credential", lambda **_kwargs: SimpleNamespace(
+        model_name="test-model", api_key="test-secret", api_base="https://provider.test",
+    ))
+    monkeypatch.setattr(agent_module, "create_openai_responses_client", lambda **_kwargs: SimpleNamespace(
+        responses=SimpleNamespace(create=reject), models=SimpleNamespace(list=reject),
+    ))
+    request = {"llm_credential_id": "credential-test", "api_base": "https://provider.test"}
+    if diagnostic == "test":
+        response = agent_module.api_llm_test(agent_module.LlmTestRequest(**request))
+    else:
+        response = agent_module.api_llm_models(agent_module.LlmModelsRequest(**request))
+    assert response.ok is False
+    assert response.error_code == code
+    assert response.error_message == fixed_error_detail(code)["message"]
+    assert "secret-token" not in response.model_dump_json()
 
 def test_reusable_sql_memory_is_not_public_agent_api():
     route_paths = {getattr(route, "path", "") for route in agent_module.router.routes}
@@ -80,7 +113,7 @@ def test_llm_test_uses_product_config_and_factory(monkeypatch):
     }
 
 
-def test_llm_test_falls_back_to_chat_completion_on_responses_404(monkeypatch):
+def test_llm_test_rejects_an_endpoint_without_native_responses(monkeypatch):
     captured: dict[str, object] = {}
 
     class _FakeResponse:
@@ -140,7 +173,7 @@ def test_llm_test_falls_back_to_chat_completion_on_responses_404(monkeypatch):
     )
 
     resolve_kwargs = captured["resolve_kwargs"]
-    assert response.ok is True
+    assert response.ok is False
     assert response.model == "mimo-v2.5-pro"
     assert response.api_base == "https://example.test/v1"
     assert captured["response"] == {
@@ -149,11 +182,7 @@ def test_llm_test_falls_back_to_chat_completion_on_responses_404(monkeypatch):
         "max_output_tokens": 16,
         "store": False,
     }
-    assert captured["chat"] == {
-        "model": "mimo-v2.5-pro",
-        "messages": [{"role": "user", "content": "ping"}],
-        "max_completion_tokens": 16,
-    }
+    assert "chat" not in captured
     assert captured["client_kwargs"] == {
         "api_key": "test-secret",
         "api_base": "https://example.test/v1",

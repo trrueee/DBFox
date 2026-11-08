@@ -22,6 +22,7 @@ from engine.agent.control import (
     UsageCharge,
 )
 from engine.agent.context import ContextAssembler, ContextSnapshot
+from engine.agent.context_budget import ContextBudgetExceeded
 from engine.agent.context_fragment import ContextContributor
 from engine.agent.resource_refs import (
     ProjectResourceProvider,
@@ -229,7 +230,10 @@ class RunLoop:
             artifact_payload_contract_resolver=artifact_payload_contract_resolver,
             runtime_snapshot_id=runtime_snapshot_id,
         )
-        self.terminalizer = Terminalizer(session_factory=self.session_factory)
+        self.terminalizer = Terminalizer(
+            session_factory=self.session_factory,
+            resource_discovery=resource_discovery,
+        )
 
     def execute(
         self,
@@ -363,6 +367,9 @@ class RunLoop:
             # The replacement worker owns all further durable transitions. The
             # old worker only closes its transient stream and exits.
             return
+        except ContextBudgetExceeded:
+            error = fixed_error_detail("AGENT_CONTEXT_BUDGET_EXCEEDED")
+            self._fail(lease, run_id, error["code"], error["message"])
         except RunControlError as exc:
             limitation = {
                 "AGENT_TOKEN_BUDGET": CompletionLimitationCode.TOKEN_BUDGET_REACHED,

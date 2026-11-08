@@ -282,15 +282,26 @@ describe("AgentTimeline", () => {
     expect(screen.queryByText(/2 次调用/)).toBeNull();
   });
 
-  it("opens an in-progress tool disclosure so live status is not hidden", () => {
+  it("keeps an in-progress tool compact while its live status stays visible", () => {
     const runningCall = call(1);
     runningCall.status = "in_progress";
     const { container } = renderTimeline([runningCall], { status: "running" });
 
-    expect(screen.getByRole("button", { name: /读取订单结构/ }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: /读取订单结构/ }).getAttribute("aria-expanded")).toBe("false");
     // Live state is the spinner glyph itself, not a word.
     expect(container.querySelector(".animate-spin")).toBeTruthy();
     expect(screen.queryByText("运行中")).toBeNull();
+  });
+
+  it("preserves an explicitly opened tool when a real output settles it", () => {
+    const item = { ...call(1), status: "in_progress" as const };
+    const view = renderTimeline([item], { status: "running" });
+    expect(screen.queryByText("schema_describe_table")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /读取订单结构/ }));
+    expect(screen.getByText("schema_describe_table")).toBeTruthy();
+    view.rerender(<AgentTimeline run={run()} items={[{ ...item, status: "completed" }, output(2)]} artifacts={[]} />);
+    expect(screen.getByRole("button", { name: /读取订单结构/ }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("已读取 12 个字段")).toBeTruthy();
   });
 
   it("renders a registered namespaced capability artifact in the conversation", () => {
@@ -322,8 +333,23 @@ describe("AgentTimeline", () => {
       relations: [],
     };
 
-    renderTimeline([], {}, [artifact]);
+    const onSelectArtifact = vi.fn();
+    renderTimeline([], {}, [artifact], onSelectArtifact);
 
+    expect(screen.getByText("乐谱工件：Warm Light")).toBeTruthy();
+    const preview = screen.getByRole("button", { name: /预览.*：Warm Light/ });
+    expect(preview.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(preview);
+    expect(preview.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("乐谱工件：Warm Light")).toBeNull();
+    expect(onSelectArtifact).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Warm Light" }));
+    expect(onSelectArtifact).toHaveBeenCalledWith(artifact.id);
+    expect(preview.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(preview);
     expect(screen.getByText("乐谱工件：Warm Light")).toBeTruthy();
   });
 

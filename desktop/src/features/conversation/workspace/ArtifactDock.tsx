@@ -1,4 +1,6 @@
-import { PanelRightClose } from "lucide-react";
+import {
+  SidebarSimpleIcon,
+} from "@/components/icons";
 import { artifactKind, ResourceIcon, resourceLabel } from "../../../components/resources/resourcePresentation";
 import { useMemo } from "react";
 import type { ConversationArtifact } from "../../../types/conversation";
@@ -36,7 +38,7 @@ export function ArtifactDock({
         <strong>成果</strong>
         {onCollapse && (
           <button type="button" onClick={onCollapse} aria-label="收起工件区" title="收起工件区">
-            <PanelRightClose size={16} aria-hidden="true" />
+            <SidebarSimpleIcon size={16} aria-hidden="true" />
           </button>
         )}
       </header>
@@ -47,13 +49,13 @@ export function ArtifactDock({
               key={artifact.id}
               type="button"
               className="conv-artifact-dock-item"
-              aria-label={`${artifact.title} ${artifactTypeLabel(artifact.type)}`}
+              aria-label={`${artifact.title} ${artifactTypeLabel(artifact.type, artifact.title)}`}
               aria-pressed={activeArtifact?.id === artifact.id}
               onClick={() => onSelectArtifact?.(artifact.id)}
             >
-              <ResourceIcon kind={artifactKind(artifact.type)} size={16} />
+              <ResourceIcon name={artifact.title} kind={artifactKind(artifact.type, artifact.title)} size={16} />
               <span>{artifact.title}</span>
-              <em>{artifactTypeLabel(artifact.type)}</em>
+              <em>{artifactTypeLabel(artifact.type, artifact.title)}</em>
             </button>
           ))}
         </nav>
@@ -81,6 +83,6 @@ export function ArtifactDock({
   );
 }
 
-function artifactTypeLabel(type: string): string {
-  return resourceLabel(artifactKind(type));
+function artifactTypeLabel(type: string, title: string): string {
+  return resourceLabel(artifactKind(type, title));
 }

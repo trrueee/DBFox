@@ -174,8 +174,9 @@ export async function waitForEngineConfig(options: EngineConfigWaitOptions = {})
 
   while (attempts === undefined || attempt < attempts) {
     throwIfAborted(options.signal);
+    let status: EngineStartupStatus | undefined;
     try {
-      const status = await getEngineStartupStatus();
+      status = await getEngineStartupStatus();
       throwIfAborted(options.signal);
       options.onStatus?.(status);
       if (status.state === "ready" && (options.afterGeneration === undefined
@@ -183,23 +184,19 @@ export async function waitForEngineConfig(options: EngineConfigWaitOptions = {})
         await initEngineConfig();
         return;
       }
-      if (status.state === "failed" || status.state === "stopped") {
-          throw new ApiError(
-            status.error || "Local engine is unavailable.",
-            503,
-            status.state === "failed"
-              ? status.failure?.code || "ENGINE_STARTUP_FAILED"
-              : "ENGINE_STOPPED",
-            [],
-            status.failure ? { ...status.failure, stage: status.stage ?? null } : undefined,
-          );
-      }
     } catch (error) {
       if (options.signal?.aborted) throw error;
+      if (error instanceof ApiError) throw error;
       lastError = error;
-      if (error instanceof ApiError && (error.code === "ENGINE_STARTUP_FAILED" || error.code === "ENGINE_STOPPED")) {
-        throw error;
-      }
+    }
+    if (status?.state === "failed" || status?.state === "stopped") {
+      throw new ApiError(
+        status.error || "Local engine is unavailable.",
+        503,
+        status.state === "failed" ? status.failure?.code || "ENGINE_STARTUP_FAILED" : "ENGINE_STOPPED",
+        [],
+        status.failure ? { ...status.failure, stage: status.stage ?? null } : undefined,
+      );
     }
     attempt += 1;
     if (attempts === undefined || attempt < attempts) {

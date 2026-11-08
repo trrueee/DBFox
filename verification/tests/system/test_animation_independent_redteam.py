@@ -123,7 +123,7 @@ class Installed:
             loop.execute(lease=lease, run_id=admission.run_id)
             assert not boundary.errors, boundary.errors
             assert max(estimate_input_items_tokens(r["input"]) + estimate_tool_schema_tokens(r["tools"])
-                for r in boundary.requests) <= loop.definition.limits.max_prompt_tokens == 32768
+                for r in boundary.requests) <= loop.definition.limits.max_prompt_tokens == 65536
             with self.factory() as db:
                 run = db.get(AgentRun, admission.run_id)
                 status = run.status

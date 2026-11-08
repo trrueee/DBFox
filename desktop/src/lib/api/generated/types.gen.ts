@@ -779,6 +779,10 @@ export type ConversationSnapshotResponse = {
  */
 export type ConversationSummaryResponse = {
     /**
+     * Cursor
+     */
+    cursor?: number;
+    /**
      * Id
      */
     id: string;
@@ -786,6 +790,7 @@ export type ConversationSummaryResponse = {
      * Project Id
      */
     project_id?: string | null;
+    run_status?: RunStatus | null;
     /**
      * Selected Artifact Id
      */
@@ -5108,6 +5113,68 @@ export type ApiCreateProjectApiV1ProjectsPostResponses = {
 };
 
 export type ApiCreateProjectApiV1ProjectsPostResponse = ApiCreateProjectApiV1ProjectsPostResponses[keyof ApiCreateProjectApiV1ProjectsPostResponses];
+
+export type ApiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Artifact Id
+         */
+        artifact_id: string;
+    };
+    query?: never;
+    url: '/api/v1/projects/{project_id}/artifacts/{artifact_id}';
+};
+
+export type ApiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ApiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGetError = ApiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGetErrors[keyof ApiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGetErrors];
+
+export type ApiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Artifact;
+};
+
+export type ApiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGetResponse = ApiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGetResponses[keyof ApiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGetResponses];
 
 export type ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetData = {
     body?: never;

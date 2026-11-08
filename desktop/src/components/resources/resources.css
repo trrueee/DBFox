@@ -7,7 +7,7 @@
   display: inline-flex; min-width: 0; max-width: 100%; align-items: center;
   border: 1px solid var(--line-strong); border-radius: var(--radius-card);
   background: var(--surface-workspace); color: var(--color-text-primary); vertical-align: middle;
-  transition: border-color var(--motion-fast), background-color var(--motion-fast);
+  transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
 }
 .resource-reference:has(button.resource-reference__main):hover { border-color: var(--color-border-hover); background: var(--control-bg-hover); }
 .resource-reference__main {
@@ -21,11 +21,15 @@ button.resource-reference__main { cursor: pointer; }
 .resource-reference__name { overflow: hidden; color: var(--color-text-primary); font-size: var(--ui-font-control); line-height: var(--ui-line-body); text-overflow: ellipsis; white-space: nowrap; }
 .resource-reference__detail { overflow: hidden; color: var(--color-text-muted); font-size: var(--ui-font-micro); line-height: var(--ui-line-caption); text-overflow: ellipsis; white-space: nowrap; }
 .resource-reference__open { flex-shrink: 0; margin-left: var(--space-1); color: var(--color-text-muted); }
-.resource-reference__remove { display: grid; width: 28px; height: 28px; flex-shrink: 0; margin-right: var(--space-1); padding: 0; place-items: center; border: 0; border-radius: var(--radius-row); background: transparent; color: var(--color-text-muted); cursor: pointer; }
+.resource-reference__open { transition: color var(--motion-fast) var(--ease-out), transform var(--motion-normal) var(--ease-out); }
+.resource-reference__main:is(:hover, :focus-visible) .resource-reference__open { color: var(--color-primary); transform: translate(1px, -1px); }
+:root[data-motion="reduce"] .resource-reference__open { transform: none; }
+@media (prefers-reduced-motion: reduce) { .resource-reference__open { transform: none !important; } }
+.resource-reference__remove { display: grid; width: 32px; height: 32px; flex-shrink: 0; margin-right: var(--space-1); padding: 0; place-items: center; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--color-text-muted); cursor: pointer; }
 .resource-reference__remove:hover { background: var(--control-bg-pressed); color: var(--color-text-primary); }
 .resource-reference button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.resource-reference--compact { border-radius: var(--radius-row); }
+.resource-reference--compact { border-radius: var(--radius-pill); }
 .resource-reference--compact .resource-reference__main { gap: 6px; padding: 4px 8px; }
 .resource-reference--compact .resource-reference__icon { width: 18px; height: 22px; background: transparent; }
-.resource-reference--compact .resource-reference__name { font-size: var(--ui-font-caption); }
+.resource-reference--compact .resource-reference__name { font-size: var(--ui-font-control); }
 @media (prefers-reduced-motion: reduce) { .resource-reference { transition: none; } }

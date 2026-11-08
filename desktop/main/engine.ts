@@ -94,6 +94,7 @@ export class EngineSupervisor {
   #removeExitListener: (() => void) | null = null;
   #startupAbort: AbortController | null = null;
   #activeAttempt: Promise<void> | null = null;
+  #shutdownAttempt: Promise<void> | null = null;
   #epoch = 0;
   #stopping = false;
 
@@ -135,7 +136,7 @@ export class EngineSupervisor {
   }
 
   async start(): Promise<void> {
-    if (this.#child !== null || this.#activeAttempt !== null) {
+    if (this.#child !== null || this.#activeAttempt !== null || this.#shutdownAttempt !== null) {
       throw new Error("Python engine supervisor is already running");
     }
     this.#stopping = false;
@@ -144,43 +145,61 @@ export class EngineSupervisor {
 
   async restart(): Promise<void> {
     this.#stopping = true;
-    this.#epoch += 1;
+    const epoch = ++this.#epoch;
     this.#startupAbort?.abort();
     this.#startupAbort = null;
-    const activeAttempt = this.#activeAttempt;
-    const child = this.#detachChild();
     this.#config = null;
     this.#restartHistory.length = 0;
     this.#setStatus({ state: "starting", error: null, stage: "starting", restartCount: 0, failure: null });
     try {
-      if (child !== null) await child.stop();
-      if (activeAttempt !== null) await activeAttempt;
+      await this.#stopCurrent();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Python engine termination failed";
-      this.#setStatus({ state: "failed", error: message, stage: "shutdown_failed" });
+      if (epoch === this.#epoch) this.#setStatus({ state: "failed", error: message, stage: "shutdown_failed" });
       throw error;
     }
+    if (epoch !== this.#epoch) return;
     this.#stopping = false;
     await this.#runStartAttempt("starting");
   }
 
   async stop(): Promise<void> {
     this.#stopping = true;
-    this.#epoch += 1;
+    const epoch = ++this.#epoch;
     this.#startupAbort?.abort();
     this.#startupAbort = null;
-    const activeAttempt = this.#activeAttempt;
-    const child = this.#detachChild();
     this.#config = null;
     try {
-      if (child !== null) await child.stop();
-      if (activeAttempt !== null) await activeAttempt;
+      await this.#stopCurrent();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Python engine termination failed";
-      this.#setStatus({ state: "failed", error: message, stage: "shutdown_failed" });
+      if (epoch === this.#epoch) this.#setStatus({ state: "failed", error: message, stage: "shutdown_failed" });
       throw error;
     }
-    this.#setStatus({ state: "stopped", error: null, stage: null, failure: null });
+    if (epoch === this.#epoch) this.#setStatus({ state: "stopped", error: null, stage: null, failure: null });
+  }
+
+  async #stopCurrent(): Promise<void> {
+    if (this.#shutdownAttempt !== null) return this.#shutdownAttempt;
+    const child = this.#detachChild();
+    const activeAttempt = this.#activeAttempt;
+    const shutdown = (async () => {
+      if (child !== null) {
+        try {
+          await child.stop();
+        } catch (error) {
+          this.#child = child;
+          throw error;
+        }
+      }
+      if (activeAttempt !== null) await activeAttempt;
+    })();
+    this.#shutdownAttempt = shutdown;
+    try {
+      await shutdown;
+    } finally {
+      if (this.#shutdownAttempt === shutdown) this.#shutdownAttempt = null;
+    }
   }
 
   async #runStartAttempt(state: "starting" | "restarting"): Promise<void> {
@@ -204,14 +223,15 @@ export class EngineSupervisor {
     this.#setStatus({ state, error: null, stage: "launching", failure: null });
     const token = this.#tokenFactory();
     let child: EngineChild | null = null;
+    let cleanupFailed = false;
     try {
       child = await this.#launcher.launch(token);
       if (!this.#isCurrent(epoch, abort)) {
         try {
           await child.stop();
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Python engine termination failed";
-          this.#setStatus({ state: "failed", error: message, stage: "shutdown_failed" });
+          cleanupFailed = true;
+          this.#child = child;
           throw error;
         }
         return;
@@ -244,13 +264,17 @@ export class EngineSupervisor {
       this.#startupAbort = null;
       this.#setStatus({ state: "ready", error: null, stage: null, generation, failure: null });
     } catch (error) {
-      if (!this.#isCurrent(epoch, abort)) return;
+      if (!this.#isCurrent(epoch, abort)) {
+        if (cleanupFailed) throw error;
+        return;
+      }
       this.#startupAbort = null;
       if (child !== null && child === this.#child) {
         this.#detachChild();
         try {
           await child.stop();
         } catch (stopError) {
+          this.#child = child;
           const message = stopError instanceof Error
             ? stopError.message
             : "Python engine termination failed";

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
+import { StandardIcon } from '../../../components/resources/StandardIcon';
 
 const frontend = resolve(process.cwd(), '../dlcs/dbfox.game/frontend');
 const url = (source: string) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
@@ -27,7 +28,7 @@ it('opens a concrete Game after creation/selection and restores its selected sub
   const open = vi.fn();
   const invoke = vi.fn(async () => ({game:{id:'game-1',title:'Fox',version:2},library_version:3}));
   const status = {state:'unavailable',message:'Fixture'};
-  const Studio = createStudio(React, {operations:{invoke},ui:{Tree:()=>null}}, {
+  const Studio = createStudio(React, {operations:{invoke},ui:{Tree:()=>null,Icon:StandardIcon}}, {
     registerCleanup:()=>()=>{},
     executor:{subscribe:()=>()=>{},getSnapshot:()=>status},
   }, open);

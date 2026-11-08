@@ -1,0 +1,17 @@
+.thread-beacon {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--color-text-muted);
+  vertical-align: middle;
+  transition: color var(--motion-fast) var(--ease-out);
+}
+.thread-beacon[data-tone="active"] { color: var(--color-primary); }
+.thread-beacon[data-tone="attention"] { color: var(--color-warning); }
+.thread-beacon[data-tone="danger"] { color: var(--color-danger); }
+.thread-beacon[data-state="running"] > svg { animation: thread-beacon-running 2.4s linear infinite; }
+@keyframes thread-beacon-running { to { transform: rotate(360deg); } }
+:root[data-motion="reduce"] .thread-beacon > svg { animation: none; }
+@media (prefers-reduced-motion: reduce) { .thread-beacon > svg { animation: none; } }

@@ -1,5 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import {
+  WarningIcon,
+  ArrowsClockwiseIcon,
+} from "@/components/icons";
 import { Alert, AlertDescription, AlertTitle, Button } from "../../components/ui";
 import "./DlcErrorBoundary.css";
 
@@ -44,7 +47,7 @@ export class DlcErrorBoundary extends Component<Props, State> {
 
       return (
         <Alert className="dlc-error-state" variant="destructive">
-          <AlertTriangle aria-hidden="true" />
+          <WarningIcon aria-hidden="true" />
           <AlertTitle>
             扩展组件加载或渲染失败
             {this.props.dlcId ? ` (${this.props.dlcId})` : ""}
@@ -52,7 +55,7 @@ export class DlcErrorBoundary extends Component<Props, State> {
           <AlertDescription>
             <p>这个扩展的界面暂时不可用。可重试渲染；详细原因只记录在诊断日志中。</p>
             <Button type="button" variant="outline" size="sm" onClick={this.handleRetry}>
-              <RefreshCw size={14} aria-hidden="true" />
+              <ArrowsClockwiseIcon size={16} aria-hidden="true" />
               重试渲染
             </Button>
           </AlertDescription>

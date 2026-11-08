@@ -15,6 +15,67 @@ from engine.tools.materialization import materialize_tools
 from verification.support.agent_tools import verification_registry
 
 
+@pytest.mark.parametrize("first_decision", ["approved", "rejected", "expired"])
+def test_resolving_one_approval_does_not_resume_a_run_with_another_pending_action(
+    db_session, first_decision,
+):
+    db_session.add(AgentSession(id="batch-approval", title="Two file writes"))
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    admission = sessions.admit(
+        session_id="batch-approval", resource_refs=(), content="Write two files",
+        idempotency_key="batch", llm_credential_id="credential", api_base=None,
+        model_name="model", request_payload={},
+    )
+    lease = sessions.claim(session_id="batch-approval", owner="worker")
+    sessions.promote_next_input(lease=lease)
+    tools = materialize_tools(
+        verification_registry(requires_approval=True),
+        allowed_groups={"verification"}, execution_mode="agent_autonomous_read",
+    )
+    turn = sessions.start_turn(
+        lease=lease, run_id=admission.run_id, agent_definition_version="1", prompt_version="1",
+        prompt_hash="prompt", context_snapshot={}, context_hash="context",
+        tool_materialization=tools.model_dump(mode="json"), tool_materialization_hash=tools.hash,
+        provider="test", model_name="test",
+    )
+    approvals = ApprovalRepository(db_session)
+    requests = []
+    for index in range(2):
+        policy = {"status": "approval_required", "safe_args": {"value": str(index)}}
+        invocation = ToolInvocationRepository(db_session).request(
+            lease=lease, run_id=admission.run_id, turn_id=str(turn.id),
+            provider_call_id=f"call-{index}", tool_name="verification_read",
+            raw_input={"value": str(index)}, materialization=tools, policy_decision=policy,
+        )
+        requests.append(approvals.request(
+            lease=lease, invocation_id=invocation.id, policy_decision=policy,
+            expires_in_seconds=-1 if index == 0 and first_decision == "expired" else 3600,
+        ))
+    sessions.release(lease=lease)
+    db_session.commit()
+    if first_decision == "expired":
+        recovery = sessions.claim(session_id="batch-approval", owner="expiry")
+        assert [item.id for item in approvals.expire_pending(lease=recovery)] == [requests[0].id]
+        sessions.release(lease=recovery)
+    else:
+        approvals.resolve(
+            approval_id=requests[0].id, expected_version=0,
+            approved=first_decision == "approved", actor="user",
+        )
+    db_session.commit()
+    db_session.expire_all()
+    assert db_session.get(AgentRun, admission.run_id).status == "waiting_approval"
+    assert db_session.get(AgentApproval, requests[1].id).status == "pending"
+    assert db_session.get(AgentToolInvocation, requests[1].tool_invocation_id).status == "waiting_approval"
+    approvals.resolve(
+        approval_id=requests[1].id, expected_version=0, approved=True, actor="user",
+    )
+    db_session.commit()
+    assert db_session.get(AgentRun, admission.run_id).status == "running"
+    assert db_session.get(AgentToolInvocation, requests[1].tool_invocation_id).status == "requested"
+
+
 def test_approval_resolves_once_and_resumes_exact_invocation(db_session, test_resource):
     db_session.add(AgentSession(id="session_approval", project_id=None, title="Approval"))
     db_session.commit()

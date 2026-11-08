@@ -1,5 +1,8 @@
 import * as React from "react";
-import { AlertTriangle, Inbox } from "lucide-react";
+import {
+  WarningIcon,
+  TrayIcon,
+} from "@/components/icons";
 
 import { cn } from "../../lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "./alert";
@@ -24,7 +27,7 @@ function EmptyState({ title, description, action, icon, className, ...props }: E
   return (
     <Empty className={cn("min-h-48", className)} {...props}>
       <EmptyHeader>
-        <EmptyMedia variant="icon">{icon ?? <Inbox aria-hidden="true" />}</EmptyMedia>
+        <EmptyMedia variant="icon">{icon ?? <TrayIcon aria-hidden="true" />}</EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>
         {description ? <EmptyDescription>{description}</EmptyDescription> : null}
       </EmptyHeader>
@@ -43,7 +46,7 @@ interface ErrorStateProps extends StateBlockProps {
 function ErrorState({ title, description, error, icon, onRetry, retryLabel = "重试", className, ...props }: ErrorStateProps) {
   return (
     <Alert variant="destructive" className={className} {...props}>
-      {icon ?? <AlertTriangle aria-hidden="true" />}
+      {icon ?? <WarningIcon aria-hidden="true" />}
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>
         {description ? <p>{description}</p> : null}

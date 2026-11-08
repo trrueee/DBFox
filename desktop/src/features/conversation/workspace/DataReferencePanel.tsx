@@ -1,4 +1,7 @@
-import { BookOpen, ChevronDown } from "lucide-react";
+import {
+  BookOpenIcon,
+  CaretDownIcon,
+} from "@/components/icons";
 import { ReferenceCard } from "../../../components/resources/ReferenceCard";
 import {
   Sources,
@@ -30,10 +33,10 @@ export function DataReferencePanel({
   return (
     <Sources className="conv-data-refs" data-reference-kind={kind}>
       <SourcesTrigger count={references.length} aria-label={`${label}，${references.length} 项`}>
-        <BookOpen size={14} aria-hidden="true" />
+        <BookOpenIcon size={16} aria-hidden="true" />
         <span className="conv-data-refs-label">{label}</span>
         <span className="conv-data-refs-count">{references.length}</span>
-        <ChevronDown className="dbfox-sources__chevron" size={14} aria-hidden="true" />
+        <CaretDownIcon className="dbfox-sources__chevron" size={16} aria-hidden="true" />
       </SourcesTrigger>
       <SourcesContent className="conv-data-ref-list">
         {references.map((reference) => {

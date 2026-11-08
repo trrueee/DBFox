@@ -5,6 +5,7 @@ import { UnifiedComposer } from "../../../components/agent/UnifiedComposer";
 import { useAttachmentInput } from "../useAttachmentInput";
 import { openWorkbenchReference } from "../../resources/openWorkbenchReference";
 import { getUserErrorMessage } from "../../../lib/api/client";
+import { getActiveWorkbenchKey, useWorkspaceStore } from "../../../stores/workspaceStore";
 
 export function Composer({
   disabled,
@@ -37,7 +38,10 @@ export function Composer({
   conversationId?: string;
   context?: ReactNode;
 }) {
-  const [value, setValue] = useState("");
+  const workbenchKey = useWorkspaceStore(state => getActiveWorkbenchKey(state, conversationId));
+  const value = useWorkspaceStore(state => state.workbenchByConversation[workbenchKey]?.draftInput ?? "");
+  const setDraftInput = useWorkspaceStore(state => state.setDraftInput);
+  const setValue = (text: string) => setDraftInput(text, workbenchKey);
   const [previewError, setPreviewError] = useState<string | undefined>();
   const attachment = useAttachmentInput(async () => {
     if (!conversationId) throw new Error("当前会话不可用。");
@@ -53,21 +57,26 @@ export function Composer({
         running ? deliveryMode : "queue",
         references ?? [],
       );
-      setValue("");
-      onClearReferences?.();
+      // Admission can finish after navigation or after the user starts a new
+      // draft. Only settle the submitted draft in its original Workbench.
+      const workspace = useWorkspaceStore.getState();
+      if (workspace.workbenchByConversation[workbenchKey]?.draftInput === value) {
+        workspace.setDraftInput("", workbenchKey);
+        onClearReferences?.();
+      }
     } catch {
       // The mutation exposes a user-facing error; preserve the draft for retry.
     }
   };
   return (
-    <footer className="conv-composer" aria-label="对话输入区">
+    <footer className="conv-composer" role="group" aria-label="对话输入区">
       <div className="conv-composer-rail">
         <UnifiedComposer
           value={value}
           onChange={setValue}
           context={context}
           onSubmit={submit}
-          placeholder="继续追问…"
+          placeholder=""
           ariaLabel="继续提问"
           references={references}
           onRemoveReference={(ref) => { attachment.remove(ref, conversationId); onRemoveReference?.(ref); }}

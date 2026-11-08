@@ -91,7 +91,7 @@ export function MarkdownContent({
             title={label}
             onClick={() => onCitation?.(artifactId)}
           >
-            <ResourceIcon name={artifact?.title} kind={artifact ? artifactKind(artifact.type) : "document"} size={14} />
+            <ResourceIcon name={artifact?.title} kind={artifact ? artifactKind(artifact.type, artifact.title) : "document"} size={14} />
             <span className="hifi-md-citation__label">{artifact?.title || shortCitationLabel(label)}</span>
             <span className="hifi-md-citation__index">{children}</span>
           </button>
@@ -136,7 +136,7 @@ export function MarkdownContent({
               title={label}
               aria-label={`查看证据：${label}`}
             >
-              <ResourceIcon name={artifact?.title} kind={artifact ? artifactKind(artifact.type) : "document"} size={14} />
+              <ResourceIcon name={artifact?.title} kind={artifact ? artifactKind(artifact.type, artifact.title) : "document"} size={14} />
               <span className="hifi-md-citation__label">{artifact?.title || shortCitationLabel(label)}</span>
               <span className="hifi-md-citation__index">{citationIndex.get(citation.artifact_id)}</span>
             </button>

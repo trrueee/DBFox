@@ -7,7 +7,8 @@
   align-items: center;
   gap: var(--space-4);
   padding-left: var(--space-6);
-  background: var(--surface-workspace);
+  background: var(--surface-chrome);
+  backdrop-filter: var(--material-filter);
   color: var(--color-text-primary);
   user-select: none;
   -webkit-user-select: none;

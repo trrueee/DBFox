@@ -69,9 +69,11 @@ export async function handleAppRequest(request: Request, rendererRoot: string): 
 export function parseAppUrl(rawUrl: string): string {
   const url = new URL(rawUrl);
   if (url.protocol !== `${APP_SCHEME}:` || url.hostname.toLowerCase() !== "localhost"
-    || url.username || url.password || url.port || url.search || url.hash) {
+    || url.username || url.password || url.port || url.search) {
     throw new Error("Invalid packaged renderer URL");
   }
+  // Electron preserves SVG <use> fragments in custom-protocol requests. The
+  // fragment selects client-side content and never contributes to a file path.
   const segments = url.pathname.split("/").filter(Boolean).map((segment) => decodeURIComponent(segment));
   if (segments.length === 0) return "index.html";
   if (segments.some((segment) => segment === "." || segment === ".." || segment.includes("/")

@@ -1,5 +1,7 @@
-import React, { useMemo } from "react";
-import { Search } from "lucide-react";
+import React, { useMemo, useRef } from "react";
+import {
+  MagnifyingGlassIcon,
+} from "@/components/icons";
 import {
   Command,
   CommandEmpty,
@@ -36,6 +38,7 @@ interface CommandPaletteProps {
 }
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, commands }) => {
+  const returnFocus = useRef<HTMLElement | null>(null);
   const grouped = useMemo(() => {
     const map = new Map<string, CommandItem[]>();
     for (const command of commands) {
@@ -55,7 +58,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
-      <DialogContent className="dbfox-command-dialog">
+      <DialogContent className="dbfox-command-dialog"
+        onOpenAutoFocus={() => { returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }}
+        onCloseAutoFocus={event => {
+          const target = returnFocus.current;
+          if (target?.isConnected && !target.closest("[inert]")) {
+            event.preventDefault();
+            target.focus({ preventScroll: true });
+          }
+        }}>
         <DialogHeader className="sr-only">
           <DialogTitle>全局搜索</DialogTitle>
           <DialogDescription>搜索任务、项目、对话和应用操作。</DialogDescription>
@@ -65,9 +76,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
         loop
       >
         <CommandSearch>
-          <Search size={16} className="dbfox-command-search-icon" />
+          <MagnifyingGlassIcon size={16} className="dbfox-command-search-icon" />
           <CommandInput
-            autoFocus
             placeholder="搜索任务、项目和操作…"
           />
           <CommandKbd>Esc</CommandKbd>
@@ -93,7 +103,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
                   onSelect={() => runCommand(command)}
                 >
                   <CommandItemIcon>
-                    {command.icon || <Search size={14} />}
+                    {command.icon || <MagnifyingGlassIcon size={16} />}
                   </CommandItemIcon>
                   <CommandItemLabel>
                     <span>{command.name}</span>

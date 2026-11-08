@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, Folder, LoaderCircle, Plus, RefreshCw, Settings } from "lucide-react";
+import {
+  CheckIcon,
+  CaretDownIcon,
+  FolderSimpleIcon,
+  CircleNotchIcon,
+  PlusIcon,
+  ArrowsClockwiseIcon,
+  GearIcon,
+} from "@/components/icons";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../../../components/ui";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import { useProjectState } from "../../projects/useProjectState";
@@ -36,17 +44,17 @@ export function ComposerContext({ busy = false }: { busy?: boolean }) {
         <Button type="button" variant="ghost" size="sm" className="dbfox-composer__context dbfox-composer__project"
           disabled={busy} aria-label={`当前项目：${activeProject?.name ?? "选择项目"}`} title={activeProject?.name ?? "选择项目"}
           onClick={event => event.stopPropagation()}>
-          <Folder size={16} strokeWidth={1.75} aria-hidden="true" />
-          <span>{activeProject?.name ?? "选择项目"}</span><ChevronDown size={14} aria-hidden="true" />
+          <FolderSimpleIcon size={16} aria-hidden="true" />
+          <span>{activeProject?.name ?? "选择项目"}</span><CaretDownIcon size={16} aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="dbfox-composer__context-menu">
         {projects.map(project => <DropdownMenuItem key={project.id} onSelect={() => setActiveProject(project.id)}>
-          <Folder size={16} aria-hidden="true" /><span>{project.name}</span>
-          {project.id === projectId ? <Check size={14} aria-hidden="true" /> : null}
+          <FolderSimpleIcon size={16} aria-hidden="true" /><span>{project.name}</span>
+          {project.id === projectId ? <CheckIcon size={16} aria-hidden="true" /> : null}
         </DropdownMenuItem>)}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={openProjectCreate}><Plus size={16} aria-hidden="true" />打开文件夹</DropdownMenuItem>
+        <DropdownMenuItem onSelect={openProjectCreate}><PlusIcon size={16} aria-hidden="true" />打开文件夹</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
     <DropdownMenu open={modelOpen} onOpenChange={setModelOpen}>
@@ -54,25 +62,25 @@ export function ComposerContext({ busy = false }: { busy?: boolean }) {
         <Button type="button" variant="ghost" size="sm" className="dbfox-composer__context dbfox-composer__model"
           disabled={busy} aria-label={`当前模型：${config.modelName || (config.credentialId ? "服务默认" : "配置模型")}`}
           title="选择下一条消息使用的模型" onClick={event => event.stopPropagation()}>
-          <span>{config.modelName || (config.credentialId ? "服务默认" : "配置模型")}</span><ChevronDown size={14} aria-hidden="true" />
+          <span>{config.modelName || (config.credentialId ? "服务默认" : "配置模型")}</span><CaretDownIcon size={16} aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="dbfox-composer__context-menu dbfox-composer__model-menu">
         {config.credentialId ? <>
           <DropdownMenuItem onSelect={() => saveStoredApiConfig({ ...config, modelName: "" })}>
-            <span>服务默认</span>{!config.modelName ? <Check size={14} aria-hidden="true" /> : null}
+            <span>服务默认</span>{!config.modelName ? <CheckIcon size={16} aria-hidden="true" /> : null}
           </DropdownMenuItem>
           {options.map(model => <DropdownMenuItem key={model} onSelect={() => saveStoredApiConfig({ ...config, modelName: model })}>
-            <span>{model}</span>{config.modelName === model ? <Check size={14} aria-hidden="true" /> : null}
+            <span>{model}</span>{config.modelName === model ? <CheckIcon size={16} aria-hidden="true" /> : null}
           </DropdownMenuItem>)}
-          {models.isFetching ? <div className="dbfox-composer__model-status" role="status"><LoaderCircle size={14} className="dbfox-composer__loading" aria-hidden="true" />正在获取模型…</div> : null}
+          {models.isFetching ? <div className="dbfox-composer__model-status" role="status"><CircleNotchIcon size={16} className="dbfox-composer__loading" aria-hidden="true" />正在获取模型…</div> : null}
           {models.isError ? <div className="dbfox-composer__model-status" role="alert">{getUserErrorMessage(models.error, "模型列表暂不可用。")}</div> : null}
           <DropdownMenuItem disabled={models.isFetching} onSelect={event => { event.preventDefault(); void models.refetch(); }}>
-            <RefreshCw size={14} aria-hidden="true" />{models.isError ? "重试获取模型" : "刷新模型列表"}
+            <ArrowsClockwiseIcon size={16} aria-hidden="true" />{models.isError ? "重试获取模型" : "刷新模型列表"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
         </> : null}
-        <DropdownMenuItem onSelect={() => openSettings("model")}><Settings size={16} aria-hidden="true" />模型服务设置</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => openSettings("model")}><GearIcon size={16} aria-hidden="true" />模型服务设置</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   </>;

@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-09-05
+> 最后核验：2026-11-07
 >
 > 适用范围：`dbfox.pixel` 0.1.0 后端与 Canvas 工作台，Extension API v2
 
@@ -43,6 +43,12 @@ Human 通过 project-scoped operation 进入同一个 Store；Agent 使用正式
 
 已注册12个 operations：`documents.list/create/get/head/apply/undo/delete/restore/revisions/diff/export` 与 `frames.read`。精确参数模型位于 [contracts.py](backend/contracts.py)。Agent 有18个工具：`pixel_create/documents/restore/inspect/fill/line/rect/stamp/apply/undo/delete/diff/export`、`palette_set`、`frame_create`、`frame_duplicate`、`layer_create`、`region_transform`。单领域写工具使用 `{document_id,expected_version,operation}`，operation 的 `kind` 必填；创建、目录和 restore 工具还需精确 `library_id`。
 
+写工具合同 v2 和 `pixel_authoring` v2 明确 `stamp.pixels` 为一维行优先数组，数量必须
+恰好等于 `rect.width * rect.height`，16×16 即 256 个。手工设计图案优先用简单矩形、
+线条或同一原子批次中的小行带，避免长数组计数错误。数量错误使用标准
+`PydanticCustomError` 的静态规则类型，经原 PolicyGate 向模型报告字段位置与规则，
+不回显原始输入，也不自动补齐或裁掉错误像素。
+
 ## 版本、预算与锁
 
 每个文档有独立 version-fenced Resource，版本为规范十进制字符串；frame/layer/tag 是父文档对象。事务追加不可变修订、CAS head 和精确 receipt；相同 ID/输入返回原结果，不同输入重用 ID 拒绝。No-op 不追加内容修订，undo 将历史内容恢复为新修订，允许重复历史 hash。对象 ID 一经出生不能给新对象复用，undo 可以恢复原身份。删除为可恢复 tombstone，历史 Artifact 保留。
@@ -67,11 +73,15 @@ PNG由原样 vendored PyPNG 0.20220715.0 Writer 编码，见 [许可证](backend
 D:/Project/DBFox/.venv/Scripts/python.exe -m pytest verification/tests/system/test_pixel_dlc.py -q --tb=short
 ```
 
-签名激活与真实RunLoop测试现使用完整后端和真实 Canvas 工作台，逐字节核对签名包中的三个前端文件；不再使用后端阶段的隔离 frontend stub。当前33项后端/完整包测试和27项工作台fixture通过；完整包被信任、激活及执行后端并不证明真实Electron交互已通过，该门禁仍由独立Verification负责。不要将临时测试包或SQLite数据提交。
+签名激活与真实RunLoop测试使用完整后端和真实 Canvas 工作台，逐字节核对签名包中的前端文件；不使用后端阶段的隔离 frontend stub。本轮后端与对抗相关集合 110 项通过，工作台 fixture 30 项通过；真实 Electron 的有限业务流程记录在[连续使用记录](../../docs/quality/continuous-product-use-20261107.md)，不能据此宣布全部发布门禁通过。不要将临时测试包或 SQLite 数据提交。
 
 ## Canvas 工作台
 
 从项目资源进入 Pixel Studio，创建或打开作品。左侧提供透明槽、调色板、图层栈，中央为整数缩放 Canvas，底部为帧时间线，右侧提供选区、动画预览与标签。小窗口按顺序滚动；适应画布自动选整数缩放，手动缩放保持到当前文档视图结束。
+
+目录与具体作品使用不同的 Host Dock 身份。创建或打开作品后，以规范 document
+对象目标和作品名打开标签，重建视图时直接按目标恢复；不再只在组件内保存当前
+document ID。返回目录会聚焦既有目录标签。入口和标签图标使用 Host 的标准图片图标。
 
 - B 画笔、E 橡皮、F 四邻接填充、R 矩形、V 选区；矩形可选空心。拖动临时笔迹标为未提交，松开后以最多128段的一次 `documents.apply` 保存；超限整笔取消，不截断。方向键定位、Enter 绘制一格、Esc 取消。输入框内不会截获快捷键。
 - 时间线每页最多32个缩略图，可直接跳转页；可新建、复制、重排、删除帧，修改20..2000ms时长。删除标签中的帧必须明确勾选移除引用；有锁层时禁止删帧。图层支持添加、隐藏、锁定、改名、排序和删除；调色板支持命名、改色与追加，透明槽固定。
@@ -79,6 +89,10 @@ D:/Project/DBFox/.venv/Scripts/python.exe -m pytest verification/tests/system/te
 - 标签保存显式帧顺序与循环选项，可调整顺序。播放仅使用同一修订的帧缓存，按各帧时长播放；不写回播放状态。选区交给 Agent 时只授权父document，并携带frame/layer/rect/revision定位。
 
 读取缓存严格绑定 document/revision/hash/palette；首次先读选中帧，再以最多两个并发只读请求加载剩余缩略图。活跃可见视图每秒检查 `documents.head`，绘制、写入或输入框编辑时不覆盖草稿。CAS冲突清除草稿并读取已提交状态，写请求从不自动重发。scope/Project/document/epoch变化及deactivate会取消请求、指针捕获、播放RAF、ResizeObserver、可见性监听和样式；旧结果不能导航或发起Agent引用。
+
+读取状态绑定现有 AbortController：后台检查不能解锁另一个手动读取，结束、隐藏或
+取消只释放自身持有的读取状态。手势的注册和身份切换清理在绘制前完成，避免首次
+笔迹被稍后执行的 Effect 清掉；停用后不能开始新的指针或键盘绘制。
 
 导出的固定修订成果通过公开 `dbfox.pixel.sprite.v1` 显示PNG预览，并下载单帧PNG或按标签顺序的Sprite Sheet。修改当前作品不会改变旧成果。下载使用正常浏览器/Electron下载流程，无文件路径输入、私有Filesystem或外部图像URL。
 
@@ -92,4 +106,9 @@ npm.cmd run lint
 npm.cmd run build
 ```
 
-27项组件fixture通过；真实浏览器作者视觉检查使用受控operation transport与真实Canvas，包含32×32/10帧预览、真实指针r1→r2、375px滚动布局、浅/深主题和严格self CSP。它不替代签名包、SQLite、人类→Agent往返或真实Electron下载验证；详细证据与剩余门禁见质量记录。
+30 项组件 fixture 通过。原有浏览器作者视觉检查使用受控 operation transport 与真实
+Canvas，不能替代真实后端。本轮另使用签名包、SQLite 与可见 Electron，实际创建、
+绘制、框选旋转、复制帧、刷新、播放并把引用交给真实模型；冷启动后具名标签恢复。
+通过原生保存对话框下载 16×16 PNG 与 32×16 两帧 Sprite Sheet，并逐像素核对该
+修订的两帧。此有限样本不能替代全部尺寸、标签顺序和多行 Sheet 的发布门禁。
+模型本次仍依赖补充指令收尾，失败尝试与验证范围见质量记录。

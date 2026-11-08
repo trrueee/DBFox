@@ -8,6 +8,7 @@ import {
   getConversationApiV1ConversationsConversationIdGet,
   getConversationHistoryApiV1ConversationsConversationIdHistoryGet,
   getRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGet,
+  apiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGet,
   getRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGet,
   listConversationsApiV1ConversationsGet,
   patchConversationApiV1ConversationsConversationIdPatch,
@@ -126,6 +127,19 @@ export const getConversationRunArtifacts = async (
     throwOnError: true,
   });
   return data.map(parseConversationArtifact);
+};
+
+export const getProjectArtifact = async (
+  projectId: string,
+  artifactId: string,
+  signal: AbortSignal,
+) => {
+  const { data } = await apiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGet({
+    path: { project_id: projectId, artifact_id: artifactId },
+    signal,
+    throwOnError: true,
+  });
+  return parseConversationArtifact(data);
 };
 
 export const getConversationRunEvidence = async (

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import {
+  ArrowSquareOutIcon,
+} from "@/components/icons";
 import { Button, Spinner, Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui";
 import { agentApi } from "../../../lib/api/agent";
 import { getUserErrorMessage } from "../../../lib/api/client";
@@ -121,7 +123,7 @@ export function ArtifactViewHost({
               size="sm"
               onClick={() => openArtifact(artifact)}
             >
-              <ExternalLink size={14} aria-hidden="true" />
+              <ArrowSquareOutIcon size={16} aria-hidden="true" />
               在工作区查看
             </Button>
           </div>

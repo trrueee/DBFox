@@ -2,8 +2,15 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { CheckCircle2, Eye, EyeOff, RefreshCw } from "lucide-react";
+import {
+  CheckCircleIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  ArrowsClockwiseIcon,
+  CaretDownIcon,
+} from "@/components/icons";
 import { Button } from "./ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { ProviderIcon } from "./ProviderIcon";
 import { getUserErrorMessage } from "../lib/api/client";
 import {
@@ -64,6 +71,7 @@ export function LlmConfigPanel({
   onTestConnection,
 }: LlmConfigPanelProps) {
   const [showKey, setShowKey] = useState(false);
+  const [endpointExpanded, setEndpointExpanded] = useState(false);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testState, setTestState] = useState<"idle" | "success" | "error">("idle");
@@ -184,14 +192,13 @@ export function LlmConfigPanel({
   ];
 
   return (
-    <form
+    <TooltipProvider><form
       onSubmit={handleSubmit(submitValidConfig)}
       className="llm-settings-form"
     >
       <SettingsContent className="llm-settings-content">
         <SettingsSection
           title="连接与模型"
-          description="连接 OpenAI 兼容服务；凭据保存在本机安全存储，模型列表从服务端实时获取。"
         >
           <SettingsField label="服务商" htmlFor="llm-provider">
             <Select
@@ -231,7 +238,7 @@ export function LlmConfigPanel({
             </Select>
           </SettingsField>
 
-          <SettingsField label="API Key" htmlFor="llm-api-key" hint="由系统安全存储管理，不会进入 Agent 上下文。">
+          <SettingsField label="API Key" htmlFor="llm-api-key" hint="密钥保存在这台设备的安全存储中。">
             <div className="hifi-settings-secret-field">
               <input
                 id="llm-api-key"
@@ -248,11 +255,14 @@ export function LlmConfigPanel({
                 aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}
                 title={showKey ? "隐藏 API Key" : "显示 API Key"}
               >
-                {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                {showKey ? <EyeSlashIcon size={16} /> : <EyeIcon size={16} />}
               </button>
             </div>
           </SettingsField>
 
+          <details className="llm-endpoint-disclosure" open={endpointExpanded || !detectedProvider || Boolean(formState.errors.apiBase)}
+            onToggle={event => setEndpointExpanded(event.currentTarget.open)}>
+          <summary><span>连接地址</span><CaretDownIcon size={16} aria-hidden="true" /></summary>
           <SettingsField label="API Base URL" htmlFor="llm-api-base"
             error={formState.errors.apiBase?.message}>
             <input
@@ -265,6 +275,7 @@ export function LlmConfigPanel({
               className="hifi-settings-input hifi-settings-input--mono"
             />
           </SettingsField>
+          </details>
 
           <SettingsField label="默认模型" htmlFor="llm-model-preset">
             <div className="llm-model-control">
@@ -285,7 +296,7 @@ export function LlmConfigPanel({
                   id="llm-model-preset"
                   className="llm-model-select"
                 >
-                  <SelectValue />
+                  <SelectValue>{customModelMode ? "自定义模型…" : values.modelName || "自动检测"}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={AUTO_MODEL_VALUE} textValue="自动检测">自动检测</SelectItem>
@@ -308,17 +319,18 @@ export function LlmConfigPanel({
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <Button
+              <Tooltip><TooltipTrigger asChild><Button
                 type="button"
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
                 className="llm-model-fetch-btn"
+                aria-label={fetching ? "正在获取模型列表" : "获取模型列表"}
+                aria-busy={fetching || undefined}
                 disabled={fetching || Boolean(formState.errors.apiBase)}
                 onClick={() => void fetchModels()}
               >
-                <RefreshCw size={14} className={fetching ? "animate-spin" : undefined} />
-                {fetching ? "获取中…" : "获取模型列表"}
-              </Button>
+                <ArrowsClockwiseIcon size={16} className={fetching ? "animate-spin" : undefined} />
+              </Button></TooltipTrigger><TooltipContent>获取模型列表</TooltipContent></Tooltip>
             </div>
             {customModelMode ? (
               <input
@@ -374,7 +386,7 @@ export function LlmConfigPanel({
               ) : null}
               {onSave ? (
                 <Button type="submit" size="sm" className="hifi-settings-submit-btn" disabled={testing || saving}>
-                  <CheckCircle2 size={14} />
+                  <CheckCircleIcon size={16} />
                   {saving ? "正在保存…" : "保存配置"}
                 </Button>
               ) : null}
@@ -382,7 +394,7 @@ export function LlmConfigPanel({
           </div>
         </SettingsSection>
       </SettingsContent>
-    </form>
+    </form></TooltipProvider>
   );
 }
 

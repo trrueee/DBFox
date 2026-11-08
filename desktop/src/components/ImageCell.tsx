@@ -1,16 +1,16 @@
 import { useState, type KeyboardEvent } from "react";
 import {
-  Copy,
-  Download,
-  ExternalLink,
-  Image,
-  ImageOff,
-  LoaderCircle,
-  Maximize,
-  Minus,
-  Plus,
-  Scan,
-} from "lucide-react";
+  CopyIcon,
+  DownloadSimpleIcon,
+  ArrowSquareOutIcon,
+  ImageIcon,
+  ImageBrokenIcon,
+  CircleNotchIcon,
+  ArrowsOutSimpleIcon,
+  MinusIcon,
+  PlusIcon,
+  CornersOutIcon,
+} from "@/components/icons";
 import {
   canSaveExternalImage,
   canOpenExternalHttpsUrl,
@@ -124,7 +124,7 @@ function ImageCellContent({ url, onCopyValue }: { url: string; onCopyValue?: (va
                 setHoverOpen(false);
               }}
             >
-              <Image className="hifi-img-icon" size={14} aria-hidden="true" />
+              <ImageIcon className="hifi-img-icon" size={16} aria-hidden="true" />
               <span className="hifi-img-url">{url}</span>
             </button>
           </DialogTrigger>
@@ -133,13 +133,13 @@ function ImageCellContent({ url, onCopyValue }: { url: string; onCopyValue?: (va
           <div className="hifi-img-hover-stage" data-state={hoverLoadState}>
             {hoverLoadState === "loading" && (
               <div className="hifi-img-hover-status" role="status">
-                <LoaderCircle className="hifi-img-loading-icon" size={16} aria-hidden="true" />
+                <CircleNotchIcon className="hifi-img-loading-icon" size={16} aria-hidden="true" />
                 正在加载预览
               </div>
             )}
             {hoverLoadState === "failed" && (
               <div className="hifi-img-hover-status is-error" role="alert">
-                <ImageOff size={16} aria-hidden="true" />
+                <ImageBrokenIcon size={16} aria-hidden="true" />
                 无法预览图片
               </div>
             )}
@@ -170,7 +170,7 @@ function ImageCellContent({ url, onCopyValue }: { url: string; onCopyValue?: (va
               disabled={loadState !== "ready" || zoomLevel === IMAGE_ZOOM_LEVELS[0]}
               onClick={() => changeZoom(-1)}
             >
-              <Minus size={14} aria-hidden="true" />
+              <MinusIcon size={16} aria-hidden="true" />
             </Button>
             <span className="hifi-img-view-toolbar__scale" role="status" aria-live="polite">
               {viewMode === "fit" ? `适应 · ${zoomLevel}%` : `实际大小 · ${zoomLevel}%`}
@@ -184,7 +184,7 @@ function ImageCellContent({ url, onCopyValue }: { url: string; onCopyValue?: (va
               disabled={loadState !== "ready" || zoomLevel === IMAGE_ZOOM_LEVELS.at(-1)}
               onClick={() => changeZoom(1)}
             >
-              <Plus size={14} aria-hidden="true" />
+              <PlusIcon size={16} aria-hidden="true" />
             </Button>
           </div>
           <div className="hifi-img-view-toolbar__separator" role="separator" aria-orientation="vertical" />
@@ -197,7 +197,7 @@ function ImageCellContent({ url, onCopyValue }: { url: string; onCopyValue?: (va
               aria-pressed={viewMode === "fit" && zoomLevel === 100}
               onClick={resetView}
             >
-              <Scan size={14} aria-hidden="true" />
+              <CornersOutIcon size={16} aria-hidden="true" />
               适应窗口
             </Button>
             <Button
@@ -208,7 +208,7 @@ function ImageCellContent({ url, onCopyValue }: { url: string; onCopyValue?: (va
               aria-pressed={viewMode === "actual" && zoomLevel === 100}
               onClick={showActualSize}
             >
-              <Maximize size={14} aria-hidden="true" />
+              <ArrowsOutSimpleIcon size={16} aria-hidden="true" />
               实际大小
             </Button>
           </div>
@@ -223,13 +223,13 @@ function ImageCellContent({ url, onCopyValue }: { url: string; onCopyValue?: (va
         >
           {loadState === "loading" && (
             <div className="hifi-img-lightbox-status" role="status">
-              <LoaderCircle className="hifi-img-loading-icon" size={20} aria-hidden="true" />
+              <CircleNotchIcon className="hifi-img-loading-icon" size={20} aria-hidden="true" />
               正在加载图片
             </div>
           )}
           {loadState === "failed" && (
             <div className="hifi-img-lightbox-status is-error" role="alert">
-              <ImageOff size={20} aria-hidden="true" />
+              <ImageBrokenIcon size={20} aria-hidden="true" />
               图片无法预览，可尝试在系统浏览器中打开
             </div>
           )}
@@ -271,7 +271,7 @@ function ImageCellContent({ url, onCopyValue }: { url: string; onCopyValue?: (va
               else void navigator.clipboard.writeText(url);
             }}
           >
-            <Copy size={14} aria-hidden="true" />
+            <CopyIcon size={16} aria-hidden="true" />
             复制链接
           </Button>
           {canSaveCopy && (
@@ -289,7 +289,7 @@ function ImageCellContent({ url, onCopyValue }: { url: string; onCopyValue?: (va
                 }
               }}
             >
-              {saveState === "saving" ? <LoaderCircle className="hifi-img-loading-icon" size={14} aria-hidden="true" /> : <Download size={14} aria-hidden="true" />}
+              {saveState === "saving" ? <CircleNotchIcon className="hifi-img-loading-icon" size={16} aria-hidden="true" /> : <DownloadSimpleIcon size={16} aria-hidden="true" />}
               {saveState === "saving" ? "正在保存" : saveState === "saved" ? "已保存" : "保存副本"}
             </Button>
           )}
@@ -299,7 +299,7 @@ function ImageCellContent({ url, onCopyValue }: { url: string; onCopyValue?: (va
             variant="outline"
             onClick={() => void openUserConfirmedExternalHttpsUrl(url)}
           >
-            <ExternalLink size={14} aria-hidden="true" />
+            <ArrowSquareOutIcon size={16} aria-hidden="true" />
             在浏览器打开
           </Button>
         </div>

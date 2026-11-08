@@ -47,12 +47,12 @@ describe("dbfox.story System DLC frontend fixture", () => {
       input: unknown,
     ): Promise<TOutput> => {
       if (operationName === "worlds.get") {
-        return { id: "world-1", title: "测试世界", generation: 1 } as TOutput;
+        return { world: { id: "world-1", title: "测试世界", generation: 1 } } as TOutput;
       }
       if (operationName === "entities.list") return { entities: [] } as TOutput;
       if (operationName === "relations.list") return { edges: [] } as TOutput;
       if (operationName === "revisions.list") return { revisions: [] } as TOutput;
-      if (operationName === "chapters.list") return { chapters } as TOutput;
+      if (operationName === "chapters.list") return { chapters: structuredClone(chapters) } as TOutput;
       if (operationName === "chapters.read") {
         const chapterId = (input as { chapter_id: string }).chapter_id;
         return chapters.find((chapter) => chapter.id === chapterId) as TOutput;
@@ -106,10 +106,18 @@ describe("dbfox.story System DLC frontend fixture", () => {
     ).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "章节" }));
     await screen.findByText("第一章正文");
+    expect(screen.queryByText("故事世界载入中…")).toBeNull();
+    expect(screen.queryByRole("button", { name: "新增实体" })).toBeNull();
 
     fireEvent.click(screen.getByText("2. 第二章"));
     await screen.findByText("第二章正文");
     expect(screen.queryByText("第一章正文")).toBeNull();
     expect(await screen.findByText("版本历史")).not.toBeNull();
+
+    chapters.push({ ...chapters[1], id: "chapter-3", seq: 3, title: "第三章", content: "由 Agent 新写入的正文" });
+    expect(screen.queryByText("3. 第三章")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "刷新故事内容" }));
+    fireEvent.click(await screen.findByText("3. 第三章"));
+    expect(await screen.findByText("由 Agent 新写入的正文")).not.toBeNull();
   });
 });

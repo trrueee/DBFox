@@ -31,6 +31,12 @@ class WorldOutput(BaseModel):
     updated_at: str
 
 
+class WorldLookupOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    world: WorldOutput | None
+
+
 class EntityOutput(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -121,6 +127,8 @@ class RelationEdgeInput(BaseModel):
 
     from_name: str = Field(min_length=1, max_length=120)
     to_name: str = Field(min_length=1, max_length=120)
+    from_id: str | None = Field(default=None, min_length=1, max_length=64)
+    to_id: str | None = Field(default=None, min_length=1, max_length=64)
     kind: str = Field(min_length=1, max_length=60)
     reason: str = Field(default="", max_length=2_000)
 

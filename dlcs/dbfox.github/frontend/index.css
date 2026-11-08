@@ -73,10 +73,11 @@
 .dbfox-github__form input,
 .dbfox-github__form button {
   border: 1px solid var(--line-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--surface-raised);
   color: inherit;
   padding: 7px 8px;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dbfox-github__error {

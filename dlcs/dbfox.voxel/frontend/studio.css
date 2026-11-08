@@ -26,8 +26,8 @@
 .dbfox-voxel .voxel-button {
   min-height: var(--density-control-height-sm, 32px); padding: 5px 10px;
   color: var(--color-text-primary); background: var(--control-bg);
-  border: 1px solid var(--control-border); border-radius: 6px;
-  text-align: center; white-space: nowrap;
+  border: 1px solid var(--control-border); border-radius: var(--radius-control);
+  text-align: center; white-space: nowrap; transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 .dbfox-voxel .voxel-button:not(:disabled):hover { background: var(--control-bg-hover); }
 .dbfox-voxel .voxel-button--primary, .dbfox-voxel .voxel-button[aria-pressed="true"] {
@@ -48,7 +48,7 @@
 .dbfox-voxel .voxel-viewport-status { position: absolute; left: 12px; bottom: 10px; right: 12px; max-width: calc(100% - 24px); width: fit-content; padding: 4px 8px; border-radius: 5px; color: var(--color-text-secondary); background: var(--surface-card); font-size: var(--ui-font-nano); pointer-events: none; }
 .dbfox-voxel .voxel-viewport-status--error { color: var(--color-danger); }
 .dbfox-voxel .voxel-view-actions { position: absolute; display: flex; gap: 6px; top: 10px; right: 10px; }
-.dbfox-voxel .voxel-view-actions .voxel-button { font-size: var(--ui-font-nano); min-height: 28px; }
+.dbfox-voxel .voxel-view-actions .voxel-button { font-size: var(--ui-font-nano); min-height: var(--density-control-height-sm); }
 .dbfox-voxel .voxel-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: var(--ui-font-caption); }
 .dbfox-voxel .voxel-editor { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(250px, 310px); align-items: start; gap: 18px; padding-top: 8px; }
 .dbfox-voxel .voxel-editor-main { min-width: 0; position: sticky; top: 0; }

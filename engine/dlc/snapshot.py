@@ -239,7 +239,6 @@ def compute_snapshot_id(
     built_in_identifiers: tuple[str, ...] = (
         "dbfox.core",
         "dbfox.conversation",
-        "dbfox.remote_job",
     ),
 ) -> str:
     """Deterministically compute the runtime snapshot ID from composition identity."""

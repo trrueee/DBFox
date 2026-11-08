@@ -258,6 +258,7 @@ def test_product_first_question_followup_and_private_result_lifecycle(tmp_path, 
                 request = ArtifactRepresentationRequest(operation="page", parameters={"page": 1, "page_size": 10})
                 page = api_artifact_representation_read(result.id, DATAFRAME_REPRESENTATION_TYPE, request, db, session_id=conversation_id)
                 assert Decimal(page.payload["fields"][0]["values"][0]) == Decimal(expected)
+                assert page.payload["fields"][0]["type"] == "number"
                 from fastapi import HTTPException
                 for invalid_session in (None, foreign_id):
                     with pytest.raises(HTTPException) as error:

@@ -18,6 +18,8 @@
 
 `browser-studio.cjs` 验证直接编辑/数字清空/undo/布局，最后卸载页面；`browser-runtime.cjs` 在同一 author server 上运行实际 Phaser。后者会用测试专属避障输入驱动狐狸，再用生成的有界输入重放，要求 tick 3600 获胜；同时检查静止失利、Canvas/HEADLESS 一致、取消、超时及 512 重叠刚体预算。通过 Playwright CLI `run-code --filename <脚本>` 运行；`eval window.gameSurvivalEvidence --raw` 可保存实际输入供 native 模型计划复用。
 
+`browser-runtime-lifecycle.cjs` 可在空作者页面单独运行，不依赖已创建的游戏或在线模型。它直接使用实际 Phaser 分别验证 Canvas/HEADLESS 初始化前取消（各 6 次）、就绪后固定步进与重复销毁，要求没有浏览器异常和残留画布。2026-11-08 的反例修复前 12 次均出现 SceneManager 的 `undefined.sys`，修复后 14 个生命周期探针通过。作者构建使用当前 `desktop/tsconfig.app.json` 解析 Host 组件与图标路径。
+
 ## 原生 Electron
 
 先在 `desktop` 完成 `npm run build`。从根运行：

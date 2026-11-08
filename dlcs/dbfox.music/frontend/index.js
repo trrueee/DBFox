@@ -256,7 +256,7 @@ function Transport({ playing, loop, onPlay, onStop, onLoop, position, duration, 
       className: "dbfox-music-transport__ask",
       onClick: () => onAskMeasure?.(selectedMeasure),
       title: `就第 ${selectedMeasure} 小节向 DBFox 提问`,
-    }, h(host.ui.Icon, { name: "at-sign", size: 14 }), `小节 ${selectedMeasure}`) : null);
+    }, h(host.ui.Icon, { name: "at-sign", size: 16 }), `小节 ${selectedMeasure}`) : null);
 }
 
 function formatTime(value) {
@@ -434,8 +434,8 @@ function AudioStudio({ projectId, source, showToast }) {
       h("progress", { className: "dbfox-music-waveform__progress", value: Math.min(100, position / effectiveSource.duration_seconds * 100), max: 100, "aria-label": "播放进度" }),
       h("small", null, formatTime(position))),
     transcription ? h("div", { className: "dbfox-music-ab", role: "group", "aria-label": "原音频与转录对照" },
-      h("button", { type: "button", onClick: () => void playOriginal() }, h(host.ui.Icon, { name: "play", size: 14 }), "原音频"),
-      h("button", { type: "button", onClick: () => void playTranscription() }, h(host.ui.Icon, { name: "play", size: 14 }), "转录试听"),
+      h("button", { type: "button", onClick: () => void playOriginal() }, h(host.ui.Icon, { name: "play", size: 16 }), "原音频"),
+      h("button", { type: "button", onClick: () => void playTranscription() }, h(host.ui.Icon, { name: "play", size: 16 }), "转录试听"),
       h("button", { type: "button", onClick: stop, "aria-label": "停止", title: "停止" }, h(host.ui.Icon, { name: "square", size: 16 }))) : null,
     !transcription ? h("div", { className: "dbfox-music-transcribe" },
       h("p", null, "使用本机 Basic Pitch 模型提取音符候选；Agent 只负责后续结构修复。"),

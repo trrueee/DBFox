@@ -1,9 +1,14 @@
 import queue
 import time
+from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy.orm import sessionmaker
 
 from engine.agent.events import CommitNotificationHub
+from engine.agent.events import RuntimeEventType
+from engine.agent.repositories.events import EventRepository
+from engine.agent.repositories.session import SessionRepository
 from engine.agent.run_item import RunItemDelta, RunItemType
 from engine.api import conversation_stream
 
@@ -25,6 +30,40 @@ class FakeSubscription:
 
     def close(self):
         self.closed = True
+
+
+def test_sse_catches_up_all_precommitted_pages_before_waiting(db_session, monkeypatch):
+    sessions = SessionRepository(db_session)
+    session = sessions.create(project_id=None, title="backlog")
+    admission = sessions.admit(session_id=session.id, resource_refs=(), content="synthetic",
+                               idempotency_key="first", llm_credential_id="synthetic",
+                               api_base=None, model_name=None, request_payload={})
+    events = EventRepository(db_session)
+    original = events.list(session.id, limit=1)[0]
+    for _ in range(1199):
+        events.append_locked(session, RuntimeEventType.RUN_UPDATED, run_id=admission.run_id,
+                             payload=original.payload.model_dump(mode="json", exclude_none=True),
+                             now=datetime.now(UTC))
+    db_session.commit()
+    count = len(events.list(session.id, limit=2000))
+    monkeypatch.setattr(conversation_stream, "SessionLocal", sessionmaker(bind=db_session.get_bind()))
+    original_queue = queue.Queue
+
+    class NoPrematureWait(original_queue):
+        def get(self, block=True, timeout=None):
+            if timeout == 15.0:
+                raise AssertionError("SSE waited while committed backlog was unread")
+            return super().get(block=block, timeout=timeout)
+
+    monkeypatch.setattr(conversation_stream.queue, "Queue", NoPrematureWait)
+    stream = conversation_stream.conversation_stream(session.id, 0)
+    try:
+        frames = [next(stream) for _ in range(count)]
+        assert count > 1000
+        assert all(frame.startswith("id:") for frame in frames)
+        assert frames[-1].startswith(f"id: {count}\n")
+    finally:
+        stream.close()
 
 
 class FakeHub:

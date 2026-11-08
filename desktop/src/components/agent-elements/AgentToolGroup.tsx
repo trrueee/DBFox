@@ -14,19 +14,19 @@
  */
 import { memo, useEffect, useState, type ReactNode } from "react";
 import {
-  AlertTriangle,
-  ArrowUpRight,
-  BarChart3,
-  Check,
-  ChevronDown,
-  CircleStop,
-  Clock3,
-  FileOutput,
-  LoaderCircle,
-  Search,
-  Settings2,
-  TerminalSquare,
-} from "lucide-react";
+  WarningIcon,
+  ArrowUpRightIcon,
+  ChartBarIcon,
+  CheckIcon,
+  CaretDownIcon,
+  StopCircleIcon,
+  ClockIcon,
+  FileArrowUpIcon,
+  CircleNotchIcon,
+  MagnifyingGlassIcon,
+  SlidersHorizontalIcon,
+  TerminalWindowIcon,
+} from "@/components/icons";
 
 import type {
   ConversationRun,
@@ -157,9 +157,8 @@ function ToolFrame({
   boundedList?: boolean;
   children: ReactNode;
 }) {
-  const disclosureKey = `${identity}:${live ? "live" : "settled"}`;
-  const [disclosure, setDisclosure] = useState({ key: disclosureKey, expanded: live });
-  const expanded = disclosure.key === disclosureKey ? disclosure.expanded : live;
+  const [disclosure, setDisclosure] = useState({ key: identity, expanded: false });
+  const expanded = disclosure.key === identity && disclosure.expanded;
   const elapsedLabel = useElapsedLabel(elapsed.startedAt, elapsed.completedMs, live);
 
   return (
@@ -169,7 +168,7 @@ function ToolFrame({
         className="grid min-h-7 w-full grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-row)] px-1 text-left hover:bg-[var(--control-bg-hover)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
         aria-controls={contentId}
         aria-expanded={expanded}
-        onClick={() => setDisclosure({ key: disclosureKey, expanded: !expanded })}
+        onClick={() => setDisclosure({ key: identity, expanded: !expanded })}
       >
         <span
           className="inline-grid size-4 place-items-center text-[var(--agent-text-muted)]"
@@ -187,7 +186,7 @@ function ToolFrame({
         </span>
         <span className="flex items-center gap-1.5 text-xs tabular-nums text-[var(--agent-text-muted)]">
           {elapsedLabel ? <span>{elapsedLabel}</span> : null}
-          <ChevronDown
+          <CaretDownIcon
             className={cn("size-4 transition-transform", expanded && "rotate-180")}
             aria-hidden="true"
           />
@@ -201,7 +200,7 @@ function ToolFrame({
           boundedList && "max-h-[140px] overflow-y-auto [scrollbar-gutter:stable]",
         )}
       >
-        {children}
+        {expanded ? children : null}
       </div>
     </section>
   );
@@ -253,9 +252,9 @@ function ToolItem({
               size="sm"
               onClick={() => onSelectArtifact?.(reference.artifact_id)}
             >
-              <FileOutput aria-hidden="true" />
+              <FileArrowUpIcon aria-hidden="true" />
               <span>{reference.label || `查看结果 ${referenceIndex + 1}`}</span>
-              <ArrowUpRight aria-hidden="true" />
+              <ArrowUpRightIcon aria-hidden="true" />
             </Button>
           ))}
         </div>
@@ -303,18 +302,18 @@ function ToolStatus({
 }
 
 function ToolStatusIcon({ status }: { status: ConversationRunItem["status"] }) {
-  if (status === "pending" || status === "in_progress") return <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />;
-  if (status === "failed") return <AlertTriangle className="size-3.5" aria-hidden="true" />;
-  if (status === "cancelled") return <CircleStop className="size-3.5" aria-hidden="true" />;
-  if (status === "waiting") return <Clock3 className="size-3.5" aria-hidden="true" />;
-  return <Check className="size-3.5" aria-hidden="true" />;
+  if (status === "pending" || status === "in_progress") return <CircleNotchIcon className="size-3.5 animate-spin" aria-hidden="true" />;
+  if (status === "failed") return <WarningIcon className="size-3.5" aria-hidden="true" />;
+  if (status === "cancelled") return <StopCircleIcon className="size-3.5" aria-hidden="true" />;
+  if (status === "waiting") return <ClockIcon className="size-3.5" aria-hidden="true" />;
+  return <CheckIcon className="size-3.5" aria-hidden="true" />;
 }
 
 function ToolCategoryIcon({ category }: { category: ToolGroup["category"] }) {
-  if (category === "explore") return <Search className="size-4" />;
-  if (category === "query") return <TerminalSquare className="size-4" />;
-  if (category === "visualize") return <BarChart3 className="size-4" />;
-  return <Settings2 className="size-4" />;
+  if (category === "explore") return <MagnifyingGlassIcon className="size-4" />;
+  if (category === "query") return <TerminalWindowIcon className="size-4" />;
+  if (category === "visualize") return <ChartBarIcon className="size-4" />;
+  return <SlidersHorizontalIcon className="size-4" />;
 }
 
 function groupStatus(statuses: ConversationRunItem["status"][]): ConversationRunItem["status"] {
@@ -329,7 +328,7 @@ function toolStatusLabel(status: ConversationRunItem["status"], runStatus: Conve
   if (status === "failed") return "失败";
   if (status === "cancelled" && runStatus === "failed") return "因任务失败终止";
   if (status === "cancelled") return "已取消";
-  return "等待授权";
+  return "等待处理";
 }
 
 function toolCategoryLabel(category: ToolGroup["category"]): string {

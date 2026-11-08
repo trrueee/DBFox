@@ -1,6 +1,8 @@
 import { useEffect, useId, useInsertionEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import {
+  CaretRightIcon,
+} from "@/components/icons";
 import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import { normalizeProps, useMachine } from "@zag-js/react";
 import * as treeView from "@zag-js/tree-view";
@@ -402,7 +404,7 @@ function TreeFlatNode<T>({
         <div className="dbfox-tree__row-shell">
           <div {...api.getBranchControlProps(nodeProps)} aria-label={label} className="dbfox-tree__row dbfox-tree__branch-row">
             <span {...api.getBranchIndicatorProps(nodeProps)} className="dbfox-tree__indicator">
-              <ChevronRight aria-hidden="true" />
+              <CaretRightIcon aria-hidden="true" />
             </span>
             {icon != null && <span className="dbfox-tree__icon">{icon}</span>}
             <span {...api.getBranchTextProps(nodeProps)} className="dbfox-tree__label" title={label}>{label}</span>
@@ -518,7 +520,7 @@ function TreeNode<T>({
         <div className="dbfox-tree__row-shell">
           <div {...api.getBranchControlProps(nodeProps)} aria-label={label} className="dbfox-tree__row dbfox-tree__branch-row">
             <span {...api.getBranchIndicatorProps(nodeProps)} className="dbfox-tree__indicator">
-              <ChevronRight aria-hidden="true" />
+              <CaretRightIcon aria-hidden="true" />
             </span>
             {icon != null && <span className="dbfox-tree__icon">{icon}</span>}
             <span {...api.getBranchTextProps(nodeProps)} className="dbfox-tree__label" title={label}>

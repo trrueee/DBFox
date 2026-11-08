@@ -48,6 +48,25 @@ export async function readScene(invoke, sceneId, signal, firstPage) {
   return result;
 }
 
+// The public Representation boundary pins every page to an exported revision.
+// Reuse the editor's paging without consulting its mutable management head.
+export async function readSceneArtifact(access, artifactId, payload, signal) {
+  const operations = { objects: "objects_page", materials: "materials_page", geometries: "geometry_catalog" };
+  return readScene(async (_name, input, pageSignal) => {
+    const result = await access.read(artifactId, REPRESENTATION_TYPE, {
+      operation: operations[input.section], parameters: { offset: input.offset, limit: input.limit },
+    }, pageSignal);
+    pageSignal?.throwIfAborted();
+    const scene = result?.payload?.scene;
+    if (result?.consistency !== "durable_snapshot" || result.source_version !== String(payload.version) ||
+        result.source_fingerprint !== payload.content_hash || scene?.id !== payload.scene_id ||
+        scene.project_id !== payload.project_id || scene.version !== payload.version || scene.content_hash !== payload.content_hash) {
+      throw new Error("场景预览版本不一致，请重新读取此工件。");
+    }
+    return result.payload;
+  }, payload.scene_id, signal);
+}
+
 export function hierarchy(snapshot) {
   const root = { id: "scene-root", name: snapshot.scene.title, kind: "scene", children: [] };
   const items = new Map(snapshot.objects.map((object) => [object.id, { ...object, children: [] }]));

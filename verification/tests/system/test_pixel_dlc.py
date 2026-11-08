@@ -24,6 +24,7 @@ from dbfox_dlc_api import (Artifact, ArtifactRepresentationContext, ArtifactRepr
     ContextContributionInput, DlcOperationContext, ResourceScopeRef)
 from engine.dlc import BuiltinContributionSet, ContributionCompiler, DlcPackageService
 from engine.dlc.package_builder import build_dlc_package_from_source
+from engine.policy.gate import PolicyGate
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.runtime import ToolRuntime
 
@@ -92,6 +93,27 @@ def test_strict_types_null_defaults_and_host_normalization(store):
     assert c.Rectangle.model_validate(normalized.model_dump(mode="json", exclude_none=True)) == normalized
     with pytest.raises(ValueError):
         c.FrameUpdate(kind="frame_update", frame_id="frame_1", duration_ms=None)
+
+
+def test_stamp_area_mismatch_gives_a_specific_safe_tool_contract_error(store, db_session):
+    registry = ToolRegistry().register(t.PixelWriteTool(store))
+    decision = PolicyGate(registry, db_session).check({}, "pixel_apply", {
+        "document_id": "pixel_fixture", "expected_version": 4,
+        "operations": [{
+            "kind": "stamp", "frame_id": "frame_1", "layer_id": "layer_1",
+            "rect": {"x": 0, "y": 0, "width": 16, "height": 16}, "pixels": [0] * 258,
+        }],
+    })
+    assert decision.status == "blocked"
+    assert decision.error_code == "TOOL_INPUT_INVALID"
+    assert "operations.0.stamp (pixel_stamp_pixel_count_must_equal_rectangle_area)" in decision.reason
+    assert "pixel_fixture" not in decision.reason
+    valid = c.ApplyInput.model_validate({
+        "document_id": "pixel_fixture", "expected_version": 4,
+        "operations": [{"kind": "stamp", "frame_id": "frame_1", "layer_id": "layer_1",
+                        "rect": {"x": 0, "y": 0, "width": 16, "height": 16}, "pixels": [0] * 256}],
+    })
+    assert len(valid.operations[0].pixels) == 256
 
 
 @pytest.mark.parametrize("width,height", [(32, 32), (128, 8)])

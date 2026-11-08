@@ -17,7 +17,8 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 
 from dbfox_dlc_api import ArtifactRepresentationContext, ArtifactRepresentationRequest, RequestedResourceRef, ToolKey
-from engine.agent.context_budget import ContextBudgetExceeded, estimate_input_items_tokens, estimate_tool_schema_tokens
+from engine.agent.context_budget import estimate_input_items_tokens, estimate_tool_schema_tokens
+from engine.agent.run import RunLimits
 from engine.agent.providers.openai import OpenAIModelAdapter
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.session import SessionRepository
@@ -181,8 +182,8 @@ class CreativeModel:
         return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=body)
 
 
-@pytest.mark.parametrize("model_name", ["gpt-5.4", "gpt-4o-mini"])
-def test_signed_studios_share_one_run_and_keep_private_authority(studios, model_name, record_property):
+@pytest.mark.parametrize("model_name,max_prompt_tokens", [("gpt-5.4", None), ("gpt-4o-mini", None), ("gpt-4o-mini", 32_768)])
+def test_signed_studios_share_one_run_and_keep_private_authority(studios, model_name, max_prompt_tokens, record_property):
     service, snapshot, factory, digests = studios
     registry = build_product_tool_registry(snapshot)
     has_shader = "dbfox.shader" in digests
@@ -203,16 +204,23 @@ def test_signed_studios_share_one_run_and_keep_private_authority(studios, model_
         sessions.promote_next_input(lease=lease); db.commit()
     model = CreativeModel(registry, shader=has_shader)
     loop = build_product_run_loop(session_factory=factory, snapshot=snapshot)
+    if max_prompt_tokens is not None:
+        loop.definition = loop.definition.model_copy(update={"limits": RunLimits(max_prompt_tokens=max_prompt_tokens)})
     def model_factory(settings):
         client = AsyncOpenAI(api_key="test-only-mock-transport", base_url="https://creative-provider.invalid/v1",
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(model.respond)), max_retries=0)
         return OpenAIModelAdapter(client=client, model_name=settings.model_name, owns_client=True)
     loop.model_factory = model_factory
     try:
-        if model_name == "gpt-4o-mini":
-            with pytest.raises(ContextBudgetExceeded):
-                loop.execute(lease=lease, run_id=admission.run_id)
+        if max_prompt_tokens == 32_768:
+            loop.execute(lease=lease, run_id=admission.run_id)
+            with factory() as db:
+                run = db.get(AgentRun, admission.run_id)
+                assert run.status == "failed" and run.error_code == "AGENT_CONTEXT_BUDGET_EXCEEDED"
             assert model.searches == 0
+            # A smaller explicit budget can admit the first calls, then stop
+            # before dropping the latest complete native tool turn.
+            assert 0 < len(model.requests) < 15 + (3 if has_shader else 0)
             assert all(not any(tool["type"] == "tool_search" for tool in request["tools"])
                 for request in model.provider_requests)
             return
@@ -226,9 +234,13 @@ def test_signed_studios_share_one_run_and_keep_private_authority(studios, model_
     record_property("hosted_searches", model.searches)
     record_property("provider_requests", len(model.provider_requests))
     record_property("signed_owners", len(owners))
-    assert prompt_peak <= loop.definition.limits.max_prompt_tokens == 32768
-    assert model.searches > 0
-    assert any(item.get("type") == "tool_search_output" for request in model.provider_requests for item in request["input"])
+    assert prompt_peak <= loop.definition.limits.max_prompt_tokens == 65536
+    if model_name == "gpt-5.4":
+        assert model.searches > 0
+        assert any(item.get("type") == "tool_search_output" for request in model.provider_requests for item in request["input"])
+    else:
+        assert model.searches == 0
+        assert all(tool["type"] == "function" for request in model.provider_requests for tool in request["tools"])
     with factory() as db:
         assert db.get(AgentRun, admission.run_id).status == "completed"
         invocations = db.query(AgentToolInvocation).filter_by(run_id=admission.run_id).all()
@@ -242,7 +254,7 @@ def test_signed_studios_share_one_run_and_keep_private_authority(studios, model_
         observations = db.query(AgentObservationRecord).filter_by(run_id=admission.run_id).all()
         assert all(len(item.model_output_json.encode()) <= 25600 for item in observations)
         turns = db.query(AgentTurn).filter_by(run_id=admission.run_id).all()
-        assert any("tool_search_output" in str(turn.response_items_json) for turn in turns)
+        assert any("tool_search_output" in str(turn.response_items_json) for turn in turns) == (model_name == "gpt-5.4")
         for turn in turns:
             fragments = json.loads(turn.context_snapshot_json).get("context_fragments", [])
             assert sum(len(json.dumps(item, ensure_ascii=False)) for item in fragments if any(str(item.get("source_id", "")).startswith(owner) for owner in OWNERS)) < 12000

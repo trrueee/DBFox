@@ -95,6 +95,9 @@ describe("DLC visual conformance (spec §20/§34)", () => {
     expect(screen.getByRole("region", { name: "空扩展工作台" })).toBeTruthy();
     rerender(<ProjectWorkbench connectorId="disabled" projectId="project-1" />);
     expect(screen.getByText("此工作台暂不可用")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "管理扩展" }));
+    expect(useWorkspaceStore.getState().settingsOpen).toBe(true);
+    expect(useWorkspaceStore.getState().settingsSection).toBe("dlc");
   });
 
   it("routes 10 synthetic DLC dock views through the host frame", () => {

@@ -73,7 +73,11 @@ def expand_piano_composition(input: ComposePianoInput) -> ScoreDocument:
                 hand="right",
             )
         pitches = plan.chord_pitches
-        if plan.accompaniment == "arpeggio_eighths":
+        if plan.accompaniment == "sustain_bass":
+            duration = float(input.meter.beats)
+            beats = [0.0]
+            sequence = [pitches[0]]
+        elif plan.accompaniment == "arpeggio_eighths":
             duration = 0.5
             beats = [index * duration for index in range(int(input.meter.beats / duration))]
             sequence = [pitches[index % len(pitches)] for index in range(len(beats))]
@@ -222,10 +226,15 @@ def simplify(
 
 def analyze(score_id: str, revision: int, document: ScoreDocument) -> ScoreAnalysisOutput:
     pitches = [note.pitch for note in document.notes]
-    simultaneous = Counter(
-        (note.measure, round(note.beat, 6)) for note in document.notes
-    )
-    maximum_polyphony = max(simultaneous.values(), default=0)
+    events: Counter[float] = Counter()
+    for note in document.notes:
+        start = (note.measure - 1) * document.meter.beats + note.beat
+        events[round(start, 6)] += 1
+        events[round(start + note.duration, 6)] -= 1
+    sounding = maximum_polyphony = 0
+    for instant in sorted(events):
+        sounding += events[instant]
+        maximum_polyphony = max(maximum_polyphony, sounding)
     event_density = len(document.notes) / max(document.measure_count, 1)
     leaps: list[int] = []
     for hand in ("left", "right"):

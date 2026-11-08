@@ -16,8 +16,8 @@
 .dbfox-shader h4 { font-size: var(--ui-font-body); }
 .dbfox-shader button, .dbfox-shader input, .dbfox-shader select {
   font: inherit; color: var(--color-text-primary); border: 1px solid var(--control-border);
-  border-radius: var(--radius-sm); min-height: var(--density-control-height-sm);
-  padding: var(--space-1) var(--space-2); background: var(--control-bg-subtle); max-width: 100%;
+  border-radius: var(--radius-control); min-height: var(--density-control-height-sm);
+  padding: var(--space-1) var(--space-2); background: var(--control-bg-subtle); max-width: 100%; transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 .dbfox-shader input, .dbfox-shader select { width: 100%; min-width: 0; }
 .dbfox-shader input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; accent-color: var(--color-primary); }
@@ -54,12 +54,12 @@
 .dbfox-shader .shader-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .dbfox-shader .shader-compare .shader-code { height: 260px; min-height: 260px; }
 .dbfox-shader .shader-section-tabs { display: flex; gap: var(--space-1); padding: 0 var(--space-5); border-bottom: 1px solid var(--color-border); overflow-x: auto; flex-shrink: 0; }
-.dbfox-shader .shader-section-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; min-height: 42px; padding: var(--space-2) var(--space-3); color: var(--color-text-muted); }
+.dbfox-shader .shader-section-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: var(--radius-control); background: transparent; min-height: 42px; padding: var(--space-2) var(--space-3); color: var(--color-text-muted); transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .dbfox-shader .shader-section-tabs button[aria-current="page"] { border-bottom-color: var(--color-primary); color: var(--color-primary); }
 .dbfox-shader .shader-work-area { display: grid; grid-template-columns: minmax(340px, 1fr) minmax(270px, 330px); flex: 1; min-height: 440px; }
 .dbfox-shader .shader-main-panel { display: flex; flex-direction: column; min-width: 0; overflow: auto; }
 .dbfox-shader .shader-stage-tabs { display: flex; align-items: center; overflow-x: auto; flex-shrink: 0; gap: var(--space-1); padding: var(--space-2) var(--space-3); background: var(--surface-panel-muted); }
-.dbfox-shader .shader-stage-tabs button { border-color: transparent; background: transparent; white-space: nowrap; font-size: var(--ui-font-caption); }
+.dbfox-shader .shader-stage-tabs button { border-color: transparent; background: transparent; white-space: nowrap; font-size: var(--ui-font-caption); transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .dbfox-shader .shader-stage-tabs button[aria-selected="true"] { border-color: var(--color-border); background: var(--surface-panel); }
 .dbfox-shader .shader-code { flex: 1; min-height: 320px; overflow: hidden; background: var(--surface-canvas); }
 .dbfox-shader .shader-editor-footer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-top: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--ui-font-nano); }
@@ -106,7 +106,7 @@
 .dbfox-shader .shader-diagnostics li[data-severity="error"] > strong { color: var(--color-danger); }
 .dbfox-shader .shader-diagnostics li[data-severity="warning"] { border-color: var(--color-warning); }
 .dbfox-shader .shader-diagnostics small { color: var(--color-text-muted); font-size: var(--ui-font-nano); }
-.dbfox-shader .shader-diagnostics button { min-height: 24px; font-size: var(--ui-font-nano); padding: 0 var(--space-1); }
+.dbfox-shader .shader-diagnostics button { min-height: var(--density-control-height-sm); font-size: var(--ui-font-nano); padding: 0 var(--space-1); }
 .dbfox-shader .shader-diff pre { margin: var(--space-2) 0; max-height: 340px; overflow: auto; background: var(--surface-canvas); padding: var(--space-3); font-family: var(--font-mono); font-size: var(--ui-font-caption); }
 .dbfox-shader .shader-diff ul { overflow-wrap: anywhere; }
 .dbfox-shader .shader-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--space-3); padding: var(--space-8); min-height: 320px; color: var(--color-text-muted); text-align: center; }

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from engine.policy.gate import PolicyGate
 from engine.runtime_composition import build_product_tool_registry
 from engine.tools.runtime import (
@@ -175,15 +177,43 @@ def test_disallowed_group_is_blocked(db_session):
 
 
 def test_declared_approval_requirement_is_preserved(db_session):
-    registry = ToolRegistry().register(
-        PolicyTestTool(policy=ToolPolicy(requires_approval=True))
-    )
+    tool = PolicyTestTool(policy=ToolPolicy(requires_approval=True))
+    tool.presentation = ToolPresentation(title="编辑项目文件", category="manage")
+    registry = ToolRegistry().register(tool)
     decision = PolicyGate(registry, db_session).check(
         _state(),
         "policy_test",
         {},
     )
     assert decision.status == "approval_required"
+    assert decision.reason == "编辑项目文件需要你的批准。"
+    assert "policy_test" not in decision.reason
+
+
+@pytest.mark.parametrize(
+    ("backend", "expected_status"),
+    [("in_process", "blocked"), ("isolated_process", "approval_required")],
+)
+def test_subprocess_capability_requires_isolation_and_still_requires_approval(
+    db_session, backend, expected_status,
+):
+    registry = ToolRegistry(
+        available_backends=frozenset({"in_process", "isolated_process"})
+    )
+    tool = PolicyTestTool(
+        execution=ToolExecutionSpec(backend=backend, capabilities=("subprocess",)),
+        policy=ToolPolicy(requires_approval=True, risk_level="danger"),
+    )
+    if backend == "in_process":
+        with pytest.raises(ValueError, match="require an isolated process"):
+            registry.register(tool)
+        return
+    registry.register(tool)
+
+    decision = PolicyGate(registry, db_session).check(_state(), "policy_test", {})
+
+    assert decision.status == expected_status
+    assert decision.risk_level == "danger"
 
 
 def test_tool_admission_requires_an_exact_current_run_artifact(db_session):

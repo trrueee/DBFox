@@ -441,7 +441,10 @@ export async function createRuntime({ document: canonical, rgba_assets: rgbaAsse
     clearTimeout(timeout);
     signal?.removeEventListener('abort', abort);
     game.destroy(true, false);
-    game.headlessStep(0, 0);
+    // Phaser defers destroy to its next frame. Before boot completes, its own
+    // loop must reach that boundary after SceneManager is ready. Only a running
+    // game whose loop we stopped for fixed stepping needs an explicit frame.
+    if (game.isRunning && !game.loop.running) game.headlessStep(0, 0);
     actors.clear();
     events = [];
   }

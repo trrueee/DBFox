@@ -73,7 +73,7 @@ describe("UnifiedComposer", () => {
     const send = getByRole("button", { name: /发送：/ });
     const icon = send.querySelector("svg");
 
-    expect(icon?.classList.contains("lucide-arrow-up")).toBe(true);
+    expect(icon?.querySelector("use")?.getAttribute("href")).toContain("#arrow-up-regular");
     expect(queryByRole("button", { name: "添加上下文" })).toBeNull();
     expect(container.querySelector(".dbfox-composer__context")).toBeNull();
   });

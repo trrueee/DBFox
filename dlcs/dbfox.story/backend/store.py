@@ -222,6 +222,7 @@ class StoryStateStore:
     def _migrate_chapter_files(self, connection: sqlite3.Connection) -> None:
         rows = connection.execute(
             "SELECT id, project_id, content, content_path FROM chapters"
+            " WHERE content_path IS NULL OR content_path = '' OR content_sha256 IS NULL"
         ).fetchall()
         for row in rows:
             relative_path = str(row["content_path"] or self._chapter_relative_path(
@@ -502,14 +503,20 @@ class StoryStateStore:
         now = _now()
         with self._connect() as connection, connection:
             for item in items:
-                from_row = connection.execute(
-                    "SELECT id, name FROM entities WHERE project_id = ? AND name = ?",
-                    (project_id, item["from_name"]),
-                ).fetchone()
-                to_row = connection.execute(
-                    "SELECT id, name FROM entities WHERE project_id = ? AND name = ?",
-                    (project_id, item["to_name"]),
-                ).fetchone()
+                endpoints = []
+                for endpoint in ("from", "to"):
+                    entity_id = item.get(endpoint + "_id")
+                    rows = connection.execute(
+                        "SELECT id, name FROM entities WHERE project_id = ? AND "
+                        + ("id = ?" if entity_id else "name = ?") + " LIMIT 2",
+                        (project_id, entity_id or item[endpoint + "_name"]),
+                    ).fetchall()
+                    if len(rows) > 1:
+                        raise ValueError("实体名称不唯一，请使用 from_id/to_id 指定关系端点。")
+                    if entity_id and not rows:
+                        raise ValueError("关系端点ID不存在或不属于当前项目。")
+                    endpoints.append(rows[0] if rows else None)
+                from_row, to_row = endpoints
                 if from_row is None:
                     unknown.append(item["from_name"])
                     continue
@@ -556,27 +563,34 @@ class StoryStateStore:
         edge_id: str,
         decision: str,
     ) -> RelationEdgeOutput:
-        with self._connect() as connection, connection:
-            row = self._edge_row(connection, project_id, edge_id)
-            if row["status"] == "confirmed" and decision != "confirmed":
-                raise ValueError("已进入修订的关系不可回退；请先创建新修订或提出新提案。")
-            connection.execute(
-                "UPDATE relation_edges SET status = ?, decided_at = ? WHERE id = ?",
-                (decision, _now(), edge_id),
-            )
-            self._bump_world(connection, project_id)
-            row = self._edge_row(connection, project_id, edge_id)
-            return self._edge_output(connection, row)
+        return self.decide_batch(project_id, [{"edge_id": edge_id, "decision": decision}])[0]
 
     def decide_batch(
         self,
         project_id: str,
         decisions: list[dict[str, str]],
     ) -> tuple[RelationEdgeOutput, ...]:
-        return tuple(
-            self.decide_edge(project_id, item["edge_id"], item["decision"])
-            for item in decisions
-        )
+        with self._connect() as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            seen: set[str] = set()
+            for item in decisions:
+                if item["edge_id"] in seen:
+                    raise ValueError("同一批次不可重复决定一条关系。")
+                seen.add(item["edge_id"])
+                if item["decision"] not in {"pending", "confirmed", "rejected"}:
+                    raise ValueError("关系决定无效。")
+                row = self._edge_row(connection, project_id, item["edge_id"])
+                if row["status"] == "confirmed" and item["decision"] != "confirmed":
+                    raise ValueError("已进入修订的关系不可回退；请先创建新修订或提出新提案。")
+            for item in decisions:
+                connection.execute(
+                    "UPDATE relation_edges SET status = ?, decided_at = ? WHERE id = ?",
+                    (item["decision"], _now(), item["edge_id"]),
+                )
+            if decisions:
+                self._bump_world(connection, project_id)
+            return tuple(self._edge_output(connection, self._edge_row(connection, project_id, item["edge_id"]))
+                         for item in decisions)
 
     def list_edges(
         self,
@@ -852,15 +866,15 @@ class StoryStateStore:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = self._chapter_row(connection, project_id, chapter_id)
-            neighbor_seq = row["seq"] - 1 if direction == "up" else row["seq"] + 1
+            comparison, order = ("<", "DESC") if direction == "up" else (">", "ASC")
             neighbor = connection.execute(
-                "SELECT id FROM chapters WHERE project_id = ? AND seq = ?",
-                (project_id, neighbor_seq),
+                f"SELECT id, seq FROM chapters WHERE project_id = ? AND seq {comparison} ? ORDER BY seq {order} LIMIT 1",
+                (project_id, row["seq"]),
             ).fetchone()
             if neighbor is None:
                 connection.commit()
                 return
-            connection.execute("UPDATE chapters SET seq = ? WHERE id = ?", (neighbor_seq, row["id"]))
+            connection.execute("UPDATE chapters SET seq = ? WHERE id = ?", (neighbor["seq"], row["id"]))
             connection.execute("UPDATE chapters SET seq = ? WHERE id = ?", (row["seq"], neighbor["id"]))
             connection.commit()
 

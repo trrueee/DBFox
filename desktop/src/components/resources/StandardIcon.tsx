@@ -1,17 +1,44 @@
-import { ArrowDown, ArrowUp, AtSign, BookOpen, Box, Clapperboard, Image, Music2, Pause, Play, Plus, RefreshCw, Repeat2, Square, Terminal, Trash2, X } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  AtIcon,
+  BookOpenIcon,
+  CubeIcon,
+  FilmSlateIcon,
+  ImageIcon,
+  MusicNotesIcon,
+  PauseIcon,
+  PlayIcon,
+  PlusIcon,
+  ArrowsClockwiseIcon,
+  RepeatIcon,
+  SquareIcon,
+  TerminalWindowIcon,
+  TrashIcon,
+  XIcon,
+  GameControllerIcon,
+  LightbulbIcon,
+  TableIcon,
+  CaretRightIcon,
+} from "@/components/icons";
 import type { HostIconName } from "../../features/dlc/types";
 
 const ICONS = {
-  plus: Plus, x: X, "refresh-cw": RefreshCw, play: Play, pause: Pause,
-  square: Square, repeat: Repeat2, terminal: Terminal, "at-sign": AtSign,
-  music: Music2, "book-open": BookOpen, box: Box, image: Image, clapperboard: Clapperboard,
-  "arrow-up": ArrowUp, "arrow-down": ArrowDown, "trash-2": Trash2,
-} satisfies Record<HostIconName, typeof Plus>;
+  plus: PlusIcon, x: XIcon, "refresh-cw": ArrowsClockwiseIcon, play: PlayIcon, pause: PauseIcon,
+  square: SquareIcon, repeat: RepeatIcon, terminal: TerminalWindowIcon, "at-sign": AtIcon,
+  music: MusicNotesIcon, "book-open": BookOpenIcon, box: CubeIcon, image: ImageIcon, clapperboard: FilmSlateIcon,
+  "arrow-up": ArrowUpIcon, "arrow-down": ArrowDownIcon, "trash-2": TrashIcon,
+  "game-controller": GameControllerIcon, lightbulb: LightbulbIcon, table: TableIcon,
+  "caret-right": CaretRightIcon,
+} satisfies Record<HostIconName, typeof PlusIcon>;
 
-/** A small, static Lucide subset shared with isolated DLC frontends. */
-export function StandardIcon({ name, size = 16, className = "" }: {
+const FILLED_ICONS = new Set<HostIconName>(["play", "pause", "square"]);
+
+/** The same pinned artwork and roles are shared by Core and isolated DLC frontends. */
+export function StandardIcon({ name, size = 20, className = "" }: {
   name: HostIconName; size?: number; className?: string;
 }) {
   const Icon = ICONS[name];
-  return <Icon size={size} strokeWidth={1.75} aria-hidden="true" className={`standard-icon ${className}`} />;
+  return <Icon size={size} weight={FILLED_ICONS.has(name) ? "fill" : "regular"}
+    aria-hidden="true" className={`standard-icon ${className}`} />;
 }

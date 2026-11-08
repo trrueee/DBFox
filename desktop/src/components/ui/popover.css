@@ -3,24 +3,26 @@
   min-width: 256px;
   padding: 12px;
   color: hsl(var(--popover-foreground));
-  background: hsl(var(--popover));
+  background: var(--surface-popover);
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-lg, 12px);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 var(--top-highlight);
   outline: none;
   transform-origin: var(--radix-popover-content-transform-origin);
+  backdrop-filter: var(--material-filter);
+  background-image: var(--surface-sheen);
 }
 
 .dbfox-popover-content[data-state="open"] {
-  animation: dbfox-popover-in 140ms var(--ease-out);
+  animation: dbfox-popover-in var(--motion-normal) var(--ease-out);
 }
 
 .dbfox-popover-content[data-state="closed"] {
-  animation: dbfox-popover-out 90ms var(--ease-in);
+  animation: dbfox-popover-out var(--motion-fast) var(--ease-in);
 }
 
 .dbfox-popover-arrow {
-  fill: hsl(var(--popover));
+  fill: var(--surface-popover);
   filter: drop-shadow(0 1px 0 hsl(var(--border)));
 }
 

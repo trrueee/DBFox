@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-31
+> 最后核验：2026-11-07
 >
 > 适用范围：启动、Agent Core、Capability DLC、Workbench、工具、事件、取消和恢复链路
 >
@@ -112,8 +112,22 @@ App Shell 组织文件夹项目与对话、固定 Main Surface、Dock registry�
 
 `mainSurfaceByProject` 是活动 Conversation 的唯一事实源。Workbench 以 Conversation 或 new-conversation draft 的稳定 scope 隔离 Tabs、引用和 DLC view state。Frontend activation 保留 epoch/generation fence、owner namespace admission、deactivate 与失效 Tab 清理。`WorkspaceDock` 支持预览替换、固定、overflow、全屏、折叠；只保存 identity/layout，不保存文件或表内容。
 
+设置中的 `DlcCenter` 直接展示扩展生命周期投影：启用开关绑定 desired state，状态徽标来自真实运行状态；版本、权限和指纹由名称按钮展开。搜索与展开仅为组件内展示状态。Dock 标签由 Radix 管理方向键和关联，关闭当前标签的按钮在 tablist 外，可关闭标签另支持 Delete 与原有焦点恢复。对话成果复用 `ReferenceCard`，名称打开同一 Artifact 的 Dock，独立按钮控制 inline 预览；来源/证据选择合同不因信息收敛而删除。实现与验证见[界面调研记录](../quality/interface-refresh-20261107.md)。
+
+通用功能图形由固定提交的 Phosphor SVG 构建为带内容 hash 的本地 sprite，Core 的 `components/icons`
+与 DLC 的 `host.ui.Icon` 共用；文件类型和品牌标志保持独立的标准资产。UI 默认 15px、Agent 正文
+16px，已有合法偏好保持原值。Dock 初始请求采用剩余舞台 38% 与 preferredWidth 的较小值，
+用户拖动尺寸优先，最小宽度约束仍由 react-resizable-panels 执行。菜单/弹窗材质、阴影和动效
+只由共享 token 定义，减少透明度和高对比度使用实色。详见 [Apple HIG 工作台](../quality/apple-hig-workbench-20261107.md)；早期证据见[全局设计实施记录](../archive/reviews/global-design-20261107.md)。
+
+`TitleBar` 同步注册/清理 preload 窗口订阅，初始异步读取不能覆盖已到达的新事件。Electron
+`appProtocol.parseAppUrl` 将 SVG fragment 视作客户端选择器，不参与磁盘路径；来源、路径包含性、
+查询、大小和 CSP 约束不变。此规则也由真实 Electron 的原生 SVG 渲染检查覆盖。
+
 - `ProjectCreateForm` 打开 native canonical folder，以文件夹名创建/复用项目。opaque idempotency key 防止重复项目；路径仍只归 Workspace binding。不同路径可有相同项目名，迁移仅放开 name 唯一约束。
 - `dlcs/dbfox.workspace/frontend/index.js` 通过原有 `binding.get/create`、`files.list/read` 操作提供文件树与只读内容；有界目录/文本与 containment 校验保持在 owner 后端。过大目录明确显示部分结果，嵌套 lazy ancestors 用 Host Tree 加载。
+- Workspace 文件成果通过 owner 的 `backend/representation.py` 校验冻结来源、绑定版本和 hash 后分页读取，复用 Host FileContent；`file_search` 空 query 浏览一层、非空 query 递归查找，与 grep 共用目录项总量预算。
+- Workspace 写入前置条件统一在 `WorkspaceService`；无 hash 只能新建，覆盖在暂存完成后校验 hash，工具与 public operation 共用固定冲突，后者返回 409。Dock 直接使用规范 target，显式刷新目录与当前文件，并取消旧读取；分页冲突不拼接新版本。验证见 `test_workspace_mutation_safety.py`、`test_dbfox_workspace_dlc_package.py` 与 `dbfoxWorkspaceFixture.test.ts`。
 - `components/resources/ReferenceCard` / `ResourceIcon` 统一消息、输入框和结果引用；`FileContent` 复用 CodeMirror 官方 grammar 与已有 Markdown renderer，支持预览/源码/分栏。
 - `features/resources/openWorkbenchReference` 唯一匹配 `DockViewContribution.objectKinds`，按精确 object/version、authority、locator 和 scope 复用标签。附件/Artifact 继续走原 navigation boundary。打开只导航；Dock 的“加入对话”经 `onAsk` 把 typed reference 交给 Composer，后端决定 authority。
 - `dlcs/dbfox_data/frontend/index.js` 在 Dock 内组合数据库树、表结构、数据样例和内嵌连接配置，复用既有 owner operations 与凭据边界。
@@ -164,7 +178,12 @@ Agent 通过 schema 工具按问题检索候选表，再按需 inspect；Context
 
 ### 4.8 Artifact Representation Gateway
 
-Core Artifact API 只接受 Artifact ID、Representation type 和通用 operation request，再把读取交给该
+成果信封通过 `GET /projects/{project_id}/artifacts/{artifact_id}` 按耐久 Project 归属恢复到现有投影，
+支持不属于当前聊天的 Action Run 成果。实现为 `ArtifactRepository.get_for_project`、
+`api/agent_results.py`、`conversationStore.loadArtifact` 与 `features/dock/dockViewContent.tsx`；
+标签仍只保存身份。回归见 `test_conversations.py` 和 `artifactNavigation.test.ts`。
+
+Artifact Representation API 接受 Artifact ID、Representation type 和通用 operation request，再把读取交给该
 Artifact owner 在当前 Runtime snapshot 注册的 Provider。Data DLC 为 Result/Snapshot 提供
 `dbfox.dataframe.v1`，负责验证来源资源、fingerprint/generation 和分页、排序、筛选、计数、导出参数；
 Core 不理解 SQL、表结构或图表。
@@ -179,6 +198,8 @@ Result rows 到 Conversation。
 Input admission 在单一短事务中创建 SessionInput、用户/助手 Message、Run 和初始 event，并用 idempotency key 防止重复接纳。Composer 的 typed Workbench Reference 与消息在同一 request 提交；Backend 从 `reference.authority` 派生 initial explicit authority、与 legacy durable intent 一次性 canonicalize 并冻结，Frontend 不双写 `requested_resources`。浏览或打开 Dock 不暗改 Conversation Intent。Coordinator 按 Session 竞争 lease，promote 一个输入并执行 Run。
 
 同一 Session 未来 queue 输入不进入当前 Context；Session 间可以并行。lease 过期后旧 worker 的任何提交都会因 token 不匹配被拒绝。
+
+等待审批或用户输入的 Session 不因排队输入自唤醒，由回答、取消、到期等明确转换恢复。`engine/agent/lease_heartbeat.py` 复用既有 owner/token 续租循环，供 Coordinator 和 `engine/dlc/action_runs.py` 的手工 ActionRun 使用；失租触发执行取消，正常完成与异常退出均收尾续租线程及执行器。
 
 ### 4.10 ReAct Harness
 

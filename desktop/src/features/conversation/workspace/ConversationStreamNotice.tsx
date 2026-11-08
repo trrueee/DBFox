@@ -1,4 +1,8 @@
-import { CheckCircle2, RefreshCw, WifiOff } from "lucide-react";
+import {
+  CheckCircleIcon,
+  ArrowsClockwiseIcon,
+  WifiSlashIcon,
+} from "@/components/icons";
 
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
@@ -33,7 +37,7 @@ export function ConversationStreamNotice({
     return (
       <div className="conv-stream-notice">
         <Alert role="status" aria-live="polite">
-          <CheckCircle2 aria-hidden="true" />
+          <CheckCircleIcon aria-hidden="true" />
           <AlertTitle>已恢复最新状态</AlertTitle>
           <AlertDescription>当前内容已与耐久快照同步；后续更新继续通过实时连接接收。</AlertDescription>
         </Alert>
@@ -44,13 +48,13 @@ export function ConversationStreamNotice({
   return (
     <div className="conv-stream-notice">
       <Alert variant="destructive">
-        <WifiOff aria-hidden="true" />
+        <WifiSlashIcon aria-hidden="true" />
         <AlertTitle>实时连接已中断</AlertTitle>
         <AlertDescription>
           <span>{error || "无法继续接收任务更新，请读取最新状态。"}</span>
           {onRefresh ? (
             <Button type="button" size="sm" variant="outline" onClick={() => void onRefresh()}>
-              <RefreshCw aria-hidden="true" />
+              <ArrowsClockwiseIcon aria-hidden="true" />
               刷新最新状态
             </Button>
           ) : null}

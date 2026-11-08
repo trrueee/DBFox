@@ -2,6 +2,7 @@
   display: grid;
   gap: 16px;
   min-width: 0;
+  container-type: inline-size;
   color: var(--color-text-primary);
   font-family: var(--font-family-ui);
 }
@@ -94,7 +95,7 @@
 .dbfox-visualization__chart-actions button,
 .dbfox-visualization__error button {
   display: inline-flex;
-  min-height: 32px;
+  min-height: var(--density-control-height-sm);
   align-items: center;
   justify-content: center;
   gap: 5px;
@@ -254,7 +255,7 @@
 }
 
 .dbfox-visualization__chart-actions button {
-  min-height: 28px;
+  min-height: var(--density-control-height-sm);
   padding-inline: 8px;
   font-size: var(--ui-font-micro);
 }
@@ -447,7 +448,7 @@
   to { transform: rotate(360deg); }
 }
 
-@media (max-width: 760px) {
+@container (max-width: 760px) {
   .dbfox-visualization__grid { grid-template-columns: minmax(0, 1fr); }
   .dbfox-visualization__metric,
   .dbfox-visualization__text,

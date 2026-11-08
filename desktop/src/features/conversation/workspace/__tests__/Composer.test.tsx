@@ -1,15 +1,20 @@
 import {
   cleanup,
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../../lib/api/client";
+import { useWorkspaceStore } from "../../../../stores/workspaceStore";
 import { Composer } from "../Composer";
 
 describe("Composer", () => {
+  beforeEach(() => {
+    useWorkspaceStore.setState({ activeProjectId: "p1", mainSurfaceByProject: {}, workbenchByConversation: {} });
+  });
   afterEach(() => {
     cleanup();
   });
@@ -21,7 +26,7 @@ describe("Composer", () => {
 
     expect(container.querySelector(".conv-composer-rail")).toBeTruthy();
     expect(container.querySelector(".dbfox-composer")).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "继续提问" }).getAttribute("placeholder")).toBe("继续追问…");
+    expect(screen.getByRole("textbox", { name: "继续提问" }).getAttribute("placeholder")).toBe("");
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "发送：立即执行" })).toBeTruthy();
   });
@@ -48,6 +53,70 @@ describe("Composer", () => {
 
     await waitFor(() => expect(onSend).toHaveBeenCalledOnce());
     expect(input.value).toBe("保留这段问题");
+  });
+
+  it("restores separate conversation drafts after navigation unmounts the input", () => {
+    const props = { running: false, onSend: vi.fn(), onCancel: vi.fn() };
+    const first = render(<Composer {...props} conversationId="c1" />);
+    fireEvent.change(screen.getByRole("textbox", { name: "继续提问" }), { target: { value: "项目一的未发送问题" } });
+    first.unmount();
+    const second = render(<Composer {...props} conversationId="c2" />);
+    const secondInput = screen.getByRole("textbox", { name: "继续提问" }) as HTMLTextAreaElement;
+    expect(secondInput.value).toBe("");
+    fireEvent.change(secondInput, { target: { value: "项目二的未发送问题" } });
+    second.unmount();
+    const restored = render(<Composer {...props} conversationId="c1" />);
+    expect((screen.getByRole("textbox", { name: "继续提问" }) as HTMLTextAreaElement).value).toBe("项目一的未发送问题");
+    restored.unmount();
+    render(<Composer {...props} conversationId="c2" />);
+    expect((screen.getByRole("textbox", { name: "继续提问" }) as HTMLTextAreaElement).value).toBe("项目二的未发送问题");
+  });
+
+  it("does not clear a newer draft when an earlier admission finishes after navigation", async () => {
+    let resolve!: () => void;
+    const onSend = vi.fn(() => new Promise<void>(done => { resolve = done; }));
+    const first = render(<Composer running={false} conversationId="c1" onSend={onSend} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "继续提问" }), { target: { value: "正在发送的问题" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送：立即执行" }));
+    first.unmount();
+    render(<Composer running={false} conversationId="c1" onSend={onSend} onCancel={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: "继续提问" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "接着写的新草稿" } });
+    resolve();
+    await waitFor(() => expect(onSend).toHaveResolved());
+    expect(input.value).toBe("接着写的新草稿");
+  });
+
+  it.each([true, false])("settles admission in its original conversation after switching (accepted=%s)", async accepted => {
+    let resolve!: () => void;
+    let reject!: (error: Error) => void;
+    const onSend = vi.fn(() => new Promise<void>((done, fail) => { resolve = done; reject = fail; }));
+    const originalRef = { label: "原始引用", artifactId: "a1" };
+    const nextRef = { label: "新项目引用", artifactId: "a2" };
+    const workspace = useWorkspaceStore.getState();
+    workspace.setProjectActiveConversation("p1", "c1");
+    workspace.addWorkbenchReference(originalRef);
+    const first = render(<Composer running={false} conversationId="c1" onSend={onSend} onCancel={vi.fn()}
+      references={[originalRef]} onClearReferences={() => workspace.clearWorkbenchReferences("c1")} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "继续提问" }), { target: { value: "原始问题" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送：立即执行" }));
+    first.unmount();
+
+    workspace.setActiveProject("p2");
+    workspace.setProjectActiveConversation("p2", "c2");
+    workspace.addWorkbenchReference(nextRef);
+    render(<Composer running={false} conversationId="c2" onSend={vi.fn()} onCancel={vi.fn()} references={[nextRef]} />);
+    const input = screen.getByRole("textbox", { name: "继续提问" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "新项目的问题" } });
+    await act(async () => {
+      if (accepted) resolve(); else reject(new Error("admission failed"));
+      await onSend.mock.results[0].value.catch(() => undefined);
+    });
+
+    expect(input.value).toBe("新项目的问题");
+    expect(useWorkspaceStore.getState().workbenchByConversation.c2.references).toEqual([nextRef]);
+    expect(useWorkspaceStore.getState().workbenchByConversation.c1.draftInput).toBe(accepted ? "" : "原始问题");
+    expect(useWorkspaceStore.getState().workbenchByConversation.c1.references).toEqual(accepted ? [] : [originalRef]);
   });
 
   it("renders only safe Problem Details metadata for an admission failure", () => {
@@ -88,7 +157,7 @@ describe("Composer", () => {
     );
 
     expect(screen.getByText("orders (table)")).toBeTruthy();
-    expect(screen.getByText("数据表")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "orders (table)" }).getAttribute("aria-description")).toBe("数据表");
     const input = screen.getByRole("textbox", { name: "继续提问" });
     fireEvent.change(input, {
       target: { value: "统计总金额" },

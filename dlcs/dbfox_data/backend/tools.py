@@ -170,6 +170,8 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
         )}
         query = next((artifact for artifact in artifacts if artifact.type == SQL_ARTIFACT_TYPE), None)
         facts["validation_artifact_id"] = query.id if query is not None else None
+        if output.get("can_execute") and query is not None:
+            facts["query_fingerprint"] = query.payload["queryFingerprint"]
         return ToolObservationProjection(
             summary="SQL已通过校验；尚未执行。" if output.get("can_execute") else "SQL未通过校验。",
             facts=facts,
@@ -314,7 +316,7 @@ class SqlExecuteReadonlyTool(
             success=True,
             row_count=returned_rows,
             columns=model_window.columns,
-            column_types=["text"] * len(model_window.columns),
+            column_types=result.column_types[:len(model_window.columns)],
             returned_rows=returned_rows,
             truncated=result.truncated or model_window.truncated,
             rows=model_window.rows,
