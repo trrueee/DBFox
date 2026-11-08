@@ -66,11 +66,13 @@ Lora/Raleway 推荐与本项目的桌面生产力场景不符，未采用。
 
 截图：
 
-- [扩展页改前](../../desktop/output/playwright/ui-refresh-20261107/extensions-before.png) / [改后](../../desktop/output/playwright/ui-refresh-20261107/extensions-light-final.png)
-- [外观设置](../../desktop/output/playwright/ui-refresh-20261107/appearance-light-final.png)
-- [深色扩展详情](../../desktop/output/playwright/ui-refresh-20261107/extensions-dark-details-final.png)
-- [对话成果与 Dock](../../desktop/output/playwright/ui-refresh-20261107/workspace-light-final.png)
-- [高对比度键盘焦点](../../desktop/output/playwright/ui-refresh-20261107/workspace-high-contrast-focus.png)
+以下文件保存在本地忽略目录 `desktop/output/playwright/ui-refresh-20261107/`，不随仓库分发：
+
+- 扩展页改前 `extensions-before.png` / 改后 `extensions-light-final.png`
+- 外观设置 `appearance-light-final.png`
+- 深色扩展详情 `extensions-dark-details-final.png`
+- 对话成果与 Dock `workspace-light-final.png`
+- 高对比度键盘焦点 `workspace-high-contrast-focus.png`
 
 截图来自实际 Electron 页面；窗口尺寸与 forced-colors/reduced-motion 的部分检查使用 renderer viewport/media 模拟，
 不等于修改 Windows 系统设置。未在本轮验证真实 NVDA/JAWS、Windows 系统 125%/150%/200% 缩放、macOS/Linux、

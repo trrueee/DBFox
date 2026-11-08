@@ -121,7 +121,6 @@ Lucide 的 24 单位图形缩到 14 px，2 单位笔画约为 1.17 CSS px；多�
 - 浏览器已核对候选的尺寸切换、深浅色、右侧 Dock 方向，以及 61 份可直接渲染的本地资产加载；ICO/ICNS 与 sprite 单列，不伪装为浏览器图形验收。
 - 本轮没有修改产品源代码，因此没有重复运行产品回归；前轮 721 项测试不能被用作新图标方案的集成证据。
 
-本地证据：[浅色对照](../../desktop/output/playwright/icon-review-20261107/compare-light.png)、
-[深色对照](../../desktop/output/playwright/icon-review-20261107/compare-dark.png)、
-[本地资产预览](../../desktop/output/playwright/icon-review-20261107/all-local-artwork.png)、
-[可切换尺寸的完整对照稿](../../desktop/output/playwright/icon-review-20261107/index.html)。
+本地证据保存在忽略目录 `desktop/output/playwright/icon-review-20261107/`，不随仓库分发：
+浅色对照 `compare-light.png`、深色对照 `compare-dark.png`、资产预览 `all-local-artwork.png`
+和可切换尺寸的完整对照稿 `index.html`。

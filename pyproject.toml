@@ -8,6 +8,8 @@ disallow_untyped_defs = false
 ignore_missing_imports = true
 exclude = [
     "verification/",
+    # Unmodified third-party bytes are checked by provenance and PNG tests.
+    "^dlcs/dbfox[.](pixel|shader)/backend/vendor/",
 ]
 
 [tool.pytest.ini_options]

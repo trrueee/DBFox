@@ -1,3 +1,12 @@
 # Security floor for Paramiko's transitive dependency.
 # GHSA-g6cj-pr64-35w5 is fixed in cryptography 50.0.0.
 cryptography>=50.0.0,<51.0.0
+# Security floors shared by runtime, development, and frozen build locks.
+# GHSA-3w57-8xmc-8v26 and related AnyIO process-isolation advisories.
+anyio>=4.14.2,<5
+# GHSA-6q48-6c7w-9gw2: revoked emSign trust anchor.
+certifi>=2026.10.18
+# GHSA-5639-2j2p-m4mx: Windows drive-letter URI traversal.
+mako>=1.4.2,<2
+# GHSA-xmj3-9gf7-h52w: namespace path escape during legacy wheel installation.
+setuptools>=84.1.0

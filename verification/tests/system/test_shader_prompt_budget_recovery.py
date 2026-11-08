@@ -1,7 +1,7 @@
-"""Director investigation: recover a committed large call through public inspection."""
+"""A too-large latest native turn fails safely; explicit follow-up can recover it."""
 import json
-import re
 
+from engine.models import AgentRun
 from engine.runtime_composition import build_product_run_loop
 from verification.bench.capabilities.dbfox_shader import runtime as suite
 from verification.bench.capabilities.dbfox_shader.build_cases import VERTEX
@@ -9,7 +9,7 @@ from verification.bench.capabilities.dbfox_shader.schema import ShaderCase
 from verification.testkit.scripted_provider import ScriptedProvider, answer_events, tool_call_events
 
 
-def test_large_native_call_eviction_preserves_ledger_and_public_recovery(tmp_path, monkeypatch):
+def test_large_native_call_budget_failure_preserves_public_recovery(tmp_path, monkeypatch):
     source = VERTEX + "".join(f"// bounded shader module line {i:03d}: preserve exact content\n" for i in range(120))
     operations = [{"kind": "stage_create", "ref": f"module_{i}", "stage_kind": "vertex",
                    "title": f"Module {i}", "source": source} for i in range(60)]
@@ -28,14 +28,10 @@ def test_large_native_call_eviction_preserves_ledger_and_public_recovery(tmp_pat
                 name, args = "shader_modify", {"document_id": document["id"], "expected_version": 1, "operations": operations}
                 checkpoints["input_bytes"] = len(json.dumps(args).encode())
             elif phase == 2:
-                # The whole native turn is evicted as a unit; no orphan output is
-                # invented. Read the existing durable ledger, then ask the owner.
+                # This is a new, explicitly requested Run after the oversized
+                # latest native turn failed. Discover through the public owner;
+                # do not replay or reconstruct the already committed mutation.
                 assert "budget-1" not in observed
-                ledger = next(item["content"] for item in messages
-                              if 'source="durable_evidence_ledger"' in str(item.get("content", "")))
-                assert "succeeded" in ledger and checkpoints["created"]["id"] in ledger and "v2" in ledger
-                assert "artifact_ids" in ledger
-                checkpoints["ledger"] = ledger
                 native_calls = {item["call_id"] for item in messages if item.get("type") == "function_call"}
                 assert native_calls == set(observed)
                 # No cached ID/version/result is used to reconstruct the mutation.
@@ -54,7 +50,7 @@ def test_large_native_call_eviction_preserves_ledger_and_public_recovery(tmp_pat
                 name, args = "shader_export", {"document_id": page["document"]["id"], "expected_version": page["document"]["version"]}
             else:
                 assert observed["budget-5"]["status"] == "succeeded"
-                yield from ScriptedProvider(answer_events("All 60 modules were saved once. Public inspection recovered the current revision after context compaction; no GPU compilation was requested.")).stream()
+                yield from ScriptedProvider(answer_events("All 60 modules were saved once. Public inspection recovered the committed revision after an explicit follow-up; no GPU compilation was requested.")).stream()
                 return
             identity = f"budget-{phase}"
             wire = self.tool_names[name]
@@ -71,10 +67,14 @@ def test_large_native_call_eviction_preserves_ledger_and_public_recovery(tmp_pat
         monkeypatch.setattr(suite, "RunLoop", production_factory)
         monkeypatch.setattr(suite, "ShaderScript", RecoveryScript)
         case = ShaderCase(case_id="large-call-recovery", category="context_budget", steps=(),
-                          prompt="Create 60 extra shader modules in one explicit batch, then inspect the committed result. If the native transcript is compacted, use public inspection and do not replay the edit.")
-        evidence, _ = suite.run_segment(runtime, case)
-        assert evidence["run_status"] == "completed", evidence["run_status"]
-        assert len(evidence["invocations"]) == 6, [(item["call_id"], item["status"]) for item in evidence["invocations"]]
+                          prompt="Create 60 extra shader modules in one explicit batch, then inspect the committed result. Do not replay the edit.",
+                          clarification="Continue after the input budget failure. Discover the saved document through public inspection, inspect its stages and source, then export it. Do not repeat the committed edit.")
+        evidence, script = suite.run_segment(runtime, case)
+        assert evidence["run_status"] == "failed", evidence["run_status"]
+        with runtime.factory() as db:
+            run = db.get(AgentRun, evidence["run_id"])
+            assert run.error_code == "AGENT_CONTEXT_BUDGET_EXCEEDED"
+        assert len(evidence["invocations"]) == len(script.requests) == 2
         assert all(item["status"] == "succeeded" and item["attempts"] == 1 for item in evidence["invocations"])
         assert 400_000 < checkpoints["input_bytes"] < 786_432
         assert len([item for item in evidence["requests"] if item["tool"] == "shader_modify"]) == 1
@@ -84,7 +84,12 @@ def test_large_native_call_eviction_preserves_ledger_and_public_recovery(tmp_pat
         complete = runtime.document(evidence["project_id"], identity, 2)
         assert len(complete["document"]["stages"]) == 62
         assert all(stage["source"] == source for stage in complete["document"]["stages"][2:])
-        assert len(evidence["artifacts"]) == 3
-        ledger_data = re.search(r'(\[.*\])\n</dbfox_context>', checkpoints["ledger"], re.S)
-        assert ledger_data is not None
-        assert sum(len(item["artifact_ids"]) for item in json.loads(ledger_data[1])) == 2
+        assert len(evidence["artifacts"]) == 2
+        recovered, _ = suite.run_segment(runtime, case, script=script,
+            project_id=evidence["project_id"], session_id=evidence["session_id"])
+        assert recovered["run_status"] == "completed", recovered["run_status"]
+        assert len(recovered["invocations"]) == 4
+        assert all(item["status"] == "succeeded" and item["attempts"] == 1 for item in recovered["invocations"])
+        assert len([item for item in script.requests if item["tool"] == "shader_modify"]) == 1
+        assert len(recovered["artifacts"]) == 1
+        assert runtime.operation(evidence["project_id"], "documents.head", {"document_id": identity})["version"] == 2

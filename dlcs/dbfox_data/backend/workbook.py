@@ -200,7 +200,9 @@ class WorkbookService:
                 if top > max(1, extent["rows"]) or left > max(1, extent["columns"]):
                     raise ToolInputError("检视范围位于工作表实际数据边界之外。")
                 chosen.reset_dimensions()
-                samples, candidates, sensitive_positions = [], [], set()
+                samples: list[dict[str, object]] = []
+                candidates: list[dict[str, object]] = []
+                sensitive_positions: set[int] = set()
                 table = {"sheet": chosen.title, "cell_range": _address(bounds), "first_column": left,
                          "candidate_headers": candidates, "samples": samples,
                          "scanned_through_row": top - 1, "next_range": None}
@@ -317,7 +319,8 @@ class WorkbookService:
                     if left != right or top != bottom or top > stats["rows"] or left > width:
                         raise ToolInputError("区块上下文必须引用同一工作表中实际存在的单个文本单元格。")
                     context_addresses.add((top, left))
-            records, kinds = [], [set() for _ in selected]
+            records = []
+            kinds: list[set[str]] = [set() for _ in selected]
             excluded, seen_exclusions = exclude_rows or {}, set()
             if any(not isinstance(r, int) or not isinstance(reason, str) or not reason.strip() or len(reason) > 200 for r, reason in excluded.items()):
                 raise ToolInputError("排除行必须包含原始行号和明确原因。")
@@ -386,15 +389,17 @@ class WorkbookService:
                 if not declared and len(detected) > 1 and not detected <= {"date", "datetime"}:
                     raise ToolInputError(f"「{name}」包含混合类型，请明确字段类型或数据问题的处理方式。")
                 kind = declared or ("datetime" if "datetime" in detected else next(iter(detected), "text"))
-                values = []
-                for row_number, row in records:
-                    value = row[index]
+                numeric_values: list[Decimal] = []
+                for row_number, row_values in records:
+                    value = row_values[index]
                     if value is None and kind in ("decimal", "integer"):
                         raise ToolInputError(f"第{row_number}行「{name}」缺少必要值，请澄清或明确排除。")
                     if kind in ("decimal", "integer"):
-                        value = _decimal(value, row_number, name)
-                        if kind == "integer" and value != value.to_integral_value():
+                        number = _decimal(value, row_number, name)
+                        if kind == "integer" and number != number.to_integral_value():
                             raise ToolInputError(f"第{row_number}行「{name}」不是整数。")
+                        numeric_values.append(number)
+                        value = number
                     elif kind in ("date", "datetime") and value is not None:
                         if isinstance(value, str):
                             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)?", value):
@@ -409,11 +414,11 @@ class WorkbookService:
                         value = str(value)
                     elif kind == "boolean" and value is not None and not isinstance(value, bool):
                         raise ToolInputError(f"第{row_number}行「{name}」不是明确的布尔值。")
-                    row[index] = value
-                    values.append(value)
+                    row_values[index] = value
                 if kind in ("decimal", "integer"):
-                    scale = max(max(-v.as_tuple().exponent, 0) for v in values)
-                    integer_digits = max(max(v.adjusted() + 1, 1) for v in values)
+                    # _decimal has already rejected non-finite exponents.
+                    scale = max(max(-int(v.as_tuple().exponent), 0) for v in numeric_values)
+                    integer_digits = max(max(v.adjusted() + 1, 1) for v in numeric_values)
                     if scale + integer_digits > 38:
                         raise ToolInputError(f"「{name}」超出DECIMAL的精度范围。")
                     sql_type = f"DECIMAL(38,{scale})"

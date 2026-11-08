@@ -65,6 +65,8 @@ Tool输出≤16KiB，目录工具每页≤8；Human目录每页≤32。Inspect/d
 
 PNG由原样 vendored PyPNG 0.20220715.0 Writer 编码，见 [许可证](backend/vendor/LICENCE) 和 [provenance](backend/vendor/provenance.json)。它只有标准库依赖；产品不使用Pillow。`.gitattributes` 保持 upstream bytes 在 Windows checkout 后不变。Reader/CLI不暴露给产品输入，不安装共享依赖、不需要本地二进制或网络服务。
 
+Mypy 只检查本项目维护的 Pixel backend，不递归分析 `backend/vendor/` 的第三方源码；不修改上游 namedtuple 声明来适配项目类型检查。第三方文件继续通过 provenance 的 SHA-256 原样校验，以及真实 PNG 编解码和导出测试。
+
 ## 验证和打包
 
 仓库根运行：
