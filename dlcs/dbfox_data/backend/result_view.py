@@ -156,10 +156,10 @@ def _apply_view(
     return viewed
 
 
-def _field_type(artifact: Artifact, column: str, values: list[Any]) -> str:
-    declared = ""
+def _field_type(artifact: Artifact, column: str, values: list[Any], *, database_type: str = "") -> str:
+    declared = database_type.casefold()
     payload_columns = artifact.payload.get("columns")
-    if isinstance(payload_columns, list):
+    if not declared and isinstance(payload_columns, list):
         for candidate in payload_columns:
             if isinstance(candidate, dict) and str(candidate.get("name") or "") == column:
                 declared = str(candidate.get("type") or "").casefold()
@@ -388,6 +388,11 @@ class DataResultRepresentation:
                 status_code=409,
             ) from exc
         parameters = dict(sql_payload.parameters)
+        if handle.dialect == "duckdb" and (
+            artifact.session_id != handle.session_id or sql_payload.source != handle.source
+            or artifact.payload.get("source") != handle.source.model_dump(mode="json")
+        ):
+            raise _error("SOURCE_UNAVAILABLE", "Workbook evidence does not belong to this conversation or source.", status_code=409)
         fingerprint = query_fingerprint(resource_ref, sql_payload.safe_sql, parameters)
         if (
             not sql_payload.safe_sql
@@ -395,7 +400,7 @@ class DataResultRepresentation:
             or str(artifact.payload.get("queryFingerprint") or "") != fingerprint
             or str(artifact.payload.get("datasourceGeneration") or "")
             != resource_version
-            or sql_payload.dialect != handle.profile.provider
+            or sql_payload.dialect != handle.dialect
         ):
             raise _error(
                 "SOURCE_CHANGED",
@@ -596,12 +601,14 @@ class DataResultRepresentation:
         has_next_page: bool,
         latency_ms: int,
         source_truncated: bool,
+        column_types: list[str] | None = None,
     ) -> dict[str, Any]:
         fields = [
             DataFrameField(
                 key=f"field_{index}",
                 name=column,
-                type=_field_type(artifact, column, [row.get(column) for row in rows]),
+                type=_field_type(artifact, column, [row.get(column) for row in rows],
+                                 database_type=column_types[index] if column_types else ""),
                 nullable=True,
                 values=[row.get(column) for row in rows],
             )
@@ -716,6 +723,7 @@ class DataResultRepresentation:
                 has_next_page=has_next_page,
                 latency_ms=latency_ms,
                 source_truncated=result.truncated,
+                column_types=result.column_types,
             ),
             consistency="live_reexecution",
             original_observed_at=str(artifact.payload.get("executedAt") or "") or None,

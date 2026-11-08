@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "package": "three",
+  "version": "0.185.1",
+  "license": "MIT",
+  "source": "https://github.com/mrdoob/three.js",
+  "bundle_sha256": "c38db794577efff42b96e75bc590c4ef1f6c376740556c38cbf2a10681e81f3a",
+  "bundle_bytes": 772531,
+  "primitive_sha256": "5df8bea98c0554098cc85693d969e3406e17f378d13c7ff3503af46bb293a92b",
+  "primitive_bytes": 120012,
+  "build": {
+    "script": "dlcs/dbfox.scene/build.mjs",
+    "esbuild": "0.28.2",
+    "target": "es2022"
+  },
+  "patches": [
+    {
+      "source": "examples/jsm/controls/OrbitControls.js",
+      "original_sha256": "faabb4e8dfd9235ee4a9fd7c9a3d75f90f1689dbd4944bd6fd32117dacec5f93",
+      "patched_sha256": "0f25f971ddc5694e4c0a1e0c6a739f5f6e587195db8c30f7b64416a439603c66",
+      "reason": "Disconnect must release the Control-held keyup interceptor as well as keydown.",
+      "owner": "dbfox.scene",
+      "removal": "Upgrade to fixed upstream OrbitControls and remove the guarded build patch after native listener and React DOM lifecycle regressions pass."
+    }
+  ]
+}

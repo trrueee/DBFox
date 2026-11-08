@@ -8,6 +8,7 @@ its own immutable package contribution.
 from __future__ import annotations
 
 from collections.abc import Callable
+from threading import Event, Thread
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -16,8 +17,10 @@ from sqlalchemy.orm import Session
 from engine.agent.artifact import ArtifactSelectionSuggestion
 from engine.agent.control import LeaseAwareRunControl
 from engine.agent.definition import AgentDefinition
+from engine.agent.lease_heartbeat import heartbeat_session_lease
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.run import SessionLeaseConflict
 from engine.agent.response import AnswerCandidate, CompletionDisposition, ResponseComposer
 from engine.agent.terminalizer import Terminalizer
 from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
@@ -36,6 +39,7 @@ from engine.tools.runtime.attempt import CompositeResourceResolver
 
 SessionFactory = Callable[[], Session]
 ProjectResourceAuthorizer = Callable[[Session, str, tuple[Any, ...]], tuple[Any, ...]]
+_ACTION_LEASE_TTL_SECONDS = 30
 
 
 class DlcActionRunsHostImpl:
@@ -158,6 +162,7 @@ class DlcActionRunsHostImpl:
             lease = sessions.claim(
                 session_id=normalized_session_id,
                 owner=f"dlc-action:{self._dlc_id}:{uuid4().hex}",
+                ttl_seconds=_ACTION_LEASE_TTL_SECONDS,
             )
             if lease is None:
                 raise DlcOperationError(
@@ -259,6 +264,16 @@ class _DlcActionRunImpl:
         self._definition = definition
         self._completed = False
         self._call_sequence = 0
+        self._heartbeat_stop = Event()
+        self._lease_lost = Event()
+        self._heartbeat = Thread(
+            target=heartbeat_session_lease,
+            kwargs={"session_factory": session_factory, "lease": lease,
+                    "ttl_seconds": _ACTION_LEASE_TTL_SECONDS,
+                    "stop": self._heartbeat_stop, "lease_lost": self._lease_lost},
+            name=f"dbfox-action-heartbeat-{session_id[:12]}", daemon=True,
+        )
+        self._heartbeat.start()
 
     @property
     def run_id(self) -> str:
@@ -375,7 +390,7 @@ class _DlcActionRunImpl:
             SessionRepository(db).release(lease=self._lease)
             db.commit()
         self._completed = True
-        self._executor.close(wait=False)
+        self._close_resources()
         return DlcActionRunResult(
             run_id=self._run_id,
             session_id=self._session_id,
@@ -386,20 +401,32 @@ class _DlcActionRunImpl:
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> Literal[False]:
-        if not self._completed:
-            with self._session_factory() as db:
-                Terminalizer.fail_in_session(
-                    db,
-                    self._lease,
-                    self._run_id,
-                    "AGENT_REQUEST_ERROR",
-                    "The Workbench action failed.",
-                )
-                SessionRepository(db).release(lease=self._lease)
-                db.commit()
-            self._completed = True
-            self._executor.close(wait=False)
+        try:
+            if not self._completed:
+                try:
+                    with self._session_factory() as db:
+                        Terminalizer.fail_in_session(
+                            db, self._lease, self._run_id, "AGENT_REQUEST_ERROR",
+                            "The Workbench action failed.",
+                        )
+                        SessionRepository(db).release(lease=self._lease)
+                        db.commit()
+                    self._completed = True
+                except SessionLeaseConflict:
+                    # A new owner fences this one. Preserve an original error;
+                    # never commit using an expired lease merely to tidy up UI.
+                    if exc is None:
+                        raise
+        finally:
+            self._close_resources()
         return False
+
+    def _close_resources(self) -> None:
+        self._heartbeat_stop.set()
+        try:
+            self._heartbeat.join(timeout=2)
+        finally:
+            self._executor.close(wait=False)
 
     def _control(self) -> LeaseAwareRunControl:
         with self._session_factory() as db:
@@ -416,5 +443,5 @@ class _DlcActionRunImpl:
             run=run,
             limits=self._definition.limits,
             cancellation_probe=cancellation_requested,
-            lease_lost_probe=None,
+            lease_lost_probe=self._lease_lost.is_set,
         )

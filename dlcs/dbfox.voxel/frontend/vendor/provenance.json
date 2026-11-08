@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "package": "three",
+  "version": "0.185.1",
+  "license": "MIT",
+  "source": "https://github.com/mrdoob/three.js",
+  "archive": "https://registry.npmjs.org/three/-/three-0.185.1.tgz",
+  "integrity": "sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==",
+  "bundle_sha256": "4019cf00891df54884c4d14981c787f36e47b125590241402a5c9b1759351929",
+  "bundle_bytes": 749587,
+  "build": {
+    "script": "desktop/scripts/build-voxel-vendor.mjs",
+    "esbuild": "0.28.2",
+    "target": "es2022"
+  },
+  "patches": [
+    {
+      "source": "examples/jsm/controls/OrbitControls.js",
+      "original_sha256": "faabb4e8dfd9235ee4a9fd7c9a3d75f90f1689dbd4944bd6fd32117dacec5f93",
+      "patched_sha256": "0f25f971ddc5694e4c0a1e0c6a739f5f6e587195db8c30f7b64416a439603c66",
+      "reason": "Disconnect must release the Control-held keyup interceptor as well as keydown.",
+      "owner": "dbfox.voxel",
+      "removal": "Upgrade to a fixed upstream OrbitControls and remove the guarded source replacement after both independent native listener lifecycle regressions pass."
+    }
+  ]
+}

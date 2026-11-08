@@ -1,0 +1,22 @@
+{
+  "shader-independent-gpu": {
+    "next_step": 1,
+    "requests": [
+      {
+        "id": "inventory",
+        "name": "dbfox_shader_06b593e8__shader_inspect",
+        "arguments": {
+          "section": "documents"
+        }
+      }
+    ],
+    "observations": {},
+    "windows": [
+      {
+        "visible_call_ids": [],
+        "input_bytes": 10459
+      }
+    ],
+    "errors": []
+  }
+}

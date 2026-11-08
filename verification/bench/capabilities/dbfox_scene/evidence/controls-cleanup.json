@@ -1,0 +1,23 @@
+{
+  "normal_window_close": true,
+  "electron_pid": 68808,
+  "child_pids": [
+    65212,
+    66248,
+    23540,
+    6628
+  ],
+  "all_recorded_pids_absent": true,
+  "listen_ports": [
+    5177,
+    19223
+  ],
+  "all_recorded_ports_absent": true,
+  "launcher_exit_code": 0,
+  "playwright_session": "scene-controls",
+  "playwright_closed": true,
+  "instrumentation_restored": true,
+  "external_runtime_retained": "C:/Users/Lenovo/AppData/Local/Temp/dbfox-scene-controls-20260906",
+  "native_dialog_or_download_hook_used": false,
+  "close_cli_note": "After the real close button terminated the page, CLI snapshot serialization reported missing url; the launcher exited 0 and process/port checks proved cleanup."
+}

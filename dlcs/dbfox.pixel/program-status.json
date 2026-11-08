@@ -1,0 +1,55 @@
+{
+  "dlc_id": "dbfox.pixel",
+  "status": "verification",
+  "phase": "independent_adversarial_complete",
+  "integrated": false,
+  "author_evidence": "docs/quality/pixel-dlc-evidence.md",
+  "independent_evidence": "docs/quality/pixel-dlc-independent-verification.md",
+  "capability_suite": "capability.dbfox-pixel.scripted",
+  "product_commit": "88e7c7d1",
+  "host_stdout_fix_commit": "734bcbb2",
+  "verified_package_digest": "cf43cb1f28538119a437c68f13ef8b152d2cd18c7acf9d18f9506a713746c299",
+  "independent_results": {
+    "baseline_system_and_bench_passed": 36,
+    "final_system_and_bench_passed": 42,
+    "final_system_and_bench_seconds": 118.04,
+    "capability_cases_passed": 15,
+    "capability_cases_total": 15,
+    "engineering_contracts_passed": 45,
+    "real_electron_downloads_completed_current_package": 4,
+    "real_electron_document_frame_count": 200,
+    "real_electron_edited_frame_index": 200,
+    "real_electron_head_reads_same_generation": 1100,
+    "scope_cancellation_observed": true,
+    "activation_cancellation_observed": true,
+    "task_owned_instances_closed": true,
+    "findings": {
+      "historical_index_corruption": "independently_closed",
+      "hundreds_of_frames_limit": "independently_closed",
+      "host_stdout_backpressure": "independently_closed",
+      "receipt_derived_summary_corruption": "independently_closed"
+    }
+  },
+  "remaining_gates": [
+    "Director integration"
+  ],
+  "shared_factory_fix_commit": "fac8a170",
+  "adversarial_evidence": "docs/quality/pixel-dlc-adversarial-review.md",
+  "adversarial_package_digest": "2b7cd5337f8a847bc1d73dfa047b3b42022fe9f0ace383678161d7ea3b97c6f9",
+  "adversarial_results": {
+    "new_tests_passed": 49,
+    "new_tests_seconds": 94.39,
+    "engineering_contracts_passed": 45,
+    "engineering_contracts_seconds": 4.95,
+    "scalar_birth_and_tag_findings": "independently_closed",
+    "real_electron_cancelled_stream_generation": [
+      1,
+      2,
+      3
+    ],
+    "real_electron_task_closed": true,
+    "actual_onask_production_factory_run": "run_c0417f86ca414826879c46d9ac69022c",
+    "other_action_session_artifact": "fail_closed",
+    "product_files_edited_by_reviewer": false
+  }
+}

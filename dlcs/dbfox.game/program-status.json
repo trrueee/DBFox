@@ -1,0 +1,145 @@
+{
+  "dlc": "dbfox.game",
+  "status": "integrated",
+  "completion": false,
+  "current_phase": "integrated_after_independent_gates",
+  "role_history": [
+    {
+      "role": "Game DLC Lead / Domain Architect",
+      "agent": "/root/scene_lead/domain_architect",
+      "independent": false,
+      "result": "25 boundaries and Phaser 4.2.1 lifecycle/step decisions recorded"
+    },
+    {
+      "role": "Game Backend Engineer",
+      "agent": "/root/scene_lead/domain_architect",
+      "independent": false,
+      "result": "Canonical/store/tools/operations/Representation/Phaser bridge implemented; author validation in progress"
+    },
+    {
+      "role": "Game Workbench Engineer",
+      "agent": "/root/scene_lead/domain_architect",
+      "independent": false,
+      "result": "Runtime author Chrome probe succeeded; complete UI draft written but unmounted/unverified when user stopped implementation"
+    },
+    {
+      "role": "Game author completion and native verification",
+      "agent": "/root/game_finish",
+      "independent": false,
+      "result": "Mounted Studio, complete signed package, native Agent and ActionRun playtests, immutable Artifacts, actual downloads, canonical drag/undo audit, 13-case capability suite and ten-change stress verified"
+    },
+    {
+      "role": "Independent backend red team",
+      "agent": "/root/game_independent_review",
+      "independent": true,
+      "result": "Nine signed runtime and immutable report attacks passed; 45 engineering contracts passed"
+    },
+    {
+      "role": "Independent composition and native verification",
+      "agent": "/root",
+      "independent": true,
+      "result": "Real signed Pixel composition; native edit/undo/restart/698-loss/3600-win/downloads; UI fixes independently verified"
+    },
+    {
+      "role": "Independent Host and Game navigation review",
+      "agent": "/root/host_fix_review",
+      "independent": true,
+      "result": "40 tests; confirmed build failure repaired by 809fa7ea; no new authority or mirrored-state defect"
+    }
+  ],
+  "resource_kinds": [
+    "dbfox.game.library",
+    "dbfox.game.project"
+  ],
+  "canonical": "GameProject with scenes, entities/components, behaviors, rules, variables and immutable RGBA assets",
+  "tools": [
+    "game_create",
+    "game_inspect",
+    "game_modify",
+    "game_diff",
+    "game_undo",
+    "game_delete",
+    "game_export",
+    "scene_create",
+    "entity_create",
+    "entity_delete",
+    "component_add",
+    "component_modify",
+    "behavior_create",
+    "rule_create",
+    "variable_create",
+    "playtest",
+    "asset_import"
+  ],
+  "project_operations": [
+    "games.list",
+    "games.head",
+    "games.get",
+    "games.create",
+    "games.apply",
+    "games.undo",
+    "games.delete",
+    "assets.upload",
+    "games.revisions",
+    "games.diff",
+    "games.export",
+    "games.playtest"
+  ],
+  "machine_operations": [
+    "playtest.attach",
+    "playtest.next",
+    "playtest.complete",
+    "playtest.detach"
+  ],
+  "artifacts": [
+    "dbfox.game.project-revision",
+    "dbfox.game.playtest-report"
+  ],
+  "representations": [
+    "dbfox.game.document.v1",
+    "dbfox.game.playtest.v1"
+  ],
+  "views": {
+    "game_studio": "independently verified in production Electron; final composed-world acceptance pending",
+    "immutable_revision": "independently verified in production Electron; final composed-world acceptance pending",
+    "playtest_report": "independently verified in production Electron; final composed-world acceptance pending"
+  },
+  "verified": [
+    "32 backend tests passed; backend mypy 11 files and pyflakes passed",
+    "7 frontend contract tests, frontend test typecheck, production build and lint passed (five existing Host warnings)",
+    "Full signed DLC with all 14 frontend assets installed and verified against source hashes",
+    "Native production Agent Run completed eight tool calls with closed Studio, no raised budgets and loopback scripted Responses model boundary",
+    "Actual Phaser seeded survival: stationary loss and recorded-input win at tick 3600; Canvas/HEADLESS deterministic replay, cancellation, timeout and dense candidate budget verified",
+    "Native Studio step/play/pause/reset, keyboard recording, drag revision and exact canonical undo verified",
+    "All six native Run Artifacts mounted after signed upgrade; fixed revision snapshots unchanged and actual Electron JSON download audited",
+    "13 capability cases passed through production RunLoop: 12 categories plus ten-change stress",
+    "Editable fox/slime survival preset and actual exported example bundle included"
+  ],
+  "evidence_limits": [
+    "No live model reasoning evidence; external HTTP model boundary is scripted.",
+    "Host has no Project delete API/callback; automatic owner cleanup on Project deletion is not provided.",
+    "Dense physics proves bounded rejection, not sustained performance at every maximum.",
+    "Native overflow menu works but existing Radix inline-style CSP warning remains; no weakened Host CSP."
+  ],
+  "pending": [
+    "Final multi-capability composed-world acceptance"
+  ],
+  "core_changes": [],
+  "architecture": "docs/architecture/game-dlc.md",
+  "quality": "docs/quality/game-dlc-evidence.md",
+  "handoff": "docs/quality/game-dlc-handoff.md",
+  "independent_reports": [
+    "docs/quality/game-independent-native.md",
+    "docs/quality/game-independent-redteam.md",
+    "docs/quality/pixel-game-composition-verification.md",
+    "docs/quality/workspace-compact-independent-review.md"
+  ],
+  "integration": {
+    "product": "b3c194da",
+    "navigation": "3612db26",
+    "host_layout": "d1563f55",
+    "tsx_build": "6561704a",
+    "independent_closure": "383d07cf",
+    "status": "scoped gates passed; full-program final acceptance pending"
+  }
+}

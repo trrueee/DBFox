@@ -12,18 +12,21 @@ from typing import Any
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
 from sqlalchemy.pool import NullPool
+from dbfox_dlc_api import ToolInputError
 
 from .connection_primitives import (
     existing_regular_file,
     network_driver_params,
     open_network_connection,
 )
-from .contracts import DatabaseHandle
+from .contracts import DatabaseHandle, WorkbookDatabaseHandle, QuerySourceHandle
+from .workbook_query import WorkbookQueryError, open_workbook_query, validate_workbook_query
 from .sql.dry_run_contracts import DryRunResult, classify_dry_run_error
 from .sql.bound_parameters import render_dbapi_sql
 from .sql.readonly_query import ReadonlyQueryError, parse_single_readonly_query
 from .sql.result_limits import QUERY_TIMEOUT_MS
 from .sql.row_serializer import (
+    DuplicateResultColumnsError,
     QueryExecutionResult,
     _fetch_and_serialize,
 )
@@ -59,7 +62,7 @@ class DataConnectionBoundary:
             return
         provider, connection = active
         try:
-            if provider == "sqlite":
+            if provider in ("sqlite", "duckdb"):
                 connection.interrupt()
             elif provider == "postgresql":
                 connection.cancel()
@@ -104,8 +107,18 @@ class DataConnectionBoundary:
             self._active.pop(invocation_id, None)
             self._cancel_requested.discard(invocation_id)
 
-    def explain(self, handle: DatabaseHandle, sql: str) -> DryRunResult:
-        dialect = handle.profile.provider
+    def explain(self, handle: QuerySourceHandle, sql: str) -> DryRunResult:
+        if isinstance(handle, WorkbookDatabaseHandle):
+            try:
+                validate_workbook_query(sql)
+                with open_workbook_query(handle) as connection:
+                    connection.execute("EXPLAIN " + sql)
+                return DryRunResult(ok=True)
+            except WorkbookQueryError as exc:
+                return DryRunResult(ok=False, blocked_reason="syntax_error", message=str(exc))
+            except Exception:
+                return DryRunResult(ok=False, blocked_reason="schema_error", message="Workbook query is unsupported or references unavailable data.")
+        dialect = handle.dialect
         try:
             parse_single_readonly_query(sql, dialect)
         except ReadonlyQueryError as exc:
@@ -152,7 +165,7 @@ class DataConnectionBoundary:
 
     def execute_readonly(
         self,
-        handle: DatabaseHandle,
+        handle: QuerySourceHandle,
         sql: str,
         *,
         invocation_id: str,
@@ -163,13 +176,16 @@ class DataConnectionBoundary:
 
         execution_id = self._reserve(invocation_id)
         try:
-            dialect = handle.profile.provider
+            dialect = handle.dialect
             parse_single_readonly_query(sql, dialect)
             executable_sql, bound_parameters = render_dbapi_sql(
                 sql,
                 dialect,
                 parameters,
             )
+            if isinstance(handle, WorkbookDatabaseHandle):
+                validate_workbook_query(sql)
+                return self._execute_workbook(handle, executable_sql, execution_id, cancellation_probe, bound_parameters)
             if handle.profile.ssh_enabled:
                 raise RuntimeError(
                     "SSH database execution is not available in the Data System DLC yet."
@@ -196,11 +212,35 @@ class DataConnectionBoundary:
                     execution_id,
                     bound_parameters,
                 )
+        except DuplicateResultColumnsError as exc:
+            raise ToolInputError(str(exc)) from exc
         except Exception as exc:
             raise RuntimeError("Read-only database execution failed.") from exc
         finally:
             self._release(execution_id)
         raise RuntimeError("This database provider does not support read execution.")
+
+    def _execute_workbook(self, handle, sql, invocation_id, cancellation_probe, parameters):
+        started = time.perf_counter()
+        connection = open_workbook_query(handle)
+        connect_ms = int((time.perf_counter() - started) * 1000)
+        self._attach(invocation_id, "duckdb", connection)
+        timer = threading.Timer(QUERY_TIMEOUT_MS / 1000, lambda: self.cancel(invocation_id))
+        try:
+            if self._is_cancelled(invocation_id, cancellation_probe):
+                raise RuntimeError("Workbook query was cancelled")
+            timer.start()
+            execute_started = time.perf_counter()
+            connection.execute(sql, dict(parameters))
+            execute_ms = int((time.perf_counter() - execute_started) * 1000)
+            fetched = _fetch_and_serialize(connection, row_mapper=self._row_mapper(connection))
+            if self._is_cancelled(invocation_id, cancellation_probe):
+                raise RuntimeError("Workbook query was cancelled")
+            return QueryExecutionResult.from_fetch_result(fetched, connect_ms=connect_ms, execute_ms=execute_ms)
+        finally:
+            timer.cancel()
+            timer.join() if timer.ident is not None else None
+            connection.close()
 
     @contextmanager
     def reflection_connection(
@@ -308,7 +348,7 @@ class DataConnectionBoundary:
             execute_started = time.perf_counter()
             cursor = connection.execute(sql, parameters)
             execute_ms = int((time.perf_counter() - execute_started) * 1_000)
-            fetched = _fetch_and_serialize(cursor)
+            fetched = _fetch_and_serialize(cursor, row_mapper=self._row_mapper(cursor))
             return QueryExecutionResult.from_fetch_result(
                 fetched,
                 connect_ms=connect_ms,

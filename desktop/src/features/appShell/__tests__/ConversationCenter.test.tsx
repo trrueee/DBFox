@@ -34,6 +34,7 @@ describe("ConversationCenter", () => {
       activeProjectId: "",
       centerMode: "home",
       mainSurfaceByProject: {},
+      workbenchByConversation: {},
       pendingAsk: null,
       settingsOpen: false,
     });
@@ -43,8 +44,8 @@ describe("ConversationCenter", () => {
   it("gates on project existence, not on datasource", () => {
     render(<ConversationCenter onNewProject={vi.fn()} />);
 
-    expect(screen.getByText("创建第一个项目")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /新建项目/ })).toBeTruthy();
+    expect(screen.getByText("打开文件夹，开始工作")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "打开文件夹" })).toBeTruthy();
     expect(screen.queryByTestId("smart-query-home")).toBeNull();
   });
 
@@ -82,7 +83,7 @@ describe("ConversationCenter", () => {
     const onNewProject = vi.fn();
     render(<ConversationCenter onNewProject={onNewProject} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /新建项目/ }));
+    fireEvent.click(screen.getByRole("button", { name: "打开文件夹" }));
     expect(onNewProject).toHaveBeenCalledTimes(1);
   });
 
@@ -134,5 +135,26 @@ describe("ConversationCenter", () => {
     expect(sendMessage.mock.calls[0][0]).toBe("conversation-retry");
     expect(sendMessage.mock.calls[1][0]).toBe("conversation-retry");
     expect(sendMessage.mock.calls[1][3]).toBe(sendMessage.mock.calls[0][3]);
+  });
+
+  it("does not reuse another project's failed submission or show its error", async () => {
+    useWorkspaceStore.setState({ activeProjectId: "project-1" });
+    const createConversation = vi.fn().mockResolvedValueOnce({ id: "one" }).mockResolvedValueOnce({ id: "two" });
+    const sendMessage = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(undefined);
+    useConversationStore.setState({ createAndOpenConversation: createConversation, sendMessage });
+    render(<ConversationCenter onNewProject={vi.fn()} />);
+    useWorkspaceStore.getState().setDraftInput("same question");
+    await waitFor(() => expect(smartQueryProps.latest?.askInputValue).toBe("same question"));
+    (smartQueryProps.latest?.onSubmitAsk as () => void)();
+    await screen.findByText("无法开始任务");
+
+    useWorkspaceStore.getState().setActiveProject("project-2");
+    useWorkspaceStore.getState().setDraftInput("same question");
+    await waitFor(() => expect(screen.queryByText("无法开始任务")).toBeNull());
+    (smartQueryProps.latest?.onSubmitAsk as () => void)();
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(2));
+    expect(createConversation).toHaveBeenCalledTimes(2);
+    expect(sendMessage.mock.calls.map(call => call[0])).toEqual(["one", "two"]);
+    expect(sendMessage.mock.calls[0][3]).not.toBe(sendMessage.mock.calls[1][3]);
   });
 });

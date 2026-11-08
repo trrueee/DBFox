@@ -8,6 +8,7 @@
 
 ## 关闭记录
 
+- [2026-10-27 对话附件第四阶段实施记录](conversation-attachments-implementation.md)：保留阶段实现与验证事实，当前交付结论以第五阶段验收记录为准。
 - [2026-07-11 Runtime Reset 交付记录](2026-07-11-foundation-runtime-reset.md)：归档早期基础能力阶段报告，当前合同以 Runtime 架构文档为准。
 - [2026-08-13 代码质量评审逐项关闭记录](2026-08-13-code-quality-review-closure.md)：归并原评审重复条目，说明已修复、已反证和不实施的设计建议。
 - [2026-08-16 Memory v4 Cutover 证据](2026-08-16-p2-memory-v4-cutover-evidence.md)：旧开关式候选实现的阶段证据；开关及配对评测入口均已删除。

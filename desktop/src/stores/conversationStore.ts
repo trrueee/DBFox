@@ -7,7 +7,9 @@ import {
   getConversation,
   getConversationHistory,
   getConversationRunArtifacts,
+  getProjectArtifact,
   listConversations,
+  patchConversation,
   resolveConversationApproval,
   resolveConversationQuestion,
   selectConversationArtifact,
@@ -46,6 +48,7 @@ import {
   upsertRun,
 } from "./conversationStoreReducer";
 import { useWorkspaceStore } from "./workspaceStore";
+import { conversationTitle } from "../features/conversation/conversationTitle";
 
 export interface ConversationState {
   summaries: ConversationSummary[];
@@ -62,11 +65,23 @@ export interface ConversationActions {
   loadOlderHistory: (conversationId: string) => Promise<boolean>;
   createAndOpenConversation: (question: string) => Promise<ConversationDetail>;
   deleteConversationById: (conversationId: string) => Promise<void>;
+  renameConversation: (conversationId: string, title: string) => Promise<void>;
   loadConversation: (detail: ConversationDetail) => void;
+  loadArtifact: (
+    projectId: string,
+    artifactId: string,
+    options: { signal: AbortSignal; beforeCommit: () => void },
+  ) => Promise<void>;
   loadRunArtifacts: (
     conversationId: string,
     runId: string,
     expectedArtifactIds: readonly string[],
+    /** A navigation read is fresh and independent of shared timeline requests. */
+    options?: {
+      signal?: AbortSignal;
+      beforeCommit: () => void;
+      afterCommit: () => void;
+    },
   ) => Promise<void>;
   sendMessage: (
     conversationId: string,
@@ -106,16 +121,17 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   openConversation: async (conversationId) => {
     const detail = await getConversation(conversationId);
     get().loadConversation(detail);
-    const activeRun = detail.runs.findLast((run) => isFollowableRun(run.status));
+    const current = get().detailById[conversationId];
+    const activeRun = current.runs.findLast((run) => isFollowableRun(run.status));
     if (activeRun) {
-      void followRun(get, conversationId, activeRun.id, detail.cursor || 0);
+      void followRun(get, conversationId, activeRun.id, current.cursor || 0);
     } else {
       set((state) => ({
         streamErrorById: { ...state.streamErrorById, [conversationId]: undefined },
         streamStateById: { ...state.streamStateById, [conversationId]: "idle" },
       }));
     }
-    return detail;
+    return current;
   },
 
   loadOlderHistory: async (conversationId) => {
@@ -128,23 +144,26 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       beforeItemSequence: itemCursor,
       beforeRunSequence: runCursor,
     });
+    const latest = get().detailById[conversationId];
+    if (!latest) return false;
     get().loadConversation({
-      ...current,
-      items: mergeProjectionById(page.items, current.items),
-      runs: mergeProjectionById(page.runs, current.runs),
+      ...latest,
+      items: mergeProjectionById(page.items, latest.items, item => item.revision),
+      runs: mergeProjectionById(page.runs, latest.runs, run => run.version),
       pagination: page.pagination,
-      cursor: Math.max(current.cursor || 0, page.cursor || 0),
+      cursor: Math.max(latest.cursor || 0, page.cursor || 0),
     });
     return Boolean(page.pagination?.items.has_more || page.pagination?.runs.has_more);
   },
 
   createAndOpenConversation: async (question) => {
-    requireConversationLlmPayload();
+    // A local draft/preview can exist before model configuration. Send owns
+    // credential validation and no Agent Run starts here.
     const projectId = useWorkspaceStore.getState().activeProjectId;
     if (!projectId) throw new Error("Please select a project first.");
     const detail = await createConversation({
       project_id: projectId,
-      title: question.slice(0, 80),
+      title: conversationTitle(question),
       resource_intents: [],
     });
     const summary: ConversationSummary = {
@@ -158,6 +177,16 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }));
     get().loadConversation(detail);
     return detail;
+  },
+
+  renameConversation: async (conversationId, title) => {
+    const detail = await patchConversation(conversationId, { title: title.trim() });
+    set(state => ({
+      summaries: state.summaries.map(item => item.id === conversationId ? { ...item, title: detail.title } : item),
+      detailById: state.detailById[conversationId] ? {
+        ...state.detailById, [conversationId]: { ...state.detailById[conversationId], title: detail.title },
+      } : state.detailById,
+    }));
   },
 
   deleteConversationById: async (conversationId) => {
@@ -195,20 +224,57 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }));
   },
 
-  loadRunArtifacts: async (conversationId, runId, expectedArtifactIds) => {
+  loadArtifact: async (projectId, artifactId, options) => {
+    const artifact = await getProjectArtifact(projectId, artifactId, options.signal);
+    options.signal.throwIfAborted();
+    const cached = get().artifactsById[artifactId];
+    if (artifact.id !== artifactId || (cached && (
+      cached.session_id !== artifact.session_id || cached.run_id !== artifact.run_id
+    ))) {
+      throw new Error("Artifact identity conflicts with the requested projection.");
+    }
+    options.beforeCommit();
+    set((state) => upsertArtifacts(state, [artifact]));
+  },
+
+  loadRunArtifacts: async (conversationId, runId, expectedArtifactIds, options) => {
     const artifactIds = [...new Set(expectedArtifactIds)];
     if (artifactIds.length === 0) return;
-    if (artifactIds.every((artifactId) => Boolean(get().artifactsById[artifactId]))) return;
+    const isLoaded = () => artifactIds.every((artifactId) => {
+      const artifact = get().artifactsById[artifactId];
+      return artifact?.session_id === conversationId && artifact.run_id === runId;
+    });
+
+    const load = async () => {
+      options?.signal?.throwIfAborted();
+      const artifacts = await getConversationRunArtifacts(conversationId, runId, options?.signal);
+      options?.signal?.throwIfAborted();
+      const ids = new Set(artifacts.map((artifact) => artifact.id));
+      if (ids.size !== artifacts.length || artifacts.some((artifact) => (
+        artifact.session_id !== conversationId || artifact.run_id !== runId
+      )) || (options && artifactIds.some((id) => !ids.has(id)))) {
+        throw new Error("Artifact response does not match the requested run.");
+      }
+      if (artifacts.some((artifact) => {
+        const cached = get().artifactsById[artifact.id];
+        return cached && (cached.session_id !== conversationId || cached.run_id !== runId);
+      })) {
+        throw new Error("Artifact identity conflicts with the existing projection.");
+      }
+      options?.beforeCommit();
+      set((state) => upsertArtifacts(state, artifacts));
+      options?.afterCommit();
+    };
+    // A caller's cancellation or activation must not affect another consumer.
+    if (options) return load();
+    if (isLoaded()) return;
 
     const requestKey = `${conversationId}:${runId}`;
     const activeRequest = artifactLoadRequests.get(requestKey);
     if (activeRequest) await activeRequest;
-    if (artifactIds.every((artifactId) => Boolean(get().artifactsById[artifactId]))) return;
+    if (isLoaded()) return;
 
-    const request = (async () => {
-      const artifacts = await getConversationRunArtifacts(conversationId, runId);
-      set((state) => upsertArtifacts(state, artifacts));
-    })();
+    const request = load();
     artifactLoadRequests.set(requestKey, request);
     try {
       await request;
@@ -258,13 +324,15 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         recent_agent_run_id: detail.runs.at(-1)?.id || null,
       },
     });
+    const latest = get().detailById[conversationId];
+    if (!latest) return;
     get().loadConversation({
-      ...detail,
-      items: mergeProjectionById(detail.items, created.projection.items),
-      runs: mergeProjectionById(detail.runs, created.projection.runs),
-      cursor: Math.max(detail.cursor || 0, created.event_cursor, created.projection.cursor),
+      ...latest,
+      items: mergeProjectionById(latest.items, created.projection.items, item => item.revision),
+      runs: mergeProjectionById(latest.runs, created.projection.runs, run => run.version),
+      cursor: Math.max(latest.cursor || 0, created.event_cursor, created.projection.cursor),
     });
-    void followRun(get, conversationId, created.run_id, created.projection.cursor);
+    void followRun(get, conversationId, created.run_id, get().detailById[conversationId].cursor || 0);
   },
 
   cancelRun: async (runId) => {
@@ -278,12 +346,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       cancel_requested: true,
     }));
     conversationStreamRuntime.stop(run.session_id);
-    const snapshot = await getConversation(run.session_id);
-    get().loadConversation(snapshot);
-    const current = snapshot.runs.find((item) => item.id === runId);
-    if (current && isFollowableRun(current.status)) {
-      void followRun(get, run.session_id, runId, snapshot.cursor || 0);
-    }
+    await get().openConversation(run.session_id);
   },
 
   resolveApproval: async (runId, approvalId, approved) => {
@@ -392,14 +455,15 @@ function preserveLiveProjection(
 ): ConversationDetail {
   if (!current) return snapshot;
   const currentItems = new Map(current.items.map((item) => [item.id, item]));
-  const items = mergeProjectionById(current.items, snapshot.items).sort(
+  const items = mergeProjectionById(current.items, snapshot.items, item => item.revision).sort(
     (left, right) => left.sequence - right.sequence
       || left.created_at.localeCompare(right.created_at)
       || left.id.localeCompare(right.id),
   );
   return {
-    ...snapshot,
-    runs: mergeProjectionById(current.runs, snapshot.runs).sort(
+    ...((snapshot.cursor || 0) < (current.cursor || 0) ? current : snapshot),
+    cursor: Math.max(current.cursor || 0, snapshot.cursor || 0),
+    runs: mergeProjectionById(current.runs, snapshot.runs, run => run.version).sort(
       (left, right) => left.session_sequence - right.session_sequence,
     ),
     items: items.map((item) => {

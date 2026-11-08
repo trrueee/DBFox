@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 import { remarkDbfoxCitations } from "./remarkDbfoxCitations";
 import { remarkSafeBreaks } from "./remarkSafeBreaks";
 import "./MarkdownContent.css";
+import { artifactKind, ResourceIcon } from "../../../components/resources/resourcePresentation";
+import type { ConversationArtifact } from "../../../types/conversation";
 
 const BASE_MARKDOWN_COMPONENTS: Components = {
   h1: ({ children }) => <h1 className="hifi-md-h1">{children}</h1>,
@@ -42,6 +44,10 @@ interface ArtifactEmbedComponentProps {
   "data-artifact-id"?: string;
 }
 
+function shortCitationLabel(label: string): string {
+  return label.length > 24 || /[\n*#]/.test(label) ? "数据来源" : label;
+}
+
 export function MarkdownContent({
   content,
   className = "",
@@ -49,6 +55,7 @@ export function MarkdownContent({
   artifactRefs = [],
   onCitation,
   renderArtifact,
+  artifacts = [],
 }: {
   content: string;
   className?: string;
@@ -56,6 +63,7 @@ export function MarkdownContent({
   artifactRefs?: Array<{ artifact_id: string }>;
   onCitation?: (artifactId: string) => void;
   renderArtifact?: (artifactId: string) => ReactNode;
+  artifacts?: readonly Pick<ConversationArtifact, "id" | "type" | "title">[];
 }) {
   const citationIndex = new Map<string, number>();
   for (const citation of citations) {
@@ -73,15 +81,19 @@ export function MarkdownContent({
       if (href?.startsWith(prefix)) {
         const artifactId = decodeURIComponent(href.slice(prefix.length));
         const citation = citations.find((item) => item.artifact_id === artifactId);
+        const artifact = artifacts.find(item => item.id === artifactId);
+        const label = artifact?.title || citation?.label || "关联成果";
         return (
           <button
             type="button"
             className="hifi-md-citation"
-            aria-label={`查看证据：${citation?.label || artifactId}`}
-            title={citation?.label || "查看关联数据工件"}
+            aria-label={`查看证据：${label}`}
+            title={label}
             onClick={() => onCitation?.(artifactId)}
           >
-            {children}
+            <ResourceIcon name={artifact?.title} kind={artifact ? artifactKind(artifact.type, artifact.title) : "document"} size={14} />
+            <span className="hifi-md-citation__label">{artifact?.title || shortCitationLabel(label)}</span>
+            <span className="hifi-md-citation__index">{children}</span>
           </button>
         );
       }
@@ -112,16 +124,24 @@ export function MarkdownContent({
       {unreferencedCitations.length > 0 && (
         <nav className="hifi-md-sources" aria-label="回答证据">
           <span>证据</span>
-          {unreferencedCitations.map((citation) => (
+          {unreferencedCitations.map((citation) => {
+            const artifact = artifacts.find(item => item.id === citation.artifact_id);
+            const label = artifact?.title || citation.label || "关联成果";
+            return (
             <button
               key={citation.artifact_id}
               type="button"
               onClick={() => onCitation?.(citation.artifact_id)}
-              aria-label={`查看证据：${citation.label || citation.artifact_id}`}
+              className="hifi-md-citation"
+              title={label}
+              aria-label={`查看证据：${label}`}
             >
-              [{citationIndex.get(citation.artifact_id)}] {citation.label || "数据工件"}
+              <ResourceIcon name={artifact?.title} kind={artifact ? artifactKind(artifact.type, artifact.title) : "document"} size={14} />
+              <span className="hifi-md-citation__label">{artifact?.title || shortCitationLabel(label)}</span>
+              <span className="hifi-md-citation__index">{citationIndex.get(citation.artifact_id)}</span>
             </button>
-          ))}
+            );
+          })}
         </nav>
       )}
     </div>

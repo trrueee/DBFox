@@ -1,0 +1,320 @@
+{
+  "package_digest": "2b7cd5337f8a847bc1d73dfa047b3b42022fe9f0ace383678161d7ea3b97c6f9",
+  "actual_references": [
+    {
+      "label": "Adversarial Human During Drag 5 · frame_1 / layer_1 · r5",
+      "authority": {
+        "kind": "dbfox.pixel.document",
+        "id": "pixel_fd6f62efd4bf4121892810022f4e5eec"
+      },
+      "object": {
+        "kind": "dbfox.pixel.frame",
+        "id": "frame_1",
+        "version": "5"
+      },
+      "locator": "pixel://pixel_fd6f62efd4bf4121892810022f4e5eec;revision=5;frame=frame_1;layer=layer_1"
+    },
+    {
+      "label": "Adversarial Human During Drag 5 · r5",
+      "artifact_id": "artifact_24c10548333d4531a697f0bc2f210fb0"
+    }
+  ],
+  "exports": [
+    {
+      "key": "cancelled",
+      "run_id": "run_aae2f0b85eeb4ba68fc7db4786ccfdfd",
+      "session_id": "1a7a845c-10d2-4835-9491-aabda1dd461d",
+      "artifact_id": "artifact_6ae4d638a4bb4039825c00527ba1a8fa",
+      "payload": {
+        "content_hash": "c9593ea793a3dad73a161beab5d7eea1972509ae40a1e07a840b7e8e31624e59",
+        "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+        "frame_count": 1,
+        "height": 16,
+        "layer_count": 1,
+        "palette_count": 3,
+        "parent_revision": 4,
+        "project_id": "pixel-redteam-ui",
+        "revision": 5,
+        "status": "active",
+        "tag_count": 0,
+        "title": "Adversarial Human During Drag 5",
+        "width": 16
+      },
+      "provenance": {
+        "tool_invocation_id": "invocation_120c37cd4618449ca737827c68bb873b",
+        "tool_name": "dbfox_pixel_ff3efa59__pixel_export"
+      },
+      "invocation_id": "invocation_120c37cd4618449ca737827c68bb873b",
+      "invocation_resources": [
+        {
+          "id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+          "kind": "dbfox.pixel.document",
+          "version": "5"
+        }
+      ],
+      "package_digest": "2b7cd5337f8a847bc1d73dfa047b3b42022fe9f0ace383678161d7ea3b97c6f9"
+    },
+    {
+      "key": "current",
+      "run_id": "run_16c59f50a0ed4f328655e8a20a68a536",
+      "session_id": "4e78b48f-f100-4571-9b4b-f00e657a4651",
+      "artifact_id": "artifact_24c10548333d4531a697f0bc2f210fb0",
+      "payload": {
+        "content_hash": "c9593ea793a3dad73a161beab5d7eea1972509ae40a1e07a840b7e8e31624e59",
+        "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+        "frame_count": 1,
+        "height": 16,
+        "layer_count": 1,
+        "palette_count": 3,
+        "parent_revision": 4,
+        "project_id": "pixel-redteam-ui",
+        "revision": 5,
+        "status": "active",
+        "tag_count": 0,
+        "title": "Adversarial Human During Drag 5",
+        "width": 16
+      },
+      "provenance": {
+        "tool_invocation_id": "invocation_77f706feefbf4707a041990f76b7bf22",
+        "tool_name": "dbfox_pixel_ff3efa59__pixel_export"
+      },
+      "invocation_id": "invocation_77f706feefbf4707a041990f76b7bf22",
+      "invocation_resources": [
+        {
+          "id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+          "kind": "dbfox.pixel.document",
+          "version": "5"
+        }
+      ],
+      "package_digest": "2b7cd5337f8a847bc1d73dfa047b3b42022fe9f0ace383678161d7ea3b97c6f9"
+    }
+  ],
+  "onask": {
+    "run_id": "run_c0417f86ca414826879c46d9ac69022c",
+    "status": "completed",
+    "before": {
+      "project_id": "pixel-redteam-ui",
+      "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+      "revision": 5,
+      "parent_revision": 4,
+      "content_hash": "c9593ea793a3dad73a161beab5d7eea1972509ae40a1e07a840b7e8e31624e59",
+      "title": "Adversarial Human During Drag 5",
+      "width": 16,
+      "height": 16,
+      "frame_count": 1,
+      "layer_count": 1,
+      "palette_count": 3,
+      "tag_count": 0,
+      "status": "active"
+    },
+    "after": {
+      "project_id": "pixel-redteam-ui",
+      "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+      "revision": 6,
+      "parent_revision": 5,
+      "content_hash": "cce76b85a08f992e32cde70d88feceaa1a203292f2bdc76b4f7e096114640221",
+      "title": "Adversarial Human During Drag 5",
+      "width": 16,
+      "height": 16,
+      "frame_count": 1,
+      "layer_count": 1,
+      "palette_count": 3,
+      "tag_count": 0,
+      "status": "active"
+    },
+    "artifact_other_session_available": false,
+    "changed_pixel_indices": [
+      240
+    ],
+    "observations": {
+      "frames": {
+        "artifact_ids": [],
+        "facts": {
+          "has_more": false,
+          "items": [
+            {
+              "duration_ms": 100,
+              "id": "frame_1"
+            }
+          ],
+          "kind": "frames",
+          "page": 0,
+          "page_size": 16,
+          "pixels": null,
+          "selection": null,
+          "summary": {
+            "content_hash": "c9593ea793a3dad73a161beab5d7eea1972509ae40a1e07a840b7e8e31624e59",
+            "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+            "frame_count": 1,
+            "height": 16,
+            "layer_count": 1,
+            "palette_count": 3,
+            "parent_revision": 4,
+            "project_id": "pixel-redteam-ui",
+            "revision": 5,
+            "status": "active",
+            "tag_count": 0,
+            "title": "Adversarial Human During Drag 5",
+            "width": 16
+          },
+          "tag_id": null,
+          "total": 1
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Pixel inspection returned a bounded page; inspect the next page when has_more is true."
+      },
+      "layers": {
+        "artifact_ids": [],
+        "facts": {
+          "has_more": false,
+          "items": [
+            {
+              "id": "layer_1",
+              "locked": false,
+              "name": "Layer 1",
+              "visible": true
+            }
+          ],
+          "kind": "layers",
+          "page": 0,
+          "page_size": 16,
+          "pixels": null,
+          "selection": null,
+          "summary": {
+            "content_hash": "c9593ea793a3dad73a161beab5d7eea1972509ae40a1e07a840b7e8e31624e59",
+            "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+            "frame_count": 1,
+            "height": 16,
+            "layer_count": 1,
+            "palette_count": 3,
+            "parent_revision": 4,
+            "project_id": "pixel-redteam-ui",
+            "revision": 5,
+            "status": "active",
+            "tag_count": 0,
+            "title": "Adversarial Human During Drag 5",
+            "width": 16
+          },
+          "tag_id": null,
+          "total": 1
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Pixel inspection returned a bounded page; inspect the next page when has_more is true."
+      },
+      "edit": {
+        "artifact_ids": [
+          "artifact_f942b66c9bef43d98d37749cec5f0555"
+        ],
+        "facts": {
+          "changed": true,
+          "changed_frame_ids": [
+            "frame_1"
+          ],
+          "changed_frame_ids_truncated": false,
+          "changed_layer_ids": [
+            "layer_1"
+          ],
+          "changed_pixel_count": 1,
+          "content_hash": "cce76b85a08f992e32cde70d88feceaa1a203292f2bdc76b4f7e096114640221",
+          "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+          "frame_count": 1,
+          "height": 16,
+          "layer_count": 1,
+          "palette_count": 3,
+          "parent_revision": 5,
+          "project_id": "pixel-redteam-ui",
+          "revision": 6,
+          "status": "active",
+          "tag_count": 0,
+          "title": "Adversarial Human During Drag 5",
+          "width": 16
+        },
+        "retryable": false,
+        "status": "succeeded",
+        "summary": "Pixel pixel_fd6f62efd4bf4121892810022f4e5eec revision 6; changed=True."
+      }
+    },
+    "max_observation_bytes": 714,
+    "invocations": [
+      {
+        "id": "invocation_c27888913b0d4129b1baa9b2e4c7433e",
+        "name": "dbfox_pixel_ff3efa59__pixel_inspect",
+        "attempts": 1,
+        "package_digest": "2b7cd5337f8a847bc1d73dfa047b3b42022fe9f0ace383678161d7ea3b97c6f9",
+        "resources": [
+          {
+            "id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+            "kind": "dbfox.pixel.document",
+            "version": "5"
+          }
+        ],
+        "input": {
+          "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+          "kind": "frames",
+          "page": 0,
+          "page_size": 16
+        }
+      },
+      {
+        "id": "invocation_582d013c0499476684202cdb9901595d",
+        "name": "dbfox_pixel_ff3efa59__pixel_inspect",
+        "attempts": 1,
+        "package_digest": "2b7cd5337f8a847bc1d73dfa047b3b42022fe9f0ace383678161d7ea3b97c6f9",
+        "resources": [
+          {
+            "id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+            "kind": "dbfox.pixel.document",
+            "version": "5"
+          }
+        ],
+        "input": {
+          "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+          "kind": "layers",
+          "page": 0,
+          "page_size": 16
+        }
+      },
+      {
+        "id": "invocation_23cbcb89aff344f8a485f3126d58c41b",
+        "name": "dbfox_pixel_ff3efa59__pixel_rect",
+        "attempts": 1,
+        "package_digest": "2b7cd5337f8a847bc1d73dfa047b3b42022fe9f0ace383678161d7ea3b97c6f9",
+        "resources": [
+          {
+            "id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+            "kind": "dbfox.pixel.document",
+            "version": "5"
+          }
+        ],
+        "input": {
+          "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+          "expected_version": 5,
+          "operation": {
+            "filled": true,
+            "frame_id": "frame_1",
+            "kind": "rect",
+            "layer_id": "layer_1",
+            "palette_index": 1,
+            "rect": {
+              "height": 1,
+              "width": 1,
+              "x": 0,
+              "y": 15
+            }
+          }
+        }
+      }
+    ]
+  },
+  "historical_preview": {
+    "unchanged_after_agent_edit": true,
+    "sha256": "689212f1f23ca70811ed4ba940b86057f418d6f17a0aeb92beb8724136c90731",
+    "bytes": 84,
+    "size": [
+      16,
+      16
+    ]
+  }
+}

@@ -1,0 +1,5487 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "case_id": "simple-creation",
+      "category": "simple-creation",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 8,
+            "height": 8,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        }
+      ],
+      "assertions": {
+        "revision": 1,
+        "nonzero": 0,
+        "frame_count": 1,
+        "layer_count": 1
+      }
+    },
+    {
+      "case_id": "incremental-modification",
+      "category": "incremental-modification",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 8,
+            "height": 8,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "block",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 1,
+                  "y": 1,
+                  "width": 3,
+                  "height": 3
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          },
+          "allowed_changes": [
+            {
+              "frame_id": "frame_1",
+              "layer_id": "layer_1",
+              "x": 1,
+              "y": 1,
+              "width": 3,
+              "height": 3
+            }
+          ]
+        },
+        {
+          "id": "detail",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 2,
+                  "y": 2,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 2,
+                "filled": true
+              }
+            ]
+          },
+          "allowed_changes": [
+            {
+              "frame_id": "frame_1",
+              "layer_id": "layer_1",
+              "x": 2,
+              "y": 2,
+              "width": 1,
+              "height": 1
+            }
+          ]
+        }
+      ],
+      "assertions": {
+        "revision": 3,
+        "nonzero": 9,
+        "points": [
+          [
+            "frame_1",
+            "layer_1",
+            2,
+            2,
+            2
+          ],
+          [
+            "frame_1",
+            "layer_1",
+            1,
+            1,
+            1
+          ],
+          [
+            "frame_1",
+            "layer_1",
+            0,
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "case_id": "multi-stage-creation",
+      "category": "multi-stage-creation",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 8,
+            "height": 8,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "shape",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 1,
+                  "y": 1,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "duplicate",
+          "tool": "frame_duplicate",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operation": {
+              "kind": "frame_duplicate",
+              "source_frame_id": "$frames.items.0.id",
+              "frame_id": "second",
+              "position": 1
+            }
+          }
+        },
+        {
+          "id": "layer",
+          "tool": "layer_create",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operation": {
+              "kind": "layer_create",
+              "layer_id": "highlights",
+              "name": "Highlights",
+              "position": 1
+            }
+          }
+        },
+        {
+          "id": "highlight",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "second",
+                "layer_id": "highlights",
+                "rect": {
+                  "x": 1,
+                  "y": 1,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 2,
+                "filled": true
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "anim",
+                "name": "Animation",
+                "frame_ids": [
+                  "$frames.items.0.id",
+                  "second"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "assertions": {
+        "revision": 5,
+        "frame_count": 2,
+        "layer_count": 2,
+        "points": [
+          [
+            "second",
+            "layer_1",
+            2,
+            2,
+            1
+          ],
+          [
+            "second",
+            "highlights",
+            1,
+            1,
+            2
+          ],
+          [
+            "frame_1",
+            "highlights",
+            1,
+            1,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "case_id": "invalid-instruction-recovery",
+      "category": "invalid-instruction-recovery",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 8,
+            "height": 8,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "outside",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 7,
+                  "y": 7,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          },
+          "succeeds": false,
+          "unchanged": true
+        },
+        {
+          "id": "after-invalid",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "frame_id": "$frames.items.0.id",
+            "layer_id": "$layers.items.0.id",
+            "rect": {
+              "x": 6,
+              "y": 6,
+              "width": 2,
+              "height": 2
+            }
+          },
+          "unchanged": true
+        },
+        {
+          "id": "correct",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 6,
+                  "y": 6,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          }
+        }
+      ],
+      "assertions": {
+        "revision": 2,
+        "nonzero": 4
+      }
+    },
+    {
+      "case_id": "inspect-before-edit",
+      "category": "inspect-before-edit",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 8,
+            "height": 8,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "draw",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 1,
+                  "y": 1,
+                  "width": 3,
+                  "height": 3
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "sample",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "frame_id": "$frames.items.0.id",
+            "layer_id": "$layers.items.0.id",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 4,
+              "height": 4
+            }
+          },
+          "unchanged": true
+        },
+        {
+          "id": "sample-correction",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 1,
+                  "y": 1,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 2,
+                "filled": true
+              }
+            ]
+          },
+          "allowed_changes": [
+            {
+              "frame_id": "frame_1",
+              "layer_id": "layer_1",
+              "x": 1,
+              "y": 1,
+              "width": 1,
+              "height": 1
+            }
+          ]
+        }
+      ],
+      "assertions": {
+        "revision": 3,
+        "provider_pixels": "sample"
+      }
+    },
+    {
+      "case_id": "stale-version",
+      "category": "stale-version",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 8,
+            "height": 8,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "fresh",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 1,
+                  "y": 1,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "stale",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$create.revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 2,
+                "filled": true
+              }
+            ]
+          },
+          "succeeds": false,
+          "unchanged": true
+        },
+        {
+          "id": "latest",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "retry-intent-after-inspect",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 2,
+                "filled": true
+              }
+            ]
+          }
+        }
+      ],
+      "assertions": {
+        "revision": 3,
+        "nonzero": 5
+      }
+    },
+    {
+      "case_id": "no-op",
+      "category": "no-op",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 8,
+            "height": 8,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "block",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 1,
+                  "y": 1,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "same",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 1,
+                  "y": 1,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          },
+          "unchanged": true
+        }
+      ],
+      "assertions": {
+        "revision": 2,
+        "noops": [
+          "same"
+        ]
+      }
+    },
+    {
+      "case_id": "ambiguous-request",
+      "category": "ambiguous-request",
+      "prompt": "Draw two matching markers; when asked to improve 'that one', ask which marker before changing anything.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 8,
+            "height": 8,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "two-targets",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 1,
+                  "y": 1,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 6,
+                  "y": 1,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "clarify",
+          "kind": "answer",
+          "text": "请明确要修改左侧还是右侧标记；我尚未替你选择目标。"
+        }
+      ],
+      "assertions": {
+        "revision": 2,
+        "nonzero": 2,
+        "clarification": true
+      }
+    },
+    {
+      "case_id": "large-document",
+      "category": "large-document",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 128,
+            "height": 128,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers16",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "layer_create",
+                "layer_id": "large_1",
+                "name": "Layer 1",
+                "position": 1
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_2",
+                "name": "Layer 2",
+                "position": 2
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_3",
+                "name": "Layer 3",
+                "position": 3
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_4",
+                "name": "Layer 4",
+                "position": 4
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_5",
+                "name": "Layer 5",
+                "position": 5
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_6",
+                "name": "Layer 6",
+                "position": 6
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_7",
+                "name": "Layer 7",
+                "position": 7
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_8",
+                "name": "Layer 8",
+                "position": 8
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_9",
+                "name": "Layer 9",
+                "position": 9
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_10",
+                "name": "Layer 10",
+                "position": 10
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_11",
+                "name": "Layer 11",
+                "position": 11
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_12",
+                "name": "Layer 12",
+                "position": 12
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_13",
+                "name": "Layer 13",
+                "position": 13
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_14",
+                "name": "Layer 14",
+                "position": 14
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "large_15",
+                "name": "Layer 15",
+                "position": 15
+              }
+            ]
+          }
+        },
+        {
+          "id": "upper-corner",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "large_15",
+                "rect": {
+                  "x": 127,
+                  "y": 127,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 2,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "large-pixels",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "frame_id": "$frames.items.0.id",
+            "layer_id": "large_15",
+            "rect": {
+              "x": 112,
+              "y": 112,
+              "width": 16,
+              "height": 16
+            }
+          },
+          "unchanged": true
+        },
+        {
+          "id": "over-quota",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_create",
+                "frame_id": "too-large",
+                "position": 1
+              }
+            ]
+          },
+          "succeeds": false,
+          "unchanged": true
+        }
+      ],
+      "assertions": {
+        "revision": 3,
+        "frame_count": 1,
+        "layer_count": 16,
+        "nonzero": 1,
+        "provider_pixels": "large-pixels"
+      }
+    },
+    {
+      "case_id": "bounded-context",
+      "category": "bounded-context",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+            "width": 32,
+            "height": 32,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "many-frames",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_2",
+                "position": 1
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_3",
+                "position": 2
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_4",
+                "position": 3
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_5",
+                "position": 4
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_6",
+                "position": 5
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_7",
+                "position": 6
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_8",
+                "position": 7
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_9",
+                "position": 8
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_10",
+                "position": 9
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_11",
+                "position": 10
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_12",
+                "position": 11
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_13",
+                "position": 12
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_14",
+                "position": 13
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_15",
+                "position": 14
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_16",
+                "position": 15
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_17",
+                "position": 16
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_18",
+                "position": 17
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_19",
+                "position": 18
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_20",
+                "position": 19
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_21",
+                "position": 20
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_22",
+                "position": 21
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_23",
+                "position": 22
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_24",
+                "position": 23
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_25",
+                "position": 24
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_26",
+                "position": 25
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_27",
+                "position": 26
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_28",
+                "position": 27
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_29",
+                "position": 28
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_30",
+                "position": 29
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_31",
+                "position": 30
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_32",
+                "position": 31
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_33",
+                "position": 32
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_34",
+                "position": 33
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_35",
+                "position": 34
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_36",
+                "position": 35
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_37",
+                "position": 36
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_38",
+                "position": 37
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_39",
+                "position": 38
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_40",
+                "position": 39
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_41",
+                "position": 40
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_42",
+                "position": 41
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_43",
+                "position": 42
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_44",
+                "position": 43
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_45",
+                "position": 44
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_46",
+                "position": 45
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_47",
+                "position": 46
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_48",
+                "position": 47
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_49",
+                "position": 48
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_50",
+                "position": 49
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_51",
+                "position": 50
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_52",
+                "position": 51
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_53",
+                "position": 52
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_54",
+                "position": 53
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_55",
+                "position": 54
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_56",
+                "position": 55
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_57",
+                "position": 56
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_58",
+                "position": 57
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_59",
+                "position": 58
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_60",
+                "position": 59
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_61",
+                "position": 60
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_62",
+                "position": 61
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_63",
+                "position": 62
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "frame_64",
+                "position": 63
+              }
+            ]
+          }
+        },
+        {
+          "id": "tags",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "tag_set",
+                "tag_id": "tag0",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag1",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag2",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag3",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag4",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag5",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag6",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag7",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag8",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag9",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag10",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag11",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag12",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag13",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag14",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "tag15",
+                "name": "狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊狐🦊",
+                "frame_ids": [
+                  "frame_1",
+                  "frame_2",
+                  "frame_3",
+                  "frame_4",
+                  "frame_5",
+                  "frame_6",
+                  "frame_7",
+                  "frame_8",
+                  "frame_9",
+                  "frame_10",
+                  "frame_11",
+                  "frame_12",
+                  "frame_13",
+                  "frame_14",
+                  "frame_15",
+                  "frame_16",
+                  "frame_17",
+                  "frame_18",
+                  "frame_19",
+                  "frame_20",
+                  "frame_21",
+                  "frame_22",
+                  "frame_23",
+                  "frame_24",
+                  "frame_25",
+                  "frame_26",
+                  "frame_27",
+                  "frame_28",
+                  "frame_29",
+                  "frame_30",
+                  "frame_31",
+                  "frame_32",
+                  "frame_33",
+                  "frame_34",
+                  "frame_35",
+                  "frame_36",
+                  "frame_37",
+                  "frame_38",
+                  "frame_39",
+                  "frame_40",
+                  "frame_41",
+                  "frame_42",
+                  "frame_43",
+                  "frame_44",
+                  "frame_45",
+                  "frame_46",
+                  "frame_47",
+                  "frame_48",
+                  "frame_49",
+                  "frame_50",
+                  "frame_51",
+                  "frame_52",
+                  "frame_53",
+                  "frame_54",
+                  "frame_55",
+                  "frame_56",
+                  "frame_57",
+                  "frame_58",
+                  "frame_59",
+                  "frame_60",
+                  "frame_61",
+                  "frame_62",
+                  "frame_63",
+                  "frame_64"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "inspect-tags",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "tags"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "page0",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 0,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "page1",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 1,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "page2",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 2,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "page3",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 3,
+            "page_size": 16
+          },
+          "unchanged": true
+        }
+      ],
+      "assertions": {
+        "revision": 3,
+        "frame_count": 64,
+        "layer_count": 1,
+        "frame_pages": [
+          "page0",
+          "page1",
+          "page2",
+          "page3"
+        ]
+      }
+    },
+    {
+      "case_id": "human-then-agent",
+      "category": "human-then-agent",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 8,
+            "height": 8,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "agent-first",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 1,
+                  "y": 1,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "human",
+          "kind": "human",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "mutation_id": "human-one",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 6,
+                  "y": 6,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 2,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "old-agent-intent",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          },
+          "succeeds": false,
+          "unchanged": true
+        },
+        {
+          "id": "human-visible",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "agent-after-inspect",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          },
+          "allowed_changes": [
+            {
+              "frame_id": "frame_1",
+              "layer_id": "layer_1",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1
+            }
+          ]
+        }
+      ],
+      "assertions": {
+        "revision": 4,
+        "points": [
+          [
+            "frame_1",
+            "layer_1",
+            6,
+            6,
+            2
+          ],
+          [
+            "frame_1",
+            "layer_1",
+            0,
+            0,
+            1
+          ]
+        ],
+        "human_steps": 1
+      }
+    },
+    {
+      "case_id": "negative-no-mutation",
+      "category": "negative-no-mutation",
+      "prompt": "Create a blank document; then refuse importing arbitrary remote images without changing the document.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 8,
+            "height": 8,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "deny",
+          "kind": "answer",
+          "text": "No changes made: loading an external image URL is outside the supported Pixel operations."
+        }
+      ],
+      "assertions": {
+        "revision": 1,
+        "nonzero": 0
+      }
+    },
+    {
+      "case_id": "whole-document-replacement-rejected",
+      "category": "whole-document-replacement-rejected",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 8,
+            "height": 8,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "replace-all",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "document": {
+              "title": "Replacement"
+            },
+            "operations": [
+              {
+                "kind": "replace_document",
+                "document": {}
+              }
+            ]
+          },
+          "succeeds": false,
+          "unchanged": true
+        },
+        {
+          "id": "unchanged",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id"
+          },
+          "unchanged": true
+        }
+      ],
+      "assertions": {
+        "revision": 1,
+        "nonzero": 0
+      }
+    },
+    {
+      "case_id": "hundreds-of-frames",
+      "category": "hundreds-of-frames",
+      "prompt": "Create a Pixel document and perform only the explicitly specified incremental operations.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Pixel independent example",
+            "width": 16,
+            "height": 16,
+            "expected_version": 0
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-frames-1",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_1",
+                "position": 1
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_2",
+                "position": 2
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_3",
+                "position": 3
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_4",
+                "position": 4
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_5",
+                "position": 5
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_6",
+                "position": 6
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_7",
+                "position": 7
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_8",
+                "position": 8
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_9",
+                "position": 9
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_10",
+                "position": 10
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_11",
+                "position": 11
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_12",
+                "position": 12
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_13",
+                "position": 13
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_14",
+                "position": 14
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_15",
+                "position": 15
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_16",
+                "position": 16
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_17",
+                "position": 17
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_18",
+                "position": 18
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_19",
+                "position": 19
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_20",
+                "position": 20
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_21",
+                "position": 21
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_22",
+                "position": 22
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_23",
+                "position": 23
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_24",
+                "position": 24
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_25",
+                "position": 25
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_26",
+                "position": 26
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_27",
+                "position": 27
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_28",
+                "position": 28
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_29",
+                "position": 29
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_30",
+                "position": 30
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_31",
+                "position": 31
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_32",
+                "position": 32
+              }
+            ]
+          }
+        },
+        {
+          "id": "scale-frames-33",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_33",
+                "position": 33
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_34",
+                "position": 34
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_35",
+                "position": 35
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_36",
+                "position": 36
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_37",
+                "position": 37
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_38",
+                "position": 38
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_39",
+                "position": 39
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_40",
+                "position": 40
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_41",
+                "position": 41
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_42",
+                "position": 42
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_43",
+                "position": 43
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_44",
+                "position": 44
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_45",
+                "position": 45
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_46",
+                "position": 46
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_47",
+                "position": 47
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_48",
+                "position": 48
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_49",
+                "position": 49
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_50",
+                "position": 50
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_51",
+                "position": 51
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_52",
+                "position": 52
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_53",
+                "position": 53
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_54",
+                "position": 54
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_55",
+                "position": 55
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_56",
+                "position": 56
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_57",
+                "position": 57
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_58",
+                "position": 58
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_59",
+                "position": 59
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_60",
+                "position": 60
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_61",
+                "position": 61
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_62",
+                "position": 62
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_63",
+                "position": 63
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_64",
+                "position": 64
+              }
+            ]
+          }
+        },
+        {
+          "id": "scale-frames-65",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_65",
+                "position": 65
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_66",
+                "position": 66
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_67",
+                "position": 67
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_68",
+                "position": 68
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_69",
+                "position": 69
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_70",
+                "position": 70
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_71",
+                "position": 71
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_72",
+                "position": 72
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_73",
+                "position": 73
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_74",
+                "position": 74
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_75",
+                "position": 75
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_76",
+                "position": 76
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_77",
+                "position": 77
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_78",
+                "position": 78
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_79",
+                "position": 79
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_80",
+                "position": 80
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_81",
+                "position": 81
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_82",
+                "position": 82
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_83",
+                "position": 83
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_84",
+                "position": 84
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_85",
+                "position": 85
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_86",
+                "position": 86
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_87",
+                "position": 87
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_88",
+                "position": 88
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_89",
+                "position": 89
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_90",
+                "position": 90
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_91",
+                "position": 91
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_92",
+                "position": 92
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_93",
+                "position": 93
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_94",
+                "position": 94
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_95",
+                "position": 95
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_96",
+                "position": 96
+              }
+            ]
+          }
+        },
+        {
+          "id": "scale-frames-97",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_97",
+                "position": 97
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_98",
+                "position": 98
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_99",
+                "position": 99
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_100",
+                "position": 100
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_101",
+                "position": 101
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_102",
+                "position": 102
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_103",
+                "position": 103
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_104",
+                "position": 104
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_105",
+                "position": 105
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_106",
+                "position": 106
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_107",
+                "position": 107
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_108",
+                "position": 108
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_109",
+                "position": 109
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_110",
+                "position": 110
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_111",
+                "position": 111
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_112",
+                "position": 112
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_113",
+                "position": 113
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_114",
+                "position": 114
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_115",
+                "position": 115
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_116",
+                "position": 116
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_117",
+                "position": 117
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_118",
+                "position": 118
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_119",
+                "position": 119
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_120",
+                "position": 120
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_121",
+                "position": 121
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_122",
+                "position": 122
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_123",
+                "position": 123
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_124",
+                "position": 124
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_125",
+                "position": 125
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_126",
+                "position": 126
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_127",
+                "position": 127
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_128",
+                "position": 128
+              }
+            ]
+          }
+        },
+        {
+          "id": "scale-frames-129",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_129",
+                "position": 129
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_130",
+                "position": 130
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_131",
+                "position": 131
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_132",
+                "position": 132
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_133",
+                "position": 133
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_134",
+                "position": 134
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_135",
+                "position": 135
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_136",
+                "position": 136
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_137",
+                "position": 137
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_138",
+                "position": 138
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_139",
+                "position": 139
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_140",
+                "position": 140
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_141",
+                "position": 141
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_142",
+                "position": 142
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_143",
+                "position": 143
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_144",
+                "position": 144
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_145",
+                "position": 145
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_146",
+                "position": 146
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_147",
+                "position": 147
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_148",
+                "position": 148
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_149",
+                "position": 149
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_150",
+                "position": 150
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_151",
+                "position": 151
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_152",
+                "position": 152
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_153",
+                "position": 153
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_154",
+                "position": 154
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_155",
+                "position": 155
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_156",
+                "position": 156
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_157",
+                "position": 157
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_158",
+                "position": 158
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_159",
+                "position": 159
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_160",
+                "position": 160
+              }
+            ]
+          }
+        },
+        {
+          "id": "scale-frames-161",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_161",
+                "position": 161
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_162",
+                "position": 162
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_163",
+                "position": 163
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_164",
+                "position": 164
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_165",
+                "position": 165
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_166",
+                "position": 166
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_167",
+                "position": 167
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_168",
+                "position": 168
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_169",
+                "position": 169
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_170",
+                "position": 170
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_171",
+                "position": 171
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_172",
+                "position": 172
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_173",
+                "position": 173
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_174",
+                "position": 174
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_175",
+                "position": 175
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_176",
+                "position": 176
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_177",
+                "position": 177
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_178",
+                "position": 178
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_179",
+                "position": 179
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_180",
+                "position": 180
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_181",
+                "position": 181
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_182",
+                "position": 182
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_183",
+                "position": 183
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_184",
+                "position": 184
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_185",
+                "position": 185
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_186",
+                "position": 186
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_187",
+                "position": 187
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_188",
+                "position": 188
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_189",
+                "position": 189
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_190",
+                "position": 190
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_191",
+                "position": 191
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_192",
+                "position": 192
+              }
+            ]
+          }
+        },
+        {
+          "id": "scale-frames-193",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_193",
+                "position": 193
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_194",
+                "position": 194
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_195",
+                "position": 195
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_196",
+                "position": 196
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_197",
+                "position": 197
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_198",
+                "position": 198
+              },
+              {
+                "kind": "frame_create",
+                "frame_id": "scale_199",
+                "position": 199
+              }
+            ]
+          }
+        },
+        {
+          "id": "scale-layer-all-frames",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "layer_create",
+                "layer_id": "scale-overlay",
+                "name": "200 cels",
+                "position": 1
+              }
+            ]
+          }
+        },
+        {
+          "id": "scale-undo-layer",
+          "tool": "pixel_undo",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "restore_revision": "$scale-frames-193.revision"
+          }
+        },
+        {
+          "id": "scale-page-0",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 0,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-1",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 1,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-2",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 2,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-3",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 3,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-4",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 4,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-5",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 5,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-6",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 6,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-7",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 7,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-8",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 8,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-9",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 9,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-10",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 10,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-11",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 11,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-page-12",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames",
+            "page": 12,
+            "page_size": 16
+          },
+          "unchanged": true
+        },
+        {
+          "id": "scale-export",
+          "tool": "pixel_export",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision"
+          },
+          "unchanged": true
+        }
+      ],
+      "assertions": {
+        "revision": 10,
+        "frame_count": 200,
+        "layer_count": 1,
+        "nonzero": 0,
+        "frame_pages": [
+          "scale-page-0",
+          "scale-page-1",
+          "scale-page-2",
+          "scale-page-3",
+          "scale-page-4",
+          "scale-page-5",
+          "scale-page-6",
+          "scale-page-7",
+          "scale-page-8",
+          "scale-page-9",
+          "scale-page-10",
+          "scale-page-11",
+          "scale-page-12"
+        ],
+        "truncated_frame_changes": [
+          "scale-layer-all-frames",
+          "scale-undo-layer"
+        ]
+      }
+    },
+    {
+      "case_id": "fox-knight-stress",
+      "category": "fox-knight-stress",
+      "prompt": "Create a 32×32 fox knight with four distinct idle poses and six distinct attack poses. Keep stable layers, indexed palette, timing and explicit tags. Apply the specified incremental refinements, ask about ambiguity, reject stale edits, inspect after the human shield edit, undo only the temporary correction, then export.",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "pixel_create",
+          "arguments": {
+            "library_id": "$project",
+            "title": "Fox Knight — idle and attack",
+            "width": 32,
+            "height": 32,
+            "expected_version": 0,
+            "palette": [
+              {
+                "name": "Transparent",
+                "color": "#00000000"
+              },
+              {
+                "name": "Outline",
+                "color": "#25243CFF"
+              },
+              {
+                "name": "Fox",
+                "color": "#D97332FF"
+              },
+              {
+                "name": "Cream",
+                "color": "#FFE7B7FF"
+              },
+              {
+                "name": "Steel",
+                "color": "#708DB0FF"
+              },
+              {
+                "name": "Steel light",
+                "color": "#BDD4EAFF"
+              },
+              {
+                "name": "Gold",
+                "color": "#E5B44BFF"
+              },
+              {
+                "name": "Spark",
+                "color": "#FFF4BEFF"
+              }
+            ]
+          }
+        },
+        {
+          "id": "frames",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "frames"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "layers",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id",
+            "kind": "layers"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "silhouette-and-face",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 8,
+                  "y": 5,
+                  "width": 16,
+                  "height": 10
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 9,
+                  "y": 6,
+                  "width": 14,
+                  "height": 8
+                },
+                "palette_index": 2,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 8,
+                  "y": 2,
+                  "width": 5,
+                  "height": 6
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 19,
+                  "y": 2,
+                  "width": 5,
+                  "height": 6
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 9,
+                  "y": 3,
+                  "width": 3,
+                  "height": 4
+                },
+                "palette_index": 2,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 20,
+                  "y": 3,
+                  "width": 3,
+                  "height": 4
+                },
+                "palette_index": 2,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 11,
+                  "y": 11,
+                  "width": 10,
+                  "height": 3
+                },
+                "palette_index": 3,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 15,
+                  "y": 10,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 11,
+                  "y": 8,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 19,
+                  "y": 8,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 10,
+                  "y": 15,
+                  "width": 12,
+                  "height": 11
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 11,
+                  "y": 16,
+                  "width": 10,
+                  "height": 9
+                },
+                "palette_index": 2,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 10,
+                  "y": 26,
+                  "width": 5,
+                  "height": 4
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 18,
+                  "y": 26,
+                  "width": 5,
+                  "height": 4
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 4,
+                  "y": 19,
+                  "width": 7,
+                  "height": 6
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 5,
+                  "y": 20,
+                  "width": 5,
+                  "height": 4
+                },
+                "palette_index": 2,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 4,
+                  "y": 19,
+                  "width": 3,
+                  "height": 3
+                },
+                "palette_index": 3,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "layer-structure",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "layer_update",
+                "layer_id": "$layers.items.0.id",
+                "name": "Fox silhouette"
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "armor",
+                "name": "Armor and sword",
+                "position": 1
+              },
+              {
+                "kind": "layer_create",
+                "layer_id": "effects",
+                "name": "Attack glints",
+                "position": 2
+              }
+            ]
+          }
+        },
+        {
+          "id": "armor-and-equipment",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 10,
+                  "y": 16,
+                  "width": 12,
+                  "height": 8
+                },
+                "palette_index": 4,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 11,
+                  "y": 17,
+                  "width": 3,
+                  "height": 5
+                },
+                "palette_index": 5,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 10,
+                  "y": 23,
+                  "width": 12,
+                  "height": 2
+                },
+                "palette_index": 6,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 15,
+                  "y": 23,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 9,
+                  "y": 4,
+                  "width": 14,
+                  "height": 2
+                },
+                "palette_index": 4,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 15,
+                  "y": 3,
+                  "width": 2,
+                  "height": 4
+                },
+                "palette_index": 6,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 24,
+                  "y": 11,
+                  "width": 2,
+                  "height": 12
+                },
+                "palette_index": 5,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 22,
+                  "y": 21,
+                  "width": 6,
+                  "height": 2
+                },
+                "palette_index": 6,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 24,
+                  "y": 23,
+                  "width": 2,
+                  "height": 3
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "animation-structure",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_duplicate",
+                "source_frame_id": "$frames.items.0.id",
+                "frame_id": "idle_2",
+                "position": 1
+              },
+              {
+                "kind": "frame_duplicate",
+                "source_frame_id": "$frames.items.0.id",
+                "frame_id": "idle_3",
+                "position": 2
+              },
+              {
+                "kind": "frame_duplicate",
+                "source_frame_id": "$frames.items.0.id",
+                "frame_id": "idle_4",
+                "position": 3
+              },
+              {
+                "kind": "frame_duplicate",
+                "source_frame_id": "$frames.items.0.id",
+                "frame_id": "attack_1",
+                "position": 4
+              },
+              {
+                "kind": "frame_duplicate",
+                "source_frame_id": "$frames.items.0.id",
+                "frame_id": "attack_2",
+                "position": 5
+              },
+              {
+                "kind": "frame_duplicate",
+                "source_frame_id": "$frames.items.0.id",
+                "frame_id": "attack_3",
+                "position": 6
+              },
+              {
+                "kind": "frame_duplicate",
+                "source_frame_id": "$frames.items.0.id",
+                "frame_id": "attack_4",
+                "position": 7
+              },
+              {
+                "kind": "frame_duplicate",
+                "source_frame_id": "$frames.items.0.id",
+                "frame_id": "attack_5",
+                "position": 8
+              },
+              {
+                "kind": "frame_duplicate",
+                "source_frame_id": "$frames.items.0.id",
+                "frame_id": "attack_6",
+                "position": 9
+              }
+            ]
+          }
+        },
+        {
+          "id": "distinct-idle-and-attack-poses",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_update",
+                "frame_id": "idle_2",
+                "duration_ms": 180
+              },
+              {
+                "kind": "rect",
+                "frame_id": "idle_2",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 11,
+                  "y": 8,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "idle_2",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 19,
+                  "y": 8,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "idle_2",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 6,
+                  "y": 23,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 6,
+                "filled": true
+              },
+              {
+                "kind": "frame_update",
+                "frame_id": "idle_3",
+                "duration_ms": 200
+              },
+              {
+                "kind": "rect",
+                "frame_id": "idle_3",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 11,
+                  "y": 8,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 2,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "idle_3",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 19,
+                  "y": 8,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 2,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "idle_3",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 7,
+                  "y": 23,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 6,
+                "filled": true
+              },
+              {
+                "kind": "frame_update",
+                "frame_id": "idle_4",
+                "duration_ms": 220
+              },
+              {
+                "kind": "rect",
+                "frame_id": "idle_4",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 11,
+                  "y": 8,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "idle_4",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 19,
+                  "y": 8,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 1,
+                "filled": true
+              },
+              {
+                "kind": "rect",
+                "frame_id": "idle_4",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 8,
+                  "y": 23,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 6,
+                "filled": true
+              },
+              {
+                "kind": "frame_update",
+                "frame_id": "attack_1",
+                "duration_ms": 70
+              },
+              {
+                "kind": "region_transform",
+                "frame_id": "attack_1",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 22,
+                  "y": 11,
+                  "width": 6,
+                  "height": 15
+                },
+                "transform": "rotate_cw",
+                "destination": {
+                  "x": 16,
+                  "y": 10
+                },
+                "mode": "move"
+              },
+              {
+                "kind": "line",
+                "frame_id": "attack_1",
+                "layer_id": "effects",
+                "x0": 19,
+                "y0": 6,
+                "x1": 30,
+                "y1": 9,
+                "palette_index": 7
+              },
+              {
+                "kind": "frame_update",
+                "frame_id": "attack_2",
+                "duration_ms": 80
+              },
+              {
+                "kind": "region_transform",
+                "frame_id": "attack_2",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 22,
+                  "y": 11,
+                  "width": 6,
+                  "height": 15
+                },
+                "transform": "rotate_cw",
+                "destination": {
+                  "x": 16,
+                  "y": 11
+                },
+                "mode": "move"
+              },
+              {
+                "kind": "line",
+                "frame_id": "attack_2",
+                "layer_id": "effects",
+                "x0": 19,
+                "y0": 7,
+                "x1": 30,
+                "y1": 10,
+                "palette_index": 7
+              },
+              {
+                "kind": "frame_update",
+                "frame_id": "attack_3",
+                "duration_ms": 90
+              },
+              {
+                "kind": "region_transform",
+                "frame_id": "attack_3",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 22,
+                  "y": 11,
+                  "width": 6,
+                  "height": 15
+                },
+                "transform": "rotate_cw",
+                "destination": {
+                  "x": 16,
+                  "y": 12
+                },
+                "mode": "move"
+              },
+              {
+                "kind": "line",
+                "frame_id": "attack_3",
+                "layer_id": "effects",
+                "x0": 19,
+                "y0": 8,
+                "x1": 30,
+                "y1": 11,
+                "palette_index": 7
+              },
+              {
+                "kind": "frame_update",
+                "frame_id": "attack_4",
+                "duration_ms": 100
+              },
+              {
+                "kind": "region_transform",
+                "frame_id": "attack_4",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 22,
+                  "y": 11,
+                  "width": 6,
+                  "height": 15
+                },
+                "transform": "rotate_cw",
+                "destination": {
+                  "x": 16,
+                  "y": 13
+                },
+                "mode": "move"
+              },
+              {
+                "kind": "line",
+                "frame_id": "attack_4",
+                "layer_id": "effects",
+                "x0": 19,
+                "y0": 9,
+                "x1": 30,
+                "y1": 12,
+                "palette_index": 7
+              },
+              {
+                "kind": "frame_update",
+                "frame_id": "attack_5",
+                "duration_ms": 110
+              },
+              {
+                "kind": "region_transform",
+                "frame_id": "attack_5",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 22,
+                  "y": 11,
+                  "width": 6,
+                  "height": 15
+                },
+                "transform": "rotate_cw",
+                "destination": {
+                  "x": 16,
+                  "y": 14
+                },
+                "mode": "move"
+              },
+              {
+                "kind": "line",
+                "frame_id": "attack_5",
+                "layer_id": "effects",
+                "x0": 19,
+                "y0": 10,
+                "x1": 30,
+                "y1": 13,
+                "palette_index": 7
+              },
+              {
+                "kind": "frame_update",
+                "frame_id": "attack_6",
+                "duration_ms": 120
+              },
+              {
+                "kind": "region_transform",
+                "frame_id": "attack_6",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 22,
+                  "y": 11,
+                  "width": 6,
+                  "height": 15
+                },
+                "transform": "rotate_cw",
+                "destination": {
+                  "x": 16,
+                  "y": 15
+                },
+                "mode": "move"
+              },
+              {
+                "kind": "line",
+                "frame_id": "attack_6",
+                "layer_id": "effects",
+                "x0": 19,
+                "y0": 11,
+                "x1": 30,
+                "y1": 14,
+                "palette_index": 7
+              }
+            ]
+          }
+        },
+        {
+          "id": "playback-tags",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "tag_set",
+                "tag_id": "idle",
+                "name": "Idle",
+                "frame_ids": [
+                  "frame_1",
+                  "idle_2",
+                  "idle_3",
+                  "idle_4"
+                ],
+                "loop": true
+              },
+              {
+                "kind": "tag_set",
+                "tag_id": "attack",
+                "name": "Attack",
+                "frame_ids": [
+                  "attack_1",
+                  "attack_2",
+                  "attack_3",
+                  "attack_4",
+                  "attack_5",
+                  "attack_6"
+                ],
+                "loop": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "initial-export",
+          "tool": "pixel_export",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "add-glint",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "attack_6",
+                "layer_id": "effects",
+                "rect": {
+                  "x": 28,
+                  "y": 8,
+                  "width": 2,
+                  "height": 2
+                },
+                "palette_index": 7,
+                "filled": true
+              }
+            ]
+          },
+          "allowed_changes": [
+            {
+              "frame_id": "attack_6",
+              "layer_id": "effects",
+              "x": 28,
+              "y": 8,
+              "width": 2,
+              "height": 2
+            }
+          ]
+        },
+        {
+          "id": "delete-glint",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "attack_6",
+                "layer_id": "effects",
+                "rect": {
+                  "x": 28,
+                  "y": 8,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 0,
+                "filled": true
+              }
+            ]
+          },
+          "allowed_changes": [
+            {
+              "frame_id": "attack_6",
+              "layer_id": "effects",
+              "x": 28,
+              "y": 8,
+              "width": 1,
+              "height": 1
+            }
+          ]
+        },
+        {
+          "id": "local-face-refinement",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 14,
+                  "y": 12,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 6,
+                "filled": true
+              }
+            ]
+          },
+          "allowed_changes": [
+            {
+              "frame_id": "frame_1",
+              "layer_id": "layer_1",
+              "x": 14,
+              "y": 12,
+              "width": 1,
+              "height": 1
+            }
+          ]
+        },
+        {
+          "id": "broad-frame-and-layer-order",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_update",
+                "frame_id": "attack_6",
+                "position": 4
+              },
+              {
+                "kind": "layer_update",
+                "layer_id": "effects",
+                "position": 1
+              }
+            ]
+          }
+        },
+        {
+          "id": "parameter-20-percent",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "frame_update",
+                "frame_id": "idle_2",
+                "duration_ms": 144
+              },
+              {
+                "kind": "palette_set",
+                "index": 4,
+                "name": "Steel",
+                "color": "#607DA0FF"
+              }
+            ]
+          }
+        },
+        {
+          "id": "ambiguous-ask",
+          "kind": "answer",
+          "text": "请明确要调整哪一帧和哪个部位；我没有猜测目标，作品保持当前修订。"
+        },
+        {
+          "id": "after-clarification",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "clarified-target",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "attack_2",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 11,
+                  "y": 17,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 6,
+                "filled": true
+              }
+            ]
+          },
+          "allowed_changes": [
+            {
+              "frame_id": "attack_2",
+              "layer_id": "armor",
+              "x": 11,
+              "y": 17,
+              "width": 1,
+              "height": 1
+            }
+          ]
+        },
+        {
+          "id": "conflicting-old-revision",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$initial-export.revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 1,
+                "filled": true
+              }
+            ]
+          },
+          "succeeds": false,
+          "unchanged": true
+        },
+        {
+          "id": "after-conflict",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "human-shield",
+          "kind": "human",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "mutation_id": "human-shield",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "attack_1",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 6,
+                  "y": 17,
+                  "width": 2,
+                  "height": 3
+                },
+                "palette_index": 6,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "after-human",
+          "tool": "pixel_inspect",
+          "arguments": {
+            "document_id": "$document_id"
+          },
+          "unchanged": true
+        },
+        {
+          "id": "agent-shield-highlight",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "attack_1",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 6,
+                  "y": 17,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 5,
+                "filled": true
+              }
+            ]
+          },
+          "allowed_changes": [
+            {
+              "frame_id": "attack_1",
+              "layer_id": "armor",
+              "x": 6,
+              "y": 17,
+              "width": 1,
+              "height": 1
+            }
+          ]
+        },
+        {
+          "id": "temporary-correction",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "$frames.items.0.id",
+                "layer_id": "$layers.items.0.id",
+                "rect": {
+                  "x": 31,
+                  "y": 31,
+                  "width": 1,
+                  "height": 1
+                },
+                "palette_index": 7,
+                "filled": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "undo-correction",
+          "tool": "pixel_undo",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "restore_revision": "$agent-shield-highlight.revision"
+          }
+        },
+        {
+          "id": "final-refinement",
+          "tool": "pixel_apply",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision",
+            "operations": [
+              {
+                "kind": "rect",
+                "frame_id": "attack_3",
+                "layer_id": "armor",
+                "rect": {
+                  "x": 12,
+                  "y": 18,
+                  "width": 1,
+                  "height": 2
+                },
+                "palette_index": 7,
+                "filled": true
+              }
+            ]
+          },
+          "allowed_changes": [
+            {
+              "frame_id": "attack_3",
+              "layer_id": "armor",
+              "x": 12,
+              "y": 18,
+              "width": 1,
+              "height": 2
+            }
+          ]
+        },
+        {
+          "id": "final-export",
+          "tool": "pixel_export",
+          "arguments": {
+            "document_id": "$document_id",
+            "expected_version": "$revision"
+          },
+          "unchanged": true
+        }
+      ],
+      "assertions": {
+        "frame_count": 10,
+        "layer_count": 3,
+        "human_steps": 1,
+        "clarification": true,
+        "points": [
+          [
+            "frame_1",
+            "layer_1",
+            31,
+            31,
+            0
+          ],
+          [
+            "attack_1",
+            "armor",
+            7,
+            19,
+            6
+          ],
+          [
+            "attack_1",
+            "armor",
+            6,
+            17,
+            5
+          ]
+        ],
+        "tags": {
+          "idle": [
+            "frame_1",
+            "idle_2",
+            "idle_3",
+            "idle_4"
+          ],
+          "attack": [
+            "attack_1",
+            "attack_2",
+            "attack_3",
+            "attack_4",
+            "attack_5",
+            "attack_6"
+          ]
+        },
+        "distinct_frames": 10
+      },
+      "stress": true,
+      "clarification": "Adjust only attack_2 armor at (11,17). Keep all other pixels. Continue the listed stale check, human shield edit, inspect, local highlight, undo of the temporary correction and final export."
+    }
+  ]
+}

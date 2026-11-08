@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "bytes": 3658552,
+  "packages": {
+    "@fortune-sheet/react": "1.0.4",
+    "@fortune-sheet/core": "1.0.4",
+    "uuid": "11.1.1"
+  },
+  "hostReact": true
+}

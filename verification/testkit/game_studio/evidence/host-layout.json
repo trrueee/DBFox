@@ -1,0 +1,142 @@
+{
+  "author": "game_host_fix",
+  "package_digest": "7a9b3429174ecbbaa6dbcfe4e9bf5230825a55bf45a38ba65c755a619ba21134",
+  "boundary": "actual Electron BrowserWindow.setSize via verification-only Main entry",
+  "measurements": {
+    "host-1440-open": {
+      "innerWidth": 1440,
+      "innerHeight": 900,
+      "compact": false,
+      "stage": {
+        "width": 1176,
+        "client": 1176,
+        "scroll": 1176
+      },
+      "conversation": {
+        "width": 513.9166870117188,
+        "client": 514,
+        "scroll": 514
+      },
+      "dock": {
+        "width": 654.0833740234375,
+        "client": 654,
+        "scroll": 654
+      },
+      "studio": {
+        "width": 653.4166870117188,
+        "client": 645,
+        "scroll": 645
+      },
+      "draft": "Unsaved layout draft",
+      "hasSeparator": true,
+      "documentWidth": 1440
+    },
+    "host-960-closed": {
+      "innerWidth": 960,
+      "innerHeight": 900,
+      "compact": true,
+      "stage": {
+        "width": 719.9896240234375,
+        "client": 720,
+        "scroll": 720
+      },
+      "conversation": {
+        "width": 675.9896240234375,
+        "client": 676,
+        "scroll": 676
+      },
+      "dock": {
+        "width": 44,
+        "client": 44,
+        "scroll": 44
+      },
+      "studio": null,
+      "hasSeparator": false,
+      "documentWidth": 960
+    },
+    "host-960-navigation-collapsed": {
+      "innerWidth": 960,
+      "innerHeight": 900,
+      "compact": false,
+      "stage": {
+        "width": 912,
+        "client": 912,
+        "scroll": 912
+      },
+      "conversation": {
+        "width": 420,
+        "client": 420,
+        "scroll": 420
+      },
+      "dock": {
+        "width": 484,
+        "client": 484,
+        "scroll": 484
+      },
+      "studio": {
+        "width": 483.3333435058594,
+        "client": 475,
+        "scroll": 475
+      },
+      "draft": "Unsaved layout draft",
+      "hasSeparator": true,
+      "documentWidth": 960
+    },
+    "host-960-open": {
+      "innerWidth": 960,
+      "innerHeight": 900,
+      "compact": true,
+      "stage": {
+        "width": 696.0104370117188,
+        "client": 696,
+        "scroll": 696
+      },
+      "conversation": {
+        "width": 0,
+        "client": 0,
+        "scroll": 0
+      },
+      "dock": {
+        "width": 696.0104370117188,
+        "client": 696,
+        "scroll": 696
+      },
+      "studio": {
+        "width": 695.34375,
+        "client": 687,
+        "scroll": 687
+      },
+      "draft": "Unsaved layout draft",
+      "hasSeparator": false,
+      "documentWidth": 960
+    },
+    "host-wide-drag-min": {
+      "innerWidth": 1440,
+      "innerHeight": 900,
+      "compact": false,
+      "stage": {
+        "width": 1200,
+        "client": 1200,
+        "scroll": 1200
+      },
+      "conversation": {
+        "width": 872,
+        "client": 872,
+        "scroll": 872
+      },
+      "dock": {
+        "width": 320,
+        "client": 320,
+        "scroll": 320
+      },
+      "studio": {
+        "width": 319.3333435058594,
+        "client": 311,
+        "scroll": 311
+      },
+      "draft": "Unsaved layout draft",
+      "hasSeparator": true,
+      "documentWidth": 1440
+    }
+  }
+}

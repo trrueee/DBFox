@@ -1,0 +1,438 @@
+{
+  "fixture": {
+    "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+    "small_world_id": "world_c653aa199f7841aaa72bf1dcddc14629",
+    "small": {
+      "world_id": "world_c653aa199f7841aaa72bf1dcddc14629",
+      "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+      "version": 2,
+      "parent_version": 1,
+      "title": "Interactive Voxel",
+      "status": "active",
+      "size": [
+        32,
+        32,
+        32
+      ],
+      "content_hash": "sha256:bd9813c1939b663c751391d0b69127989369a6c05fee589dbf3e9ed83bf14a7e",
+      "chunk_count": 4,
+      "nonzero_count": 1112,
+      "layer_count": 1,
+      "palette_count": 5,
+      "region_count": 0,
+      "changed": true,
+      "changed_chunk_count": 4,
+      "changed_voxel_count": 1112,
+      "operation_kind": "box"
+    },
+    "large_world_id": "world_8ff1b0cb303d42b8a54e24ec2ea0d726",
+    "large": {
+      "world_id": "world_8ff1b0cb303d42b8a54e24ec2ea0d726",
+      "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+      "version": 2,
+      "parent_version": 1,
+      "title": "128 Cubed Boundary World",
+      "status": "active",
+      "size": [
+        128,
+        128,
+        128
+      ],
+      "content_hash": "sha256:4ccdd4a0928565d31f7fefd8e2a706a37c3b677091f4f6d75c0494af75fbb1dd",
+      "chunk_count": 296,
+      "nonzero_count": 96776,
+      "layer_count": 1,
+      "palette_count": 5,
+      "region_count": 0,
+      "changed": true,
+      "changed_chunk_count": 296,
+      "changed_voxel_count": 96776,
+      "operation_kind": "box"
+    },
+    "stress": {
+      "world_id": "world_cccd96664bef4ff2b909349798617149",
+      "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+      "version": 38,
+      "parent_version": 37,
+      "title": "Cyberpunk Fox Shrine",
+      "status": "active",
+      "size": [
+        64,
+        64,
+        64
+      ],
+      "content_hash": "sha256:78e182bcb3a1210aa1b2cb4b36e0cdbe9fd9c39eedf782fdc048601ddb2f600e",
+      "chunk_count": 60,
+      "nonzero_count": 23386,
+      "layer_count": 4,
+      "palette_count": 8,
+      "region_count": 3
+    },
+    "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+    "boundary": "real signed frontend and backend; production RunLoop with scripted Responses only",
+    "previous_package_digest": "8ca922d908c94b27467dfc27eb2b1c078598b24a451130e24bd1e3f22cccf708",
+    "reopened_small": {
+      "world_id": "world_c653aa199f7841aaa72bf1dcddc14629",
+      "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+      "version": 9,
+      "parent_version": 8,
+      "title": "Interactive Voxel",
+      "status": "active",
+      "size": [
+        32,
+        32,
+        32
+      ],
+      "content_hash": "sha256:346cf393256de30e0c038ec6cd972c39bc8b63428e161607d1d8a4e31b6bd7db",
+      "chunk_count": 5,
+      "nonzero_count": 1136,
+      "layer_count": 1,
+      "palette_count": 5,
+      "region_count": 0,
+      "document": {
+        "schema_version": 1,
+        "size": [
+          32,
+          32,
+          32
+        ],
+        "title": "Interactive Voxel",
+        "status": "active",
+        "palette": [
+          {
+            "index": 0,
+            "name": "Air",
+            "color": "#000000"
+          },
+          {
+            "index": 1,
+            "name": "Stone",
+            "color": "#64748b"
+          },
+          {
+            "index": 2,
+            "name": "Neon pink",
+            "color": "#f472b6"
+          },
+          {
+            "index": 3,
+            "name": "Neon cyan",
+            "color": "#22d3ee"
+          },
+          {
+            "index": 4,
+            "name": "Gold",
+            "color": "#fbbf24"
+          }
+        ],
+        "layers": [
+          {
+            "id": "base",
+            "name": "Base",
+            "locked": false
+          }
+        ],
+        "regions": [],
+        "metadata": {
+          "description": "",
+          "tags": []
+        }
+      }
+    }
+  },
+  "runs": [
+    {
+      "id": "run_61bd4a7f449649e19bfaecf3e59e039a",
+      "session_id": "7c3327d6-422a-4864-b9b4-0641b9f16500",
+      "status": "completed",
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    },
+    {
+      "id": "run_b7d1148492bf470fadb707ee67204f5a",
+      "session_id": "voxel-browser-agent-bc090eb3d8994b59b2f26a5b74d4339e",
+      "status": "completed",
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    },
+    {
+      "id": "run_9aab419b2ae446b397ebecf5fcb9f31c",
+      "session_id": "voxel-browser-agent-06ed8b903193411cb089beb9491f25b8",
+      "status": "completed",
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    },
+    {
+      "id": "run_e24ba06f65414ba49f6013f05ca2d231",
+      "session_id": "443865a8-be7b-449d-a2a1-a1cbbcd5bb20",
+      "status": "completed",
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    },
+    {
+      "id": "run_b1bebd8317dd4e4da849e60cdfaa97aa",
+      "session_id": "voxel-browser-agent-9541ab7a46154c8982357f04265c1950",
+      "status": "completed",
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    }
+  ],
+  "invocations": [
+    {
+      "id": "invocation_d09c00c3a5c749209580d2d69aee24a2",
+      "run_id": "run_61bd4a7f449649e19bfaecf3e59e039a",
+      "tool_name": "dbfox_voxel_fe30d8d5__voxel_export",
+      "owner_id": "dbfox.voxel",
+      "package_digest": "8ca922d908c94b27467dfc27eb2b1c078598b24a451130e24bd1e3f22cccf708",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"version\":8,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":8}]"
+    },
+    {
+      "id": "invocation_a3b27ba825c044f18bcd8568cae4d200",
+      "run_id": "run_b7d1148492bf470fadb707ee67204f5a",
+      "tool_name": "dbfox_voxel_fe30d8d5__voxel_inspect",
+      "owner_id": "dbfox.voxel",
+      "package_digest": "8ca922d908c94b27467dfc27eb2b1c078598b24a451130e24bd1e3f22cccf708",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"object_limit\":16,\"object_offset\":0,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":8}]"
+    },
+    {
+      "id": "invocation_1a01ff0889254f18af634a660859a44b",
+      "run_id": "run_b7d1148492bf470fadb707ee67204f5a",
+      "tool_name": "dbfox_voxel_fe30d8d5__voxel_fill",
+      "owner_id": "dbfox.voxel",
+      "package_digest": "8ca922d908c94b27467dfc27eb2b1c078598b24a451130e24bd1e3f22cccf708",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"expected_version\":8,\"operation\":{\"bounds\":{\"max\":[29,29,29],\"min\":[28,28,28]},\"kind\":\"fill\",\"layer_id\":\"base\",\"palette_index\":3},\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":8}]"
+    },
+    {
+      "id": "invocation_17d9d866afbf4a80bb6a0fc39795efe9",
+      "run_id": "run_b7d1148492bf470fadb707ee67204f5a",
+      "tool_name": "dbfox_voxel_fe30d8d5__voxel_inspect",
+      "owner_id": "dbfox.voxel",
+      "package_digest": "8ca922d908c94b27467dfc27eb2b1c078598b24a451130e24bd1e3f22cccf708",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"object_limit\":16,\"object_offset\":0,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":9}]"
+    },
+    {
+      "id": "invocation_04307ab6c6924cffbe91cf532a827438",
+      "run_id": "run_9aab419b2ae446b397ebecf5fcb9f31c",
+      "tool_name": "dbfox_voxel_fe30d8d5__voxel_inspect",
+      "owner_id": "dbfox.voxel",
+      "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"object_limit\":16,\"object_offset\":0,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":10}]"
+    },
+    {
+      "id": "invocation_08b27dbf5fae4982967f8e5d97695645",
+      "run_id": "run_9aab419b2ae446b397ebecf5fcb9f31c",
+      "tool_name": "dbfox_voxel_fe30d8d5__voxel_fill",
+      "owner_id": "dbfox.voxel",
+      "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"expected_version\":10,\"operation\":{\"bounds\":{\"max\":[30,30,30],\"min\":[29,29,29]},\"kind\":\"fill\",\"layer_id\":\"base\",\"palette_index\":3},\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":10}]"
+    },
+    {
+      "id": "invocation_3825cce15b264704819883613afc0165",
+      "run_id": "run_9aab419b2ae446b397ebecf5fcb9f31c",
+      "tool_name": "dbfox_voxel_fe30d8d5__voxel_inspect",
+      "owner_id": "dbfox.voxel",
+      "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"object_limit\":16,\"object_offset\":0,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":11}]"
+    },
+    {
+      "id": "invocation_03beef835b14420bb57a2ac945ef37be",
+      "run_id": "run_e24ba06f65414ba49f6013f05ca2d231",
+      "tool_name": "dbfox_voxel_fe30d8d5__voxel_export",
+      "owner_id": "dbfox.voxel",
+      "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"version\":11,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":11}]"
+    },
+    {
+      "id": "invocation_3d6c99c3feaa439eb3373f7ae913535e",
+      "run_id": "run_b1bebd8317dd4e4da849e60cdfaa97aa",
+      "tool_name": "dbfox_voxel_fe30d8d5__voxel_inspect",
+      "owner_id": "dbfox.voxel",
+      "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"object_limit\":16,\"object_offset\":0,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":11}]"
+    },
+    {
+      "id": "invocation_14b9e653231242bca9107b7ea1b5677b",
+      "run_id": "run_b1bebd8317dd4e4da849e60cdfaa97aa",
+      "tool_name": "dbfox_voxel_fe30d8d5__voxel_fill",
+      "owner_id": "dbfox.voxel",
+      "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"expected_version\":11,\"operation\":{\"bounds\":{\"max\":[31,31,31],\"min\":[30,30,30]},\"kind\":\"fill\",\"layer_id\":\"base\",\"palette_index\":3},\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":11}]"
+    },
+    {
+      "id": "invocation_d604e2e8ba2c4092afbcf7930fe31f70",
+      "run_id": "run_b1bebd8317dd4e4da849e60cdfaa97aa",
+      "tool_name": "dbfox_voxel_fe30d8d5__voxel_inspect",
+      "owner_id": "dbfox.voxel",
+      "package_digest": "ee6365217774f9fe4fefc8f9ba942aabde904dff765b7bc65db2ed0395df5f5b",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"object_limit\":16,\"object_offset\":0,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":12}]"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "artifact_9c366a0e50254ea4aebe2ecd5b9b6732",
+      "run_id": "run_61bd4a7f449649e19bfaecf3e59e039a",
+      "session_id": "7c3327d6-422a-4864-b9b4-0641b9f16500",
+      "type": "dbfox.voxel.snapshot",
+      "payload_json": "{\"chunk_count\":4,\"content_hash\":\"sha256:f011d4f3db26c9dcd1e0b46f28d50f96711fb474a35f30348f7b6941c74e6b0a\",\"layer_count\":1,\"nonzero_count\":1135,\"palette_count\":5,\"parent_version\":7,\"project_id\":\"voxel-bench-7e66d547801241588114c41422d77610\",\"region_count\":0,\"size\":[32,32,32],\"status\":\"active\",\"title\":\"Interactive Voxel\",\"version\":8,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":8}]"
+    },
+    {
+      "id": "artifact_655b24dfba6f490d99ffeed933822d97",
+      "run_id": "run_b7d1148492bf470fadb707ee67204f5a",
+      "session_id": "voxel-browser-agent-bc090eb3d8994b59b2f26a5b74d4339e",
+      "type": "dbfox.voxel.snapshot",
+      "payload_json": "{\"chunk_count\":5,\"content_hash\":\"sha256:346cf393256de30e0c038ec6cd972c39bc8b63428e161607d1d8a4e31b6bd7db\",\"layer_count\":1,\"nonzero_count\":1136,\"palette_count\":5,\"parent_version\":8,\"project_id\":\"voxel-bench-7e66d547801241588114c41422d77610\",\"region_count\":0,\"size\":[32,32,32],\"status\":\"active\",\"title\":\"Interactive Voxel\",\"version\":9,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":8}]"
+    },
+    {
+      "id": "artifact_851d970c1f404b16a32a9d75a5c0eeca",
+      "run_id": "run_9aab419b2ae446b397ebecf5fcb9f31c",
+      "session_id": "voxel-browser-agent-06ed8b903193411cb089beb9491f25b8",
+      "type": "dbfox.voxel.snapshot",
+      "payload_json": "{\"chunk_count\":6,\"content_hash\":\"sha256:7c579f54b45c8988c42b7f3530c7da437ebf11a51e734c38b325e4911ffbdf97\",\"layer_count\":1,\"nonzero_count\":1138,\"palette_count\":5,\"parent_version\":10,\"project_id\":\"voxel-bench-7e66d547801241588114c41422d77610\",\"region_count\":0,\"size\":[32,32,32],\"status\":\"active\",\"title\":\"Interactive Voxel\",\"version\":11,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":10}]"
+    },
+    {
+      "id": "artifact_80a2bcec81ea471c98bbb56ac97befe8",
+      "run_id": "run_e24ba06f65414ba49f6013f05ca2d231",
+      "session_id": "443865a8-be7b-449d-a2a1-a1cbbcd5bb20",
+      "type": "dbfox.voxel.snapshot",
+      "payload_json": "{\"chunk_count\":6,\"content_hash\":\"sha256:7c579f54b45c8988c42b7f3530c7da437ebf11a51e734c38b325e4911ffbdf97\",\"layer_count\":1,\"nonzero_count\":1138,\"palette_count\":5,\"parent_version\":10,\"project_id\":\"voxel-bench-7e66d547801241588114c41422d77610\",\"region_count\":0,\"size\":[32,32,32],\"status\":\"active\",\"title\":\"Interactive Voxel\",\"version\":11,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":11}]"
+    },
+    {
+      "id": "artifact_a96105389cf947e8a01776b251187bd0",
+      "run_id": "run_b1bebd8317dd4e4da849e60cdfaa97aa",
+      "session_id": "voxel-browser-agent-9541ab7a46154c8982357f04265c1950",
+      "type": "dbfox.voxel.snapshot",
+      "payload_json": "{\"chunk_count\":6,\"content_hash\":\"sha256:723c40c5c2253758dac5f35bac4a3a9d8d39728e7b698b249b1d211a7e7a4287\",\"layer_count\":1,\"nonzero_count\":1139,\"palette_count\":5,\"parent_version\":11,\"project_id\":\"voxel-bench-7e66d547801241588114c41422d77610\",\"region_count\":0,\"size\":[32,32,32],\"status\":\"active\",\"title\":\"Interactive Voxel\",\"version\":12,\"world_id\":\"world_c653aa199f7841aaa72bf1dcddc14629\"}",
+      "resource_refs_json": "[{\"id\":\"world_c653aa199f7841aaa72bf1dcddc14629\",\"kind\":\"dbfox.voxel.world\",\"version\":11}]"
+    }
+  ],
+  "current": {
+    "world_id": "world_c653aa199f7841aaa72bf1dcddc14629",
+    "project_id": "voxel-bench-7e66d547801241588114c41422d77610",
+    "version": 12,
+    "parent_version": 11,
+    "title": "Interactive Voxel",
+    "status": "active",
+    "size": [
+      32,
+      32,
+      32
+    ],
+    "content_hash": "sha256:723c40c5c2253758dac5f35bac4a3a9d8d39728e7b698b249b1d211a7e7a4287",
+    "chunk_count": 6,
+    "nonzero_count": 1139,
+    "layer_count": 1,
+    "palette_count": 5,
+    "region_count": 0,
+    "document": {
+      "schema_version": 1,
+      "size": [
+        32,
+        32,
+        32
+      ],
+      "title": "Interactive Voxel",
+      "status": "active",
+      "palette": [
+        {
+          "index": 0,
+          "name": "Air",
+          "color": "#000000"
+        },
+        {
+          "index": 1,
+          "name": "Stone",
+          "color": "#64748b"
+        },
+        {
+          "index": 2,
+          "name": "Neon pink",
+          "color": "#f472b6"
+        },
+        {
+          "index": 3,
+          "name": "Neon cyan",
+          "color": "#22d3ee"
+        },
+        {
+          "index": 4,
+          "name": "Gold",
+          "color": "#fbbf24"
+        }
+      ],
+      "layers": [
+        {
+          "id": "base",
+          "name": "Base",
+          "locked": false
+        }
+      ],
+      "regions": [],
+      "metadata": {
+        "description": "",
+        "tags": []
+      }
+    }
+  },
+  "sentinel_cells": {
+    "first_agent_28": 3,
+    "second_agent_29": 3,
+    "conflict_agent_30": 3,
+    "human_gold_0_30_0": 4
+  },
+  "download": {
+    "filename": "world_c653aa199f7841aaa72bf1dcddc14629-v8.voxel.json",
+    "bytes": 34256,
+    "sha256": "d1f322665556500a6888ea38a28ee1f44e2abc82aab7639da425a7cc3e59f954",
+    "manifest_matches_public_history": true,
+    "every_chunk_matches_public_history": true,
+    "chunk_hashes_verified": true,
+    "nonzero_count": 1135,
+    "all_layers_despite_hidden_preview": true
+  },
+  "native_download_events": [
+    {
+      "filename": "world_c653aa199f7841aaa72bf1dcddc14629-v8.voxel.json",
+      "state": "completed",
+      "totalBytes": 34256,
+      "receivedBytes": 34256,
+      "boundary": "verification-controlled-native-save-path"
+    }
+  ]
+}

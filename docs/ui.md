@@ -16,7 +16,7 @@ DBFox 当前 UI 已完成市场驱动的组件调研与第一轮生产替换。�
 1. [产品与 UI 总合同](dbfox-master-product-ui-contract.md)：产品层级、Core/DLC 视觉所有权和整体体验。
 2. [UI 设计与开发规范](quality/ui-design-and-development.md)：新增、替换和验证 UI 的当前工作方式。
 3. [组件采用报告](ui/component-adoption-report.md)：已经进入生产的上游组件、许可证和本地落点。
-4. [字体与颜色审计](ui/typography-color-audit.md)：Fluent 2 字体角色、语义颜色和唯一 token 边界。
+4. [字体与颜色历史审计](archive/reviews/typography-color-audit.md)：保留早期字体角色、语义颜色和 token 边界的调查；当前规范见 [Apple HIG 工作台](quality/apple-hig-workbench-20261107.md)。
 5. [运行时状态清单](ui/ui-runtime-inventory.md)：产品必须呈现的 loading、error、disabled 和恢复状态。
 6. [Design Lab 状态矩阵](ui/design-lab-state-matrix.md)：生产组件的主题、语言、缩放和状态验证范围。
 

@@ -1,0 +1,4 @@
+# Preserve reviewed upstream bytes and provenance across Windows checkouts.
+backend/vendor/png.py -text
+backend/vendor/PyPNG-LICENSE -text
+frontend/vendor/** -text

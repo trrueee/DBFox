@@ -1,4 +1,7 @@
-import { ArrowLeft, Settings } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  GearIcon,
+} from "@/components/icons";
 
 import type { AppSettingsSection } from "../../types/settings";
 import { SETTINGS_SECTIONS } from "./settingsSections";
@@ -18,12 +21,12 @@ export function SettingsSidebar({
   return (
     <aside className="settings-sidebar" aria-label="设置导航">
       <button type="button" className="settings-sidebar__back" onClick={onClose}>
-        <ArrowLeft size={16} aria-hidden="true" />
+        <ArrowLeftIcon size={16} aria-hidden="true" />
         <span>返回工作区</span>
       </button>
 
       <div className="settings-sidebar__title">
-        <Settings size={16} aria-hidden="true" />
+        <GearIcon size={22} aria-hidden="true" />
         <h2>设置</h2>
       </div>
 
@@ -39,7 +42,7 @@ export function SettingsSidebar({
               aria-current={selected ? "page" : undefined}
               onClick={() => onSectionChange(item.id)}
             >
-              <Icon size={16} aria-hidden="true" />
+              <Icon size={20} aria-hidden="true" />
               <span>{item.title}</span>
             </button>
           );

@@ -15,6 +15,7 @@ class FakeEngineChild implements EngineChild {
   readonly pid: number;
   stopped = false;
   stopError: Error | null = null;
+  stopGate: Promise<void> | null = null;
   readonly #exitListeners = new Set<(exit: EngineExit) => void>();
 
   constructor(pid: number) {
@@ -27,6 +28,7 @@ class FakeEngineChild implements EngineChild {
   }
 
   async stop(): Promise<void> {
+    if (this.stopGate) await this.stopGate;
     if (this.stopError !== null) throw this.stopError;
     this.stopped = true;
   }
@@ -114,6 +116,57 @@ async function waitFor(predicate: () => boolean): Promise<void> {
 }
 
 describe("Electron EngineSupervisor", () => {
+  it("retains the child after a failed stop so retry cannot orphan it", async () => {
+    const launcher = new FakeLauncher();
+    const host = supervisor(launcher);
+    await host.start();
+    launcher.launched[0].stopError = new Error("stop failed");
+    await expect(host.restart()).rejects.toThrow("stop failed");
+    expect(launcher.launched).toHaveLength(1);
+    launcher.launched[0].stopError = null;
+    await host.restart();
+    expect(launcher.launched[0].stopped).toBe(true);
+    expect(launcher.launched).toHaveLength(2);
+    await host.stop();
+  });
+
+  it("preserves a late child's failed cleanup for the current stop owner", async () => {
+    let release!: (child: EngineChild) => void;
+    const launcher = { launch: () => new Promise<EngineChild>(resolve => { release = resolve; }) };
+    const child = new FakeEngineChild(1);
+    child.stopError = new Error("late cleanup failed");
+    const host = new EngineSupervisor(launcher, new FakeHealthProbe());
+    const starting = host.start();
+    const stopping = host.stop();
+    const settled = Promise.allSettled([starting, stopping]);
+    release(child);
+    expect((await settled).map(result => result.status)).toEqual(["rejected", "rejected"]);
+    expect(host.status()).toMatchObject({ state: "failed", stage: "shutdown_failed" });
+    child.stopError = null;
+    await host.stop();
+    expect(child.stopped).toBe(true);
+  });
+
+  it.each(["stop", "restart"] as const)("fences a pending restart when a newer %s arrives", async (next) => {
+    const launcher = new FakeLauncher();
+    const host = supervisor(launcher);
+    await host.start();
+    let release!: () => void;
+    launcher.launched[0].stopGate = new Promise<void>(resolve => { release = resolve; });
+    const older = host.restart();
+    const newer = next === "stop" ? host.stop() : host.restart();
+    try {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    } finally {
+      release();
+    }
+    await Promise.all([older, newer]);
+    expect(launcher.launched).toHaveLength(next === "stop" ? 1 : 2);
+    expect(host.status().state).toBe(next === "stop" ? "stopped" : "ready");
+    await host.stop();
+    expect(launcher.launched.every(child => child.stopped)).toBe(true);
+  });
+
   it("publishes config only after an authenticated compatible generation is healthy", async () => {
     const launcher = new FakeLauncher();
     const probe = new FakeHealthProbe();

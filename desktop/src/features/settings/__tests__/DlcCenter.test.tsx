@@ -112,6 +112,58 @@ describe("DlcCenter", () => {
 
   afterEach(cleanup);
 
+  it("keeps normal rows concise and reveals version details without changing lifecycle state", async () => {
+    mockListDlcs.mockResolvedValue({ snapshot_id: "snapshot-1", dlcs: [baseItem] });
+    renderCenter();
+    const trigger = await screen.findByRole("button", { name: "Acme Echo" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByLabelText("DLC 期望状态与运行状态")).toBeNull();
+    expect(screen.getByRole("switch", { name: "启用 Acme Echo" }).getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("DLC 期望状态与运行状态")).toBeTruthy();
+    expect(screen.getByText("已安装版本（1）")).toBeTruthy();
+    fireEvent.click(trigger);
+    expect(screen.queryByText("已安装版本（1）")).toBeNull();
+    expect(mockSetDlcEnabled).not.toHaveBeenCalled();
+    expect(mockSelectDlcVersion).not.toHaveBeenCalled();
+    expect(mockListDlcs).toHaveBeenCalledOnce();
+  });
+
+  it("filters installed extensions locally and clears an empty search without changing enablement", async () => {
+    const other: DlcLifecycleItem = {
+      ...baseItem, dlc_id: "beta.notes", display_name: "Beta Notes", publisher: "Beta",
+      selected_digest: "c".repeat(64),
+      installed_versions: [{ ...baseItem.installed_versions[0], package_digest: "c".repeat(64) }],
+    };
+    mockListDlcs.mockResolvedValue({ snapshot_id: "snapshot-1", dlcs: [baseItem, other] });
+    renderCenter();
+    const search = await screen.findByRole("searchbox", { name: "搜索扩展" });
+    fireEvent.change(search, { target: { value: "beta.notes" } });
+    expect(screen.getByRole("button", { name: "Beta Notes" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Acme Echo" })).toBeNull();
+    fireEvent.change(search, { target: { value: "not-an-installed-extension" } });
+    expect(screen.getByText("未找到匹配的扩展")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "清除搜索" }));
+    expect(screen.getByRole("button", { name: "Acme Echo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Beta Notes" })).toBeTruthy();
+    expect(mockListDlcs).toHaveBeenCalledOnce();
+    expect(mockSetDlcEnabled).not.toHaveBeenCalled();
+  });
+
+  it("returns keyboard focus to the initiating action when a confirmation is cancelled", async () => {
+    mockListDlcs.mockResolvedValue({ snapshot_id: "snapshot-1", dlcs: [baseItem] });
+    renderCenter();
+    fireEvent.click(await screen.findByRole("button", { name: "Acme Echo" }));
+    const trigger = screen.getByRole("button", { name: "卸载" });
+    fireEvent.click(trigger);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(mockUninstallDlc).not.toHaveBeenCalled();
+  });
+
   it("shows a safe empty state before any package is installed", async () => {
     renderCenter();
 
@@ -173,6 +225,7 @@ describe("DlcCenter", () => {
       "C:\\fixtures\\acme.echo.dbfox-dlc",
     ));
     expect(await screen.findByText("已安装，未启用")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Acme Echo" }));
     expect(screen.getByText("禁用")).toBeTruthy();
     expect(screen.getByText("未激活")).toBeTruthy();
   });
@@ -218,8 +271,9 @@ describe("DlcCenter", () => {
     renderCenter();
     await screen.findByText("已安装，未启用");
 
-    fireEvent.click(screen.getByRole("button", { name: "启用" }));
+    fireEvent.click(screen.getByRole("switch", { name: "启用 Acme Echo" }));
     expect(await screen.findByText("等待重启启用")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Acme Echo" }));
     expect(screen.getByText("启用")).toBeTruthy();
     expect(screen.getByText("未激活")).toBeTruthy();
 
@@ -235,7 +289,7 @@ describe("DlcCenter", () => {
       restart_state: "required",
       state: "disable_pending_restart",
     });
-    fireEvent.click(screen.getByRole("button", { name: "停用" }));
+    fireEvent.click(screen.getByRole("switch", { name: "启用 Acme Echo" }));
     expect(await screen.findByText("等待重启停用")).toBeTruthy();
     expect(screen.getByText("禁用")).toBeTruthy();
     expect(screen.getByText("已激活")).toBeTruthy();
@@ -258,6 +312,7 @@ describe("DlcCenter", () => {
 
     expect(await screen.findByText("激活失败")).toBeTruthy();
     expect(screen.getByText("backend failed closed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Acme Echo" }));
     expect(screen.getByText("停用并重启后才可卸载")).toBeTruthy();
     expect(screen.getByRole("button", { name: "卸载" }).hasAttribute("disabled")).toBe(true);
   });
@@ -274,6 +329,7 @@ describe("DlcCenter", () => {
     renderCenter();
     await screen.findByText("已安装，未启用");
 
+    fireEvent.click(screen.getByRole("button", { name: "Acme Echo" }));
     fireEvent.click(screen.getByRole("button", { name: "卸载" }));
     expect(await screen.findByText(/DLC 自己的数据目录默认保留/)).toBeTruthy();
     expect(screen.getByText(/APP_DATA\/dlcs\/data\/acme.echo/)).toBeTruthy();
@@ -331,13 +387,14 @@ describe("DlcCenter", () => {
     mockSelectDlcVersion.mockResolvedValueOnce(pending);
     renderCenter();
 
-    expect(await screen.findByText("2.0.0")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "选择 / 回滚" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Acme Echo" }));
+    expect(screen.getByText("2.0.0")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "切换版本" }));
     await waitFor(() => expect(mockSelectDlcVersion).toHaveBeenCalledWith(
       baseItem.dlc_id,
       newDigest,
     ));
-    expect(await screen.findByText("Pending restart")).toBeTruthy();
+    expect(await screen.findByText("待重启")).toBeTruthy();
 
     const activeV2: DlcLifecycleItem = {
       ...pending,

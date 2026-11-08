@@ -24,18 +24,20 @@
   font-size: var(--ui-font-control);
   line-height: 1.5;
   pointer-events: auto;
-  background: hsl(var(--card));
+  background: var(--surface-popover);
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-lg, 12px);
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-lg);
+  backdrop-filter: var(--material-filter);
+  background-image: var(--surface-sheen);
 }
 
 .dbfox-toast-root[data-state="open"] {
-  animation: dbfox-toast-in 220ms var(--ease-out);
+  animation: dbfox-toast-in var(--motion-spatial) var(--ease-out);
 }
 
 .dbfox-toast-root[data-state="closed"] {
-  animation: dbfox-toast-out 150ms var(--ease-in);
+  animation: dbfox-toast-out var(--motion-fast) var(--ease-in);
 }
 
 .dbfox-toast-root[data-swipe="move"] {
@@ -44,11 +46,11 @@
 
 .dbfox-toast-root[data-swipe="cancel"] {
   transform: translateX(0);
-  transition: transform 180ms var(--ease-out);
+  transition: transform var(--motion-normal) var(--ease-out);
 }
 
 .dbfox-toast-root[data-swipe="end"] {
-  animation: dbfox-toast-swipe-out 160ms var(--ease-out);
+  animation: dbfox-toast-swipe-out var(--motion-normal) var(--ease-out);
 }
 
 .dbfox-toast-icon {
@@ -63,8 +65,8 @@
 }
 
 .dbfox-toast-icon-glyph {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .dbfox-toast-root--success .dbfox-toast-icon {
@@ -130,8 +132,8 @@
 }
 
 .dbfox-toast-close-icon {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
 }
 
 @keyframes dbfox-toast-in {

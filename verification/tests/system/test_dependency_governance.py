@@ -1,5 +1,9 @@
 from email.message import Message
 from pathlib import Path
+import hashlib
+import json
+
+import pytest
 
 from packaging.markers import default_environment
 
@@ -25,6 +29,25 @@ def test_license_gate_rejects_unknown_and_strong_copyleft() -> None:
         Component("python", "copyleft", "1", "AGPL-3.0-only"),
     ])
     assert len(failures) == 2
+
+
+def test_curated_license_requires_exact_version_and_unchanged_text(tmp_path, monkeypatch):
+    monkeypatch.setattr(dependency_governance, "ROOT", tmp_path)
+    (tmp_path / "desktop").mkdir()
+    (tmp_path / "scripts").mkdir()
+    license_file = tmp_path / "LICENSE"; license_file.write_bytes(b"audited license text")
+    lock = tmp_path / "desktop/package-lock.json"
+    lock.write_text(json.dumps({"packages": {"node_modules/example": {"version": "1"}}}))
+    (tmp_path / "scripts/dependency-license-evidence.json").write_text(json.dumps({
+        "pkg:npm/example@1": {"license": "MIT", "file": "LICENSE", "sha256": hashlib.sha256(license_file.read_bytes()).hexdigest()},
+    }))
+    assert node_components()[0].license == "MIT"
+    lock.write_text(json.dumps({"packages": {"node_modules/example": {"version": "2"}}}))
+    assert validate_licenses(node_components())
+    lock.write_text(json.dumps({"packages": {"node_modules/example": {"version": "1"}}}))
+    license_file.write_bytes(b"changed terms")
+    with pytest.raises(ValueError, match="License evidence changed"):
+        node_components()
 
 
 def test_dependency_governance_is_lockfile_only_for_node() -> None:

@@ -1,0 +1,320 @@
+{
+  "fixture": {
+    "project_id": "scene-browser-project",
+    "small_scene_id": "1b003aef7327476db61919d46c3b0da2",
+    "large_scene_id": "c7dd6af0e06c4a12820888de61c6dfe3",
+    "large_count": 10000,
+    "package_digest": "e298eb67139c974b91c2692be1434f2172081bd4690b14d3ae047491784e08fc"
+  },
+  "runs": [
+    {
+      "id": "run_ed135aa1233143e3ab58f6b2d72001fc",
+      "session_id": "f3e7a598-7121-4670-b2c3-5a3b4fb57747",
+      "status": "completed",
+      "error_code": null,
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    },
+    {
+      "id": "run_8cb7c96ee22d44dd85c6ca25cccc335b",
+      "session_id": "8e06be0c-d84c-4001-996b-b6cf008c0931",
+      "status": "completed",
+      "error_code": null,
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    },
+    {
+      "id": "run_8a0be733c4404703afa8f7ead15e93b9",
+      "session_id": "8d6701f6-0a76-4c7b-b276-6c9fbdfb3acd",
+      "status": "completed",
+      "error_code": null,
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    },
+    {
+      "id": "run_08cb348c207f442c99578403ff116b9a",
+      "session_id": "b413e413-54cd-4667-8dd3-69ffa480e921",
+      "status": "completed",
+      "error_code": null,
+      "consumed_tokens": 0,
+      "consumed_cost_usd": 0.0
+    }
+  ],
+  "invocations": [
+    {
+      "id": "invocation_639908ac1b2c4348bb5ce6f4d29d3bba",
+      "run_id": "run_ed135aa1233143e3ab58f6b2d72001fc",
+      "tool_name": "dbfox_scene_c870271c__scene_export",
+      "owner_id": "dbfox.scene",
+      "package_digest": "e298eb67139c974b91c2692be1434f2172081bd4690b14d3ae047491784e08fc",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"expected_version\":4,\"scene_id\":\"1b003aef7327476db61919d46c3b0da2\"}",
+      "resource_refs_json": "[{\"id\":\"1b003aef7327476db61919d46c3b0da2\",\"kind\":\"dbfox.scene.document\",\"version\":4}]"
+    },
+    {
+      "id": "invocation_0b6c3a4a7d3b404e868c6cb95563682e",
+      "run_id": "run_8cb7c96ee22d44dd85c6ca25cccc335b",
+      "tool_name": "dbfox_scene_c870271c__scene_export",
+      "owner_id": "dbfox.scene",
+      "package_digest": "e298eb67139c974b91c2692be1434f2172081bd4690b14d3ae047491784e08fc",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"expected_version\":4,\"scene_id\":\"1b003aef7327476db61919d46c3b0da2\"}",
+      "resource_refs_json": "[{\"id\":\"1b003aef7327476db61919d46c3b0da2\",\"kind\":\"dbfox.scene.document\",\"version\":4}]"
+    },
+    {
+      "id": "invocation_0abe270a35f1462a995b157a206a8e6f",
+      "run_id": "run_8a0be733c4404703afa8f7ead15e93b9",
+      "tool_name": "dbfox_scene_c870271c__scene_export",
+      "owner_id": "dbfox.scene",
+      "package_digest": "e298eb67139c974b91c2692be1434f2172081bd4690b14d3ae047491784e08fc",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"expected_version\":4,\"scene_id\":\"1b003aef7327476db61919d46c3b0da2\"}",
+      "resource_refs_json": "[{\"id\":\"1b003aef7327476db61919d46c3b0da2\",\"kind\":\"dbfox.scene.document\",\"version\":4}]"
+    },
+    {
+      "id": "invocation_306f5192fa6840869c9f110eab6a1005",
+      "run_id": "run_08cb348c207f442c99578403ff116b9a",
+      "tool_name": "dbfox_scene_c870271c__scene_export",
+      "owner_id": "dbfox.scene",
+      "package_digest": "e298eb67139c974b91c2692be1434f2172081bd4690b14d3ae047491784e08fc",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "input_json": "{\"expected_version\":4,\"scene_id\":\"1b003aef7327476db61919d46c3b0da2\"}",
+      "resource_refs_json": "[{\"id\":\"1b003aef7327476db61919d46c3b0da2\",\"kind\":\"dbfox.scene.document\",\"version\":4}]"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "artifact_8ead6050978146cb9dbbc64c2519f7a2",
+      "run_id": "run_ed135aa1233143e3ab58f6b2d72001fc",
+      "session_id": "f3e7a598-7121-4670-b2c3-5a3b4fb57747",
+      "type": "dbfox.scene.revision",
+      "status": "completed",
+      "payload_json": "{\"content_hash\":\"f61e1b24f102c74602721bcf39ee86b369e8720c74ed4a29c275cdff1bd46b69\",\"material_count\":0,\"object_count\":2,\"project_id\":\"scene-browser-project\",\"scene_id\":\"1b003aef7327476db61919d46c3b0da2\",\"title\":\"Interactive Scene\",\"version\":4}",
+      "resource_refs_json": "[{\"id\":\"1b003aef7327476db61919d46c3b0da2\",\"kind\":\"dbfox.scene.document\",\"version\":4}]"
+    },
+    {
+      "id": "artifact_f6de0f7ee7254fe8b4963568bf451256",
+      "run_id": "run_8cb7c96ee22d44dd85c6ca25cccc335b",
+      "session_id": "8e06be0c-d84c-4001-996b-b6cf008c0931",
+      "type": "dbfox.scene.revision",
+      "status": "completed",
+      "payload_json": "{\"content_hash\":\"f61e1b24f102c74602721bcf39ee86b369e8720c74ed4a29c275cdff1bd46b69\",\"material_count\":0,\"object_count\":2,\"project_id\":\"scene-browser-project\",\"scene_id\":\"1b003aef7327476db61919d46c3b0da2\",\"title\":\"Interactive Scene\",\"version\":4}",
+      "resource_refs_json": "[{\"id\":\"1b003aef7327476db61919d46c3b0da2\",\"kind\":\"dbfox.scene.document\",\"version\":4}]"
+    },
+    {
+      "id": "artifact_9a70e1d5c8d54682b1bdd66e58728cbf",
+      "run_id": "run_8a0be733c4404703afa8f7ead15e93b9",
+      "session_id": "8d6701f6-0a76-4c7b-b276-6c9fbdfb3acd",
+      "type": "dbfox.scene.revision",
+      "status": "completed",
+      "payload_json": "{\"content_hash\":\"f61e1b24f102c74602721bcf39ee86b369e8720c74ed4a29c275cdff1bd46b69\",\"material_count\":0,\"object_count\":2,\"project_id\":\"scene-browser-project\",\"scene_id\":\"1b003aef7327476db61919d46c3b0da2\",\"title\":\"Interactive Scene\",\"version\":4}",
+      "resource_refs_json": "[{\"id\":\"1b003aef7327476db61919d46c3b0da2\",\"kind\":\"dbfox.scene.document\",\"version\":4}]"
+    },
+    {
+      "id": "artifact_21ade2aa79af470b9c8ad12fb1f106fb",
+      "run_id": "run_08cb348c207f442c99578403ff116b9a",
+      "session_id": "b413e413-54cd-4667-8dd3-69ffa480e921",
+      "type": "dbfox.scene.revision",
+      "status": "completed",
+      "payload_json": "{\"content_hash\":\"f61e1b24f102c74602721bcf39ee86b369e8720c74ed4a29c275cdff1bd46b69\",\"material_count\":0,\"object_count\":2,\"project_id\":\"scene-browser-project\",\"scene_id\":\"1b003aef7327476db61919d46c3b0da2\",\"title\":\"Interactive Scene\",\"version\":4}",
+      "resource_refs_json": "[{\"id\":\"1b003aef7327476db61919d46c3b0da2\",\"kind\":\"dbfox.scene.document\",\"version\":4}]"
+    }
+  ],
+  "small_scene_revisions": [
+    {
+      "version": 1,
+      "content_hash": "8866e4eda020ec2d3b3881ab1af1e9b92db5a6cdf219ad1ccc7156a065dd8736",
+      "objects": []
+    },
+    {
+      "version": 2,
+      "content_hash": "b668fe5e59a0d596fdbd989bb81306c49e8b3fa0b3533220fd571a8c7acf965e",
+      "objects": [
+        {
+          "geometry_id": "geometry.box",
+          "id": "qa-cube",
+          "kind": "mesh",
+          "material_id": null,
+          "name": "QA Cube",
+          "parent_id": null,
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        {
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "id": "qa-light",
+          "inner_cone_angle": 0.0,
+          "intensity": 5.0,
+          "kind": "light",
+          "light_type": "directional",
+          "name": "QA Light",
+          "outer_cone_angle": 0.7853981633974483,
+          "parent_id": null,
+          "position": [
+            3.0,
+            5.0,
+            4.0
+          ],
+          "range": null,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        }
+      ]
+    },
+    {
+      "version": 3,
+      "content_hash": "ba1c2cff48e002e86699e3bdb02b7e1ddf3af19ee41baea43aae1b843fa32b13",
+      "objects": [
+        {
+          "geometry_id": "geometry.box",
+          "id": "qa-cube",
+          "kind": "mesh",
+          "material_id": null,
+          "name": "QA Cube",
+          "parent_id": null,
+          "position": [
+            0.7288495407201738,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        {
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "id": "qa-light",
+          "inner_cone_angle": 0.0,
+          "intensity": 5.0,
+          "kind": "light",
+          "light_type": "directional",
+          "name": "QA Light",
+          "outer_cone_angle": 0.7853981633974483,
+          "parent_id": null,
+          "position": [
+            3.0,
+            5.0,
+            4.0
+          ],
+          "range": null,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        }
+      ]
+    },
+    {
+      "version": 4,
+      "content_hash": "f61e1b24f102c74602721bcf39ee86b369e8720c74ed4a29c275cdff1bd46b69",
+      "objects": [
+        {
+          "geometry_id": "geometry.box",
+          "id": "qa-cube",
+          "kind": "mesh",
+          "material_id": null,
+          "name": "QA Cube",
+          "parent_id": null,
+          "position": [
+            0.7288495407201738,
+            1.5,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        },
+        {
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "id": "qa-light",
+          "inner_cone_angle": 0.0,
+          "intensity": 5.0,
+          "kind": "light",
+          "light_type": "directional",
+          "name": "QA Light",
+          "outer_cone_angle": 0.7853981633974483,
+          "parent_id": null,
+          "position": [
+            3.0,
+            5.0,
+            4.0
+          ],
+          "range": null,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "visible": true
+        }
+      ]
+    }
+  ]
+}

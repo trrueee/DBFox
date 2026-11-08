@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { Copy, ExternalLink } from "lucide-react";
+import {
+  CopyIcon,
+  ArrowSquareOutIcon,
+} from "@/components/icons";
 import { ImageCell } from "../ImageCell";
 import {
   Button,
@@ -77,7 +80,7 @@ export function CellValuePreview({
             setViewerOpen(true);
           }}
         >
-          <ExternalLink size={14} aria-hidden="true" />
+          <ArrowSquareOutIcon size={16} aria-hidden="true" />
           <span>{resolvedDisplayValue}</span>
         </button>
         <ValueViewerDialog
@@ -193,12 +196,12 @@ function ValueViewerDialog({
             else void navigator.clipboard.writeText(presentation.copyText);
           }}
         >
-          <Copy size={14} aria-hidden="true" />
+          <CopyIcon size={16} aria-hidden="true" />
           复制值
         </Button>
         {onOpenExternal && (
           <Button type="button" size="sm" variant="outline" onClick={onOpenExternal}>
-            <ExternalLink size={14} aria-hidden="true" />
+            <ArrowSquareOutIcon size={16} aria-hidden="true" />
             在浏览器打开
           </Button>
         )}

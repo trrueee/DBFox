@@ -1,4 +1,7 @@
-import { Sun, Moon } from "lucide-react";
+import {
+  SunIcon,
+  MoonIcon,
+} from "@/components/icons";
 import { Button } from "./ui/button";
 import { useTheme } from "../hooks/themeContext";
 
@@ -14,9 +17,9 @@ export function ThemeToggle() {
       aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
     >
       {theme === "dark" ? (
-        <Sun size={14} className="text-[hsl(var(--primary))] transition-transform hover:rotate-45" />
+        <SunIcon size={16} className="text-[hsl(var(--primary))] transition-transform hover:rotate-45" />
       ) : (
-        <Moon size={14} className="text-[hsl(var(--primary))] transition-transform hover:-rotate-12" />
+        <MoonIcon size={16} className="text-[hsl(var(--primary))] transition-transform hover:-rotate-12" />
       )}
     </Button>
   );

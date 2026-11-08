@@ -14,9 +14,9 @@ export function ProjectCreateDialog() {
     <Dialog open={projectCreateOpen} onOpenChange={setProjectCreateOpen}>
       <DialogContent className="project-create-dialog">
         <DialogHeader>
-          <DialogTitle>新建项目</DialogTitle>
+          <DialogTitle>打开文件夹</DialogTitle>
           <DialogDescription>
-            项目用于组织长期上下文与 Agent 工作。创建后可继续添加文件、数据和外部服务。
+            在这个文件夹里开始对话，分析、创建、修改或研究任何事情。
           </DialogDescription>
         </DialogHeader>
         <ProjectCreateForm

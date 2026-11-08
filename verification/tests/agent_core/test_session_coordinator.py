@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import sessionmaker
 
 from engine.agent.coordinator import SessionCoordinator
+from engine.agent.lease_heartbeat import heartbeat_session_lease
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.run import SessionLeaseConflict
 from engine.agent.session import SessionLease
@@ -115,13 +116,7 @@ def test_heartbeat_retries_after_a_transient_storage_failure(monkeypatch):
                 raise RuntimeError("temporary resource interruption")
             stop.set()
 
-    monkeypatch.setattr("engine.agent.coordinator.SessionRepository", FlakySessionRepository)
-    coordinator = SessionCoordinator(
-        session_factory=FakeDb,
-        run_loop=object(),
-        max_workers=1,
-        lease_ttl_seconds=30,
-    )
+    monkeypatch.setattr("engine.agent.lease_heartbeat.SessionRepository", FlakySessionRepository)
     lease = SessionLease(
         session_id="heartbeat_session",
         owner="worker",
@@ -129,7 +124,7 @@ def test_heartbeat_retries_after_a_transient_storage_failure(monkeypatch):
         expires_at=datetime.now(UTC) + timedelta(seconds=30),
     )
 
-    coordinator._heartbeat(lease, stop)
+    heartbeat_session_lease(session_factory=FakeDb, lease=lease, ttl_seconds=30, stop=stop)
 
     assert attempts == 2
 
@@ -157,13 +152,7 @@ def test_heartbeat_signals_lease_loss(monkeypatch):
         def heartbeat(self, *, lease, ttl_seconds):
             raise SessionLeaseConflict("lease lost")
 
-    monkeypatch.setattr("engine.agent.coordinator.SessionRepository", ConflictedSessionRepository)
-    coordinator = SessionCoordinator(
-        session_factory=FakeDb,
-        run_loop=object(),
-        max_workers=1,
-        lease_ttl_seconds=30,
-    )
+    monkeypatch.setattr("engine.agent.lease_heartbeat.SessionRepository", ConflictedSessionRepository)
     lease = SessionLease(
         session_id="heartbeat_session",
         owner="worker",
@@ -172,9 +161,34 @@ def test_heartbeat_signals_lease_loss(monkeypatch):
     )
     lease_lost = threading.Event()
 
-    coordinator._heartbeat(lease, SingleTickStop(), lease_lost)
+    heartbeat_session_lease(session_factory=FakeDb, lease=lease, ttl_seconds=30,
+                            stop=SingleTickStop(), lease_lost=lease_lost)
 
     assert lease_lost.is_set()
+
+
+def test_queued_input_does_not_reschedule_a_formally_waiting_session(db_session):
+    sessions = SessionRepository(db_session)
+    session = sessions.create(project_id=None, title="waiting")
+    arguments = dict(session_id=session.id, resource_refs=(), content="first",
+                     llm_credential_id="synthetic", api_base=None, model_name=None, request_payload={})
+    first = sessions.admit(**arguments, idempotency_key="first")
+    lease = sessions.claim(session_id=session.id, owner="setup")
+    sessions.promote_next_input(lease=lease)
+    run = db_session.get(AgentRun, first.run_id)
+    run.status = "waiting_input"
+    sessions.release(lease=lease)
+    sessions.admit(**{**arguments, "content": "second"}, idempotency_key="second")
+    db_session.commit()
+    coordinator = SessionCoordinator(session_factory=sessionmaker(bind=db_session.get_bind()), run_loop=object())
+    try:
+        assert coordinator._has_work(session.id) is False
+        assert session.id not in coordinator._recoverable_sessions()
+        run.status = "running"
+        db_session.commit()
+        assert coordinator._has_work(session.id) is True
+    finally:
+        coordinator.stop()
 
 
 def test_finished_callback_cannot_remove_a_newer_session_worker() -> None:

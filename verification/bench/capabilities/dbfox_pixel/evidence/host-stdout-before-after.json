@@ -1,0 +1,25 @@
+{
+  "command": "node verification/bench/capabilities/dbfox_pixel/browser-stdout-probe.mjs",
+  "bytes": 4194304,
+  "before": {
+    "exit_code": 1,
+    "ready": "ready",
+    "producer_completed_without_intervention": false,
+    "stdout_flowing_after_ready": false,
+    "producer_completed_after_control_resume": true
+  },
+  "after": {
+    "exit_code": 0,
+    "ready": "ready",
+    "producer_completed_without_intervention": true,
+    "stdout_flowing_after_ready": true,
+    "producer_completed_after_control_resume": true
+  },
+  "independent_shared_regression_commit": "6ea0788a",
+  "actual_electron_before": {
+    "last_successful_request": 495,
+    "pending_requests": ["documents.head", "documents.apply"],
+    "unauthenticated_health_timeout_seconds": 5,
+    "electron_and_sidecar_still_alive": true
+  }
+}

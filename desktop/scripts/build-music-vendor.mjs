@@ -19,9 +19,10 @@ await mkdir(vendorRoot, { recursive: true });
 
 for (const entry of ["basic-pitch", "vexflow"]) {
   const outfile = join(vendorRoot, `${entry}.js`);
-  await build({
+  const bundled = await build({
     entryPoints: [join(sourceRoot, `${entry}.js`)],
     outfile,
+    write: false,
     bundle: true,
     format: "esm",
     platform: "browser",
@@ -31,7 +32,9 @@ for (const entry of ["basic-pitch", "vexflow"]) {
     absWorkingDir: desktopRoot,
     nodePaths: [join(desktopRoot, "node_modules")],
   });
-  const bundledSource = await readFile(outfile, "utf8");
+  // Normalize in memory and publish once. Reopening the freshly written large
+  // asset immediately can conflict with Windows file scanning/indexing.
+  const bundledSource = bundled.outputFiles[0].text;
   await writeFile(outfile, bundledSource.replace(/[ \t]+(?=\r?\n|$)/g, ""), "utf8");
 }
 

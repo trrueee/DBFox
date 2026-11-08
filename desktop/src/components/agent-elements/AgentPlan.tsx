@@ -13,16 +13,16 @@
  */
 import { useState } from "react";
 import {
-  AlertTriangle,
-  ArrowRight,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Circle,
-  CircleStop,
-  LoaderCircle,
-  X,
-} from "lucide-react";
+  WarningIcon,
+  ArrowRightIcon,
+  CheckIcon,
+  CaretDownIcon,
+  CaretUpIcon,
+  CircleIcon,
+  StopCircleIcon,
+  CircleNotchIcon,
+  XIcon,
+} from "@/components/icons";
 
 import type { ConversationArtifact, PlanItem } from "../../types/conversation";
 import { cn } from "../../lib/utils";
@@ -68,7 +68,7 @@ export function AgentPlan({
           {completedSteps}/{totalSteps}
         </span>
         <span className="inline-grid size-4 place-items-center text-[var(--agent-text-muted)]">
-          {expanded ? <ChevronUp className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}
+          {expanded ? <CaretUpIcon className="size-4" aria-hidden="true" /> : <CaretDownIcon className="size-4" aria-hidden="true" />}
         </span>
       </button>
 
@@ -161,33 +161,33 @@ function PlanStepRow({
 
 function PlanStatusIcon({ status }: { status: PlanItem["status"] }) {
   if (status === "pending" || status === "in_progress") {
-    return <LoaderCircle className="size-3.5 shrink-0 animate-spin text-[var(--agent-accent)]" aria-hidden="true" />;
+    return <CircleNotchIcon className="size-3.5 shrink-0 animate-spin text-[var(--agent-accent)]" aria-hidden="true" />;
   }
   if (status === "waiting") {
-    return <AlertTriangle className="size-3.5 shrink-0 text-[var(--color-warning)]" aria-hidden="true" />;
+    return <WarningIcon className="size-3.5 shrink-0 text-[var(--color-warning)]" aria-hidden="true" />;
   }
   if (status === "failed") {
-    return <AlertTriangle className="size-3.5 shrink-0 text-[var(--color-danger)]" aria-hidden="true" />;
+    return <WarningIcon className="size-3.5 shrink-0 text-[var(--color-danger)]" aria-hidden="true" />;
   }
   if (status === "cancelled") {
-    return <CircleStop className="size-3.5 shrink-0 text-[var(--agent-text-muted)]" aria-hidden="true" />;
+    return <StopCircleIcon className="size-3.5 shrink-0 text-[var(--agent-text-muted)]" aria-hidden="true" />;
   }
   if (status === "completed") {
-    return <Check className="size-3.5 shrink-0 text-[var(--color-success)]" aria-hidden="true" />;
+    return <CheckIcon className="size-3.5 shrink-0 text-[var(--color-success)]" aria-hidden="true" />;
   }
-  return <Circle className="size-3.5 shrink-0 text-[var(--agent-text-muted)]" aria-hidden="true" />;
+  return <CircleIcon className="size-3.5 shrink-0 text-[var(--agent-text-muted)]" aria-hidden="true" />;
 }
 
 function PlanStepIcon({ status, running }: { status: PlanStep["status"]; running: boolean }) {
   if (status === "in_progress") {
     return running
-      ? <LoaderCircle className="size-3.5 animate-spin text-[var(--agent-accent)]" />
-      : <ArrowRight className="size-3.5 text-[var(--agent-accent)]" />;
+      ? <CircleNotchIcon className="size-3.5 animate-spin text-[var(--agent-accent)]" />
+      : <ArrowRightIcon className="size-3.5 text-[var(--agent-accent)]" />;
   }
-  if (status === "completed") return <Check className="size-3.5 text-[var(--color-success)]" />;
-  if (status === "blocked") return <AlertTriangle className="size-3.5 text-[var(--color-warning)]" />;
-  if (status === "skipped") return <X className="size-3.5 text-[var(--agent-text-muted)]" />;
-  return <Circle className="size-3.5 text-[var(--agent-text-muted)]" />;
+  if (status === "completed") return <CheckIcon className="size-3.5 text-[var(--color-success)]" />;
+  if (status === "blocked") return <WarningIcon className="size-3.5 text-[var(--color-warning)]" />;
+  if (status === "skipped") return <XIcon className="size-3.5 text-[var(--agent-text-muted)]" />;
+  return <CircleIcon className="size-3.5 text-[var(--agent-text-muted)]" />;
 }
 
 function planStepStatusLabel(status: PlanStep["status"]) {

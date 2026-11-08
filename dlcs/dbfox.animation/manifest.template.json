@@ -1,0 +1,12 @@
+{
+  "manifestSchemaVersion": 2,
+  "id": "dbfox.animation",
+  "version": "1.0.2",
+  "displayName": "DBFox Animation Studio",
+  "publisher": "dbfox",
+  "description": "Durable timelines, keyframes, curves, clips and markers with native Three playback.",
+  "extensionApiVersion": "2",
+  "requiresDbfox": ">=1.0.0",
+  "entrypoints": {"backend": "backend/entry.py", "frontend": "frontend/index.js"},
+  "permissions": []
+}

@@ -6,14 +6,15 @@ import {
   useState,
 } from "react";
 import {
-  HelpCircle,
-  Maximize2,
-  MoreHorizontal,
-  Minimize2,
-  PanelRightClose,
-  PanelRightOpen,
-  X,
-} from "lucide-react";
+  QuestionIcon,
+  ArrowsOutSimpleIcon,
+  DotsThreeIcon,
+  ArrowsInSimpleIcon,
+  SidebarSimpleIcon,
+  PushPinIcon,
+  XIcon,
+  ArrowLeftIcon,
+} from "@/components/icons";
 import {
   Button,
   DropdownMenu,
@@ -48,6 +49,7 @@ export interface WorkspaceDockProps {
   activeConversationId: string | null;
   showToast: (message: string, type?: "success" | "error" | "warning" | "info") => void;
   registry?: DockViewRegistry;
+  onPreferredWidthChange?: (width: number | undefined) => void;
 }
 
 const OVERFLOW_TRIGGER_RESERVE_PX = 30;
@@ -107,13 +109,14 @@ function dockTabIcon(
   dlcDockViews: readonly DockViewContribution[],
 ) {
   return resolveDockView(tab.viewType, registry, dlcDockViews)?.icon(tab)
-    ?? <HelpCircle size={14} aria-hidden="true" />;
+    ?? <QuestionIcon size={16} aria-hidden="true" />;
 }
 
 export function WorkspaceDock({
   activeConversationId,
   showToast,
   registry = DEFAULT_REGISTRY,
+  onPreferredWidthChange,
 }: WorkspaceDockProps) {
   const dockOpen = useWorkspaceStore(selectActiveDockOpen);
   const dockTabs = useWorkspaceStore(selectActiveDockTabs);
@@ -123,6 +126,7 @@ export function WorkspaceDock({
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
   const setDockActiveTab = useWorkspaceStore((s) => s.setDockActiveTab);
   const closeDockTab = useWorkspaceStore((s) => s.closeDockTab);
+  const updateDockTab = useWorkspaceStore((s) => s.updateDockTab);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
   // Subscribe so active runtime contributions are reflected in production Dock consumers.
   const dlcDockViews = useDlcStore((s) => s.contributions.dockViews);
@@ -135,15 +139,18 @@ export function WorkspaceDock({
         return true;
       }
       return contribution.isVisible(tab, {
+        workbenchScopeId,
         activeProjectId,
         activeConversationId,
       });
     });
-  }, [activeConversationId, activeProjectId, dlcDockViews, dockTabs, registry]);
+  }, [activeConversationId, activeProjectId, dlcDockViews, dockTabs, registry, workbenchScopeId]);
 
   const activeKey = activeViewKey;
   const activeTab =
     visibleTabs.find((tab) => tab.viewKey === activeKey) ?? visibleTabs.at(-1) ?? null;
+  const preferredWidth = activeTab ? resolveDockView(activeTab.viewType, registry, dlcDockViews)?.preferredWidth : undefined;
+  useLayoutEffect(() => { onPreferredWidthChange?.(preferredWidth); }, [onPreferredWidthChange, preferredWidth]);
 
   // ── Tab strip windowing: direct tabs + overflow menu (no hidden scrollbar) ──
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -234,7 +241,7 @@ export function WorkspaceDock({
               onClick={() => setDockOpen(true)}
               aria-label="展开工作区"
             >
-              <PanelRightOpen size={16} aria-hidden="true" />
+              <SidebarSimpleIcon size={20} mirrored aria-hidden="true" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>展开工作区</TooltipContent>
@@ -268,14 +275,27 @@ export function WorkspaceDock({
       data-fullscreen={fullscreen ? "true" : undefined}
     >
       <header className="workspace-dock__tabbar">
-        <TabsList className="workspace-dock__tabs" aria-label="工作区标签" ref={tabsRef}>
+        <Tooltip><TooltipTrigger asChild>
+        <Button type="button" variant="ghost" size="icon-sm" className="workspace-dock__return-conversation"
+          onClick={() => {
+            const composer = document.querySelector<HTMLTextAreaElement>(".app-conversation-panel .dbfox-composer textarea:not(:disabled)");
+            setDockOpen(false);
+            requestAnimationFrame(() => {
+              if (composer?.isConnected && !composer.closest("[inert]")) composer.focus({ preventScroll: true });
+            });
+          }} aria-label="返回对话">
+          <ArrowLeftIcon size={20} aria-hidden="true" />
+        </Button>
+        </TooltipTrigger><TooltipContent>返回对话</TooltipContent></Tooltip>
+        <div className="workspace-dock__tabs" ref={tabsRef}>
+        <TabsList className="workspace-dock__tab-list" aria-label="工作区标签">
           {directTabs.map((tab) => {
             const active = tab.viewKey === activeTab?.viewKey;
             return (
               <div
                 key={tab.viewKey}
                 ref={registerTabNode(tab.viewKey)}
-                className={`workspace-dock__tab ${active ? "is-active" : ""}`}
+                className={`workspace-dock__tab ${active ? "is-active" : ""} ${tab.preview ? "is-preview" : ""}`}
               >
                 <TabsTrigger
                   ref={registerTabTrigger(tab.viewKey)}
@@ -283,32 +303,24 @@ export function WorkspaceDock({
                   className="workspace-dock__tab-main"
                   title={tab.title}
                   onClick={() => setDockActiveTab(tab.viewKey)}
+                  onDoubleClick={() => updateDockTab(tab.viewKey, { preview: false })}
+                  aria-keyshortcuts={tab.closeable ? "Delete" : undefined}
+                  onKeyDown={(event) => {
+                    if (event.key === "Delete" && tab.closeable) {
+                      event.preventDefault();
+                      handleCloseTab(tab.viewKey);
+                    }
+                  }}
                 >
                   <span className="workspace-dock__tab-icon" aria-hidden="true">
                     {dockTabIcon(tab, registry, dlcDockViews)}
                   </span>
                   <span className="workspace-dock__tab-title">{tab.title}</span>
                 </TabsTrigger>
-                {tab.closeable && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        className="workspace-dock__tab-close"
-                        aria-label={`关闭 ${tab.title}`}
-                        onClick={() => handleCloseTab(tab.viewKey)}
-                      >
-                        <X size={14} aria-hidden="true" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>关闭 {tab.title}</TooltipContent>
-                  </Tooltip>
-                )}
               </div>
             );
           })}
+        </TabsList>
           {overflowTabs.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -320,19 +332,32 @@ export function WorkspaceDock({
                   className="workspace-dock__overflow"
                   aria-label={`更多标签（${overflowTabs.length} 个）`}
                 >
-                  <MoreHorizontal size={16} aria-hidden="true" />
+                  <DotsThreeIcon size={16} aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {overflowTabs.map((tab) => (
                   <DropdownMenuItem key={tab.viewKey} onClick={() => setDockActiveTab(tab.viewKey)}>
+                    {dockTabIcon(tab, registry, dlcDockViews)}
                     {tab.title}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-        </TabsList>
+        </div>
+        {activeTab?.closeable ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button type="button" size="icon-sm" variant="ghost" className="workspace-dock__close"
+                aria-label={`关闭 ${activeTab.title}`} onClick={() => handleCloseTab(activeTab.viewKey)}>
+                <XIcon size={16} aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>关闭当前标签 · Delete</TooltipContent>
+          </Tooltip>
+        ) : null}
+        {activeTab?.preview ? <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label="固定当前标签" onClick={() => updateDockTab(activeTab.viewKey, { preview: false })}><PushPinIcon size={16} aria-hidden="true" /></Button></TooltipTrigger><TooltipContent>固定标签 · 也可双击标签</TooltipContent></Tooltip> : null}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -343,7 +368,7 @@ export function WorkspaceDock({
               onClick={() => setFullscreen((value) => !value)}
               aria-label={fullscreen ? "退出工作区全屏" : "工作区全屏"}
             >
-              {fullscreen ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
+              {fullscreen ? <ArrowsInSimpleIcon size={16} aria-hidden="true" /> : <ArrowsOutSimpleIcon size={16} aria-hidden="true" />}
             </Button>
           </TooltipTrigger>
           <TooltipContent>{fullscreen ? "退出全屏" : "全屏"}</TooltipContent>
@@ -362,7 +387,7 @@ export function WorkspaceDock({
               }}
               aria-label="收起工作区"
             >
-              <PanelRightClose size={16} aria-hidden="true" />
+              <SidebarSimpleIcon size={20} mirrored aria-hidden="true" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>收起工作区</TooltipContent>
@@ -414,7 +439,7 @@ function renderDockTab(
     return (
       <EmptyState
         title="没有打开的标签"
-        description="从左侧资源或对话打开对象后，会在这里继续查看和操作。"
+        description="从项目菜单打开文件与数据库，或点击对话中的引用和成果。"
       />
     );
   }

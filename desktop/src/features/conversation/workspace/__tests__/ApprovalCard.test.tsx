@@ -28,16 +28,26 @@ const approval: ApprovalItem = {
 };
 
 describe("ApprovalCard", () => {
+  it("identifies the runtime danger level as high risk before a command decision", () => {
+    render(<ApprovalCard approval={{ ...approval, payload: { ...approval.payload, risk_level: "danger" } }} onResolve={vi.fn()} />);
+
+    expect(screen.getByLabelText("需要批准")).toHaveTextContent("高风险");
+    expect(screen.queryByText("风险待确认")).not.toBeInTheDocument();
+  });
+
   it("shows risk, reason and operation before the decision actions", () => {
     render(<ApprovalCard approval={approval} onResolve={vi.fn()} />);
 
     expect(screen.getByText("需要你的批准")).toBeInTheDocument();
     expect(screen.getByText("该操作会向项目目录写入文件。")).toBeInTheDocument();
-    expect(screen.getByText("workspace.write_file")).toBeInTheDocument();
+    expect(screen.getByText("workspace.write_file")).not.toBeVisible();
+    expect(screen.getByText("reports/summary.md")).toBeInTheDocument();
     const actions = screen.getAllByRole("button");
     expect(actions[0]).toHaveTextContent("拒绝");
     expect(actions[1]).toHaveTextContent("批准执行");
     expect(actions[0]).toHaveFocus();
+    fireEvent.click(screen.getByText("查看操作内容"));
+    expect(screen.getByText("workspace.write_file")).toBeVisible();
   });
 
   it("resolves reject and approve decisions through the same Core component", () => {
@@ -70,6 +80,30 @@ describe("ApprovalCard", () => {
     expect(screen.getByLabelText("批准记录")).toHaveAttribute("role", "status");
     expect(screen.getByText("已批准")).toBeInTheDocument();
     expect(screen.queryByText("已拒绝")).not.toBeInTheDocument();
+  });
+
+  it("keeps a waiting request distinct from a rejected decision", () => {
+    render(<ApprovalAuditCard approval={approval} />);
+
+    expect(screen.getByText("等待批准")).toBeInTheDocument();
+    expect(screen.queryByText("已拒绝")).not.toBeInTheDocument();
+  });
+
+  it("shows remaining decisions and the concrete action for file writes", () => {
+    render(<ApprovalCard approval={approval} pendingCount={2} onResolve={vi.fn()} />);
+
+    expect(screen.getByText("还有 2 项操作待批准，将逐项处理。")).toBeInTheDocument();
+    expect(screen.getByText("查看操作内容")).toBeInTheDocument();
+    expect(screen.getByText("reports/summary.md")).toBeInTheDocument();
+  });
+
+  it("keeps an unfinished draft focused when approval arrives", () => {
+    const { rerender } = render(<div><textarea aria-label="草稿" defaultValue="正在写补充要求" /></div>);
+    const draft = screen.getByRole("textbox", { name: "草稿" });
+    draft.focus();
+    rerender(<div><textarea aria-label="草稿" defaultValue="正在写补充要求" /><ApprovalCard approval={approval} onResolve={vi.fn()} /></div>);
+    expect(draft).toHaveFocus();
+    expect(screen.getByRole("button", { name: "批准执行" })).toBeEnabled();
   });
 
   it.each([

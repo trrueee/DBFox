@@ -1,0 +1,48 @@
+async (page) => {
+  const assert = (value, message) => { if (!value) throw new Error(message); };
+  const request = await page.waitForRequest((value) => value.url().includes('/operations/playtest.next'));
+  const headers = await request.allHeaders(); delete headers['content-length']; delete headers.host;
+  const base = request.url().split('/api/v1/')[0] + '/api/v1/';
+  const api = async (path, data, method = 'POST') => {
+    const response = await page.context().request.fetch(base + path, { method, headers, ...(data === undefined ? {} : { data }) });
+    const body = await response.json(); if (!response.ok()) throw new Error(JSON.stringify(body)); await response.dispose(); return body;
+  };
+  const project = (await api('projects', undefined, 'GET')).find((item) => item.name === 'Game Native Agent QA');
+  const operation = (name, input) => api(`dlcs/dbfox.game/operations/${name}?project_id=${project.id}`, input);
+  const game = (await operation('games.list', {})).items.find((item) => item.title === 'Native Agent Fox Survival');
+  const before = await operation('games.get', { game_id: game.id, version: game.version, section: 'entities' });
+  const fox = before.items.find((item) => item.tags.includes('player'));
+  const transform = fox.components.find((item) => item.spec.kind === 'transform');
+  if (game.version !== 3) throw new Error('This mutation phase requires the unedited v3 acceptance dataset; inspect its state instead of replaying');
+  await page.locator('.game-artifact').filter({ has: page.locator('.game-viewport') }).getByRole('button', { name: '编辑当前游戏', exact: true }).click();
+  const studio = page.locator('.game-studio');
+  await studio.locator('canvas').waitFor();
+  await studio.getByRole('button', { name: '单步', exact: true }).click();
+  assert((await studio.locator('.game-preview-stats').innerText()).includes('tick 1'), 'Native single-step advances exactly once');
+  await studio.getByRole('button', { name: '播放', exact: true }).click();
+  await page.waitForFunction(() => Number(document.querySelector('.game-studio .game-preview-stats')?.textContent.match(/tick (\d+)/)?.[1]) > 5);
+  await studio.getByRole('button', { name: '暂停', exact: true }).click();
+  const paused = await studio.locator('.game-preview-stats').innerText();
+  await page.waitForTimeout(100);
+  assert(await studio.locator('.game-preview-stats').innerText() === paused, 'Native pause must stop stepping');
+  await studio.getByRole('button', { name: '重置', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('.game-studio .game-preview-stats')?.textContent.includes('tick 0'));
+  const canvas = await studio.locator('canvas').boundingBox();
+  const viewport = await studio.locator('.game-viewport').boundingBox();
+  assert(Math.abs(canvas.width - viewport.width) < 3, 'Native Studio canvas fits its container');
+  const x = canvas.x + transform.spec.x / 800 * canvas.width, y = canvas.y + transform.spec.y / 600 * canvas.height;
+  await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + canvas.width / 10, y, { steps: 5 }); await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector('.game-studio .game-header .game-badge')?.textContent === 'v4');
+  const moved = await operation('games.get', { game_id: game.id, version: 4, section: 'entities' });
+  assert(moved.items.find((item) => item.id === fox.id).components.find((item) => item.id === transform.id).spec.x === transform.spec.x + 80, 'Native pointer drag persists exact expected displacement');
+  await studio.getByRole('button', { name: '撤销上个版本', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('.game-studio .game-header .game-badge')?.textContent === 'v5');
+  const restored = await operation('games.head', { game_id: game.id });
+  assert(restored.game.content_hash === game.content_hash, 'Native undo restores original canonical hash as a new revision');
+  await page.screenshot({ path: '.tmp/game-phaser-review/native-studio-wide.png' });
+  const response = page.waitForResponse((item) => item.request().method() === 'POST' && item.url().includes('/operations/games.playtest'));
+  await studio.getByRole('button', { name: '运行正式 Playtest', exact: true }).click();
+  const completed = await response; const result = await completed.json();
+  assert(completed.ok() && result.outcome.game.version === 5 && result.outcome.report.outcome === 'lost', 'New signed candidate must execute real Phaser through original ActionRun');
+  return { initialVersion: 3, finalVersion: 5, singleStep: true, pause: true, reset: true, nativeDrag: true, exactUndo: true, playtest: result, canvas, viewport };
+}

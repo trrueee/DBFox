@@ -1,0 +1,73 @@
+{
+  "suite": {
+    "schema_version": "1.0",
+    "suite_id": "capability.dbfox-game.scripted",
+    "suite_version": "1.0.0",
+    "subject": {
+      "kind": "capability",
+      "components": [
+        "dbfox.game"
+      ],
+      "supporting_fixtures": [
+        "scripted-provider",
+        "migrated-metadata",
+        "signed-full-package"
+      ]
+    },
+    "execution": {
+      "provider_modes": [
+        "scripted"
+      ],
+      "default_repetitions": 1,
+      "max_repetitions": 1
+    },
+    "dataset": "cases.json",
+    "metrics": [
+      {
+        "name": "task.success_rate",
+        "direction": "higher_is_better",
+        "unit": "ratio",
+        "description": "All case-owned assertions passed"
+      },
+      {
+        "name": "runtime.tool_calls",
+        "direction": "informational",
+        "unit": "count",
+        "description": "Durable production invocations"
+      },
+      {
+        "name": "game.final_version",
+        "direction": "informational",
+        "unit": "count",
+        "description": "Authoritative final revision"
+      }
+    ]
+  },
+  "trials": 13,
+  "scored_trials": 13,
+  "passed_trials": 13,
+  "unscored_trials": 0,
+  "success_rate": 1.0,
+  "wilson_95_ci": [
+    0.7719046276458015,
+    1.0
+  ],
+  "metrics": {
+    "game.final_version": {
+      "median": 3.0,
+      "p90": 4.0,
+      "maximum": 12.0
+    },
+    "runtime.tool_calls": {
+      "median": 2.0,
+      "p90": 3.6000000000000014,
+      "maximum": 10.0
+    },
+    "task.success_rate": {
+      "median": 1.0,
+      "p90": 1.0,
+      "maximum": 1.0
+    }
+  },
+  "failed_checks": []
+}

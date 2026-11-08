@@ -7,7 +7,10 @@ const execFileAsync = promisify(execFile);
 const runtimeRoot = await mkdtemp(join(process.cwd(), ".electron-packaged-smoke-"));
 const executable = await findExecutable();
 const resultPath = join(runtimeRoot, "electron-smoke-result.json");
-const requiredSystemDlcIds = ["dbfox.data", "dbfox.music", "dbfox.workspace"];
+const bundle = JSON.parse(await readFile(join(process.cwd(), "electron-resources", "system-dlcs", "system-dlcs.json"), "utf8"));
+const requiredSystemDlcIds = bundle.packages.filter(item => item.default_enabled).map(item => item.dlc_id);
+if (!requiredSystemDlcIds.length || new Set(requiredSystemDlcIds).size !== requiredSystemDlcIds.length)
+  throw new Error("System DLC smoke expectations require a nonempty unique bundle manifest");
 let capturedOutput = "";
 let child;
 let succeeded = false;

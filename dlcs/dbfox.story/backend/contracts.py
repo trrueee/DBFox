@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from .resource_kind import ENTITY_KINDS
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 EntityKind = Literal["character", "scene", "plotline"]
 EdgeStatus = Literal["pending", "confirmed", "rejected"]
@@ -31,6 +29,12 @@ class WorldOutput(BaseModel):
     generation: int
     created_at: str
     updated_at: str
+
+
+class WorldLookupOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    world: WorldOutput | None
 
 
 class EntityOutput(BaseModel):
@@ -99,7 +103,7 @@ class WorldEnsureInput(BaseModel):
 class EntityCreateInput(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    kind: Literal[ENTITY_KINDS]  # type: ignore[misc]
+    kind: EntityKind
     name: str = Field(min_length=1, max_length=120)
     summary: str = Field(default="", max_length=2_000)
 
@@ -123,6 +127,8 @@ class RelationEdgeInput(BaseModel):
 
     from_name: str = Field(min_length=1, max_length=120)
     to_name: str = Field(min_length=1, max_length=120)
+    from_id: str | None = Field(default=None, min_length=1, max_length=64)
+    to_id: str | None = Field(default=None, min_length=1, max_length=64)
     kind: str = Field(min_length=1, max_length=60)
     reason: str = Field(default="", max_length=2_000)
 
@@ -182,13 +188,24 @@ class ChapterOutput(BaseModel):
     seq: int
     title: str
     content: str
+    content_path: str
+    content_sha256: str = Field(min_length=64, max_length=64)
     updated_at: str
 
 
-class ChapterListOutput(BaseModel):
+class ChapterCatalogItem(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    chapters: tuple[ChapterOutput, ...] = ()
+    id: str
+    seq: int
+    title: str
+    updated_at: str
+
+
+class ChapterCatalogListOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    chapters: tuple[ChapterCatalogItem, ...] = ()
 
 
 class ChapterCreateInput(BaseModel):
@@ -204,6 +221,15 @@ class ChapterUpdateInput(BaseModel):
     chapter_id: str = Field(min_length=1, max_length=64)
     title: str | None = Field(default=None, min_length=1, max_length=160)
     content: str | None = Field(default=None, max_length=100_000)
+    expected_sha256: str = Field(min_length=64, max_length=64)
+
+
+class ChapterAppendInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    chapter_id: str = Field(min_length=1, max_length=64)
+    content: str = Field(min_length=1, max_length=50_000)
+    expected_sha256: str = Field(min_length=64, max_length=64)
 
 
 class ChapterIdInput(BaseModel):
@@ -217,6 +243,48 @@ class ChapterMoveInput(BaseModel):
 
     chapter_id: str = Field(min_length=1, max_length=64)
     direction: Literal["up", "down"]
+
+
+class ChapterVersionOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str
+    chapter_id: str
+    seq: int
+    title: str
+    content: str
+    content_sha256: str = Field(min_length=64, max_length=64)
+    author: str
+    created_at: str
+
+
+class ChapterVersionCatalogItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str
+    chapter_id: str
+    seq: int
+    title: str
+    content_sha256: str = Field(min_length=64, max_length=64)
+    author: str
+    created_at: str
+
+
+class ChapterVersionListOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    versions: tuple[ChapterVersionCatalogItem, ...] = ()
+
+
+class ChapterVersionIdInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    chapter_id: str = Field(min_length=1, max_length=64)
+    version_id: str = Field(min_length=1, max_length=64)
+
+
+class ChapterVersionRestoreInput(ChapterVersionIdInput):
+    expected_sha256: str = Field(min_length=64, max_length=64)
 
 
 class StoryUpsertEntityInput(BaseModel):
@@ -249,6 +317,8 @@ class ChapterReadOutput(BaseModel):
     id: str
     title: str
     content: str
+    content_path: str
+    content_sha256: str = Field(min_length=64, max_length=64)
     updated_at: str
 
 
@@ -259,6 +329,17 @@ class ChapterWriteOutput(BaseModel):
     chapter_id: str
     title: str
     length: int
+    checked_world_generation: int = Field(ge=1)
+
+
+class StoryAppendChapterInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    world_id: str | None = Field(default=None, min_length=1, max_length=64)
+    chapter_id: str = Field(min_length=1, max_length=64)
+    content: str = Field(min_length=1, max_length=50_000)
+    expected_world_generation: int = Field(ge=1)
+    expected_chapter_sha256: str = Field(min_length=64, max_length=64)
 
 
 class StoryChapterReadInput(BaseModel):
@@ -276,6 +357,20 @@ class StoryWriteChapterInput(BaseModel):
     chapter_id: str | None = Field(default=None, min_length=1, max_length=64)
     title: str = Field(min_length=1, max_length=160)
     content: str = Field(min_length=1, max_length=100_000)
+    expected_world_generation: int = Field(ge=1)
+    expected_chapter_sha256: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=64,
+    )
+
+    @model_validator(mode="after")
+    def require_existing_chapter_hash(self) -> "StoryWriteChapterInput":
+        if self.chapter_id is not None and self.expected_chapter_sha256 is None:
+            raise ValueError("existing chapter updates require expected_chapter_sha256")
+        if self.chapter_id is None and self.expected_chapter_sha256 is not None:
+            raise ValueError("new chapters must not provide expected_chapter_sha256")
+        return self
 
 
 class StoryGraphQueryInput(BaseModel):
@@ -306,5 +401,6 @@ class GraphFactsOutput(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    world_generation: int = Field(ge=1)
     entities: tuple[dict[str, Any], ...] = ()
     relations: tuple[dict[str, Any], ...] = ()

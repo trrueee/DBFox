@@ -24,6 +24,13 @@ from engine.runtime_env import load_runtime_env
 # Load runtime configuration before provider and database clients initialize.
 load_runtime_env()
 
+# A frozen executable is a bootloader, not a Python CLI. Dispatch the existing
+# worker protocol before importing the HTTP host; a worker never starts a server.
+if __name__ == "__main__" and sys.argv[1:] == ["--tool-worker"]:
+    from engine.tools.worker import main as run_tool_worker
+
+    raise SystemExit(run_tool_worker())
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -140,6 +147,13 @@ async def lifespan(application: FastAPI) -> Any:
             begin_agent_write(audit_session)
             SecurityAuditService(audit_session).enforce_retention()
             audit_session.commit()
+        from engine.attachments import AttachmentService
+        from engine.runtime_composition import deliver_session_resource_retirements
+        with SessionLocal() as attachment_session:
+            begin_agent_write(attachment_session)
+            AttachmentService(attachment_session).collect()
+            attachment_session.commit()
+            deliver_session_resource_retirements(attachment_session, runtime_snapshot)
 
         # Agent execution is independent from HTTP/SSE connections. Session leases
         # and the event log are database-owned; this coordinator only schedules work.

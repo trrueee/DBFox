@@ -96,7 +96,7 @@ describe("MessageList", () => {
   it("shows the user question immediately while a run is queued", () => {
     const queued = run("run-queued", 1);
     queued.status = "queued";
-    render(
+    const { rerender } = render(
       <MessageList
         runs={[queued]}
         items={[user("run-queued", 1)]}
@@ -105,6 +105,19 @@ describe("MessageList", () => {
       />,
     );
     expect(screen.getByText("问题 1")).toBeTruthy();
+    expect(screen.getByText("已排队")).toBeTruthy();
+    expect(screen.getByText("当前任务结束后将自动开始")).toBeTruthy();
+    expect(screen.queryByText("正在等待模型响应")).toBeNull();
+
+    rerender(
+      <MessageList
+        runs={[{ ...queued, status: "running", phase: "waiting_model" }]}
+        items={[user("run-queued", 1)]}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("已排队")).toBeNull();
     expect(screen.getByText("正在等待模型响应")).toBeTruthy();
   });
 

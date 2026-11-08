@@ -1,0 +1,48 @@
+{
+  "human": {
+    "before": {
+      "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+      "revision": 44,
+      "content_hash": "ab7d6e8243c561858d1f2d37abceda7dd52c12dd017ea16772f25328ba2b25aa",
+      "status": "active"
+    },
+    "result": {
+      "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+      "document_id": "pixel_d737af8bf8d04a5fb688493384fccf5c",
+      "revision": 45,
+      "parent_revision": 44,
+      "content_hash": "1a859c268356ac294b27b840c5a09ff47656e702128d8211c25b6fabd924f096",
+      "title": "Interactive Pixel human",
+      "width": 16,
+      "height": 16,
+      "frame_count": 2,
+      "layer_count": 1,
+      "palette_count": 3,
+      "tag_count": 1,
+      "status": "active",
+      "changed": true,
+      "changed_pixel_count": 0,
+      "changed_frame_ids": [],
+      "changed_frame_ids_truncated": false,
+      "changed_layer_ids": []
+    },
+    "frame": "frame_0c6292e94b214c92aef0981512421251"
+  },
+  "failure": {
+    "type": "urn:dbfox:problem:pixel-conflict",
+    "title": "Conflict",
+    "status": 409,
+    "detail": "Pixel document changed; inspect before editing.",
+    "instance": "/api/v1/dlcs/dbfox.pixel/operations/documents.apply",
+    "code": "PIXEL_CONFLICT",
+    "request_id": "ced8876b64db7e3e9c0a2c36e44afa3b"
+  },
+  "responses": [
+    200,
+    409
+  ],
+  "alert": [
+    "Pixel document changed; inspect before editing. 本次请求 pixel_a151918c1320471ba7362433b4718c7e 未自动重发；正在读取已提交状态。关闭提示"
+  ],
+  "heading": "Interactive Pixel human\n16 × 16 · 2 帧 · 1 层 · r45"
+}

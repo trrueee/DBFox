@@ -1,0 +1,69 @@
+{
+  "package_digest": "840b1f4d4f00572f98633207bc7f6a29398a6722308e8ea3c73e6cc4d71fbc87",
+  "native_surface": "Real Electron Main/Preload/EngineSupervisor; actual Host Dock; no viewport emulation",
+  "wide": {
+    "client_width": 1432,
+    "scroll_width": 1432
+  },
+  "narrow": {
+    "client_width": 311,
+    "scroll_width": 311
+  },
+  "large": {
+    "canonical_keys": 2048,
+    "dom_elements": 428,
+    "client_width": 311,
+    "scroll_width": 311
+  },
+  "console_errors": 0,
+  "console_warnings": 1,
+  "screenshots": [
+    {
+      "file": "animation-artifact-v1-0-2.png",
+      "sha256": "e8b6e59ce3b9c45797916d006960ef9cfd569fe954ac80bb529c34adfc66ff46",
+      "package_digest": "840b1f4d4f00572f98633207bc7f6a29398a6722308e8ea3c73e6cc4d71fbc87"
+    },
+    {
+      "file": "animation-artifact-final.png",
+      "sha256": "e8b6e59ce3b9c45797916d006960ef9cfd569fe954ac80bb529c34adfc66ff46",
+      "package_digest": "4548d67e4af69f9113e4242d8bb367a0a2330c501f911ebd42c570f017e90266"
+    },
+    {
+      "file": "animation-inspector-final.png",
+      "sha256": "2c1d381512259a5af3f0a656321f2135bc48138dda0edea680f40aa13bace49d",
+      "package_digest": "4548d67e4af69f9113e4242d8bb367a0a2330c501f911ebd42c570f017e90266"
+    },
+    {
+      "file": "animation-large-edit-final.png",
+      "sha256": "e7719a7a24a1b29fb0fbe723f567d51e0958dd3849c85bc73d3191a96f3779ec",
+      "package_digest": "4548d67e4af69f9113e4242d8bb367a0a2330c501f911ebd42c570f017e90266"
+    },
+    {
+      "file": "animation-large-final.png",
+      "sha256": "f466fd655c2f15921a553ea382cafb6dcf68b215cd374a661d683db38640678c",
+      "package_digest": "4548d67e4af69f9113e4242d8bb367a0a2330c501f911ebd42c570f017e90266"
+    },
+    {
+      "file": "animation-narrow-v1-0-2.png",
+      "sha256": "101cdbe8d0caa62fb065056da8bcb85ce7912a3d06cd27d497cda6e71611ab81",
+      "package_digest": "840b1f4d4f00572f98633207bc7f6a29398a6722308e8ea3c73e6cc4d71fbc87"
+    },
+    {
+      "file": "animation-narrow-final.png",
+      "sha256": "1a58c573f3179aa0a7f91fac1100fc89305a73e38aa735d24e0f40bdab3f95c2",
+      "package_digest": "4548d67e4af69f9113e4242d8bb367a0a2330c501f911ebd42c570f017e90266"
+    },
+    {
+      "file": "animation-wide-v1-0-2.png",
+      "sha256": "30de1c94d322231a894eefeb0d083281bf09826dce8ca4ffaced65a61cdd4082",
+      "package_digest": "840b1f4d4f00572f98633207bc7f6a29398a6722308e8ea3c73e6cc4d71fbc87"
+    },
+    {
+      "file": "animation-wide-final.png",
+      "sha256": "24d9841153ff489e7b2c924ac70d61a15329175f7d78e53d63355ec40c12a95c",
+      "package_digest": "4548d67e4af69f9113e4242d8bb367a0a2330c501f911ebd42c570f017e90266"
+    }
+  ],
+  "prior_large_inspector_digest": "4548d67e4af69f9113e4242d8bb367a0a2330c501f911ebd42c570f017e90266",
+  "final_native_delete": "UI-created Disposable native QA removed from active list; durable deleted revision retained"
+}

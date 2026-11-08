@@ -7,7 +7,12 @@
  */
 import { useCallback } from "react";
 import type { ComponentProps, MouseEvent } from "react";
-import { ArrowUp, LoaderCircle, Square, X } from "lucide-react";
+import {
+  ArrowUpIcon,
+  CircleNotchIcon,
+  SquareIcon,
+  XIcon,
+} from "@/components/icons";
 
 import { Button } from "../ui";
 
@@ -29,13 +34,13 @@ export function PromptInputSubmit({
 }: PromptInputSubmitProps) {
   const isGenerating = status === "submitted" || status === "streaming";
 
-  let icon = <ArrowUp size={16} aria-hidden="true" />;
+  let icon = <ArrowUpIcon size={20} aria-hidden="true" />;
   if (status === "submitted") {
-    icon = <LoaderCircle className="animate-spin" size={16} aria-hidden="true" />;
+    icon = <CircleNotchIcon className="animate-spin" size={16} aria-hidden="true" />;
   } else if (status === "streaming") {
-    icon = <Square size={14} fill="currentColor" aria-hidden="true" />;
+    icon = <SquareIcon size={16} weight="fill" aria-hidden="true" />;
   } else if (status === "error") {
-    icon = <X size={16} aria-hidden="true" />;
+    icon = <XIcon size={16} aria-hidden="true" />;
   }
 
   const handleClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {

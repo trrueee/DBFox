@@ -13,6 +13,8 @@ from starlette.concurrency import run_in_threadpool
 from engine.db import SessionLocal
 from engine.dlc.api import DlcOperationContext, DlcOperationError
 from engine.models import Project
+from engine.resource import ResourceScopeRef
+from engine.attachments import AttachmentError, AttachmentService, require_session
 from engine.runtime_composition import (
     build_dlc_action_runs_host,
     get_active_runtime_snapshot,
@@ -200,6 +202,8 @@ async def invoke_dlc_operation(
 
     # 4. Validate scope authority
     project_id: str | None = None
+    session_id: str | None = None
+    operation_refs: tuple[ResourceScopeRef, ...] = ()
     if spec.scope == "project":
         project_id = request.query_params.get("project_id") or request.headers.get("x-project-id")
         if not project_id and isinstance(raw_input, dict):
@@ -223,11 +227,40 @@ async def invoke_dlc_operation(
                     },
                 )
 
+    if spec.scope == "session":
+        session_id = request.query_params.get("session_id")
+        if not session_id:
+            raise HTTPException(400, detail={"code": "MISSING_SESSION_ID", "message": "This operation requires a conversation."})
+        with SessionLocal() as db:
+            try:
+                aggregate = require_session(db, session_id)
+                project_id = str(aggregate.project_id or "")
+                expected_project = request.query_params.get("project_id")
+                if expected_project is not None and expected_project != project_id:
+                    raise AttachmentError("SESSION_SCOPE_MISMATCH", "会话不属于指定项目。", 404)
+                operation_refs = tuple(d.to_scope_ref() for d in AttachmentService(db).descriptors(session_id, staged=True))
+            except AttachmentError as exc:
+                raise HTTPException(exc.status, detail={"code": exc.code, "message": str(exc)}) from None
+
+    def resolve_operation_resource(ref):
+        with SessionLocal() as db:
+            service = AttachmentService(db)
+            if session_id is None:
+                raise DlcOperationError(code="RESOURCE_UNAVAILABLE", message="Conversation scope is required.")
+            try:
+                service.owned(session_id, ref.id)
+                return service.resolve(ref)
+            except AttachmentError as exc:
+                raise DlcOperationError(code=exc.code, message=str(exc), status_code=409) from None
+
     # 5. Build execution context
     ctx = DlcOperationContext(
         dlc_id=dlc_id,
         operation_name=operation_name,
         project_id=project_id,
+        session_id=session_id,
+        resource_refs=operation_refs,
+        resource_resolver=resolve_operation_resource if session_id else None,
         action_runs=(
             build_dlc_action_runs_host(
                 dlc_id=dlc_id,

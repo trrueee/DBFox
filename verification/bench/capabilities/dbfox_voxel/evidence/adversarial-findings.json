@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "phase": "independent final adversarial review after 6467337c",
+  "candidate": "25b1e76e",
+  "package_digest": "98e87d0bf2851212f0820e741c56947d5241b712590433bb6527fa67bf866d99",
+  "ownership": "Reviewer owns tests/report/evidence only; Director fixed product",
+  "findings": [
+    {
+      "id": "VAX-01",
+      "severity": "P2",
+      "test": "test_corrupt_derived_count_cannot_be_published_as_valid_summary",
+      "before": "2 failed: valid blob/hash/fingerprint with changed nonzero_count published by get/list",
+      "fix": "61002688: _snapshot reuses _raw before summary publication",
+      "after": "original two assertions pass"
+    },
+    {
+      "id": "VAX-02",
+      "severity": "P1",
+      "test": "test_noop_receipt_cannot_claim_another_requests_real_later_revision",
+      "before": "1 failed: original no-op replay claims another genuine later revision",
+      "fix": "61002688: unique revision producer must equal exact request identity",
+      "after": "original assertion passes; historical create/no-op/undo exact replay after deleted head also passes"
+    },
+    {
+      "id": "VAX-03",
+      "severity": "P2",
+      "test": "dbfoxVoxelAdversarial.test.ts",
+      "before": "4 failed/2 passed: missing chunk, missing delta tombstone, changed bytes with stale hash, duplicate coordinate",
+      "fix": "61002688: per-chunk SHA256, cross-page key set, exact final counts and fingerprint",
+      "after": "10 pass including coherent positive variants, rehashed substitution and aborted final page"
+    },
+    {
+      "id": "VAX-04",
+      "severity": "P1",
+      "test": "test_signed_executor_cancel_create_and_undo_reconciles_exact_outcome[before_commit-create]",
+      "before": "ToolExecutor cancelled before commit; create nevertheless committed and reconciled as success",
+      "fix": "25b1e76e: existing cancellation check immediately before create commit",
+      "after": "4 create/undo cancellation phases pass; one call; exact before/after recovery"
+    },
+    {
+      "id": "VAX-05",
+      "severity": "P2",
+      "test": "test_historical_pages_remain_exact_across_delete_and_foreign_cursor_substitution",
+      "before": "INVALID_CURSOR passed into restricted ArtifactRepresentationError catalog; leaked ValueError",
+      "fix": "25b1e76e: translate only at public representation boundary using supported codes",
+      "after": "foreign cursor and 4 source error variants yield public catalog errors"
+    },
+    {
+      "id": "VAX-06",
+      "severity": "P2",
+      "test": "test_valid_geometry_cannot_hide_broken_revision_parent",
+      "before": "3 failed: revision2 parent2,999,NULL all published",
+      "fix": "25b1e76e: linear parent identity and referenced revision existence",
+      "after": "original 3 assertions pass"
+    },
+    {
+      "id": "VAX-07",
+      "severity": "P2",
+      "test": "test_corrupt_current_head_is_rejected_while_explicit_intact_history_is_readable",
+      "before": "2 failed: head1 rollback accepted; head999 mistaken for missing world",
+      "fix": "25b1e76e: current head equals latest existing revision; explicit pinned history independent",
+      "after": "original 2 assertions pass and v1/v2 history remains readable"
+    }
+  ],
+  "validation": [
+    {
+      "command": "pytest test_voxel_adversarial.py test_voxel_independent.py -q --tb=short --show-capture=no",
+      "new_adversarial": 52,
+      "previous_independent_regression": 36,
+      "passed": 88,
+      "seconds": 124.63
+    },
+    {
+      "command": "pytest test_voxel_adversarial.py -k frozen_resource",
+      "added_adversarial": 3,
+      "passed": 3,
+      "seconds": 5.68
+    },
+    {
+      "command": "vitest dbfoxVoxelFixture.test.ts dbfoxVoxelAdversarial.test.ts --maxWorkers=1",
+      "previous_fixture": 26,
+      "new_page_attacks": 10,
+      "new_generation_attacks": 2,
+      "passed": 38,
+      "seconds": 4.71
+    },
+    {
+      "command": "npm run typecheck:test",
+      "result": "pass"
+    },
+    {
+      "command": "npm run lint",
+      "errors": 0,
+      "preexisting_warnings": 5
+    },
+    {
+      "command": "npm run build",
+      "result": "pass; Electron host and production token/bundle budgets"
+    },
+    {
+      "command": "pyflakes independent owned Python modules",
+      "result": "pass"
+    },
+    {
+      "command": "node scripts/build-voxel-vendor.mjs",
+      "result": "749587 bytes; SHA256 4019cf00891df54884c4d14981c787f36e47b125590241402a5c9b1759351929; product diff empty"
+    }
+  ],
+  "fixture_corrections": [
+    "Existing real timeout deadline increased from 0.35s to 2s after original 82pass/1fail (after_commit injection not reached); unchanged single case first passed1.48s. Actual executor deadline, entered check, no replay and durable assertions retained.",
+    "Old frontend fake hashes and inconsistent counts replaced with independent Node SHA256/canonical encodings; original26 interaction assertions retained.",
+    "New frozen mismatch first expected output=None; Runtime correctly returns public failure envelope. Corrected to strict failed/TOOL_INPUT_ERROR/frozen message with no success world fields, not a product finding.",
+    "Initial browser APIRequest replay copied null Electron CDP postData and returned422. Explicit read-only selector supplied; final reusable script derives identity from actual public response. Both600-read successful evidence records retained."
+  ],
+  "remaining_confirmed_product_defects": [],
+  "limits": [
+    "No packaged installer/native save-dialog automation",
+    "No real paid LLM",
+    "Single Windows/Electron GPU environment",
+    "600 reads and64/128 cubed are bounded samples;8192-live-chunk maximum not profiled",
+    "Director decides integration"
+  ]
+}

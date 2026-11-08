@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-09-05T03:53:37.301987+00:00",
+  "git_commit": "76091eef8430af8b8f3834437bde8e1af7842123",
+  "git_branch": "creative/voxel",
+  "git_status_sha256": "92cdaa14cc22844fc867d47a02cda0c04e9d566f1a2120553a4021dd6af3447c",
+  "os": "Windows-11-10.0.26200-SP0",
+  "architecture": "AMD64",
+  "python": "3.12.7",
+  "ci": false
+}

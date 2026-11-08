@@ -1,15 +1,22 @@
 import { lazy, Suspense, useCallback, useState } from "react";
-import { Plus } from "lucide-react";
+import {
+  PlusIcon,
+} from "@/components/icons";
 import { useConversationStore } from "../../stores/conversationStore";
 import {
   selectActiveWorkbenchReferences,
   useWorkspaceStore,
+  selectActiveWorkbench,
+  selectActiveWorkbenchScopeId,
 } from "../../stores/workspaceStore";
 import { getUserErrorMessage } from "../../lib/api/client";
 import { SmartQueryHome } from "../workspace/SmartQueryHome";
 import { Button, EmptyState, ErrorState, LoadingState } from "../../components/ui";
 import { ProjectOverview } from "../projects/ProjectOverview";
 import type { WorkbenchReference } from "../../types/workspace";
+import { useAttachmentInput } from "../conversation/useAttachmentInput";
+import { openWorkbenchReference } from "../resources/openWorkbenchReference";
+import { ComposerContext } from "../conversation/workspace/ComposerContext";
 
 const ConversationWorkspace = lazy(() =>
   import("../conversation/workspace/ConversationWorkspace").then((module) => ({ default: module.ConversationWorkspace })),
@@ -21,6 +28,7 @@ interface ConversationCenterProps {
 }
 
 interface PendingSubmission {
+  scopeId: string;
   conversationId: string;
   content: string;
   idempotencyKey: string;
@@ -45,21 +53,40 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
   );
   const removeWorkbenchReference = useWorkspaceStore((state) => state.removeWorkbenchReference);
   const clearWorkbenchReferences = useWorkspaceStore((state) => state.clearWorkbenchReferences);
-  const [askInputValue, setAskInputValue] = useState("");
-  const [submitError, setSubmitError] = useState<unknown | null>(null);
+  const askInputValue = useWorkspaceStore(state => selectActiveWorkbench(state).draftInput ?? "");
+  const setAskInputValue = useWorkspaceStore(state => state.setDraftInput);
+  const [submitting, setSubmitting] = useState(false);
+  const activeScope = useWorkspaceStore(selectActiveWorkbenchScopeId);
+  const [submitFailure, setSubmitFailure] = useState<{ projectId: string; scopeId: string; error: unknown } | null>(null);
+  const submitError = submitFailure?.projectId === activeProjectId && submitFailure.scopeId === activeScope ? submitFailure.error : null;
   const [pendingSubmission, setPendingSubmission] = useState<PendingSubmission | null>(null);
   const displayAsk = pendingAsk ?? askInputValue;
+  const ensureDraftConversation = async () => {
+    const state = useWorkspaceStore.getState();
+    const existing = selectActiveWorkbench(state).draftConversationId;
+    if (existing) return existing;
+    const capturedScope = state.ensureActiveWorkbenchScope();
+    const detail = await useConversationStore.getState().createAndOpenConversation(displayAsk.trim() || "附件分析");
+    if (selectActiveWorkbenchScopeId(useWorkspaceStore.getState()) !== capturedScope) throw new Error("会话已切换。");
+    useWorkspaceStore.getState().setDraftConversationId(detail.id);
+    return detail.id;
+  };
+  const attachment = useAttachmentInput(ensureDraftConversation, references);
 
   const handleSubmitAsk = useCallback(async () => {
     const text = displayAsk.trim();
-    if (!text) return;
-    setSubmitError(null);
+    if (!text || attachment.busy || submitting) return;
+    const capturedScope = useWorkspaceStore.getState().ensureActiveWorkbenchScope();
+    setSubmitting(true);
+    setSubmitFailure(null);
     try {
-      let submission = pendingSubmission?.content === text ? pendingSubmission : null;
+      let submission = pendingSubmission?.scopeId === capturedScope && pendingSubmission.content === text ? pendingSubmission : null;
       if (!submission) {
-        const detail = await useConversationStore.getState().createAndOpenConversation(text);
+        const draftId = selectActiveWorkbench(useWorkspaceStore.getState()).draftConversationId;
+        const conversationId = draftId ?? (await useConversationStore.getState().createAndOpenConversation(text)).id;
         submission = {
-          conversationId: detail.id,
+          scopeId: capturedScope,
+          conversationId,
           content: text,
           idempotencyKey: globalThis.crypto.randomUUID(),
           references,
@@ -75,6 +102,8 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
           submission.idempotencyKey,
           submission.references,
         );
+      if (useWorkspaceStore.getState().activeProjectId !== activeProjectId
+        || selectActiveWorkbenchScopeId(useWorkspaceStore.getState()) !== capturedScope) return;
       promoteDraftWorkbenchToConversation(activeProjectId, submission.conversationId);
       setProjectActiveConversation(activeProjectId, submission.conversationId);
       openConversationCenter(submission.conversationId);
@@ -83,8 +112,9 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
       setAskInputValue("");
       setPendingSubmission(null);
     } catch (error) {
-      setSubmitError(error);
-    }
+      if (useWorkspaceStore.getState().activeProjectId === activeProjectId
+        && selectActiveWorkbenchScopeId(useWorkspaceStore.getState()) === capturedScope) setSubmitFailure({ projectId: activeProjectId, scopeId: capturedScope, error });
+    } finally { setSubmitting(false); }
   }, [
     activeProjectId,
     clearPendingAsk,
@@ -95,18 +125,21 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
     references,
     setProjectActiveConversation,
     clearWorkbenchReferences,
+    setAskInputValue,
+    attachment.busy,
+    submitting,
   ]);
 
   if (!activeProjectId) {
     return (
       <section className="conversation-center" aria-label="对话">
         <EmptyState
-          title="创建第一个项目"
-          description="项目是 DBFox 的工作单元，创建后即可在中间用自然语言开始分析。"
+          title="打开文件夹，开始工作"
+          description="在文件夹中对话、查看文件和处理数据。"
           action={(
             <Button type="button" onClick={onNewProject}>
-              <Plus size={14} aria-hidden="true" />
-              新建项目
+              <PlusIcon size={16} aria-hidden="true" />
+              打开文件夹
             </Button>
           )}
         />
@@ -131,7 +164,7 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
   if (effectiveSurface.kind === "project-overview") {
     return (
       <section className="conversation-center" aria-label="项目上下文">
-        <ProjectOverview />
+        <ProjectOverview key={activeProjectId} />
       </section>
     );
   }
@@ -143,15 +176,26 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
         onAskInputChange={(value) => {
           clearPendingAsk();
           setAskInputValue(value);
-          setSubmitError(null);
+          setSubmitFailure(null);
           setPendingSubmission(null);
         }}
         onSubmitAsk={() => void handleSubmitAsk()}
         projectId={activeProjectId}
+        context={<ComposerContext busy={submitting || attachment.busy} />}
         references={references}
+        onAddAttachment={() => { setPendingSubmission(null); void attachment.add(); }}
+        onOpenReference={(ref) => {
+          const id = selectActiveWorkbench(useWorkspaceStore.getState()).draftConversationId;
+          try { openWorkbenchReference(ref, id ?? undefined); } catch (error) { setSubmitFailure({ projectId: activeProjectId, scopeId: activeScope, error }); }
+        }}
+        attachmentBusy={attachment.busy}
+        submitting={submitting}
+        attachmentError={attachment.error}
+        onRetryAttachment={attachment.retryable ? () => void attachment.retry() : undefined}
         onRemoveReference={(reference) => {
           removeWorkbenchReference(reference);
-          setSubmitError(null);
+          attachment.remove(reference, selectActiveWorkbench(useWorkspaceStore.getState()).draftConversationId);
+          setSubmitFailure(null);
           setPendingSubmission(null);
         }}
         feedback={submitError ? (

@@ -9,6 +9,7 @@ import type { ArtifactEnvelope } from "./types";
 export function toArtifactEnvelope(artifact: ConversationArtifact): ArtifactEnvelope {
   return {
     id: artifact.id,
+    session_id: artifact.session_id,
     type: artifact.type,
     schema_version: artifact.schema_version ?? 1,
     title: artifact.title,

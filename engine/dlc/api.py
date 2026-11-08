@@ -1,9 +1,9 @@
 """Public Extension API v2 for DBFox Runtime DLCs.
 
-This module is the stable, narrow public interface exposed to Runtime DLCs.
-DLC implementations MUST import extension contracts from this module (or
-``dbfox_dlc_api``), and private imports from DBFox internals are unsupported
-and outside Extension API compatibility.
+This module owns the Host-side definitions behind the stable public interface.
+External DLC implementations MUST import extension contracts from
+``dbfox_dlc_api``; direct ``engine.*`` imports are private, unsupported, and
+outside Extension API compatibility.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ from engine.agent.artifact import (
 )
 from engine.agent.completion import (
     CompletionConstraint,
+    CompletionConstraintResult,
     CompletionSupport,
     SemanticArtifactCompletionSupport,
     SemanticCitationConstraint,
@@ -88,6 +89,11 @@ TOutput = TypeVar("TOutput", bound=BaseModel)
 
 # Neutral project resource provider contract: DLC receives only project_id (no Session)
 ExtensionProjectResourceProvider: TypeAlias = Callable[[str], Sequence[ProjectResourceDescriptor]]
+
+from engine.agent.resource_refs import SessionResourceDiscoveryContext
+from engine.attachments import AttachmentResourceHandle, ATTACHMENT_RESOURCE_KIND
+
+ExtensionSessionResourceProvider: TypeAlias = Callable[[SessionResourceDiscoveryContext], Sequence[ProjectResourceDescriptor]]
 
 # Neutral context contributor contract: DLC receives only ContextContributionInput (no Session)
 ExtensionContextContributor: TypeAlias = ContextContributor
@@ -254,6 +260,14 @@ class DlcOperationContext:
     operation_name: str
     project_id: str | None = None
     action_runs: DlcActionRunsHost | None = None
+    session_id: str | None = None
+    resource_refs: tuple[ResourceScopeRef, ...] = ()
+    resource_resolver: Callable[[ResourceScopeRef], Any] | None = None
+
+    def resource(self, ref: ResourceScopeRef) -> Any:
+        if ref not in self.resource_refs or self.resource_resolver is None:
+            raise DlcOperationError(code="RESOURCE_UNAVAILABLE", message="Operation resource is not authorized.")
+        return self.resource_resolver(ref)
 
     def require_action_runs(self) -> DlcActionRunsHost:
         if self.action_runs is None:
@@ -269,7 +283,7 @@ class DlcOperationSpec:
     input_model: type[BaseModel]
     output_model: type[BaseModel]
     handler: Callable[[Any, DlcOperationContext], Any]
-    scope: Literal["machine", "project"] = "machine"
+    scope: Literal["machine", "project", "session"] = "machine"
     capabilities: tuple[str, ...] = ()
     description: str = ""
     max_output_bytes: int = 1_048_576  # 1 MiB
@@ -290,6 +304,12 @@ class ExtensionResourcesHost(Protocol):
 
     def register_provider(self, provider: ExtensionProjectResourceProvider) -> None:
         """Register a neutral project resource discovery function."""
+        ...
+
+    def register_session_provider(
+        self, provider: ExtensionSessionResourceProvider, *, retire: Callable[[str], None] | None = None,
+    ) -> None:
+        """Optional owner-bound discovery and idempotent Session retirement."""
         ...
 
     def register_resolver(self, kind: str, resolver: ScopedResourceResolver) -> None:
@@ -469,12 +489,17 @@ __all__ = [
     "DataFramePageRequest",
     "DataFrameSort",
     "CompletionConstraint",
+    "CompletionConstraintResult",
     "CompletionSupport",
     "SemanticArtifactCompletionSupport",
     "SemanticCitationConstraint",
     # Resource contracts
     "ProjectResourceDescriptor",
     "ExtensionProjectResourceProvider",
+    "ExtensionSessionResourceProvider",
+    "SessionResourceDiscoveryContext",
+    "AttachmentResourceHandle",
+    "ATTACHMENT_RESOURCE_KIND",
     "RequestedResourceRef",
     "ResourceKey",
     "ResourceScopeRef",

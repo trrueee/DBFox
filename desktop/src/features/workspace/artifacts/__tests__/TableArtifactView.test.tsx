@@ -71,7 +71,7 @@ function dataframeResult(value: LegacyPage): ArtifactRepresentationResult {
 
 function makeArtifact() {
   return {
-    id: "result-view-payload-1",
+    id: "result-view-payload-1", session_id: "session-1",
     type: "result_view",
     title: "查询结果",
     description: "订单按日聚合结果",
@@ -87,7 +87,7 @@ function makeArtifact() {
 
 function makeSqlBackedArtifact() {
   return {
-    id: "result-view-1",
+    id: "result-view-1", session_id: "session-1",
     type: "result_view",
     title: "SQL-backed result",
     description: "Agent result view",
@@ -156,6 +156,7 @@ describe("TableArtifactView", () => {
       DATAFRAME_REPRESENTATION_TYPE,
       expect.objectContaining({ parameters: expect.objectContaining({ page: 1, page_size: 10 }) }),
       expect.any(AbortSignal),
+        "session-1",
     );
     expect(screen.getByText("本页 10 / 共 128 行")).toBeTruthy();
     expect(screen.getByText("3 列")).toBeTruthy();
@@ -282,6 +283,7 @@ describe("TableArtifactView", () => {
       DATAFRAME_REPRESENTATION_TYPE,
       expect.objectContaining({ parameters: expect.objectContaining({ search: "row-12" }) }),
       expect.any(AbortSignal),
+        "session-1",
     ));
     expect(await screen.findByText("2026-06-12")).toBeTruthy();
   });
@@ -297,6 +299,7 @@ describe("TableArtifactView", () => {
       DATAFRAME_REPRESENTATION_TYPE,
       expect.objectContaining({ parameters: expect.objectContaining({ sort: [{ field: "order_count", direction: "desc" }] }) }),
       expect.any(AbortSignal),
+        "session-1",
     ));
     expect(screen.getByRole("columnheader", { name: /order_count integer/ }).getAttribute("aria-sort")).toBe("descending");
   });
@@ -385,6 +388,7 @@ describe("TableArtifactView", () => {
         })
         }),
         expect.any(AbortSignal),
+        "session-1",
       ),
     );
 
@@ -398,6 +402,8 @@ describe("TableArtifactView", () => {
           search: "daily",
           sort: [{ field: "order_count", direction: "desc" }],
         }) }),
+        undefined,
+        "session-1",
       ),
     );
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已导出 CSV"));
@@ -415,6 +421,7 @@ describe("TableArtifactView", () => {
           page_size: 50,
         }) }),
         expect.any(AbortSignal),
+        "session-1",
       ),
     );
   });
@@ -448,6 +455,7 @@ describe("TableArtifactView", () => {
           filters: [{ field: "day", operator: "contains", value: "2026-06" }],
         }) }),
         expect.any(AbortSignal),
+        "session-1",
       ),
     );
   });
@@ -469,6 +477,7 @@ describe("TableArtifactView", () => {
           sort: [{ field: "order_count", direction: "asc" }],
         }) }),
         expect.any(AbortSignal),
+        "session-1",
       ),
     );
   });
@@ -487,6 +496,7 @@ describe("TableArtifactView", () => {
           sort: [{ field: "order_count", direction: "desc" }],
         }) }),
         expect.any(AbortSignal),
+        "session-1",
       ),
     );
   });

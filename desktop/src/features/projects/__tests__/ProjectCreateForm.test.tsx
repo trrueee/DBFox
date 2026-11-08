@@ -1,95 +1,65 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { ApiError } from "../../../lib/api/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectCreateForm } from "../ProjectCreateForm";
+import { useDlcStore } from "../../dlc/extensionStore";
 
-const projectState = vi.hoisted(() => ({
-  createProject: vi.fn(),
-}));
+const fixture = vi.hoisted(() => ({ createProject: vi.fn(), pick: vi.fn(), invoke: vi.fn(), listResources: vi.fn(), projects: [] as Array<{ id: string; name: string }> }));
+vi.mock("../useProjectState", () => ({ useProjectState: () => ({ createProject: fixture.createProject, projects: fixture.projects, loadingProjects: false }) }));
+vi.mock("../../../lib/desktopHost", () => ({ pickDesktopProjectFolder: fixture.pick }));
+vi.mock("../../dlc/extensionHost", () => ({ invokeBoundDlcOperation: fixture.invoke }));
 
-vi.mock("../useProjectState", () => ({
-  useProjectState: () => ({ createProject: projectState.createProject }),
-}));
-
-describe("ProjectCreateForm", () => {
+describe("folder-first project opening", () => {
   beforeEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-    projectState.createProject.mockResolvedValue({ id: "project-new" });
+    vi.clearAllMocks(); fixture.projects = [];
+    fixture.pick.mockResolvedValue("D:/work/orders");
+    fixture.createProject.mockResolvedValue({ id: "project-new" });
+    fixture.listResources.mockResolvedValue([]);
+    fixture.invoke.mockImplementation(async (_owner, name) => name === "binding.get" ? { binding: null } : {});
+    vi.stubGlobal("crypto", { subtle: { digest: vi.fn(async () => new Uint8Array(32).buffer) } });
+    useDlcStore.setState({ contributions: { connectors: [{ id: "dbfox.workspace", title: "文件", icon: null, render: () => null, listResources: fixture.listResources }], dockViews: [], artifactViews: [] } });
+  });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it("uses the folder name and binds it through the existing owner operation", async () => {
+    const onCreated = vi.fn(); render(<ProjectCreateForm onCreated={onCreated} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "打开文件夹" }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("project-new"));
+    expect(fixture.createProject).toHaveBeenCalledWith(expect.objectContaining({ name: "orders", description: null, idempotency_key: expect.stringMatching(/^folder:[a-f0-9]{64}$/) }));
+    expect(fixture.invoke).toHaveBeenCalledWith("dbfox.workspace", "binding.create", { root_path: "D:/work/orders" }, { projectId: "project-new" });
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
-  it("creates an identity-only project without requiring a folder", async () => {
-    const onCreated = vi.fn();
-    render(<ProjectCreateForm onCreated={onCreated} onCancel={vi.fn()} />);
-
-    fireEvent.change(screen.getByPlaceholderText("例如：电商经营分析"), {
-      target: { value: "orders" },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "创建项目" }));
-    await waitFor(() =>
-      expect(projectState.createProject).toHaveBeenCalledWith({
-        name: "orders",
-        description: null,
-      }),
-    );
-    expect(onCreated).toHaveBeenCalledWith("project-new");
+  it("reopens a previously bound folder instead of creating another project", async () => {
+    fixture.projects = [{ id: "existing", name: "orders" }];
+    fixture.listResources.mockResolvedValue([{ id: "existing", kind: "dbfox.workspace.binding", name: "d:/WORK/orders" }]);
+    const onCreated = vi.fn(); render(<ProjectCreateForm onCreated={onCreated} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "打开文件夹" }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("existing"));
+    expect(fixture.createProject).not.toHaveBeenCalled(); expect(fixture.invoke).not.toHaveBeenCalled();
   });
 
-  it("requires only a project name", async () => {
+  it("does not create anything when the native picker is cancelled", async () => {
+    fixture.pick.mockResolvedValue(null);
     render(<ProjectCreateForm onCreated={vi.fn()} onCancel={vi.fn()} />);
-
-    fireEvent.change(screen.getByPlaceholderText("例如：电商经营分析"), {
-      target: { value: "手工项目" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "创建项目" }));
-
-    await waitFor(() => expect(projectState.createProject).toHaveBeenCalledWith({
-      name: "手工项目",
-      description: null,
-    }));
+    fireEvent.click(screen.getByRole("button", { name: "打开文件夹" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "打开文件夹" })).not.toBeDisabled());
+    expect(fixture.createProject).not.toHaveBeenCalled();
   });
 
-  it("preserves an optional project description", async () => {
-    render(<ProjectCreateForm onCreated={vi.fn()} onCancel={vi.fn()} />);
-
-    fireEvent.change(screen.getByPlaceholderText("例如：电商经营分析"), {
-      target: { value: "保留名称" },
+  it("reconciles an uncertain binding result before an explicit retry", async () => {
+    let reads = 0;
+    fixture.invoke.mockImplementation(async (_owner, name) => {
+      if (name === "binding.get") return { binding: ++reads === 1 ? null : { root_path: "D:/work/orders" } };
+      throw new Error("connection interrupted");
     });
-    fireEvent.change(screen.getByPlaceholderText("这个项目主要分析什么？"), {
-      target: { value: "  项目说明  " },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "创建项目" }));
-    await waitFor(() =>
-      expect(projectState.createProject).toHaveBeenCalledWith(
-        { name: "保留名称", description: "项目说明" },
-      ),
-    );
-  });
-
-  it("keeps create failures inline with safe correlation metadata", async () => {
-    projectState.createProject.mockRejectedValueOnce(new ApiError(
-      "database path C:\\private\\projects.db",
-      503,
-      "PROJECT_CREATE_UNAVAILABLE",
-      [],
-      { request_id: "project-request-7", secret: "must-not-render" },
-    ));
-    render(<ProjectCreateForm onCreated={vi.fn()} onCancel={vi.fn()} />);
-
-    fireEvent.change(screen.getByPlaceholderText("例如：电商经营分析"), {
-      target: { value: "orders" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "创建项目" }));
-
-    expect(await screen.findByText("创建项目失败")).toBeTruthy();
-    fireEvent.click(screen.getByText("技术详情"));
-    expect(screen.getByText("PROJECT_CREATE_UNAVAILABLE")).toBeTruthy();
-    expect(screen.getByText("project-request-7")).toBeTruthy();
-    expect(document.body.textContent).not.toContain("C:\\private\\projects.db");
-    expect(document.body.textContent).not.toContain("must-not-render");
+    const onCreated = vi.fn(); render(<ProjectCreateForm onCreated={onCreated} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "打开文件夹" }));
+    expect(await screen.findByText("打开文件夹失败")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重试打开" }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("project-new"));
+    expect(fixture.pick).toHaveBeenCalledOnce();
+    expect(fixture.createProject.mock.calls[0][0]).toEqual(fixture.createProject.mock.calls[1][0]);
+    expect(fixture.invoke.mock.calls.filter(call => call[1] === "binding.create")).toHaveLength(1);
   });
 });

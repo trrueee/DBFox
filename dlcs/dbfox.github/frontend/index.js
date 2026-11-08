@@ -152,7 +152,7 @@ function GithubConnector({ projectId }) {
           onClick: () => void removeBinding(binding),
           "aria-label": `移除 ${binding.owner}/${binding.repository}`,
           title: "移除仓库",
-        }, "×"))),
+        }, React.createElement(extensionHost.ui.Icon, { name: "x", size: 18 })))),
     ),
     addFormProjects.has(projectId) || bindings.length === 0
       ? React.createElement("form", { className: "dbfox-github__form", onSubmit: submit },

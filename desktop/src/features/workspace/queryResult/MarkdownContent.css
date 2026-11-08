@@ -95,17 +95,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-1);
   min-width: 18px;
-  height: 18px;
+  min-height: 24px;
+  max-width: min(240px, 100%);
   margin: 0 2px;
-  padding: 0 5px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 32%, var(--border-subtle));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-primary) 9%, transparent);
-  color: var(--color-primary);
+  padding: 2px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-row);
+  background: var(--surface-auxiliary);
+  color: var(--color-text-secondary);
   font-size: var(--ui-font-caption);
-  font-weight: 600;
-  line-height: 1;
+  font-weight: 400;
+  line-height: var(--ui-line-caption);
   vertical-align: 0.08em;
   cursor: pointer;
 }
@@ -117,8 +119,12 @@
 }
 
 .hifi-md-citation:hover {
-  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  background: var(--control-bg-hover);
+  border-color: var(--control-border-hover);
 }
+
+.hifi-md-citation__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hifi-md-citation__index { flex-shrink: 0; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
 
 .hifi-md-sources {
   display: flex;
@@ -191,6 +197,8 @@
 }
 
 .hifi-md-table th {
+  white-space: nowrap;
+  word-break: normal;
   background: var(--surface-panel-muted);
   color: var(--color-text-primary);
   font-weight: 600;

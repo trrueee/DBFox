@@ -1,3 +1,4 @@
+import axe from "axe-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../components/ui";
@@ -137,6 +138,32 @@ describe("WorkspaceDock", () => {
     const first = await screen.findByRole("tab", { name: "SQL 控制台" });
     fireEvent.click(screen.getByRole("button", { name: "关闭 SQL 控制台 2" }));
 
+    expect(first.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(first);
+  });
+
+  it("keeps tab actions outside the tablist and supports Delete with focus recovery", async () => {
+    const fixed = useWorkspaceStore.getState().workbenchByConversation["draft:default"].tabs[0];
+    setWorkbench(true, "dbfox.data.sql-console:ds-2", [fixed, {
+      ...fixed,
+      viewKey: "dbfox.data.sql-console:ds-2",
+      title: "SQL 控制台 2",
+      stateKey: "sql-ds-2",
+      closeable: true,
+    }]);
+    const { container } = renderDock();
+    const second = await screen.findByRole("tab", { name: "SQL 控制台 2" });
+    const tablist = screen.getByRole("tablist", { name: "工作区标签" });
+    expect(tablist.contains(screen.getByRole("button", { name: "关闭 SQL 控制台 2" }))).toBe(false);
+    const audit = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
+    expect(audit.violations.map((violation) => violation.id)).toEqual([]);
+
+    const first = screen.getByRole("tab", { name: "SQL 控制台" });
+    fireEvent.keyDown(first, { key: "Delete" });
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    second.focus();
+    fireEvent.keyDown(second, { key: "Delete" });
+    expect(screen.queryByRole("tab", { name: "SQL 控制台 2" })).toBeNull();
     expect(first.getAttribute("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(first);
   });

@@ -25,6 +25,21 @@ function reset() {
 describe("workspaceStore — Shell", () => {
   beforeEach(reset);
 
+  it("replaces only the unpinned preview of the same viewer", () => {
+    const store = useWorkspaceStore.getState();
+    const tab = (viewKey: string, viewType = "files") => ({ viewKey, viewType, title: viewKey, closeable: true, preview: true });
+    store.openDockTab(tab("a"));
+    store.openDockTab(tab("b"));
+    expect(selectActiveDockTabs(useWorkspaceStore.getState()).map(item => item.viewKey)).toEqual(["b"]);
+    store.updateDockTab("b", { preview: false });
+    store.openDockTab(tab("c"));
+    store.openDockTab(tab("table", "data"));
+    store.openDockTab(tab("d"));
+    store.openDockTab(tab("b"));
+    expect(selectActiveDockTabs(useWorkspaceStore.getState()).map(item => [item.viewKey, item.preview]))
+      .toEqual([["b", false], ["table", true], ["d", true]]);
+  });
+
   it("keeps the selected Conversation solely in each Project main surface", () => {
     useWorkspaceStore.getState().setActiveProject("project-1");
     useWorkspaceStore.getState().setProjectActiveConversation("project-1", "conv-1");

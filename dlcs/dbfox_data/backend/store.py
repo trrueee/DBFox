@@ -157,6 +157,11 @@ class DataStateStore:
     def _initialize(self) -> None:
         with self._connect() as connection, connection:
             connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("""CREATE TABLE IF NOT EXISTS workbook_datasets (
+                id TEXT PRIMARY KEY, session_id TEXT NOT NULL, project_id TEXT NOT NULL,
+                source_attachment_id TEXT NOT NULL, source_sha256 TEXT NOT NULL,
+                scope_version TEXT NOT NULL, handle_json TEXT NOT NULL
+            )""")
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS connection_profiles (
@@ -338,7 +343,18 @@ class DataStateStore:
                     PRAGMA user_version = 4;
                     """
                 )
-            elif version > 4:
+            if version < 5:
+                # A pre-v5 catalog cannot prove which source generation it
+                # describes. Leave the stamp NULL until a fenced refresh.
+                connection.execute("BEGIN IMMEDIATE")
+                if int(connection.execute("PRAGMA user_version").fetchone()[0]) < 5:
+                    columns = {row[1] for row in connection.execute("PRAGMA table_info(database_resources)")}
+                    if "catalog_source_version" not in columns:
+                        connection.execute("ALTER TABLE database_resources ADD COLUMN catalog_source_version TEXT")
+                    connection.execute("UPDATE database_resources SET catalog_revision = 0, catalog_refreshed_at = NULL, catalog_source_version = NULL")
+                    connection.execute("DELETE FROM catalog_tables")
+                    connection.execute("PRAGMA user_version = 5")
+            elif version > 5:
                 raise RuntimeError("Data state schema is newer than this DBFox build")
 
     @staticmethod
@@ -347,7 +363,7 @@ class DataStateStore:
 
     @staticmethod
     def _database(row: sqlite3.Row) -> DatabaseResource:
-        return DatabaseResource.model_validate(dict(row))
+        return DatabaseResource.model_validate({name: row[name] for name in DatabaseResource.model_fields})
 
     @staticmethod
     def _backup(row: sqlite3.Row) -> StoredBackup:
@@ -417,6 +433,12 @@ class DataStateStore:
     ) -> DatabaseHandle:
         """Resolve the exact database generation already fenced by an Artifact."""
 
+        workbook = self.get_workbook(database_id)
+        if workbook is not None:
+            if resource_version != workbook.scope_version:
+                raise ValueError("Workbook source version has changed")
+            self.check_workbook_files(workbook)
+            return workbook
         database = self.get_database(database_id)
         if database is None:
             raise KeyError("Database resource is unavailable")
@@ -444,7 +466,7 @@ class DataStateStore:
         identity = "\x00".join((database_resource_id, schema_name, table_name))
         return f"catalog_table_{sha256(identity.encode('utf-8')).hexdigest()[:32]}"
 
-    def replace_catalog(self, inventory: SchemaInventory) -> SyncResult:
+    def replace_catalog(self, inventory: SchemaInventory, *, expected_resource_version: str) -> SyncResult:
         """Atomically replace one database catalog and advance its revision."""
 
         database_id = inventory.database_resource_id
@@ -462,6 +484,16 @@ class DataStateStore:
         }
         refreshed_at = _now()
         with self._connect() as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute(
+                """SELECT 1 FROM database_resources d
+                     JOIN connection_profiles p ON p.id = d.connection_profile_id
+                    WHERE d.id = ?
+                      AND (p.connection_generation || ':' || d.resource_generation) = ?""",
+                (database_id, expected_resource_version),
+            ).fetchone()
+            if current is None:
+                raise ValueError("Database resource version changed during catalog refresh")
             old_tables = {
                 (str(row["schema_name"]), str(row["table_name"]))
                 for row in connection.execute(
@@ -558,10 +590,10 @@ class DataStateStore:
                 """
                 UPDATE database_resources
                    SET catalog_revision = catalog_revision + 1,
-                       catalog_refreshed_at = ?, updated_at = ?
+                       catalog_refreshed_at = ?, updated_at = ?, catalog_source_version = ?
                  WHERE id = ?
                 """,
-                (refreshed_at, refreshed_at, database_id),
+                (refreshed_at, refreshed_at, expected_resource_version, database_id),
             )
             if cursor.rowcount != 1:
                 raise KeyError("Database resource became unavailable during refresh")
@@ -583,12 +615,18 @@ class DataStateStore:
             catalog_revision=revision,
         )
 
-    def catalog_state(self, database_id: str) -> dict[str, Any]:
+    def catalog_state(self, database_id: str, *, expected_resource_version: str | None = None) -> dict[str, Any]:
+        workbook = self.get_workbook(database_id)
+        if workbook is not None:
+            return {"database_id": workbook.id, "database_name": workbook.display_name, "dialect": "duckdb",
+                    "catalog_revision": 1, "refreshed_at": workbook.created_at, "table_count": 1,
+                    "schema_count": 1, "schemas": [{"name": "main", "table_count": 1}]}
         with self._connect() as connection:
             database = connection.execute(
                 """
                 SELECT d.catalog_revision, d.catalog_refreshed_at,
-                       d.display_name, p.provider
+                       d.display_name, p.provider, d.catalog_source_version,
+                       (p.connection_generation || ':' || d.resource_generation) AS source_version
                   FROM database_resources d
                   JOIN connection_profiles p ON p.id = d.connection_profile_id
                  WHERE d.id = ?
@@ -597,6 +635,9 @@ class DataStateStore:
             ).fetchone()
             if database is None:
                 raise KeyError("Database resource is unavailable")
+            if expected_resource_version is not None and database["source_version"] != expected_resource_version:
+                raise ValueError("Database resource version changed")
+            ready = database["catalog_source_version"] == database["source_version"]
             counts = connection.execute(
                 """
                 SELECT COUNT(*) AS table_count,
@@ -626,11 +667,11 @@ class DataStateStore:
             "database_id": database_id,
             "database_name": str(database["display_name"]),
             "dialect": str(database["provider"]),
-            "catalog_revision": int(database["catalog_revision"] or 0),
-            "refreshed_at": database["catalog_refreshed_at"],
-            "table_count": int(counts["table_count"] or 0),
-            "schema_count": int(counts["schema_count"] or 0),
-            "schemas": schemas,
+            "catalog_revision": int(database["catalog_revision"] or 0) if ready else 0,
+            "refreshed_at": database["catalog_refreshed_at"] if ready else None,
+            "table_count": int(counts["table_count"] or 0) if ready else 0,
+            "schema_count": int(counts["schema_count"] or 0) if ready else 0,
+            "schemas": schemas if ready else [],
         }
 
     def list_catalog_tables(
@@ -640,9 +681,18 @@ class DataStateStore:
         after: tuple[str, str, str] | None,
         limit: int,
         name_filter: str | None,
+        expected_resource_version: str | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
-        clauses = ["t.database_resource_id = ?"]
-        parameters: list[object] = [database_id]
+        workbook = self.get_workbook(database_id)
+        if workbook is not None:
+            match = not after and (not name_filter or name_filter.casefold() in "data")
+            return ([workbook.catalog_table()] if match else []), False
+        clauses = ["t.database_resource_id = ?", """EXISTS (
+            SELECT 1 FROM database_resources d JOIN connection_profiles p ON p.id = d.connection_profile_id
+             WHERE d.id = t.database_resource_id
+               AND d.catalog_source_version = (p.connection_generation || ':' || d.resource_generation)
+               AND (? IS NULL OR d.catalog_source_version = ?))"""]
+        parameters: list[object] = [database_id, expected_resource_version, expected_resource_version]
         if after is not None:
             schema_name, table_name, table_id = after
             clauses.append(
@@ -676,7 +726,14 @@ class DataStateStore:
         self,
         database_id: str,
         name: str,
+        *,
+        expected_resource_version: str | None = None,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        workbook = self.get_workbook(database_id)
+        if workbook is not None:
+            if name not in ("data", "main.data"):
+                raise KeyError("Table is unavailable in this workbook dataset")
+            return workbook.catalog_table(), workbook.catalog_columns()
         normalized = name.strip()
         if not normalized or "\x00" in normalized:
             raise ValueError("A valid catalog table name is required")
@@ -686,6 +743,13 @@ class DataStateStore:
                 SELECT *
                   FROM catalog_tables
                  WHERE database_resource_id = ?
+                   AND EXISTS (
+                       SELECT 1 FROM database_resources d
+                         JOIN connection_profiles p ON p.id = d.connection_profile_id
+                        WHERE d.id = catalog_tables.database_resource_id
+                          AND d.catalog_source_version = (p.connection_generation || ':' || d.resource_generation)
+                          AND (? IS NULL OR d.catalog_source_version = ?)
+                   )
                    AND (
                        table_name = ?
                        OR schema_name || '.' || table_name = ?
@@ -693,7 +757,7 @@ class DataStateStore:
                  ORDER BY schema_name, table_name, id
                  LIMIT 2
                 """,
-                (database_id, normalized, normalized),
+                (database_id, expected_resource_version, expected_resource_version, normalized, normalized),
             ).fetchall()
             if len(rows) > 1:
                 raise ValueError(
@@ -722,6 +786,12 @@ class DataStateStore:
         tokens: tuple[str, ...],
         limit: int,
     ) -> list[dict[str, Any]]:
+        workbook = self.get_workbook(database_id)
+        if workbook is not None:
+            return [{"type": "column", "schema_name": "main", "table_name": "data",
+                     "column_name": c.name, "name": "data." + c.name, "score": 1.0,
+                     "reasons": ["catalog_name_match"], "matched_fields": ["column_name"]}
+                    for c in workbook.columns if any(t.casefold() in c.name.casefold() for t in tokens)][:limit]
         if not tokens:
             return []
         token_patterns = tuple(f"%{token.casefold()}%" for token in tokens)
@@ -1040,21 +1110,33 @@ class DataStateStore:
                 int(row["connection_generation"]),
                 new_generation,
             )
-            connection.execute(
+            cursor = connection.execute(
                 """
                 UPDATE database_resources
                    SET database_name = ?, resource_generation = ?,
                        catalog_revision = 0, catalog_refreshed_at = NULL,
+                       catalog_source_version = NULL,
                        updated_at = ?
-                 WHERE id = ?
+                 WHERE id = ? AND resource_generation = ?
+                   AND connection_profile_id IN (
+                       SELECT id FROM connection_profiles
+                        WHERE project_id = ? AND provider = 'sqlite'
+                          AND connection_generation = ?
+                   )
                 """,
                 (
                     target_database_name,
                     new_generation,
                     completed_at,
                     database_resource_id,
+                    int(row["resource_generation"]),
+                    project_id,
+                    int(row["connection_generation"]),
                 ),
             )
+            if cursor.rowcount != 1:
+                raise ValueError("Database resource version changed before restore cutover")
+            connection.execute("DELETE FROM catalog_tables WHERE database_resource_id = ?", (database_resource_id,))
             connection.execute(
                 """
                 INSERT INTO restore_operations (
@@ -1268,6 +1350,16 @@ class DataStateStore:
                     expected_generation,
                 ),
             )
+            if cursor.rowcount == 1:
+                sqlite_connection.execute(
+                    """UPDATE database_resources SET catalog_revision = 0,
+                              catalog_refreshed_at = NULL, catalog_source_version = NULL
+                         WHERE connection_profile_id = ?""", (profile_id,),
+                )
+                sqlite_connection.execute(
+                    """DELETE FROM catalog_tables WHERE database_resource_id IN
+                       (SELECT id FROM database_resources WHERE connection_profile_id = ?)""", (profile_id,),
+                )
         if cursor.rowcount != 1:
             raise ValueError("Connection profile generation is stale or profile is unavailable")
         profile = self.get_profile(profile_id)
@@ -1321,6 +1413,7 @@ class DataStateStore:
                 UPDATE database_resources
                    SET database_name = ?, display_name = ?,
                        resource_generation = resource_generation + 1,
+                       catalog_revision = 0, catalog_refreshed_at = NULL, catalog_source_version = NULL,
                        updated_at = ?
                  WHERE id = ? AND resource_generation = ?
                    AND connection_profile_id IN (
@@ -1332,6 +1425,8 @@ class DataStateStore:
                     expected_generation, project_id,
                 ),
             )
+            if cursor.rowcount == 1:
+                connection.execute("DELETE FROM catalog_tables WHERE database_resource_id = ?", (database_id,))
         if cursor.rowcount != 1:
             raise ValueError("Database resource generation is stale or resource is unavailable")
         database = self.get_database(database_id)
@@ -1407,9 +1502,15 @@ class DataStateStore:
                 )
         return tuple(descriptors)
 
-    def resolve(self, ref: ResourceScopeRef) -> DatabaseHandle:
+    def resolve(self, ref: ResourceScopeRef):
         if ref.kind != DATABASE_RESOURCE_KIND:
             raise KeyError(f"Unexpected resource kind: {ref.kind}")
+        workbook = self.get_workbook(ref.id)
+        if workbook is not None:
+            if ref.version != workbook.scope_version:
+                raise ValueError("Workbook resource version does not match its frozen scope")
+            self.check_workbook_files(workbook)
+            return workbook
         database = self.get_database(str(ref.id))
         if database is None:
             raise ValueError(f"Database resource '{ref.id}' does not exist")
@@ -1420,3 +1521,59 @@ class DataStateStore:
         if str(ref.version or "") != version:
             raise ValueError(f"Database resource '{ref.id}' version does not match authorized scope")
         return DatabaseHandle(profile=profile, database=database, scope_version=version)
+
+    def get_workbook(self, dataset_id: str):
+        from .contracts import WorkbookDatabaseHandle
+        with self._connect() as db:
+            row = db.execute("SELECT handle_json FROM workbook_datasets WHERE id = ?", (dataset_id,)).fetchone()
+        return WorkbookDatabaseHandle.model_validate_json(row[0]) if row else None
+
+    @staticmethod
+    def check_workbook_files(handle) -> None:
+        import hashlib
+        for path, expected in ((handle.path, handle.file_sha256), (handle.source_path, handle.source.content_sha256)):
+            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                raise ValueError("Workbook source or derived data is unavailable or changed")
+
+    def publish_workbook(self, handle, temporary: Path):
+        """Publish the closed file under the owner's existing SQLite write boundary."""
+        from .contracts import WorkbookDatabaseHandle
+        with self._connect() as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            prior = db.execute("SELECT handle_json FROM workbook_datasets WHERE id = ?", (handle.id,)).fetchone()
+            if prior is not None:
+                current = WorkbookDatabaseHandle.model_validate_json(prior[0])
+                try:
+                    self.check_workbook_files(current)
+                except ValueError:
+                    pass
+                else:
+                    temporary.unlink(missing_ok=True)
+                    return current
+            temporary.replace(handle.path)
+            db.execute("INSERT OR REPLACE INTO workbook_datasets VALUES (?, ?, ?, ?, ?, ?, ?)", (
+                handle.id, handle.session_id, handle.project_id, handle.source.attachment_id,
+                handle.source.content_sha256, handle.scope_version, handle.model_dump_json(),
+            ))
+        return handle
+
+    def session_workbooks(self, context):
+        from dbfox_dlc_api import ATTACHMENT_RESOURCE_KIND
+        visible = {(ref.id, str(ref.version)) for ref in context.resource_refs if ref.kind == ATTACHMENT_RESOURCE_KIND}
+        with self._connect() as db:
+            rows = db.execute("SELECT id, source_attachment_id, source_sha256, scope_version, handle_json FROM workbook_datasets WHERE session_id = ? AND project_id = ?", (context.session_id, context.project_id)).fetchall()
+        return tuple(ProjectResourceDescriptor(kind=DATABASE_RESOURCE_KIND, id=row["id"], version=row["scope_version"],
+                                              name=self.get_workbook(row["id"]).display_name)
+                     for row in rows if (row["source_attachment_id"], row["source_sha256"]) in visible)
+
+    def retire_session(self, session_id: str) -> None:
+        with self._connect() as db, db:
+            rows = db.execute("SELECT id FROM workbook_datasets WHERE session_id = ?", (session_id,)).fetchall()
+            for row in rows:
+                handle = self.get_workbook(row["id"])
+                if handle is not None:
+                    expected_root = (self.database_path.parent / "workbooks").resolve()
+                    if handle.path.parent.resolve() != expected_root:
+                        raise ValueError("Workbook cleanup path is outside owner storage")
+                    handle.path.unlink(missing_ok=True)
+            db.execute("DELETE FROM workbook_datasets WHERE session_id = ?", (session_id,))

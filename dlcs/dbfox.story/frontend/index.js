@@ -10,13 +10,17 @@ const edgesByProject = new Map();
 const revisionsByProject = new Map();
 const chaptersByProject = new Map();
 const treeModeByProject = new Map();
-const loadedProjects = new Set();
 const posByProject = new Map();
 let selectedEntityByProject = new Map();
 let lastError = null;
 
 function emit() {
   for (const listener of listeners) listener();
+}
+
+function reportError(error) {
+  lastError = String(error && error.message ? error.message : error);
+  emit();
 }
 
 function useDlcState(projectId) {
@@ -50,8 +54,38 @@ async function createChapter(projectId, title, content) {
   return chapter;
 }
 
-async function updateChapter(projectId, chapterId, title, content) {
-  const chapter = await invoke("chapters.update", { chapter_id: chapterId, title, content }, projectId);
+async function readChapter(projectId, chapterId) {
+  return invoke("chapters.read", { chapter_id: chapterId }, projectId);
+}
+
+async function updateChapter(projectId, chapterId, title, content, expectedSha256) {
+  const chapter = await invoke("chapters.update", {
+    chapter_id: chapterId,
+    title,
+    content,
+    expected_sha256: expectedSha256,
+  }, projectId);
+  await loadChapters(projectId);
+  return chapter;
+}
+
+async function loadChapterVersions(projectId, chapterId) {
+  return invoke("chapter_versions.list", { chapter_id: chapterId }, projectId);
+}
+
+async function readChapterVersion(projectId, chapterId, versionId) {
+  return invoke("chapter_versions.read", {
+    chapter_id: chapterId,
+    version_id: versionId,
+  }, projectId);
+}
+
+async function restoreChapterVersion(projectId, chapterId, versionId, expectedSha256) {
+  const chapter = await invoke("chapter_versions.restore", {
+    chapter_id: chapterId,
+    version_id: versionId,
+    expected_sha256: expectedSha256,
+  }, projectId);
   await loadChapters(projectId);
   return chapter;
 }
@@ -72,8 +106,8 @@ async function invoke(operation, input, projectId) {
 
 async function loadAll(projectId) {
   try {
-    const world = await invoke("worlds.get", {}, projectId);
-    worldByProject.set(projectId, world || null);
+    const result = await invoke("worlds.get", {}, projectId);
+    worldByProject.set(projectId, result.world);
     const [entities, edgeList, revisions, chapters] = await Promise.all([
       invoke("entities.list", {}, projectId),
       invoke("relations.list", {}, projectId),
@@ -85,7 +119,6 @@ async function loadAll(projectId) {
     revisionsByProject.set(projectId, revisions?.revisions || []);
     chaptersByProject.set(projectId, chapters?.chapters || []);
     lastError = null;
-    loadedProjects.add(projectId);
   } catch (error) {
     lastError = String(error && error.message ? error.message : error);
   }
@@ -173,22 +206,22 @@ async function commitRevision(projectId, note) {
 function StoryConnector({ projectId }) {
   const state = useDlcState(projectId);
   React.useEffect(() => {
-    if (!loadedProjects.has(projectId)) void loadAll(projectId);
+    void loadAll(projectId);
   }, [projectId]);
   const pending = state.edges.filter((edge) => edge.status === "pending").length;
   return React.createElement(
     "div",
-    { className: "story-connector" },
+    { className: "dbfox-story-connector" },
     React.createElement(
       "p",
-      { className: "story-connector__meta" },
+      { className: "dbfox-story-connector__meta" },
       `${state.entities.length} 个实体 · ${state.edges.filter((edge) => edge.status === "confirmed").length} 条既定关系` + (pending ? ` · ${pending} 条待审` : ""),
     ),
     React.createElement(
       "button",
       {
         type: "button",
-        className: "story-connector__open",
+        className: "dbfox-story-connector__open",
         onClick: () => openWorkbench(projectId),
       },
       "打开故事工作台",
@@ -213,9 +246,12 @@ function StoryWorkbench({ projectId }) {
   const [edgeForm, setEdgeForm] = React.useState({ from: "", to: "", kind: "", reason: "" });
   const [revisionNote, setRevisionNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [selectedChapterId, setSelectedChapterId] = React.useState(null);
+  const entityDisclosure = React.useRef(null);
+  const entityNameInput = React.useRef(null);
 
   React.useEffect(() => {
-    if (!loadedProjects.has(projectId)) void loadAll(projectId);
+    void loadAll(projectId);
   }, [projectId]);
 
   const pending = state.edges.filter((edge) => edge.status === "pending");
@@ -320,22 +356,31 @@ function StoryWorkbench({ projectId }) {
   const resolveItem = (id) => items.get(id);
 
   const treeMode = state.treeMode;
+  const activeChapterId = state.chapters.some(
+    (chapter) => chapter.id === selectedChapterId,
+  )
+    ? selectedChapterId
+    : state.chapters[0]?.id || null;
 
   return React.createElement(
     "div",
-    { className: "story-workbench" },
+    { className: "dbfox-story-workbench" },
     React.createElement(
       "div",
-      { className: "story-workbench__tree" },
+      { className: "dbfox-story-workbench__tree" },
       React.createElement(
         "div",
-        { className: "story-mode-toggle", role: "tablist", "aria-label": "目录形态" },
+        { className: "dbfox-story-toolbar" },
+      React.createElement(
+        "div",
+        { className: "dbfox-story-mode-toggle", role: "group", "aria-label": "目录形态" },
         React.createElement(
           "button",
           {
             type: "button",
-            className: treeMode === "logical" ? "story-mode is-active" : "story-mode",
-            onClick: () => { treeModeByProject.set(projectId, "logical"); emit(); },
+            "aria-pressed": treeMode === "logical",
+            className: treeMode === "logical" ? "dbfox-story-mode is-active" : "dbfox-story-mode",
+            onClick: () => { treeModeByProject.set(projectId, "logical"); void loadAll(projectId); emit(); },
           },
           "逻辑",
         ),
@@ -343,18 +388,29 @@ function StoryWorkbench({ projectId }) {
           "button",
           {
             type: "button",
-            className: treeMode === "chapters" ? "story-mode is-active" : "story-mode",
+            "aria-pressed": treeMode === "chapters",
+            className: treeMode === "chapters" ? "dbfox-story-mode is-active" : "dbfox-story-mode",
             onClick: () => {
               treeModeByProject.set(projectId, "chapters");
-              if (!loadedProjects.has(projectId)) void loadAll(projectId);
+              void loadChapters(projectId).catch(reportError);
               emit();
             },
           },
           "章节",
         ),
       ),
-      state.error ? React.createElement("p", { className: "story-workbench__error" }, state.error) : null,
-      treeMode === "logical" && rootItem && host.ui?.Tree
+      React.createElement("button", {
+        type: "button", className: "dbfox-story-toolbar__refresh", "aria-label": "刷新故事内容", title: "刷新故事内容", disabled: busy,
+        onClick: async () => {
+          if (busy) return;
+          setBusy(true);
+          try { await loadAll(projectId); }
+          finally { setBusy(false); }
+        },
+      }, React.createElement(host.ui.Icon, { name: "refresh-cw", size: 18 })),
+      ),
+      state.error ? React.createElement("p", { className: "dbfox-story-workbench__error", role: "alert" }, state.error) : null,
+      treeMode === "logical" ? (rootItem && host.ui?.Tree
         ? React.createElement(host.ui.Tree, {
             ariaLabel: "故事实体",
             rootItem,
@@ -376,16 +432,24 @@ function StoryWorkbench({ projectId }) {
                 "button",
                 {
                   type: "button",
-                  className: "story-tree__add",
-                  onClick: () => setForm({ kind: branch.kind, name: "", summary: "" }),
+                  className: "dbfox-story-tree__add",
+                  onClick: () => {
+                    setForm({ kind: branch.kind, name: "", summary: "" });
+                    if (entityDisclosure.current) entityDisclosure.current.open = true;
+                    entityNameInput.current?.focus();
+                  },
                 },
-                "+ 新增",
+                React.createElement(host.ui.Icon, { name: "plus", size: 16 }), "新增",
               ),
           })
-        : React.createElement("p", null, "故事世界载入中…"),
-      React.createElement(
+        : React.createElement("p", null, "故事世界载入中…")) : null,
+      treeMode === "logical" ? React.createElement(
+        "details",
+        { className: "dbfox-story-disclosure", ref: entityDisclosure },
+        React.createElement("summary", null, "添加实体"),
+        React.createElement(
         "form",
-        { className: "story-entity-form", onSubmit: submitEntity },
+        { className: "dbfox-story-entity-form", onSubmit: submitEntity },
         React.createElement(
           "select",
           {
@@ -398,6 +462,7 @@ function StoryWorkbench({ projectId }) {
           React.createElement("option", { value: "plotline" }, "情节线"),
         ),
         React.createElement("input", {
+          ref: entityNameInput,
           value: form.name,
           onChange: (event) => setForm({ ...form, name: event.target.value }),
           placeholder: "名称",
@@ -414,15 +479,21 @@ function StoryWorkbench({ projectId }) {
           { type: "submit", disabled: busy || !form.name.trim() },
           "新增实体",
         ),
-      ),
+        ),
+      ) : null,
       treeMode === "chapters"
         ? React.createElement(ChapterTree, {
             projectId,
             chapters: state.chapters,
+            selectedId: activeChapterId,
             busy,
+            onSelect: setSelectedChapterId,
             onCreate: async (title, content) => {
               setBusy(true);
-              try { await createChapter(projectId, title, content); } finally { setBusy(false); }
+              try {
+                const chapter = await createChapter(projectId, title, content);
+                setSelectedChapterId(chapter.id);
+              } finally { setBusy(false); }
             },
             onDelete: async (chapterId) => {
               setBusy(true);
@@ -437,7 +508,7 @@ function StoryWorkbench({ projectId }) {
       treeMode === "logical" && selected
         ? React.createElement(
             "div",
-            { className: "story-entity-detail" },
+            { className: "dbfox-story-entity-detail" },
             React.createElement("strong", null, `${KIND_LABELS[selected.kind] || selected.kind} · ${selected.name}`),
             React.createElement("p", null, selected.summary || "（无设定摘要）"),
             React.createElement(
@@ -455,10 +526,19 @@ function StoryWorkbench({ projectId }) {
       ? React.createElement(ChapterReader, {
           projectId,
           chapters: state.chapters,
+          selectedId: activeChapterId,
           busy,
-          onUpdate: async (chapterId, title, content) => {
+          onUpdate: async (chapterId, title, content, expectedSha256) => {
             setBusy(true);
-            try { await updateChapter(projectId, chapterId, title, content); } finally { setBusy(false); }
+            try {
+              return await updateChapter(projectId, chapterId, title, content, expectedSha256);
+            } finally { setBusy(false); }
+          },
+          onRestore: async (chapterId, versionId, expectedSha256) => {
+            setBusy(true);
+            try {
+              return await restoreChapterVersion(projectId, chapterId, versionId, expectedSha256);
+            } finally { setBusy(false); }
           },
           onDelete: async (chapterId) => {
             setBusy(true);
@@ -471,21 +551,21 @@ function StoryWorkbench({ projectId }) {
         })
       : React.createElement(
       "div",
-      { className: "story-workbench__main" },
+      { className: "dbfox-story-workbench__main" },
       React.createElement(
         "div",
-        { className: "story-canvas-card" },
+        { className: "dbfox-story-canvas-card" },
         React.createElement(
           "div",
-          { className: "story-canvas-card__legend" },
-          React.createElement("span", { className: "story-legend story-legend--confirmed" }, "已确认"),
-          React.createElement("span", { className: "story-legend story-legend--pending" }, "待审"),
-          React.createElement("span", { className: "story-legend story-legend--rejected" }, "已否决（保留记录）"),
+          { className: "dbfox-story-canvas-card__legend" },
+          React.createElement("span", { className: "dbfox-story-legend dbfox-story-legend--confirmed" }, "已确认"),
+          React.createElement("span", { className: "dbfox-story-legend dbfox-story-legend--pending" }, "待审"),
+          React.createElement("span", { className: "dbfox-story-legend dbfox-story-legend--rejected" }, "已否决"),
         ),
         React.createElement(
           "svg",
           {
-            className: "story-canvas",
+            className: "dbfox-story-canvas",
             viewBox: "0 0 640 380",
             role: "img",
             "aria-label": "关系画布",
@@ -495,10 +575,10 @@ function StoryWorkbench({ projectId }) {
             const to = nodeAt(edge.to_entity_id);
             const className =
               edge.status === "confirmed"
-                ? "story-edge story-edge--confirmed"
+                ? "dbfox-story-edge dbfox-story-edge--confirmed"
                 : edge.status === "pending"
-                  ? "story-edge story-edge--pending"
-                  : "story-edge story-edge--rejected";
+                  ? "dbfox-story-edge dbfox-story-edge--pending"
+                  : "dbfox-story-edge dbfox-story-edge--rejected";
             return React.createElement(
               "g",
               { key: edge.id, className },
@@ -523,7 +603,7 @@ function StoryWorkbench({ projectId }) {
               "g",
               {
                 key: entity.id,
-                className: "story-node",
+                className: "dbfox-story-node",
                 transform: `translate(${point.x}, ${point.y})`,
                 onPointerDown: (event) => startDrag(event, entity.id),
                 onClick: () => {
@@ -543,10 +623,14 @@ function StoryWorkbench({ projectId }) {
       ),
       React.createElement(
         "div",
-        { className: "story-review" },
+        { className: "dbfox-story-review" },
         React.createElement(
+          "details",
+          { className: "dbfox-story-disclosure" },
+          React.createElement("summary", null, "添加关系"),
+          React.createElement(
           "form",
-          { className: "story-edge-form", onSubmit: submitEdge },
+          { className: "dbfox-story-edge-form", onSubmit: submitEdge },
           React.createElement("input", {
             value: edgeForm.from,
             onChange: (event) => setEdgeForm({ ...edgeForm, from: event.target.value }),
@@ -576,13 +660,14 @@ function StoryWorkbench({ projectId }) {
             { type: "submit", disabled: busy || !edgeForm.from.trim() || !edgeForm.to.trim() },
             "加入待审",
           ),
+          ),
         ),
         React.createElement(
           "div",
-          { className: "story-review__section" },
+          { className: "dbfox-story-review__section" },
           React.createElement(
             "div",
-            { className: "story-review__header" },
+            { className: "dbfox-story-review__header" },
             React.createElement("strong", null, `待审提案（${pending.length}）`),
             pending.length
               ? React.createElement(
@@ -604,10 +689,10 @@ function StoryWorkbench({ projectId }) {
             ? pending.map((edge) =>
                 React.createElement(
                   "div",
-                  { className: "story-review__row", key: edge.id },
+                  { className: "dbfox-story-review__row", key: edge.id },
                   React.createElement(
                     "span",
-                    { className: "story-review__copy" },
+                    { className: "dbfox-story-review__copy" },
                     React.createElement("strong", null, `${edge.from_name} —${edge.kind}→ ${edge.to_name}`),
                     edge.reason ? React.createElement("small", null, edge.reason) : null,
                   ),
@@ -631,24 +716,24 @@ function StoryWorkbench({ projectId }) {
                   ),
                 ),
               )
-            : React.createElement("p", { className: "story-review__empty" }, "没有待审提案。"),
+            : null,
         ),
         rejected.length
           ? React.createElement(
               "div",
-              { className: "story-review__section" },
+              { className: "dbfox-story-review__section" },
               React.createElement(
                 "div",
-                { className: "story-review__header" },
+                { className: "dbfox-story-review__header" },
                 React.createElement("strong", null, `已否决（${rejected.length}，保留供 AI 规避）`),
               ),
               rejected.map((edge) =>
                 React.createElement(
                   "div",
-                  { className: "story-review__row story-review__row--rejected", key: edge.id },
+                  { className: "dbfox-story-review__row dbfox-story-review__row--rejected", key: edge.id },
                   React.createElement(
                     "span",
-                    { className: "story-review__copy" },
+                    { className: "dbfox-story-review__copy" },
                     React.createElement("strong", null, `${edge.from_name} —${edge.kind}→ ${edge.to_name}`),
                     edge.reason ? React.createElement("small", null, edge.reason) : null,
                   ),
@@ -667,10 +752,10 @@ function StoryWorkbench({ projectId }) {
           : null,
         React.createElement(
           "div",
-          { className: "story-review__section" },
+          { className: "dbfox-story-review__section" },
           React.createElement(
             "div",
-            { className: "story-review__header" },
+            { className: "dbfox-story-review__header" },
             React.createElement("strong", null, `不可变修订（${state.revisions.length}）`),
             confirmed.length
               ? React.createElement(
@@ -704,10 +789,10 @@ function StoryWorkbench({ projectId }) {
             ? state.revisions.map((revision) =>
                 React.createElement(
                   "div",
-                  { className: "story-review__row", key: revision.id },
+                  { className: "dbfox-story-review__row", key: revision.id },
                   React.createElement(
                     "span",
-                    { className: "story-review__copy" },
+                    { className: "dbfox-story-review__copy" },
                     React.createElement(
                       "strong",
                       null,
@@ -719,7 +804,7 @@ function StoryWorkbench({ projectId }) {
               )
             : React.createElement(
                 "p",
-                { className: "story-review__empty" },
+                { className: "dbfox-story-review__empty" },
                 "确认关系后提交为不可变修订，之后可由 Agent 查询比对。",
               ),
         ),
@@ -728,8 +813,9 @@ function StoryWorkbench({ projectId }) {
   );
 }
 
-function ChapterTree({ projectId, chapters, busy, onCreate, onDelete, onMove }) {
+function ChapterTree({ projectId, chapters, selectedId, busy, onSelect, onCreate, onDelete, onMove }) {
   const [draft, setDraft] = React.useState({ title: "", content: "" });
+  const [creating, setCreating] = React.useState(false);
   const items = new Map();
   const root = { id: "chapters-root", label: state_label(projectId), children: chapters.map((chapter) => chapter.id) };
   items.set(root.id, root);
@@ -738,7 +824,7 @@ function ChapterTree({ projectId, chapters, busy, onCreate, onDelete, onMove }) 
   }
   return React.createElement(
     "div",
-    { className: "story-chapter-tree" },
+    { className: "dbfox-story-chapter-tree" },
     root && host.ui?.Tree
       ? React.createElement(host.ui.Tree, {
           ariaLabel: "章节目录",
@@ -748,45 +834,49 @@ function ChapterTree({ projectId, chapters, busy, onCreate, onDelete, onMove }) 
           getItemChildren: (item) =>
             item.children ? item.children.map((id) => items.get(id)).filter(Boolean) : undefined,
           getItemChildrenCount: (item) => (item.children ? item.children.length : undefined),
+          selectedIds: selectedId ? [selectedId] : [],
+          onItemSelect: (item) => {
+            if (item.chapter) onSelect(item.id);
+          },
           renderItemActions: (item) =>
             item.chapter
               ? React.createElement(
                   "span",
-                  { className: "story-chapter-actions" },
+                  { className: "dbfox-story-chapter-actions" },
                   React.createElement("button", {
                     type: "button",
                     title: "上移",
                     disabled: busy || item.chapter.seq === 1,
-                    onClick: () => void onMove(item.chapter.id, "up"),
-                  }, "↑"),
+                    onClick: () => void onMove(item.chapter.id, "up").catch(reportError),
+                  "aria-label": "上移章节", }, React.createElement(host.ui.Icon, { name: "arrow-up", size: 16 })),
                   React.createElement("button", {
                     type: "button",
                     title: "下移",
-                    disabled: busy,
-                    onClick: () => void onMove(item.chapter.id, "down"),
-                  }, "↓"),
+                    disabled: busy || item.chapter.seq === chapters.length,
+                    onClick: () => void onMove(item.chapter.id, "down").catch(reportError),
+                  "aria-label": "下移章节", }, React.createElement(host.ui.Icon, { name: "arrow-down", size: 16 })),
                   React.createElement("button", {
                     type: "button",
                     title: "删除",
                     disabled: busy,
-                    onClick: () => void onDelete(item.chapter.id),
-                  }, "×"),
+                    onClick: () => void onDelete(item.chapter.id).catch(reportError),
+                  "aria-label": "删除章节", }, React.createElement(host.ui.Icon, { name: "trash-2", size: 16 })),
                 )
               : null,
-          renderBranchFooter: () =>
-            React.createElement(
-              "button",
-              { type: "button", className: "story-tree__add", onClick: () => setDraft({ title: `第${chapters.length + 1}章`, content: "" }) },
-              "+ 新增章节",
-            ),
         })
       : null,
-    React.createElement(
+    React.createElement("button", {
+      type: "button", className: "dbfox-story-tree__add", "aria-expanded": creating,
+      onClick: () => setCreating(!creating),
+    }, React.createElement(host.ui.Icon, { name: "plus", size: 16 }), creating ? "收起表单" : "新建章节"),
+    creating ? React.createElement(
       "form",
-      { className: "story-entity-form", onSubmit: (event) => {
+      { className: "dbfox-story-entity-form", onSubmit: (event) => {
           event.preventDefault();
           if (!draft.title.trim()) return;
-          void onCreate(draft.title.trim(), draft.content).then(() => setDraft({ title: "", content: "" }));
+          void onCreate(draft.title.trim(), draft.content)
+            .then(() => { setDraft({ title: "", content: "" }); setCreating(false); })
+            .catch(reportError);
         } },
       React.createElement("input", {
         value: draft.title,
@@ -801,7 +891,7 @@ function ChapterTree({ projectId, chapters, busy, onCreate, onDelete, onMove }) 
         "aria-label": "章节正文",
       }),
       React.createElement("button", { type: "submit", disabled: busy || !draft.title.trim() }, "新增章节"),
-    ),
+    ) : null,
   );
 }
 
@@ -810,47 +900,114 @@ function state_label(projectId) {
   return world?.title || "故事世界";
 }
 
-function ChapterReader({ projectId, chapters, busy, onUpdate, onDelete, onMove }) {
-  const [selectedId, setSelectedId] = React.useState(chapters[0]?.id || null);
-  const chapter = chapters.find((item) => item.id === selectedId) || chapters[0] || null;
+const storyDateFormat = new Intl.DateTimeFormat("zh-CN", {
+  year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+});
+
+function storyDate(value) {
+  const date = new Date(value);
+  return value && Number.isFinite(date.getTime()) ? storyDateFormat.format(date) : "—";
+}
+
+function ChapterReader({ projectId, chapters, selectedId, busy, onUpdate, onRestore, onDelete, onMove }) {
+  const chapterCatalog = chapters.find((item) => item.id === selectedId) || chapters[0] || null;
+  const [chapter, setChapter] = React.useState(null);
+  const [readError, setReadError] = React.useState(null);
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(null);
+  const [versions, setVersions] = React.useState([]);
+  const [selectedVersion, setSelectedVersion] = React.useState(null);
 
   React.useEffect(() => {
-    if (chapters.length && !chapters.some((item) => item.id === selectedId)) {
-      setSelectedId(chapters[0].id);
-    }
-  }, [chapters, selectedId]);
+    setEditing(false);
+    setDraft(null);
+    setSelectedVersion(null);
+    setChapter(null);
+    setReadError(null);
+    if (!chapterCatalog) return undefined;
+    let cancelled = false;
+    void readChapter(projectId, chapterCatalog.id)
+      .then((output) => {
+        if (!cancelled) setChapter(output);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setReadError(String(error && error.message ? error.message : error));
+          reportError(error);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [projectId, chapterCatalog?.id, chapterCatalog?.updated_at]);
 
-  if (!chapter) {
+  React.useEffect(() => {
+    setSelectedVersion(null);
+    if (!chapter) {
+      setVersions([]);
+      return undefined;
+    }
+    let cancelled = false;
+    void loadChapterVersions(projectId, chapter.id)
+      .then((output) => {
+        if (!cancelled) setVersions(output?.versions || []);
+      })
+      .catch((error) => {
+        if (!cancelled) reportError(error);
+      });
+    return () => { cancelled = true; };
+  }, [projectId, chapter?.id, chapter?.content_sha256]);
+
+  if (!chapterCatalog) {
     return React.createElement(
       "div",
-      { className: "story-reader" },
-      React.createElement("p", { className: "story-review__empty" }, "还没有章节。在左侧目录新增，或让 AI 用 story_write_chapter 写第一章。"),
+      { className: "dbfox-story-reader" },
+      React.createElement("p", { className: "dbfox-story-review__empty" }, "还没有章节。在目录中新建，或在对话中请 AI 撰写。"),
+    );
+  }
+  if (!chapter || chapter.id !== chapterCatalog.id) {
+    return React.createElement(
+      "div",
+      { className: "dbfox-story-reader" },
+      React.createElement(
+        "p",
+        { className: "dbfox-story-review__empty" },
+        readError || "正在读取章节正文…",
+      ),
     );
   }
 
   return React.createElement(
     "div",
-    { className: "story-reader" },
+    { className: "dbfox-story-reader" },
     React.createElement(
       "div",
-      { className: "story-reader__toolbar" },
-      React.createElement("strong", { className: "story-reader__title" }, `${chapter.seq}. ${chapter.title}`),
-      React.createElement("span", { className: "story-reader__meta" }, `更新于 ${chapter.updated_at || "—"}`),
+      { className: "dbfox-story-reader__toolbar" },
+      React.createElement("strong", { className: "dbfox-story-reader__title" }, `${chapterCatalog.seq}. ${chapter.title}`),
+      React.createElement("time", { className: "dbfox-story-reader__meta", dateTime: chapter.updated_at, title: chapter.updated_at }, `更新于 ${storyDate(chapter.updated_at)}`),
       React.createElement(
         "button",
-        { type: "button", disabled: busy, onClick: () => void onMove(chapter.id, "up") },
+        {
+          type: "button",
+          disabled: busy || chapterCatalog.seq === 1,
+          onClick: () => void onMove(chapter.id, "up").catch(reportError),
+        },
         "上移",
       ),
       React.createElement(
         "button",
-        { type: "button", disabled: busy, onClick: () => void onMove(chapter.id, "down") },
+        {
+          type: "button",
+          disabled: busy || chapterCatalog.seq === chapters.length,
+          onClick: () => void onMove(chapter.id, "down").catch(reportError),
+        },
         "下移",
       ),
       React.createElement(
         "button",
-        { type: "button", disabled: busy, onClick: () => void onDelete(chapter.id) },
+        {
+          type: "button",
+          disabled: busy,
+          onClick: () => void onDelete(chapter.id).catch(reportError),
+        },
         "删除",
       ),
       editing
@@ -859,7 +1016,17 @@ function ChapterReader({ projectId, chapters, busy, onUpdate, onDelete, onMove }
             {
               type: "button",
               onClick: () => {
-                void onUpdate(chapter.id, chapter.title, draft ?? chapter.content).then(() => setEditing(false));
+                void onUpdate(
+                  chapter.id,
+                  chapter.title,
+                  draft ?? chapter.content,
+                  chapter.content_sha256,
+                )
+                  .then((updated) => {
+                    setChapter(updated);
+                    setEditing(false);
+                  })
+                  .catch(reportError);
               },
               disabled: busy,
             },
@@ -876,20 +1043,82 @@ function ChapterReader({ projectId, chapters, busy, onUpdate, onDelete, onMove }
     ),
     editing
       ? React.createElement("textarea", {
-          className: "story-reader__editor",
+          className: "dbfox-story-reader__editor",
           value: draft ?? chapter.content,
           onChange: (event) => setDraft(event.target.value),
           "aria-label": "章节正文编辑",
         })
       : React.createElement(
           "div",
-          { className: "story-reader__content" },
+          { className: "dbfox-story-reader__content" },
           chapter.content
             ? chapter.content.split("\n\n").map((paragraph, index) =>
                 React.createElement("p", { key: index }, paragraph),
               )
-            : React.createElement("p", { className: "story-review__empty" }, "本章还没有正文。让 AI 用 story_write_chapter 写入，或直接编辑。"),
+            : React.createElement("p", { className: "dbfox-story-review__empty" }, "本章还没有正文。可以直接编辑，或在对话中请 AI 续写。"),
         ),
+    React.createElement(
+      "section",
+      { className: "dbfox-story-versions", "aria-label": "章节版本历史" },
+      React.createElement("strong", null, "版本历史"),
+      versions.length
+        ? React.createElement(
+            "div",
+            { className: "dbfox-story-versions__list" },
+            versions.map((version) => React.createElement(
+              "button",
+              {
+                key: version.id,
+                type: "button",
+                className: selectedVersion?.id === version.id ? "is-active" : "",
+                title: version.created_at,
+                onClick: () => {
+                  void readChapterVersion(projectId, chapter.id, version.id)
+                    .then(setSelectedVersion)
+                    .catch(reportError);
+                },
+              },
+              `v${version.seq} · ${{ ai: "AI", user: "用户", system: "系统" }[version.author] || version.author} · ${storyDate(version.created_at)}`,
+            )),
+          )
+        : React.createElement("p", { className: "dbfox-story-review__empty" }, "暂无版本。"),
+      selectedVersion
+        ? React.createElement(
+            "div",
+            { className: "dbfox-story-version-compare" },
+            React.createElement(
+              "div",
+              null,
+              React.createElement("span", null, `v${selectedVersion.seq}`),
+              React.createElement("pre", null, selectedVersion.content),
+            ),
+            React.createElement(
+              "div",
+              null,
+              React.createElement("span", null, "当前版本"),
+              React.createElement("pre", null, chapter.content),
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                disabled: busy || selectedVersion.content_sha256 === chapter.content_sha256,
+                onClick: () => void onRestore(
+                  chapter.id,
+                  selectedVersion.id,
+                  chapter.content_sha256,
+                )
+                  .then((restored) => {
+                    setChapter(restored);
+                    setSelectedVersion(null);
+                  })
+                  .catch(reportError),
+              },
+              "恢复此版本",
+            ),
+          )
+        : null,
+    ),
   );
 }
 
@@ -901,20 +1130,19 @@ export function register(extensionHost) {
   host.connectors.register({
     id: DLC_ID,
     title: "故事",
-    icon: React.createElement("span", { "aria-hidden": true }, "✒"),
+    icon: React.createElement(host.ui.Icon, { name: "book-open", size: 16 }),
+    onOpen: ({ projectId }) => openWorkbench(projectId),
     addLabel: "创建故事世界",
-    onAdd: ({ projectId }) => {
-      void (async () => {
-        await invoke("worlds.ensure", {}, projectId);
-        await loadAll(projectId);
-        openWorkbench(projectId);
-      })().catch(() => emit());
+    onAdd: async ({ projectId }) => {
+      await invoke("worlds.ensure", {}, projectId);
+      await loadAll(projectId);
+      openWorkbench(projectId);
     },
     render: ({ projectId }) => React.createElement(StoryConnector, { projectId }),
   });
   host.dockViews.register({
     viewType: WORKBENCH_VIEW,
-    icon: () => React.createElement("span", { "aria-hidden": true }, "✒"),
+    icon: () => React.createElement(host.ui.Icon, { name: "book-open", size: 16 }),
     resolveTitle: (view) => `${worldByProject.get(view.projectId)?.title || "故事"} · 工作台`,
     isVisible: (view, context) => !view.projectId || view.projectId === context.activeProjectId,
     render: (view, context) =>

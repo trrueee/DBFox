@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from dbfox_dlc_api import ExtensionToolRunContext, ResourceScopeRef, ToolInputError
 
-from .contracts import DatabaseHandle
+from .contracts import DatabaseHandle, WorkbookDatabaseHandle, QuerySourceHandle
 from .resource_kind import DATABASE_RESOURCE_KIND
 
 
 def select_database(
     context: ExtensionToolRunContext,
     database_id: str | None,
-) -> tuple[ResourceScopeRef, DatabaseHandle]:
+) -> tuple[ResourceScopeRef, QuerySourceHandle]:
     scopes = context.scopes(DATABASE_RESOURCE_KIND)
     if database_id is None:
         if len(scopes) != 1:
@@ -24,6 +24,6 @@ def select_database(
         if selected is None:
             raise ToolInputError("The selected database is not authorized for this Run.")
     resource = context.resource(selected)
-    if not isinstance(resource, DatabaseHandle):
+    if not isinstance(resource, (DatabaseHandle, WorkbookDatabaseHandle)):
         raise RuntimeError("dbfox.data database resource did not resolve to DatabaseHandle")
     return selected, resource

@@ -1,0 +1,12 @@
+{
+  "manifestSchemaVersion": 2,
+  "id": "dbfox.shader",
+  "version": "0.1.0",
+  "displayName": "DBFox Shader",
+  "publisher": "dbfox",
+  "description": "Durable ESSL 3.00 Shader Studio with incremental editing and explicit Chromium WebGL2 compile/preview evidence.",
+  "extensionApiVersion": "2",
+  "requiresDbfox": ">=1.0.0",
+  "entrypoints": {"backend": "backend/entry.py", "frontend": "frontend/index.js"},
+  "permissions": []
+}

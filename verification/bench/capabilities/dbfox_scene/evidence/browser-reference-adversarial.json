@@ -1,0 +1,53 @@
+{
+  "date": "2026-09-05",
+  "method": "Real Electron UI clicks, signed prior verification bundle with frontend bytes independently equal to current reviewed source. References read from canonical existing Workbench projection only; no Store mutations or Provider calls.",
+  "frontend_sha256": {
+    "frontend/index.js": "1d6b266ba79faae67b41f239c11183a419de9afe0010abe25ed49649c9cec927",
+    "frontend/model.js": "96797b8b6922b6f8be7b7cc5a9060bf8697ba63b343e5755c8d881aaa8436ea6",
+    "frontend/viewport.js": "f52bcf0eed0c8b01cf4578270665cde6c2fcb9ae0bfac62f2df382d8d5866b9e"
+  },
+  "package_digest": "21ceabee97f28f37d63627d8445ddf93747e6fa554e08f2d73166bef09e6ccc7",
+  "package_scope": "Frontend onAsk review only. This prior package does not include later strict backend fixes; those are independently covered by new signed-package pytest runs.",
+  "document_reference": {
+    "label": "Interactive Scene",
+    "authority": {
+      "kind": "dbfox.scene.document",
+      "id": "91df7fd0cf114c53abd368d88950cc9e"
+    },
+    "object": {
+      "kind": "dbfox.scene.document",
+      "id": "91df7fd0cf114c53abd368d88950cc9e",
+      "version": 2
+    },
+    "locator": "/"
+  },
+  "artifact_reference": {
+    "label": "Interactive Scene · v2",
+    "object": {
+      "kind": "artifact",
+      "id": "artifact_7e644fb785a04d719102cfa141a0fa6d",
+      "version": 1
+    },
+    "artifactId": "artifact_7e644fb785a04d719102cfa141a0fa6d"
+  },
+  "export_action": {
+    "artifact_id": "artifact_7e644fb785a04d719102cfa141a0fa6d",
+    "run_id": "run_809431cf78c142aab47eedfa830d4a76",
+    "session_id": "2b8970bd-418e-458d-9acd-88226216b749",
+    "operation_status": 200
+  },
+  "destination": {
+    "project": "scene-browser-project",
+    "conversation": null
+  },
+  "actual_artifact_button_label": "����Ի�������",
+  "scope_conclusion": "Generic Artifact reference has no execution authority. Workbench direct document reference is separate. ActionRun Artifact belongs to its own Session, while current draft has none. Backend tests cover subsequent admission fences.",
+  "cleanup": {
+    "named_playwright_session": "scene-red",
+    "detached": true,
+    "own_electron_closed": true,
+    "launcher_exit": 0,
+    "route_or_debugger_hooks": false,
+    "downloads_requested": false
+  }
+}

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import "./ArtifactCard.css";
+import { ResourceIcon } from "../../../components/resources/resourcePresentation";
 
 export type ArtifactTone = "default" | "sql" | "table" | "chart" | "insight" | "warning" | "danger";
 
@@ -41,7 +42,7 @@ export function ArtifactCard({
     <section className={classNames}>
       <header className="artifact-card-header">
         <div className="artifact-card-title">
-          {icon}
+          {icon ?? <ResourceIcon kind={tone === "chart" ? "chart" : tone === "table" ? "table" : tone === "sql" ? "code" : tone === "insight" ? "document" : "artifact"} size={16} />}
           <span>{title}</span>
         </div>
         <div className="artifact-card-header-end">

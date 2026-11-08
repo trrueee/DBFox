@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -22,4 +22,6 @@ def coordinator(request: Request) -> Any:
 def required_iso(value: datetime | None, field: str) -> str:
     if value is None:
         raise RuntimeError(f"Persisted conversation is missing {field}")
-    return value.isoformat()
+    # SQLite reloads UTC timestamps without tzinfo; preserve their instant on the wire.
+    aware = value.replace(tzinfo=UTC) if value.tzinfo is None else value
+    return aware.astimezone(UTC).isoformat()

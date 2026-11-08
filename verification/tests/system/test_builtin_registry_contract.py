@@ -46,16 +46,13 @@ class _EchoTool(BaseTool[_EchoInput, _EchoOutput]):
 
 
 FROZEN_MATERIALIZATION_HASH = (
-    "9eb03a53070cd829befb71383c8a0be736f38638af27d476f8be070235c23799"
+    "2b6e8f7365e005f490bd45917a086317e4525e2012e3c8be727e460dc4779100"
 )
 
 FROZEN_BUILTIN_NAMES = (
     "conversation_read",
     "conversation_search",
     "project_resource_search",
-    "remote_job_cancel",
-    "remote_job_status",
-    "remote_job_submit",
     "request_clarification",
     "update_plan",
 )
@@ -66,9 +63,6 @@ FROZEN_OWNERS = {
     "project_resource_search": "dbfox.core",
     "conversation_read": "dbfox.conversation",
     "conversation_search": "dbfox.conversation",
-    "remote_job_cancel": "dbfox.remote_job",
-    "remote_job_status": "dbfox.remote_job",
-    "remote_job_submit": "dbfox.remote_job",
 }
 
 

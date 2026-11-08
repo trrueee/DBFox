@@ -1,4 +1,7 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  CaretLeftIcon,
+  CaretRightIcon,
+} from "@/components/icons";
 import {
   Button,
   Select,
@@ -52,7 +55,7 @@ export function ArtifactTableFooter({
               disabled={page <= 1 || isLoading}
               onClick={() => onPageChange((current) => Math.max(1, current - 1))}
             >
-              <ChevronLeft aria-hidden="true" />
+              <CaretLeftIcon aria-hidden="true" />
             </Button>
             <span className="artifact-table-page-number">{page}</span>
             <Button
@@ -64,7 +67,7 @@ export function ArtifactTableFooter({
               disabled={!hasNextPage || isLoading}
               onClick={() => onPageChange((current) => current + 1)}
             >
-              <ChevronRight aria-hidden="true" />
+              <CaretRightIcon aria-hidden="true" />
             </Button>
         </div>
         <Select

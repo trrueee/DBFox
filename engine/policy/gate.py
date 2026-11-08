@@ -77,7 +77,10 @@ def _rule_capabilities(
     tool: Any, _policy: Any,
 ) -> PolicyDecision | None:
     capabilities = set(tool.spec.execution.capabilities)
-    forbidden = sorted(capabilities - _AGENT_KERNEL_CAPABILITIES)
+    permitted = _AGENT_KERNEL_CAPABILITIES
+    if tool.spec.execution.backend == "isolated_process":
+        permitted = permitted | {"subprocess"}
+    forbidden = sorted(capabilities - permitted)
     if forbidden:
         return PolicyDecision(
             status="blocked",
@@ -207,12 +210,12 @@ def _rule_tool_admission(
 
 def _rule_requires_approval(
     _gate: PolicyGate, _state: dict, tool_name: str, args: dict, _mode: str,
-    _tool: Any, policy: Any,
+    tool: Any, policy: Any,
 ) -> PolicyDecision | None:
     if policy.requires_approval:
         return PolicyDecision(
             status="approval_required",
-            reason=f"Tool {tool_name} requires approval.",
+            reason=f"{tool.presentation.title.strip() or '此操作'}需要你的批准。",
             risk_level=policy.risk_level,
             safe_args=args,
         )

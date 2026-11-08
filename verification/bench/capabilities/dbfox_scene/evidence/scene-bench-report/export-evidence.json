@@ -1,0 +1,30 @@
+{
+  "artifact_id": "artifact_5ee1fb9bc3034b20b726a9996d2ec75f",
+  "scene_id": "d5bff4fd3d7c4256a664ae836fa7bb31",
+  "version": 18,
+  "exports": [
+    {
+      "file": "fox-temple.gltf",
+      "bytes": 76249,
+      "sha256": "2b3b477d9d72ec28c08eacfdb28ad49b18be02b68fb8d60c592cfadd1c9ddd23",
+      "metadata": {
+        "source-version": "18",
+        "source-fingerprint": "2faa5743a33fe0b447fdffa749d21a08ed29928be426241dd28ac9851a0451fd",
+        "consistency": "durable_snapshot"
+      }
+    },
+    {
+      "file": "fox-temple.glb",
+      "bytes": 60656,
+      "sha256": "8f0ace3c88b0c79ea1b4df8978dda5fc9acca065852ff87973affea30108a18f",
+      "metadata": {
+        "source-version": "18",
+        "source-fingerprint": "2faa5743a33fe0b447fdffa749d21a08ed29928be426241dd28ac9851a0451fd",
+        "consistency": "durable_snapshot"
+      }
+    }
+  ],
+  "validator_exit_code": 0,
+  "validator_stdout": "{\"file\":\"fox-temple.gltf\",\"validator\":\"2.0.0-dev.3.10\",\"errors\":0,\"warnings\":0,\"infos\":0,\"messages\":[]}\n{\"file\":\"fox-temple.glb\",\"validator\":\"2.0.0-dev.3.10\",\"errors\":0,\"warnings\":0,\"infos\":0,\"messages\":[]}\n",
+  "validator_stderr": ""
+}

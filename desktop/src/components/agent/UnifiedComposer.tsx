@@ -1,5 +1,14 @@
-import type { FormEvent, KeyboardEvent } from "react";
-import { AlertCircle, ChevronDown, X } from "lucide-react";
+import type { FormEvent, KeyboardEvent, ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { useConversationStore } from "../../stores/conversationStore";
+import {
+  WarningCircleIcon,
+  CaretDownIcon,
+  CircleNotchIcon,
+  PlusIcon,
+} from "@/components/icons";
+import { ReferenceCard } from "../resources/ReferenceCard";
+import { referenceKind } from "../resources/resourcePresentation";
 
 import type { WorkbenchReference } from "../../types/workspace";
 import type { ConversationDeliveryMode } from "../../types/conversation";
@@ -37,6 +46,11 @@ interface UnifiedComposerProps {
   ariaLabel: string;
   references?: readonly WorkbenchReference[];
   onRemoveReference?: (reference: WorkbenchReference) => void;
+  onOpenReference?: (reference: WorkbenchReference) => void;
+  onAddAttachment?: () => void;
+  attachmentBusy?: boolean;
+  attachmentError?: string;
+  onRetryAttachment?: () => void;
   running?: boolean;
   submitting?: boolean;
   cancelling?: boolean;
@@ -47,6 +61,7 @@ interface UnifiedComposerProps {
   onCancel?: () => void | Promise<void>;
   autoFocus?: boolean;
   compact?: boolean;
+  context?: ReactNode;
 }
 
 export function UnifiedComposer({
@@ -57,6 +72,11 @@ export function UnifiedComposer({
   ariaLabel,
   references = [],
   onRemoveReference,
+  onOpenReference,
+  onAddAttachment,
+  attachmentBusy = false,
+  attachmentError,
+  onRetryAttachment,
   running = false,
   submitting = false,
   cancelling = false,
@@ -67,8 +87,12 @@ export function UnifiedComposer({
   onCancel,
   autoFocus = false,
   compact = false,
+  context,
 }: UnifiedComposerProps) {
-  const unavailable = Boolean(disabled) || submitting;
+  const referenceKinds = useConversationStore(useShallow(state => references.map(reference => referenceKind(
+    reference, reference.artifactId ? state.artifactsById[reference.artifactId] : undefined,
+  ))));
+  const unavailable = Boolean(disabled) || submitting || attachmentBusy;
   const hasInput = value.trim().length > 0;
   const errorMessage = typeof error === "string"
     ? error
@@ -110,27 +134,11 @@ export function UnifiedComposer({
     >
       <PromptInput disabled={Boolean(disabled)} className="dbfox-composer__prompt-input">
         {references.length > 0 ? (
-          <div className="dbfox-composer__references" aria-label="当前上下文">
-            {references.map((reference) => (
-              <span className="dbfox-reference-chip" key={referenceKey(reference)}>
-                <span className="dbfox-reference-chip__kind">
-                  {reference.object?.kind || reference.authority?.kind || (reference.artifactId ? "工件" : "上下文")}
-                </span>
-                <span className="dbfox-reference-chip__label" title={reference.label}>
-                  {reference.label}
-                </span>
-                {onRemoveReference ? (
-                  <button
-                    type="button"
-                    className="dbfox-reference-chip__remove"
-                    onClick={(event) => { event.stopPropagation(); onRemoveReference(reference); }}
-                    aria-label={`移除上下文：${reference.label}`}
-                  >
-                    <X size={14} aria-hidden="true" />
-                  </button>
-                ) : null}
-              </span>
-            ))}
+          <div className="dbfox-composer__references" role="group" aria-label="当前上下文">
+            {references.map((reference, index) => <ReferenceCard key={referenceKey(reference)}
+              name={reference.label} kind={referenceKinds[index]} compact
+              onOpen={onOpenReference ? () => onOpenReference(reference) : undefined}
+              onRemove={onRemoveReference ? () => onRemoveReference(reference) : undefined} />)}
           </div>
         ) : null}
 
@@ -140,12 +148,18 @@ export function UnifiedComposer({
           onKeyDown={handleKeyDown}
           placeholder={disabled || placeholder}
           aria-label={ariaLabel}
-          disabled={unavailable}
+          disabled={Boolean(disabled) || submitting}
           autoFocus={autoFocus}
         />
 
         <PromptInputActions className="dbfox-composer__toolbar">
+          {onAddAttachment ? <PromptInputAction tooltip="添加本地文件">
+            <Button type="button" variant="ghost" size="icon" className="dbfox-composer__attachment-action" aria-label="添加本地文件" aria-busy={attachmentBusy || undefined} disabled={unavailable} onClick={onAddAttachment}>
+              {attachmentBusy ? <CircleNotchIcon className="dbfox-composer__loading" size={20} aria-hidden="true" /> : <PlusIcon size={20} aria-hidden="true" />}
+            </Button>
+          </PromptInputAction> : null}
           <span className="dbfox-composer__spacer" aria-hidden="true" />
+          {context}
 
           {running && onDeliveryModeChange ? (
             <DropdownMenu>
@@ -159,7 +173,7 @@ export function UnifiedComposer({
                   onClick={(event) => event.stopPropagation()}
                 >
                   <span>{DELIVERY_LABELS[deliveryMode]}</span>
-                  <ChevronDown size={14} aria-hidden="true" />
+                  <CaretDownIcon size={16} aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -187,9 +201,12 @@ export function UnifiedComposer({
           </PromptInputAction>
         </PromptInputActions>
 
+        {attachmentError ? <Alert className="dbfox-composer__error" variant="destructive">
+          <AlertDescription>{attachmentError}{onRetryAttachment ? <Button type="button" variant="ghost" size="sm" onClick={onRetryAttachment}>重试添加文件</Button> : null}</AlertDescription>
+        </Alert> : null}
         {error ? (
           <Alert className="dbfox-composer__error" variant="destructive">
-            <AlertCircle aria-hidden="true" />
+            <WarningCircleIcon aria-hidden="true" />
             <AlertDescription>
               <p>{errorMessage}</p>
               <ErrorDetails error={error} />

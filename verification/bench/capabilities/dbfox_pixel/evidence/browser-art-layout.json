@@ -1,0 +1,33 @@
+{
+  "attackPreview": [
+    "动画预览 attack_1",
+    "动画预览 attack_2",
+    "动画预览 attack_3",
+    "动画预览 attack_4",
+    "动画预览 attack_5",
+    "动画预览 attack_6",
+    "动画预览 frame_1"
+  ],
+  "finishedNaturally": true,
+  "measurements": {
+    "width": 375,
+    "scrollWidth": 375,
+    "canvas": {
+      "x": 55.66666793823242,
+      "y": 312,
+      "width": 256,
+      "height": 256,
+      "top": 312,
+      "right": 311.6666679382324,
+      "bottom": 568,
+      "left": 55.66666793823242
+    },
+    "activeElement": "application",
+    "status": "1, 0 · 8× · r18",
+    "styles": 1
+  },
+  "nextFocus": {
+    "tag": "SELECT",
+    "label": "播放动画标签"
+  }
+}

@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, ChevronUp, FolderOpen, MessageSquare, Trash2 } from "lucide-react";
+import { runPresentation } from "./runPresentation";
+import {
+  CaretDownIcon,
+  CaretRightIcon,
+  CaretUpIcon,
+  FolderOpenIcon,
+  ChatCircleIcon,
+  TrashIcon,
+} from "@/components/icons";
 import { Button, EmptyState } from "../../components/ui";
 import { WorkspaceShell } from "../workspace/WorkspaceShell";
 import type { ConversationSummary } from "../../types/conversation";
@@ -56,7 +64,7 @@ export function ConversationHistoryPanel({
               <section className="conversation-history__group" key={group.projectId}>
               <div className="conversation-history__group-heading">
                 <span className="conversation-history__group-icon" aria-hidden="true">
-                  <FolderOpen size={16} />
+                  <FolderOpenIcon size={16} />
                 </span>
                 <strong>{group.label}</strong>
                 <span className="conversation-history__group-count">
@@ -84,7 +92,7 @@ export function ConversationHistoryPanel({
                         onClick={() => onOpenConversation(conversation)}
                       >
                         <span className="conversation-history__item-icon" aria-hidden="true">
-                          <MessageSquare size={14} />
+                          <ChatCircleIcon size={16} />
                         </span>
                         <span className="conversation-history__copy">
                           <span className="conversation-history__title">{conversation.title}</span>
@@ -100,7 +108,7 @@ export function ConversationHistoryPanel({
                         >
                           {formatTime(conversation.updated_at)}
                         </time>
-                        <ChevronRight size={14} className="conversation-history__chevron" aria-hidden="true" />
+                        <CaretRightIcon size={16} className="conversation-history__chevron" aria-hidden="true" />
                       </button>
                       <Button
                         className="conversation-history__delete"
@@ -110,7 +118,7 @@ export function ConversationHistoryPanel({
                         title={`删除 ${conversation.title}`}
                         onClick={() => onDeleteConversation(conversation.id)}
                       >
-                        <Trash2 size={14} aria-hidden="true" />
+                        <TrashIcon size={16} aria-hidden="true" />
                       </Button>
                     </article>
                   );
@@ -129,7 +137,7 @@ export function ConversationHistoryPanel({
                       });
                     }}
                   >
-                    {expanded ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+                    {expanded ? <CaretUpIcon size={16} aria-hidden="true" /> : <CaretDownIcon size={16} aria-hidden="true" />}
                     {expanded ? "收起" : `展开其余 ${hiddenCount} 个对话`}
                   </button>
                 ) : null}
@@ -206,26 +214,7 @@ function formatDetails(conversation: ConversationSummary) {
   if (conversation.message_count) details.push(`${conversation.message_count} 条消息`);
   if (conversation.artifact_count) details.push(`${conversation.artifact_count} 个工件`);
 
-  const statusLabel = formatRunStatus(conversation.run_status);
+  const statusLabel = conversation.run_status ? runPresentation(conversation.run_status).label : "";
   if (statusLabel) details.push(statusLabel);
   return details.join(" · ");
-}
-
-function formatRunStatus(status: ConversationSummary["run_status"]) {
-  switch (status) {
-    case "created":
-    case "queued":
-      return "等待运行";
-    case "running":
-    case "waiting_approval":
-    case "waiting_input":
-    case "cancelling":
-      return "正在运行";
-    case "failed":
-      return "上次运行失败";
-    case "cancelled":
-      return "上次运行已取消";
-    default:
-      return "";
-  }
 }

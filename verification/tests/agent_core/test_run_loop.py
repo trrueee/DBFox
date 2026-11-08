@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+import pytest
 
 from sqlalchemy.orm import sessionmaker
 
@@ -17,10 +18,17 @@ from engine.agent.definition import AgentDefinition
 from engine.agent.events import LiveStreamHub
 from engine.agent.loop import RunLoop
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.repositories.approval import ApprovalRepository
+from engine.agent.repositories.question import QuestionRepository
+from engine.agent.question import QuestionAnswer
+from engine.tools.builtin.control import RequestClarificationCommand
 from engine.agent.resource_refs import ProjectResourceDescriptor
 from engine.agent.turn import TurnStreamItem, TurnStreamKind, TurnTermination
 from engine.models import (
     AgentObservationRecord,
+    AgentApproval,
+    AgentQuestionRequest,
+    AgentTurn,
     AgentRun,
     AgentSession,
     AgentSessionInput,
@@ -84,6 +92,119 @@ class EchoTool(BaseTool[EchoInput, EchoOutput]):
 class ApprovalTool(EchoTool):
     name = "verification_approval"
     policy = ToolPolicy(requires_approval=True)
+
+
+@pytest.mark.parametrize("approve_first", [True, False])
+def test_two_approval_calls_resume_as_one_complete_native_response_batch(db_session, approve_first):
+    with _EVENT_LOCK:
+        _EVENTS.clear()
+
+    def calls():
+        yield from _tool_turn("write-first", "verification_approval", {"value": "first"}, finish=False)
+        yield from _tool_turn("write-second", "verification_approval", {"value": "second"}, index=1)
+
+    registry = ToolRegistry().register(ApprovalTool())
+    run_id = _execute(db_session, scripts=(calls,), registry=registry)
+    requests = db_session.query(AgentApproval).filter_by(run_id=run_id).order_by(AgentApproval.created_at).all()
+    assert len(requests) == 2
+    approvals = ApprovalRepository(db_session)
+    approvals.resolve(approval_id=requests[0].id, expected_version=0, approved=approve_first, actor="user")
+    db_session.commit()
+    assert db_session.get(AgentRun, run_id).status == "waiting_approval"
+    assert _EVENTS == []
+    approvals.resolve(approval_id=requests[1].id, expected_version=0, approved=True, actor="user")
+    db_session.commit()
+    sessions = SessionRepository(db_session)
+    lease = sessions.claim(session_id="agent-core-loop", owner="resume")
+    assert lease is not None
+    sessions.bind_run(lease=lease, run_id=run_id)
+    db_session.commit()
+    RunLoop(
+        session_factory=sessionmaker(bind=db_session.get_bind(), expire_on_commit=False),
+        model_factory=lambda _settings: ScriptedModel(lambda: _answer_turn("Authorized actions completed.")),
+        registry=registry, context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
+        definition=AgentDefinition(allowed_tool_groups=("verification",)), live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=run_id)
+    db_session.expire_all()
+    assert db_session.get(AgentRun, run_id).status == "completed"
+    outputs = db_session.query(AgentObservationRecord).filter_by(run_id=run_id).all()
+    assert len(outputs) == 2
+    assert sorted(item.status for item in outputs) == (["succeeded", "succeeded"] if approve_first else ["rejected", "succeeded"])
+    last_turn = db_session.query(AgentTurn).filter_by(run_id=run_id).order_by(AgentTurn.sequence.desc()).first()
+    batch = json.loads(last_turn.context_snapshot_json)["response_batches"][-1]["items"]
+    assert {item["call_id"] for item in batch if item["type"] == "function_call"} == {"write-first", "write-second"}
+    assert {item["call_id"] for item in batch if item["type"] == "function_call_output"} == {"write-first", "write-second"}
+    assert len([event for event in _EVENTS if event[1] == "start"]) == (2 if approve_first else 1)
+
+
+@pytest.mark.parametrize("kinds", [("question", "question"), ("approval", "question"), ("question", "approval")])
+@pytest.mark.parametrize("reverse_answers", [False, True])
+def test_native_batch_waits_for_each_question_and_approval(db_session, kinds, reverse_answers):
+    with _EVENT_LOCK:
+        _EVENTS.clear()
+
+    def calls():
+        for index, kind in enumerate(kinds):
+            name = "request_clarification" if kind == "question" else "verification_approval"
+            arguments = (
+                {"question": f"Which period {index}?", "reason": "The reporting period is missing."}
+                if kind == "question" else {"value": f"action-{index}"}
+            )
+            yield from _tool_turn(f"interaction-{index}", name, arguments, index=index, finish=index == 1)
+
+    registry = ToolRegistry().register(ApprovalTool()).register(RequestClarificationCommand())
+    run_id = _execute(db_session, scripts=(calls,), registry=registry, allowed_tool_groups=("verification", "control"))
+    assert db_session.get(AgentRun, run_id).status == "waiting_input"
+    questions = db_session.query(AgentQuestionRequest).filter_by(run_id=run_id).all()
+    approvals = db_session.query(AgentApproval).filter_by(run_id=run_id).all()
+    assert len(questions) == kinds.count("question")
+    assert len(approvals) == kinds.count("approval")
+    requests = sorted(
+        [*(('question', row) for row in questions), *(('approval', row) for row in approvals)],
+        key=lambda entry: entry[1].created_at,
+        reverse=reverse_answers,
+    )
+    for index, (kind, request) in enumerate(requests):
+        if kind == "question":
+            QuestionRepository(db_session).resolve(
+                question_id=request.id, expected_version=0,
+                answer=QuestionAnswer(text=f"Answer to {request.question}"), actor="user",
+            )
+        else:
+            ApprovalRepository(db_session).resolve(
+                approval_id=request.id, expected_version=0, approved=True, actor="user",
+            )
+        db_session.commit()
+        remaining = requests[index + 1:]
+        expected = (
+            "waiting_input" if any(kind == "question" for kind, _ in remaining)
+            else "waiting_approval" if remaining else "running"
+        )
+        assert db_session.get(AgentRun, run_id).status == expected
+        assert _EVENTS == []
+
+    sessions = SessionRepository(db_session)
+    lease = sessions.claim(session_id="agent-core-loop", owner="resume")
+    assert lease is not None
+    sessions.bind_run(lease=lease, run_id=run_id)
+    db_session.commit()
+    RunLoop(
+        session_factory=sessionmaker(bind=db_session.get_bind(), expire_on_commit=False),
+        model_factory=lambda _settings: ScriptedModel(lambda: _answer_turn("All requested interactions completed.")),
+        registry=registry, context_contributors=default_context_contributors(),
+        completion=CompletionGate(build_default_completion_policy()),
+        definition=AgentDefinition(allowed_tool_groups=("verification", "control")), live_stream=LiveStreamHub(),
+    ).execute(lease=lease, run_id=run_id)
+    db_session.expire_all()
+    assert db_session.get(AgentRun, run_id).status == "completed"
+    outputs = db_session.query(AgentObservationRecord).filter_by(run_id=run_id).all()
+    assert len(outputs) == 2
+    assert all(item.status == "succeeded" for item in outputs)
+    last_turn = db_session.query(AgentTurn).filter_by(run_id=run_id).order_by(AgentTurn.sequence.desc()).first()
+    batch = json.loads(last_turn.context_snapshot_json)["response_batches"][-1]["items"]
+    assert {item["call_id"] for item in batch if item["type"] == "function_call_output"} == {"interaction-0", "interaction-1"}
+    assert len([event for event in _EVENTS if event[1] == "start"]) == kinds.count("approval")
 
 
 def _tool_turn(call_id: str, name: str, arguments: dict, *, index: int = 0, finish: bool = True):
@@ -168,6 +289,8 @@ def _execute(
     resource_refs=None,
     resource_providers=(),
     resource_resolver=None,
+    allowed_tool_groups=("verification",),
+    limits=None,
 ):
     if project_id is not None:
         db_session.add(Project(id=project_id, name=f"Project {project_id}"))
@@ -212,13 +335,82 @@ def _execute(
         registry=registry,
         context_contributors=default_context_contributors(),
         completion=CompletionGate(build_default_completion_policy()),
-        definition=AgentDefinition(allowed_tool_groups=("verification",)),
+        definition=AgentDefinition(allowed_tool_groups=allowed_tool_groups, **({"limits": limits} if limits is not None else {})),
         live_stream=LiveStreamHub(),
         resource_providers=resource_providers,
         resource_resolver=resource_resolver,
     ).execute(lease=lease, run_id=admission.run_id)
     db_session.expire_all()
     return admission.run_id
+
+
+@pytest.mark.parametrize("after_successful_tool", [False, True])
+def test_context_budget_failure_is_durable_before_or_after_resource_discovery(
+    db_session, after_successful_tool,
+):
+    registry = ToolRegistry().register(EchoTool())
+    for index in range(96):
+        class DiscoverableTool(ResourceProbeTool):
+            name = f"verification_budget_probe_{index}"
+            description = "Bounded context test schema. " * 32
+
+        registry.register(DiscoverableTool([]))
+
+    def provider(db, _project_id):
+        if after_successful_tool and not db.query(AgentToolInvocation).filter_by(
+            status="succeeded",
+        ).first():
+            return ()
+        return (
+            ProjectResourceDescriptor(
+                kind=SYNTHETIC_RESOURCE_KIND, id="new-resource", version=1,
+                name="Newly discoverable resource",
+            ),
+        )
+
+    def call():
+        yield from _tool_turn("saved-call", "verification_echo", {"value": "saved"})
+
+    from engine.agent.run import RunLimits
+    run_id = _execute(
+        db_session,
+        scripts=(call,) if after_successful_tool else (),
+        registry=registry,
+        project_id="budget-project", resource_refs=(), resource_providers=(provider,),
+        limits=RunLimits(max_prompt_tokens=32_768),
+    )
+    run = db_session.get(AgentRun, run_id)
+    assert run.status == "failed"
+    assert run.error_code == "AGENT_CONTEXT_BUDGET_EXCEEDED"
+    assert "停用不需要的扩展" in run.error_message
+    assert "Bounded context test schema" not in run.error_message
+    turns = db_session.query(AgentTurn).filter_by(run_id=run_id).all()
+    invocations = db_session.query(AgentToolInvocation).filter_by(run_id=run_id).all()
+    observations = db_session.query(AgentObservationRecord).filter_by(run_id=run_id).all()
+    assert len(turns) == len(invocations) == len(observations) == int(after_successful_tool)
+    assert all(turn.status == "completed" for turn in turns)
+    assert all(invocation.status == "succeeded" for invocation in invocations)
+    assert all(observation.status == "succeeded" for observation in observations)
+
+
+def test_repeated_plan_rewording_stops_the_real_loop_without_task_evidence(db_session):
+    from engine.tools.builtin.control import UpdatePlanCommand
+
+    def change_plan(index):
+        def call():
+            yield from _tool_turn(f"plan-{index}", "update_plan", {
+                "objective": f"Reworded objective {index}",
+                "steps": [{"id": f"replacement-{index}", "title": f"Different phrasing {index}", "status": "in_progress"}],
+                "summary": f"Intending to work {index}",
+            })
+        return call
+
+    run_id = _execute(db_session, scripts=tuple(change_plan(i) for i in range(5)),
+                      registry=ToolRegistry().register(UpdatePlanCommand()), allowed_tool_groups=("control",))
+    run = db_session.get(AgentRun, run_id)
+    assert run.status == "failed"
+    assert run.error_code == "AGENT_NO_PROGRESS"
+    assert db_session.query(AgentToolInvocation).filter_by(run_id=run_id, status="succeeded").count() == 3
 
 
 def test_real_loop_persists_tool_observation_then_terminal_answer(db_session):

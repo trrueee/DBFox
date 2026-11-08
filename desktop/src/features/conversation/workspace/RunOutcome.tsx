@@ -5,7 +5,11 @@
  * One line of outcome, one line of cause, and a way back into the work.
  * Step progress lives in the plan card — it is not repeated here.
  */
-import { AlertTriangle, CircleStop, FileOutput } from "lucide-react";
+import {
+  WarningIcon,
+  StopCircleIcon,
+  FileArrowUpIcon,
+} from "@/components/icons";
 
 import type {
   AssistantMessageItem,
@@ -54,8 +58,8 @@ export function RunOutcome({
       data-outcome={outcome}
     >
       {outcome === "cancelled"
-        ? <CircleStop aria-hidden="true" />
-        : <AlertTriangle aria-hidden="true" />}
+        ? <StopCircleIcon aria-hidden="true" />
+        : <WarningIcon aria-hidden="true" />}
       <AlertTitle>{outcomeTitle(outcome, preservedArtifacts.length)}</AlertTitle>
       <AlertDescription>
         {outcome === "failed" ? (
@@ -73,7 +77,7 @@ export function RunOutcome({
             onClick={() => onSelectArtifact(firstArtifact.id)}
             aria-label={`打开已保留工件：${firstArtifact.title}`}
           >
-            <FileOutput aria-hidden="true" />
+            <FileArrowUpIcon aria-hidden="true" />
             <span>{firstArtifact.title}</span>
           </Button>
         ) : null}

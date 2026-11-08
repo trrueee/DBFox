@@ -36,15 +36,7 @@
 
 .dbfox-button svg {
   flex-shrink: 0;
-  width: var(--icon-size-md);
-  height: var(--icon-size-md);
   pointer-events: none;
-}
-
-.dbfox-button--icon-sm svg,
-.dbfox-button--sm svg {
-  width: var(--icon-size-sm);
-  height: var(--icon-size-sm);
 }
 
 .dbfox-button--default {

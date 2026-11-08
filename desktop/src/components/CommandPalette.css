@@ -4,14 +4,16 @@
   gap: 0;
   padding: 0;
   overflow: hidden;
+}
+
+.dbfox-command-dialog > .dbfox-command-panel {
+  width: 100%;
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.dbfox-command-dialog > .dbfox-command-panel {
-  width: 100%;
-}
+.dbfox-command-dialog .dbfox-command-search { background: transparent; }
 
 .dbfox-command-dialog > .dbfox-dialog-close {
   display: none;

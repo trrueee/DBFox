@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from engine.agent.resource_refs import (
     ProjectResourceProvider,
+    RunResourceDiscovery,
     discover_resources_from_providers,
 )
 from engine.models import AgentSession
@@ -55,8 +56,9 @@ class ProjectResourceSearchTool(
         required_resources=(),
     )
 
-    def __init__(self, providers: tuple[ProjectResourceProvider, ...]) -> None:
+    def __init__(self, providers: tuple[ProjectResourceProvider, ...], discovery: RunResourceDiscovery | None = None) -> None:
         self._providers = providers
+        self._discovery = discovery
 
     def run(
         self,
@@ -67,7 +69,7 @@ class ProjectResourceSearchTool(
         aggregate = db.get(AgentSession, context.require_request().session_id)
         project_id = str(aggregate.project_id or "") if aggregate is not None else ""
         resources = list(
-            discover_resources_from_providers(db, project_id, self._providers)
+            self._discovery(db, context.require_request().run_id) if self._discovery else discover_resources_from_providers(db, project_id, self._providers)
         )
         if tool_input.kinds:
             allowed_kinds = frozenset(tool_input.kinds)

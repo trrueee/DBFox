@@ -1,0 +1,12 @@
+{
+  "manifestSchemaVersion": 2,
+  "id": "dbfox.scene",
+  "version": "1.0.0",
+  "displayName": "DBFox Scene Studio",
+  "publisher": "dbfox",
+  "description": "Local 3D scene authoring with versioned objects, direct manipulation, and glTF exports.",
+  "extensionApiVersion": "2",
+  "requiresDbfox": ">=1.0.0",
+  "entrypoints": {"backend": "backend/entry.py", "frontend": "frontend/index.js"},
+  "permissions": []
+}

@@ -9,9 +9,6 @@ PARENT_TOOL_NAMES = (
     "conversation_read",
     "conversation_search",
     "project_resource_search",
-    "remote_job_cancel",
-    "remote_job_status",
-    "remote_job_submit",
     "request_clarification",
     "update_plan",
 )
@@ -20,7 +17,7 @@ WORKER_TOOL_NAMES = PARENT_TOOL_NAMES
 
 
 def test_p1_derives_parent_and_worker_from_one_product_composition() -> None:
-    """Worker receives all frozen definitions; RemoteJob is still in-process only."""
+    """Worker receives the same frozen, executable built-in definitions."""
 
     parent = build_product_tool_registry()
     worker = build_product_tool_registry()

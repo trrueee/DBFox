@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.metadata
 import json
 import re
@@ -36,12 +37,20 @@ class Component:
 
 def node_components() -> list[Component]:
     lock = json.loads((ROOT / "desktop" / "package-lock.json").read_text(encoding="utf-8"))
+    evidence = json.loads((ROOT / "scripts/dependency-license-evidence.json").read_text(encoding="utf-8"))
     result: list[Component] = []
     for path, package in lock.get("packages", {}).items():
         if not path or not package.get("version"):
             continue
         name = package.get("name") or path.rsplit("node_modules/", 1)[-1]
-        result.append(Component("node", str(name), str(package["version"]), str(package.get("license") or "UNKNOWN")))
+        license_value = str(package.get("license") or "UNKNOWN")
+        proof = evidence.get(f"pkg:npm/{name}@{package['version']}")
+        if license_value == "UNKNOWN" and proof is not None:
+            license_path = (ROOT / proof["file"]).resolve()
+            if not license_path.is_relative_to(ROOT) or hashlib.sha256(license_path.read_bytes()).hexdigest() != proof["sha256"]:
+                raise ValueError(f"License evidence changed: {name}")
+            license_value = proof["license"]
+        result.append(Component("node", str(name), str(package["version"]), license_value))
     return result
 
 

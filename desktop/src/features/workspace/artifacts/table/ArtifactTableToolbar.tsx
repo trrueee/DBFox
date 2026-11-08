@@ -1,4 +1,11 @@
-import { ArrowUpDown, Copy, Download, Filter, RefreshCw, Search } from "lucide-react";
+import {
+  ArrowsDownUpIcon,
+  CopyIcon,
+  DownloadSimpleIcon,
+  FunnelSimpleIcon,
+  ArrowsClockwiseIcon,
+  MagnifyingGlassIcon,
+} from "@/components/icons";
 import { useState } from "react";
 import {
   Button,
@@ -96,7 +103,7 @@ export function ArtifactTableToolbar({
                 onClick={onRefresh}
                 disabled={isLoading}
               >
-                <RefreshCw size={14} className={isLoading ? "artifact-table-refresh-icon is-spinning" : "artifact-table-refresh-icon"} /> 刷新
+                <ArrowsClockwiseIcon size={16} className={isLoading ? "artifact-table-refresh-icon is-spinning" : "artifact-table-refresh-icon"} /> 刷新
               </Button>
             </ToolbarButton>
             <Popover>
@@ -108,7 +115,7 @@ export function ArtifactTableToolbar({
                     size="sm"
                     className="artifact-table-toolbar-button"
                   >
-                    <Filter size={14} /> 筛选{filters.length > 0 ? ` ${filters.length}` : ""}
+                    <FunnelSimpleIcon size={16} /> 筛选{filters.length > 0 ? ` ${filters.length}` : ""}
                   </Button>
                 </PopoverTrigger>
               </ToolbarButton>
@@ -172,7 +179,7 @@ export function ArtifactTableToolbar({
                     size="sm"
                     className="artifact-table-toolbar-button"
                   >
-                    <ArrowUpDown size={14} /> 排序{sort ? ` ${sort.direction === "asc" ? "↑" : "↓"}` : ""}
+                    <ArrowsDownUpIcon size={16} /> 排序{sort ? ` ${sort.direction === "asc" ? "↑" : "↓"}` : ""}
                   </Button>
                 </PopoverTrigger>
               </ToolbarButton>
@@ -214,16 +221,16 @@ export function ArtifactTableToolbar({
             </Popover>
             <ToolbarButton asChild>
               <Button type="button" variant="ghost" size="sm" className="artifact-table-toolbar-button" onClick={onExport}>
-                <Download size={14} /> 导出
+                <DownloadSimpleIcon size={16} /> 导出
               </Button>
             </ToolbarButton>
             <ToolbarButton asChild>
               <Button type="button" variant="ghost" size="sm" className="artifact-table-toolbar-button" onClick={onCopy}>
-                <Copy size={14} /> 复制
+                <CopyIcon size={16} /> 复制
               </Button>
             </ToolbarButton>
             <div className="artifact-table-search-shell">
-              <Search size={14} className="artifact-table-search-icon" />
+              <MagnifyingGlassIcon size={16} className="artifact-table-search-icon" />
               <Input
                 className="artifact-table-search"
                 value={search}

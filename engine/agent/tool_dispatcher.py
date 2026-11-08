@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -36,6 +37,7 @@ from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.resource_refs import (
     ProjectResourceProvider,
+    ProjectResourceDescriptor,
     discover_resources_from_providers,
     resource_refs_for_run,
 )
@@ -166,6 +168,7 @@ class ToolDispatcher:
         isolated_worker_command: tuple[str, ...] | None = None,
         resource_resolver: CompositeResourceResolver | None = None,
         resource_providers: tuple[ProjectResourceProvider, ...] = (),
+        resource_discovery: Callable[[Session, str], tuple[ProjectResourceDescriptor, ...]] | None = None,
         artifact_representation_provider_resolver: (
             ArtifactRepresentationProviderResolver | None
         ) = None,
@@ -182,6 +185,7 @@ class ToolDispatcher:
             resource_resolver or CompositeResourceResolver().freeze()
         )
         self.resource_providers = resource_providers
+        self.resource_discovery = resource_discovery
         self.artifact_representation_provider_resolver = (
             artifact_representation_provider_resolver
         )
@@ -300,9 +304,9 @@ class ToolDispatcher:
                             continue
                         artifact_id = str(normalized_input.get(field) or "").strip()
                         artifact = (
-                            ArtifactRepository(db).get_for_run(
+                            ArtifactRepository(db, resource_discovery=self.resource_discovery).available_artifact(
                                 session_id=str(run.session_id),
-                                run_id=str(run.id),
+                                current_run_id=str(run.id),
                                 artifact_id=artifact_id,
                             )
                             if artifact_id
@@ -313,7 +317,7 @@ class ToolDispatcher:
                                 f"The Artifact selected by {field} is unavailable in this Run."
                             )
                         artifact_authority[field] = artifact.resource_refs
-                    discovered = discover_resources_from_providers(
+                    discovered = self.resource_discovery(db, run_id) if self.resource_discovery else discover_resources_from_providers(
                         db,
                         project_id,
                         self.resource_providers,
@@ -512,12 +516,25 @@ class ToolDispatcher:
         prepared = self._prepare_execution(lease, invocation)
         if prepared is None:
             return None
-        result = self._run_prepared_execution(
-            lease,
-            invocation,
-            prepared=prepared,
-            control=control,
-        )
+        started = time.monotonic()
+        try:
+            result = self._run_prepared_execution(
+                lease,
+                invocation,
+                prepared=prepared,
+                control=control,
+            )
+        except ToolInputError as exc:
+            # Scope revalidation happens before the tool leaf. Settle its refusal
+            # like any other expected tool failure, preserving the frozen refs.
+            unknown = prepared.needs_reconciliation
+            result = ToolResult(
+                name=invocation.tool_name, status="failed",
+                error=(f"The interrupted action could not be reconciled: {exc} Do not repeat it until its outcome is verified."
+                       if unknown else str(exc)),
+                error_code="TOOL_OUTCOME_UNKNOWN" if unknown else exc.code,
+                latency_ms=int((time.monotonic() - started) * 1_000),
+            )
         if result is None:
             return None
         return _CompletedToolExecution(
@@ -717,6 +734,7 @@ class ToolDispatcher:
                         request,
                         tool,
                         self.resource_resolver,
+                        resource_discovery=self.resource_discovery,
                     )
                 return self.isolated_runner.run(
                     request=attempt_request("execute", scope_refs),
@@ -728,8 +746,9 @@ class ToolDispatcher:
                     request,
                     tool,
                     self.resource_resolver,
+                    resource_discovery=self.resource_discovery,
                 )
-                artifacts = ArtifactRepository(leaf_db)
+                artifacts = ArtifactRepository(leaf_db, resource_discovery=self.resource_discovery)
 
                 def load_artifact(artifact_id: str) -> Artifact | None:
                     return artifacts.available_artifact(
@@ -834,6 +853,7 @@ class ToolDispatcher:
                             request,
                             tool,
                             self.resource_resolver,
+                            resource_discovery=self.resource_discovery,
                         )
                     return self.isolated_runner.run(
                         request=attempt_request("reconcile", scope_refs),
@@ -845,6 +865,7 @@ class ToolDispatcher:
                         request,
                         tool,
                         self.resource_resolver,
+                        resource_discovery=self.resource_discovery,
                     )
                     reconciled = self.attempt_handler.run_with_resources(
                         attempt_request("reconcile", scope_refs),
@@ -854,14 +875,14 @@ class ToolDispatcher:
                         execution_authority=execution_authority,
                         metadata_session=leaf_db,
                         artifact_loader=lambda artifact_id: ArtifactRepository(
-                            leaf_db
+                            leaf_db, resource_discovery=self.resource_discovery
                         ).available_artifact(
                             session_id=request.session_id,
                             current_run_id=request.run_id,
                             artifact_id=artifact_id,
                         ),
                         artifact_relation_loader=lambda artifact_id, relation: (
-                            ArtifactRepository(leaf_db).artifacts_relating_to_for_run(
+                            ArtifactRepository(leaf_db, resource_discovery=self.resource_discovery).artifacts_relating_to_for_run(
                                 session_id=request.session_id,
                                 run_id=request.run_id,
                                 artifact_id=artifact_id,

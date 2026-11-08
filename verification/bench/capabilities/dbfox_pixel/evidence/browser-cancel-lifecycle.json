@@ -1,0 +1,8 @@
+{
+  "artifact": {"run_id":"run_23f8dec8609240738ab699b018e7b5a9","session_id":"a743921f-251d-4a13-9717-c1f408951909","artifact_ids":["artifact_fd8a71e0e83e4ebfb9864b66cda88fba"]},
+  "sessionStatus": 200,
+  "before": {"generation":7,"styles":1},
+  "disabled": {"generation":8,"styles":0},
+  "active": {"generation":9,"styles":1},
+  "lateTab": false
+}

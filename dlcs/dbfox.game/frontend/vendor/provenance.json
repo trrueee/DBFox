@@ -1,0 +1,34 @@
+{
+  "engine": "phaser-arcade-4.2.1",
+  "upstream": {
+    "version": "4.2.1",
+    "archive": "https://registry.npmjs.org/phaser/-/phaser-4.2.1.tgz",
+    "integrity": "sha512-WUNwCPJpdjvZiuT6SgCfYVW8Qw/3j0jJ4ws7P2QkhFLFu74sbGuyHJcbFueGkY/AYO4Pi47bNQXn1OCJeLX//w==",
+    "license": "MIT"
+  },
+  "eventemitter3": {
+    "version": "5.0.4",
+    "archive": "https://registry.npmjs.org/eventemitter3/-/eventemitter3-5.0.4.tgz",
+    "integrity": "sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==",
+    "license": "MIT"
+  },
+  "build": {
+    "esbuild": "0.28.2",
+    "entry": "phaser/src/phaser-esm.js",
+    "renderer": "Canvas",
+    "physics": "Arcade",
+    "sound": false,
+    "webgl": false
+  },
+  "lifecycle_patch": {
+    "file": "src/core/VisibilityHandler.js",
+    "original_sha256": "5a520230ec2af86e779655102ea3b7217a989a5cd5cdd06bc3a644fa9b7d1d93",
+    "patched_sha256": "f481edbd20cbeb61be20e2627ebcf1b44d7256499984d5fe92de92feca3c5a80",
+    "reason": "Preserve window onblur/onfocus and remove owned visibility/blur/focus listeners on Game DESTROY."
+  },
+  "output": {
+    "file": "phaser.js",
+    "bytes": 1211553,
+    "sha256": "d11f0597c79521a82682831cef1f7d44a2cd6bd2afa9db266713d52b8a4328b8"
+  }
+}

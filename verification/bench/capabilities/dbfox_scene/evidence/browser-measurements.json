@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-05",
+  "environment": "Windows x64; actual Electron Main/Preload/EngineSupervisor; Vite dev renderer; signed dbfox.scene; real isolated backend; no model calls",
+  "renderer": "ANGLE NVIDIA GeForce RTX 4060 Laptop GPU Direct3D11; WebGL 2.0",
+  "canvas_pixels": [1470, 1087],
+  "edit": {"initial_version": 2, "pointer_drag_version": 3, "inspector_version": 4, "changed_ids": ["qa-cube"], "final_position": [0.7288495407201738, 1.5, 0]},
+  "large": {"objects": 10000, "get_pages": 102, "loaded_ms": 17941, "collapsed_treeitems": 10000, "visible_treeitems": 1, "dom_elements": 60357, "js_heap_bytes": 119449297, "load_long_tasks_ms": [899, 51]},
+  "orbit": {"method": "Focus all then 45 pointer moves; 3-second RAF observer includes idle intervals, not renderer FPS", "samples": 417, "median_ms": 4.2, "p95_ms": 20.8, "max_ms": 25.1, "long_tasks_ms": []},
+  "tree_after_a0dc0840": {"objects":10000,"get_pages":102,"loaded_ms":19603,"collapsed_treeitems":1,"dom_elements":414,"js_heap_bytes":82428034,"load_long_tasks_ms":[118,71],"expanded_mounted_rows":22,"last_node_visible":"Node 9999","last_node_aria_setsize":9999,"recollapsed_treeitems":1,"note":"Same canonical scene; bulk read remains about 20s. No total load speedup claimed."},
+  "navigation_failure": {"phase": "initial openArtifact assertCurrent, before any session GET", "lease_aborted": true, "navigation_active": false, "scope_matches": true, "consumer_signal_aborted": false, "scene_stylesheet_count": 2, "source": "read-only CDP Debugger local expressions; debugger detached after inspection"},
+  "console": {"errors": 0, "warnings": 1},
+  "initial_not_yet_proven": ["Artifact Dock download", "Representation network stream", "scope-change cancellation after fresh valid registration", "actual Fox Temple GLB/glTF export"],
+  "final_results": "browser-final-checks.json and scene-bench-report/export-evidence.json record the completed independent revalidation; the initial failures above remain historical evidence."
+}

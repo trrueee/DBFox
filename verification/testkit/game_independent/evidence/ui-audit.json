@@ -1,0 +1,246 @@
+{
+  "package_digest": "39abf5cf53ef5f2c70356af892f3d5230a87faf9cee62e4a3d3c0a948468c054",
+  "layout": {
+    "960-draft": {
+      "viewport": {
+        "width": 960,
+        "height": 900
+      },
+      "documentWidth": 960,
+      "stage": {
+        "width": 696.0104370117188,
+        "height": 860,
+        "clientWidth": 696,
+        "scrollWidth": 696,
+        "inert": false
+      },
+      "conversation": {
+        "width": 0,
+        "height": 860,
+        "clientWidth": 0,
+        "scrollWidth": 0,
+        "inert": true
+      },
+      "dock": {
+        "width": 696.0104370117188,
+        "height": 860,
+        "clientWidth": 696,
+        "scrollWidth": 696,
+        "inert": false
+      },
+      "studio": {
+        "width": 695.34375,
+        "height": 819.3333740234375,
+        "clientWidth": 687,
+        "scrollWidth": 687,
+        "inert": false
+      },
+      "compact": true,
+      "draft": "Independent layout draft",
+      "selectedGame": "0f0d8d85-b780-4973-8b57-5034b1dd69e4",
+      "separator": false
+    },
+    "1440-draft": {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "documentWidth": 1440,
+      "stage": {
+        "width": 1176,
+        "height": 860,
+        "clientWidth": 1176,
+        "scrollWidth": 1176,
+        "inert": false
+      },
+      "conversation": {
+        "width": 513.9166870117188,
+        "height": 860,
+        "clientWidth": 514,
+        "scrollWidth": 514,
+        "inert": false
+      },
+      "dock": {
+        "width": 654.0833740234375,
+        "height": 860,
+        "clientWidth": 654,
+        "scrollWidth": 654,
+        "inert": false
+      },
+      "studio": {
+        "width": 653.4166870117188,
+        "height": 819.3333740234375,
+        "clientWidth": 645,
+        "scrollWidth": 645,
+        "inert": false
+      },
+      "compact": false,
+      "draft": "Independent layout draft",
+      "selectedGame": "0f0d8d85-b780-4973-8b57-5034b1dd69e4",
+      "separator": true
+    },
+    "960-nav-collapsed": {
+      "viewport": {
+        "width": 960,
+        "height": 900
+      },
+      "documentWidth": 960,
+      "stage": {
+        "width": 912,
+        "height": 860,
+        "clientWidth": 912,
+        "scrollWidth": 912,
+        "inert": false
+      },
+      "conversation": {
+        "width": 420,
+        "height": 860,
+        "clientWidth": 420,
+        "scrollWidth": 420,
+        "inert": false
+      },
+      "dock": {
+        "width": 484,
+        "height": 860,
+        "clientWidth": 484,
+        "scrollWidth": 484,
+        "inert": false
+      },
+      "studio": {
+        "width": 483.3333435058594,
+        "height": 819.3333740234375,
+        "clientWidth": 475,
+        "scrollWidth": 475,
+        "inert": false
+      },
+      "compact": false,
+      "draft": "Independent layout draft",
+      "selectedGame": "0f0d8d85-b780-4973-8b57-5034b1dd69e4",
+      "separator": true
+    },
+    "fullscreen": {
+      "viewport": {
+        "width": 960,
+        "height": 900
+      },
+      "documentWidth": 960,
+      "stage": {
+        "width": 720,
+        "height": 860,
+        "clientWidth": 720,
+        "scrollWidth": 720,
+        "inert": false
+      },
+      "conversation": {
+        "width": 0,
+        "height": 860,
+        "clientWidth": 0,
+        "scrollWidth": 0,
+        "inert": true
+      },
+      "dock": {
+        "width": 720,
+        "height": 860,
+        "clientWidth": 720,
+        "scrollWidth": 720,
+        "inert": false
+      },
+      "studio": {
+        "width": 960,
+        "height": 859.3333740234375,
+        "clientWidth": 952,
+        "scrollWidth": 952,
+        "inert": false
+      },
+      "compact": true,
+      "draft": "Independent layout draft",
+      "selectedGame": "0f0d8d85-b780-4973-8b57-5034b1dd69e4",
+      "separator": false
+    },
+    "fullscreen-exit": {
+      "viewport": {
+        "width": 960,
+        "height": 900
+      },
+      "documentWidth": 960,
+      "stage": {
+        "width": 720,
+        "height": 860,
+        "clientWidth": 720,
+        "scrollWidth": 720,
+        "inert": false
+      },
+      "conversation": {
+        "width": 0,
+        "height": 860,
+        "clientWidth": 0,
+        "scrollWidth": 0,
+        "inert": true
+      },
+      "dock": {
+        "width": 720,
+        "height": 860,
+        "clientWidth": 720,
+        "scrollWidth": 720,
+        "inert": false
+      },
+      "studio": {
+        "width": 719.3333740234375,
+        "height": 819.3333740234375,
+        "clientWidth": 711,
+        "scrollWidth": 711,
+        "inert": false
+      },
+      "compact": true,
+      "draft": "Independent layout draft",
+      "selectedGame": "0f0d8d85-b780-4973-8b57-5034b1dd69e4",
+      "separator": false
+    },
+    "closed": {
+      "viewport": {
+        "width": 960,
+        "height": 900
+      },
+      "documentWidth": 960,
+      "stage": {
+        "width": 720,
+        "height": 860,
+        "clientWidth": 720,
+        "scrollWidth": 720,
+        "inert": false
+      },
+      "conversation": {
+        "width": 676,
+        "height": 860,
+        "clientWidth": 676,
+        "scrollWidth": 676,
+        "inert": false
+      },
+      "dock": {
+        "width": 44,
+        "height": 860,
+        "clientWidth": 44,
+        "scrollWidth": 44,
+        "inert": false
+      },
+      "studio": null,
+      "compact": true,
+      "draft": null,
+      "selectedGame": null,
+      "separator": false
+    }
+  },
+  "navigation": {
+    "keyboardMinimum": 320,
+    "pointerMinimum": 320,
+    "restoredGame": "0f0d8d85-b780-4973-8b57-5034b1dd69e4",
+    "restoredEntity": "狐狸",
+    "underlyingVersion": 5
+  },
+  "tab_focus_check": {
+    "actual_tab_presses": 20,
+    "hidden_conversation_focus": 0
+  },
+  "current_and_historical_games_unchanged": true,
+  "frontend_source_files_verified": 14
+}

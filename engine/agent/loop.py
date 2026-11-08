@@ -22,9 +22,11 @@ from engine.agent.control import (
     UsageCharge,
 )
 from engine.agent.context import ContextAssembler, ContextSnapshot
+from engine.agent.context_budget import ContextBudgetExceeded
 from engine.agent.context_fragment import ContextContributor
 from engine.agent.resource_refs import (
     ProjectResourceProvider,
+    ProjectResourceDescriptor,
     load_resource_refs,
 )
 from engine.agent.guidance import (
@@ -99,6 +101,7 @@ class _PreparedTurn:
     context: ContextSnapshot
     messages: list[dict[str, Any]]
     tools: ToolMaterialization
+    provider_tools: list[dict[str, Any]]
     provider_settings: ProviderSettings
 
 
@@ -177,6 +180,7 @@ class RunLoop:
         tool_executor: ToolExecutor | None = None,
         resource_resolver: CompositeResourceResolver | None = None,
         resource_providers: tuple[ProjectResourceProvider, ...] = (),
+        resource_discovery: Callable[[Session, str], tuple[ProjectResourceDescriptor, ...]] | None = None,
         artifact_representation_provider_resolver: (
             ArtifactRepresentationProviderResolver | None
         ) = None,
@@ -208,6 +212,7 @@ class RunLoop:
         self.prompts = PromptAssembler()
         self.context_contributors = context_contributors
         self.resource_providers = resource_providers
+        self.resource_discovery = resource_discovery
         self.artifact_representation_describer = artifact_representation_describer
         self.capability_guidance = capability_guidance or ()
         self.completion = completion
@@ -218,13 +223,17 @@ class RunLoop:
             executor=self.tool_executor,
             resource_resolver=resource_resolver,
             resource_providers=resource_providers,
+            resource_discovery=resource_discovery,
             artifact_representation_provider_resolver=(
                 artifact_representation_provider_resolver
             ),
             artifact_payload_contract_resolver=artifact_payload_contract_resolver,
             runtime_snapshot_id=runtime_snapshot_id,
         )
-        self.terminalizer = Terminalizer(session_factory=self.session_factory)
+        self.terminalizer = Terminalizer(
+            session_factory=self.session_factory,
+            resource_discovery=resource_discovery,
+        )
 
     def execute(
         self,
@@ -358,6 +367,9 @@ class RunLoop:
             # The replacement worker owns all further durable transitions. The
             # old worker only closes its transient stream and exits.
             return
+        except ContextBudgetExceeded:
+            error = fixed_error_detail("AGENT_CONTEXT_BUDGET_EXCEEDED")
+            self._fail(lease, run_id, error["code"], error["message"])
         except RunControlError as exc:
             limitation = {
                 "AGENT_TOKEN_BUDGET": CompletionLimitationCode.TOKEN_BUDGET_REACHED,
@@ -466,7 +478,7 @@ class RunLoop:
                     control=state.control,
                     items=adapter.stream(
                         messages=prepared.messages,
-                        tools=prepared.tools.provider_schemas(),
+                        tools=prepared.provider_tools,
                         stream_timeouts=self._model_stream_timeouts(state),
                         cancellation_probe=state.control.is_cancel_requested,
                     ),
@@ -812,6 +824,7 @@ class RunLoop:
                 db,
                 contributors=self.context_contributors,
                 resource_providers=self.resource_providers,
+                resource_discovery=self.resource_discovery,
                 artifact_representation_describer=self.artifact_representation_describer,
             ).build(run_id)
             state = RunWorkingStateAssembler(
@@ -838,7 +851,10 @@ class RunLoop:
                 execution_mode=self.definition.execution_mode,
                 available_resource_kinds=frozenset(available_resource_kinds),
             )
-            tool_schemas = tools.provider_schemas()
+            tool_schemas = OpenAIModelAdapter.prepare_tools(
+                model_name=str(run.model_name or ""),
+                tools=tools.provider_schemas(),
+            )
             artifact_types = frozenset(
                 artifact.type for artifact in context.selected_artifacts
             )
@@ -886,6 +902,7 @@ class RunLoop:
                 messages=list(prompt.messages),
                 tools=tools,
                 provider_settings=settings,
+                provider_tools=tool_schemas,
             )
 
     def _complete(
@@ -983,6 +1000,8 @@ class RunLoop:
             snapshot = context or ContextAssembler(
                 db,
                 contributors=self.context_contributors,
+                resource_providers=self.resource_providers,
+                resource_discovery=self.resource_discovery,
                 artifact_representation_describer=self.artifact_representation_describer,
             ).build(run_id)
             decision = self.completion.evaluate_bounded_partial(
@@ -1043,6 +1062,8 @@ class RunLoop:
             snapshot = context or ContextAssembler(
                 db,
                 contributors=self.context_contributors,
+                resource_providers=self.resource_providers,
+                resource_discovery=self.resource_discovery,
                 artifact_representation_describer=self.artifact_representation_describer,
             ).build(run_id)
             decision = self.completion.evaluate_bounded_partial(

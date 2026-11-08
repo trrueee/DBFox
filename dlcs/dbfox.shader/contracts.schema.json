@@ -1,0 +1,4601 @@
+{
+  "owner": "dbfox.shader",
+  "version": 1,
+  "document": {
+    "$defs": {
+      "Binding": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "discriminator": {
+              "mapping": {
+                "pass": "#/$defs/PassSource",
+                "texture": "#/$defs/TextureSource"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/TextureSource"
+              },
+              {
+                "$ref": "#/$defs/PassSource"
+              }
+            ],
+            "title": "Source"
+          },
+          "filter": {
+            "default": "nearest",
+            "enum": [
+              "nearest",
+              "linear"
+            ],
+            "title": "Filter",
+            "type": "string"
+          },
+          "wrap": {
+            "const": "clamp",
+            "default": "clamp",
+            "title": "Wrap",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "source"
+        ],
+        "title": "Binding",
+        "type": "object"
+      },
+      "Pass": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "vertex_stage_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Vertex Stage Id",
+            "type": "string"
+          },
+          "fragment_stage_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Fragment Stage Id",
+            "type": "string"
+          },
+          "width": {
+            "maximum": 512,
+            "minimum": 1,
+            "title": "Width",
+            "type": "integer"
+          },
+          "height": {
+            "maximum": 512,
+            "minimum": 1,
+            "title": "Height",
+            "type": "integer"
+          },
+          "clear_color": {
+            "items": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Clear Color",
+            "type": "array"
+          },
+          "bindings": {
+            "items": {
+              "$ref": "#/$defs/Binding"
+            },
+            "maxItems": 8,
+            "title": "Bindings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "vertex_stage_id",
+          "fragment_stage_id",
+          "width",
+          "height",
+          "clear_color"
+        ],
+        "title": "Pass",
+        "type": "object"
+      },
+      "PassSource": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "pass",
+            "title": "Kind",
+            "type": "string"
+          },
+          "pass_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Pass Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "pass_id"
+        ],
+        "title": "PassSource",
+        "type": "object"
+      },
+      "Preview": {
+        "additionalProperties": false,
+        "properties": {
+          "pass_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Pass Id",
+            "type": "string"
+          },
+          "width": {
+            "maximum": 256,
+            "minimum": 1,
+            "title": "Width",
+            "type": "integer"
+          },
+          "height": {
+            "maximum": 256,
+            "minimum": 1,
+            "title": "Height",
+            "type": "integer"
+          },
+          "time_seconds": {
+            "maximum": 86400,
+            "minimum": 0,
+            "title": "Time Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "pass_id",
+          "width",
+          "height",
+          "time_seconds"
+        ],
+        "title": "Preview",
+        "type": "object"
+      },
+      "Stage": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "vertex",
+              "fragment"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "source": {
+            "maxLength": 262144,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "source"
+        ],
+        "title": "Stage",
+        "type": "object"
+      },
+      "Texture": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "width": {
+            "maximum": 512,
+            "minimum": 1,
+            "title": "Width",
+            "type": "integer"
+          },
+          "height": {
+            "maximum": 512,
+            "minimum": 1,
+            "title": "Height",
+            "type": "integer"
+          },
+          "format": {
+            "const": "rgba8",
+            "default": "rgba8",
+            "title": "Format",
+            "type": "string"
+          },
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "width",
+          "height",
+          "content_hash"
+        ],
+        "title": "Texture",
+        "type": "object"
+      },
+      "TextureSource": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "texture",
+            "title": "Kind",
+            "type": "string"
+          },
+          "texture_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Texture Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "texture_id"
+        ],
+        "title": "TextureSource",
+        "type": "object"
+      },
+      "Uniform": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "pass_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Pass Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "float",
+              "int",
+              "bool",
+              "vec2",
+              "vec3",
+              "vec4",
+              "mat2",
+              "mat3",
+              "mat4"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "maximum": 2147483647,
+                "minimum": -2147483648,
+                "type": "integer"
+              },
+              {
+                "maximum": 1000000.0,
+                "minimum": -1000000.0,
+                "type": "number"
+              },
+              {
+                "items": {
+                  "maximum": 1000000.0,
+                  "minimum": -1000000.0,
+                  "type": "number"
+                },
+                "maxItems": 16,
+                "minItems": 2,
+                "type": "array"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "id",
+          "pass_id",
+          "name",
+          "type",
+          "value"
+        ],
+        "title": "Uniform",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        "title": "Id",
+        "type": "string"
+      },
+      "schema_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Schema Version",
+        "type": "integer"
+      },
+      "language": {
+        "const": "glsl-es-300",
+        "default": "glsl-es-300",
+        "title": "Language",
+        "type": "string"
+      },
+      "title": {
+        "maxLength": 120,
+        "minLength": 1,
+        "title": "Title",
+        "type": "string"
+      },
+      "stages": {
+        "items": {
+          "$ref": "#/$defs/Stage"
+        },
+        "maxItems": 64,
+        "minItems": 2,
+        "title": "Stages",
+        "type": "array"
+      },
+      "passes": {
+        "items": {
+          "$ref": "#/$defs/Pass"
+        },
+        "maxItems": 32,
+        "minItems": 1,
+        "title": "Passes",
+        "type": "array"
+      },
+      "uniforms": {
+        "items": {
+          "$ref": "#/$defs/Uniform"
+        },
+        "maxItems": 128,
+        "title": "Uniforms",
+        "type": "array"
+      },
+      "textures": {
+        "items": {
+          "$ref": "#/$defs/Texture"
+        },
+        "maxItems": 16,
+        "title": "Textures",
+        "type": "array"
+      },
+      "preview": {
+        "$ref": "#/$defs/Preview"
+      }
+    },
+    "required": [
+      "id",
+      "title",
+      "stages",
+      "passes",
+      "preview"
+    ],
+    "title": "Document",
+    "type": "object"
+  },
+  "representation_parameters": {
+    "additionalProperties": false,
+    "properties": {
+      "section": {
+        "default": "summary",
+        "enum": [
+          "summary",
+          "stages",
+          "passes",
+          "uniforms",
+          "textures",
+          "source",
+          "texture_bytes",
+          "document_bytes"
+        ],
+        "title": "Section",
+        "type": "string"
+      },
+      "offset": {
+        "default": 0,
+        "maximum": 9007199254740991,
+        "minimum": 0,
+        "title": "Offset",
+        "type": "integer"
+      },
+      "limit": {
+        "default": 20,
+        "maximum": 16384,
+        "minimum": 1,
+        "title": "Limit",
+        "type": "integer"
+      },
+      "stage_id": {
+        "anyOf": [
+          {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Stage Id"
+      },
+      "texture_id": {
+        "anyOf": [
+          {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Texture Id"
+      }
+    },
+    "title": "ReadParameters",
+    "type": "object"
+  },
+  "operations": {
+    "documents.list": {
+      "scope": "project",
+      "max_output_bytes": 32768,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "offset": {
+            "default": 0,
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "PageInput",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "JsonValue": {},
+          "Summary": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "version": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "deleted": {
+                "title": "Deleted",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "version",
+              "content_hash",
+              "deleted"
+            ],
+            "title": "Summary",
+            "type": "object"
+          },
+          "TexturePage": {
+            "additionalProperties": false,
+            "properties": {
+              "texture_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Texture Id",
+                "type": "string"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "total_bytes": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "title": "Total Bytes",
+                "type": "integer"
+              },
+              "rgba_base64": {
+                "maxLength": 21848,
+                "title": "Rgba Base64",
+                "type": "string"
+              }
+            },
+            "required": [
+              "texture_id",
+              "content_hash",
+              "total_bytes",
+              "rgba_base64"
+            ],
+            "title": "TexturePage",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Summary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "studio_generation": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Studio Generation",
+            "type": "integer"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "document_bytes": {
+            "anyOf": [
+              {
+                "maxLength": 21848,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Document Bytes"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            "maxItems": 50,
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stage Id"
+          },
+          "offset": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "next_offset": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Next Offset",
+            "type": "integer"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValue"
+            },
+            "title": "Metadata",
+            "type": "object"
+          },
+          "texture_bytes": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/TexturePage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "studio_generation",
+          "section",
+          "offset",
+          "next_offset",
+          "total",
+          "has_more"
+        ],
+        "title": "PageResult",
+        "type": "object"
+      }
+    },
+    "documents.get": {
+      "scope": "project",
+      "max_output_bytes": 32768,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "section": {
+            "default": "summary",
+            "enum": [
+              "summary",
+              "stages",
+              "passes",
+              "uniforms",
+              "textures",
+              "source",
+              "texture_bytes",
+              "document_bytes"
+            ],
+            "title": "Section",
+            "type": "string"
+          },
+          "offset": {
+            "default": 0,
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 16384,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stage Id"
+          },
+          "texture_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Texture Id"
+          },
+          "document_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Version"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "title": "GetInput",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "JsonValue": {},
+          "Summary": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "version": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "deleted": {
+                "title": "Deleted",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "version",
+              "content_hash",
+              "deleted"
+            ],
+            "title": "Summary",
+            "type": "object"
+          },
+          "TexturePage": {
+            "additionalProperties": false,
+            "properties": {
+              "texture_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Texture Id",
+                "type": "string"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "total_bytes": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "title": "Total Bytes",
+                "type": "integer"
+              },
+              "rgba_base64": {
+                "maxLength": 21848,
+                "title": "Rgba Base64",
+                "type": "string"
+              }
+            },
+            "required": [
+              "texture_id",
+              "content_hash",
+              "total_bytes",
+              "rgba_base64"
+            ],
+            "title": "TexturePage",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Summary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "studio_generation": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Studio Generation",
+            "type": "integer"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "document_bytes": {
+            "anyOf": [
+              {
+                "maxLength": 21848,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Document Bytes"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            "maxItems": 50,
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stage Id"
+          },
+          "offset": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "next_offset": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Next Offset",
+            "type": "integer"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValue"
+            },
+            "title": "Metadata",
+            "type": "object"
+          },
+          "texture_bytes": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/TexturePage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "studio_generation",
+          "section",
+          "offset",
+          "next_offset",
+          "total",
+          "has_more"
+        ],
+        "title": "PageResult",
+        "type": "object"
+      }
+    },
+    "documents.head": {
+      "scope": "project",
+      "max_output_bytes": 1048576,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Document Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "title": "HeadInput",
+        "type": "object"
+      },
+      "output": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          },
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "content_hash",
+          "deleted"
+        ],
+        "title": "HeadResult",
+        "type": "object"
+      }
+    },
+    "documents.create": {
+      "scope": "project",
+      "max_output_bytes": 1048576,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "expected_generation": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Expected Generation",
+            "type": "integer"
+          },
+          "request_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "expected_generation",
+          "request_id"
+        ],
+        "title": "CreateRequest",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "Summary": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "version": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "deleted": {
+                "title": "Deleted",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "version",
+              "content_hash",
+              "deleted"
+            ],
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "$ref": "#/$defs/Summary"
+          },
+          "studio_generation": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Studio Generation",
+            "type": "integer"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "changed_ids": {
+            "items": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Changed Ids",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "created_refs": {
+            "maxProperties": 64,
+            "patternProperties": {
+              "^[A-Za-z_][A-Za-z0-9_]*$": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "maxLength": 32,
+              "minLength": 1
+            },
+            "title": "Created Refs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "document",
+          "studio_generation",
+          "changed"
+        ],
+        "title": "MutationResult",
+        "type": "object"
+      }
+    },
+    "documents.apply": {
+      "scope": "project",
+      "max_output_bytes": 1048576,
+      "input": {
+        "$defs": {
+          "BindingInput": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "title": "Name",
+                "type": "string"
+              },
+              "source": {
+                "discriminator": {
+                  "mapping": {
+                    "pass": "#/$defs/SelectPassSource",
+                    "texture": "#/$defs/SelectTextureSource"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/SelectTextureSource"
+                  },
+                  {
+                    "$ref": "#/$defs/SelectPassSource"
+                  }
+                ],
+                "title": "Source"
+              },
+              "filter": {
+                "default": "nearest",
+                "enum": [
+                  "nearest",
+                  "linear"
+                ],
+                "title": "Filter",
+                "type": "string"
+              },
+              "wrap": {
+                "const": "clamp",
+                "default": "clamp",
+                "title": "Wrap",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "source"
+            ],
+            "title": "BindingInput",
+            "type": "object"
+          },
+          "BindingRemove": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "binding_remove",
+                "title": "Kind",
+                "type": "string"
+              },
+              "pass_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Pass Id"
+              },
+              "name": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "title": "Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "pass_id",
+              "name"
+            ],
+            "title": "BindingRemove",
+            "type": "object"
+          },
+          "BindingSet": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "title": "Name",
+                "type": "string"
+              },
+              "source": {
+                "discriminator": {
+                  "mapping": {
+                    "pass": "#/$defs/SelectPassSource",
+                    "texture": "#/$defs/SelectTextureSource"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/SelectTextureSource"
+                  },
+                  {
+                    "$ref": "#/$defs/SelectPassSource"
+                  }
+                ],
+                "title": "Source"
+              },
+              "filter": {
+                "default": "nearest",
+                "enum": [
+                  "nearest",
+                  "linear"
+                ],
+                "title": "Filter",
+                "type": "string"
+              },
+              "wrap": {
+                "const": "clamp",
+                "default": "clamp",
+                "title": "Wrap",
+                "type": "string"
+              },
+              "kind": {
+                "const": "binding_set",
+                "title": "Kind",
+                "type": "string"
+              },
+              "pass_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Pass Id"
+              }
+            },
+            "required": [
+              "name",
+              "source",
+              "kind",
+              "pass_id"
+            ],
+            "title": "BindingSet",
+            "type": "object"
+          },
+          "ObjectId": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "title": "ObjectId",
+            "type": "object"
+          },
+          "ObjectRef": {
+            "additionalProperties": false,
+            "properties": {
+              "ref": {
+                "maxLength": 32,
+                "minLength": 1,
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "title": "Ref",
+                "type": "string"
+              }
+            },
+            "required": [
+              "ref"
+            ],
+            "title": "ObjectRef",
+            "type": "object"
+          },
+          "PassCreate": {
+            "additionalProperties": false,
+            "properties": {
+              "ref": {
+                "anyOf": [
+                  {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Ref"
+              },
+              "kind": {
+                "const": "pass_create",
+                "title": "Kind",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "vertex_stage_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Vertex Stage Id"
+              },
+              "fragment_stage_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Fragment Stage Id"
+              },
+              "width": {
+                "maximum": 512,
+                "minimum": 1,
+                "title": "Width",
+                "type": "integer"
+              },
+              "height": {
+                "maximum": 512,
+                "minimum": 1,
+                "title": "Height",
+                "type": "integer"
+              },
+              "clear_color": {
+                "items": {
+                  "maximum": 1,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "maxItems": 4,
+                "minItems": 4,
+                "title": "Clear Color",
+                "type": "array"
+              },
+              "bindings": {
+                "items": {
+                  "$ref": "#/$defs/BindingInput"
+                },
+                "maxItems": 8,
+                "title": "Bindings",
+                "type": "array"
+              }
+            },
+            "required": [
+              "kind",
+              "title",
+              "vertex_stage_id",
+              "fragment_stage_id",
+              "width",
+              "height",
+              "clear_color"
+            ],
+            "title": "PassCreate",
+            "type": "object"
+          },
+          "PassRemove": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "pass_remove",
+                "title": "Kind",
+                "type": "string"
+              },
+              "pass_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Pass Id"
+              }
+            },
+            "required": [
+              "kind",
+              "pass_id"
+            ],
+            "title": "PassRemove",
+            "type": "object"
+          },
+          "PassReorder": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "pass_reorder",
+                "title": "Kind",
+                "type": "string"
+              },
+              "pass_ids": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ObjectId"
+                    },
+                    {
+                      "$ref": "#/$defs/ObjectRef"
+                    }
+                  ]
+                },
+                "maxItems": 32,
+                "minItems": 1,
+                "title": "Pass Ids",
+                "type": "array"
+              }
+            },
+            "required": [
+              "kind",
+              "pass_ids"
+            ],
+            "title": "PassReorder",
+            "type": "object"
+          },
+          "PassUpdate": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "pass_update",
+                "title": "Kind",
+                "type": "string"
+              },
+              "pass_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Pass Id"
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "maxLength": 120,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Title"
+              },
+              "vertex_stage_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Vertex Stage Id"
+              },
+              "fragment_stage_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Fragment Stage Id"
+              },
+              "width": {
+                "anyOf": [
+                  {
+                    "maximum": 512,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Width"
+              },
+              "height": {
+                "anyOf": [
+                  {
+                    "maximum": 512,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Height"
+              },
+              "clear_color": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Clear Color"
+              }
+            },
+            "required": [
+              "kind",
+              "pass_id"
+            ],
+            "title": "PassUpdate",
+            "type": "object"
+          },
+          "PreviewSet": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "preview_set",
+                "title": "Kind",
+                "type": "string"
+              },
+              "pass_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Pass Id"
+              },
+              "width": {
+                "anyOf": [
+                  {
+                    "maximum": 256,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Width"
+              },
+              "height": {
+                "anyOf": [
+                  {
+                    "maximum": 256,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Height"
+              },
+              "time_seconds": {
+                "anyOf": [
+                  {
+                    "maximum": 86400,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Time Seconds"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "title": "PreviewSet",
+            "type": "object"
+          },
+          "RenameDocument": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "rename_document",
+                "title": "Kind",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "title"
+            ],
+            "title": "RenameDocument",
+            "type": "object"
+          },
+          "SelectPassSource": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "pass",
+                "title": "Kind",
+                "type": "string"
+              },
+              "pass_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Pass Id"
+              }
+            },
+            "required": [
+              "kind",
+              "pass_id"
+            ],
+            "title": "SelectPassSource",
+            "type": "object"
+          },
+          "SelectTextureSource": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "texture",
+                "title": "Kind",
+                "type": "string"
+              },
+              "texture_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Texture Id"
+              }
+            },
+            "required": [
+              "kind",
+              "texture_id"
+            ],
+            "title": "SelectTextureSource",
+            "type": "object"
+          },
+          "StageCreate": {
+            "additionalProperties": false,
+            "properties": {
+              "ref": {
+                "anyOf": [
+                  {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Ref"
+              },
+              "kind": {
+                "const": "stage_create",
+                "title": "Kind",
+                "type": "string"
+              },
+              "stage_kind": {
+                "enum": [
+                  "vertex",
+                  "fragment"
+                ],
+                "title": "Stage Kind",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "source": {
+                "maxLength": 262144,
+                "title": "Source",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "stage_kind",
+              "title",
+              "source"
+            ],
+            "title": "StageCreate",
+            "type": "object"
+          },
+          "StagePatch": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "stage_patch",
+                "title": "Kind",
+                "type": "string"
+              },
+              "stage_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Stage Id"
+              },
+              "old_text": {
+                "maxLength": 262144,
+                "minLength": 1,
+                "title": "Old Text",
+                "type": "string"
+              },
+              "new_text": {
+                "maxLength": 262144,
+                "title": "New Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "stage_id",
+              "old_text",
+              "new_text"
+            ],
+            "title": "StagePatch",
+            "type": "object"
+          },
+          "StageRemove": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "stage_remove",
+                "title": "Kind",
+                "type": "string"
+              },
+              "stage_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Stage Id"
+              }
+            },
+            "required": [
+              "kind",
+              "stage_id"
+            ],
+            "title": "StageRemove",
+            "type": "object"
+          },
+          "StageReplace": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "stage_replace",
+                "title": "Kind",
+                "type": "string"
+              },
+              "stage_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Stage Id"
+              },
+              "source": {
+                "maxLength": 262144,
+                "title": "Source",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "stage_id",
+              "source"
+            ],
+            "title": "StageReplace",
+            "type": "object"
+          },
+          "TextureCreate": {
+            "additionalProperties": false,
+            "properties": {
+              "ref": {
+                "anyOf": [
+                  {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Ref"
+              },
+              "kind": {
+                "const": "texture_create",
+                "title": "Kind",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "width": {
+                "maximum": 512,
+                "minimum": 1,
+                "title": "Width",
+                "type": "integer"
+              },
+              "height": {
+                "maximum": 512,
+                "minimum": 1,
+                "title": "Height",
+                "type": "integer"
+              },
+              "rgba_base64": {
+                "maxLength": 1398104,
+                "title": "Rgba Base64",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "title",
+              "width",
+              "height",
+              "rgba_base64"
+            ],
+            "title": "TextureCreate",
+            "type": "object"
+          },
+          "TextureRemove": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "texture_remove",
+                "title": "Kind",
+                "type": "string"
+              },
+              "texture_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Texture Id"
+              }
+            },
+            "required": [
+              "kind",
+              "texture_id"
+            ],
+            "title": "TextureRemove",
+            "type": "object"
+          },
+          "UniformCreate": {
+            "additionalProperties": false,
+            "properties": {
+              "ref": {
+                "anyOf": [
+                  {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Ref"
+              },
+              "kind": {
+                "const": "uniform_create",
+                "title": "Kind",
+                "type": "string"
+              },
+              "pass_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Pass Id"
+              },
+              "name": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "title": "Name",
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "float",
+                  "int",
+                  "bool",
+                  "vec2",
+                  "vec3",
+                  "vec4",
+                  "mat2",
+                  "mat3",
+                  "mat4"
+                ],
+                "title": "Type",
+                "type": "string"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "maximum": 2147483647,
+                    "minimum": -2147483648,
+                    "type": "integer"
+                  },
+                  {
+                    "maximum": 1000000.0,
+                    "minimum": -1000000.0,
+                    "type": "number"
+                  },
+                  {
+                    "items": {
+                      "maximum": 1000000.0,
+                      "minimum": -1000000.0,
+                      "type": "number"
+                    },
+                    "maxItems": 16,
+                    "minItems": 2,
+                    "type": "array"
+                  }
+                ],
+                "title": "Value"
+              }
+            },
+            "required": [
+              "kind",
+              "pass_id",
+              "name",
+              "type",
+              "value"
+            ],
+            "title": "UniformCreate",
+            "type": "object"
+          },
+          "UniformRemove": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "uniform_remove",
+                "title": "Kind",
+                "type": "string"
+              },
+              "uniform_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Uniform Id"
+              }
+            },
+            "required": [
+              "kind",
+              "uniform_id"
+            ],
+            "title": "UniformRemove",
+            "type": "object"
+          },
+          "UniformUpdate": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "uniform_update",
+                "title": "Kind",
+                "type": "string"
+              },
+              "uniform_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  }
+                ],
+                "title": "Uniform Id"
+              },
+              "pass_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ObjectId"
+                  },
+                  {
+                    "$ref": "#/$defs/ObjectRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Pass Id"
+              },
+              "name": {
+                "anyOf": [
+                  {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Name"
+              },
+              "type": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "float",
+                      "int",
+                      "bool",
+                      "vec2",
+                      "vec3",
+                      "vec4",
+                      "mat2",
+                      "mat3",
+                      "mat4"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Type"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "maximum": 2147483647,
+                    "minimum": -2147483648,
+                    "type": "integer"
+                  },
+                  {
+                    "maximum": 1000000.0,
+                    "minimum": -1000000.0,
+                    "type": "number"
+                  },
+                  {
+                    "items": {
+                      "maximum": 1000000.0,
+                      "minimum": -1000000.0,
+                      "type": "number"
+                    },
+                    "maxItems": 16,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              }
+            },
+            "required": [
+              "kind",
+              "uniform_id"
+            ],
+            "title": "UniformUpdate",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "operations": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "binding_remove": "#/$defs/BindingRemove",
+                  "binding_set": "#/$defs/BindingSet",
+                  "pass_create": "#/$defs/PassCreate",
+                  "pass_remove": "#/$defs/PassRemove",
+                  "pass_reorder": "#/$defs/PassReorder",
+                  "pass_update": "#/$defs/PassUpdate",
+                  "preview_set": "#/$defs/PreviewSet",
+                  "rename_document": "#/$defs/RenameDocument",
+                  "stage_create": "#/$defs/StageCreate",
+                  "stage_patch": "#/$defs/StagePatch",
+                  "stage_remove": "#/$defs/StageRemove",
+                  "stage_replace": "#/$defs/StageReplace",
+                  "texture_create": "#/$defs/TextureCreate",
+                  "texture_remove": "#/$defs/TextureRemove",
+                  "uniform_create": "#/$defs/UniformCreate",
+                  "uniform_remove": "#/$defs/UniformRemove",
+                  "uniform_update": "#/$defs/UniformUpdate"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RenameDocument"
+                },
+                {
+                  "$ref": "#/$defs/StageCreate"
+                },
+                {
+                  "$ref": "#/$defs/StageReplace"
+                },
+                {
+                  "$ref": "#/$defs/StagePatch"
+                },
+                {
+                  "$ref": "#/$defs/StageRemove"
+                },
+                {
+                  "$ref": "#/$defs/PassCreate"
+                },
+                {
+                  "$ref": "#/$defs/PassUpdate"
+                },
+                {
+                  "$ref": "#/$defs/PassRemove"
+                },
+                {
+                  "$ref": "#/$defs/PassReorder"
+                },
+                {
+                  "$ref": "#/$defs/UniformCreate"
+                },
+                {
+                  "$ref": "#/$defs/UniformUpdate"
+                },
+                {
+                  "$ref": "#/$defs/UniformRemove"
+                },
+                {
+                  "$ref": "#/$defs/BindingSet"
+                },
+                {
+                  "$ref": "#/$defs/BindingRemove"
+                },
+                {
+                  "$ref": "#/$defs/TextureCreate"
+                },
+                {
+                  "$ref": "#/$defs/TextureRemove"
+                },
+                {
+                  "$ref": "#/$defs/PreviewSet"
+                }
+              ]
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Operations",
+            "type": "array"
+          },
+          "request_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "expected_version",
+          "operations",
+          "request_id"
+        ],
+        "title": "ApplyRequest",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "Summary": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "version": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "deleted": {
+                "title": "Deleted",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "version",
+              "content_hash",
+              "deleted"
+            ],
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "$ref": "#/$defs/Summary"
+          },
+          "studio_generation": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Studio Generation",
+            "type": "integer"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "changed_ids": {
+            "items": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Changed Ids",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "created_refs": {
+            "maxProperties": 64,
+            "patternProperties": {
+              "^[A-Za-z_][A-Za-z0-9_]*$": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "maxLength": 32,
+              "minLength": 1
+            },
+            "title": "Created Refs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "document",
+          "studio_generation",
+          "changed"
+        ],
+        "title": "MutationResult",
+        "type": "object"
+      }
+    },
+    "documents.undo": {
+      "scope": "project",
+      "max_output_bytes": 1048576,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "target_version": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Target Version",
+            "type": "integer"
+          },
+          "request_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "expected_version",
+          "target_version",
+          "request_id"
+        ],
+        "title": "UndoRequest",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "Summary": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "version": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "deleted": {
+                "title": "Deleted",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "version",
+              "content_hash",
+              "deleted"
+            ],
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "$ref": "#/$defs/Summary"
+          },
+          "studio_generation": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Studio Generation",
+            "type": "integer"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "changed_ids": {
+            "items": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Changed Ids",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "created_refs": {
+            "maxProperties": 64,
+            "patternProperties": {
+              "^[A-Za-z_][A-Za-z0-9_]*$": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "maxLength": 32,
+              "minLength": 1
+            },
+            "title": "Created Refs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "document",
+          "studio_generation",
+          "changed"
+        ],
+        "title": "MutationResult",
+        "type": "object"
+      }
+    },
+    "documents.delete": {
+      "scope": "project",
+      "max_output_bytes": 1048576,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "request_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "expected_version",
+          "request_id"
+        ],
+        "title": "VersionRequest",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "Summary": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "version": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "deleted": {
+                "title": "Deleted",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "version",
+              "content_hash",
+              "deleted"
+            ],
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "$ref": "#/$defs/Summary"
+          },
+          "studio_generation": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Studio Generation",
+            "type": "integer"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "changed_ids": {
+            "items": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Changed Ids",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "created_refs": {
+            "maxProperties": 64,
+            "patternProperties": {
+              "^[A-Za-z_][A-Za-z0-9_]*$": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "maxLength": 32,
+              "minLength": 1
+            },
+            "title": "Created Refs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "document",
+          "studio_generation",
+          "changed"
+        ],
+        "title": "MutationResult",
+        "type": "object"
+      }
+    },
+    "documents.revisions": {
+      "scope": "project",
+      "max_output_bytes": 32768,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "offset": {
+            "default": 0,
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "document_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Version"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "title": "RevisionsInput",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "JsonValue": {},
+          "Summary": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "version": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "deleted": {
+                "title": "Deleted",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "version",
+              "content_hash",
+              "deleted"
+            ],
+            "title": "Summary",
+            "type": "object"
+          },
+          "TexturePage": {
+            "additionalProperties": false,
+            "properties": {
+              "texture_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Texture Id",
+                "type": "string"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "total_bytes": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "title": "Total Bytes",
+                "type": "integer"
+              },
+              "rgba_base64": {
+                "maxLength": 21848,
+                "title": "Rgba Base64",
+                "type": "string"
+              }
+            },
+            "required": [
+              "texture_id",
+              "content_hash",
+              "total_bytes",
+              "rgba_base64"
+            ],
+            "title": "TexturePage",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Summary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "studio_generation": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Studio Generation",
+            "type": "integer"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "document_bytes": {
+            "anyOf": [
+              {
+                "maxLength": 21848,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Document Bytes"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            "maxItems": 50,
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stage Id"
+          },
+          "offset": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "next_offset": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Next Offset",
+            "type": "integer"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValue"
+            },
+            "title": "Metadata",
+            "type": "object"
+          },
+          "texture_bytes": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/TexturePage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "studio_generation",
+          "section",
+          "offset",
+          "next_offset",
+          "total",
+          "has_more"
+        ],
+        "title": "PageResult",
+        "type": "object"
+      }
+    },
+    "documents.diff": {
+      "scope": "project",
+      "max_output_bytes": 32768,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "offset": {
+            "default": 0,
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "document_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "from_version": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "From Version",
+            "type": "integer"
+          },
+          "to_version": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "To Version",
+            "type": "integer"
+          },
+          "section": {
+            "default": "summary",
+            "enum": [
+              "summary",
+              "source"
+            ],
+            "title": "Section",
+            "type": "string"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stage Id"
+          }
+        },
+        "required": [
+          "document_id",
+          "from_version",
+          "to_version"
+        ],
+        "title": "DiffInput",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "JsonValue": {},
+          "Summary": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "version": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "deleted": {
+                "title": "Deleted",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "version",
+              "content_hash",
+              "deleted"
+            ],
+            "title": "Summary",
+            "type": "object"
+          },
+          "TexturePage": {
+            "additionalProperties": false,
+            "properties": {
+              "texture_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Texture Id",
+                "type": "string"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "total_bytes": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "title": "Total Bytes",
+                "type": "integer"
+              },
+              "rgba_base64": {
+                "maxLength": 21848,
+                "title": "Rgba Base64",
+                "type": "string"
+              }
+            },
+            "required": [
+              "texture_id",
+              "content_hash",
+              "total_bytes",
+              "rgba_base64"
+            ],
+            "title": "TexturePage",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Summary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "studio_generation": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Studio Generation",
+            "type": "integer"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "document_bytes": {
+            "anyOf": [
+              {
+                "maxLength": 21848,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Document Bytes"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            "maxItems": 50,
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stage Id"
+          },
+          "offset": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "next_offset": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Next Offset",
+            "type": "integer"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValue"
+            },
+            "title": "Metadata",
+            "type": "object"
+          },
+          "texture_bytes": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/TexturePage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "studio_generation",
+          "section",
+          "offset",
+          "next_offset",
+          "total",
+          "has_more"
+        ],
+        "title": "PageResult",
+        "type": "object"
+      }
+    },
+    "documents.compile": {
+      "scope": "project",
+      "max_output_bytes": 1048576,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "request_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "expected_version",
+          "request_id"
+        ],
+        "title": "VersionRequest",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "JsonValue": {}
+        },
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "outcome": {
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValue"
+            },
+            "title": "Outcome",
+            "type": "object"
+          }
+        },
+        "required": [
+          "session_id",
+          "run_id",
+          "artifact_ids",
+          "outcome"
+        ],
+        "title": "ActionResult",
+        "type": "object"
+      }
+    },
+    "documents.preview": {
+      "scope": "project",
+      "max_output_bytes": 1048576,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "request_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "expected_version",
+          "request_id"
+        ],
+        "title": "VersionRequest",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "JsonValue": {}
+        },
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "outcome": {
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValue"
+            },
+            "title": "Outcome",
+            "type": "object"
+          }
+        },
+        "required": [
+          "session_id",
+          "run_id",
+          "artifact_ids",
+          "outcome"
+        ],
+        "title": "ActionResult",
+        "type": "object"
+      }
+    },
+    "documents.export": {
+      "scope": "project",
+      "max_output_bytes": 1048576,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "request_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "expected_version",
+          "request_id"
+        ],
+        "title": "VersionRequest",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "JsonValue": {}
+        },
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "outcome": {
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValue"
+            },
+            "title": "Outcome",
+            "type": "object"
+          }
+        },
+        "required": [
+          "session_id",
+          "run_id",
+          "artifact_ids",
+          "outcome"
+        ],
+        "title": "ActionResult",
+        "type": "object"
+      }
+    },
+    "compute.attach": {
+      "scope": "machine",
+      "max_output_bytes": 1048576,
+      "input": {
+        "$defs": {
+          "Capabilities": {
+            "additionalProperties": false,
+            "properties": {
+              "version": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Version",
+                "type": "string"
+              },
+              "shading_language_version": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Shading Language Version",
+                "type": "string"
+              },
+              "max_texture_size": {
+                "maximum": 1048576,
+                "minimum": 1,
+                "title": "Max Texture Size",
+                "type": "integer"
+              },
+              "max_renderbuffer_size": {
+                "maximum": 1048576,
+                "minimum": 1,
+                "title": "Max Renderbuffer Size",
+                "type": "integer"
+              },
+              "max_texture_image_units": {
+                "maximum": 1024,
+                "minimum": 1,
+                "title": "Max Texture Image Units",
+                "type": "integer"
+              },
+              "max_combined_texture_image_units": {
+                "maximum": 1024,
+                "minimum": 1,
+                "title": "Max Combined Texture Image Units",
+                "type": "integer"
+              },
+              "max_fragment_uniform_vectors": {
+                "maximum": 1048576,
+                "minimum": 1,
+                "title": "Max Fragment Uniform Vectors",
+                "type": "integer"
+              },
+              "max_vertex_uniform_vectors": {
+                "maximum": 1048576,
+                "minimum": 1,
+                "title": "Max Vertex Uniform Vectors",
+                "type": "integer"
+              },
+              "parallel_shader_compile": {
+                "title": "Parallel Shader Compile",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "version",
+              "shading_language_version",
+              "max_texture_size",
+              "max_renderbuffer_size",
+              "max_texture_image_units",
+              "max_combined_texture_image_units",
+              "max_fragment_uniform_vectors",
+              "max_vertex_uniform_vectors",
+              "parallel_shader_compile"
+            ],
+            "title": "Capabilities",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "registration_counter": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Registration Counter",
+            "type": "integer"
+          },
+          "package_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Package Digest",
+            "type": "string"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "capabilities": {
+            "$ref": "#/$defs/Capabilities"
+          }
+        },
+        "required": [
+          "client_id",
+          "registration_counter",
+          "package_digest",
+          "available",
+          "capabilities"
+        ],
+        "title": "AttachInput",
+        "type": "object"
+      },
+      "output": {
+        "additionalProperties": false,
+        "properties": {
+          "epoch": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Epoch",
+            "type": "string"
+          },
+          "lease": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Lease",
+            "type": "string"
+          },
+          "lease_ms": {
+            "const": 5000,
+            "default": 5000,
+            "title": "Lease Ms",
+            "type": "integer"
+          },
+          "server_status": {
+            "enum": [
+              "ready",
+              "unavailable"
+            ],
+            "title": "Server Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "epoch",
+          "lease",
+          "server_status"
+        ],
+        "title": "AttachResult",
+        "type": "object"
+      }
+    },
+    "compute.next": {
+      "scope": "machine",
+      "max_output_bytes": 8388608,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "epoch": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Epoch",
+            "type": "string"
+          },
+          "lease": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Lease",
+            "type": "string"
+          },
+          "registration_counter": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Registration Counter",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "epoch",
+          "lease",
+          "registration_counter"
+        ],
+        "title": "LeaseInput",
+        "type": "object"
+      },
+      "output": {
+        "$defs": {
+          "Binding": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "title": "Name",
+                "type": "string"
+              },
+              "source": {
+                "discriminator": {
+                  "mapping": {
+                    "pass": "#/$defs/PassSource",
+                    "texture": "#/$defs/TextureSource"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/TextureSource"
+                  },
+                  {
+                    "$ref": "#/$defs/PassSource"
+                  }
+                ],
+                "title": "Source"
+              },
+              "filter": {
+                "default": "nearest",
+                "enum": [
+                  "nearest",
+                  "linear"
+                ],
+                "title": "Filter",
+                "type": "string"
+              },
+              "wrap": {
+                "const": "clamp",
+                "default": "clamp",
+                "title": "Wrap",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "source"
+            ],
+            "title": "Binding",
+            "type": "object"
+          },
+          "ComputeRequest": {
+            "additionalProperties": false,
+            "properties": {
+              "request_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Request Id",
+                "type": "string"
+              },
+              "claim": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Claim",
+                "type": "string"
+              },
+              "invocation_id": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Invocation Id",
+                "type": "string"
+              },
+              "document_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "version": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "request_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Request Hash",
+                "type": "string"
+              },
+              "remaining_ms": {
+                "maximum": 10000,
+                "minimum": 1,
+                "title": "Remaining Ms",
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "compile",
+                  "preview"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "snapshot": {
+                "$ref": "#/$defs/Snapshot"
+              }
+            },
+            "required": [
+              "request_id",
+              "claim",
+              "invocation_id",
+              "document_id",
+              "version",
+              "content_hash",
+              "request_hash",
+              "remaining_ms",
+              "kind",
+              "snapshot"
+            ],
+            "title": "ComputeRequest",
+            "type": "object"
+          },
+          "Document": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "schema_version": {
+                "const": 1,
+                "default": 1,
+                "title": "Schema Version",
+                "type": "integer"
+              },
+              "language": {
+                "const": "glsl-es-300",
+                "default": "glsl-es-300",
+                "title": "Language",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "stages": {
+                "items": {
+                  "$ref": "#/$defs/Stage"
+                },
+                "maxItems": 64,
+                "minItems": 2,
+                "title": "Stages",
+                "type": "array"
+              },
+              "passes": {
+                "items": {
+                  "$ref": "#/$defs/Pass"
+                },
+                "maxItems": 32,
+                "minItems": 1,
+                "title": "Passes",
+                "type": "array"
+              },
+              "uniforms": {
+                "items": {
+                  "$ref": "#/$defs/Uniform"
+                },
+                "maxItems": 128,
+                "title": "Uniforms",
+                "type": "array"
+              },
+              "textures": {
+                "items": {
+                  "$ref": "#/$defs/Texture"
+                },
+                "maxItems": 16,
+                "title": "Textures",
+                "type": "array"
+              },
+              "preview": {
+                "$ref": "#/$defs/Preview"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "stages",
+              "passes",
+              "preview"
+            ],
+            "title": "Document",
+            "type": "object"
+          },
+          "Pass": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "vertex_stage_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Vertex Stage Id",
+                "type": "string"
+              },
+              "fragment_stage_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Fragment Stage Id",
+                "type": "string"
+              },
+              "width": {
+                "maximum": 512,
+                "minimum": 1,
+                "title": "Width",
+                "type": "integer"
+              },
+              "height": {
+                "maximum": 512,
+                "minimum": 1,
+                "title": "Height",
+                "type": "integer"
+              },
+              "clear_color": {
+                "items": {
+                  "maximum": 1,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "maxItems": 4,
+                "minItems": 4,
+                "title": "Clear Color",
+                "type": "array"
+              },
+              "bindings": {
+                "items": {
+                  "$ref": "#/$defs/Binding"
+                },
+                "maxItems": 8,
+                "title": "Bindings",
+                "type": "array"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "vertex_stage_id",
+              "fragment_stage_id",
+              "width",
+              "height",
+              "clear_color"
+            ],
+            "title": "Pass",
+            "type": "object"
+          },
+          "PassSource": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "pass",
+                "title": "Kind",
+                "type": "string"
+              },
+              "pass_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Pass Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "pass_id"
+            ],
+            "title": "PassSource",
+            "type": "object"
+          },
+          "Preview": {
+            "additionalProperties": false,
+            "properties": {
+              "pass_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Pass Id",
+                "type": "string"
+              },
+              "width": {
+                "maximum": 256,
+                "minimum": 1,
+                "title": "Width",
+                "type": "integer"
+              },
+              "height": {
+                "maximum": 256,
+                "minimum": 1,
+                "title": "Height",
+                "type": "integer"
+              },
+              "time_seconds": {
+                "maximum": 86400,
+                "minimum": 0,
+                "title": "Time Seconds",
+                "type": "number"
+              }
+            },
+            "required": [
+              "pass_id",
+              "width",
+              "height",
+              "time_seconds"
+            ],
+            "title": "Preview",
+            "type": "object"
+          },
+          "Snapshot": {
+            "additionalProperties": false,
+            "properties": {
+              "document": {
+                "$ref": "#/$defs/Document"
+              },
+              "textures": {
+                "items": {
+                  "$ref": "#/$defs/TextureBytes"
+                },
+                "maxItems": 16,
+                "title": "Textures",
+                "type": "array"
+              }
+            },
+            "required": [
+              "document",
+              "textures"
+            ],
+            "title": "Snapshot",
+            "type": "object"
+          },
+          "Stage": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "vertex",
+                  "fragment"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "source": {
+                "maxLength": 262144,
+                "title": "Source",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "source"
+            ],
+            "title": "Stage",
+            "type": "object"
+          },
+          "Texture": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "width": {
+                "maximum": 512,
+                "minimum": 1,
+                "title": "Width",
+                "type": "integer"
+              },
+              "height": {
+                "maximum": 512,
+                "minimum": 1,
+                "title": "Height",
+                "type": "integer"
+              },
+              "format": {
+                "const": "rgba8",
+                "default": "rgba8",
+                "title": "Format",
+                "type": "string"
+              },
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "width",
+              "height",
+              "content_hash"
+            ],
+            "title": "Texture",
+            "type": "object"
+          },
+          "TextureBytes": {
+            "additionalProperties": false,
+            "properties": {
+              "content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "rgba_base64": {
+                "maxLength": 1398104,
+                "title": "Rgba Base64",
+                "type": "string"
+              }
+            },
+            "required": [
+              "content_hash",
+              "rgba_base64"
+            ],
+            "title": "TextureBytes",
+            "type": "object"
+          },
+          "TextureSource": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "texture",
+                "title": "Kind",
+                "type": "string"
+              },
+              "texture_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Texture Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "texture_id"
+            ],
+            "title": "TextureSource",
+            "type": "object"
+          },
+          "Uniform": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "pass_id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "title": "Pass Id",
+                "type": "string"
+              },
+              "name": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "title": "Name",
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "float",
+                  "int",
+                  "bool",
+                  "vec2",
+                  "vec3",
+                  "vec4",
+                  "mat2",
+                  "mat3",
+                  "mat4"
+                ],
+                "title": "Type",
+                "type": "string"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "maximum": 2147483647,
+                    "minimum": -2147483648,
+                    "type": "integer"
+                  },
+                  {
+                    "maximum": 1000000.0,
+                    "minimum": -1000000.0,
+                    "type": "number"
+                  },
+                  {
+                    "items": {
+                      "maximum": 1000000.0,
+                      "minimum": -1000000.0,
+                      "type": "number"
+                    },
+                    "maxItems": 16,
+                    "minItems": 2,
+                    "type": "array"
+                  }
+                ],
+                "title": "Value"
+              }
+            },
+            "required": [
+              "id",
+              "pass_id",
+              "name",
+              "type",
+              "value"
+            ],
+            "title": "Uniform",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "idle",
+              "busy",
+              "request"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "request": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComputeRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "NextResult",
+        "type": "object"
+      }
+    },
+    "compute.complete": {
+      "scope": "machine",
+      "max_output_bytes": 1048576,
+      "input": {
+        "$defs": {
+          "ComputeResult": {
+            "additionalProperties": false,
+            "properties": {
+              "compiled": {
+                "title": "Compiled",
+                "type": "boolean"
+              },
+              "rendered": {
+                "title": "Rendered",
+                "type": "boolean"
+              },
+              "diagnostics": {
+                "items": {
+                  "$ref": "#/$defs/Diagnostic"
+                },
+                "maxItems": 128,
+                "title": "Diagnostics",
+                "type": "array"
+              },
+              "logs": {
+                "items": {
+                  "$ref": "#/$defs/DriverLog"
+                },
+                "maxItems": 96,
+                "title": "Logs",
+                "type": "array"
+              },
+              "log_truncated": {
+                "default": 0,
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "title": "Log Truncated",
+                "type": "integer"
+              },
+              "rgba_base64": {
+                "anyOf": [
+                  {
+                    "maxLength": 349528,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Rgba Base64"
+              },
+              "width": {
+                "anyOf": [
+                  {
+                    "maximum": 256,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Width"
+              },
+              "height": {
+                "anyOf": [
+                  {
+                    "maximum": 256,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Height"
+              },
+              "row_order": {
+                "anyOf": [
+                  {
+                    "const": "bottom-left",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Row Order"
+              }
+            },
+            "required": [
+              "compiled",
+              "rendered"
+            ],
+            "title": "ComputeResult",
+            "type": "object"
+          },
+          "Diagnostic": {
+            "additionalProperties": false,
+            "properties": {
+              "severity": {
+                "enum": [
+                  "error",
+                  "warning",
+                  "info"
+                ],
+                "title": "Severity",
+                "type": "string"
+              },
+              "code": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Z][A-Z0-9_]*$",
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "maxLength": 1024,
+                "title": "Message",
+                "type": "string"
+              },
+              "stage_id": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Stage Id"
+              },
+              "pass_id": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Pass Id"
+              },
+              "line": {
+                "anyOf": [
+                  {
+                    "maximum": 16384,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Line"
+              }
+            },
+            "required": [
+              "severity",
+              "code",
+              "message"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "DriverLog": {
+            "additionalProperties": false,
+            "properties": {
+              "stage_id": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Stage Id"
+              },
+              "pass_id": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Pass Id"
+              },
+              "text": {
+                "maxLength": 65536,
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "title": "DriverLog",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "epoch": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Epoch",
+            "type": "string"
+          },
+          "lease": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Lease",
+            "type": "string"
+          },
+          "registration_counter": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Registration Counter",
+            "type": "integer"
+          },
+          "package_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Package Digest",
+            "type": "string"
+          },
+          "request_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "claim": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Claim",
+            "type": "string"
+          },
+          "invocation_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Invocation Id",
+            "type": "string"
+          },
+          "document_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "version": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          },
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "request_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Request Hash",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/$defs/ComputeResult"
+          }
+        },
+        "required": [
+          "epoch",
+          "lease",
+          "registration_counter",
+          "package_digest",
+          "request_id",
+          "claim",
+          "invocation_id",
+          "document_id",
+          "version",
+          "content_hash",
+          "request_hash",
+          "result"
+        ],
+        "title": "CompleteInput",
+        "type": "object"
+      },
+      "output": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "const": true,
+            "default": true,
+            "title": "Accepted",
+            "type": "boolean"
+          }
+        },
+        "title": "Accepted",
+        "type": "object"
+      }
+    },
+    "compute.detach": {
+      "scope": "machine",
+      "max_output_bytes": 1048576,
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "epoch": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Epoch",
+            "type": "string"
+          },
+          "lease": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Lease",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "deactivate",
+              "hidden",
+              "context_lost",
+              "network_error"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "epoch",
+          "lease",
+          "reason"
+        ],
+        "title": "DetachInput",
+        "type": "object"
+      },
+      "output": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "const": true,
+            "default": true,
+            "title": "Accepted",
+            "type": "boolean"
+          }
+        },
+        "title": "Accepted",
+        "type": "object"
+      }
+    }
+  }
+}

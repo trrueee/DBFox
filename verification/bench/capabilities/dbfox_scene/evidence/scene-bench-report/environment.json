@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-09-05T03:37:42.973838+00:00",
+  "git_commit": "354f57a7c9dcdba07f83146c31fa1fa16e37d3bf",
+  "git_branch": "creative/scene",
+  "git_status_sha256": "864c5cb4c936c95ef9ae810815e9f860fe306e3dcc408566fd15116b222a1f0a",
+  "os": "Windows-11-10.0.26200-SP0",
+  "architecture": "AMD64",
+  "python": "3.12.7",
+  "ci": false
+}

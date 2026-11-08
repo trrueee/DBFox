@@ -5,7 +5,7 @@ Consumers: ContextAssembler, ToolDispatcher, and ProjectResourceProviders.
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -44,6 +44,19 @@ class ProjectResourceProvider(Protocol):
 
     def __call__(self, db: Any, project_id: str) -> tuple[ProjectResourceDescriptor, ...]:
         ...
+
+
+class SessionResourceDiscoveryContext(BaseModel):
+    """Host-proven Input frontier; discovery is never execution authority."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    session_id: str
+    project_id: str
+    input_boundary: int = Field(ge=0)
+    resource_refs: tuple[ResourceScopeRef, ...] = ()
+
+
+RunResourceDiscovery: TypeAlias = Callable[[Any, str], tuple[ProjectResourceDescriptor, ...]]
 
 
 def dump_resource_refs(refs: tuple[ResourceScopeRef, ...]) -> str:

@@ -273,7 +273,7 @@ API 边界已有 RFC 9457 `ProblemDetails`：`code`、`title`、`detail`、`stat
 1. 本清单中的每类组件在 Design Lab 有代表性 fixture；生产独有状态可用最小 harness 呈现。
 2. 每个错误状态都有权威来源、影响范围、主恢复动作和敏感信息边界。
 3. 关键组件完成 Current / Candidate A / B / C 同数据对比，而不是只比较静态截图。
-4. 字体、字号和颜色问题按 `typography-color-audit.md` 收敛到权威 token。
+4. 字体、字号和颜色问题按[当前 UI 规范](../quality/ui-design-and-development.md)收敛到权威 token；[旧审计](../archive/reviews/typography-color-audit.md)仅供追溯。
 5. 逐组件决策标记 KEEP、ADAPT、ADOPT、REFERENCE 或 REJECT，并记录依赖与退出成本。
 6. 经上述基线确认后，按[现行 UI 设计与开发规范](../quality/ui-design-and-development.md)继续生产实现；
    Plan 与错误只是其中两条纵向能力，历史任务路线仅保留在

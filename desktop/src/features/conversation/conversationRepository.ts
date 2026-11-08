@@ -8,6 +8,7 @@ import {
   getConversationApiV1ConversationsConversationIdGet,
   getConversationHistoryApiV1ConversationsConversationIdHistoryGet,
   getRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGet,
+  apiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGet,
   getRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGet,
   listConversationsApiV1ConversationsGet,
   patchConversationApiV1ConversationsConversationIdPatch,
@@ -84,9 +85,10 @@ export const createConversation = async (input: ConversationCreateInput) => {
   return normalizeSnapshot(data);
 };
 
-export const getConversation = async (conversationId: string) => {
+export const getConversation = async (conversationId: string, signal?: AbortSignal) => {
   const { data } = await getConversationApiV1ConversationsConversationIdGet({
     path: { conversation_id: conversationId },
+    signal,
     throwOnError: true,
   });
   return normalizeSnapshot(data);
@@ -117,12 +119,27 @@ export const getConversationHistory = async (
 export const getConversationRunArtifacts = async (
   conversationId: string,
   runId: string,
+  signal?: AbortSignal,
 ) => {
   const { data } = await getRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGet({
     path: { conversation_id: conversationId, run_id: runId },
+    signal,
     throwOnError: true,
   });
   return data.map(parseConversationArtifact);
+};
+
+export const getProjectArtifact = async (
+  projectId: string,
+  artifactId: string,
+  signal: AbortSignal,
+) => {
+  const { data } = await apiProjectArtifactApiV1ProjectsProjectIdArtifactsArtifactIdGet({
+    path: { project_id: projectId, artifact_id: artifactId },
+    signal,
+    throwOnError: true,
+  });
+  return parseConversationArtifact(data);
 };
 
 export const getConversationRunEvidence = async (

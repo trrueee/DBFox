@@ -84,7 +84,6 @@ class RunControl:
             self._provider_retry_base,
             provider_retry_max_seconds,
         )
-        self._last_probe = 0.0
         self._cancelled = False
 
     def checkpoint(self) -> None:
@@ -107,10 +106,10 @@ class RunControl:
             return True
         if self._cancelled:
             return True
-        now = time.monotonic()
-        if now - self._last_probe >= self._probe_interval:
-            self._last_probe = now
-            self._cancelled = bool(self._cancellation_probe())
+        # A negative result cannot authorize a later model/tool boundary:
+        # cancellation may have committed since the previous probe, even within
+        # the same clock tick. Only observed cancellation is safe to retain.
+        self._cancelled = bool(self._cancellation_probe())
         return self._cancelled
 
     def remaining_seconds(self) -> float:

@@ -9,7 +9,8 @@ from dbfox_dlc_api import ToolInputError
 
 from .catalog_reflection import DataCatalogReflector
 from .connection import DataConnectionBoundary
-from .contracts import DatabaseHandle
+from .contracts import DatabaseHandle, WorkbookDatabaseHandle, QuerySourceHandle
+from .inventory import InspectedColumn, InspectedColumnObject, InspectedTable
 from .store import DataStateStore
 from .tool_contracts import (
     CatalogOverviewOutput,
@@ -43,13 +44,13 @@ class DataCatalogWorkbench:
     ) -> DatabaseHandle:
         return self._store.resolve_project_database(project_id, database_id)
 
-    def overview(self, handle: DatabaseHandle) -> CatalogOverviewOutput:
-        state = self._store.catalog_state(handle.database.id)
+    def overview(self, handle: QuerySourceHandle) -> CatalogOverviewOutput:
+        state = self._store.catalog_state(handle.id, expected_resource_version=handle.scope_version)
         initialized = state["refreshed_at"] is not None
         return CatalogOverviewOutput(
-            database_id=handle.database.id,
-            database_name=handle.database.display_name,
-            dialect=handle.profile.provider,
+            database_id=handle.id,
+            database_name=handle.display_name,
+            dialect=handle.dialect,
             catalog_status="ready" if initialized else "uninitialized",
             last_sync_at=(
                 str(state["refreshed_at"])
@@ -70,13 +71,13 @@ class DataCatalogWorkbench:
 
     def list_tables(
         self,
-        handle: DatabaseHandle,
+        handle: QuerySourceHandle,
         request: SchemaListInput,
     ) -> SchemaListOutput:
-        state = self._store.catalog_state(handle.database.id)
+        state = self._store.catalog_state(handle.id, expected_resource_version=handle.scope_version)
         cursor = request.cursor
         rows, has_more = self._store.list_catalog_tables(
-            handle.database.id,
+            handle.id,
             after=(
                 (cursor.schema_name, cursor.table_name, cursor.table_id)
                 if cursor is not None
@@ -84,6 +85,7 @@ class DataCatalogWorkbench:
             ),
             limit=request.limit,
             name_filter=request.name_filter,
+            expected_resource_version=handle.scope_version,
         )
         tables = [self._table_summary(row) for row in rows]
         return SchemaListOutput(
@@ -105,11 +107,11 @@ class DataCatalogWorkbench:
             catalog_revision=int(state["catalog_revision"]),
         )
 
-    def table(self, handle: DatabaseHandle, name: str) -> CatalogTableDetail:
-        table, columns = self._store.resolve_catalog_table(handle.database.id, name)
-        state = self._store.catalog_state(handle.database.id)
+    def table(self, handle: QuerySourceHandle, name: str) -> CatalogTableDetail:
+        table, columns = self._store.resolve_catalog_table(handle.id, name, expected_resource_version=handle.scope_version)
+        state = self._store.catalog_state(handle.id, expected_resource_version=handle.scope_version)
         return CatalogTableDetail(
-            database_id=handle.database.id,
+            database_id=handle.id,
             table={key: value for key, value in table.items() if key != "database_resource_id"},
             columns=[dict(column) for column in columns],
             catalog_revision=int(state["catalog_revision"]),
@@ -117,22 +119,28 @@ class DataCatalogWorkbench:
 
     def refresh(
         self,
-        handle: DatabaseHandle,
+        handle: QuerySourceHandle,
         *,
         invocation_id: str,
         cancellation_probe: Callable[[], bool] | None = None,
     ) -> CatalogRefreshOutput:
         if cancellation_probe and cancellation_probe():
             raise ToolInputError("Catalog refresh was cancelled.")
+        if isinstance(handle, WorkbookDatabaseHandle):
+            self._store.check_workbook_files(handle)
+            return CatalogRefreshOutput(database_id=handle.id, status="ready", refreshed_at=handle.created_at,
+                                        table_count=1, schema_count=1, catalog_revision=1,
+                                        tables_created=0, tables_updated=0, tables_removed=0,
+                                        columns_created=0, columns_updated=0, columns_removed=0)
         inventory = self._reflector.inspect_catalog(
             handle,
             invocation_id=invocation_id,
             cancellation_probe=cancellation_probe,
         )
-        result = self._store.replace_catalog(inventory)
-        state = self._store.catalog_state(handle.database.id)
+        result = self._store.replace_catalog(inventory, expected_resource_version=handle.scope_version)
+        state = self._store.catalog_state(handle.id, expected_resource_version=handle.scope_version)
         return CatalogRefreshOutput(
-            database_id=handle.database.id,
+            database_id=handle.id,
             status="ready",
             refreshed_at=str(state["refreshed_at"]),
             table_count=int(state["table_count"]),
@@ -148,19 +156,36 @@ class DataCatalogWorkbench:
 
     def inspect(
         self,
-        handle: DatabaseHandle,
+        handle: QuerySourceHandle,
         request: SchemaInspectInput,
         *,
         invocation_id: str,
         cancellation_probe: Callable[[], bool] | None = None,
     ) -> SchemaInspectOutput:
+        if isinstance(handle, WorkbookDatabaseHandle):
+            self._store.check_workbook_files(handle)
+            columns = [InspectedColumn(name=str(c["column_name"]), type=str(c["data_type"]),
+                                       nullable=bool(c["is_nullable"]), comment=str(c["comment"]))
+                       for c in handle.catalog_columns()]
+            details = []
+            for target in request.targets:
+                if target in ("data", "main.data"):
+                    details.append(InspectedTable(name="data", schema_name="main", type="table", dialect="duckdb",
+                                                  comment=handle.display_name, row_estimate=handle.row_count, columns=columns))
+                else:
+                    name = target.removeprefix("main.").removeprefix("data.")
+                    column = next((c for c in columns if c.name == name), None)
+                    if column is None or target == name:
+                        raise ToolInputError("Workbook column is unavailable; inspect main.data first.")
+                    details.append(InspectedColumnObject(**column.model_dump(), table="data", schema_name="main", dialect="duckdb"))
+            return SchemaInspectOutput(inspections=[SchemaInspection(target=t, details=d) for t, d in zip(request.targets, details, strict=True)], catalog_revision=1)
         details = self._reflector.inspect_objects(
             handle,
             request.targets,
             invocation_id=invocation_id,
             cancellation_probe=cancellation_probe,
         )
-        state = self._store.catalog_state(handle.database.id)
+        state = self._store.catalog_state(handle.id)
         return SchemaInspectOutput(
             inspections=[
                 SchemaInspection(target=target, details=detail)

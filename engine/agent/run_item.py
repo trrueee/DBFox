@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from engine.agent.plan import PlanStep
+from engine.agent.references import ConversationInputReference
 from engine.agent.response import CompletionDisposition, CompletionLimitationCode
 from engine.agent.run import RunPhase, RunStatus
 from engine.json_codec import load_array, load_object
@@ -39,6 +40,7 @@ class RunItemStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    EXPIRED = "expired"
 
 
 class ArtifactReference(BaseModel):
@@ -74,6 +76,7 @@ class MessagePayload(BaseModel):
     role: Literal["user", "assistant"]
     phase: Literal["commentary", "final_answer"] | None = None
     content: str = ""
+    references: list[ConversationInputReference] = Field(default_factory=list, max_length=12)
     evidence: list[EvidenceReference] = Field(default_factory=list)
     artifact_refs: list[ArtifactReference] = Field(default_factory=list)
     completion_disposition: CompletionDisposition | None = None
@@ -275,7 +278,7 @@ def project_run(run: Any) -> dict[str, Any]:
     }).model_dump(mode="json")
 
 
-def user_message_item(message: Any, *, run_id: str, sequence: int = 0) -> MessageItem:
+def user_message_item(message: Any, *, run_id: str, sequence: int = 0, references: tuple[ConversationInputReference, ...] = ()) -> MessageItem:
     return MessageItem(
         type=RunItemType.MESSAGE,
         id=str(message.id),
@@ -286,7 +289,7 @@ def user_message_item(message: Any, *, run_id: str, sequence: int = 0) -> Messag
         status=RunItemStatus.COMPLETED,
         created_at=message.created_at,
         completed_at=message.updated_at,
-        payload=MessagePayload(role="user", content=str(message.content)),
+        payload=MessagePayload(role="user", content=str(message.content), references=list(references)),
     )
 
 
@@ -495,8 +498,10 @@ def approval_item(approval: Any, *, sequence: int = 0) -> ApprovalItem:
     status = (
         RunItemStatus.WAITING
         if str(approval.status) == "pending"
+        else RunItemStatus.EXPIRED
+        if str(approval.status) == "expired"
         else RunItemStatus.CANCELLED
-        if str(approval.status) in {"cancelled", "expired"}
+        if str(approval.status) == "cancelled"
         else RunItemStatus.COMPLETED
     )
     return ApprovalItem(
@@ -533,8 +538,10 @@ def question_item(question: Any, *, sequence: int = 0) -> QuestionItem:
     status = (
         RunItemStatus.WAITING
         if str(question.status) == "pending"
+        else RunItemStatus.EXPIRED
+        if str(question.status) == "expired"
         else RunItemStatus.CANCELLED
-        if str(question.status) in {"cancelled", "expired"}
+        if str(question.status) == "cancelled"
         else RunItemStatus.COMPLETED
     )
     return QuestionItem(

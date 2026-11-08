@@ -6,17 +6,15 @@
 
 @layer base {
   :root {
-    --background: 220 20% 97%;
+    --background: 220 20% 99%;
     --foreground: 220 18% 13%;
     --card: 0 0% 100%;
     --card-foreground: 220 18% 13%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 18% 13%;
     --primary: 208 85% 40%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 16% 94%;
+    --secondary: 220 16% 97%;
     --secondary-foreground: 220 12% 32%;
-    --muted: 220 16% 95%;
+    --muted: 220 16% 98%;
     --muted-foreground: 220 9% 42%;
     --accent: 208 60% 96%;
     --accent-foreground: 208 67% 34%;
@@ -26,17 +24,17 @@
     --success-foreground: 0 0% 100%;
     --warning: 32 80% 34%;
     --warning-foreground: 0 0% 100%;
-    --border: 220 14% 89%;
-    --input: 220 14% 89%;
+    --border: 220 14% 91%;
+    --input: 220 14% 91%;
     --ring: 208 85% 40%;
     --radius: 8px;
-    --sidebar-background: 220 18% 93%;
+    --sidebar-background: 220 20% 98%;
     --sidebar-foreground: 220 18% 13%;
     --sidebar-primary: 208 85% 40%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 18% 92%;
+    --sidebar-accent: 220 18% 96%;
     --sidebar-accent-foreground: 220 18% 13%;
-    --sidebar-border: 220 14% 89%;
+    --sidebar-border: 220 14% 91%;
     --sidebar-ring: 208 85% 40%;
     font-family: var(--font-family-ui);
     -webkit-font-smoothing: antialiased;
@@ -120,4 +118,34 @@
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.animate-fade-up { animation: fade-up 0.2s var(--ease-out, ease-out) both; }
+.animate-fade-up { animation: fade-up var(--motion-normal) var(--ease-out) both; }
+
+/* Animate surface entry, never pane width or streamed content. */
+@keyframes surface-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.smart-query-home__content,
+.settings-page__inner {
+  animation: surface-enter var(--motion-spatial) var(--ease-out) both;
+}
+
+/* Forced colors removes shadow focus rings. Keep an OS-colored outline even
+   when an individual component resets its normal pointer/focus outline. */
+@media (forced-colors: active) {
+  [data-sidebar="menu-button"][data-active="true"],
+  .settings-sidebar__item[aria-current="page"],
+  .workspace-dock__tab.is-active,
+  .dbfox-tabs-trigger[data-state="active"],
+  .file-content__modes button[aria-pressed="true"],
+  .dbfox-tree__row[data-selected],
+  .dbfox-tree__item-shell[data-selected] {
+    outline: 1px solid Highlight !important;
+    outline-offset: -1px;
+  }
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px;
+  }
+}

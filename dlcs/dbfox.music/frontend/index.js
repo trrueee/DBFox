@@ -115,7 +115,7 @@ function ResourceRow({ projectId, kind, item }) {
       className: "dbfox-music__resource-main",
       onClick: () => openStudio(projectId, kind, item),
     },
-    h("span", { className: "dbfox-music__resource-icon", "aria-hidden": true }, isScore ? "♪" : "≈"),
+    h("span", { className: "dbfox-music__resource-icon", "aria-hidden": true }, isScore ? h(host.ui.Icon, { name: "music", size: 16 }) : h(host.ui.ResourceIcon, { kind: "audio", size: 16 })),
     h("span", { className: "dbfox-music__resource-label" }, item.title || item.name),
     h("small", null, isScore ? `R${item.head_revision}` : (item.analysis_revision ? "已转录" : "待转录"))));
 }
@@ -247,16 +247,16 @@ function PianoKeyboard({ document, activeNotes, full, onFull }) {
 
 function Transport({ playing, loop, onPlay, onStop, onLoop, position, duration, selectedMeasure, onAskMeasure }) {
   return h("div", { className: "dbfox-music-transport", role: "group", "aria-label": "播放控制" },
-    h("button", { type: "button", onClick: onPlay, className: playing ? "is-active" : "", "aria-label": playing ? "暂停" : "播放" }, playing ? "Ⅱ" : "▶"),
-    h("button", { type: "button", onClick: onStop, "aria-label": "停止" }, "■"),
-    h("button", { type: "button", onClick: onLoop, className: loop ? "is-active" : "", "aria-pressed": loop }, "Loop"),
+    h("button", { type: "button", onClick: onPlay, className: playing ? "is-active" : "", "aria-label": playing ? "暂停" : "播放", title: playing ? "暂停" : "播放" }, h(host.ui.Icon, { name: playing ? "pause" : "play", size: 16 })),
+    h("button", { type: "button", onClick: onStop, "aria-label": "停止", title: "停止" }, h(host.ui.Icon, { name: "square", size: 16 })),
+    h("button", { type: "button", onClick: onLoop, className: loop ? "is-active" : "", "aria-pressed": loop, "aria-label": "循环播放", title: "循环播放" }, h(host.ui.Icon, { name: "repeat", size: 16 })),
     h("span", null, `${formatTime(position)} / ${formatTime(duration)}`),
     selectedMeasure ? h("button", {
       type: "button",
       className: "dbfox-music-transport__ask",
       onClick: () => onAskMeasure?.(selectedMeasure),
       title: `就第 ${selectedMeasure} 小节向 DBFox 提问`,
-    }, `💬 小节 ${selectedMeasure}`) : null);
+    }, h(host.ui.Icon, { name: "at-sign", size: 16 }), `小节 ${selectedMeasure}`) : null);
 }
 
 function formatTime(value) {
@@ -434,9 +434,9 @@ function AudioStudio({ projectId, source, showToast }) {
       h("progress", { className: "dbfox-music-waveform__progress", value: Math.min(100, position / effectiveSource.duration_seconds * 100), max: 100, "aria-label": "播放进度" }),
       h("small", null, formatTime(position))),
     transcription ? h("div", { className: "dbfox-music-ab", role: "group", "aria-label": "原音频与转录对照" },
-      h("button", { type: "button", onClick: () => void playOriginal() }, "▶ Original"),
-      h("button", { type: "button", onClick: () => void playTranscription() }, "▶ Transcription"),
-      h("button", { type: "button", onClick: stop }, "■")) : null,
+      h("button", { type: "button", onClick: () => void playOriginal() }, h(host.ui.Icon, { name: "play", size: 16 }), "原音频"),
+      h("button", { type: "button", onClick: () => void playTranscription() }, h(host.ui.Icon, { name: "play", size: 16 }), "转录试听"),
+      h("button", { type: "button", onClick: stop, "aria-label": "停止", title: "停止" }, h(host.ui.Icon, { name: "square", size: 16 }))) : null,
     !transcription ? h("div", { className: "dbfox-music-transcribe" },
       h("p", null, "使用本机 Basic Pitch 模型提取音符候选；Agent 只负责后续结构修复。"),
       h("button", { type: "button", onClick: () => void transcribe(), disabled: status === "transcribing" }, status === "transcribing" ? `正在转录 ${Math.round(progress * 100)}%` : "开始钢琴转录")) :
@@ -454,7 +454,7 @@ function AudioStudio({ projectId, source, showToast }) {
 
 function EmptyStudio({ projectId }) {
   return h("div", { className: "dbfox-music-start" },
-    h("span", { "aria-hidden": true }, "♪"),
+    h(host.ui.Icon, { name: "music", size: 20 }),
     h("h2", null, "Start with an idea"),
     h("p", null, "在对话中直接告诉 Agent 创作意图："),
     h("blockquote", null, "“写一段安静、缓慢、带夜晚感的钢琴曲”"),
@@ -486,7 +486,7 @@ function ScoreArtifactCard({ artifact, payload }) {
     promoteEmptyStudio(projectId, payload);
   }, [artifact.id, projectId]);
   return h("article", { className: "dbfox-music-artifact" },
-    h("span", { className: "dbfox-music-artifact__icon", "aria-hidden": true }, "♪"),
+    h("span", { className: "dbfox-music-artifact__icon", "aria-hidden": true }, h(host.ui.Icon, { name: "music", size: 20 })),
     h("div", null, h("strong", null, payload.title), h("small", null, `${payload.measureCount} measures · ${payload.key} · ♩${payload.tempo} · Revision ${payload.revision}`)),
     h("button", { type: "button", onClick: () => {
       openStudio(projectId, "score", payload);
@@ -499,7 +499,7 @@ function parseTranscriptionArtifact(value) {
 }
 
 function TranscriptionArtifactCard({ artifact, payload }) {
-  return h("article", { className: "dbfox-music-artifact" }, h("span", { className: "dbfox-music-artifact__icon", "aria-hidden": true }, "≈"), h("div", null, h("strong", null, artifact.title), h("small", null, `${Math.round(payload.confidence * 100)}% confidence · ${payload.uncertainRanges?.length || 0} uncertain ranges`)));
+  return h("article", { className: "dbfox-music-artifact" }, h("span", { className: "dbfox-music-artifact__icon", "aria-hidden": true }, h(host.ui.ResourceIcon, { kind: "audio", size: 20 })), h("div", null, h("strong", null, artifact.title), h("small", null, `${Math.round(payload.confidence * 100)}% confidence · ${payload.uncertainRanges?.length || 0} uncertain ranges`)));
 }
 
 export function register(extensionHost) {
@@ -509,9 +509,9 @@ export function register(extensionHost) {
   ensureStylesheet();
   host.connectors.register({
     id: DLC_ID,
-    title: "Music",
-    icon: h("span", { "aria-hidden": true }, "♪"),
-    addLabel: "New score",
+    title: "音乐",
+    icon: h(host.ui.Icon, { name: "music", size: 16 }),
+    addLabel: "新建乐谱",
     onAdd: ({ projectId }) => {
       openStudio(projectId, "empty", { title: "Piano Studio" });
     },
@@ -519,7 +519,8 @@ export function register(extensionHost) {
   });
   host.dockViews.register({
     viewType: STUDIO_VIEW,
-    icon: () => h("span", { "aria-hidden": true }, "♪"),
+    objectKinds: [SCORE_KIND, AUDIO_KIND],
+    icon: () => h(host.ui.Icon, { name: "music", size: 16 }),
     resolveTitle: (view) => view.title || "Piano Studio",
     isVisible: (view, context) => !view.projectId || view.projectId === context.activeProjectId,
     render: (view, context) => h(PianoStudioDock, { view, context }),

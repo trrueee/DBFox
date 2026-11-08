@@ -74,7 +74,7 @@ def test_music_package_owns_complete_capability_contributions(tmp_path: Path) ->
         ("dbfox.music", "dbfox.music.score_revision")
     ]
     assert [(item.owner_id, item.spec.id, item.spec.version) for item in snapshot.capability_guidance] == [
-        ("dbfox.music", "piano_composition", "1")
+        ("dbfox.music", "piano_composition", "2")
     ]
     active = next(item for item in snapshot.active_dlcs if item.dlc_id == "dbfox.music")
     assert active.frontend_entrypoint == "frontend/index.js"
@@ -150,6 +150,35 @@ def test_transpose_tool_is_deterministic_and_preserves_old_revision(tmp_path: Pa
     assert [event.symbol for event in first.revision.document.harmony] == ["Cmaj7/E"]
     assert [event.symbol for event in second.revision.document.harmony] == ["Dmaj7/F#"]
     assert [note.pitch for note in second.revision.document.notes] == [pitch + 2 for pitch in first_pitches]
+
+
+def test_composition_preserves_one_sustained_bass_per_measure(tmp_path: Path) -> None:
+    _service, snapshot = _snapshot(tmp_path)
+    compose = next(item.tool for item in snapshot.tools if item.tool.name == "music_compose_piano")
+    resolver = next(item.resolver for item in snapshot.resource_resolvers if item.kind == "dbfox.music.library")
+    for beats, beat_unit in ((3, 4), (4, 4), (6, 8)):
+        project_id = f"sustain-{beats}"
+        scope = ResourceScopeRef(kind="dbfox.music.library", id=project_id, version="1")
+        payload = {
+            "title": "雨夜", "intent": "one bass note in each measure", "tempo": 72,
+            "meter": {"beats": beats, "beat_unit": beat_unit}, "key": {"tonic": "C", "mode": "major"},
+            "measure_count": 2, "composition": {"measures": [{
+                "measure": measure, "chord": "C", "chord_pitches": [36],
+                "melody": [{"beat": 0, "duration": beats, "pitch": 72}], "accompaniment": "sustain_bass",
+            } for measure in (1, 2)]},
+        }
+        outcome = compose.run(compose.input_model.model_validate(payload), ToolRunContext.for_invocation(
+            request=None, invocation_id=f"compose-{beats}", idempotency_key=f"compose-{beats}",
+            scope_refs=(scope,), resources={scope.canonical(): resolver(scope)},
+        ))
+        saved = _invoke(snapshot, "scores.get", project_id, {"score_id": outcome.output.score_id})
+        left = [note for note in saved.revision.document.notes if note.hand == "left"]
+        assert [(note.measure, note.beat, note.duration, note.pitch) for note in left] == [
+            (1, 0, beats, 36), (2, 0, beats, 36),
+        ]
+        payload["composition"]["measures"][0]["accompaniment"] = "root_fifth_half_notes"
+        with pytest.raises(ValueError, match="at least two chord_pitches"):
+            compose.input_model.model_validate(payload)
 
 
 def test_compose_reuses_invocation_and_reconciles_the_artifact(tmp_path: Path) -> None:

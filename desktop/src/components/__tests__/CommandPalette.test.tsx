@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandPalette, type CommandItem } from "../CommandPalette";
 
@@ -75,5 +76,22 @@ describe("CommandPalette", () => {
 
     expect(screen.getAllByText("hello")).toHaveLength(2);
     expect(document.querySelectorAll('[data-selected="true"]')).toHaveLength(1);
+  });
+
+  it.each([false, true])("returns focus after a programmatic open and Escape (conditional mount: %s)", async conditional => {
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return <><input aria-label="原输入框" /><button onClick={() => setOpen(true)}>打开搜索</button>
+        {(!conditional || open) && <CommandPalette open={open} commands={makeCommands()} onClose={() => setOpen(false)} />}</>;
+    }
+    render(<Harness />);
+    const caller = screen.getByRole("textbox", { name: "原输入框" });
+    caller.focus();
+    fireEvent.click(screen.getByRole("button", { name: "打开搜索" }));
+    const search = screen.getByPlaceholderText("搜索任务、项目和操作…");
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    fireEvent.keyDown(search, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(caller));
   });
 });

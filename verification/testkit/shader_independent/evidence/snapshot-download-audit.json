@@ -1,0 +1,66 @@
+{
+  "snapshots": [
+    {
+      "project": "Shader Native Agent Fixed QA",
+      "version": 1,
+      "canonical_hash": "aa8e9a8025bffc3dc8e42a608ba6e62fa7a7b9c7274a68d582e7bd5f2866b64b",
+      "pages": 7,
+      "page_read_ms": 48,
+      "native_json": {
+        "filename": "shader-9a4b43a7-ba94-43be-83f4-753912e2c120-v1.json",
+        "bytes": 1434,
+        "sha256": "865c830b7177efede2b437b07c12099a36fa6f44bd188dae5b8599717a5b36c7",
+        "exact_public_snapshot_equal": true
+      }
+    },
+    {
+      "project": "Shader Independent Stress QA",
+      "version": 12,
+      "canonical_hash": "8449737d4cfa4fab3edfa60f786241700fbc427420846146e414266a42e67d96",
+      "pages": 9,
+      "page_read_ms": 64,
+      "native_json": {
+        "filename": "shader-f000046a-cd02-4402-bb2d-333cfe6a4450-v12.json",
+        "bytes": 3995,
+        "sha256": "5632968405aae88058cc326f70ea8878ae17e5295b776fff3d049f903e646572",
+        "exact_public_snapshot_equal": true
+      }
+    },
+    {
+      "project": "Shader Independent Large QA",
+      "version": 21,
+      "canonical_hash": "5169f0e49b19918d5ccd35aa05cb96aa038367346084d6a63d2b9c13b1ad326d",
+      "pages": 188,
+      "page_read_ms": 3153,
+      "native_json": null
+    }
+  ],
+  "multipass_exact_rgba": "ff0000ff00ff00ff0000ffffffff00ff",
+  "maximum_uniforms": {
+    "count": 128,
+    "head": {
+      "id": "60427616-04bb-480a-895f-182695fb2bed",
+      "version": 24,
+      "content_hash": "3e05782d8f449d516d1f07e75da923045378b01491ec3b54cde1dc2fe7892fa2",
+      "deleted": false
+    },
+    "real_gpu_sample_pixels": 1024,
+    "exact_rgba": [
+      127,
+      0,
+      0,
+      255
+    ]
+  },
+  "stress_png": {
+    "filename": "shader-c1a6dd60-7cdc-4c34-a450-f889a6a02351.png",
+    "bytes": 11234,
+    "sha256": "70f4a4f951a70d4d3425a43316897c8afcfd6706970da59c93c73c14b0a23515",
+    "unique_colors": 1767,
+    "pixel_sha256": "5f3a90b9726e27e87735e154bc5f6e327ef3954e6fc723090c7eb772ae247fc4",
+    "size": [
+      128,
+      96
+    ]
+  }
+}

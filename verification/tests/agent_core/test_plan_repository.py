@@ -12,6 +12,7 @@ from engine.models import (
     AgentObservationRecord,
     AgentRun,
     AgentSession,
+    AgentTaskPlanRecord,
     AgentToolInvocation,
 )
 
@@ -92,6 +93,24 @@ def test_task_plan_is_versioned_and_replayed_as_a_public_event(
     assert events[-1].payload.item is not None
     assert events[-1].payload.item.type == "plan"
     assert events[-1].payload.item.payload.steps[0].id == "trend"
+    # A completed public RunItem stays immutable even while its Run is active.
+    from types import SimpleNamespace
+    from engine.errors import ToolInputError
+    from engine.tools.builtin.control import UpdatePlanCommand
+
+    repeated = repository.update(lease=lease, run_id=admission.run_id, turn_id=str(turn.id),
+                                 objective=second.objective, steps=second.steps, summary=second.summary)
+    assert repeated.version == second.version
+    command = UpdatePlanCommand()
+    context = SimpleNamespace(db=db_session, lease=lease, run_id=admission.run_id, turn_id=str(turn.id))
+    update = command.input_model.model_validate({"objective": second.objective,
+        "steps": [step.model_dump(mode="json") for step in second.steps] +
+                 [{"id": "extra", "title": "extra work", "status": "in_progress"}]})
+    with pytest.raises(ToolInputError, match="already terminal"):
+        command.handle(update, context)
+    db_session.commit()
+    assert db_session.get(AgentTaskPlanRecord, second.id).version == second.version
+    assert len(sessions.events.list("session-plan")) == len(events)
 
 
 def test_task_plan_rejects_artifacts_from_another_run_in_the_same_session(
@@ -200,6 +219,20 @@ def test_task_plan_accepts_a_prior_result_observed_by_the_current_run(
     lease = sessions.claim(session_id=session_id, owner="worker-plan-observed")
     assert lease is not None
     assert sessions.promote_next_input(lease=lease) == previous.run_id
+    previous_turn = sessions.start_turn(
+        lease=lease, run_id=previous.run_id, agent_definition_version="1",
+        prompt_version="1", prompt_hash="prompt", context_snapshot={}, context_hash="context",
+        tool_materialization={"tools": []}, tool_materialization_hash="tools",
+        provider="provider", model_name="model",
+    )
+    db_session.add(AgentToolInvocation(
+        id="invocation-produced-result", session_id=session_id, run_id=previous.run_id,
+        turn_id=str(previous_turn.id), provider_call_id="produce-prior-result",
+        tool_name="verification_create", declared_version="1", contract_hash="sha256:1",
+        input_json="{}", input_hash="input-hash", idempotency_key="produce-prior-result",
+        status="succeeded", resource_refs_json="[]", policy_json="{}",
+        presentation_json="{}", recovery_policy="retry_safe",
+    ))
     previous_run = db_session.get(AgentRun, previous.run_id)
     assert previous_run is not None
     previous_run.status = "completed"
@@ -208,11 +241,12 @@ def test_task_plan_accepts_a_prior_result_observed_by_the_current_run(
             id="artifact-observed-result",
             run_id=previous.run_id,
             session_id=session_id,
+            turn_id=str(previous_turn.id),
             type="verification.evidence",
             title="前序证据产物",
             payload_json='{"summary":"verified"}',
             presentation_json="{}",
-            provenance_json="{}",
+            provenance_json='{"tool_invocation_id":"invocation-produced-result","tool_name":"verification_create"}',
             relations_json="[]",
         )
     )

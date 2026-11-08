@@ -1,0 +1,2 @@
+# Preserve pinned vendor bytes and their recorded digests on Windows checkout.
+frontend/vendor/** -text

@@ -33,6 +33,15 @@ function question(status: QuestionItem["status"], response?: Record<string, unkn
 describe("AgentQuestion", () => {
   afterEach(cleanup);
 
+  it("does not move focus from an unfinished draft when a question arrives", () => {
+    const { rerender } = render(<div><textarea aria-label="草稿" defaultValue="正在补充目标" /></div>);
+    const draft = screen.getByRole("textbox", { name: "草稿" });
+    draft.focus();
+    rerender(<div><textarea aria-label="草稿" defaultValue="正在补充目标" /><AgentQuestion question={question("waiting")} onRespond={vi.fn()} /></div>);
+    expect(draft).toHaveFocus();
+    expect(screen.getByRole("radio", { name: "自然月" })).toBeInTheDocument();
+  });
+
   it("returns the exact selected business option", () => {
     const onRespond = vi.fn();
     render(<AgentQuestion question={question("waiting")} onRespond={onRespond} />);

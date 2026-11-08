@@ -136,6 +136,6 @@ export async function closeDesktopWindow(): Promise<void> {
   return requireElectronBridge().window.close();
 }
 
-export async function subscribeDesktopWindowState(listener: (maximized: boolean) => void): Promise<() => void> {
+export function subscribeDesktopWindowState(listener: (maximized: boolean) => void): () => void {
   return requireElectronBridge().window.subscribe(listener);
 }

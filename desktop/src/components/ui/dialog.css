@@ -3,15 +3,14 @@
   inset: 0;
   z-index: 50;
   background: var(--overlay-scrim);
-  backdrop-filter: blur(3px);
 }
 
 .dbfox-dialog-overlay[data-state="open"] {
-  animation: dbfox-dialog-overlay-in 160ms var(--ease-out);
+  animation: dbfox-dialog-overlay-in var(--motion-spatial) var(--ease-out);
 }
 
 .dbfox-dialog-overlay[data-state="closed"] {
-  animation: dbfox-dialog-overlay-out 120ms var(--ease-in);
+  animation: dbfox-dialog-overlay-out var(--motion-fast) var(--ease-in);
 }
 
 .dbfox-dialog-content {
@@ -25,20 +24,22 @@
   gap: 18px;
   padding: 24px;
   color: hsl(var(--card-foreground));
-  background: hsl(var(--card));
+  background: var(--surface-dialog);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-xl, 16px);
-  box-shadow: var(--shadow-panel-elevated, var(--shadow-xl));
+  box-shadow: var(--shadow-xl), inset 0 1px 0 var(--top-highlight);
   outline: none;
   transform: translate(-50%, -50%);
+  backdrop-filter: var(--material-filter);
+  background-image: var(--surface-sheen);
 }
 
 .dbfox-dialog-content[data-state="open"] {
-  animation: dbfox-dialog-content-in 200ms var(--ease-out);
+  animation: dbfox-dialog-content-in var(--motion-spatial) var(--ease-out);
 }
 
 .dbfox-dialog-content[data-state="closed"] {
-  animation: dbfox-dialog-content-out 130ms var(--ease-in);
+  animation: dbfox-dialog-content-out var(--motion-fast) var(--ease-in);
 }
 
 .dbfox-dialog-close {

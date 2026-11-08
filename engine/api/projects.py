@@ -5,8 +5,9 @@ from typing import Any
 from engine.schemas.project import ProjectResponse
 from engine.agent.resource_refs import ProjectResourceDescriptor
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from engine.db import get_db
 from engine.errors import DBFoxError
@@ -57,17 +58,38 @@ def api_create_project(req: ProjectCreateRequest, db: Session = Depends(get_db))
     if not name:
         raise DBFoxError("Project name is required", "PROJECT_NAME_REQUIRED")
 
+    description = (req.description or "").strip() or None
+    project_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"dbfox:project:{req.idempotency_key}")) if req.idempotency_key else str(uuid.uuid4())
+
+    def replay() -> dict[str, Any] | None:
+        existing = db.get(Project, project_id)
+        if existing is None:
+            return None
+        if existing.name != name or existing.description != description or existing.status != "active":
+            raise HTTPException(status_code=409, detail={"code": "PROJECT_CREATE_CONFLICT", "message": "The creation key belongs to a different project."})
+        return _project_to_dict(existing)
+
+    prior = replay() if req.idempotency_key else None
+    if prior is not None:
+        return prior
+
     try:
         project = Project(
-            id=str(uuid.uuid4()),
+            id=project_id,
             name=name,
-            description=(req.description or "").strip() or None,
+            description=description,
             status="active",
         )
         db.add(project)
         db.commit()
         db.refresh(project)
         return _project_to_dict(project)
+    except IntegrityError:
+        db.rollback()
+        prior = replay() if req.idempotency_key else None
+        if prior is not None:
+            return prior
+        raise
     except Exception:
         db.rollback()
         raise

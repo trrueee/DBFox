@@ -13,21 +13,28 @@ import type {
 } from "../workspace/artifacts/types";
 import { DlcErrorBoundary } from "./DlcErrorBoundary";
 import type { WorkspaceDockTab } from "../../types/workspace";
-import { fetchEnginePath } from "../../lib/api/client";
+import { fetchEnginePath, getRuntimeSession } from "../../lib/api/client";
 import {
   pickDesktopFile,
   pickDesktopProjectFolder,
   readDesktopPickedFile,
 } from "../../lib/desktopHost";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { selectActiveWorkbenchScopeId, useWorkspaceStore } from "../../stores/workspaceStore";
+import { useConversationStore } from "../../stores/conversationStore";
+import { openArtifactDock } from "../../stores/artifactDockStore";
+import { getConversation } from "../conversation/conversationRepository";
 import { Tree } from "../../components/ui";
 import { CodeArtifactView } from "../workspace/artifacts/CodeArtifactView";
+import { ResourceIcon } from "../../components/resources/resourcePresentation";
+import { StandardIcon } from "../../components/resources/StandardIcon";
 import type { DlcOperationInvokeOptions } from "./types";
 import type {
   CredentialEnrollmentBatchResult,
   CredentialEnrollmentInput,
 } from "./types";
 import "./extension-host.css";
+
+const FileContent = React.lazy(() => import("../../components/resources/FileContent").then(module => ({ default: module.FileContent })));
 
 /**
  * Ensures global SDK object is mounted on window for dynamic DLC scripts.
@@ -45,6 +52,9 @@ export function initExtensionHostGlobalSdk(): void {
 export interface StagedExtensionHostResult {
   host: FrontendExtensionHost;
   getContributions(): DlcContributionSet;
+  /** Loader-only activation controls; never exposed to a DLC. */
+  activateNavigation(): void;
+  revokeNavigation(): void;
 }
 
 interface ExtensionHostServices {
@@ -67,15 +77,16 @@ interface ExtensionHostServices {
   ): Promise<CredentialEnrollmentBatchResult>;
 }
 
-async function invokeBoundDlcOperation<TOutput>(
+export async function invokeBoundDlcOperation<TOutput>(
   dlcId: string,
   operationName: string,
   input: unknown,
   options?: DlcOperationInvokeOptions,
 ): Promise<TOutput> {
-  const query = options?.projectId
-    ? `?project_id=${encodeURIComponent(options.projectId)}`
-    : "";
+  const parameters = new URLSearchParams();
+  if (options?.projectId) parameters.set("project_id", options.projectId);
+  if (options?.sessionId) parameters.set("session_id", options.sessionId);
+  const query = parameters.size ? `?${parameters.toString()}` : "";
   const response = await fetchEnginePath(
     `/dlcs/${encodeURIComponent(dlcId)}/operations/${encodeURIComponent(operationName)}${query}`,
     {
@@ -181,6 +192,8 @@ export function createStagedExtensionHost(
   const connectorIds = new Set<string>();
   const dockViewTypes = new Set<string>();
   const artifactViewIds = new Set<string>();
+  let navigationActive = false;
+  const navigationLease = new AbortController();
 
   const admitOwnedId = (id: string, kind: string, registered: Set<string>): void => {
     if (id !== dlcId && !id.startsWith(`${dlcId}.`)) {
@@ -200,6 +213,9 @@ export function createStagedExtensionHost(
       version: "1.0.0",
       Tree,
       CodeArtifact: CodeArtifactView,
+      FileContent: (props) => React.createElement(React.Suspense, { fallback: React.createElement("p", null, "正在打开文件…") }, React.createElement(FileContent, props)),
+      ResourceIcon,
+      Icon: StandardIcon,
     },
     connectors: {
       register(contribution: ResourceConnectorContribution): void {
@@ -230,6 +246,10 @@ export function createStagedExtensionHost(
               }
             }
             : undefined,
+          onOpen: contribution.onOpen ? async (context: ConnectorContext) => {
+            try { await contribution.onOpen?.(context); }
+            catch (error) { reportCallbackFailure(dlcId, `connector:${contribution.id}:onOpen`, error); throw error; }
+          } : undefined,
           listResources: contribution.listResources
             ? async (context: ConnectorContext) => {
               try {
@@ -282,6 +302,14 @@ export function createStagedExtensionHost(
           throw new Error(`[DLC ${dlcId}] Invalid dock view registration: missing valid viewType`);
         }
         admitOwnedId(contribution.viewType, "dock view", dockViewTypes);
+        if (contribution.preferredWidth !== undefined && (
+          !Number.isFinite(contribution.preferredWidth) || contribution.preferredWidth < 320 || contribution.preferredWidth > 1200
+        )) {
+          throw new Error(`[DLC ${dlcId}] Dock preferredWidth must be between 320 and 1200 CSS pixels`);
+        }
+        if (contribution.objectKinds?.some(kind => typeof kind !== "string" || !kind.startsWith(`${dlcId}.`))) {
+          throw new Error(`[DLC ${dlcId}] Object preview kinds must belong to the owner's namespace`);
+        }
         const safeContribution: DockViewContribution = {
           ...contribution,
           icon(view: WorkspaceDockTab) {
@@ -335,6 +363,66 @@ export function createStagedExtensionHost(
       currentScopeId(): string {
         return useWorkspaceStore.getState().ensureActiveWorkbenchScope();
       },
+      async openArtifact(target, options): Promise<void> {
+        // Capture declared scalar fields before awaiting; the caller cannot change the target later.
+        const { projectId, sessionId, runId, artifactId } = target ?? {};
+        const scopeId = options?.workbenchScopeId;
+        if ([projectId, sessionId, runId, artifactId, scopeId].some(
+          (id) => typeof id !== "string" || !id.trim(),
+        )) {
+          throw new Error("Artifact navigation requires persistent identity and workbench scope.");
+        }
+        const generation = getRuntimeSession().generation;
+        const scope = new AbortController();
+        const signal = AbortSignal.any([
+          navigationLease.signal, scope.signal, ...(options?.signal ? [options.signal] : []),
+        ]);
+        const matchesScope = () => {
+          const workspace = useWorkspaceStore.getState();
+          return workspace.activeProjectId === projectId
+            && selectActiveWorkbenchScopeId(workspace) === scopeId;
+        };
+        const assertCurrent = () => {
+          signal.throwIfAborted();
+          if (!navigationActive || generation !== getRuntimeSession().generation || !matchesScope()) {
+            throw new Error("Artifact navigation is no longer active in this workbench.");
+          }
+        };
+        assertCurrent();
+        const unsubscribe = useWorkspaceStore.subscribe(() => {
+          if (!matchesScope()) scope.abort();
+        });
+        try {
+          const session = await getConversation(sessionId, signal);
+          assertCurrent();
+          if (session.id !== sessionId || session.project_id !== projectId) {
+            throw new Error("Artifact session does not belong to the requested project.");
+          }
+          // The existing endpoint proves Run -> Session even for runs outside the snapshot page.
+          await useConversationStore.getState().loadRunArtifacts(sessionId, runId, [artifactId], {
+            signal,
+            beforeCommit: assertCurrent,
+            afterCommit: () => {
+              // No async gap after projection; synchronous store subscribers can still revoke it.
+              assertCurrent();
+              const artifact = useConversationStore.getState().artifactsById[artifactId];
+              if (!artifact || artifact.id !== artifactId
+                || artifact.session_id !== sessionId || artifact.run_id !== runId) {
+                throw new Error("Artifact does not belong to the requested run.");
+              }
+              openArtifactDock(artifact, { projectId });
+            },
+          });
+        } catch {
+          if (signal.aborted) {
+            throw new DOMException("Artifact navigation was cancelled.", "AbortError");
+          }
+          // Keep parser/transport details inside the Host; DLCs receive a bounded message.
+          throw new Error("Unable to open the requested artifact.");
+        } finally {
+          unsubscribe();
+        }
+      },
     },
     artifactViews: {
       register(contribution: ArtifactViewContribution<unknown>): void {
@@ -386,6 +474,13 @@ export function createStagedExtensionHost(
 
   return {
     host,
+    activateNavigation(): void {
+      if (!navigationLease.signal.aborted) navigationActive = true;
+    },
+    revokeNavigation(): void {
+      navigationActive = false;
+      navigationLease.abort();
+    },
     getContributions(): DlcContributionSet {
       return {
         connectors: Object.freeze([...connectors]),

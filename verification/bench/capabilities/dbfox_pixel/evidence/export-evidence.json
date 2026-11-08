@@ -1,0 +1,207 @@
+{
+  "decoder": "Pillow (verification-only)",
+  "exports": [
+    {
+      "file": "fox-knight-initial-export-single.png",
+      "artifact_id": "artifact_f9d51c1d838f45229c49e9d7c7c61f3d",
+      "producer_invocation_id": "invocation_4a80a40b944440f2958904cafd91b456",
+      "revision": 7,
+      "bytes": 260,
+      "sha256": "5698e1beadc99cd846bb3b5f389f564562a05d33e05a946380f6e969189f47b5",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frame_ids": [
+        "frame_1"
+      ],
+      "all_decoded_pixels_match": true,
+      "stream_metadata": {
+        "consistency": "durable_snapshot",
+        "source_version": "7",
+        "source_fingerprint": "c34427e016e4c68da93d57c283c0c24d251bb46d3e0405fdf8d353b75236e72a"
+      }
+    },
+    {
+      "file": "fox-knight-initial-export-all.png",
+      "artifact_id": "artifact_f9d51c1d838f45229c49e9d7c7c61f3d",
+      "producer_invocation_id": "invocation_4a80a40b944440f2958904cafd91b456",
+      "revision": 7,
+      "bytes": 708,
+      "sha256": "79a8e8f350d28af00896f8e2b31d5b05c12981ee6fe334c9a9389ddbf13ce8b9",
+      "dimensions": [
+        320,
+        32
+      ],
+      "frame_ids": [
+        "frame_1",
+        "idle_2",
+        "idle_3",
+        "idle_4",
+        "attack_1",
+        "attack_2",
+        "attack_3",
+        "attack_4",
+        "attack_5",
+        "attack_6"
+      ],
+      "all_decoded_pixels_match": true,
+      "stream_metadata": {
+        "consistency": "durable_snapshot",
+        "source_version": "7",
+        "source_fingerprint": "c34427e016e4c68da93d57c283c0c24d251bb46d3e0405fdf8d353b75236e72a"
+      }
+    },
+    {
+      "file": "fox-knight-initial-export-idle.png",
+      "artifact_id": "artifact_f9d51c1d838f45229c49e9d7c7c61f3d",
+      "producer_invocation_id": "invocation_4a80a40b944440f2958904cafd91b456",
+      "revision": 7,
+      "bytes": 404,
+      "sha256": "cc3fc4f216bf685c4bb606e2dcb1dec40a72e6eb9b42df9745b6efd2c0b1a725",
+      "dimensions": [
+        128,
+        32
+      ],
+      "frame_ids": [
+        "frame_1",
+        "idle_2",
+        "idle_3",
+        "idle_4"
+      ],
+      "all_decoded_pixels_match": true,
+      "stream_metadata": {
+        "consistency": "durable_snapshot",
+        "source_version": "7",
+        "source_fingerprint": "c34427e016e4c68da93d57c283c0c24d251bb46d3e0405fdf8d353b75236e72a"
+      }
+    },
+    {
+      "file": "fox-knight-initial-export-attack.png",
+      "artifact_id": "artifact_f9d51c1d838f45229c49e9d7c7c61f3d",
+      "producer_invocation_id": "invocation_4a80a40b944440f2958904cafd91b456",
+      "revision": 7,
+      "bytes": 556,
+      "sha256": "edb3253df340a0b84846fdbd5045e710138dd6e54f30275f064ab0965024e57b",
+      "dimensions": [
+        192,
+        32
+      ],
+      "frame_ids": [
+        "attack_1",
+        "attack_2",
+        "attack_3",
+        "attack_4",
+        "attack_5",
+        "attack_6"
+      ],
+      "all_decoded_pixels_match": true,
+      "stream_metadata": {
+        "consistency": "durable_snapshot",
+        "source_version": "7",
+        "source_fingerprint": "c34427e016e4c68da93d57c283c0c24d251bb46d3e0405fdf8d353b75236e72a"
+      }
+    },
+    {
+      "file": "fox-knight-final-export-single.png",
+      "artifact_id": "artifact_03f498cb728644f38562cc4e784651b2",
+      "producer_invocation_id": "invocation_063a308e06364a5b87179ca732e63c55",
+      "revision": 18,
+      "bytes": 268,
+      "sha256": "a0cf1b4251ec852db100a2123e3c5a2094f84e2b7664200fc1919576ebe32ffc",
+      "dimensions": [
+        32,
+        32
+      ],
+      "frame_ids": [
+        "frame_1"
+      ],
+      "all_decoded_pixels_match": true,
+      "stream_metadata": {
+        "consistency": "durable_snapshot",
+        "source_version": "18",
+        "source_fingerprint": "e7ac63296a90583428c27bca3ef983c3045660e9eacf38d04defb6d33ef75b4e"
+      }
+    },
+    {
+      "file": "fox-knight-final-export-all.png",
+      "artifact_id": "artifact_03f498cb728644f38562cc4e784651b2",
+      "producer_invocation_id": "invocation_063a308e06364a5b87179ca732e63c55",
+      "revision": 18,
+      "bytes": 764,
+      "sha256": "94ccc064c9073f3de72418adf3486de958d04f59ff0fe500002c2d8d55f8c90f",
+      "dimensions": [
+        320,
+        32
+      ],
+      "frame_ids": [
+        "frame_1",
+        "idle_2",
+        "idle_3",
+        "idle_4",
+        "attack_6",
+        "attack_1",
+        "attack_2",
+        "attack_3",
+        "attack_4",
+        "attack_5"
+      ],
+      "all_decoded_pixels_match": true,
+      "stream_metadata": {
+        "consistency": "durable_snapshot",
+        "source_version": "18",
+        "source_fingerprint": "e7ac63296a90583428c27bca3ef983c3045660e9eacf38d04defb6d33ef75b4e"
+      }
+    },
+    {
+      "file": "fox-knight-final-export-idle.png",
+      "artifact_id": "artifact_03f498cb728644f38562cc4e784651b2",
+      "producer_invocation_id": "invocation_063a308e06364a5b87179ca732e63c55",
+      "revision": 18,
+      "bytes": 411,
+      "sha256": "6b0f3abbdc24cd58ba06557e13e99ca056227fd8308603c82192b2e01f0df805",
+      "dimensions": [
+        128,
+        32
+      ],
+      "frame_ids": [
+        "frame_1",
+        "idle_2",
+        "idle_3",
+        "idle_4"
+      ],
+      "all_decoded_pixels_match": true,
+      "stream_metadata": {
+        "consistency": "durable_snapshot",
+        "source_version": "18",
+        "source_fingerprint": "e7ac63296a90583428c27bca3ef983c3045660e9eacf38d04defb6d33ef75b4e"
+      }
+    },
+    {
+      "file": "fox-knight-final-export-attack.png",
+      "artifact_id": "artifact_03f498cb728644f38562cc4e784651b2",
+      "producer_invocation_id": "invocation_063a308e06364a5b87179ca732e63c55",
+      "revision": 18,
+      "bytes": 591,
+      "sha256": "1a16181dedc11939ef4133f8bd848ffe3c7a5f39c0b772bae3a116b3043f3013",
+      "dimensions": [
+        192,
+        32
+      ],
+      "frame_ids": [
+        "attack_1",
+        "attack_2",
+        "attack_3",
+        "attack_4",
+        "attack_5",
+        "attack_6"
+      ],
+      "all_decoded_pixels_match": true,
+      "stream_metadata": {
+        "consistency": "durable_snapshot",
+        "source_version": "18",
+        "source_fingerprint": "e7ac63296a90583428c27bca3ef983c3045660e9eacf38d04defb6d33ef75b4e"
+      }
+    }
+  ]
+}

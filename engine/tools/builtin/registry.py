@@ -4,7 +4,6 @@ from engine.tools.runtime import ToolRegistry
 
 CORE_OWNER = "dbfox.core"
 CONVERSATION_OWNER = "dbfox.conversation"
-REMOTE_JOB_OWNER = "dbfox.remote_job"
 
 
 def register_core_functions(registry: ToolRegistry) -> None:
@@ -37,20 +36,3 @@ def register_conversation_functions(registry: ToolRegistry) -> None:
     read = ConversationReadTool()
     registry.register(search, owner=CONVERSATION_OWNER, provider_name=search.name)
     registry.register(read, owner=CONVERSATION_OWNER, provider_name=read.name)
-
-
-def register_remote_job_extension(registry: ToolRegistry) -> None:
-    """Register the built-in Remote Job capability family."""
-
-    from engine.tools.builtin.remote_job import (
-        RemoteJobCancelTool,
-        RemoteJobStatusTool,
-        RemoteJobSubmitTool,
-    )
-
-    submit = RemoteJobSubmitTool()
-    status = RemoteJobStatusTool()
-    cancel = RemoteJobCancelTool()
-    registry.register(submit, owner=REMOTE_JOB_OWNER, provider_name=submit.name)
-    registry.register(status, owner=REMOTE_JOB_OWNER, provider_name=status.name)
-    registry.register(cancel, owner=REMOTE_JOB_OWNER, provider_name=cancel.name)

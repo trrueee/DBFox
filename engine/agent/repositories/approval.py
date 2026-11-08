@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from engine.agent.approval import Approval, ApprovalConflict, ApprovalStatus
 from engine.agent.events import RuntimeEventType
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.observation import ObservationStatus
@@ -75,7 +76,7 @@ class ApprovalRepository:
         self.session.add(row)
         self.session.flush()
         invocation.approval_id = row.id
-        run.status = RunStatus.WAITING_APPROVAL.value
+        RunRepository(self.session).refresh_waiting_status(lease=lease, run_id=str(run.id))
         run.version = int(run.version or 0) + 1
         run.updated_at = now
         value = self._domain(row)
@@ -175,7 +176,7 @@ class ApprovalRepository:
             run = self.session.execute(
                 select(AgentRun).where(AgentRun.id == row.run_id).with_for_update()
             ).scalar_one()
-            if run.status != RunStatus.WAITING_APPROVAL.value:
+            if run.status not in {RunStatus.WAITING_APPROVAL.value, RunStatus.WAITING_INPUT.value}:
                 continue
             run.lease_token = lease.token
             row.status = ApprovalStatus.EXPIRED.value
@@ -184,7 +185,7 @@ class ApprovalRepository:
             row.consumed_at = current_time
             row.decided_by = "system:expiry"
             invocation.status = ToolInvocationStatus.REJECTED.value
-            run.status = RunStatus.RUNNING.value
+            RunRepository(self.session).refresh_waiting_status(lease=lease, run_id=str(run.id))
             run.version = int(run.version or 0) + 1
             run.updated_at = current_time
             self.session.flush()
@@ -309,7 +310,7 @@ class ApprovalRepository:
         run = self.session.execute(
             select(AgentRun).where(AgentRun.id == row.run_id).with_for_update()
         ).scalar_one()
-        if run.status != RunStatus.WAITING_APPROVAL.value:
+        if run.status not in {RunStatus.WAITING_APPROVAL.value, RunStatus.WAITING_INPUT.value}:
             raise ApprovalConflict(f"Approval cannot be resolved while Run is {run.status}")
         lease = self.sessions.claim(session_id=str(run.session_id), owner=f"approval:{approval_id}")
         if lease is None:
@@ -318,20 +319,18 @@ class ApprovalRepository:
         if expires_at is not None and expires_at <= now:
             row.status = ApprovalStatus.EXPIRED.value
             invocation.status = ToolInvocationStatus.REJECTED.value
-            run.status = RunStatus.RUNNING.value
         elif approved:
             row.status = ApprovalStatus.APPROVED.value
             invocation.status = ToolInvocationStatus.REQUESTED.value
-            run.status = RunStatus.RUNNING.value
         else:
             row.status = ApprovalStatus.REJECTED.value
             invocation.status = ToolInvocationStatus.REJECTED.value
-            run.status = RunStatus.RUNNING.value
         row.version = int(row.version or 0) + 1
         row.decided_at = now
         row.consumed_at = now
         row.decided_by = actor
         row.decision_note = note
+        RunRepository(self.session).refresh_waiting_status(lease=lease, run_id=str(run.id))
         run.version = int(run.version or 0) + 1
         run.updated_at = now
         self.session.flush()

@@ -1,4 +1,6 @@
-"""Public alias module for DBFox Extension API v2."""
+"""Stable public import surface for DBFox Extension API v2."""
+
+from engine.dlc.compat import CURRENT_EXTENSION_API_VERSION as DLC_API_VERSION
 
 from engine.dlc.api import (
     Artifact,
@@ -23,6 +25,7 @@ from engine.dlc.api import (
     DataFrameSort,
     BackendExtensionHost,
     CapabilityGuidanceSpec,
+    CompletionConstraintResult,
     BaseModel,
     BaseTool,
     ConfigDict,
@@ -48,6 +51,10 @@ from engine.dlc.api import (
     ExtensionCredentialsHost,
     ExtensionOperationsHost,
     ExtensionProjectResourceProvider,
+    ExtensionSessionResourceProvider,
+    SessionResourceDiscoveryContext,
+    AttachmentResourceHandle,
+    ATTACHMENT_RESOURCE_KIND,
     ExtensionResourcesHost,
     ExtensionToolsHost,
     ExtensionToolRunContext,
@@ -84,6 +91,7 @@ from engine.dlc.api import (
 )
 
 __all__ = [
+    "DLC_API_VERSION",
     "Artifact",
     "ArtifactDraft",
     "ArtifactRelationDraft",
@@ -106,6 +114,7 @@ __all__ = [
     "DataFrameSort",
     "BackendExtensionHost",
     "CapabilityGuidanceSpec",
+    "CompletionConstraintResult",
     "BaseModel",
     "BaseTool",
     "ConfigDict",
@@ -131,6 +140,10 @@ __all__ = [
     "ExtensionCredentialsHost",
     "ExtensionOperationsHost",
     "ExtensionProjectResourceProvider",
+    "ExtensionSessionResourceProvider",
+    "SessionResourceDiscoveryContext",
+    "AttachmentResourceHandle",
+    "ATTACHMENT_RESOURCE_KIND",
     "ExtensionResourcesHost",
     "ExtensionToolsHost",
     "ExtensionToolRunContext",

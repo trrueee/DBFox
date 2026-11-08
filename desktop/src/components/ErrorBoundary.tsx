@@ -1,5 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { RotateCcw, TriangleAlert } from "lucide-react";
+import {
+  ArrowCounterClockwiseIcon,
+  WarningIcon,
+} from "@/components/icons";
 import {
   Button,
   Empty,
@@ -24,7 +27,7 @@ export function FatalErrorFallback({ onRetry }: { onRetry: () => void }) {
     <Empty className="app-error-boundary-panel" role="alert">
       <EmptyHeader>
         <EmptyMedia variant="icon">
-          <TriangleAlert aria-hidden="true" />
+          <WarningIcon aria-hidden="true" />
         </EmptyMedia>
         <EmptyTitle role="heading" aria-level={1}>DBFox 界面发生异常</EmptyTitle>
         <EmptyDescription>
@@ -33,7 +36,7 @@ export function FatalErrorFallback({ onRetry }: { onRetry: () => void }) {
       </EmptyHeader>
       <EmptyContent>
         <Button type="button" onClick={onRetry}>
-          <RotateCcw size={14} aria-hidden="true" />
+          <ArrowCounterClockwiseIcon size={16} aria-hidden="true" />
           重试渲染
         </Button>
       </EmptyContent>

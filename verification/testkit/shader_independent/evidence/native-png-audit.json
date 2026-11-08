@@ -1,0 +1,36 @@
+{
+  "decoder": "Pillow 12.3.0",
+  "artifact_id": "artifact_509353f76302407a9d379117c93ee470",
+  "document_id": "66cd4b63-0b4b-4e47-9640-d13f678a0a35",
+  "version": 4,
+  "content_hash": "6521c7da17f2f0fa0f228adba094ec7362b2d769ad7f0845325f1f37c8ce3b6a",
+  "filename": "shader-af50597d-17dd-4259-bc84-cbb2741a6f5d.png",
+  "bytes": 91291,
+  "file_sha256": "1e0519d4b8aa7e43df722fa49fbc20962e2cb41491cd33337938af73356b21a6",
+  "pixel_sha256": "1f66a5624131f768fd888e965b304e86979917f93afdc30bc33e9993404e6461",
+  "analytical_all_65536_pixels_match": true,
+  "normalized_half_blue": 127,
+  "half_tie_permitted_values": [
+    127,
+    128
+  ],
+  "top_left": [
+    0,
+    255,
+    127,
+    255
+  ],
+  "bottom_left": [
+    0,
+    0,
+    127,
+    255
+  ],
+  "native_download": {
+    "filename": "shader-af50597d-17dd-4259-bc84-cbb2741a6f5d.png",
+    "state": "completed",
+    "totalBytes": 91291,
+    "receivedBytes": 91291,
+    "boundary": "verification-controlled-native-save-path"
+  }
+}

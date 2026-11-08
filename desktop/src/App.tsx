@@ -6,12 +6,14 @@ import { installClientErrorLogging, recordClientLog } from "./lib/diagnostics/cl
 import {
   selectActiveConversationId,
   selectActiveDockOpen,
+  selectActiveWorkbench,
   useWorkspaceStore,
 } from "./stores/workspaceStore";
 import { openArtifactsDock } from "./stores/artifactDockStore";
 import { useConversationStore } from "./stores/conversationStore";
 import { DesktopLifecycleMonitor } from "./features/appShell/DesktopLifecycleMonitor";
 import { LoadingState } from "./components/ui";
+import { SidebarSimpleIcon } from "./components/icons";
 import { ConversationCenter } from "./features/appShell/ConversationCenter";
 import { ConversationWorkspaceLayout } from "./features/appShell/ConversationWorkspaceLayout";
 import { ResizableWorkspaceLayout } from "./features/appShell/ResizableWorkspaceLayout";
@@ -24,6 +26,12 @@ import {
   invalidateActiveFrontendExtensions,
 } from "./features/dlc/extensionLoader";
 import { getRuntimeSession, subscribeEngineState } from "./lib/api/client";
+import TitleBar from "./components/TitleBar";
+import { ConversationTitleActions } from "./features/conversation/workspace/ConversationTitleActions";
+import { ThreadBeacon } from "./features/conversation/ThreadBeacon";
+import { threadRunStatus } from "./features/conversation/runPresentation";
+import { conversationTitle as shortConversationTitle } from "./features/conversation/conversationTitle";
+import { useTheme } from "./hooks/themeContext";
 
 const AppCommandPalette = lazy(() =>
   import("./features/appShell/AppCommandPalette").then((module) => ({
@@ -50,16 +58,10 @@ const SettingsSidebar = lazy(() =>
     default: module.SettingsSidebar,
   })),
 );
-const TitleBar = lazy(() => import("./components/TitleBar"));
-
-function TitleBarFallback() {
-  return <div className="app-titlebar-fallback" aria-hidden="true" />;
-}
-
-function WorkspaceDockFallback() {
+function WorkspaceDockFallback({ open }: { open: boolean }) {
   return (
-    <div className="app-dock-fallback" role="status" aria-label="正在载入工作区">
-      <LoadingState label="正在载入工作区" />
+    <div className="app-dock-fallback" data-collapsed={!open || undefined} role="status" aria-label="正在载入工作区">
+      {open ? <LoadingState label="正在载入工作区" /> : <SidebarSimpleIcon size={20} mirrored aria-hidden="true" />}
     </div>
   );
 }
@@ -82,7 +84,8 @@ function AppLayoutFallback() {
     <div className="app-layout-fallback">
       <SidebarFallback />
       <div className="app-layout-fallback__workspace">
-        <LoadingState label="正在载入工作区" />
+        <TitleBar />
+        <div className="app-layout-fallback__loading"><LoadingState label="正在载入工作区" /></div>
       </div>
     </div>
   );
@@ -90,6 +93,8 @@ function AppLayoutFallback() {
 
 
 export default function App() {
+  const { appearance } = useTheme();
+  const [preferredDockWidth, setPreferredDockWidth] = useState<number | undefined>();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const loadedEngineGenerationRef = useRef(0);
 
@@ -98,9 +103,13 @@ export default function App() {
   // ── Store initialization (mount once) ──
   useEffect(() => {
     installClientErrorLogging();
-    void useConversationStore.getState().initConversations().catch((error) => {
-      recordClientLog("error", "初始化对话列表失败", error);
-    });
+    const refreshConversationIndex = () => {
+      void useConversationStore.getState().initConversations().catch((error) => {
+        recordClientLog("error", "读取对话列表失败", error);
+      });
+    };
+    refreshConversationIndex();
+    window.addEventListener("focus", refreshConversationIndex);
     void fetchAndLoadActiveExtensions().catch((error) => {
       recordClientLog("warning", "加载 DLC 扩展失败", error);
     });
@@ -117,6 +126,7 @@ export default function App() {
       const generation = status.generation ?? 0;
       if (generation <= loadedEngineGenerationRef.current) return;
       loadedEngineGenerationRef.current = generation;
+      refreshConversationIndex();
       void fetchAndLoadActiveExtensions().catch((error) => {
         recordClientLog("warning", "重新加载 DLC 扩展失败", error);
       });
@@ -127,14 +137,26 @@ export default function App() {
 
     return () => {
       disposed = true;
+      window.removeEventListener("focus", refreshConversationIndex);
       unsubscribe?.();
     };
   }, []);
 
   // ── Store selectors ──
   const activeConversationId = useWorkspaceStore(selectActiveConversationId);
+  const conversationTitle = useConversationStore((state) => {
+    if (!activeConversationId) return undefined;
+    return (state.detailById[activeConversationId]?.title
+      ?? state.summaries.find((conversation) => conversation.id === activeConversationId)?.title
+      ?? "").trim() || "新对话";
+  });
   const dockOpen = useWorkspaceStore(selectActiveDockOpen);
+  const conversationStatus = useConversationStore(state => activeConversationId
+    ? threadRunStatus(state.detailById[activeConversationId], state.summaries.find(summary => summary.id === activeConversationId))
+    : null);
   const setDockOpen = useWorkspaceStore((s) => s.setDockOpen);
+  const dockWidth = useWorkspaceStore(state => selectActiveWorkbench(state).dockWidth);
+  const setDockWidth = useWorkspaceStore(state => state.setDockWidth);
   const showSmartQueryHome = useWorkspaceStore((s) => s.showSmartQueryHome);
   const openConversationCenter = useWorkspaceStore((s) => s.openConversationCenter);
   const settingsOpen = useWorkspaceStore((s) => s.settingsOpen);
@@ -160,10 +182,10 @@ export default function App() {
   const connectors = productResourceConnectors(toast, dlcConnectors);
 
   // Layout UI states
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const toggleSidebarCollapse = useCallback(() => setSidebarCollapsed((value) => !value), []);
+  const sidebarCollapsed = useWorkspaceStore(state => state.sidebarCollapsed);
+  const setSidebarCollapsed = useWorkspaceStore(state => state.setSidebarCollapsed);
+  const toggleSidebarCollapse = useCallback(() => setSidebarCollapsed(!useWorkspaceStore.getState().sidebarCollapsed), [setSidebarCollapsed]);
   const handleOpenSettings = useCallback(() => {
-    setSidebarCollapsed(false);
     openSettings("appearance");
   }, [openSettings]);
 
@@ -208,9 +230,6 @@ export default function App() {
         ref={useCallback((el: HTMLDivElement | null) => { setDialogContainer(el); setToastRoot(el); }, [])}
       >
         <DesktopLifecycleMonitor showToast={toast} />
-        <Suspense fallback={<TitleBarFallback />}>
-          <TitleBar />
-        </Suspense>
         {/* Window body: left tree | center conversation | right dock */}
         <main className="app-body">
           <Suspense fallback={<AppLayoutFallback />}>
@@ -234,42 +253,54 @@ export default function App() {
                   onNewProject={() => useWorkspaceStore.getState().openProjectCreate()}
                   onOpenSettings={handleOpenSettings}
                   onOpenExtensions={() => {
-                    setSidebarCollapsed(false);
                     openSettings("dlc");
                   }}
                 />
               )}
               workspace={
-                settingsOpen ? (
-                  <section className="app-main app-main--settings">
-                    <Suspense fallback={<LoadingState label="正在载入设置" />}>
-                      <div className="app-main-scroll">
-                        <SettingsPage section={settingsSection} showToast={toast} />
-                      </div>
-                    </Suspense>
-                  </section>
-                ) : (
-                  <ConversationWorkspaceLayout
-                    dockOpen={dockOpen}
-                    conversation={(
-                      <section className="app-main app-main--conversation">
-                        <div className="app-main-scroll">
-                          <ConversationCenter
-                            onNewProject={() => useWorkspaceStore.getState().openProjectCreate()}
-                          />
-                        </div>
+                <div className="app-workspace">
+                  <TitleBar title={settingsOpen || !conversationTitle ? undefined : shortConversationTitle(conversationTitle)} titleHint={conversationTitle}
+                    leading={activeConversationId ? <ThreadBeacon status={conversationStatus} /> : undefined}
+                    actions={!settingsOpen && activeConversationId && conversationTitle
+                      ? <ConversationTitleActions conversationId={activeConversationId} title={conversationTitle} /> : undefined} />
+                  <div className="app-workspace__body">
+                    {settingsOpen ? (
+                      <section className="app-main app-main--settings">
+                        <Suspense fallback={<LoadingState label="正在载入设置" />}>
+                          <div className="app-main-scroll">
+                            <SettingsPage section={settingsSection} showToast={toast} />
+                          </div>
+                        </Suspense>
                       </section>
+                    ) : (
+                      <ConversationWorkspaceLayout
+                        dockOpen={dockOpen}
+                        preferredWidth={preferredDockWidth}
+                        defaultWidthPercent={appearance.artifactDockWidth}
+                        savedWidth={dockWidth}
+                        onWidthChange={setDockWidth}
+                        conversation={(
+                          <section className="app-main app-main--conversation">
+                            <div className="app-main-scroll">
+                              <ConversationCenter
+                                onNewProject={() => useWorkspaceStore.getState().openProjectCreate()}
+                              />
+                            </div>
+                          </section>
+                        )}
+                        dock={(
+                          <Suspense fallback={<WorkspaceDockFallback open={dockOpen} />}>
+                            <WorkspaceDock
+                              activeConversationId={activeConversationId}
+                              showToast={toast}
+                              onPreferredWidthChange={setPreferredDockWidth}
+                            />
+                          </Suspense>
+                        )}
+                      />
                     )}
-                    dock={(
-                      <Suspense fallback={<WorkspaceDockFallback />}>
-                        <WorkspaceDock
-                          activeConversationId={activeConversationId}
-                          showToast={toast}
-                        />
-                      </Suspense>
-                    )}
-                  />
-                )
+                  </div>
+                </div>
               }
             />
           </Suspense>

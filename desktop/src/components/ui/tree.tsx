@@ -1,6 +1,8 @@
 import { useEffect, useId, useInsertionEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import {
+  CaretRightIcon,
+} from "@/components/icons";
 import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import { normalizeProps, useMachine } from "@zag-js/react";
 import * as treeView from "@zag-js/tree-view";
@@ -70,6 +72,7 @@ export function Tree<T>({
   const nodeRowIndexesRef = useRef<readonly number[]>([]);
   const deferredFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentRootRef = useRef(rootItem);
+  const initialExpansionRef = useRef<{ rootItem: T; pending: Set<string> } | null>(null);
   currentRootRef.current = rootItem;
   const baseCollection = useMemo(
     () => treeView.collection<T>({
@@ -98,7 +101,7 @@ export function Tree<T>({
   const service = useMachine(treeView.machine, {
     id,
     collection,
-    defaultExpandedValue: [...defaultExpandedIds],
+    defaultExpandedValue: loadItemChildren ? [] : [...defaultExpandedIds],
     ...(selectedIds ? { selectedValue: [...selectedIds] } : {}),
     selectionMode: "single",
     expandOnClick: true,
@@ -162,6 +165,19 @@ export function Tree<T>({
     },
   });
   const api = treeView.connect(service, normalizeProps);
+  // Zag loads branches through expand(), not defaultExpandedValue. Apply initial
+  // lazy expansion as nodes become available; its machine still owns all I/O,
+  // cancellation, loading errors, and subsequent user-controlled expansion.
+  useEffect(() => {
+    if (!loadItemChildren) return;
+    if (initialExpansionRef.current?.rootItem !== rootItem) {
+      initialExpansionRef.current = { rootItem, pending: new Set(defaultExpandedIds) };
+    }
+    const pending = initialExpansionRef.current.pending;
+    const available = [...pending].filter(value => api.collection.findNode(value));
+    available.forEach(value => pending.delete(value));
+    if (available.length) api.expand(available);
+  }, [api, defaultExpandedIds, loadItemChildren, rootItem]);
   const collectionRoot = api.collection.rootNode as T;
   const rootChildren = api.collection.getNodeChildren(collectionRoot) as T[];
   const visibleNodes = api.getVisibleNodes() as Array<{ node: T; indexPath: number[] }>;
@@ -244,6 +260,7 @@ export function Tree<T>({
                       renderItemIcon={renderItemIcon}
                       renderItemMeta={renderItemMeta}
                       renderItemActions={renderItemActions}
+                      onItemSelect={onItemSelect}
                     />
                   ) : (
                     <div
@@ -274,6 +291,7 @@ export function Tree<T>({
                 renderItemMeta={renderItemMeta}
                 renderItemActions={renderItemActions}
                 renderBranchFooter={renderBranchFooter}
+                onItemSelect={onItemSelect}
               />
             ))}
       </div>
@@ -352,6 +370,7 @@ function TreeFlatNode<T>({
   renderItemIcon,
   renderItemMeta,
   renderItemActions,
+  onItemSelect,
 }: {
   item: T;
   indexPath: number[];
@@ -362,6 +381,7 @@ function TreeFlatNode<T>({
   renderItemIcon?: (item: T, state: TreeItemRenderState) => ReactNode;
   renderItemMeta?: (item: T, state: TreeItemRenderState) => ReactNode;
   renderItemActions?: (item: T, state: TreeItemRenderState) => ReactNode;
+  onItemSelect?: (item: T) => void;
 }) {
   const nodeProps = { node: item, indexPath };
   const nodeState = api.getNodeState(nodeProps);
@@ -384,7 +404,7 @@ function TreeFlatNode<T>({
         <div className="dbfox-tree__row-shell">
           <div {...api.getBranchControlProps(nodeProps)} aria-label={label} className="dbfox-tree__row dbfox-tree__branch-row">
             <span {...api.getBranchIndicatorProps(nodeProps)} className="dbfox-tree__indicator">
-              <ChevronRight aria-hidden="true" />
+              <CaretRightIcon aria-hidden="true" />
             </span>
             {icon != null && <span className="dbfox-tree__icon">{icon}</span>}
             <span {...api.getBranchTextProps(nodeProps)} className="dbfox-tree__label" title={label}>{label}</span>
@@ -400,6 +420,18 @@ function TreeFlatNode<T>({
   return (
     <div
       {...itemProps}
+      onClick={(event) => {
+        const reactivate = nodeState.selected && !nodeState.disabled && !event.defaultPrevented
+          && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+        itemProps.onClick?.(event);
+        if (reactivate) onItemSelect?.(item);
+      }}
+      onKeyDown={(event) => {
+        // Zag reports selection changes; Enter also reopens a selected leaf.
+        if (nodeState.selected && !nodeState.disabled && event.target === event.currentTarget
+          && event.key === "Enter" && !event.repeat && !event.nativeEvent.isComposing
+          && !event.defaultPrevented) onItemSelect?.(item);
+      }}
       {...declaredTreePosition}
       aria-label={label}
       className={joinClassNames("dbfox-tree__row-shell", "dbfox-tree__item-shell", depthClass)}
@@ -447,6 +479,7 @@ function TreeNode<T>({
   renderItemMeta,
   renderItemActions,
   renderBranchFooter,
+  onItemSelect,
 }: {
   item: T;
   indexPath: number[];
@@ -458,6 +491,7 @@ function TreeNode<T>({
   renderItemIcon?: (item: T, state: TreeItemRenderState) => ReactNode;
   renderItemMeta?: (item: T, state: TreeItemRenderState) => ReactNode;
   renderItemActions?: (item: T, state: TreeItemRenderState) => ReactNode;
+  onItemSelect?: (item: T) => void;
   renderBranchFooter?: (item: T, state: TreeItemRenderState) => ReactNode;
 }) {
   const nodeProps = { node: item, indexPath };
@@ -474,7 +508,9 @@ function TreeNode<T>({
   const icon = renderItemIcon?.(item, state);
   const meta = renderItemMeta?.(item, state);
   const actions = renderItemActions?.(item, state);
-  const branchFooter = renderBranchFooter?.(item, state);
+  const branchFooter = nodeState.isBranch && nodeState.expanded
+    ? renderBranchFooter?.(item, state)
+    : null;
   const children = api.collection.getNodeChildren(item) as T[];
 
   if (nodeState.isBranch) {
@@ -484,7 +520,7 @@ function TreeNode<T>({
         <div className="dbfox-tree__row-shell">
           <div {...api.getBranchControlProps(nodeProps)} aria-label={label} className="dbfox-tree__row dbfox-tree__branch-row">
             <span {...api.getBranchIndicatorProps(nodeProps)} className="dbfox-tree__indicator">
-              <ChevronRight aria-hidden="true" />
+              <CaretRightIcon aria-hidden="true" />
             </span>
             {icon != null && <span className="dbfox-tree__icon">{icon}</span>}
             <span {...api.getBranchTextProps(nodeProps)} className="dbfox-tree__label" title={label}>
@@ -495,7 +531,7 @@ function TreeNode<T>({
           {actions != null && <TreeNodeActions>{actions}</TreeNodeActions>}
         </div>
         <div {...api.getBranchContentProps(nodeProps)} className="dbfox-tree__group">
-          {children.map((child, index) => (
+          {nodeState.expanded && children.map((child, index) => (
             <TreeNode
               key={getItemId(child)}
               item={child}
@@ -509,6 +545,7 @@ function TreeNode<T>({
               renderItemMeta={renderItemMeta}
               renderItemActions={renderItemActions}
               renderBranchFooter={renderBranchFooter}
+              onItemSelect={onItemSelect}
             />
           ))}
           {branchFooter != null && (
@@ -527,7 +564,23 @@ function TreeNode<T>({
 
   const itemProps = withoutInlineStyle(api.getItemProps(nodeProps));
   return (
-    <div {...itemProps} aria-label={label} className="dbfox-tree__row-shell dbfox-tree__item-shell">
+    <div
+      {...itemProps}
+      onClick={(event) => {
+        const reactivate = nodeState.selected && !nodeState.disabled && !event.defaultPrevented
+          && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+        itemProps.onClick?.(event);
+        if (reactivate) onItemSelect?.(item);
+      }}
+      onKeyDown={(event) => {
+        // Zag reports selection changes; Enter also reopens a selected leaf.
+        if (nodeState.selected && !nodeState.disabled && event.target === event.currentTarget
+          && event.key === "Enter" && !event.repeat && !event.nativeEvent.isComposing
+          && !event.defaultPrevented) onItemSelect?.(item);
+      }}
+      aria-label={label}
+      className="dbfox-tree__row-shell dbfox-tree__item-shell"
+    >
       <div className="dbfox-tree__row dbfox-tree__item-row">
         <span className="dbfox-tree__indicator dbfox-tree__indicator--leaf" aria-hidden="true" />
         {icon != null && <span className="dbfox-tree__icon">{icon}</span>}

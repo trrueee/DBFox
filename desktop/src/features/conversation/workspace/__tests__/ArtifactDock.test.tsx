@@ -132,7 +132,7 @@ describe("ArtifactDock", () => {
     expect(screen.getByRole("complementary", { name: "Artifact dock" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "SQL sql" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Safety safety" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Order result result view" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Order result 数据表" }).getAttribute("aria-pressed")).toBe("true");
     expect(await screen.findByText("本页 1 / 共 1 行")).toBeTruthy();
     expect(onSelectArtifact).not.toHaveBeenCalled();
   });
@@ -204,13 +204,14 @@ describe("ArtifactDock", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Latest SQL sql" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Latest result result view" }).getAttribute("aria-pressed"))
+    expect(screen.getByRole("button", { name: "Latest result 数据表" }).getAttribute("aria-pressed"))
       .toBe("true");
     await waitFor(() => expect(agentApi.readArtifactRepresentation).toHaveBeenCalledWith(
         "artifact-result-latest",
         DATAFRAME_REPRESENTATION_TYPE,
         expect.objectContaining({ parameters: expect.objectContaining({ page: 1 }) }),
         expect.any(AbortSignal),
+        "conv",
       ));
   });
 
@@ -224,7 +225,7 @@ describe("ArtifactDock", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Safety safety" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Order result result view" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Order result 数据表" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("renders dock content without owning split pane resize state", () => {

@@ -32,6 +32,7 @@ extraResources:
       - dbfox.workspace.dbfox-dlc
       - dbfox.music.dbfox-dlc
       - dbfox.visualization.dbfox-dlc
+      - dbfox.story.dbfox-dlc
 
 artifactName: DBFox-${version}-${os}-${arch}.${ext}
 

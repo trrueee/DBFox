@@ -1,0 +1,1 @@
+async(page)=>await page.evaluate(()=>({csp:document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content,dpr:devicePixelRatio,viewport:innerWidth,alerts:[...document.querySelectorAll('[role=alert]')].map(e=>e.textContent)}))

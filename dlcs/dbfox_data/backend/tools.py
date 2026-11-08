@@ -76,14 +76,14 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
         context: ExtensionToolRunContext,
     ) -> ToolOutcome[SqlValidateOutput]:
         resource_ref, handle = select_database(context, tool_input.database_id)
-        dialect = canonical_sql_dialect(handle.profile.provider)
+        dialect = canonical_sql_dialect(handle.dialect)
         scope = DatabaseSafetyScope(
-            resource_id=handle.database.id,
+            resource_id=handle.id,
             exists=True,
             dialect=dialect,
-            environment=handle.profile.environment,
-            is_read_only=handle.profile.is_read_only,
-            project_id=handle.profile.project_id,
+            environment=handle.environment,
+            is_read_only=handle.is_read_only,
+            project_id=handle.project_id,
         )
         gate = TrustGate(
             schema_validator=lambda _query: [],
@@ -127,7 +127,7 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
                 "riskLevel": decision.risk_level,
                 "blockedReasons": list(decision.blocked_reasons),
                 "messages": list(decision.messages),
-                "datasourceId": handle.database.id,
+                "datasourceId": handle.id,
                 "policy": decision.policy,
                 "originalSql": decision.original_sql,
                 "safeSql": safe_sql,
@@ -150,6 +150,7 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
                 "dialect": dialect,
                 "queryFingerprint": fingerprint,
                 "parameters": {},
+                **({"source": handle.source.model_dump(mode="json")} if handle.dialect == "duckdb" else {}),
             },
             resource_refs=(resource_ref,),
             relations=(
@@ -161,6 +162,21 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
         )
         return ToolOutcome(output=output, artifacts=(safety, query))
 
+    def project_observation(self, *, status, output, artifacts):
+        if status != "success":
+            return ToolObservationProjection(summary="SQL校验未完成。")
+        facts = {key: output.get(key) for key in (
+            "can_execute", "requires_confirmation", "risk_level", "blocked_reasons", "messages",
+        )}
+        query = next((artifact for artifact in artifacts if artifact.type == SQL_ARTIFACT_TYPE), None)
+        facts["validation_artifact_id"] = query.id if query is not None else None
+        if output.get("can_execute") and query is not None:
+            facts["query_fingerprint"] = query.payload["queryFingerprint"]
+        return ToolObservationProjection(
+            summary="SQL已通过校验；尚未执行。" if output.get("can_execute") else "SQL未通过校验。",
+            facts=facts,
+        )
+
 
 class SqlExecuteReadonlyTool(
     BaseTool[SqlExecuteReadonlyInput, QueryResultOutput]
@@ -169,6 +185,7 @@ class SqlExecuteReadonlyTool(
     group = "query"
     description = (
         "Execute the exact query bound to one immutable dbfox.data SQL Artifact. "
+        "Use validation_artifact_id returned by sql_validate, not its safety Artifact ID. "
         "The Data capability rechecks the Artifact graph and frozen database "
         "authority immediately before opening a read-only transaction."
     )
@@ -276,6 +293,7 @@ class SqlExecuteReadonlyTool(
                 "executedAt": datetime.now(UTC).isoformat(),
                 "truncated": result.truncated,
                 "evidenceKind": "query_result",
+                **({"source": handle.source.model_dump(mode="json")} if handle.dialect == "duckdb" else {}),
             },
             relations=(
                 ArtifactRelationDraft(
@@ -298,7 +316,7 @@ class SqlExecuteReadonlyTool(
             success=True,
             row_count=returned_rows,
             columns=model_window.columns,
-            column_types=["text"] * len(model_window.columns),
+            column_types=result.column_types[:len(model_window.columns)],
             returned_rows=returned_rows,
             truncated=result.truncated or model_window.truncated,
             rows=model_window.rows,

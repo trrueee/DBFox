@@ -151,6 +151,10 @@ def conversation_stream(session_id: str, after_sequence: int) -> Iterator[str]:
                 )
             if stream_gap.is_set():
                 return
+            if len(events) == 500:
+                # A full page is not the durable tail. Catch up before waiting
+                # for a notification that may predate this subscription.
+                continue
             try:
                 kind, value = signals.get(timeout=15.0)
             except queue.Empty:

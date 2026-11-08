@@ -1,0 +1,105 @@
+{
+  "initial": {
+    "project_id": "pixel-redteam-ui",
+    "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+    "revision": 4,
+    "parent_revision": 3,
+    "content_hash": "801e5c55ef6eeb4ccb6c1945957eacedd83861fb30aa7222e7558486adcbddc0",
+    "title": "Adversarial Human During Drag 4",
+    "width": 16,
+    "height": 16,
+    "frame_count": 1,
+    "layer_count": 1,
+    "palette_count": 3,
+    "tag_count": 0,
+    "status": "active"
+  },
+  "oversize": {
+    "head": {
+      "status": 200,
+      "body": {
+        "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+        "revision": 4,
+        "content_hash": "801e5c55ef6eeb4ccb6c1945957eacedd83861fb30aa7222e7558486adcbddc0",
+        "status": "active"
+      }
+    },
+    "writes": 0
+  },
+  "escape": {
+    "head": {
+      "status": 200,
+      "body": {
+        "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+        "revision": 4,
+        "content_hash": "801e5c55ef6eeb4ccb6c1945957eacedd83861fb30aa7222e7558486adcbddc0",
+        "status": "active"
+      }
+    },
+    "writes": 0
+  },
+  "closed": {
+    "canvas": 0,
+    "writes": 0,
+    "latePolls": 0,
+    "head": {
+      "status": 200,
+      "body": {
+        "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+        "revision": 4,
+        "content_hash": "801e5c55ef6eeb4ccb6c1945957eacedd83861fb30aa7222e7558486adcbddc0",
+        "status": "active"
+      }
+    }
+  },
+  "reopened": {
+    "tabs": 1,
+    "styles": 1
+  },
+  "human": {
+    "status": 200,
+    "body": {
+      "project_id": "pixel-redteam-ui",
+      "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+      "revision": 5,
+      "parent_revision": 4,
+      "content_hash": "c9593ea793a3dad73a161beab5d7eea1972509ae40a1e07a840b7e8e31624e59",
+      "title": "Adversarial Human During Drag 5",
+      "width": 16,
+      "height": 16,
+      "frame_count": 1,
+      "layer_count": 1,
+      "palette_count": 3,
+      "tag_count": 0,
+      "status": "active",
+      "changed": true,
+      "changed_pixel_count": 0,
+      "changed_frame_ids": [],
+      "changed_frame_ids_truncated": false,
+      "changed_layer_ids": []
+    }
+  },
+  "during": "16 × 16 · 1 帧 · 1 层 · r4",
+  "failure": {
+    "type": "urn:dbfox:problem:pixel-conflict",
+    "title": "Conflict",
+    "status": 409,
+    "detail": "Pixel document changed; inspect before editing.",
+    "instance": "/api/v1/dlcs/dbfox.pixel/operations/documents.apply",
+    "code": "PIXEL_CONFLICT",
+    "request_id": "0ce8ef0cb652456376c49733d054c43d"
+  },
+  "after": {
+    "status": 200,
+    "body": {
+      "document_id": "pixel_fd6f62efd4bf4121892810022f4e5eec",
+      "revision": 5,
+      "content_hash": "c9593ea793a3dad73a161beab5d7eea1972509ae40a1e07a840b7e8e31624e59",
+      "status": "active"
+    }
+  },
+  "writes": [
+    null,
+    null
+  ]
+}

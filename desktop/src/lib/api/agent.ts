@@ -22,9 +22,11 @@ export const agentApi = {
   async listArtifactRepresentations(
     artifactId: string,
     signal?: AbortSignal,
+    sessionId?: string,
   ) {
     const { data } = await apiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGet({
       path: { artifact_id: artifactId },
+      query: sessionId ? { session_id: sessionId } : undefined,
       signal,
       throwOnError: true,
     });
@@ -36,6 +38,7 @@ export const agentApi = {
     representationType: string,
     value: ArtifactRepresentationRequest,
     signal?: AbortSignal,
+    sessionId?: string,
   ) {
     const { data } = await apiArtifactRepresentationReadApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeReadPost({
       path: {
@@ -43,6 +46,7 @@ export const agentApi = {
         representation_type: representationType,
       },
       body: value,
+      query: sessionId ? { session_id: sessionId } : undefined,
       signal,
       throwOnError: true,
     });
@@ -54,6 +58,7 @@ export const agentApi = {
     representationType: string,
     value: ArtifactRepresentationRequest,
     signal?: AbortSignal,
+    sessionId?: string,
   ): Promise<Blob> {
     const { data } = await apiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPost({
       path: {
@@ -61,6 +66,7 @@ export const agentApi = {
         representation_type: representationType,
       },
       body: value,
+      query: sessionId ? { session_id: sessionId } : undefined,
       parseAs: "blob",
       signal,
       throwOnError: true,

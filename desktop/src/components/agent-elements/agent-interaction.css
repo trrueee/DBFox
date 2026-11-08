@@ -1,0 +1,31 @@
+/* Content-layer decisions. Glass is reserved for navigation, never for the
+   action, target or choices a person must read before authorizing work. */
+.agent-question,
+.agent-approval {
+  margin-block: var(--space-3);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  background: var(--surface-workspace);
+  box-shadow: var(--shadow-sm);
+}
+.agent-approval[data-risk="danger"] { border-color: color-mix(in srgb, var(--color-danger) 35%, var(--line-strong)); }
+.agent-question > header { min-height: 36px; padding-inline: var(--space-4); border-color: var(--line-subtle); }
+.agent-question > div { padding: var(--space-4); background: transparent; }
+.agent-question__option { display: grid; grid-template-columns: 20px minmax(0, 1fr); min-height: 40px; align-items: start; gap: var(--space-2); padding: 10px var(--space-3); border-radius: var(--radius-row); cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out); }
+.agent-question__option:hover { background: var(--control-bg-hover); }
+.agent-question__option[data-selected] { background: var(--nav-active-bg); }
+.agent-question__option:has(:focus-visible) { box-shadow: var(--focus-ring); }
+.agent-question__radio { display: grid; width: 18px; height: 18px; margin-top: 1px; padding: 0; place-items: center; border: 1px solid var(--control-border-hover); border-radius: var(--radius-pill); background: var(--control-bg); outline: none; }
+.agent-question__radio[data-state="checked"] { border-color: var(--color-primary-fill); background: var(--color-primary-fill); }
+.agent-question__radio-dot { width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--color-on-primary); }
+.agent-approval--audit { box-shadow: none; background: var(--agent-surface-muted); }
+.agent-approval__history { min-width: 0; grid-column: 2; }
+.agent-approval__history > summary { display: flex; min-height: 28px; align-items: center; gap: var(--space-2); list-style: none; cursor: pointer; font-size: var(--ui-font-caption); }
+.agent-approval__history > summary::-webkit-details-marker { display: none; }
+.agent-approval__history > summary strong { flex-shrink: 0; font-weight: 500; }
+.agent-approval__history > summary span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-muted); }
+.agent-approval__history > summary svg { flex-shrink: 0; transition: transform var(--motion-normal) var(--ease-out); }
+.agent-approval__history[open] > summary svg { transform: rotate(180deg); }
+.agent-approval__history > summary:focus-visible { outline: none; border-radius: var(--radius-row); box-shadow: var(--focus-ring); }
+.agent-approval__history-body { display: grid; gap: var(--space-3); padding-top: var(--space-3); }

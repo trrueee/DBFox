@@ -1,0 +1,9 @@
+{
+  "pkg:npm/jstat@1.9.6": {
+    "license": "MIT",
+    "file": "dlcs/dbfox_data/frontend/vendor/licenses/jstat-LICENSE",
+    "sha256": "854847b5c4375f52fbe73364fd13ba138e59a52c88938ed0bab7f940dd8dd800",
+    "source": "https://registry.npmjs.org/jstat/-/jstat-1.9.6.tgz",
+    "reason": "The published package declares legacy licenses[].type=MIT and includes this LICENSE. npm lockfile v3 omits that legacy field. Evidence applies only to this exact version and text; no missing-license exemption."
+  }
+}

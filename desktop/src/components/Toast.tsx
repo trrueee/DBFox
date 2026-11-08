@@ -1,7 +1,13 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import * as ToastPrimitive from "@radix-ui/react-toast";
-import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
+import {
+  WarningIcon,
+  CheckCircleIcon,
+  InfoIcon,
+  XIcon,
+  XCircleIcon,
+} from "@/components/icons";
 import { allocateToastId, getToastRoot, ToastContext, type ToastType } from "./toastState";
 import "./Toast.css";
 
@@ -14,13 +20,13 @@ interface ToastItem {
 function ToastIcon({ type }: { type: ToastType }) {
   switch (type) {
     case "success":
-      return <CheckCircle2 className="dbfox-toast-icon-glyph" aria-hidden="true" />;
+      return <CheckCircleIcon className="dbfox-toast-icon-glyph" aria-hidden="true" />;
     case "error":
-      return <XCircle className="dbfox-toast-icon-glyph" aria-hidden="true" />;
+      return <XCircleIcon className="dbfox-toast-icon-glyph" aria-hidden="true" />;
     case "warning":
-      return <AlertTriangle className="dbfox-toast-icon-glyph" aria-hidden="true" />;
+      return <WarningIcon className="dbfox-toast-icon-glyph" aria-hidden="true" />;
     case "info":
-      return <Info className="dbfox-toast-icon-glyph" aria-hidden="true" />;
+      return <InfoIcon className="dbfox-toast-icon-glyph" aria-hidden="true" />;
   }
 }
 
@@ -57,7 +63,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <span className="dbfox-toast-message">{item.message}</span>
           </ToastPrimitive.Description>
           <ToastPrimitive.Close className="dbfox-toast-close" aria-label="关闭通知">
-            <X className="dbfox-toast-close-icon" aria-hidden="true" />
+            <XIcon className="dbfox-toast-close-icon" aria-hidden="true" />
           </ToastPrimitive.Close>
         </ToastPrimitive.Root>
       ))}

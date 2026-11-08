@@ -143,10 +143,10 @@ def _validate_vega_lite(
         for item in transform:
             if not isinstance(item, dict) or not item:
                 raise ToolInputError("Vega-Lite transforms must be objects.")
-            transform_type = next(iter(item))
-            if transform_type not in _VEGA_LITE_TRANSFORMS:
+            transform_types = set(item) & _VEGA_LITE_TRANSFORMS
+            if len(transform_types) != 1:
                 raise ToolInputError(
-                    f"Vega-Lite transform {transform_type!r} is not permitted."
+                    "Vega-Lite transform must declare exactly one permitted transform type."
                 )
     _validate_selection_params(spec, fields)
 

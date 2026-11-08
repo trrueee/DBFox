@@ -1,10 +1,12 @@
 import pytest
+import duckdb
 
 from dlcs.dbfox_data.backend.sql.sql_backed_view import (
     SqlBackedFilter,
     SqlBackedSort,
     SqlBackedViewError,
     build_sql_backed_page_sql,
+    build_sql_backed_count_sql,
 )
 
 
@@ -28,7 +30,7 @@ def test_builds_filtered_sorted_paginated_sql() -> None:
     sql = compact(result.sql)
     assert "FROM (SELECT id, name, total FROM orders) AS dbfox_result" in sql
     assert "`total` >= 100" in sql
-    assert "`name` LIKE '%acme%'" in sql
+    assert "CAST(`name` AS CHAR) LIKE '%acme%'" in sql
     assert "ORDER BY `total` DESC" in sql
     assert "LIMIT 26" in sql
     assert "OFFSET 25" in sql
@@ -127,4 +129,17 @@ def test_rejects_non_select_base_sql() -> None:
         )
 
     assert exc_info.value.code == "SOURCE_SQL_VALIDATION_FAILED"
+
+
+@pytest.mark.parametrize("search,expected", [("通识", ["通识教育"]), ("38", ["公共基础"]), ("不存在", [])])
+def test_global_search_reads_mixed_text_decimal_and_integer_columns(search, expected):
+    with duckdb.connect(":memory:") as connection:
+        connection.execute("CREATE TABLE credits(module VARCHAR, credits DECIMAL(8,2), courses INTEGER)")
+        connection.execute("INSERT INTO credits VALUES ('通识教育',35.5,28),('公共基础',38,10)")
+        options = dict(base_sql="SELECT module, credits, courses FROM credits", dialect="duckdb",
+                       columns=["module", "credits", "courses"], search=search)
+        page = connection.execute(build_sql_backed_page_sql(**options).sql).fetchall()
+        count = connection.execute(build_sql_backed_count_sql(**options).sql).fetchone()[0]
+    assert [row[0] for row in page] == expected
+    assert count == len(expected)
 

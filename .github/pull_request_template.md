@@ -24,6 +24,15 @@
 
 <!-- 安全、兼容、迁移、回滚影响；是否新增兼容层、fallback、双轨路径或新依赖。 -->
 
+## Core / SDK 边界影响
+
+<!-- 必填。未触及则写“不适用”。依据：docs/architecture/core-kernel-constitution.md。 -->
+
+- 触及的稳定级别（Frozen / Stable / Experimental / Internal）：
+- 为什么现有 DLC 接入口不能表达：
+- `extensionApiVersion`、公开 API 快照与已安装 DLC 的兼容影响：
+- 是否需要解冻；对应合同、迁移和退出证据：
+
 ## 技术调研与复用决策
 
 <!-- 非简单功能或通用能力必填；其他情况填“不适用”。依据：docs/quality/technical-investigation-and-reuse.md。 -->
@@ -39,6 +48,7 @@
 ## 检查清单
 
 - [ ] 已运行与修改范围匹配的质量门禁（见 `docs/quality/engineering-gates.md`）
+- [ ] Core / SDK 变更已按 Kernel 宪章说明稳定级别与解冻依据
 - [ ] 行为、命令、配置或支持范围变化已同步更新当前文档
 - [ ] 重要技术决策已按“技术调研与复用决策”填写，并落入 PR/ADR/当前文档
 - [ ] 未提交 `.env*`、Token、数据库、日志、安装包、Sidecar 二进制或无关改动

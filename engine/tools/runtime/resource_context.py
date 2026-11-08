@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from engine.errors import ToolInputError
+from engine.agent.resource_refs import RunResourceDiscovery
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
     ResourceKey,
@@ -20,10 +21,15 @@ def build_tool_scope_context(
     request: Any,
     tool: BaseTool[Any, Any],
     resolver: CompositeResourceResolver,
+    *, resource_discovery: RunResourceDiscovery | None = None,
 ) -> tuple[tuple[ResourceScopeRef, ...], dict[ResourceKey, Any]]:
     scope_refs: list[ResourceScopeRef] = []
 
     frozen_refs = tuple(getattr(request, "frozen_resource_refs", None) or ())
+    if resource_discovery is not None:
+        current = {d.to_scope_ref() for d in resource_discovery(db, request.run_id)}
+        if any(ref not in current for ref in frozen_refs):
+            raise ToolInputError("Invocation resources are unavailable or changed in this conversation.")
 
     # ToolRequest carries the exact refs frozen on this Invocation. Missing and
     # explicit-empty refs are equivalent; resolution never expands from Project

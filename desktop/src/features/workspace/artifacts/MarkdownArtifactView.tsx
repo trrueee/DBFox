@@ -1,4 +1,6 @@
-import { Copy } from "lucide-react";
+import {
+  CopyIcon,
+} from "@/components/icons";
 import { Button } from "../../../components/ui";
 import { MarkdownContent } from "../queryResult/MarkdownContent";
 import { ArtifactCard } from "./ArtifactCard";
@@ -32,7 +34,7 @@ export function MarkdownArtifactView({ artifact, onToast }: MarkdownArtifactView
       description={artifact.description}
       actions={
         <Button type="button" variant="outline" size="sm" className="artifact-action-button" onClick={handleCopy}>
-          <Copy size={14} />
+          <CopyIcon size={16} />
           复制
         </Button>
       }

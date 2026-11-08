@@ -17,6 +17,8 @@ from dbfox_dlc_api import (
     ToolObservationProjection,
     ToolPolicy,
     ToolPresentation,
+    ToolResourceRequirement,
+    ToolSemanticSpec,
 )
 
 from .contracts import (
@@ -28,6 +30,7 @@ from .contracts import (
     StoryRevisionsInput,
 )
 from .store import StoryStateStore
+from .resource_kind import STORY_WORLD_KIND
 from .world_selection import select_world
 
 class StoryGraphQueryTool(BaseTool[StoryGraphQueryInput, GraphFactsOutput]):
@@ -44,7 +47,11 @@ class StoryGraphQueryTool(BaseTool[StoryGraphQueryInput, GraphFactsOutput]):
     output_model = GraphFactsOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        capabilities=(),
+    )
+    semantics = ToolSemanticSpec(produces=("dbfox.story.graph_check",))
     presentation = ToolPresentation(title="查询故事设定", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -61,19 +68,24 @@ class StoryGraphQueryTool(BaseTool[StoryGraphQueryInput, GraphFactsOutput]):
             entity_kind=tool_input.entity_kind,
             name_contains=tool_input.name_contains,
         )
-        return GraphFactsOutput(entities=entities, relations=relations)
+        return GraphFactsOutput(
+            world_generation=world.generation,
+            entities=entities,
+            relations=relations,
+        )
 
     def project_observation(self, *, status, output, artifacts):
         if status != "success":
             return ToolObservationProjection(summary="故事设定查询失败。")
         return ToolObservationProjection(
             summary=(
-                f"已读取故事设定：{len(output.entities)} 个实体、"
-                f"{len(output.relations)} 条既定关系。"
+                f"已读取故事设定：{len(output.get('entities') or [])} 个实体、"
+                f"{len(output.get('relations') or [])} 条既定关系。"
             ),
             facts={
-                "entities": list(output.entities),
-                "relations": list(output.relations),
+                "world_generation": output.get("world_generation"),
+                "entities": list(output.get("entities") or []),
+                "relations": list(output.get("relations") or []),
             },
         )
 
@@ -86,13 +98,17 @@ class StoryProposeRelationsTool(BaseTool[RelationProposeInput, StoryProposeOutpu
         "proposal needs from_name, to_name, a short relation kind (for example "
         "师徒/宿敌/同盟), and a reason grounded in the story. Proposals land in "
         "the author's batch-review queue as pending edges; they do NOT become "
-        "world facts until the author confirms them."
+        "world facts until the author confirms them. Use from_id/to_id to "
+        "select exact entities when names are ambiguous."
     )
     input_model = RelationProposeInput
     output_model = StoryProposeOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="提出关系提案", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -103,17 +119,12 @@ class StoryProposeRelationsTool(BaseTool[RelationProposeInput, StoryProposeOutpu
         tool_input: RelationProposeInput,
         context: ExtensionToolRunContext,
     ) -> StoryProposeOutput:
-        _ref, world = select_world(context, tool_input.world_id)
-        items = [
-            {
-                "from_name": relation.from_name,
-                "to_name": relation.to_name,
-                "kind": relation.kind,
-                "reason": relation.reason,
-            }
-            for relation in tool_input.relations
-        ]
-        created, unknown = self._store.propose_relations(world.project_id, items)
+        _ref, world = select_world(context, None)
+        items = [relation.model_dump(exclude_none=True) for relation in tool_input.relations]
+        try:
+            created, unknown = self._store.propose_relations(world.project_id, items)
+        except ValueError as exc:
+            raise ToolInputError(str(exc)) from exc
         if unknown:
             raise ToolInputError(
                 "以下实体名不存在于故事世界中，请先用实体创建流程补充："
@@ -140,10 +151,10 @@ class StoryProposeRelationsTool(BaseTool[RelationProposeInput, StoryProposeOutpu
             return ToolObservationProjection(summary="关系提案提交失败。")
         return ToolObservationProjection(
             summary=(
-                f"已提交 {output.created_count} 条关系提案，等待作者批量审阅。"
+                f"已提交 {int(output.get('created_count') or 0)} 条关系提案，等待作者批量审阅。"
                 "提案在确认前不是世界事实。"
             ),
-            facts={"created": list(output.created)},
+            facts={"created": list(output.get("created") or [])},
         )
 
 
@@ -159,7 +170,10 @@ class StoryRevisionsTool(BaseTool[StoryRevisionsInput, RevisionListOutput]):
     output_model = RevisionListOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="查询修订历史", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -177,6 +191,6 @@ class StoryRevisionsTool(BaseTool[StoryRevisionsInput, RevisionListOutput]):
         if status != "success":
             return ToolObservationProjection(summary="修订历史查询失败。")
         return ToolObservationProjection(
-            summary=f"故事世界共有 {len(output.revisions)} 个不可变修订。",
+            summary=f"故事世界共有 {len(output.get('revisions') or [])} 个不可变修订。",
             facts={},
         )

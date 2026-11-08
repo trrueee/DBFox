@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 import json
+from uuid import uuid4
+
+import pytest
+from pydantic import BaseModel, ConfigDict
 
 from engine.agent.context import ContextAssembler
+from engine.agent.artifact import ArtifactDraft
+from engine.agent.observation import ObservationStatus
 from engine.agent.references import ConversationInputReference
-from engine.agent.resource_refs import ProjectResourceDescriptor
+from engine.agent.resource_refs import ProjectResourceDescriptor, resource_refs_for_run
+from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.session import SessionRepository
+from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.session import DeliveryMode
 from engine.tools.runtime.attempt import ResourceScopeRef
+from engine.tools.materialization import materialize_tools
+from verification.support.agent_tools import verification_registry
 from engine.representation import (
     ArtifactRepresentationDescriptor,
     ArtifactRepresentationOperation,
@@ -18,9 +28,107 @@ from engine.models import (
     AgentRun,
     AgentSession,
     AgentTaskPlanRecord,
-    AgentTurn,
+    AgentToolInvocation,
     Project,
 )
+
+
+class ContextFixturePayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+def _persist_context_artifact(db, admission, *, title, payload, summary=None):
+    """Produce test metadata through durable Invocation and Artifact settlement."""
+    sessions = SessionRepository(db)
+    run = db.get(AgentRun, admission.run_id)
+    lease = sessions.claim(session_id=run.session_id, owner="context-fixture")
+    assert lease is not None
+    sessions.promote_next_input(lease=lease)
+    tools = materialize_tools(verification_registry(), allowed_groups={"verification"}, execution_mode="user_requested_read")
+    turn = sessions.start_turn(lease=lease, run_id=run.id, agent_definition_version="1",
+        prompt_version="1", prompt_hash="context-fixture", context_snapshot={}, context_hash="context-fixture",
+        tool_materialization=tools.model_dump(mode="json"), tool_materialization_hash=tools.hash,
+        provider="test", model_name="test")
+    refs = resource_refs_for_run(db, run)
+    invocations = ToolInvocationRepository(db)
+    invocation = invocations.request(lease=lease, run_id=run.id, turn_id=turn.id,
+        provider_call_id=f"context-{uuid4().hex}", tool_name="verification_read", raw_input={},
+        materialization=tools, policy_decision={"status":"allowed", "safe_args":{}}, resource_refs=refs)
+    artifacts = ArtifactRepository(db, payload_contract_resolver=lambda kind, version: ContextFixturePayload).persist_drafts(
+        lease=lease, run_id=run.id, turn_id=turn.id, invocation_id=invocation.id, tool_name=invocation.tool_name,
+        drafts=[ArtifactDraft(key="context_result", type="verification.result", title=title, summary=summary, payload=payload, resource_refs=refs)])
+    invocations.settle(lease=lease, invocation_id=invocation.id, status=ObservationStatus.SUCCEEDED,
+        model_visible_summary="Produced context result", artifact_ids=[artifacts[0].id])
+    run.status = "completed"
+    db.commit()
+    return artifacts[0]
+
+
+@pytest.mark.parametrize("selection", ["selected", "attached"])
+@pytest.mark.parametrize("outcome", ["complete", "bounded_partial", "failed", "cancelled"])
+@pytest.mark.parametrize("condition", ["valid", "internal", "producer_failed", "missing_producer", "future", "nonterminal", "stale_fence", "incomplete"])
+def test_all_structured_artifact_context_obeys_availability(db_session, test_resource, selection, outcome, condition):
+    session_id = f"context-fence-{selection}-{condition}"
+    db_session.add(AgentSession(id=session_id, title="Artifact context fence"))
+    db_session.commit()
+    repository = SessionRepository(db_session)
+    refs = (ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),)
+    first = repository.admit(session_id=session_id, resource_refs=refs, content="Create a result",
+        idempotency_key="first", llm_credential_id="credential", api_base=None, model_name="model", request_payload={})
+    artifact = _persist_context_artifact(db_session, first, title="PROTECTED_ARTIFACT_TITLE",
+        payload={"summary":"PROTECTED_ARTIFACT_PAYLOAD"})
+    second = repository.admit(session_id=session_id,
+        resource_refs=(ResourceScopeRef(kind=refs[0].kind, id=refs[0].id, version="2:1"),) if condition == "stale_fence" else refs,
+        content="Continue", idempotency_key="second", llm_credential_id="credential", api_base=None,
+        model_name="model", request_payload={},
+        selected_artifact_ids=[artifact.id] if selection == "selected" else [],
+        references=(ConversationInputReference(label="Chosen result", artifact_id=artifact.id),) if selection == "attached" else ())
+    row = db_session.get(AgentArtifactRecord, artifact.id)
+    owner = db_session.get(AgentRun, first.run_id)
+    owner.status = outcome if outcome in {"failed", "cancelled"} else "completed"
+    owner.result_json = json.dumps({"completion_disposition": outcome})
+    db_session.add(AgentTaskPlanRecord(id=f"plan-{uuid4().hex}", session_id=session_id,
+        run_id=first.run_id, turn_id=artifact.turn_id, objective="Continue the work", status="partial",
+        steps_json=json.dumps([{"id":"result", "title":"Result", "status":"completed",
+            "artifact_ids":[artifact.id]}])))
+    if condition == "internal":
+        row.presentation_json = '{"visibility":"internal"}'
+    elif condition == "producer_failed":
+        db_session.get(AgentToolInvocation, artifact.provenance["tool_invocation_id"]).status = "failed"
+    elif condition == "missing_producer":
+        row.provenance_json = json.dumps({"tool_name":"verification_read", "tool_invocation_id":"absent"})
+    elif condition == "future":
+        owner.session_sequence = db_session.get(AgentRun, second.run_id).session_sequence + 1
+    elif condition == "nonterminal":
+        owner.status = "running"
+    elif condition == "incomplete":
+        row.status = "failed"
+    db_session.commit()
+    available = ArtifactRepository(db_session).available_artifact(current_run_id=second.run_id,
+        artifact_id=artifact.id, session_id=session_id)
+    assert (available is not None) == (condition == "valid")
+    captured = []
+
+    class CaptureContributor:
+        def build(self, input_data):
+            captured.extend(input_data.recent_artifacts)
+            return ()
+
+    snapshot = ContextAssembler(db_session, contributors=(lambda _db: CaptureContributor(),)).build(second.run_id)
+    if condition == "valid":
+        assert [item.id for item in snapshot.selected_artifacts] == [artifact.id]
+        assert [item.artifact_id for item in captured] == [artifact.id]
+        assert snapshot.previous_run_outcome.artifacts[0].id == artifact.id
+        assert snapshot.previous_run_outcome.plan.steps[0].artifact_ids == [artifact.id]
+        assert snapshot.previous_run_outcome.tool_outcomes[0].artifact_ids == [artifact.id]
+    else:
+        assert snapshot.selected_artifacts == []
+        assert captured == [], "Unavailable payload reached a capability context contributor"
+        if snapshot.previous_run_outcome:
+            assert snapshot.previous_run_outcome.artifacts == []
+            assert all(not row.artifact_ids and not row.artifacts for row in snapshot.previous_run_outcome.tool_outcomes)
+            assert all(not step.artifact_ids for step in snapshot.previous_run_outcome.plan.steps)
+        assert "PROTECTED_ARTIFACT_TITLE" not in str(snapshot.model_message_plan(system_prompt="Context verification"))
 
 
 def test_project_resource_directory_snapshot_is_bounded_and_reports_full_kind_counts(
@@ -91,28 +199,9 @@ def test_next_run_reads_durable_history_and_selected_artifact(
     assistant = db_session.get(AgentMessage, first.assistant_message_id)
     assistant.content = "共有 42 条订单。"
     assistant.status = "completed"
-    artifact = AgentArtifactRecord(
-        id="artifact_result_42",
-        run_id=first.run_id,
-        session_id="session_context",
-        message_id=first.assistant_message_id,
-        semantic_id="orders-count",
-        type="verification.result",
-        title="订单数量",
-        payload_json=json.dumps(
-            {
-                "summary": "verified work product",
-                "privateValues": [{"secret": "sensitive-cell-value"}],
-            }
-        ),
-        presentation_json="{}",
-        refs_json="{}",
-        provenance_json="{}",
-        relations_json="[]",
-        status="completed",
-        sequence=1,
-    )
-    db_session.add(artifact)
+    artifact = _persist_context_artifact(db_session, first, title="订单数量", payload={
+        "summary": "verified work product", "privateValues": [{"secret":"sensitive-cell-value"}],
+    })
     aggregate = db_session.get(AgentSession, "session_context")
     aggregate.selected_artifact_id = artifact.id
     db_session.commit()
@@ -150,7 +239,9 @@ def test_next_run_reads_durable_history_and_selected_artifact(
     assert snapshot.selected_artifacts[0].descriptor == {}
     assert snapshot.selected_artifacts[0].schema_version == 1
     assert snapshot.selected_artifacts[0].version == 1
-    assert snapshot.previous_run_outcome is None
+    assert snapshot.previous_run_outcome is not None
+    assert snapshot.previous_run_outcome.run_id == first.run_id
+    assert snapshot.previous_run_outcome.status == "completed"
     assert "sensitive-cell-value" not in json.dumps(snapshot.model_dump(mode="json"))
     assert snapshot.hash == ContextAssembler(db_session).build(second.run_id).hash
 
@@ -226,22 +317,7 @@ def test_attached_artifact_reference_is_projected_as_selected_context(
         model_name="model",
         request_payload={},
     )
-    artifact = AgentArtifactRecord(
-        id="artifact_attached",
-        run_id=first.run_id,
-        session_id="session_attached_artifact",
-        type="verification.result",
-        title="Attached result",
-        payload_json="{}",
-        presentation_json='{"visibility":"primary"}',
-        refs_json="{}",
-        provenance_json="{}",
-        relations_json="[]",
-        status="completed",
-        sequence=1,
-    )
-    db_session.add(artifact)
-    db_session.commit()
+    artifact = _persist_context_artifact(db_session, first, title="Attached result", payload={})
 
     second = repository.admit(
         session_id="session_attached_artifact",
@@ -409,6 +485,12 @@ def test_next_run_receives_bounded_partial_plan_and_artifact_index(
         model_name="model",
         request_payload={},
     )
+    artifact = _persist_context_artifact(db_session, first, title="月度收入趋势",
+        summary="返回 2 行月度汇总。", payload={
+                        "sourceSqlArtifactId": "artifact_partial_sql",
+                        "queryFingerprint": "partial-fingerprint",
+                        "rowCount": 2,
+                    })
     first_run = db_session.get(AgentRun, first.run_id)
     first_run.status = "completed"
     first_run.result_json = json.dumps(
@@ -420,31 +502,13 @@ def test_next_run_receives_bounded_partial_plan_and_artifact_index(
     first_assistant = db_session.get(AgentMessage, first.assistant_message_id)
     first_assistant.content = "分析以部分结果结束。"
     first_assistant.status = "completed"
-    turn = AgentTurn(
-        id="turn_partial_context",
-        session_id="session_partial_context",
-        run_id=first.run_id,
-        sequence=1,
-        status="completed",
-        agent_definition_version="1",
-        prompt_version="1",
-        prompt_hash="prompt",
-        context_snapshot_json="{}",
-        context_hash="context",
-        tool_materialization_json="{}",
-        tool_materialization_hash="tools",
-        provider="test",
-        model_name="test",
-    )
-    db_session.add(turn)
-    db_session.flush()
     db_session.add_all(
         [
             AgentTaskPlanRecord(
                 id="plan_partial_context",
                 session_id="session_partial_context",
                 run_id=first.run_id,
-                turn_id=turn.id,
+                turn_id=artifact.turn_id,
                 objective="分析订单收入、退款和订阅留存",
                 status="partial",
                 summary="收入与退款已完成，留存未完成。",
@@ -455,7 +519,7 @@ def test_next_run_receives_bounded_partial_plan_and_artifact_index(
                             "title": "计算收入趋势",
                             "status": "completed",
                             "evidence_required": True,
-                            "artifact_ids": ["artifact_partial_result"],
+                            "artifact_ids": [artifact.id],
                             "note": "已得到月度趋势",
                         },
                         {
@@ -470,28 +534,7 @@ def test_next_run_receives_bounded_partial_plan_and_artifact_index(
                     ensure_ascii=False,
                 ),
             ),
-            AgentArtifactRecord(
-                id="artifact_partial_result",
-                run_id=first.run_id,
-                session_id="session_partial_context",
-                turn_id=turn.id,
-                type="verification.result",
-                title="月度收入趋势",
-                summary="返回 2 行月度汇总。",
-                payload_json=json.dumps(
-                    {
-                        "sourceSqlArtifactId": "artifact_partial_sql",
-                        "queryFingerprint": "partial-fingerprint",
-                        "rowCount": 2,
-                    }
-                ),
-                presentation_json="{}",
-                refs_json="{}",
-                provenance_json="{}",
-                relations_json="[]",
-                status="completed",
-                sequence=1,
-            ),
+
         ]
     )
     db_session.commit()
@@ -518,14 +561,14 @@ def test_next_run_receives_bounded_partial_plan_and_artifact_index(
         "分析订单收入、退款和订阅留存"
     )
     assert snapshot.previous_run_outcome.plan.steps[0].artifact_ids == [
-        "artifact_partial_result"
+        artifact.id
     ]
     assert [
         artifact.model_dump(mode="json")
         for artifact in snapshot.previous_run_outcome.artifacts
     ] == [
         {
-            "id": "artifact_partial_result",
+            "id": artifact.id,
             "type": "verification.result",
             "title": "月度收入趋势",
             "summary": "返回 2 行月度汇总。",
@@ -560,35 +603,18 @@ def test_next_run_indexes_result_artifacts_from_a_completed_previous_run(
         model_name="model",
         request_payload={},
     )
+    artifact = _persist_context_artifact(db_session, first, title="订单状态分布",
+        summary="返回 4 行状态汇总。", payload={
+                    "sourceSqlArtifactId": "artifact_completed_sql",
+                    "queryFingerprint": "completed-result-fingerprint",
+                    "rowCount": 4,
+                })
     first_run = db_session.get(AgentRun, first.run_id)
     first_run.status = "completed"
     first_run.result_json = json.dumps({"completion_disposition": "complete"})
     first_answer = db_session.get(AgentMessage, first.assistant_message_id)
     first_answer.content = "状态分布已查询。"
     first_answer.status = "completed"
-    db_session.add(
-        AgentArtifactRecord(
-            id="artifact_completed_result",
-            run_id=first.run_id,
-            session_id="session_completed_result_context",
-            type="verification.result",
-            title="订单状态分布",
-            summary="返回 4 行状态汇总。",
-            payload_json=json.dumps(
-                {
-                    "sourceSqlArtifactId": "artifact_completed_sql",
-                    "queryFingerprint": "completed-result-fingerprint",
-                    "rowCount": 4,
-                }
-            ),
-            presentation_json="{}",
-            refs_json="{}",
-            provenance_json="{}",
-            relations_json="[]",
-            status="completed",
-            sequence=1,
-        )
-    )
     db_session.commit()
 
     second = repository.admit(
@@ -609,6 +635,6 @@ def test_next_run_indexes_result_artifacts_from_a_completed_previous_run(
     assert snapshot.previous_run_outcome.status == "completed"
     assert snapshot.previous_run_outcome.completion_disposition == "complete"
     assert [item.id for item in snapshot.previous_run_outcome.artifacts] == [
-        "artifact_completed_result"
+        artifact.id
     ]
     assert "可复用" in snapshot.previous_run_outcome.public_message

@@ -1,7 +1,7 @@
 """Agent tools for entity editing and chapter authoring (dbfox.story).
 
 These tools let the Agent modify the world and write chapters directly:
-entities are upserted by name, chapters are written whole. Every write is
+entities are upserted by name; chapters can be created, replaced, or appended. Every write is
 version-tracked in the store with the author recorded (`author="ai"`), so
 the reader view can show provenance and the author can diff or revert.
 Relationship edges stay out of these tools on purpose — they keep their
@@ -18,20 +18,31 @@ from dbfox_dlc_api import (
     ToolObservationProjection,
     ToolPolicy,
     ToolPresentation,
+    ToolResourceRequirement,
+    ToolSemanticSpec,
 )
 
 from .contracts import (
-    ChapterListOutput,
+    ChapterCatalogListOutput,
     ChapterReadOutput,
     ChapterWriteOutput,
     EntityUpsertOutput,
+    StoryAppendChapterInput,
     StoryChapterReadInput,
     StoryChaptersListInput,
     StoryUpsertEntityInput,
     StoryWriteChapterInput,
 )
-from .store import StoryStateStore
+from .store import ChapterConflictError, StoryStateStore
+from .resource_kind import STORY_WORLD_KIND
 from .world_selection import select_world
+
+
+def _require_generation(world, expected: int) -> None:
+    if world.generation != expected:
+        raise ToolInputError(
+            "故事设定已变化；请重新调用 story_graph_query，并使用最新 world_generation。"
+        )
 
 
 class StoryUpsertEntityTool(BaseTool[StoryUpsertEntityInput, object]):
@@ -47,7 +58,10 @@ class StoryUpsertEntityTool(BaseTool[StoryUpsertEntityInput, object]):
     output_model = EntityUpsertOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="写入故事实体", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -95,7 +109,7 @@ class StoryUpsertEntityTool(BaseTool[StoryUpsertEntityInput, object]):
         )
 
 
-class StoryChaptersListTool(BaseTool[StoryChaptersListInput, ChapterListOutput]):
+class StoryChaptersListTool(BaseTool[StoryChaptersListInput, ChapterCatalogListOutput]):
     name = "story_chapters_list"
     group = "story"
     description = (
@@ -104,10 +118,13 @@ class StoryChaptersListTool(BaseTool[StoryChaptersListInput, ChapterListOutput])
         "story_chapter_read."
     )
     input_model = StoryChaptersListInput
-    output_model = ChapterListOutput
+    output_model = ChapterCatalogListOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="列出章节", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -117,19 +134,23 @@ class StoryChaptersListTool(BaseTool[StoryChaptersListInput, ChapterListOutput])
         self,
         tool_input: StoryChaptersListInput,
         context: ExtensionToolRunContext,
-    ) -> ChapterListOutput:
+    ) -> ChapterCatalogListOutput:
         _ref, world = select_world(context, tool_input.world_id)
-        return ChapterListOutput(chapters=self._store.list_chapters(world.project_id))
+        return ChapterCatalogListOutput(
+            chapters=self._store.list_chapter_catalog(world.project_id)
+        )
 
     def project_observation(self, *, status, output, artifacts):
         if status != "success":
             return ToolObservationProjection(summary="章节列表查询失败。")
+        chapters = list(output.get("chapters") or [])
         return ToolObservationProjection(
-            summary=f"故事共有 {len(output.chapters)} 章。",
+            summary=f"故事共有 {len(chapters)} 章。",
             facts={
                 "chapters": [
-                    {"id": chapter.id, "title": chapter.title}
-                    for chapter in output.chapters
+                    {"id": chapter.get("id"), "title": chapter.get("title")}
+                    for chapter in chapters
+                    if isinstance(chapter, dict)
                 ]
             },
         )
@@ -146,7 +167,10 @@ class StoryChapterReadTool(BaseTool[StoryChapterReadInput, object]):
     output_model = ChapterReadOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        capabilities=(),
+    )
     presentation = ToolPresentation(title="阅读章节", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -178,6 +202,8 @@ class StoryChapterReadTool(BaseTool[StoryChapterReadInput, object]):
             id=chapter.id,
             title=chapter.title,
             content=chapter.content,
+            content_path=chapter.content_path,
+            content_sha256=chapter.content_sha256,
             updated_at=chapter.updated_at,
         )
 
@@ -197,14 +223,24 @@ class StoryWriteChapterTool(BaseTool[StoryWriteChapterInput, object]):
         "Write a chapter's full content. With no chapter_id, a new chapter is "
         "appended (title must be unique); with a chapter_id the chapter is "
         "replaced. Every write is version-tracked with author recorded, so the "
-        "human author can review the history. Write the complete chapter text "
+        "human author can review the history. Call story_graph_query first and "
+        "provide its world_generation. Existing chapters must first be read with "
+        "story_chapter_read and use its content_sha256 for compare-and-swap. "
+        "Write the complete chapter text "
         "in Chinese prose — never outlines or bullet summaries."
     )
     input_model = StoryWriteChapterInput
     output_model = ChapterWriteOutput
     version = "1"
     policy = ToolPolicy(risk_level="safe")
-    execution = ToolExecutionSpec(capabilities=())
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        backend="isolated_process",
+        timeout_seconds=60,
+        recovery="never_retry",
+        capabilities=("filesystem_write",),
+    )
+    semantics = ToolSemanticSpec(produces=("dbfox.story.chapter_write",))
     presentation = ToolPresentation(title="写章节", category="explore")
 
     def __init__(self, store: StoryStateStore) -> None:
@@ -216,19 +252,25 @@ class StoryWriteChapterTool(BaseTool[StoryWriteChapterInput, object]):
         context: ExtensionToolRunContext,
     ) -> ChapterWriteOutput:
         _ref, world = select_world(context, tool_input.world_id)
+        _require_generation(world, tool_input.expected_world_generation)
         if tool_input.chapter_id:
-            chapter = self._store.update_chapter(
-                world.project_id,
-                tool_input.chapter_id,
-                title=tool_input.title,
-                content=tool_input.content,
-                author="ai",
-            )
+            try:
+                chapter = self._store.update_chapter(
+                    world.project_id,
+                    tool_input.chapter_id,
+                    title=tool_input.title,
+                    content=tool_input.content,
+                    author="ai",
+                    expected_sha256=str(tool_input.expected_chapter_sha256),
+                )
+            except ChapterConflictError as exc:
+                raise ToolInputError(str(exc)) from exc
             return ChapterWriteOutput(
                 op="updated",
                 chapter_id=chapter.id,
                 title=chapter.title,
                 length=len(chapter.content),
+                checked_world_generation=world.generation,
             )
         duplicate = any(
             chapter.title == tool_input.title
@@ -249,6 +291,7 @@ class StoryWriteChapterTool(BaseTool[StoryWriteChapterInput, object]):
             chapter_id=chapter.id,
             title=chapter.title,
             length=len(chapter.content),
+            checked_world_generation=world.generation,
         )
 
     def project_observation(self, *, status, output, artifacts):
@@ -259,5 +302,65 @@ class StoryWriteChapterTool(BaseTool[StoryWriteChapterInput, object]):
                 f"已{('改写' if output['op'] == 'updated' else '写完')}章节"
                 f"「{output['title']}」（{output['length']} 字），等待作者阅读。"
             ),
+            facts={"chapter": dict(output)},
+        )
+
+
+class StoryAppendChapterTool(BaseTool[StoryAppendChapterInput, object]):
+    name = "story_append_chapter"
+    group = "story"
+    description = (
+        "Append prose to an existing chapter without resending its current text. "
+        "Call story_graph_query first and provide its world_generation. The resulting "
+        "complete chapter is stored as a new AI-authored version. Read the chapter "
+        "first and provide its content_sha256 for compare-and-swap."
+    )
+    input_model = StoryAppendChapterInput
+    output_model = ChapterWriteOutput
+    version = "1"
+    policy = ToolPolicy(risk_level="safe")
+    execution = ToolExecutionSpec(
+        required_resources=(ToolResourceRequirement(kind=STORY_WORLD_KIND, selector_field="world_id"),),
+        backend="isolated_process",
+        timeout_seconds=60,
+        recovery="never_retry",
+        capabilities=("filesystem_write",),
+    )
+    semantics = ToolSemanticSpec(produces=("dbfox.story.chapter_write",))
+    presentation = ToolPresentation(title="续写章节", category="manage")
+
+    def __init__(self, store: StoryStateStore) -> None:
+        self._store = store
+
+    def run(
+        self,
+        tool_input: StoryAppendChapterInput,
+        context: ExtensionToolRunContext,
+    ) -> ChapterWriteOutput:
+        _ref, world = select_world(context, tool_input.world_id)
+        _require_generation(world, tool_input.expected_world_generation)
+        try:
+            chapter = self._store.append_chapter(
+                world.project_id,
+                tool_input.chapter_id,
+                content=tool_input.content,
+                author="ai",
+                expected_sha256=tool_input.expected_chapter_sha256,
+            )
+        except ValueError as exc:
+            raise ToolInputError(str(exc)) from exc
+        return ChapterWriteOutput(
+            op="updated",
+            chapter_id=chapter.id,
+            title=chapter.title,
+            length=len(chapter.content),
+            checked_world_generation=world.generation,
+        )
+
+    def project_observation(self, *, status, output, artifacts):
+        if status != "success":
+            return ToolObservationProjection(summary="章节续写失败。")
+        return ToolObservationProjection(
+            summary=f"已续写章节「{output['title']}」，当前共 {output['length']} 字。",
             facts={"chapter": dict(output)},
         )

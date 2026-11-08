@@ -188,8 +188,8 @@ class ScoreAnalysisArtifactPayload(BaseModel):
 
 
 class MeasureMelodyNote(Contract):
-    beat: float = Field(ge=0)
-    duration: float = Field(gt=0, le=64)
+    beat: float = Field(ge=0, description="Zero-based position within the measure, in notated beats: 4/4 uses 0, 1, 2, 3.")
+    duration: float = Field(gt=0, le=64, description="Length in the same notated beats as beat; beat + duration must not exceed meter.beats.")
     pitch: int = Field(ge=PIANO_LOW, le=PIANO_HIGH)
     velocity: float = Field(default=0.72, ge=0.01, le=1)
 
@@ -202,10 +202,10 @@ class PianoMeasurePlan(Contract):
         description="Chord symbol shown above this measure, for example Cmaj7, Am7, or G/B.",
     )
     chord_pitches: tuple[int, ...] = Field(
-        min_length=2,
+        min_length=1,
         max_length=5,
         description=(
-            "Unique MIDI pitches forming the left-hand accompaniment voicing. "
+            "Unique MIDI pitches forming the left-hand accompaniment voicing; first pitch is the bass. "
             "Choose a playable low register; the Music tool expands the selected pattern."
         ),
     )
@@ -219,11 +219,14 @@ class PianoMeasurePlan(Contract):
         "broken_quarters",
         "root_fifth_half_notes",
         "block_half_notes",
-    ] = "arpeggio_eighths"
+        "sustain_bass",
+    ] = Field(default="arpeggio_eighths", description="Use sustain_bass for exactly one sustained bass note per measure. Other patterns play multiple notes.")
     accompaniment_velocity: float = Field(default=0.54, ge=0.01, le=1)
 
     @model_validator(mode="after")
     def validate_measure_plan(self) -> "PianoMeasurePlan":
+        if self.accompaniment == "root_fifth_half_notes" and len(self.chord_pitches) < 2:
+            raise ValueError("root_fifth_half_notes requires at least two chord_pitches")
         if len(set(self.chord_pitches)) != len(self.chord_pitches):
             raise ValueError("chord_pitches must be unique")
         if any(not PIANO_LOW <= pitch <= PIANO_HIGH for pitch in self.chord_pitches):
@@ -252,7 +255,7 @@ class ComposePianoInput(ToolInputModel):
     measure_count: int = Field(ge=1, le=MAX_MEASURES)
     composition: PianoCompositionDraft = Field(
         description=(
-            "Compact musical plan. Describe melody, harmony, and accompaniment shape; "
+            "Structured JSON object containing the measures array, not a prose string. Describe melody, harmony, and accompaniment shape; "
             "do not enumerate the expanded left-hand ScoreDocument notes."
         )
     )

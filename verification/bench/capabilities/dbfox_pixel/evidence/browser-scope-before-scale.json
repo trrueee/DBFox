@@ -1,0 +1,18 @@
+{
+  "artifact": {
+    "run_id": "run_0c3e3e718d7246399abe04fa51f706d4",
+    "session_id": "c2b8455d-6d52-46f0-95b2-49e2f928544b",
+    "artifact_ids": [
+      "artifact_9df8302f517d49888a584daefbb471dc"
+    ]
+  },
+  "originalStatus": 200,
+  "switched": {
+    "project": "pixel-browser-other",
+    "hasArtifact": false
+  },
+  "returned": {
+    "project": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+    "hasArtifact": false
+  }
+}

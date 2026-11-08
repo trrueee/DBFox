@@ -1,0 +1,49 @@
+{
+  "boundary": "Public window.close after independent script uses observed public world identity; no force kill",
+  "before": [
+    {
+      "ProcessId": 42416,
+      "ParentProcessId": 67152,
+      "Name": "node.exe"
+    },
+    {
+      "ProcessId": 9308,
+      "ParentProcessId": 42416,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 59512,
+      "ParentProcessId": 9308,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 74776,
+      "ParentProcessId": 9308,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 51156,
+      "ParentProcessId": 9308,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 69064,
+      "ParentProcessId": 9308,
+      "Name": "python.exe"
+    },
+    {
+      "ProcessId": 74400,
+      "ParentProcessId": 69064,
+      "Name": "conhost.exe"
+    },
+    {
+      "ProcessId": 57912,
+      "ParentProcessId": 69064,
+      "Name": "python.exe"
+    }
+  ],
+  "after": {
+    "listening": [],
+    "remaining": []
+  }
+}

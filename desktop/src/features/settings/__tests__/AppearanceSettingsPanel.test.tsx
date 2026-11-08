@@ -31,12 +31,17 @@ describe("AppearanceSettingsPanel", () => {
     );
 
     expect(screen.getByRole("radiogroup", { name: "主题模式" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "界面基准字号" }).textContent).toContain("15 px（默认）");
+    const advanced = screen.getByText("高级外观设置").closest("details")!;
+    expect(advanced.open).toBe(false);
+    expect(screen.getByRole("combobox", { name: "界面密度" }).closest("details")).toBeNull();
+    expect(screen.getByRole("complementary", { name: "当前外观预览" }).querySelector("[inert]")).toBeTruthy();
+    fireEvent.click(screen.getByText("高级外观设置"));
     expect(screen.getByRole("radiogroup", { name: "强调色" })).toBeTruthy();
     expect(screen.getByRole("radiogroup", { name: "中性色调" })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "界面基准字号" }).textContent).toContain("14 px（默认）");
     expect(screen.getByRole("combobox", { name: "数据字号" }).textContent).toContain("14 px（默认）");
     expect(screen.getByRole("combobox", { name: "SQL 与代码字号" }).textContent).toContain("14 px（默认）");
-    expect(screen.getByRole("combobox", { name: "Agent 对话字号" }).textContent).toContain("14 px（默认）");
+    expect(screen.getByRole("combobox", { name: "Agent 对话字号" }).textContent).toContain("16 px（默认）");
   });
 
   it("previews palette changes immediately and can reset them", () => {
@@ -47,7 +52,8 @@ describe("AppearanceSettingsPanel", () => {
       </ThemeProvider>,
     );
 
-    fireEvent.click(screen.getByRole("radio", { name: "数据蓝" }));
+    fireEvent.click(screen.getByText("高级外观设置"));
+    fireEvent.click(screen.getByRole("radio", { name: "蓝色" }));
     expect(document.documentElement.dataset.accent).toBe("blue");
 
     fireEvent.click(screen.getByRole("button", { name: /恢复默认/ }));

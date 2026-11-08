@@ -1,0 +1,49 @@
+{
+  "candidate": "50ccf2b7",
+  "date": "2026-09-05",
+  "method": "Real Electron UI after current Host emitter fix; prior signed Scene frontend unchanged. Read-only Workbench selectors. No model calls.",
+  "documentReferences": [
+    {
+      "label": "Interactive Scene",
+      "authority": {
+        "kind": "dbfox.scene.document",
+        "id": "91df7fd0cf114c53abd368d88950cc9e"
+      },
+      "object": {
+        "kind": "dbfox.scene.document",
+        "id": "91df7fd0cf114c53abd368d88950cc9e",
+        "version": 2
+      },
+      "locator": "/"
+    }
+  ],
+  "exported": {
+    "artifact_id": "artifact_5c296e15d030483a9487040596149a23",
+    "run_id": "run_31c07d59413a4d09953fb53e92c7d1e4",
+    "session_id": "fa81fed3-b416-47f0-aebf-9bb5b790f4cf"
+  },
+  "actualButtonLabel": "加入对话上下文",
+  "after": {
+    "project": "scene-browser-project",
+    "conversation": null,
+    "references": [
+      {
+        "label": "Interactive Scene",
+        "authority": {
+          "kind": "dbfox.scene.document",
+          "id": "91df7fd0cf114c53abd368d88950cc9e"
+        },
+        "object": {
+          "kind": "dbfox.scene.document",
+          "id": "91df7fd0cf114c53abd368d88950cc9e",
+          "version": 2
+        },
+        "locator": "/"
+      },
+      {
+        "label": "Interactive Scene · v2",
+        "artifactId": "artifact_5c296e15d030483a9487040596149a23"
+      }
+    ]
+  }
+}

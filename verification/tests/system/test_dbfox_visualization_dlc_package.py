@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import sqlite3
 
 import pytest
+from sqlalchemy.orm import sessionmaker
 
 from dbfox_dlc_api import (
     Artifact,
@@ -15,32 +18,50 @@ from dbfox_dlc_api import (
     DataFrameField,
     DataFramePage,
     ToolInputError,
+    ToolKey,
+    DlcOperationContext,
 )
 from engine.dlc import BuiltinContributionSet, ContributionCompiler, DlcPackageService
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.session import SessionRepository
-from engine.models import AgentSession
+from engine.agent.repositories.tool import ToolInvocationRepository
+from engine.models import AgentObservationRecord, AgentRun, AgentSession, AgentToolInvocation, Project
+from engine.agent.completion import CompletionGate
+from engine.agent.definition import AgentDefinition
+from engine.agent.events import LiveStreamHub
+from engine.agent.loop import RunLoop
+from engine.agent.run import RunLimits
 from engine.runtime_composition import (
     active_runtime_snapshot,
+    build_product_tool_registry,
+    build_attempt_resource_resolver,
+    build_default_completion_policy,
+    default_context_contributors,
     set_active_runtime_snapshot,
 )
 from engine.tools.runtime import ToolRunContext
+from engine.tools.materialization import materialize_tools
 from scripts.build_dbfox_visualization_dlc_fixture import (
     SOURCE_ROOT,
     build_dbfox_visualization_dlc_fixture,
 )
+from scripts.build_dbfox_data_dlc_fixture import build_dbfox_data_dlc_fixture
+from verification.testkit.scripted_provider import ScriptedProvider, answer_events, tool_call_events
 
 
-def _snapshot(tmp_path: Path):
-    built = build_dbfox_visualization_dlc_fixture(tmp_path / "archives")
+def _snapshot(tmp_path: Path, *, with_data: bool = False):
     service = DlcPackageService(tmp_path / "runtime" / "dlcs")
-    service.trust_publisher_from_file(
-        built.archive,
-        expected_package_digest=built.package_digest,
-        expected_publisher_key_id=built.publisher_fingerprint,
-    )
-    service.install_from_file(built.archive)
-    service.set_desired_enabled("dbfox.visualization", True)
+    packages = [("dbfox.visualization", build_dbfox_visualization_dlc_fixture)]
+    if with_data:
+        packages.append(("dbfox.data", build_dbfox_data_dlc_fixture))
+    for owner, build in packages:
+        built = build(tmp_path / "archives")
+        service.trust_publisher_from_file(
+            built.archive, expected_package_digest=built.package_digest,
+            expected_publisher_key_id=built.publisher_fingerprint,
+        )
+        service.install_from_file(built.archive)
+        service.set_desired_enabled(owner, True)
     snapshot = ContributionCompiler(service.storage_root).compile(
         built_ins=BuiltinContributionSet()
     )
@@ -515,6 +536,10 @@ def test_inline_source_materializes_one_atomic_dataset_visualization_graph(
         lease = sessions.claim(session_id="visualization-materialize", owner="worker")
         assert lease is not None
         sessions.promote_next_input(lease=lease)
+        registry = build_product_tool_registry(snapshot)
+        materialization = materialize_tools(
+            registry, allowed_groups={"visualization"}, execution_mode="user_requested_read",
+        )
         turn = sessions.start_turn(
             lease=lease,
             run_id=admission.run_id,
@@ -523,8 +548,8 @@ def test_inline_source_materializes_one_atomic_dataset_visualization_graph(
             prompt_hash="prompt",
             context_snapshot={},
             context_hash="context",
-            tool_materialization={},
-            tool_materialization_hash="tools",
+            tool_materialization=materialization.model_dump(mode="json"),
+            tool_materialization_hash=materialization.hash,
             provider="test",
             model_name="test",
         )
@@ -536,6 +561,14 @@ def test_inline_source_materializes_one_atomic_dataset_visualization_graph(
         }
         tool = snapshot.tools[0].tool
         outcome = tool.run(tool.input_model.model_validate(payload), _context())
+        invocation = ToolInvocationRepository(db_session).request(
+            lease=lease, run_id=admission.run_id, turn_id=str(turn.id),
+            provider_call_id="visualization-materialize-call",
+            tool_name=registry.provider_name_for_key(ToolKey(
+                owner_id="dbfox.visualization", local_name="visualization_create",
+            )), raw_input=payload, materialization=materialization,
+            policy_decision={"status": "allowed", "safe_args": payload}, resource_refs=(),
+        )
 
         artifacts = ArtifactRepository(
             db_session,
@@ -554,8 +587,8 @@ def test_inline_source_materializes_one_atomic_dataset_visualization_graph(
             lease=lease,
             run_id=admission.run_id,
             turn_id=str(turn.id),
-            invocation_id="visualization-materialize-invocation",
-            tool_name="visualization_create",
+            invocation_id=invocation.id,
+            tool_name=invocation.tool_name,
             drafts=list(outcome.artifacts),
         )
 
@@ -567,3 +600,157 @@ def test_inline_source_materializes_one_atomic_dataset_visualization_graph(
         assert "records" not in repr(visualization.payload)
     finally:
         set_active_runtime_snapshot(previous)
+
+
+@pytest.mark.parametrize("fault", [None, "sql-version", "result-version", "result-removed", "representation-version"])
+def test_signed_data_to_visualization_runloop_preserves_execution_and_source_fences(
+    tmp_path: Path, db_session, fault: str | None,
+) -> None:
+    """Real signed DLCs, SQLite, admission, RunLoop, settlement and Representation."""
+    snapshot = _snapshot(tmp_path, with_data=True)
+    database_path = tmp_path / "revenue.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE revenue (month TEXT, brand TEXT, revenue REAL)")
+        connection.execute("INSERT INTO revenue VALUES ('2026-01-01', 'North', 128.5)")
+    project_id, session_id = "visualization-composition", "visualization-composition-session"
+    db_session.add(Project(id=project_id, name="Composition"))
+    db_session.flush()
+    db_session.add(AgentSession(id=session_id, project_id=project_id))
+    db_session.commit()
+
+    def operation(name, payload):
+        contribution = snapshot.get_operation("dbfox.data", name)
+        assert contribution is not None
+        return contribution.spec.handler(
+            contribution.spec.input_model.model_validate(payload),
+            DlcOperationContext(dlc_id="dbfox.data", operation_name=name, project_id=project_id),
+        )
+
+    created = operation("profiles.create", {
+        "name": "Revenue", "provider": "sqlite", "environment": "dev",
+        "initial_database_name": str(database_path),
+    })
+    database_id = created.databases[0].id
+    registry = build_product_tool_registry(snapshot)
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    observed = {}
+    calls = []
+
+    class Provider:
+        def stream(self, *, messages, **_kwargs):
+            for message in messages:
+                if message.get("type") == "function_call_output":
+                    observed[message["call_id"]] = json.loads(message["output"])
+            index = len(calls)
+            if index and observed[f"step-{index - 1}"]["status"] != "succeeded" or index == 4:
+                text = "The source workflow completed." if fault is None else "The changed source cannot be reused."
+                result = observed.get("step-1", {}).get("artifact_ids", [])
+                if result:
+                    text += " {{cite:" + result[0] + "}}"
+                yield from ScriptedProvider(answer_events(text)).stream()
+                return
+            mutation_step = {"sql-version": 1, "result-version": 2,
+                             "result-removed": 2, "representation-version": 3}.get(fault)
+            if index == mutation_step:
+                if fault == "result-removed":
+                    operation("databases.delete", {"database_id": database_id})
+                else:
+                    operation("profiles.update", {
+                        "profile_id": created.profile.id, "expected_generation": 1,
+                        "name": "Changed generation", "environment": "dev",
+                    })
+            owner = "dbfox.data"
+            if index == 0:
+                name, payload = "sql_validate", {"database_id": database_id, "sql": "SELECT month, brand, revenue FROM revenue"}
+            elif index == 1:
+                name, payload = "sql_execute_readonly", {
+                    "database_id": database_id,
+                    "validation_artifact_id": observed["step-0"]["artifact_ids"][-1],
+                }
+            elif index == 2:
+                name, payload = "result_inspect", {"result_artifact_id": observed["step-1"]["artifact_ids"][0]}
+            else:
+                owner, name, payload = "dbfox.visualization", "visualization_create", _artifact_payload()
+                payload["source"]["artifactId"] = observed["step-1"]["artifact_ids"][0]
+                # The current Data provider declares live result columns as text.
+                # Count uses that real schema without inventing numeric metadata.
+                payload["blocks"] = [
+                    {"id": "count", "kind": "chart", "title": "Rows by brand",
+                     "grammar": "vega-lite", "spec": {
+                         "data": {"name": "dbfox_source"}, "mark": "bar",
+                         "encoding": {"x": {"field": "brand", "type": "nominal"},
+                                      "y": {"aggregate": "count", "type": "quantitative"}},
+                     }},
+                    {"id": "detail", "kind": "table", "fields": ["month", "brand", "revenue"]},
+                ]
+            calls.append(name)
+            wire_name = registry.provider_name_for_key(ToolKey(owner_id=owner, local_name=name))
+            yield from ScriptedProvider(tool_call_events(
+                call_id=f"step-{index}", tool_name=wire_name, arguments=payload,
+            )).stream()
+
+    def payload_contract(kind, version):
+        contribution = snapshot.get_artifact_contract(kind, version)
+        return contribution.validator if contribution is not None else None
+
+    def representation_provider(kind, representation_type):
+        contribution = snapshot.get_artifact_representation(kind, representation_type)
+        return contribution.provider if contribution is not None else None
+
+    previous = active_runtime_snapshot()
+    set_active_runtime_snapshot(snapshot)
+    try:
+        sessions = SessionRepository(db_session)
+        admission = sessions.admit(
+            session_id=session_id, resource_refs=(), content="Query and visualize the revenue source.",
+            idempotency_key="composition", llm_credential_id="scripted", api_base=None,
+            model_name="scripted", request_payload={},
+        )
+        lease = sessions.claim(session_id=session_id, owner="composition-test", ttl_seconds=300)
+        assert lease is not None
+        sessions.promote_next_input(lease=lease)
+        db_session.commit()
+        loop = RunLoop(
+            session_factory=factory, model_factory=lambda _settings: Provider(), registry=registry,
+            context_contributors=default_context_contributors(snapshot),
+            resource_providers=snapshot.resource_providers,
+            resource_resolver=build_attempt_resource_resolver(snapshot=snapshot),
+            artifact_payload_contract_resolver=payload_contract,
+            artifact_representation_provider_resolver=representation_provider,
+            completion=CompletionGate(build_default_completion_policy(snapshot)),
+            definition=AgentDefinition(limits=RunLimits(max_turns=12, max_tool_invocations=12,
+                finalization_turn_reserve=1, finalization_tool_reserve=1, max_prompt_tokens=128_000)),
+            live_stream=LiveStreamHub(), runtime_snapshot_id=snapshot.snapshot_id,
+        )
+        try:
+            loop.execute(lease=lease, run_id=admission.run_id)
+        finally:
+            loop.close()
+    finally:
+        set_active_runtime_snapshot(previous)
+    db_session.expire_all()
+    assert db_session.get(AgentRun, admission.run_id).status == "completed"
+    assert len(observed) == len(calls)
+    artifacts = ArtifactRepository(db_session).list_for_run(admission.run_id)
+    if fault is None:
+        assert len(calls) == 4
+        assert all(value["status"] == "succeeded" for value in observed.values()), observed
+        result = next(item for item in artifacts if item.type == "dbfox.data.result_view")
+        visualization = next(item for item in artifacts if item.type == "dbfox.visualization.document")
+        assert visualization.resource_refs == result.resource_refs
+        assert visualization.relations[0].artifact_id == result.id
+        invocation = db_session.get(AgentToolInvocation, visualization.provenance["tool_invocation_id"])
+        assert invocation.resource_refs_json == "[]"
+        assert ArtifactRepository(db_session).available_artifact(
+            session_id=session_id, current_run_id=admission.run_id, artifact_id=visualization.id,
+        ) == visualization
+    else:
+        failure = observed[f"step-{len(calls) - 1}"]
+        assert failure["status"] in {"failed", "rejected"}, failure
+        assert failure["artifact_ids"] == []
+        assert not any(item.type == "dbfox.visualization.document" for item in artifacts)
+        if fault.startswith("result-"):
+            assert failure["error_code"] == "TOOL_RESOURCE_UNAVAILABLE"
+        if fault == "sql-version":
+            assert not any(item.type == "dbfox.data.result_view" for item in artifacts)
+    assert db_session.query(AgentObservationRecord).filter_by(run_id=admission.run_id).count() == len(calls)

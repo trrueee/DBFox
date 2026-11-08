@@ -42,19 +42,20 @@
   min-height: var(--density-tree-row-height);
   align-items: center;
   gap: var(--space-1);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-row);
   color: var(--text-secondary);
   cursor: default;
   outline: none;
   padding: 0 var(--space-2);
   user-select: none;
+  transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out);
 }
 
 .dbfox-tree__row-shell {
   display: flex;
   min-width: 0;
   align-items: center;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-row);
 }
 
 .dbfox-tree__row-shell > .dbfox-tree__row {
@@ -72,6 +73,8 @@
 
 .dbfox-tree__row[data-selected] {
   background: var(--nav-active-bg);
+  background-image: var(--surface-sheen);
+  box-shadow: var(--shadow-selection);
   color: var(--text-primary);
   font-weight: 500;
 }
@@ -79,15 +82,17 @@
 .dbfox-tree__item-shell[data-selected],
 .dbfox-tree [data-part="branch"][data-selected] > .dbfox-tree__row-shell {
   background: var(--nav-active-bg);
+  background-image: var(--surface-sheen);
+  box-shadow: var(--shadow-selection);
   color: var(--text-primary);
   font-weight: 500;
 }
 
-.dbfox-tree__row[data-focus] {
+.dbfox-tree:has(:focus-visible) .dbfox-tree__row[data-focus] {
   box-shadow: var(--focus-ring);
 }
 
-.dbfox-tree__item-shell[data-focus] {
+.dbfox-tree__item-shell[data-focus]:focus-visible {
   box-shadow: var(--focus-ring);
 }
 

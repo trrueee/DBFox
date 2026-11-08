@@ -1,0 +1,92 @@
+{
+  "source": "https://github.com/vscode-icons/vscode-icons",
+  "commit": "f0a0c40aeae5eba2917ada14ad59b7e7f729e396",
+  "license": "MIT",
+  "usage": "Unmodified upstream file-type artwork, used only to identify the corresponding files. Brand marks remain owned by their respective owners.",
+  "assets": {
+    "file_type_typescript.svg": {
+      "sha256": "7bfda6366d5cbe281eb4224a80c57b96583662cdca310d110b14a53d73a5b7a8",
+      "bytes": 909
+    },
+    "file_type_js_official.svg": {
+      "sha256": "f1bd1600324ed06c587384c4ac381f303b004a23f5c9c6582590d6fe009daa00",
+      "bytes": 653
+    },
+    "file_type_reactjs.svg": {
+      "sha256": "2495c31e2647d63eae5d9ce07ae1e7529b9c16b8d9e55af782fff5c4177ce099",
+      "bytes": 878
+    },
+    "file_type_reactts.svg": {
+      "sha256": "3c213bb8518de78f5939f69fe761c5a3c88580ee8ecb0bd6482f172c33a8ef0a",
+      "bytes": 772
+    },
+    "file_type_python.svg": {
+      "sha256": "9734223a0f9083254f8a1f0f79870790446d22e2aa7509b10ebffec19093d649",
+      "bytes": 1213
+    },
+    "file_type_json.svg": {
+      "sha256": "d33c55591c627feb212664fbee28fa7ed002e4c3c2b5dfa21ea5bc714e744a39",
+      "bytes": 1384
+    },
+    "file_type_sql.svg": {
+      "sha256": "f4f0a132fdee919b4d212b70097d6b12d52090185366dc666a447a261830c5dc",
+      "bytes": 882
+    },
+    "file_type_html.svg": {
+      "sha256": "6a5cfad64d74cee26abfb808dc62c17d0e4644412e63e44f4743833164b8e6e4",
+      "bytes": 544
+    },
+    "file_type_css.svg": {
+      "sha256": "cdac6102fcab786f686181cf5d721aa08e0e1ae0f1e0e0a78394a8d76ea6f622",
+      "bytes": 1274
+    },
+    "file_type_yaml.svg": {
+      "sha256": "41b3a793e1354b455f6c0bf62acdb5cef39b42ad4c859e0d8232bdcd80abfa56",
+      "bytes": 1009
+    },
+    "file_type_rust.svg": {
+      "sha256": "73f695fefdd89c634e4fe42a196be626c02d7c505e707183d07f26264400e4d2",
+      "bytes": 3916
+    },
+    "file_type_go.svg": {
+      "sha256": "e36af0b95895c11b51f1da18392bb9fdee7a1e92a1694f377b4be85e10997d23",
+      "bytes": 1049
+    },
+    "file_type_c.svg": {
+      "sha256": "e6c7437259682c4465b61c2def722042cfd0cd007e7bfbb089d28f411708b8f8",
+      "bytes": 633
+    },
+    "file_type_cpp.svg": {
+      "sha256": "08743e12fd75168a57e218e88116c4d7ec033c85b372abfebc27402774f9de42",
+      "bytes": 596
+    },
+    "file_type_csharp.svg": {
+      "sha256": "163a61f08cc9020aaa22fa5ff41c22b16444148a79a2d91583943d4df38dcf36",
+      "bytes": 636
+    },
+    "file_type_powershell.svg": {
+      "sha256": "475c0ba7513e4867fe6a4ba2a8b4a7405e1779fbd71a06606f9e26f24198f737",
+      "bytes": 1449
+    },
+    "file_type_shell.svg": {
+      "sha256": "d5e90417b595ae46cbd77ecafe5aa53db67b12dcf676b5b78b4b55bc60d10b94",
+      "bytes": 280
+    },
+    "file_type_toml.svg": {
+      "sha256": "51d511c91ef54f6ea90b50d48c08e18b903b8457488dddd2555838085f8ce092",
+      "bytes": 237
+    },
+    "file_type_java.svg": {
+      "sha256": "b39062402ad8207bc9d25a9f25a006c0cae504d99561efb98c0531f3e9f31016",
+      "bytes": 1297
+    },
+    "file_type_git.svg": {
+      "sha256": "a0569837ba3c54cb5305b3fa90a84a6100885ed53d73e6c11d77023575151af1",
+      "bytes": 636
+    },
+    "file_type_docker.svg": {
+      "sha256": "74b6bfa7ae81f5bae33ac2ab452e776e9b0705f24fc16850919b549b2488bc35",
+      "bytes": 4397
+    }
+  }
+}

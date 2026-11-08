@@ -1,0 +1,27 @@
+{
+  "before": "Pixel independent example\n16 × 16 · 200 帧 · 1 层 · r10",
+  "result": {
+    "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+    "document_id": "pixel_b019fad34570449584e16e5505d445b8",
+    "revision": 11,
+    "parent_revision": 10,
+    "content_hash": "1df00f879df7315030910da97be4b19a701b2272965e0eed6293bbd381a0e1ac",
+    "title": "Pixel independent example",
+    "width": 16,
+    "height": 16,
+    "frame_count": 200,
+    "layer_count": 1,
+    "palette_count": 3,
+    "tag_count": 0,
+    "status": "active",
+    "changed": true,
+    "changed_pixel_count": 1,
+    "changed_frame_ids": [
+      "scale_199"
+    ],
+    "changed_frame_ids_truncated": false,
+    "changed_layer_ids": [
+      "layer_1"
+    ]
+  }
+}

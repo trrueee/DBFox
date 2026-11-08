@@ -1,0 +1,65 @@
+{
+  "project_id": "scene-controls-project",
+  "scene": {
+    "id": "ea4584b8e45b43cd97df114f2865c652",
+    "project_id": "scene-controls-project",
+    "title": "Controls Regression",
+    "version": 2,
+    "content_hash": "e62305e39c20c01723368f4ea4eca9a4b009e172349fc363239ec4e36075fc62",
+    "status": "active",
+    "object_count": 2,
+    "material_count": 0,
+    "created_at": "2026-09-05T15:37:16.353103+00:00",
+    "updated_at": "2026-09-05T15:37:16.369187+00:00"
+  },
+  "package_digest": "c7ba73d64ac318d4cbbf2b11f20145fdc648ba0b97ab0bb2d8262f236786426b",
+  "files": {
+    "frontend/index.js": {
+      "bytes": 36408,
+      "sha256": "0abf3eb33d6a3034386641e7f6e5651cc6e28a866ac35d703ce526650e806002"
+    },
+    "frontend/viewport.js": {
+      "bytes": 13551,
+      "sha256": "f52bcf0eed0c8b01cf4578270665cde6c2fcb9ae0bfac62f2df382d8d5866b9e"
+    },
+    "frontend/vendor/three.js": {
+      "bytes": 772531,
+      "sha256": "c38db794577efff42b96e75bc590c4ef1f6c376740556c38cbf2a10681e81f3a"
+    },
+    "frontend/vendor/provenance.json": {
+      "bytes": 1045,
+      "sha256": "bb79be928004342bae4ec4598a00c8c2ca1a3351df435a688a6460afc1571097"
+    },
+    "backend/primitives.json": {
+      "bytes": 120012,
+      "sha256": "5df8bea98c0554098cc85693d969e3406e17f378d13c7ff3503af46bb293a92b"
+    }
+  },
+  "provenance": {
+    "schema_version": 1,
+    "package": "three",
+    "version": "0.185.1",
+    "license": "MIT",
+    "source": "https://github.com/mrdoob/three.js",
+    "bundle_sha256": "c38db794577efff42b96e75bc590c4ef1f6c376740556c38cbf2a10681e81f3a",
+    "bundle_bytes": 772531,
+    "primitive_sha256": "5df8bea98c0554098cc85693d969e3406e17f378d13c7ff3503af46bb293a92b",
+    "primitive_bytes": 120012,
+    "build": {
+      "script": "dlcs/dbfox.scene/build.mjs",
+      "esbuild": "0.28.2",
+      "target": "es2022"
+    },
+    "patches": [
+      {
+        "source": "examples/jsm/controls/OrbitControls.js",
+        "original_sha256": "faabb4e8dfd9235ee4a9fd7c9a3d75f90f1689dbd4944bd6fd32117dacec5f93",
+        "patched_sha256": "0f25f971ddc5694e4c0a1e0c6a739f5f6e587195db8c30f7b64416a439603c66",
+        "reason": "Disconnect must release the Control-held keyup interceptor as well as keydown.",
+        "owner": "dbfox.scene",
+        "removal": "Upgrade to fixed upstream OrbitControls and remove the guarded build patch after native listener and React DOM lifecycle regressions pass."
+      }
+    ]
+  },
+  "boundary": "fresh signed package, trusted install, active registered typed operations"
+}

@@ -119,7 +119,10 @@ class SemanticCitationConstraint:
             )
         return CompletionConstraintResult(
             kind="missing",
-            reason="An answer based on observed evidence must cite that Artifact inline.",
+            reason=("An answer based on observed evidence must cite that Artifact inline. "
+                    + ("Use {{cite:" + sorted(artifact_ids)[0] + "}} next to the supported claim. "
+                       if artifact_ids else "")
+                    + "An Artifact embed does not satisfy this citation requirement."),
             requirements=[self.requirement],
         )
 
@@ -249,7 +252,11 @@ class CompletionPolicy:
                 kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
                 reason=(
                     "The answer contains malformed, repeated, or excessive DBFox "
-                    "Artifact embed markup."
+                    "Artifact embed markup. Rewrite the complete answer and preserve "
+                    "its inline evidence citations. Put each embed on its own Markdown "
+                    "line using {{artifact:artifact_abc123}}, replacing artifact_abc123 "
+                    "with the full ID from a successful observation, including its "
+                    f"artifact_ prefix. Embed each Artifact once, at most {MAX_ARTIFACT_EMBEDS} total."
                 ),
                 missing=["valid_artifact_embeds"],
             )
@@ -316,6 +323,7 @@ class CompletionPolicy:
 
         veto: CompletionConstraintResult | None = None
         missing: list[str] = []
+        reasons: list[str] = []
         for constraint in self.constraints:
             result = constraint.evaluate(
                 context=context,
@@ -326,6 +334,8 @@ class CompletionPolicy:
                 break
             if result.kind == "missing":
                 missing.extend(result.requirements)
+                if len(reasons) < 8:
+                    reasons.append(result.reason[:500])
 
         if veto is not None:
             return CompletionDecision(
@@ -345,7 +355,7 @@ class CompletionPolicy:
                     if turn_count >= max_turns
                     else CompletionKind.CONTINUE
                 ),
-                reason="Extension completion constraints require another model turn.",
+                reason=" ".join(dict.fromkeys(reasons)),
                 missing=list(dict.fromkeys(missing)),
                 evidence_artifact_ids=[],
             )

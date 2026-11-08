@@ -48,7 +48,7 @@ class RunLimits(BaseModel):
     model_request_timeout_seconds: int = Field(default=60, ge=1, le=300)
     model_first_event_timeout_seconds: int = Field(default=30, ge=1, le=300)
     model_stream_idle_timeout_seconds: int = Field(default=60, ge=1, le=300)
-    max_prompt_tokens: int = Field(default=32_768, ge=1_024, le=1_000_000)
+    max_prompt_tokens: int = Field(default=65_536, ge=1_024, le=1_000_000)
     token_budget: int | None = Field(default=None, ge=1)
     cost_budget_usd: float | None = Field(default=None, gt=0)
 

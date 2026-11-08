@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-28
+> 最后核验：2026-08-31
 >
 > 事实源：当前源码、迁移、锁文件、协议测试和绑定目标 commit 的运行证据
 
@@ -20,12 +20,18 @@
 
 ## 2. 当前架构合同
 
-1. [Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md)：Project、Conversation intent、Run authority、ResourceKey、System DLC 与 Workbench composition 的权威边界。
-2. [Artifact、Representation、可视化与 Dock 架构](./artifact-representation-visualization.md)：当前 AI 编排、SQL Backend、多视图、Visualization DLC 与 Dock 边界。
-3. [Runtime Extension Contracts](./runtime-extension-contracts.md)：Backend Extension Manifest、Invocation Context、Capability Grant、Effect、Semantic 和 Completion Rule。
-4. [Runtime Extension 安全与兼容规范](./runtime-extension-security-compatibility.md)：trusted publisher、Filesystem/Network/Process/Secret、Artifact envelope 和 wire compatibility。
-5. [前端架构](./frontend.md)：Host-owned Workbench、资源树、Conversation composer、Dock 与 DLC contribution。
-6. [测试与测评系统边界](./verification-system.md)：与产品物理分离但驱动真实 Runtime loop 的验证架构。
+1. [DBFox Core Kernel 宪章](./core-kernel-constitution.md)：Frozen Kernel、Stable Extension Runtime、Public SDK、DLC 的依赖方向、稳定级别与解冻规则。
+2. [Agent Core 与 Capability DLC 架构合同](./agent-core-capability-dlc-contract.md)：Project、Conversation intent、Run authority、ResourceKey、System DLC 与 Workbench composition 的权威边界。
+3. [DLC SDK、CLI 与 conformance](./dlc-sdk-cli.md)：Extension API v2 的公开作者入口、构建、签名和稳定性规则。
+4. [Artifact、Representation、可视化与 Dock 架构](./artifact-representation-visualization.md)：当前 AI 编排、SQL Backend、多视图、Visualization DLC 与 Dock 边界。
+5. [Runtime Extension Contracts](./runtime-extension-contracts.md)：Backend Extension Manifest、Invocation Context、Capability Grant、Effect、Semantic 和 Completion Rule。
+6. [Runtime Extension 安全与兼容规范](./runtime-extension-security-compatibility.md)：trusted publisher、Filesystem/Network/Process/Secret、Artifact envelope 和 wire compatibility。
+7. [前端架构](./frontend.md)：Host-owned Workbench、资源树、Conversation composer、Dock 与 DLC contribution。
+8. [测试与测评系统边界](./verification-system.md)：与产品物理分离但驱动真实 Runtime loop 的验证架构。
+9. [DLC 工件导航合同](./dlc-artifact-navigation.md)：API v2 可选的 Workbench 工件导航、持久身份校验与作用域取消；[验证记录](../quality/dlc-artifact-navigation-validation.md)。
+10. [对话附件与工作簿分析](./conversation-attachments.md)：会话私有附件、历史追问、Data SQL 复用和右侧只读工作簿；[第四阶段实施记录](../archive/reviews/conversation-attachments-implementation.md)。
+
+Creative DLC 的波次、独立职责与未完成门禁见[开发计划](./creative-dlc-program.md)。
 
 已完成的分阶段迁移方案和 Memory v4 候选设计只保留在 [`docs/archive/designs/`](../archive/designs/)；它们不是当前实现合同，也不得成为新增兼容路径的依据。
 
@@ -57,6 +63,7 @@
 
 ## 6. 当前核心不变量
 
+- Core Kernel 的职责和外部语义已冻结；新增业务能力默认进入 DLC，公开接入口变化按 Kernel 宪章解冻。
 - Electron Main 的 `EngineSupervisor` 是生产 Sidecar 的唯一生命周期权威；React 不猜测端口、Token 或进程状态。
 - Runtime DLC 是 trusted-publisher-only 的应用级代码扩展；manifest permissions、subprocess、module namespace、CSP 或 Renderer sandbox 均不被描述为不可信代码 sandbox。
 - FastAPI 对 loopback HTTP/SSE 统一鉴权，公开错误使用固定 catalog 和 RFC 9457 Problem Details。

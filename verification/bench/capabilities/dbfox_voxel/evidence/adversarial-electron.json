@@ -1,0 +1,21 @@
+{
+  "product_commit": "25b1e76e",
+  "shared_tree_commit": "fc8d407a",
+  "package_digest": "98e87d0bf2851212f0820e741c56947d5241b712590433bb6527fa67bf866d99",
+  "boundary": "real signed Electron/EngineSupervisor; read-only HTTP replay copies an observed management read, never prints credentials",
+  "treeReopen": {
+    "selectedAfterClose": "true",
+    "before": "Interactive Voxel\n\n32 × 32 × 32 · 1,139 个方块 · v12\n\n已同步",
+    "after": "Interactive Voxel\n\n32 × 32 × 32 · 1,139 个方块 · v12\n\n已同步"
+  },
+  "readStress": [
+    {"reads":100,"elapsedMs":588,"version":12},
+    {"reads":200,"elapsedMs":1100,"version":12},
+    {"reads":300,"elapsedMs":1628,"version":12},
+    {"reads":400,"elapsedMs":2166,"version":12},
+    {"reads":500,"elapsedMs":2703,"version":12},
+    {"reads":600,"elapsedMs":3237,"version":12}
+  ],
+  "lateRead": {"held":1,"abandonedStudioCount":0,"destination":"Voxel Empty QA"},
+  "reopened": "Interactive Voxel\n\n32 × 32 × 32 · 1,139 个方块 · v12\n\n已同步"
+}

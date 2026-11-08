@@ -1,0 +1,3 @@
+# Keep audited upstream bytes identical across Windows checkouts.
+backend/vendor/png.py -text
+backend/vendor/LICENCE -text

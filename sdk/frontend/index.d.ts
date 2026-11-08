@@ -52,11 +52,20 @@ export interface HostCodeArtifactComponent {
   (props: HostCodeArtifactProps): ReactNode;
 }
 
+export type HostResourceKind = "file" | "folder" | "code" | "markdown" | "spreadsheet" | "database" | "table" | "chart" | "image" | "audio" | "video" | "document" | "archive" | "artifact" | "resource";
+
+export type HostIconName = "plus" | "x" | "refresh-cw" | "play" | "pause" | "square" | "repeat" | "terminal" | "at-sign" | "music" | "book-open" | "box" | "image" | "clapperboard" | "arrow-up" | "arrow-down" | "trash-2" | "game-controller" | "lightbulb" | "table" | "caret-right";
+
 export interface HostUiPrimitives {
   readonly version: "1.0.0";
   readonly Tree: HostTreeComponent;
   /** Host-themed, accessible, read-only code Artifact with copy/download actions. */
   readonly CodeArtifact: HostCodeArtifactComponent;
+  /** Read-only, language-aware text and rendered Markdown. The owner supplies the content. */
+  readonly FileContent: (props: { name: string; content: string; onAsk?: () => void; showIdentity?: boolean }) => ReactNode;
+  readonly ResourceIcon: (props: { name?: string; kind?: HostResourceKind; size?: number; className?: string; expanded?: boolean }) => ReactNode;
+  /** Host-owned decorative symbols. The containing control supplies its accessible name. */
+  readonly Icon: (props: { name: HostIconName; size?: number; className?: string }) => ReactNode;
 }
 
 export interface ConnectorContext {
@@ -78,6 +87,8 @@ export interface ResourceConnectorContribution {
   title: string;
   icon: ReactNode;
   render(context: ConnectorContext): ReactNode;
+  /** Open the owner's full workbench when a separate connector summary is unnecessary. */
+  onOpen?: (context: ConnectorContext) => void | Promise<void>;
   addLabel?: string;
   onAdd?: (context: ConnectorContext) => void | Promise<void>;
   /** List the resources this DLC has configured for the project. Enables the
@@ -118,7 +129,11 @@ export interface WorkspaceDockTab {
   viewType: string;
   title: string;
   closeable: boolean;
+  /** A replaceable read-only preview; pinning clears this presentation flag. */
+  preview?: boolean;
   projectId?: string;
+  /** Owning conversation for private input/source views, including staged inputs. */
+  sessionId?: string;
   target?:
     | {
         type: "object";
@@ -141,6 +156,7 @@ export type DockShowToast = (
 export interface DockViewContext {
   activeProjectId: string;
   activeConversationId: string | null;
+  workbenchScopeId?: string;
 }
 
 export interface DockRenderContext extends DockViewContext {
@@ -151,6 +167,12 @@ export interface DockRenderContext extends DockViewContext {
 
 export interface DockViewContribution {
   viewType: string;
+  /** Initial width in CSS pixels; Host clamps to the viewport and preserves user resizing. */
+  preferredWidth?: number;
+  /** Lowercase extensions (without dots) accepted for Host attachment previews. No access grant. */
+  attachmentExtensions?: readonly string[];
+  /** Object kinds this view can display through an exact existing reference. No access grant. */
+  objectKinds?: readonly string[];
   icon: (view: WorkspaceDockTab) => ReactNode;
   resolveTitle: (view: WorkspaceDockTab) => string;
   isVisible: (view: WorkspaceDockTab, context: DockViewContext) => boolean;
@@ -159,6 +181,8 @@ export interface DockViewContribution {
 
 export interface ArtifactEnvelope<TPayload = Record<string, unknown>> {
   id: string;
+  /** Canonical owning conversation; required by Host for private source reads. */
+  session_id?: string;
   type: string;
   schema_version?: number;
   title: string;
@@ -261,6 +285,8 @@ export interface ArtifactViewContribution<TPayload> {
 
 export interface DlcOperationInvokeOptions {
   readonly projectId?: string;
+  /** Host validates this conversation and its canonical project; never a model-provided authority. */
+  readonly sessionId?: string;
   /** Opaque server-issued lease used when this operation adopts new secrets. */
   readonly credentialLeaseId?: string;
   readonly signal?: AbortSignal;
@@ -290,6 +316,21 @@ export interface PickFileOptions {
   readonly title?: string;
   readonly accept?: readonly string[];
   readonly maxBytes?: number;
+}
+
+/** Persistent identity only; the Host reads and validates the canonical Artifact. */
+export interface ArtifactNavigationTarget {
+  readonly projectId: string;
+  readonly sessionId: string;
+  readonly runId: string;
+  readonly artifactId: string;
+}
+
+export interface ArtifactNavigationOptions {
+  /** Capture before awaiting the operation that produces the Artifact. */
+  readonly workbenchScopeId: string;
+  /** Abort on unmount or scope changes, including during the producing operation. */
+  readonly signal?: AbortSignal;
 }
 
 export interface FrontendExtensionHost {
@@ -322,6 +363,11 @@ export interface FrontendExtensionHost {
   readonly workbench: {
     /** Stable across draft-to-Conversation promotion; isolates capability view state. */
     currentScopeId(): string;
+    /** Optional API v2 navigation. Missing capability, invalid identity or stale scope fail closed. */
+    openArtifact?(
+      target: ArtifactNavigationTarget,
+      options: ArtifactNavigationOptions,
+    ): Promise<void>;
   };
   readonly artifactViews: {
     register(contribution: ArtifactViewContribution<unknown>): void;

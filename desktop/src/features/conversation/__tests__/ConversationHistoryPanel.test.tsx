@@ -45,8 +45,8 @@ describe("ConversationHistoryPanel", () => {
 
     expect(screen.getByText("CreatorHub")).toBeTruthy();
     expect(screen.getByText("2 个对话", { selector: ".conversation-history__group-count" })).toBeTruthy();
-    expect(screen.getByText("3 条消息 · 2 个工件")).toBeTruthy();
-    expect(screen.getByText("1 条消息 · 上次运行失败")).toBeTruthy();
+    expect(screen.getByText("3 条消息 · 2 个工件 · 本轮已结束")).toBeTruthy();
+    expect(screen.getByText("1 条消息 · 运行失败")).toBeTruthy();
     expect(screen.getAllByRole("button", { current: "page" })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "打开 统计订单趋势" }));
 

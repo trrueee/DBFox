@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from tempfile import TemporaryFile
 
 
 APP_DIR_NAME = "DBFox"
@@ -46,9 +47,9 @@ def private_runtime_root() -> Path:
     try:
         root.mkdir(parents=True, exist_ok=True)
         _chmod_private(root, is_dir=True)
-        probe = root / ".write_test"
-        probe.write_text("", encoding="utf-8")
-        probe.unlink(missing_ok=True)
+        with TemporaryFile(dir=root, prefix=".write-test-") as probe:
+            probe.write(b"\0")
+            probe.flush()
         return root
     except OSError as exc:
         raise OSError(
@@ -64,9 +65,9 @@ def private_runtime_dir(name: str) -> Path:
     path = private_runtime_root() / name
     path.mkdir(parents=True, exist_ok=True)
     _chmod_private(path, is_dir=True)
-    probe = path / ".write_test"
-    probe.write_text("", encoding="utf-8")
-    probe.unlink(missing_ok=True)
+    with TemporaryFile(dir=path, prefix=".write-test-") as probe:
+        probe.write(b"\0")
+        probe.flush()
     return path
 
 

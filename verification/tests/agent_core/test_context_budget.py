@@ -1,4 +1,5 @@
 import json
+import pytest
 
 from engine.agent.context import (
     ContextObservation,
@@ -6,6 +7,83 @@ from engine.agent.context import (
     ResponseItemBatch,
 )
 from engine.agent.context_budget import estimate_messages_tokens
+
+
+def test_responses_message_shorthand_uses_the_same_budget_as_explicit_messages() -> None:
+    from engine.agent.context_budget import estimate_input_item_tokens, estimate_message_tokens
+
+    for role in ("system", "developer", "user", "assistant"):
+        message = {"role": role, "content": "JSON and 中文 context"}
+        assert estimate_input_item_tokens(message) == estimate_input_item_tokens({"type": "message", **message})
+        assert estimate_input_item_tokens(message) == estimate_message_tokens(message)
+
+
+def test_deferred_schema_budget_counts_descriptions_and_loaded_history_in_full() -> None:
+    from engine.agent.context_budget import estimate_input_item_tokens, estimate_tool_schema_tokens
+
+    function = {"type": "function", "name": "inspect", "description": "inspect records",
+                "parameters": {"type": "object", "description": "x" * 12_000}, "strict": True}
+    deferred = {**function, "defer_loading": True}
+    loaded = {"type": "tool_search_output", "execution": "server", "call_id": None,
+              "status": "completed", "tools": [deferred]}
+    assert estimate_tool_schema_tokens([deferred]) >= estimate_tool_schema_tokens([function])
+    assert estimate_tool_schema_tokens([deferred, {"type": "tool_search"}]) < 100
+    assert estimate_input_item_tokens(loaded) > 4_000
+    assert estimate_tool_schema_tokens([
+        {**deferred, "description": "x" * 12_000}, {"type": "tool_search"},
+    ]) > 4_000
+
+
+def test_prompt_preserves_native_search_order_and_evicts_its_complete_turn() -> None:
+    from engine.agent.definition import AgentDefinition
+    from engine.agent.prompt import PromptAssembler
+    from engine.agent.run import RunLimits
+
+    tools = [{"type": "function", "name": "inspect", "description": "Inspect",
+              "parameters": {"type": "object", "properties": {}}, "defer_loading": True},
+             {"type": "tool_search"}]
+    items = [
+        {"type": "tool_search_call", "execution": "server", "call_id": None,
+         "status": "completed", "arguments": {"paths": ["inspect"]}},
+        {"type": "tool_search_output", "execution": "server", "call_id": None,
+         "status": "completed", "tools": [tools[0]]},
+        {"type": "function_call", "call_id": "call_1", "name": "inspect", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "call_1", "output": "x" * 20_000},
+    ]
+    snapshot = ContextSnapshot(
+        session_id="s", run_id="r", context_epoch=0, current_request="current request", messages=[],
+        response_batches=[ResponseItemBatch(turn_id="t", items=items)], sources=[], hash="hash",
+    )
+    full = PromptAssembler().assemble(definition=AgentDefinition(), context=snapshot, tool_schemas=tools)
+    assert full.messages[-4:] == items
+    assert full.budget["response_item_tokens"] > 6_000
+    from engine.agent.context_budget import ContextBudgetExceeded
+    with pytest.raises(ContextBudgetExceeded, match="latest complete"):
+        PromptAssembler().assemble(
+            definition=AgentDefinition(limits=RunLimits(max_prompt_tokens=4_096)),
+            context=snapshot, tool_schemas=tools,
+        )
+    assert snapshot.response_batches[0].items == items
+
+
+def test_default_budget_keeps_latest_native_turn_with_a_large_capability_inventory() -> None:
+    from engine.agent.definition import AgentDefinition
+    from engine.agent.prompt import PromptAssembler
+
+    schemas = [{"type": "function", "name": f"operation_{index}", "description": "Inspect or edit a resource",
+                "parameters": {"type": "object", "properties": {"value": {"type": "string", "description": "structured input context " * 60}}}}
+               for index in range(52)]
+    items = [
+        {"type": "reasoning", "encrypted_content": "opaque-state", "summary": [{"type": "summary_text", "text": "reasoning " * 3_200}]},
+        {"type": "function_call", "call_id": "latest-call", "name": "operation_0", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "latest-call", "output": '{"revision":3,"changed":true}'},
+    ]
+    snapshot = ContextSnapshot(session_id="s", run_id="r", context_epoch=0, current_request="Continue building the new result",
+                               messages=[], response_batches=[ResponseItemBatch(turn_id="latest", items=items)], sources=[], hash="hash")
+    bundle = PromptAssembler().assemble(definition=AgentDefinition(), context=snapshot, tool_schemas=schemas)
+    assert bundle.messages[-3:] == items
+    assert bundle.budget["omitted_response_batches"] == 0
+    assert bundle.budget["estimated_prompt_tokens"] <= AgentDefinition().limits.max_prompt_tokens
 
 
 def test_budget_keeps_current_request_and_drops_old_history_first() -> None:
@@ -96,14 +174,14 @@ def test_budget_accounts_for_typed_response_items_and_drops_complete_old_pairs()
     from engine.agent.run import RunLimits
 
     bundle = PromptAssembler().assemble(
-        definition=AgentDefinition(limits=RunLimits(max_prompt_tokens=4_096)),
+        definition=AgentDefinition(limits=RunLimits(max_prompt_tokens=8_192)),
         context=snapshot,
     )
 
     encoded = json.dumps(bundle.messages, ensure_ascii=False)
     assert "current" in encoded
     assert "old " not in encoded
-    assert bundle.budget["estimated_prompt_tokens"] <= 4_096
+    assert bundle.budget["estimated_prompt_tokens"] <= 8_192
     assert bundle.budget["omitted_response_items"] > 0
     assert bundle.budget["omitted_response_batches"] > 0
     assert "durable_evidence_ledger" in encoded
@@ -119,6 +197,7 @@ def test_budget_accounts_for_typed_response_items_and_drops_complete_old_pairs()
         if item.get("type") == "function_call_output"
     }
     assert retained_call_ids == retained_output_ids
+    assert retained_call_ids == {"call-1"}
 
 
 def test_consumed_steer_follows_the_response_batch_it_updates() -> None:

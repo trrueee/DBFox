@@ -1,21 +1,24 @@
 import {
-  Box,
-  CheckCircle2,
-  PackageOpen,
-  PackagePlus,
-  Power,
-  RefreshCw,
-  RotateCcw,
-  ShieldAlert,
-  ShieldCheck,
-  Trash2,
-  TriangleAlert,
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+  CubeIcon,
+  ArrowsLeftRightIcon,
+  CheckCircleIcon,
+  CaretDownIcon,
+  PuzzlePieceIcon,
+  PackageIcon,
+  MagnifyingGlassIcon,
+  ArrowsClockwiseIcon,
+  ShieldWarningIcon,
+  ShieldCheckIcon,
+  TrashIcon,
+  WarningIcon,
+} from "@/components/icons";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { SettingsContent, SettingsSection, SettingsStatus } from "../../components/settings";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Switch } from "../../components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -100,6 +103,19 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
   const [uninstallTarget, setUninstallTarget] = useState<DlcLifecycleItem | null>(null);
   const [removeVersionTarget, setRemoveVersionTarget] = useState<RemoveVersionTarget | null>(null);
   const [actionError, setActionError] = useState<DlcActionError | null>(null);
+  const [query, setQuery] = useState("");
+  const dialogOrigin = useRef<HTMLButtonElement | null>(null);
+  const installButton = useRef<HTMLButtonElement | null>(null);
+  const searchInput = useRef<HTMLInputElement | null>(null);
+
+  const restoreDialogFocus = (event: Event) => {
+    const origin = dialogOrigin.current;
+    const target = origin?.isConnected ? origin : searchInput.current ?? installButton.current;
+    if (target && !target.disabled) {
+      event.preventDefault();
+      target.focus();
+    }
+  };
 
   const refresh = useCallback(async () => {
     const next = await listDlcs();
@@ -278,23 +294,22 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
   };
 
   const busy = actionKey !== null;
+  const search = query.trim().toLowerCase();
+  const visibleDlcs = payload?.dlcs.filter((item) => (
+    `${item.display_name} ${item.description ?? ""} ${item.publisher} ${item.dlc_id}`.toLowerCase().includes(search)
+  )) ?? [];
   return (
     <>
-      <SettingsContent className="dlc-center" aria-busy={busy || payload === null}>
-        <SettingsStatus
-          tone={restartRequired ? "warning" : "info"}
-          label={restartRequired ? "有 DLC 状态等待引擎重启" : "Desired state 与当前运行状态独立显示"}
-          description={restartRequired
-            ? "启用或停用只修改期望状态；重启成功前，当前运行能力不会被冒充为新状态。"
-            : "安装不会执行扩展代码；只有启用并完成引擎重启后，选定 digest 才会进入 active runtime。"}
-          meta={payload?.snapshot_id ? `Snapshot ${payload.snapshot_id.slice(0, 13)}…` : "正在读取…"}
-        />
+      <SettingsContent className="dlc-center" aria-busy={busy || (payload === null && !loadError)}>
+        {restartRequired && actionKey !== "restart" ? (
+          <SettingsStatus tone="warning" label="重启后应用扩展更改" description="部分扩展的启用状态或版本已更改，当前运行状态将在重启后更新。" />
+        ) : null}
 
         {actionKey === "restart" ? (
           <SettingsStatus
             tone="loading"
             label="正在重启本地引擎"
-            description="正在等待新的 engine generation、健康检查和 DLC runtime snapshot。"
+            description="正在重新连接工作区，完成后将更新扩展状态。"
           />
         ) : null}
 
@@ -326,9 +341,9 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
         ) : null}
 
         <SettingsSection
-          icon={PackageOpen}
+          icon={PuzzlePieceIcon}
           title="已安装扩展"
-          description="每个扩展同时显示持久化期望状态与当前进程真实激活状态。"
+          description="按需开启工作能力，点击扩展名称查看版本与权限。"
           trailing={(
             <div className="dlc-center__primary-actions">
               {restartRequired ? (
@@ -338,17 +353,18 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
                   disabled={!desktopRuntime || busy}
                   onClick={() => void restartNow()}
                 >
-                  <RefreshCw size={14} aria-hidden="true" />
+                  <ArrowsClockwiseIcon size={16} aria-hidden="true" />
                   立即重启
                 </Button>
               ) : null}
               <Button
+                ref={installButton}
                 size="sm"
                 disabled={!desktopRuntime || busy}
                 title={desktopRuntime ? undefined : "只能在 DBFox 桌面应用中选择安装包"}
-                onClick={() => void choosePackage()}
+                onClick={(event) => { dialogOrigin.current = event.currentTarget; void choosePackage(); }}
               >
-                <PackagePlus size={14} aria-hidden="true" />
+                <PackageIcon size={16} aria-hidden="true" />
                 {actionKey === "pick" ? "正在检查…" : "从文件安装"}
               </Button>
             </div>
@@ -356,38 +372,56 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
         >
           {payload === null && !loadError ? (
             <div className="dlc-center__loading" role="status">
-              <RefreshCw className="is-spinning" size={16} aria-hidden="true" />
-              正在读取本机 DLC registry…
+              <ArrowsClockwiseIcon className="is-spinning" size={16} aria-hidden="true" />
+              正在读取已安装扩展…
             </div>
           ) : payload?.dlcs.length === 0 ? (
             <div className="dlc-center__empty">
-              <Box size={20} aria-hidden="true" />
+              <CubeIcon size={20} aria-hidden="true" />
               <strong>尚未安装 DLC 扩展</strong>
               <span>选择一个签名的 .dbfox-dlc 文件；检查和安装阶段不会执行扩展代码。</span>
             </div>
           ) : (
-            <div className="dlc-list">
-              {payload?.dlcs.map((item) => (
-                <DlcCard
+            <>
+              {payload ? (
+                <div className="dlc-center__toolbar">
+                  <div className="dlc-center__search" role="search">
+                    <MagnifyingGlassIcon size={16} aria-hidden="true" />
+                    <Input ref={searchInput} type="search" aria-label="搜索扩展" placeholder="搜索扩展…" value={query} onChange={(event) => setQuery(event.target.value)} />
+                  </div>
+                  <span className="dlc-center__count" role="status">{search ? `${visibleDlcs.length} / ${payload.dlcs.length}` : payload.dlcs.length} 个扩展</span>
+                </div>
+              ) : null}
+              <div className="dlc-list">
+              {visibleDlcs.map((item) => (
+                <DlcRow
                   key={item.dlc_id}
                   item={item}
                   busy={busy}
                   actionKey={actionKey}
                   onSetEnabled={setEnabled}
                   onSelectVersion={selectVersion}
-                  onRemoveVersion={(version) => {
+                  onRemoveVersion={(version, trigger) => {
+                    dialogOrigin.current = trigger;
                     setActionError(null);
                     setRemoveVersionTarget({ item, version });
                   }}
-                  onRestart={restartNow}
-                  onUninstall={(target) => {
+                  onUninstall={(target, trigger) => {
+                    dialogOrigin.current = trigger;
                     setActionError(null);
                     setUninstallTarget(target);
                   }}
-                  desktopRuntime={desktopRuntime}
                 />
               ))}
-            </div>
+              </div>
+              {payload && visibleDlcs.length === 0 && search ? (
+                <div className="dlc-center__empty" role="status">
+                  <MagnifyingGlassIcon size={20} aria-hidden="true" />
+                  <strong>未找到匹配的扩展</strong>
+                  <Button variant="ghost" size="sm" onClick={() => setQuery("")}>清除搜索</Button>
+                </div>
+              ) : null}
+            </>
           )}
         </SettingsSection>
       </SettingsContent>
@@ -404,6 +438,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
         }}
         onTrust={trustCandidate}
         onInstall={installCandidate}
+        onCloseAutoFocus={restoreDialogFocus}
       />
 
       <Dialog
@@ -415,7 +450,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
           }
         }}
       >
-        <DialogContent className="dlc-confirm-dialog">
+        <DialogContent className="dlc-confirm-dialog" onCloseAutoFocus={restoreDialogFocus}>
           <DialogHeader>
             <DialogTitle>卸载 {uninstallTarget?.display_name}</DialogTitle>
             <DialogDescription>
@@ -438,7 +473,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
           <DialogFooter>
             <Button variant="outline" disabled={busy} onClick={() => setUninstallTarget(null)}>取消</Button>
             <Button variant="destructive" disabled={busy} onClick={() => void confirmUninstall()}>
-              <Trash2 size={14} aria-hidden="true" />
+              <TrashIcon size={16} aria-hidden="true" />
               {actionKey?.startsWith("uninstall:") ? "正在卸载…" : "确认卸载"}
             </Button>
           </DialogFooter>
@@ -454,7 +489,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
           }
         }}
       >
-        <DialogContent className="dlc-confirm-dialog">
+        <DialogContent className="dlc-confirm-dialog" onCloseAutoFocus={restoreDialogFocus}>
           <DialogHeader>
             <DialogTitle>移除旧版本 {removeVersionTarget?.version.version}</DialogTitle>
             <DialogDescription>
@@ -477,7 +512,7 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
           <DialogFooter>
             <Button variant="outline" disabled={busy} onClick={() => setRemoveVersionTarget(null)}>取消</Button>
             <Button variant="destructive" disabled={busy} onClick={() => void confirmRemoveVersion()}>
-              <Trash2 size={14} aria-hidden="true" />
+              <TrashIcon size={16} aria-hidden="true" />
               {actionKey?.startsWith("remove:") ? "正在移除…" : "确认移除旧版本"}
             </Button>
           </DialogFooter>
@@ -487,45 +522,63 @@ export function DlcCenter({ showToast }: DlcCenterProps) {
   );
 }
 
-function DlcCard({
+function DlcRow({
   item,
   busy,
   actionKey,
   onSetEnabled,
   onSelectVersion,
   onRemoveVersion,
-  onRestart,
   onUninstall,
-  desktopRuntime,
 }: {
   item: DlcLifecycleItem;
   busy: boolean;
   actionKey: string | null;
   onSetEnabled: (item: DlcLifecycleItem, enabled: boolean) => Promise<void>;
   onSelectVersion: (item: DlcLifecycleItem, packageDigest: string) => Promise<void>;
-  onRemoveVersion: (version: DlcInstalledVersionItem) => void;
-  onRestart: () => Promise<void>;
-  onUninstall: (item: DlcLifecycleItem) => void;
-  desktopRuntime: boolean;
+  onRemoveVersion: (version: DlcInstalledVersionItem, trigger: HTMLButtonElement) => void;
+  onUninstall: (item: DlcLifecycleItem, trigger: HTMLButtonElement) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const detailsId = useId();
+  const statusId = useId();
   const state = STATE_PRESENTATION[item.state];
   const uninstallAllowed = !item.desired_enabled && !item.active;
   const transitionKey = `${item.desired_enabled ? "disable" : "enable"}:${item.dlc_id}`;
   return (
-    <article className="dlc-card" aria-labelledby={`dlc-${item.dlc_id}`}>
-      <header className="dlc-card__header">
-        <div>
-          <h3 id={`dlc-${item.dlc_id}`}>{item.display_name}</h3>
-          <p>{item.description || "此扩展未提供说明。"}</p>
+    <article className="dlc-row" aria-labelledby={`dlc-${item.dlc_id}`}>
+      <header className="dlc-row__header">
+        <div className="dlc-row__identity">
+          <span className="dlc-row__icon"><PuzzlePieceIcon size={20} aria-hidden="true" /></span>
+          <div className="dlc-row__copy">
+            <h3 id={`dlc-${item.dlc_id}`}>
+              <button type="button" className="dlc-row__trigger" aria-expanded={expanded} aria-controls={detailsId} onClick={() => setExpanded((value) => !value)}>
+                <span>{item.display_name}</span><CaretDownIcon size={16} aria-hidden="true" />
+              </button>
+            </h3>
+            <p className="dlc-row__description" title={item.description ?? undefined}>{item.description || "此扩展未提供说明。"}</p>
+            <span className="dlc-row__byline">{item.publisher} <span aria-hidden="true">·</span> <span>{item.installed_versions.length} 个版本</span></span>
+          </div>
         </div>
-        <span className={`dlc-state dlc-state--${state.tone}`}>
-          {item.state === "active" ? <CheckCircle2 size={14} aria-hidden="true" /> : null}
-          {item.state === "activation_failed" ? <TriangleAlert size={14} aria-hidden="true" /> : null}
-          {state.label}
+        <span id={statusId} className={`dlc-state dlc-state--${state.tone}`}>
+          {item.state === "active" ? <CheckCircleIcon size={16} aria-hidden="true" /> : null}
+          {item.state === "activation_failed" ? <WarningIcon size={16} aria-hidden="true" /> : null}
+          {actionKey === transitionKey ? "正在更新…" : state.label}
         </span>
+        <Switch checked={item.desired_enabled} disabled={busy} aria-label={`启用 ${item.display_name}`} aria-describedby={statusId}
+          onCheckedChange={(enabled) => void onSetEnabled(item, enabled)} />
       </header>
 
-      <div className="dlc-truth-grid" aria-label="DLC 期望状态与运行状态">
+      {item.activation_failure ? (
+        <Alert className="dlc-activation-error" variant="destructive">
+          <WarningIcon aria-hidden="true" />
+          <AlertTitle>{item.activation_failure.code}</AlertTitle>
+          <AlertDescription>{item.activation_failure.message}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="dlc-row__details" id={detailsId} hidden={!expanded}>{expanded ? <>
+      <div className="dlc-truth-grid" role="group" aria-label="DLC 期望状态与运行状态">
         <div>
           <span>期望状态</span>
           <strong>{item.desired_enabled ? "启用" : "禁用"}</strong>
@@ -535,28 +588,28 @@ function DlcCard({
           <strong>{item.active ? "已激活" : "未激活"}</strong>
         </div>
         <div>
-          <span>Selected digest</span>
+          <span>选定包指纹</span>
           <code title={item.selected_digest}>{shortDigest(item.selected_digest)}</code>
         </div>
         <div>
-          <span>Active digest</span>
+          <span>运行包指纹</span>
           <code title={item.active_digest ?? undefined}>{shortDigest(item.active_digest)}</code>
         </div>
       </div>
 
-      <dl className="dlc-card__metadata">
+      <dl className="dlc-row__metadata">
         <div><dt>ID / 版本</dt><dd><code>{item.dlc_id}</code> · {item.version}</dd></div>
         <div><dt>发布者</dt><dd>{item.publisher} · <code title={item.publisher_fingerprint ?? undefined}>{shortDigest(item.publisher_fingerprint)}</code></dd></div>
-        <div><dt>Entrypoints</dt><dd>{[
-          item.backend_entrypoint_present ? "Backend" : null,
-          item.frontend_entrypoint_present ? "Frontend" : null,
+        <div><dt>运行组件</dt><dd>{[
+          item.backend_entrypoint_present ? "后端" : null,
+          item.frontend_entrypoint_present ? "界面" : null,
         ].filter(Boolean).join(" + ") || "无可用入口"}</dd></div>
       </dl>
 
-      <div className="dlc-versions" aria-label="已安装 DLC 包版本">
+      <div className="dlc-versions" role="group" aria-label="已安装 DLC 包版本">
         <div className="dlc-versions__heading">
           <strong>已安装版本（{item.installed_versions.length}）</strong>
-          <span>选择包只改变下次重启目标；不会回滚 DLC 数据 schema。</span>
+          <span>版本切换在重启后生效，不会回退已有数据格式。</span>
         </div>
         <ul>
           {item.installed_versions.map((version) => {
@@ -568,9 +621,9 @@ function DlcCard({
                   <code title={version.package_digest}>{shortDigest(version.package_digest)}</code>
                 </div>
                 <div className="dlc-version__states">
-                  {version.selected ? <span>Selected</span> : null}
-                  {version.active ? <span>Active</span> : null}
-                  {version.pending ? <span>Pending restart</span> : null}
+                  {version.selected ? <span>已选择</span> : null}
+                  {version.active ? <span>运行中</span> : null}
+                  {version.pending ? <span>待重启</span> : null}
                 </div>
                 <div className="dlc-version__actions">
                   {!version.selected ? (
@@ -580,8 +633,8 @@ function DlcCard({
                       disabled={busy}
                       onClick={() => void onSelectVersion(item, version.package_digest)}
                     >
-                      <RotateCcw size={14} aria-hidden="true" />
-                      {actionKey === selectKey ? "正在选择…" : "选择 / 回滚"}
+                      <ArrowsLeftRightIcon size={16} aria-hidden="true" />
+                      {actionKey === selectKey ? "正在切换…" : "切换版本"}
                     </Button>
                   ) : null}
                   {!version.selected ? (
@@ -590,9 +643,9 @@ function DlcCard({
                       size="sm"
                       disabled={busy || !version.removable}
                       title={version.removable ? "移除此旧版本包" : "当前运行版本必须在重启切换后才能移除"}
-                      onClick={() => onRemoveVersion(version)}
+                      onClick={(event) => onRemoveVersion(version, event.currentTarget)}
                     >
-                      <Trash2 size={14} aria-hidden="true" />
+                      <TrashIcon size={16} aria-hidden="true" />
                       移除旧版本
                     </Button>
                   ) : null}
@@ -604,48 +657,26 @@ function DlcCard({
       </div>
 
       <details className="dlc-permissions">
-        <summary>权限声明（{item.permissions.length}）</summary>
+        <summary><CaretDownIcon size={16} aria-hidden="true" />权限声明（{item.permissions.length}）</summary>
         {item.permissions.length > 0 ? (
           <ul>{item.permissions.map((permission) => <li key={permission}><code>{permission}</code></li>)}</ul>
         ) : <p>未声明额外权限。</p>}
       </details>
 
-      {item.activation_failure ? (
-        <Alert className="dlc-activation-error" variant="destructive">
-          <TriangleAlert aria-hidden="true" />
-          <AlertTitle>{item.activation_failure.code}</AlertTitle>
-          <AlertDescription>{item.activation_failure.message}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <footer className="dlc-card__actions">
-        <Button
-          variant={item.desired_enabled ? "outline" : "default"}
-          size="sm"
-          disabled={busy}
-          onClick={() => void onSetEnabled(item, !item.desired_enabled)}
-        >
-          <Power size={14} aria-hidden="true" />
-          {actionKey === transitionKey ? "正在更新…" : item.desired_enabled ? "停用" : "启用"}
-        </Button>
-        {item.restart_state !== "none" ? (
-          <Button variant="outline" size="sm" disabled={!desktopRuntime || busy} onClick={() => void onRestart()}>
-            <RefreshCw size={14} aria-hidden="true" />
-            立即重启
-          </Button>
-        ) : null}
+      <footer className="dlc-row__actions">
         <Button
           variant="ghost"
           size="sm"
           disabled={busy || !uninstallAllowed}
           title={uninstallAllowed ? "卸载并保留 DLC 数据" : "请先停用并重启，确认当前运行状态为未激活"}
-          onClick={() => onUninstall(item)}
+          onClick={(event) => onUninstall(item, event.currentTarget)}
         >
-          <Trash2 size={14} aria-hidden="true" />
+          <TrashIcon size={16} aria-hidden="true" />
           卸载
         </Button>
-        {!uninstallAllowed ? <span className="dlc-card__constraint">停用并重启后才可卸载</span> : null}
+        {!uninstallAllowed ? <span className="dlc-row__constraint">停用并重启后才可卸载</span> : null}
       </footer>
+      </> : null}</div>
     </article>
   );
 }
@@ -657,6 +688,7 @@ function PackageInspectionDialog({
   onOpenChange,
   onTrust,
   onInstall,
+  onCloseAutoFocus,
 }: {
   candidate: InspectedPackage | null;
   actionKey: string | null;
@@ -664,6 +696,7 @@ function PackageInspectionDialog({
   onOpenChange: (open: boolean) => void;
   onTrust: () => Promise<void>;
   onInstall: () => Promise<void>;
+  onCloseAutoFocus: (event: Event) => void;
 }) {
   const inspection = candidate?.inspection;
   const busy = actionKey === "trust" || actionKey === "install";
@@ -671,6 +704,7 @@ function PackageInspectionDialog({
     <Dialog open={candidate !== null} onOpenChange={onOpenChange}>
       <DialogContent
         className="dlc-inspection-dialog"
+        onCloseAutoFocus={onCloseAutoFocus}
         onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}
         onInteractOutside={(event) => { if (busy) event.preventDefault(); }}
       >
@@ -683,7 +717,7 @@ function PackageInspectionDialog({
         {candidate && inspection ? (
           <div className="dlc-inspection">
             <div className="dlc-inspection__title">
-              <PackageOpen size={20} aria-hidden="true" />
+              <PuzzlePieceIcon size={20} aria-hidden="true" />
               <div><strong>{inspection.display_name}</strong><span>{packageFileName(candidate.archivePath)}</span></div>
             </div>
             <p>{inspection.description || "此扩展未提供说明。"}</p>
@@ -708,14 +742,14 @@ function PackageInspectionDialog({
                 tone="warning"
                 label="发布者尚未受信任"
                 description="确认后只保存此 Ed25519 公钥；发布者名称不参与信任判定。信任操作会再次检查 digest、内嵌 key 与签名。"
-                meta={<ShieldAlert size={16} aria-hidden="true" />}
+                meta={<ShieldWarningIcon size={16} aria-hidden="true" />}
               />
             ) : (
               <SettingsStatus
                 tone="success"
                 label="发布者公钥已受信任"
                 description="安装仍默认为禁用；启用并重启前不会执行扩展代码。"
-                meta={<ShieldCheck size={16} aria-hidden="true" />}
+                meta={<ShieldCheckIcon size={16} aria-hidden="true" />}
               />
             )}
             {actionError ? (
@@ -732,12 +766,12 @@ function PackageInspectionDialog({
           <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>取消</Button>
           {inspection?.trust_required ? (
             <Button disabled={busy} onClick={() => void onTrust()}>
-              <ShieldCheck size={14} aria-hidden="true" />
+              <ShieldCheckIcon size={16} aria-hidden="true" />
               {actionKey === "trust" ? "正在重新验证…" : "信任此发布者"}
             </Button>
           ) : (
             <Button disabled={busy || !inspection} onClick={() => void onInstall()}>
-              <PackagePlus size={14} aria-hidden="true" />
+              <PackageIcon size={16} aria-hidden="true" />
               {actionKey === "install" ? "正在安装…" : "安装（默认禁用）"}
             </Button>
           )}

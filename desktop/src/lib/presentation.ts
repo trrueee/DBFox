@@ -102,6 +102,7 @@ export function safetyCheckLabel(result?: string | null): string {
 export function riskLevelLabel(level?: string | null): string {
   switch (String(level || "").trim().toLowerCase()) {
     case "critical":
+    case "danger":
     case "high": return "高风险";
     case "warning":
     case "medium": return "中风险";

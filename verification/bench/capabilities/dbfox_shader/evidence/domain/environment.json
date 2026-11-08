@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-09-05T15:59:03.353252+00:00",
+  "git_commit": "4df3568d2bd925c33874e8f80c3c8e231fe5f2c1",
+  "git_branch": "creative/shader",
+  "git_status_sha256": "367bde5a70e9e96f8211758a8a6a4ed180a1bf932d7e61b6df6ae0595019e62a",
+  "os": "Windows-11-10.0.26200-SP0",
+  "architecture": "AMD64",
+  "python": "3.12.7",
+  "ci": false
+}

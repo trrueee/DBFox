@@ -21,6 +21,8 @@ describe("packaged Electron renderer protocol", () => {
   it("accepts only the fixed local application origin and contained paths", () => {
     expect(parseAppUrl("dbfox-app://localhost/")).toBe("index.html");
     expect(parseAppUrl("dbfox-app://localhost/assets/index.js")).toBe("assets/index.js");
+    expect(parseAppUrl("dbfox-app://localhost/assets/icons.svg#folder-duotone")).toBe("assets/icons.svg");
+    expect(parseAppUrl("dbfox-app://localhost/assets/icons.svg#../../outside")).toBe("assets/icons.svg");
     for (const url of [
       "https://localhost/index.html",
       "dbfox-app://example.com/index.html",
@@ -37,6 +39,7 @@ describe("packaged Electron renderer protocol", () => {
     await mkdir(join(root, "assets"), { recursive: true });
     await writeFile(join(root, "index.html"), "<!doctype html><title>DBFox</title>");
     await writeFile(join(root, "assets", "index.js"), "export default 1;");
+    await writeFile(join(root, "assets", "icons.svg"), '<svg xmlns="http://www.w3.org/2000/svg"><symbol id="folder"/></svg>');
 
     const index = await handleAppRequest(new Request("dbfox-app://localhost/index.html"), root);
     expect(index.status).toBe(200);
@@ -49,6 +52,11 @@ describe("packaged Electron renderer protocol", () => {
     const asset = await handleAppRequest(new Request("dbfox-app://localhost/assets/index.js"), root);
     expect(asset.headers.get("cache-control")).toContain("immutable");
     expect(await asset.text()).toBe("export default 1;");
+    const icon = await handleAppRequest(new Request("dbfox-app://localhost/assets/icons.svg#folder"), root);
+    expect(icon.status).toBe(200);
+    expect(icon.headers.get("content-type")).toBe("image/svg+xml");
+    expect(icon.headers.get("content-security-policy")).toBe(index.headers.get("content-security-policy"));
+    expect(await icon.text()).toContain('id="folder"');
   });
 
   it("rejects oversized application assets", async () => {

@@ -1,0 +1,49 @@
+{
+  "boundary": "Public window.close; no force kill",
+  "before": [
+    {
+      "ProcessId": 24088,
+      "ParentProcessId": 63436,
+      "Name": "node.exe"
+    },
+    {
+      "ProcessId": 68424,
+      "ParentProcessId": 24088,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 25240,
+      "ParentProcessId": 68424,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 66936,
+      "ParentProcessId": 68424,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 34456,
+      "ParentProcessId": 68424,
+      "Name": "electron.exe"
+    },
+    {
+      "ProcessId": 76292,
+      "ParentProcessId": 68424,
+      "Name": "python.exe"
+    },
+    {
+      "ProcessId": 72680,
+      "ParentProcessId": 76292,
+      "Name": "conhost.exe"
+    },
+    {
+      "ProcessId": 69508,
+      "ParentProcessId": 76292,
+      "Name": "python.exe"
+    }
+  ],
+  "after": {
+    "listening": [],
+    "remaining": []
+  }
+}

@@ -28,6 +28,15 @@ class MemoryStorage {
 }
 
 describe("appearance preferences", () => {
+  it("keeps saved typography and layout choices when the shipped defaults change", () => {
+    const storage = new MemoryStorage();
+    const saved = { ...DEFAULT_APPEARANCE, uiFontSize: 14, agentFontSize: 14, artifactDockWidth: 28 };
+    storage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(saved));
+    expect(loadAppearancePreferences(storage)).toEqual(saved);
+    expect(DEFAULT_APPEARANCE.uiFontSize).toBe(15);
+    expect(DEFAULT_APPEARANCE.agentFontSize).toBe(16);
+  });
+
   it("rejects malformed or out-of-contract persisted values", () => {
     const storage = new MemoryStorage();
     storage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({

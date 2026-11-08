@@ -1,0 +1,176 @@
+{
+  "downloads": [
+    {
+      "format": "png",
+      "filename": "pixel_b019fad34570449584e16e5505d445b8-r10-png.png",
+      "download": {
+        "guid": "0859793e-3d1f-4ac6-baf5-6576a0c6d662",
+        "totalBytes": 75,
+        "receivedBytes": 75,
+        "state": "completed",
+        "filePath": "D:\\Project\\DBFox-worktrees\\creative-pixel\\output\\playwright\\interactive-pixel.png"
+      },
+      "status": 200,
+      "blob": {
+        "bytes": 75,
+        "sha256": "50b068e07b4bf235705c19b77da49fdbbc7e98ddc0a46f1c6659cca98c963904"
+      },
+      "independent_rgba_equal": true,
+      "dimensions": [
+        16,
+        16
+      ]
+    },
+    {
+      "format": "sheet",
+      "filename": "pixel_b019fad34570449584e16e5505d445b8-r10-sheet.png",
+      "download": {
+        "guid": "d51875e0-8d0b-4467-9279-8e7d4e27a097",
+        "totalBytes": 278,
+        "receivedBytes": 278,
+        "state": "completed",
+        "filePath": "D:\\Project\\DBFox-worktrees\\creative-pixel\\output\\playwright\\interactive-pixel-sheet.png"
+      },
+      "status": 200,
+      "blob": {
+        "bytes": 278,
+        "sha256": "0f2441136d86254c5ea82a8105359d657d994a087774d2d9401ee6173b201a71"
+      },
+      "independent_rgba_equal": true,
+      "dimensions": [
+        3200,
+        16
+      ]
+    }
+  ],
+  "state": {
+    "project": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+    "conversation": null,
+    "workbench": {
+      "scopeId": "7a4dd61c-4a80-4dd4-b631-8c2ef4a76711",
+      "open": true,
+      "activeViewKey": "core.artifact:artifact_1b52a2cd620a4f65b3172e35b107d272",
+      "tabs": [
+        {
+          "viewKey": "dbfox.pixel.studio:pixel-bench-0ca84a9d5880482da512a607c689d920:library",
+          "viewType": "dbfox.pixel.studio",
+          "title": "Pixel Studio",
+          "projectId": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+          "closeable": true
+        },
+        {
+          "viewKey": "core.artifact:artifact_b93e313e710d4ecf9e1ef6b842ad5b6f",
+          "viewType": "core.artifact",
+          "title": "Interactive Pixel · r44",
+          "closeable": true,
+          "projectId": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+          "target": {
+            "type": "artifact",
+            "id": "artifact_b93e313e710d4ecf9e1ef6b842ad5b6f"
+          },
+          "selectedViewId": "dbfox.pixel.revision-view"
+        },
+        {
+          "viewKey": "dbfox.pixel.studio:pixel-bench-0ca84a9d5880482da512a607c689d920:pixel_d737af8bf8d04a5fb688493384fccf5c",
+          "viewType": "dbfox.pixel.studio",
+          "title": "Interactive Pixel",
+          "projectId": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+          "closeable": true,
+          "target": {
+            "type": "object",
+            "object": {
+              "kind": "dbfox.pixel.document",
+              "id": "pixel_d737af8bf8d04a5fb688493384fccf5c"
+            },
+            "authority": {
+              "kind": "dbfox.pixel.document",
+              "id": "pixel_d737af8bf8d04a5fb688493384fccf5c"
+            }
+          }
+        },
+        {
+          "viewKey": "core.artifact:artifact_1b52a2cd620a4f65b3172e35b107d272",
+          "viewType": "core.artifact",
+          "title": "Pixel independent example · r10",
+          "closeable": true,
+          "projectId": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+          "target": {
+            "type": "artifact",
+            "id": "artifact_1b52a2cd620a4f65b3172e35b107d272"
+          },
+          "selectedViewId": "dbfox.pixel.revision-view"
+        }
+      ],
+      "references": [
+        {
+          "label": "Interactive Pixel · frame_0c6292e94b214c92aef0981512421251 / layer_1 · r44",
+          "authority": {
+            "kind": "dbfox.pixel.document",
+            "id": "pixel_d737af8bf8d04a5fb688493384fccf5c"
+          },
+          "object": {
+            "kind": "dbfox.pixel.frame",
+            "id": "frame_0c6292e94b214c92aef0981512421251",
+            "version": "44"
+          },
+          "locator": "pixel://pixel_d737af8bf8d04a5fb688493384fccf5c;revision=44;frame=frame_0c6292e94b214c92aef0981512421251;layer=layer_1"
+        },
+        {
+          "label": "Interactive Pixel · r44",
+          "artifactId": "artifact_b93e313e710d4ecf9e1ef6b842ad5b6f"
+        },
+        {
+          "label": "Pixel independent example · scale_199 / layer_1 · r10",
+          "authority": {
+            "kind": "dbfox.pixel.document",
+            "id": "pixel_b019fad34570449584e16e5505d445b8"
+          },
+          "object": {
+            "kind": "dbfox.pixel.frame",
+            "id": "scale_199",
+            "version": "10"
+          },
+          "locator": "pixel://pixel_b019fad34570449584e16e5505d445b8;revision=10;frame=scale_199;layer=layer_1"
+        },
+        {
+          "label": "Pixel independent example · r10",
+          "artifactId": "artifact_1b52a2cd620a4f65b3172e35b107d272"
+        }
+      ]
+    }
+  },
+  "producer": {
+    "run_id": "run_cee9e4751e894db594a112acb6aa8b63",
+    "session_id": "6988b8ce-f54a-4611-b3e1-79146c857968",
+    "status": "completed",
+    "artifact_id": "artifact_1b52a2cd620a4f65b3172e35b107d272",
+    "payload": {
+      "content_hash": "14c2b654db5b12d5e736884e0478b01936dba1daa01bc89aba41a802947c0422",
+      "document_id": "pixel_b019fad34570449584e16e5505d445b8",
+      "frame_count": 200,
+      "height": 16,
+      "layer_count": 1,
+      "palette_count": 3,
+      "parent_revision": 9,
+      "project_id": "pixel-bench-0ca84a9d5880482da512a607c689d920",
+      "revision": 10,
+      "status": "active",
+      "tag_count": 0,
+      "title": "Pixel independent example",
+      "width": 16
+    },
+    "provenance": {
+      "tool_invocation_id": "invocation_62255e6fc3044a4284ec34271e4e7004",
+      "tool_name": "dbfox_pixel_ff3efa59__pixel_export"
+    },
+    "invocation_id": "invocation_62255e6fc3044a4284ec34271e4e7004",
+    "resource_refs": [
+      {
+        "id": "pixel_b019fad34570449584e16e5505d445b8",
+        "kind": "dbfox.pixel.document",
+        "version": "10"
+      }
+    ]
+  },
+  "package_digest": "cf43cb1f28538119a437c68f13ef8b152d2cd18c7acf9d18f9506a713746c299"
+}

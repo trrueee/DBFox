@@ -1,0 +1,97 @@
+{
+  "source": "https://github.com/microsoft/fluentui-system-icons/tree/9eb184e96268d3293462f9d9d19225b4c7b07774/packages/react-icons-file-type",
+  "cdn_version": "fabric-cdn-prod_20261014.001",
+  "usage": "Unmodified Microsoft file-type assets, solely identifying the corresponding file formats. Microsoft and other marks remain the property of their owners. See https://fluent2.microsoft.design/iconography and https://www.microsoft.com/legal/intellectualproperty/trademarks",
+  "assets": {
+    "file_type_excel.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/16/xlsx.svg",
+      "sha256": "989e28da8044041569537253376f24ab2ec099f5eb124df76493d5517caf9a5d",
+      "bytes": 4700
+    },
+    "file_type_excel_20.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/20/xlsx.svg",
+      "sha256": "eec891045656cb6c8ba8ef6afb33fbe3130e9aed5a83ca8a6c0efabe447f5075",
+      "bytes": 4529
+    },
+    "file_type_word.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/16/docx.svg",
+      "sha256": "077cac53e9777727393bb0b52576d99178d4e2d644147413217fe6d046eb8a89",
+      "bytes": 4070
+    },
+    "file_type_word_20.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/20/docx.svg",
+      "sha256": "10866c8fa06664260ad1c063a3ab87ea6e814b86a8f54fdd2e1e7be795d74032",
+      "bytes": 4042
+    },
+    "file_type_powerpoint.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/16/pptx.svg",
+      "sha256": "0bb10c0af29e22c78a8df2d1f18dd6c3b4a504234bf68a61bc8d8a7cb19d686b",
+      "bytes": 3900
+    },
+    "file_type_powerpoint_20.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/20/pptx.svg",
+      "sha256": "bc83f7cd664a3eeac569fbc55c7c3868cfa4fdbed1ce3c762bd28fb573a9e682",
+      "bytes": 4030
+    },
+    "file_type_pdf.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/16/pdf.svg",
+      "sha256": "16727e1671273e279a63313596a4493471678895dab5ca3c2b4d9e4d52cce884",
+      "bytes": 1920
+    },
+    "file_type_pdf_20.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/20/pdf.svg",
+      "sha256": "b0614289b1755092884e6ed3e37806c5126113e6aea430662aa88af80fb23d25",
+      "bytes": 1877
+    },
+    "file_type_image.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/16/photo.svg",
+      "sha256": "f363053bac0910dbf22b141207ddd7a496fec926cc1ea18dc7ff05c042a7f840",
+      "bytes": 1587
+    },
+    "file_type_image_20.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/20/photo.svg",
+      "sha256": "76e885e2aaa0e90b8caa455d82edb917342de5440c2e387b09544e89a882b36a",
+      "bytes": 1535
+    },
+    "file_type_audio.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/16/audio.svg",
+      "sha256": "83557edab5658dbf4ef0f973de5a8e2be0252e23a27c00ccdbda643a82b5bf39",
+      "bytes": 1883
+    },
+    "file_type_audio_20.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/20/audio.svg",
+      "sha256": "4f83887e1d40594b3c152f001f5438ccf715e6c8facb556d902e057361b29251",
+      "bytes": 1818
+    },
+    "file_type_video.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/16/video.svg",
+      "sha256": "4b626307213cfe6a1bd322e3d76a3ea1c84232c2eb8c1d51bccddb3fdc0b6a1b",
+      "bytes": 1345
+    },
+    "file_type_video_20.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/20/video.svg",
+      "sha256": "129c3be297e50988317de583ba947a20815cdab26e1510b1fc3ec38cd3963856",
+      "bytes": 1280
+    },
+    "file_type_text.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/16/txt.svg",
+      "sha256": "bff43f03d5ce9e119df941969029f6d4a4ef764008d25549a7ed1438e97a0bb7",
+      "bytes": 1460
+    },
+    "file_type_text_20.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/20/txt.svg",
+      "sha256": "623a41ee87b7813c3ce8af9b9f635f0ce0f12391112a7c0a416bc211cb5a444b",
+      "bytes": 1415
+    },
+    "file_type_archive.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/16/archive.svg",
+      "sha256": "04cb132d02ae7477c84db4c7311d7dc33c424e5a3fa2971b0dfb1ecb0184c975",
+      "bytes": 1491
+    },
+    "file_type_archive_20.svg": {
+      "source": "https://res.cdn.office.net/files/fabric-cdn-prod_20261014.001/assets/item-types/20/archive.svg",
+      "sha256": "71df2824c28af818591e400c01a3ce72e0c3f4b95b5ad02bea3fadf66bd11474",
+      "bytes": 1497
+    }
+  }
+}

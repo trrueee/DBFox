@@ -1,0 +1,414 @@
+[
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "simple_creation",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 2.0,
+      "game.final_version": 1.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_d2ab48ca0d9c4f8eae8282bc9fbf2a7b"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "f46ac300-9d95-4aa0-adf8-b2e84c4d4fbf",
+        "project_id": "029fbbd2-9a04-4bb3-aa5c-7bdcce6828a5",
+        "title": "Fox survival",
+        "version": 1,
+        "content_hash": "6a55a6796ed3bce7c83ab37dcbbe228dd998b2928e263bc243bef94730e5945d",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 0,
+        "rule_count": 0
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "incremental_modification",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 1.0,
+      "game.final_version": 3.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_c8994fc5760a44e5bdb0c859a43c9691"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "eab2c045-3344-4a34-b692-902116d4a439",
+        "project_id": "184b94ef-9633-4ab5-85a4-8f2674ed3bdc",
+        "title": "Forest survival",
+        "version": 3,
+        "content_hash": "5c288bf8bc4e77754c36300b570a0b0b548e26d283262a037cbcc4ee8e54bb02",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 3,
+        "rule_count": 3
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "multi_stage_creation",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 2.0,
+      "game.final_version": 3.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_8a170356f0a34ae983859af0cb3e81ab"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "93304ce4-6b55-49d9-b76b-d1df1b44e487",
+        "project_id": "379c02d1-d840-46ca-ae54-43424ae252de",
+        "title": "Fox survival",
+        "version": 3,
+        "content_hash": "6e59cec350339be28f297ef41e3f7499f305c314e06df7bc912bebcb3d901947",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 3,
+        "rule_count": 4
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "invalid_recovery",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 2.0,
+      "game.final_version": 3.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_d2483fc53df34856b09e75f10c73cd30"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "b5371e0e-00a9-4c5f-ae35-d0c4f450d2cd",
+        "project_id": "776c2876-969d-4fbc-bfa9-d93fe668956e",
+        "title": "Forest survival",
+        "version": 3,
+        "content_hash": "a2a2c14c7e6ae89ee23998a34a4dd00494938083d5df1f5b4cece1c3ba20b54a",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 3,
+        "rule_count": 3
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "inspect_before_edit",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 2.0,
+      "game.final_version": 3.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_20823bf1a98b43efa42aae134de4eca2"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "23404565-1bfa-4f2a-84b4-f04c906112d3",
+        "project_id": "2403a617-98a5-41c3-8872-079a0765d518",
+        "title": "Fox survival",
+        "version": 3,
+        "content_hash": "2e2c78af22f08ef82204e642017b912eba2d910a0e2e94e93a7e692943f02b75",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 3,
+        "rule_count": 3
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "stale_version",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 4.0,
+      "game.final_version": 4.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_56ce30b82611447385f13698a17d85a3"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "7a088cf1-6875-42ab-8a0e-7b4a2de651fa",
+        "project_id": "24bd452c-4ec2-4b5f-9fae-de5d75a5e974",
+        "title": "Forest survival",
+        "version": 4,
+        "content_hash": "e25cdee40bde3b3df23d2d711fa8c7d99efb541ecd7c6e8f68114b85d4d40336",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 3,
+        "rule_count": 3
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "no_op",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 1.0,
+      "game.final_version": 2.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_ad647d34ddf04f0b8420b358404b8c13"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "930b90c3-8443-4695-89c8-f19fe665d436",
+        "project_id": "17bdd6bd-6a98-45c0-b048-ed3cf9b65687",
+        "title": "Fox survival",
+        "version": 2,
+        "content_hash": "501f84b866a3487e126d3d1d26ca4dfa2ac8bb3751c7e16c02baee00ffd81717",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 3,
+        "rule_count": 3
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "ambiguous_request",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 0.0,
+      "game.final_version": 2.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_25c158372f82484c81a491b58d18e0d1"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "6d5eb44c-a9ab-45a6-8d9f-97f0c03423f2",
+        "project_id": "4cccd652-00a2-463c-8fc0-faa8130a7d0c",
+        "title": "Fox survival",
+        "version": 2,
+        "content_hash": "38723556e918fee1be6d20ec011ad081fc90bf4136d030d34b97c0dc160d181e",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 3,
+        "rule_count": 3
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "large_document",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 1.0,
+      "game.final_version": 3.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_db773b8948964399ad6c05242c12fa10"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "b02b144d-9332-43c9-9f4d-c668de4b5007",
+        "project_id": "7825e14f-25f5-43e3-aa0e-56ae0ff68efe",
+        "title": "Fox survival",
+        "version": 3,
+        "content_hash": "4ee2c8372ce7400c1704eca40d769fe73acffde5cec48f4a4bec05c829e3de37",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 128,
+        "rule_count": 3
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "bounded_context",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 1.0,
+      "game.final_version": 3.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_acfa7e67fd024fec80530034a5d8eb19"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "6cb6c28d-6d91-4532-b01f-05c4b97b7c1b",
+        "project_id": "22ceb99e-b49d-4f72-9172-fa2b012f44f3",
+        "title": "Fox survival",
+        "version": 3,
+        "content_hash": "9a02bc61583433516bd72662270c1d25d6ca10ca997359880815eaec1b59273a",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 128,
+        "rule_count": 3
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "human_then_agent",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 2.0,
+      "game.final_version": 4.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_b7a2ab6f8bdb4c2d8bbe4839c130b948"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "0075e936-b5e1-4ac5-a427-99466a4f71fd",
+        "project_id": "e8126b5f-3d95-4101-b5ee-75005cef0d0d",
+        "title": "Fox survival",
+        "version": 4,
+        "content_hash": "bd61842b88e39824f0a9e38a5f2bd05771581a879a4e7c4f45882b38d0cdc694",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 3,
+        "rule_count": 3
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "negative_no_modification",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 1.0,
+      "game.final_version": 2.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_e1d5a56be19a45b3813c2c61aa717874"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "3aad1c0f-789d-438d-8198-4cf3083ef79a",
+        "project_id": "6e75a580-0154-4838-baac-09fe997adb09",
+        "title": "Fox survival",
+        "version": 2,
+        "content_hash": "f6ae23ae6d8a31e9be08164824171adbe3fc8cc63ebb0ff3642a2b025ae1aa7b",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 3,
+        "rule_count": 3
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  },
+  {
+    "suite_id": "capability.dbfox-game.scripted",
+    "case_id": "creative_stress",
+    "repetition": 1,
+    "verdict": "pass",
+    "metrics": {
+      "task.success_rate": 1.0,
+      "runtime.tool_calls": 10.0,
+      "game.final_version": 12.0
+    },
+    "failed_checks": [],
+    "evidence": {
+      "run_ids": [
+        "run_731fa00d2c3c43cfbd9debf5c3c43b02",
+        "run_f0d69be486494312989d3724eee71bf2",
+        "run_338962a381d4461faa72b1a1d795d2fe",
+        "run_d0445ab536ec4ee89443eb7addac520d",
+        "run_aefcee069e544b7282841b8ce77949e4",
+        "run_78dd23e283c14f5597cbe60f0770a5d9",
+        "run_6eb36d005c37408299878e3db744dc48",
+        "run_837a71dbd8ab499cbccc3c1c92a43841",
+        "run_27dd7330071942fda62d04561b5065c1",
+        "run_8fbeaae2e95a467dbcfedff13b3da727"
+      ],
+      "package_digest": "3cdd8db95e39a180f76f481f1b04411e3b6805dc57f8a9846b894d422899572c",
+      "final": {
+        "id": "e3fb6df5-df4f-476d-8d8c-93fc365f0a5a",
+        "project_id": "72b933d8-9e02-46d0-9316-fc2e17fd342f",
+        "title": "Forest survival — refined",
+        "version": 12,
+        "content_hash": "a10743a54e554bb82966719552fe37e46488b4b2e8f436dc7c13c4ec006a0067",
+        "deleted": false,
+        "scene_count": 1,
+        "entity_count": 27,
+        "rule_count": 3
+      },
+      "factory": "build_product_run_loop",
+      "budget_override": false
+    }
+  }
+]

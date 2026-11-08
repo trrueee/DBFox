@@ -26,6 +26,7 @@ from engine.agent.resource_refs import (
     ProjectResourceDescriptor,
     ProjectResourceProvider,
     RequestedResourceRef,
+    SessionResourceDiscoveryContext,
     discover_resources_from_providers,
 )
 from engine.db import SessionLocal
@@ -162,7 +163,7 @@ def build_product_tool_registry(
         )
     from engine.tools.builtin.project_resources import ProjectResourceSearchTool
 
-    resource_search = ProjectResourceSearchTool(snap.resource_providers)
+    resource_search = ProjectResourceSearchTool(snap.resource_providers, lambda db, run_id: discover_run_resources(db, run_id, snap))
     registry.register(
         resource_search,
         owner="dbfox.core",
@@ -222,6 +223,132 @@ def authorize_project_resources(
 
     # Absence of an explicit request never grants Project resources.
     return ()
+
+
+def discover_session_resources(
+    db: Session, session_id: str, *, boundary: int | None = None,
+    staged: bool = False, snapshot: RuntimeContributionSnapshot | None = None,
+) -> tuple[ProjectResourceDescriptor, ...]:
+    """Compose owner-checked private resources from a Host-proven Input frontier."""
+    from engine.attachments import AttachmentService, require_session
+
+    aggregate = require_session(db, session_id)
+    frontier = int(aggregate.input_sequence or 0) if boundary is None else boundary
+    descriptors = list(AttachmentService(db).descriptors(session_id, frontier, staged=staged))
+    context = SessionResourceDiscoveryContext(
+        session_id=session_id, project_id=str(aggregate.project_id or ""), input_boundary=frontier,
+        resource_refs=tuple(item.to_scope_ref() for item in descriptors),
+    )
+    seen = {item.to_scope_ref().canonical() for item in descriptors}
+    for contribution in (snapshot or get_active_runtime_snapshot()).session_resource_contributions:
+        for descriptor in contribution.provider(context):
+            if not descriptor.kind.startswith(contribution.owner_id + ".") or descriptor.to_scope_ref().canonical() in seen:
+                raise ValueError("Session discovery returned a foreign or duplicate resource")
+            seen.add(descriptor.to_scope_ref().canonical())
+            descriptors.append(descriptor)
+    return tuple(descriptors)
+
+
+def discover_run_resources(
+    db: Session, run_id: str, snapshot: RuntimeContributionSnapshot | None = None,
+) -> tuple[ProjectResourceDescriptor, ...]:
+    from engine.attachments import require_session, run_input_boundary
+    from engine.models import AgentRun
+
+    run = db.get(AgentRun, run_id)
+    if run is None:
+        return ()
+    aggregate = require_session(db, str(run.session_id))
+    return (*discover_project_resources(db, str(aggregate.project_id or ""), snapshot),
+            *discover_session_resources(db, str(run.session_id), boundary=run_input_boundary(db, run), snapshot=snapshot))
+
+
+def authorize_conversation_resources(
+    db: Session, session_id: str, requested: Sequence[RequestedResourceRef],
+) -> tuple[ResourceScopeRef, ...]:
+    from engine.attachments import require_session
+
+    aggregate = require_session(db, session_id)
+    available = {item.to_scope_ref().canonical(): item.to_scope_ref() for item in (
+        *discover_project_resources(db, str(aggregate.project_id or "")),
+        *discover_session_resources(db, session_id, staged=True),
+    )}
+    result = []
+    for ref in requested:
+        key = (ref.kind, ref.id)
+        if key not in available:
+            raise ValueError("Requested resource is unavailable in this conversation")
+        if available[key] not in result:
+            result.append(available[key])
+    return tuple(result)
+
+
+def authorize_artifact_session_resources(db: Session, artifact: Any, session_id: str | None) -> None:
+    """Private Representation reads require an explicit conversation and current membership."""
+    from engine.representation import ArtifactRepresentationError
+
+    if session_id is not None and session_id != artifact.session_id:
+        raise ArtifactRepresentationError("NOT_FOUND", "Artifact is unavailable in this conversation.", status_code=404)
+    snap = get_active_runtime_snapshot()
+    session_owners = {c.owner_id for c in snap.session_resource_contributions}
+    if not any(ref.kind.startswith(owner + ".") for owner in session_owners for ref in artifact.resource_refs):
+        return
+    from engine.attachments import AttachmentError, require_session
+    try:
+        aggregate = require_session(db, artifact.session_id)
+    except AttachmentError as exc:
+        raise ArtifactRepresentationError("NOT_FOUND", "Artifact conversation is unavailable.", status_code=404) from exc
+    project_refs = {d.to_scope_ref() for d in discover_project_resources(db, str(aggregate.project_id or ""), snap)}
+    private_refs = tuple(ref for ref in artifact.resource_refs if ref not in project_refs)
+    if private_refs:
+        if session_id != artifact.session_id:
+            raise ArtifactRepresentationError("NOT_FOUND", "Private Artifact requires its conversation scope.", status_code=404)
+        available = {d.to_scope_ref() for d in discover_run_resources(db, artifact.run_id, snap)}
+        if any(ref not in available for ref in private_refs):
+            raise ArtifactRepresentationError("SOURCE_UNAVAILABLE", "Artifact source is no longer available.", status_code=409)
+
+
+def deliver_session_resource_retirements(db: Session, snapshot: RuntimeContributionSnapshot | None = None) -> None:
+    """Replay committed deletions; owner callbacks are idempotent and never grant access."""
+    from sqlalchemy import select
+    from engine.agent.repositories.write_transaction import begin_agent_write
+    from engine.attachments import AttachmentService
+    from engine.json_codec import dumps
+    from pydantic import TypeAdapter
+    from engine.models import SessionResourceRetirement
+
+    string_list = TypeAdapter(list[str])
+    groups: dict[str, list[Callable[[str], None]]] = {}
+    for contribution in (snapshot or get_active_runtime_snapshot()).session_resource_contributions:
+        if contribution.retire is not None:
+            groups.setdefault(contribution.owner_id, []).append(contribution.retire)
+    for record in tuple(db.scalars(select(SessionResourceRetirement))):
+        owners = set(string_list.validate_json(record.delivered_owners_json))
+        if "dbfox.core" not in owners:
+            try:
+                service = AttachmentService(db)
+                for attachment_id in string_list.validate_json(record.attachment_ids_json):
+                    service.path(attachment_id).unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning("Session input cleanup deferred error=%s", type(exc).__name__)
+            else:
+                begin_agent_write(db)
+                db.refresh(record)
+                record.delivered_owners_json = dumps(sorted({*string_list.validate_json(record.delivered_owners_json), "dbfox.core"}))
+                db.commit()
+        for owner, callbacks in groups.items():
+            if owner in owners:
+                continue
+            try:
+                for callback in callbacks:
+                    callback(record.session_id)
+            except Exception as exc:
+                logger.warning("Session resource cleanup deferred owner=%s error=%s", owner, type(exc).__name__)
+                continue
+            begin_agent_write(db)
+            db.refresh(record)
+            record.delivered_owners_json = dumps(sorted({*string_list.validate_json(record.delivered_owners_json), owner}))
+            db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +465,8 @@ def build_product_run_loop(
         context_contributors=default_context_contributors(snap),
         capability_guidance=default_capability_guidance(snap),
         resource_providers=snap.resource_providers,
+        resource_discovery=lambda db, run_id: discover_run_resources(db, run_id, snap),
+        resource_resolver=build_attempt_resource_resolver(snapshot=snap),
         artifact_representation_provider_resolver=representation_provider,
         artifact_representation_describer=describe_representations,
         artifact_payload_contract_resolver=artifact_payload_contract,

@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "capability.dbfox-voxel.scripted",
+  "suite_version": "1.0.0",
+  "description": "Director-authored deterministic Voxel suite through a signed full DLC and production RunLoop; independent review remains required.",
+  "subject": {
+    "kind": "capability",
+    "components": [
+      "dbfox.voxel"
+    ],
+    "supporting_fixtures": [
+      "scripted-provider",
+      "migrated-metadata",
+      "signed-package"
+    ]
+  },
+  "execution": {
+    "provider_modes": [
+      "scripted"
+    ],
+    "default_repetitions": 1,
+    "max_repetitions": 5
+  },
+  "dataset": "cases.json",
+  "metrics": [
+    {
+      "name": "task.success_rate",
+      "direction": "higher_is_better",
+      "unit": "ratio",
+      "description": "task.success_rate"
+    },
+    {
+      "name": "runtime.tool_calls",
+      "direction": "lower_is_better",
+      "unit": "count",
+      "description": "runtime.tool_calls"
+    },
+    {
+      "name": "runtime.turns",
+      "direction": "lower_is_better",
+      "unit": "count",
+      "description": "runtime.turns"
+    },
+    {
+      "name": "voxel.nonzero",
+      "direction": "informational",
+      "unit": "count",
+      "description": "voxel.nonzero"
+    },
+    {
+      "name": "context.voxel_chars",
+      "direction": "informational",
+      "unit": "chars",
+      "description": "context.voxel_chars"
+    },
+    {
+      "name": "observation.max_bytes",
+      "direction": "informational",
+      "unit": "bytes",
+      "description": "observation.max_bytes"
+    }
+  ]
+}

@@ -1,0 +1,2226 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "case_id": "simple-creation",
+      "category": "simple_creation",
+      "prompt": "simple creation",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              32,
+              32,
+              32
+            ]
+          }
+        },
+        {
+          "id": "seed",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  2,
+                  2,
+                  2
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": 8,
+      "points": [
+        {
+          "layer": "base",
+          "xyz": [
+            0,
+            0,
+            0
+          ],
+          "index": 1
+        },
+        {
+          "layer": "base",
+          "xyz": [
+            2,
+            0,
+            0
+          ],
+          "index": 0
+        }
+      ]
+    },
+    {
+      "case_id": "local-incremental-edit",
+      "category": "incremental_modification",
+      "prompt": "local incremental edit",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              32,
+              32,
+              32
+            ]
+          }
+        },
+        {
+          "id": "seed",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  2,
+                  2,
+                  2
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "remote",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  20,
+                  20,
+                  20
+                ],
+                "max": [
+                  22,
+                  22,
+                  22
+                ]
+              },
+              "palette_index": 2
+            }
+          }
+        },
+        {
+          "id": "inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": 16,
+      "points": [
+        {
+          "layer": "base",
+          "xyz": [
+            0,
+            0,
+            0
+          ],
+          "index": 1
+        },
+        {
+          "layer": "base",
+          "xyz": [
+            20,
+            20,
+            20
+          ],
+          "index": 2
+        }
+      ]
+    },
+    {
+      "case_id": "multi-stage-geometry",
+      "category": "multi_stage_creation",
+      "prompt": "multi stage geometry",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              32,
+              32,
+              32
+            ]
+          }
+        },
+        {
+          "id": "plane",
+          "tool": "voxel_box",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "box",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  2,
+                  1,
+                  2
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "raise",
+          "tool": "voxel_extrude",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "extrude",
+              "layer_id": "base",
+              "source_layer_id": "base",
+              "axis": "y",
+              "depth": 3,
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  2,
+                  1,
+                  2
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "orb",
+          "tool": "voxel_sphere",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "sphere",
+              "layer_id": "base",
+              "center": [
+                8,
+                8,
+                8
+              ],
+              "radius": 2,
+              "palette_index": 3
+            }
+          }
+        },
+        {
+          "id": "inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": 49,
+      "points": [
+        {
+          "layer": "base",
+          "xyz": [
+            1,
+            3,
+            1
+          ],
+          "index": 1
+        },
+        {
+          "layer": "base",
+          "xyz": [
+            8,
+            8,
+            8
+          ],
+          "index": 3
+        }
+      ]
+    },
+    {
+      "case_id": "invalid-recovery",
+      "category": "invalid_instruction_recovery",
+      "prompt": "invalid recovery",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              32,
+              32,
+              32
+            ]
+          }
+        },
+        {
+          "id": "outside",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  31,
+                  31,
+                  31
+                ],
+                "max": [
+                  33,
+                  33,
+                  33
+                ]
+              },
+              "palette_index": 1
+            }
+          },
+          "succeeds": false,
+          "unchanged": true,
+          "error_contains": "OUT_OF_BOUNDS"
+        },
+        {
+          "id": "after_reject",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "repair",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  31,
+                  31,
+                  31
+                ],
+                "max": [
+                  32,
+                  32,
+                  32
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": 1,
+      "points": [
+        {
+          "layer": "base",
+          "xyz": [
+            31,
+            31,
+            31
+          ],
+          "index": 1
+        }
+      ]
+    },
+    {
+      "case_id": "inspect-before-edit",
+      "category": "inspect_before_edit",
+      "prompt": "inspect before edit",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              32,
+              32,
+              32
+            ]
+          }
+        },
+        {
+          "id": "before",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "guided",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "$before.layers.0.id",
+              "bounds": {
+                "min": [
+                  3,
+                  3,
+                  3
+                ],
+                "max": [
+                  4,
+                  4,
+                  4
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": 1,
+      "points": [
+        {
+          "layer": "base",
+          "xyz": [
+            3,
+            3,
+            3
+          ],
+          "index": 1
+        }
+      ]
+    },
+    {
+      "case_id": "stale-and-refresh",
+      "category": "stale_version",
+      "prompt": "stale and refresh",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              32,
+              32,
+              32
+            ]
+          }
+        },
+        {
+          "id": "seed",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  2,
+                  2,
+                  2
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "stale",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$create.version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  8,
+                  8,
+                  8
+                ],
+                "max": [
+                  9,
+                  9,
+                  9
+                ]
+              },
+              "palette_index": 1
+            }
+          },
+          "succeeds": false,
+          "unchanged": true,
+          "error_contains": "STALE_VERSION"
+        },
+        {
+          "id": "refresh",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "fresh",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  8,
+                  8,
+                  8
+                ],
+                "max": [
+                  9,
+                  9,
+                  9
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": 9
+    },
+    {
+      "case_id": "no-op-receipt",
+      "category": "no_op",
+      "prompt": "no op receipt",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              32,
+              32,
+              32
+            ]
+          }
+        },
+        {
+          "id": "seed",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  2,
+                  2,
+                  2
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "same",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  2,
+                  2,
+                  2
+                ]
+              },
+              "palette_index": 1
+            }
+          },
+          "unchanged": true
+        },
+        {
+          "id": "inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": 8
+    },
+    {
+      "case_id": "ambiguous-no-mutation",
+      "category": "ambiguous_request",
+      "prompt": "ambiguous no mutation",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              32,
+              32,
+              32
+            ]
+          }
+        },
+        {
+          "id": "seed",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  2,
+                  2,
+                  2
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "clarify",
+          "kind": "answer",
+          "text": "Which region and what dimensions should change? The world is unchanged while awaiting clarification."
+        }
+      ],
+      "nonzero_count": 8
+    },
+    {
+      "case_id": "large-world",
+      "category": "large_document",
+      "prompt": "large world",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              128,
+              128,
+              128
+            ]
+          }
+        },
+        {
+          "id": "bulk",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  128,
+                  128,
+                  128
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "local",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  127,
+                  127,
+                  127
+                ],
+                "max": [
+                  128,
+                  128,
+                  128
+                ]
+              },
+              "palette_index": 2
+            }
+          }
+        },
+        {
+          "id": "inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": 2097152,
+      "points": [
+        {
+          "layer": "base",
+          "xyz": [
+            0,
+            0,
+            0
+          ],
+          "index": 1
+        },
+        {
+          "layer": "base",
+          "xyz": [
+            127,
+            127,
+            127
+          ],
+          "index": 2
+        }
+      ]
+    },
+    {
+      "case_id": "bounded-world-context",
+      "category": "bounded_context",
+      "prompt": "bounded world context",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001",
+            "size": [
+              64,
+              64,
+              64
+            ]
+          }
+        },
+        {
+          "id": "long_layer",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "layer_put",
+              "layer": {
+                "id": "long_layer",
+                "name": "\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001",
+                "locked": false
+              }
+            }
+          }
+        },
+        {
+          "id": "bulk",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  64,
+                  64,
+                  64
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "next_turn",
+          "kind": "answer",
+          "text": "World created. Please select this same world to inspect its bounded metadata."
+        },
+        {
+          "id": "inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": 262144
+    },
+    {
+      "case_id": "human-then-agent",
+      "category": "human_then_agent_edit",
+      "prompt": "human then agent",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              32,
+              32,
+              32
+            ]
+          }
+        },
+        {
+          "id": "seed",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  2,
+                  2,
+                  2
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "human",
+          "tool": "worlds.apply",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  20,
+                  0,
+                  0
+                ],
+                "max": [
+                  21,
+                  1,
+                  1
+                ]
+              },
+              "palette_index": 3
+            },
+            "mutation_id": "human-step"
+          },
+          "kind": "human"
+        },
+        {
+          "id": "after_human",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "agent",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  25,
+                  0,
+                  0
+                ],
+                "max": [
+                  26,
+                  1,
+                  1
+                ]
+              },
+              "palette_index": 2
+            }
+          }
+        },
+        {
+          "id": "inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": 10,
+      "points": [
+        {
+          "layer": "base",
+          "xyz": [
+            20,
+            0,
+            0
+          ],
+          "index": 3
+        },
+        {
+          "layer": "base",
+          "xyz": [
+            25,
+            0,
+            0
+          ],
+          "index": 2
+        }
+      ]
+    },
+    {
+      "case_id": "negative-preserve-world",
+      "category": "negative_no_modification",
+      "prompt": "negative preserve world",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              32,
+              32,
+              32
+            ]
+          }
+        },
+        {
+          "id": "seed",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  2,
+                  2,
+                  2
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "answer",
+          "kind": "answer",
+          "text": "I will leave the world unchanged; no further mutation is requested."
+        }
+      ],
+      "nonzero_count": 8
+    },
+    {
+      "case_id": "whole-world-replacement-rejected",
+      "category": "regeneration_abuse",
+      "prompt": "whole world replacement rejected",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Voxel bench",
+            "size": [
+              32,
+              32,
+              32
+            ]
+          }
+        },
+        {
+          "id": "seed",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  2,
+                  2,
+                  2
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "replacement",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "replace_world",
+              "document": {}
+            }
+          },
+          "succeeds": false,
+          "unchanged": true,
+          "error_contains": "TOOL_INPUT_INVALID"
+        },
+        {
+          "id": "inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": 8
+    },
+    {
+      "case_id": "fox-shrine-stress",
+      "category": "creative_stress",
+      "prompt": "fox shrine stress",
+      "steps": [
+        {
+          "id": "create",
+          "tool": "voxel_create",
+          "arguments": {
+            "title": "Cyberpunk Fox Shrine",
+            "size": [
+              64,
+              64,
+              64
+            ]
+          }
+        },
+        {
+          "id": "layer_architecture",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "layer_put",
+              "layer": {
+                "id": "architecture",
+                "name": "Architecture",
+                "locked": false
+              }
+            }
+          }
+        },
+        {
+          "id": "layer_fox",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "layer_put",
+              "layer": {
+                "id": "fox",
+                "name": "Fox",
+                "locked": false
+              }
+            }
+          }
+        },
+        {
+          "id": "layer_neon",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "layer_put",
+              "layer": {
+                "id": "neon",
+                "name": "Neon",
+                "locked": false
+              }
+            }
+          }
+        },
+        {
+          "id": "palette_Fox",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "palette_put",
+              "entry": {
+                "index": 5,
+                "name": "Fox orange",
+                "color": "#ef7833"
+              }
+            }
+          }
+        },
+        {
+          "id": "palette_Cream",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "palette_put",
+              "entry": {
+                "index": 6,
+                "name": "Cream",
+                "color": "#fff1ce"
+              }
+            }
+          }
+        },
+        {
+          "id": "palette_Obsidian",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "palette_put",
+              "entry": {
+                "index": 7,
+                "name": "Obsidian",
+                "color": "#181825"
+              }
+            }
+          }
+        },
+        {
+          "id": "region_shrine",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "region_put",
+              "region": {
+                "id": "shrine",
+                "name": "shrine",
+                "bounds": {
+                  "min": [
+                    8,
+                    0,
+                    8
+                  ],
+                  "max": [
+                    56,
+                    48,
+                    56
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "region_fox",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "region_put",
+              "region": {
+                "id": "fox",
+                "name": "fox",
+                "bounds": {
+                  "min": [
+                    20,
+                    10,
+                    22
+                  ],
+                  "max": [
+                    44,
+                    34,
+                    38
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "region_entrance",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "region_put",
+              "region": {
+                "id": "entrance",
+                "name": "entrance",
+                "bounds": {
+                  "min": [
+                    20,
+                    0,
+                    8
+                  ],
+                  "max": [
+                    44,
+                    20,
+                    24
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "foundation",
+          "tool": "voxel_box",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "box",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  8,
+                  0,
+                  8
+                ],
+                "max": [
+                  56,
+                  3,
+                  56
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "stairs",
+          "tool": "voxel_box",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "box",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  22,
+                  3,
+                  8
+                ],
+                "max": [
+                  42,
+                  5,
+                  20
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "left_pillar",
+          "tool": "voxel_box",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "box",
+              "layer_id": "architecture",
+              "bounds": {
+                "min": [
+                  16,
+                  3,
+                  16
+                ],
+                "max": [
+                  20,
+                  25,
+                  20
+                ]
+              },
+              "palette_index": 7
+            }
+          }
+        },
+        {
+          "id": "right_pillar",
+          "tool": "voxel_copy_region",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "copy_region",
+              "layer_id": "architecture",
+              "source_layer_id": "architecture",
+              "destination": [
+                44,
+                3,
+                16
+              ],
+              "bounds": {
+                "min": [
+                  16,
+                  3,
+                  16
+                ],
+                "max": [
+                  20,
+                  25,
+                  20
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "torii_beam",
+          "tool": "voxel_box",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "box",
+              "layer_id": "architecture",
+              "bounds": {
+                "min": [
+                  12,
+                  25,
+                  15
+                ],
+                "max": [
+                  52,
+                  28,
+                  21
+                ]
+              },
+              "palette_index": 2
+            }
+          }
+        },
+        {
+          "id": "temple_shell",
+          "tool": "voxel_box",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "box",
+              "layer_id": "architecture",
+              "hollow": true,
+              "thickness": 2,
+              "bounds": {
+                "min": [
+                  18,
+                  3,
+                  26
+                ],
+                "max": [
+                  46,
+                  23,
+                  50
+                ]
+              },
+              "palette_index": 7
+            }
+          }
+        },
+        {
+          "id": "doorway",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "architecture",
+              "bounds": {
+                "min": [
+                  28,
+                  3,
+                  26
+                ],
+                "max": [
+                  36,
+                  15,
+                  28
+                ]
+              },
+              "palette_index": 0
+            }
+          }
+        },
+        {
+          "id": "roof_lower",
+          "tool": "voxel_box",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "box",
+              "layer_id": "architecture",
+              "bounds": {
+                "min": [
+                  14,
+                  23,
+                  22
+                ],
+                "max": [
+                  50,
+                  26,
+                  54
+                ]
+              },
+              "palette_index": 1
+            }
+          }
+        },
+        {
+          "id": "roof_upper",
+          "tool": "voxel_box",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "box",
+              "layer_id": "architecture",
+              "bounds": {
+                "min": [
+                  18,
+                  26,
+                  26
+                ],
+                "max": [
+                  46,
+                  29,
+                  50
+                ]
+              },
+              "palette_index": 2
+            }
+          }
+        },
+        {
+          "id": "fox_head",
+          "tool": "voxel_sphere",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "sphere",
+              "layer_id": "fox",
+              "center": [
+                32,
+                16,
+                26
+              ],
+              "radius": 7,
+              "palette_index": 5
+            }
+          }
+        },
+        {
+          "id": "fox_left_ear",
+          "tool": "voxel_box",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "box",
+              "layer_id": "fox",
+              "bounds": {
+                "min": [
+                  24,
+                  20,
+                  24
+                ],
+                "max": [
+                  28,
+                  29,
+                  29
+                ]
+              },
+              "palette_index": 5
+            }
+          }
+        },
+        {
+          "id": "fox_right_ear",
+          "tool": "voxel_mirror",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "mirror",
+              "layer_id": "fox",
+              "source_layer_id": "fox",
+              "destination": [
+                36,
+                20,
+                24
+              ],
+              "axis": "x",
+              "bounds": {
+                "min": [
+                  24,
+                  20,
+                  24
+                ],
+                "max": [
+                  28,
+                  29,
+                  29
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "fox_muzzle",
+          "tool": "voxel_box",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "box",
+              "layer_id": "fox",
+              "bounds": {
+                "min": [
+                  28,
+                  12,
+                  18
+                ],
+                "max": [
+                  36,
+                  16,
+                  21
+                ]
+              },
+              "palette_index": 6
+            }
+          }
+        },
+        {
+          "id": "left_eye",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "fox",
+              "bounds": {
+                "min": [
+                  27,
+                  17,
+                  19
+                ],
+                "max": [
+                  29,
+                  19,
+                  22
+                ]
+              },
+              "palette_index": 3
+            }
+          }
+        },
+        {
+          "id": "right_eye",
+          "tool": "voxel_copy_region",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "copy_region",
+              "layer_id": "fox",
+              "source_layer_id": "fox",
+              "destination": [
+                35,
+                17,
+                19
+              ],
+              "bounds": {
+                "min": [
+                  27,
+                  17,
+                  19
+                ],
+                "max": [
+                  29,
+                  19,
+                  22
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "ring",
+          "tool": "voxel_sphere",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "sphere",
+              "layer_id": "neon",
+              "center": [
+                32,
+                17,
+                30
+              ],
+              "radius": 12,
+              "hollow": true,
+              "thickness": 1,
+              "palette_index": 3
+            }
+          }
+        },
+        {
+          "id": "scaffold",
+          "tool": "voxel_box",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "box",
+              "layer_id": "architecture",
+              "bounds": {
+                "min": [
+                  24,
+                  5,
+                  10
+                ],
+                "max": [
+                  26,
+                  12,
+                  12
+                ]
+              },
+              "palette_index": 4
+            }
+          }
+        },
+        {
+          "id": "base_inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "base_export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        },
+        {
+          "id": "new_lantern",
+          "tool": "voxel_sphere",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "sphere",
+              "layer_id": "neon",
+              "center": [
+                12,
+                18,
+                14
+              ],
+              "radius": 2,
+              "palette_index": 4
+            }
+          }
+        },
+        {
+          "id": "paired_lantern",
+          "tool": "voxel_copy_region",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "copy_region",
+              "layer_id": "neon",
+              "source_layer_id": "neon",
+              "destination": [
+                49,
+                16,
+                12
+              ],
+              "bounds": {
+                "min": [
+                  10,
+                  16,
+                  12
+                ],
+                "max": [
+                  15,
+                  21,
+                  17
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "remove_scaffold",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "architecture",
+              "bounds": {
+                "min": [
+                  24,
+                  5,
+                  10
+                ],
+                "max": [
+                  26,
+                  12,
+                  12
+                ]
+              },
+              "palette_index": 0
+            }
+          }
+        },
+        {
+          "id": "eye_refine",
+          "tool": "voxel_replace",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "replace",
+              "layer_id": "fox",
+              "from_index": 3,
+              "to_index": 4,
+              "bounds": {
+                "min": [
+                  26,
+                  16,
+                  18
+                ],
+                "max": [
+                  38,
+                  20,
+                  23
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "entrance_rearrange",
+          "tool": "voxel_mirror",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "mirror",
+              "layer_id": "neon",
+              "source_layer_id": "neon",
+              "destination": [
+                18,
+                15,
+                8
+              ],
+              "axis": "x",
+              "bounds": {
+                "min": [
+                  12,
+                  15,
+                  12
+                ],
+                "max": [
+                  18,
+                  24,
+                  18
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "palette_parameter",
+          "tool": "voxel_configure",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "palette_put",
+              "entry": {
+                "index": 2,
+                "name": "Deep magenta",
+                "color": "#c026d3"
+              }
+            }
+          }
+        },
+        {
+          "id": "ambiguous_change",
+          "kind": "answer",
+          "text": "Please specify the target region and intended change. No ambiguous alteration has been applied."
+        },
+        {
+          "id": "conflict",
+          "tool": "voxel_fill",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$base_inspect.version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  1,
+                  1,
+                  1
+                ]
+              },
+              "palette_index": 2
+            }
+          },
+          "succeeds": false,
+          "unchanged": true,
+          "error_contains": "STALE_VERSION"
+        },
+        {
+          "id": "after_conflict",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "human_stair",
+          "tool": "worlds.apply",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "fill",
+              "layer_id": "base",
+              "bounds": {
+                "min": [
+                  24,
+                  5,
+                  12
+                ],
+                "max": [
+                  26,
+                  6,
+                  14
+                ]
+              },
+              "palette_index": 4
+            },
+            "mutation_id": "human-stair"
+          },
+          "kind": "human"
+        },
+        {
+          "id": "after_human",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "distant_lantern",
+          "tool": "voxel_sphere",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "sphere",
+              "layer_id": "neon",
+              "center": [
+                50,
+                32,
+                50
+              ],
+              "radius": 1,
+              "palette_index": 3
+            }
+          }
+        },
+        {
+          "id": "undo_lantern",
+          "tool": "voxel_undo",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "target_version": "$after_human.version"
+          }
+        },
+        {
+          "id": "correct_lantern",
+          "tool": "voxel_sphere",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "sphere",
+              "layer_id": "neon",
+              "center": [
+                50,
+                34,
+                50
+              ],
+              "radius": 1,
+              "palette_index": 4
+            }
+          }
+        },
+        {
+          "id": "final_refinement",
+          "tool": "voxel_replace",
+          "arguments": {
+            "world_id": "$world_id",
+            "expected_version": "$version",
+            "operation": {
+              "kind": "replace",
+              "layer_id": "neon",
+              "from_index": 4,
+              "to_index": 3,
+              "bounds": {
+                "min": [
+                  10,
+                  16,
+                  12
+                ],
+                "max": [
+                  15,
+                  21,
+                  17
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "final_inspect",
+          "tool": "voxel_inspect",
+          "arguments": {
+            "world_id": "$world_id"
+          }
+        },
+        {
+          "id": "export",
+          "tool": "voxel_export",
+          "arguments": {
+            "world_id": "$world_id",
+            "version": "$version"
+          }
+        }
+      ],
+      "nonzero_count": null,
+      "min_nonzero_count": 12000,
+      "stress": true,
+      "assertions": {
+        "size": [
+          64,
+          64,
+          64
+        ],
+        "palette/2/color": "#c026d3"
+      },
+      "points": [
+        {
+          "layer": "base",
+          "xyz": [
+            8,
+            0,
+            8
+          ],
+          "index": 1
+        },
+        {
+          "layer": "base",
+          "xyz": [
+            24,
+            5,
+            12
+          ],
+          "index": 4
+        },
+        {
+          "layer": "architecture",
+          "xyz": [
+            24,
+            6,
+            10
+          ],
+          "index": 0
+        },
+        {
+          "layer": "fox",
+          "xyz": [
+            27,
+            17,
+            19
+          ],
+          "index": 4
+        },
+        {
+          "layer": "neon",
+          "xyz": [
+            50,
+            34,
+            50
+          ],
+          "index": 4
+        },
+        {
+          "layer": "neon",
+          "xyz": [
+            50,
+            32,
+            50
+          ],
+          "index": 0
+        }
+      ]
+    }
+  ]
+}

@@ -55,7 +55,7 @@ export function upsertRun(
       ...state.detailById,
       [conversationId]: {
         ...detail,
-        runs: mergeProjectionById(detail.runs, [run]).sort(
+        runs: mergeProjectionById(detail.runs, [run], value => value.version).sort(
           (left, right) => left.session_sequence - right.session_sequence,
         ),
       },
@@ -78,7 +78,7 @@ export function upsertItem(
       ...state.detailById,
       [conversationId]: {
         ...detail,
-        items: sortItems(mergeProjectionById(detail.items, [item])),
+        items: sortItems(mergeProjectionById(detail.items, [item], value => value.revision)),
       },
     },
   };

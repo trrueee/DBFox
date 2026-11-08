@@ -1,0 +1,23 @@
+{
+  "package": "PyPNG",
+  "version": "0.20220715.0",
+  "license": "MIT",
+  "source_url": "https://files.pythonhosted.org/packages/93/cd/112f092ec27cca83e0516de0a3368dbd9128c187fb6b52aaaa7cde39c96d/pypng-0.20220715.0.tar.gz",
+  "source_sha256": "739c433ba96f078315de54c0db975aee537cbc3e1d0ae4ed9aab0ca1e427e2c1",
+  "retrieved_at": "2026-09-05",
+  "files": [
+    {
+      "path": "LICENCE",
+      "upstream_member": "pypng-0.20220715.0/LICENCE",
+      "sha256": "8dd127d87bb901ab9c8f584e98b7c7aa8539db27fe62ff01b1ee4be93b6a513a",
+      "bytes": 1038
+    },
+    {
+      "path": "png.py",
+      "upstream_member": "pypng-0.20220715.0/code/png.py",
+      "sha256": "b1c6211078af892bbe975f948d40e19f2e9ec064994f635b6e431b5c55e56830",
+      "bytes": 82781
+    }
+  ],
+  "modified": false
+}

@@ -17,12 +17,44 @@ from engine.dlc import BuiltinContributionSet, ContributionCompiler
 from engine.runtime_composition import active_runtime_snapshot, set_active_runtime_snapshot
 from engine.tools.runtime.attempt import ResourceScopeRef
 from engine.models import (
+    AgentArtifactRecord,
     AgentRun,
     AgentSession,
     AgentSessionInput,
     AgentToolInvocation,
     Project,
 )
+
+
+@pytest.mark.parametrize("requested_project", ["proj-test", "other-project", "missing-project"])
+def test_project_artifact_read_recovers_action_result_without_chat_snapshot(
+    client, db_session, requested_project,
+):
+    db_session.add(Project(id="other-project", name="Other Project"))
+    db_session.add(AgentSession(id="export-session", project_id="proj-test", title="Export"))
+    db_session.flush()
+    db_session.add(AgentRun(id="export-run", session_id="export-session", question="Export", status="completed"))
+    db_session.flush()
+    db_session.add(AgentArtifactRecord(
+        id="fixed-export", session_id="export-session", run_id="export-run", type="markdown",
+        title="Fixed export", payload_json='{"content":"saved result"}', presentation_json="{}",
+    ))
+    db_session.commit()
+
+    response = client.get(
+        f"/api/v1/projects/{requested_project}/artifacts/fixed-export", headers=_headers(),
+    )
+    if requested_project == "proj-test":
+        assert response.status_code == 200
+        assert response.json() == ArtifactRepository(db_session).get("fixed-export").model_dump(mode="json")
+        db_session.delete(db_session.get(Project, "proj-test"))
+        db_session.commit()
+        assert client.get(
+            "/api/v1/projects/proj-test/artifacts/fixed-export", headers=_headers(),
+        ).status_code == 404
+    else:
+        assert response.status_code == 404
+        assert "saved result" not in response.text
 
 
 @pytest.fixture(autouse=True)
@@ -59,6 +91,60 @@ def _headers() -> dict[str, str]:
     return {"X-Local-Token": LOCAL_SECURE_TOKEN}
 
 
+@pytest.mark.parametrize("status, visible", [
+    ("completed", False), ("failed", False), ("cancelled", False),
+    ("running", True), ("waiting_approval", True), ("queued", True),
+    ("created", True), ("waiting_input", True), ("cancelling", True),
+])
+def test_workbench_action_history_does_not_displace_conversations(
+    client, db_session, status, visible,
+):
+    db_session.add_all([
+        AgentSession(id="action-only", project_id="proj-test", title="Table Preview"),
+        AgentSession(id="real-chat", project_id="proj-test", title="Table Preview"),
+    ])
+    db_session.flush()
+    db_session.add_all([
+        AgentRun(
+            id="action-only-run", session_id="action-only", session_sequence=1, question="Read a sample",
+            status=status, request_json='{"source":"dlc_workbench_action","owner_id":"example.owner"}',
+        ),
+        AgentRun(id="real-chat-run", session_id="real-chat", session_sequence=1, question="Discuss the sample", status="completed"),
+    ])
+    db_session.commit()
+
+    response = client.get("/api/v1/conversations", headers=_headers())
+    assert response.status_code == 200
+    ids = {row["id"] for row in response.json()}
+    assert ("action-only" in ids) is visible
+    assert "real-chat" in ids  # Titles and DLC owner names never decide visibility.
+    detail = client.get("/api/v1/conversations/action-only", headers=_headers())
+    assert detail.status_code == 200
+    assert detail.json()["runs"][0]["id"] == "action-only-run"
+
+
+def test_workbench_history_filter_precedes_paging_and_keeps_follow_up_chats(client, db_session):
+    db_session.add_all([
+        AgentSession(id="empty-chat", project_id="proj-test", title="New task", updated_at=datetime(2026, 11, 1, tzinfo=UTC)),
+        AgentSession(id="follow-up", project_id="proj-test", title="Discuss export", updated_at=datetime(2026, 11, 2, tzinfo=UTC)),
+        AgentSession(id="export-only", project_id="proj-test", title="Comic export", updated_at=datetime(2026, 11, 3, tzinfo=UTC)),
+    ])
+    db_session.flush()
+    db_session.add_all([
+        AgentRun(id="export-run", session_id="export-only", session_sequence=1, question="Export", status="completed",
+                 request_json='{"source":"dlc_workbench_action","owner_id":"another.owner"}'),
+        AgentRun(id="follow-up-export", session_id="follow-up", session_sequence=1, question="Export", status="completed",
+                 request_json='{"source":"dlc_workbench_action"}'),
+        AgentRun(id="follow-up-chat", session_id="follow-up", session_sequence=2, question="Explain it", status="completed"),
+    ])
+    db_session.commit()
+
+    first = client.get("/api/v1/conversations?limit=1&offset=0", headers=_headers())
+    second = client.get("/api/v1/conversations?limit=1&offset=1", headers=_headers())
+    assert [row["id"] for row in first.json()] == ["follow-up"]
+    assert [row["id"] for row in second.json()] == ["empty-chat"]
+
+
 def test_create_patch_list_and_delete_conversation(client, db_session):
     created = client.post(
         "/api/v1/conversations",
@@ -81,6 +167,8 @@ def test_create_patch_list_and_delete_conversation(client, db_session):
     listed = client.get("/api/v1/conversations", headers=_headers())
     assert listed.status_code == 200
     assert listed.json()[0]["id"] == conversation_id
+    assert listed.json()[0]["run_status"] is None
+    assert listed.json()[0]["cursor"] == created.json()["cursor"]
 
     patched = client.patch(
         f"/api/v1/conversations/{conversation_id}",

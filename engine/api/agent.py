@@ -15,8 +15,7 @@ from engine.app.safe_errors import (
     log_unexpected_exception,
 )
 from engine.llm.config import DEFAULT_LLM_MODEL_NAME, resolve_product_llm_config_from_credential
-from engine.agent.providers.openai import _responses_not_found_falls_back_to_chat
-from engine.llm.providers.openai import create_openai_responses_client
+from engine.llm.providers.openai import classify_openai_status_error, create_openai_responses_client
 from engine.api.agent_results import router as result_router
 
 logger = logging.getLogger("dbfox.api.agent")
@@ -63,29 +62,8 @@ class LlmModelsResponse(BaseModel):
 
 
 def _probe_llm_service(*, client: Any, model_name: str) -> None:
-    """Probe the configured LLM endpoint with legacy-compatible fallback.
-
-    DBFox runtime prefers Responses; if the endpoint does not expose it (404),
-    fallback to Chat Completions, which is what many OpenAI-compatible
-    gateways (including MiMo) currently support.
-    """
-
-    try:
-        client.responses.create(
-            model=model_name,
-            input="ping",
-            max_output_tokens=16,
-            store=False,
-        )
-        return
-    except APIStatusError as exc:
-        if not _responses_not_found_falls_back_to_chat(exc):
-            raise
-        client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "user", "content": "ping"}],
-            max_completion_tokens=16,
-        )
+    """Check the same native Responses endpoint used by the Agent runtime."""
+    client.responses.create(model=model_name, input="ping", max_output_tokens=16, store=False)
 
 
 @router.post("/agent/llm/test", response_model=LlmTestResponse)
@@ -117,6 +95,7 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
         )
     except Exception as exc:
         latency_ms = int((_time.monotonic() - t0) * 1000)
+        failure = classify_openai_status_error(exc) if isinstance(exc, APIStatusError) else None
         log_unexpected_exception(
             logger,
             operation=SafeLogOperation.UNEXPECTED,
@@ -127,8 +106,8 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
             model=req.model_name or DEFAULT_LLM_MODEL_NAME,
             api_base=req.api_base,
             latency_ms=latency_ms,
-            error_code="LLM_CONNECTION_FAILED",
-            error_message="模型连接测试未通过，请检查服务地址、凭据和模型名称。",
+            error_code=failure.code if failure else "LLM_CONNECTION_FAILED",
+            error_message=failure.message if failure else "模型连接测试未通过，请检查服务地址、凭据和模型名称。",
         )
 
 @router.post("/agent/llm/models", response_model=LlmModelsResponse)
@@ -137,8 +116,7 @@ def api_llm_models(req: LlmModelsRequest) -> LlmModelsResponse:
 
     Resolves the credential through the local OS vault, then queries the
     provider's ``/models`` route with the same client stack as the Agent
-    runtime. Gateways without a model route return ``ok=False``; the client
-    falls back to its bundled catalog.
+    runtime. Unsupported model routes and other failures return safe diagnostics.
     """
     try:
         config = resolve_product_llm_config_from_credential(
@@ -163,6 +141,7 @@ def api_llm_models(req: LlmModelsRequest) -> LlmModelsResponse:
         options.sort(key=lambda option: option.id)
         return LlmModelsResponse(ok=True, api_base=config.api_base, models=options)
     except Exception as exc:
+        failure = classify_openai_status_error(exc) if isinstance(exc, APIStatusError) else None
         log_unexpected_exception(
             logger,
             operation=SafeLogOperation.UNEXPECTED,
@@ -171,8 +150,8 @@ def api_llm_models(req: LlmModelsRequest) -> LlmModelsResponse:
         return LlmModelsResponse(
             ok=False,
             api_base=req.api_base,
-            error_code="LLM_MODEL_LIST_FAILED",
-            error_message="无法从该服务获取模型列表，请检查服务地址与凭据。",
+            error_code=failure.code if failure else "LLM_MODEL_LIST_FAILED",
+            error_message=failure.message if failure else "无法从该服务获取模型列表，请检查服务地址与凭据。",
         )
 
 router.include_router(result_router)

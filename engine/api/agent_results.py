@@ -32,7 +32,7 @@ from engine.representation import (
 )
 from engine.errors import DBFoxError
 from engine.json_codec import dumps
-from engine.runtime_composition import get_active_runtime_snapshot
+from engine.runtime_composition import get_active_runtime_snapshot, authorize_artifact_session_resources
 from engine.security.audit import SecurityAuditService
 
 
@@ -109,9 +109,11 @@ def _resolve(
     request: ArtifactRepresentationRequest,
     *,
     expected_kind: Literal["json", "stream"],
+    session_id: str | None = None,
 ) -> tuple[Artifact, ArtifactRepresentationDescriptor, object]:
     artifacts = ArtifactRepository(db)
     artifact = _root_artifact(artifacts, artifact_id)
+    authorize_artifact_session_resources(db, artifact, session_id)
     contribution = get_active_runtime_snapshot().get_artifact_representation(
         artifact.type,
         representation_type,
@@ -166,6 +168,18 @@ def _bounded_chunks(chunks: Iterator[str | bytes]) -> Iterator[str | bytes]:
         yield chunk
 
 
+@router.get("/projects/{project_id}/artifacts/{artifact_id}", response_model=Artifact)
+def api_project_artifact(
+    project_id: str,
+    artifact_id: str,
+    db: Session = Depends(get_db),
+) -> Artifact:
+    artifact = ArtifactRepository(db).get_for_project(project_id, artifact_id)
+    if artifact is None:
+        raise _representation_error("NOT_FOUND", status_code=404)
+    return artifact
+
+
 @router.get(
     "/artifacts/{artifact_id}/representations",
     response_model=list[ArtifactRepresentationDescriptor],
@@ -173,9 +187,11 @@ def _bounded_chunks(chunks: Iterator[str | bytes]) -> Iterator[str | bytes]:
 def api_artifact_representations(
     artifact_id: str,
     db: Session = Depends(get_db),
+    *, session_id: str | None = None,
 ) -> list[ArtifactRepresentationDescriptor]:
     try:
         artifact = _root_artifact(ArtifactRepository(db), artifact_id)
+        authorize_artifact_session_resources(db, artifact, session_id)
         contributions = (
             get_active_runtime_snapshot().artifact_representations_for(artifact.type)
         )
@@ -206,6 +222,7 @@ def api_artifact_representation_read(
     representation_type: str,
     request: ArtifactRepresentationRequest,
     db: Session = Depends(get_db),
+    *, session_id: str | None = None,
 ) -> ArtifactRepresentationResult:
     try:
         _, descriptor, untrusted_result = _resolve(
@@ -214,6 +231,7 @@ def api_artifact_representation_read(
             representation_type,
             request,
             expected_kind="json",
+            session_id=session_id,
         )
         if not isinstance(untrusted_result, ArtifactRepresentationResult):
             raise TypeError("Canonical JSON representation dispatch returned a stream")
@@ -246,6 +264,7 @@ def api_artifact_representation_stream(
     representation_type: str,
     request: ArtifactRepresentationRequest,
     db: Session = Depends(get_db),
+    *, session_id: str | None = None,
 ) -> StreamingResponse:
     try:
         artifact, descriptor, untrusted_result = _resolve(
@@ -254,6 +273,7 @@ def api_artifact_representation_stream(
             representation_type,
             request,
             expected_kind="stream",
+            session_id=session_id,
         )
         if not isinstance(untrusted_result, ArtifactRepresentationStream):
             raise TypeError("Canonical stream representation dispatch returned JSON")

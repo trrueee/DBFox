@@ -19,18 +19,26 @@ from verification.bench.capabilities.dbfox_data.direct.runtime import (
 from verification.bench.capabilities.dbfox_data.direct.schema import (
     load_cases as load_data_direct_cases,
 )
+from verification.bench.capabilities.dbfox_pixel.runtime import run_pixel_bench
+from verification.bench.capabilities.dbfox_pixel.schema import load_cases as load_pixel_cases
+from verification.bench.capabilities.dbfox_scene.runtime import run_scene_bench
+from verification.bench.capabilities.dbfox_scene.schema import load_cases as load_scene_cases
 from verification.bench.composition.data_workspace.runtime import (
     run_data_workspace_bench,
 )
 from verification.bench.composition.data_workspace.schema import (
     load_cases as load_data_workspace_cases,
 )
+from verification.bench.capabilities.dbfox_shader.runtime import run_shader_bench
+from verification.bench.capabilities.dbfox_shader.schema import load_cases as load_shader_cases
 from verification.bench.core.authority.runtime import run_core_authority_bench
 from verification.bench.core.authority.schema import load_cases as load_authority_cases
 from verification.bench.core.context.runtime import run_core_context_bench
 from verification.bench.core.context.schema import load_cases as load_context_cases
 from verification.bench.core.loop.runtime import run_core_loop_bench
 from verification.bench.core.loop.schema import load_cases as load_loop_cases
+from verification.bench.capabilities.dbfox_voxel.runtime import run_voxel_bench
+from verification.bench.capabilities.dbfox_voxel.schema import load_cases as load_voxel_cases
 
 
 HERE = Path(__file__).resolve().parent
@@ -55,6 +63,26 @@ class SuiteRegistration:
 
 
 SUITES: dict[str, SuiteRegistration] = {
+    "capability.dbfox-pixel.scripted": SuiteRegistration(
+        HERE / "capabilities" / "dbfox_pixel" / "suite.json",
+        _count(load_pixel_cases),
+        runner=run_pixel_bench,
+    ),
+    "capability.dbfox-scene.scripted": SuiteRegistration(
+        HERE / "capabilities" / "dbfox_scene" / "suite.json",
+        _count(load_scene_cases),
+        runner=run_scene_bench,
+    ),
+    "capability.dbfox-voxel.scripted": SuiteRegistration(
+        HERE / "capabilities" / "dbfox_voxel" / "suite.json",
+        _count(load_voxel_cases),
+        runner=run_voxel_bench,
+    ),
+    "capability.dbfox-shader.scripted": SuiteRegistration(
+        HERE / "capabilities" / "dbfox_shader" / "suite.json",
+        _count(load_shader_cases),
+        runner=run_shader_bench,
+    ),
     "core.loop.scripted": SuiteRegistration(
         HERE / "core" / "loop" / "suite.json",
         _count(load_loop_cases),

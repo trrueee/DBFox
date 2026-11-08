@@ -1,0 +1,106 @@
+{
+  "suite": {
+    "schema_version": "1.0",
+    "suite_id": "capability.dbfox-pixel.scripted",
+    "suite_version": "1.0.0",
+    "subject": {
+      "kind": "capability",
+      "components": [
+        "dbfox.pixel"
+      ],
+      "supporting_fixtures": [
+        "scripted-provider",
+        "migrated-metadata",
+        "signed-package"
+      ]
+    },
+    "execution": {
+      "provider_modes": [
+        "scripted"
+      ],
+      "default_repetitions": 1,
+      "max_repetitions": 5
+    },
+    "dataset": "cases.json",
+    "metrics": [
+      {
+        "name": "task.success_rate",
+        "direction": "higher_is_better",
+        "unit": "ratio",
+        "description": "task.success_rate"
+      },
+      {
+        "name": "runtime.tool_calls",
+        "direction": "lower_is_better",
+        "unit": "count",
+        "description": "runtime.tool_calls"
+      },
+      {
+        "name": "runtime.turns",
+        "direction": "lower_is_better",
+        "unit": "count",
+        "description": "runtime.turns"
+      },
+      {
+        "name": "pixel.frames",
+        "direction": "informational",
+        "unit": "count",
+        "description": "pixel.frames"
+      },
+      {
+        "name": "context.pixel_chars",
+        "direction": "informational",
+        "unit": "chars",
+        "description": "context.pixel_chars"
+      },
+      {
+        "name": "observation.max_bytes",
+        "direction": "informational",
+        "unit": "bytes",
+        "description": "observation.max_bytes"
+      }
+    ]
+  },
+  "trials": 15,
+  "scored_trials": 15,
+  "passed_trials": 15,
+  "unscored_trials": 0,
+  "success_rate": 1.0,
+  "wilson_95_ci": [
+    0.7961166989641514,
+    1.0000000000000002
+  ],
+  "metrics": {
+    "context.pixel_chars": {
+      "median": 163.0,
+      "p90": 163.0,
+      "maximum": 193.0
+    },
+    "observation.max_bytes": {
+      "median": 723.0,
+      "p90": 1843.7999999999997,
+      "maximum": 8304.0
+    },
+    "pixel.frames": {
+      "median": 1.0,
+      "p90": 42.39999999999998,
+      "maximum": 200.0
+    },
+    "runtime.tool_calls": {
+      "median": 6.0,
+      "p90": 18.999999999999993,
+      "maximum": 26.0
+    },
+    "runtime.turns": {
+      "median": 7.0,
+      "p90": 20.599999999999994,
+      "maximum": 27.0
+    },
+    "task.success_rate": {
+      "median": 1.0,
+      "p90": 1.0,
+      "maximum": 1.0
+    }
+  },
+  "failed_checks": []
+}

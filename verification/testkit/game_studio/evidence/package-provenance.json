@@ -1,0 +1,77 @@
+{
+  "package_digest": "82996d3da0630568941ac7de0ab1c2d7ce0acddd4c5ee44459f83d268d679dff",
+  "publisher_fingerprint": "c9aac4214d450852093bf07c5355e3a2f8e136d7d5502c309e5a67cc8aa5d5b1",
+  "frontend": [
+    {
+      "path": "frontend/artifacts.js",
+      "bytes": 7805,
+      "sha256": "9286c65f87726432eecff83c1e334673c418c3a35db0f6608fb01b6eacc0a180"
+    },
+    {
+      "path": "frontend/executor.js",
+      "bytes": 6566,
+      "sha256": "187852211e68754f4fa7387c991f559730ae736f77c17c404d0888ddc1c6c823"
+    },
+    {
+      "path": "frontend/forms.js",
+      "bytes": 10047,
+      "sha256": "de687b47d2010fc80b4e30cb35fc5f1f33423b5c54eefc7d8dad86be66beae95"
+    },
+    {
+      "path": "frontend/index.css",
+      "bytes": 11315,
+      "sha256": "3f4c4740e0574656c626684064995941b959c88d6d62df44c79e1995a3a74412"
+    },
+    {
+      "path": "frontend/index.js",
+      "bytes": 5254,
+      "sha256": "7d7394fec9986d9ebc39351cb0f0e7fc102d253a6c003f0747ce601b73ca577b"
+    },
+    {
+      "path": "frontend/model.js",
+      "bytes": 6052,
+      "sha256": "b1affea716d27ccaaf86d936352a57944c5e0ccab75a31a92e2bb15fc8e5f0e7"
+    },
+    {
+      "path": "frontend/presets.js",
+      "bytes": 2616,
+      "sha256": "48d1e0493221a5160caae7c1d62d326e9a7299baa8beb388c8130000106136ce"
+    },
+    {
+      "path": "frontend/runtime.js",
+      "bytes": 23822,
+      "sha256": "d842383da711f63a6270ac4242c8b12257386a7e1699790b7ae63dc92afd5bd3"
+    },
+    {
+      "path": "frontend/studio.js",
+      "bytes": 33092,
+      "sha256": "cca4df3059807eb2b6737ef7b3eb565b1d8a58cbc441fc1ccbc85fc159edbf05"
+    },
+    {
+      "path": "frontend/vendor/EVENTEMITTER3-LICENSE.txt",
+      "bytes": 1082,
+      "sha256": "3aecc12b1cb28832b5f65ab64291de96568c3f236a74d646281b4491f7bcadbf"
+    },
+    {
+      "path": "frontend/vendor/PHASER-LICENSE.txt",
+      "bytes": 1120,
+      "sha256": "d59c20a9deb5dc240614b428dce5246ae561d15efeeebea0e069d73f0a78fbff"
+    },
+    {
+      "path": "frontend/vendor/phaser.js",
+      "bytes": 1211553,
+      "sha256": "d11f0597c79521a82682831cef1f7d44a2cd6bd2afa9db266713d52b8a4328b8"
+    },
+    {
+      "path": "frontend/vendor/provenance.json",
+      "bytes": 1251,
+      "sha256": "63bdecab48636d0d9bdd245fa71c8bf512600a1187abd9e7c54e4345c03a2121"
+    },
+    {
+      "path": "frontend/viewport.js",
+      "bytes": 10709,
+      "sha256": "fa08bd46ff88866dcda4fd9679bdab41b02e420f89758c190921f1231655ff00"
+    }
+  ],
+  "boundary": "complete signed source, normal trust/install/enable lifecycle"
+}

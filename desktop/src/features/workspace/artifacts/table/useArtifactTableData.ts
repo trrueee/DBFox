@@ -55,7 +55,7 @@ export interface ArtifactTableData {
 }
 
 export function useArtifactTableData(
-  artifact: Pick<ArtifactEnvelope<unknown>, "id">,
+  artifact: Pick<ArtifactEnvelope<unknown>, "id" | "session_id">,
   mode: "inline" | "workspace",
 ): ArtifactTableData {
   const source = useMemo<DataFrameViewSource>(() => ({
@@ -80,6 +80,7 @@ export function useArtifactTableData(
         },
       },
       signal,
+      artifact.session_id,
     );
     const read = parseDataFrameRead(represented);
     return {
@@ -101,7 +102,7 @@ export function useArtifactTableData(
       warnings: read.warnings,
       notices: read.notices,
     };
-  }, []);
+  }, [artifact.session_id]);
 
   const exportAll = useCallback(async (request: DataFrameExportRequest) => {
     return agentApi.streamArtifactRepresentation(
@@ -115,8 +116,10 @@ export function useArtifactTableData(
           search: request.search,
         },
       },
+      undefined,
+      artifact.session_id,
     );
-  }, []);
+  }, [artifact.session_id]);
 
   const gateway = useDataFrameView({
     source,

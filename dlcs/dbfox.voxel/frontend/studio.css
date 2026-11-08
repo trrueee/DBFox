@@ -1,0 +1,101 @@
+.dbfox-voxel {
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--ui-font-body, 13px);
+  line-height: 1.5;
+  box-sizing: border-box;
+  container-type: inline-size;
+}
+.dbfox-voxel *, .dbfox-voxel *::before, .dbfox-voxel *::after { box-sizing: border-box; }
+.dbfox-voxel h2, .dbfox-voxel h3, .dbfox-voxel p { margin: 0; }
+.dbfox-voxel h2 { font-size: var(--ui-font-title); font-weight: 600; overflow-wrap: anywhere; }
+.dbfox-voxel h3 { font-size: var(--ui-font-body); font-weight: 600; }
+.dbfox-voxel button, .dbfox-voxel input, .dbfox-voxel select { font: inherit; }
+.dbfox-voxel button, .dbfox-voxel summary { cursor: pointer; }
+.dbfox-voxel :is(button, input, select, canvas, summary):focus-visible { outline: 2px solid var(--color-focus-ring, var(--color-primary)); outline-offset: 3px; }
+.dbfox-voxel :is(button, input, select):disabled { opacity: var(--control-disabled-opacity, .5); cursor: not-allowed; }
+.dbfox-voxel input:not([type="checkbox"]):not([type="range"]), .dbfox-voxel select {
+  min-height: var(--density-control-height-sm, 32px);
+  width: 100%; min-width: 0; padding: 5px 8px;
+  color: var(--color-text-primary); background: var(--control-bg);
+  border: 1px solid var(--control-border); border-radius: 6px;
+}
+.dbfox-voxel input[type="checkbox"], .dbfox-voxel input[type="range"] { accent-color: var(--color-primary); }
+.dbfox-voxel input[type="checkbox"] { width: 16px; height: 16px; margin: 0; flex-shrink: 0; }
+.dbfox-voxel input[type="color"] { padding: 3px; }
+.dbfox-voxel .voxel-button {
+  min-height: var(--density-control-height-sm, 32px); padding: 5px 10px;
+  color: var(--color-text-primary); background: var(--control-bg);
+  border: 1px solid var(--control-border); border-radius: var(--radius-control);
+  text-align: center; white-space: nowrap; transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
+}
+.dbfox-voxel .voxel-button:not(:disabled):hover { background: var(--control-bg-hover); }
+.dbfox-voxel .voxel-button--primary, .dbfox-voxel .voxel-button[aria-pressed="true"] {
+  color: var(--color-primary); border-color: var(--color-primary); background: var(--color-primary-soft);
+}
+.dbfox-voxel .voxel-muted, .dbfox-voxel .voxel-caption { color: var(--color-text-secondary); }
+.dbfox-voxel .voxel-caption { font-size: var(--ui-font-nano); line-height: 1.6; }
+.dbfox-voxel.voxel-studio { height: 100%; overflow-y: auto; padding: var(--space-4, 16px); background: var(--surface-canvas); }
+.dbfox-voxel .voxel-header { display: flex; align-items: center; gap: var(--space-3, 12px); margin-bottom: 12px; }
+.dbfox-voxel .voxel-header > svg { color: var(--color-primary); flex-shrink: 0; }
+.dbfox-voxel .voxel-header > div { min-width: 0; }
+.dbfox-voxel .voxel-header .voxel-muted { font-size: var(--ui-font-nano); }
+.dbfox-voxel .voxel-version { margin-left: auto; padding: 3px 8px; border: 1px solid var(--border-subtle); border-radius: 5px; color: var(--color-text-secondary); font-size: var(--ui-font-nano); white-space: nowrap; }
+.dbfox-voxel .voxel-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.dbfox-voxel .voxel-viewport-shell { position: relative; height: clamp(260px, 36vh, 420px); min-height: 260px; overflow: hidden; background: var(--surface-panel-muted); border: 1px solid var(--border-subtle); border-radius: var(--radius-panel, 12px); }
+.dbfox-voxel .voxel-viewport { position: absolute; inset: 0; }
+.dbfox-voxel .voxel-viewport canvas { display: block; width: 100%; height: 100%; }
+.dbfox-voxel .voxel-viewport-status { position: absolute; left: 12px; bottom: 10px; right: 12px; max-width: calc(100% - 24px); width: fit-content; padding: 4px 8px; border-radius: 5px; color: var(--color-text-secondary); background: var(--surface-card); font-size: var(--ui-font-nano); pointer-events: none; }
+.dbfox-voxel .voxel-viewport-status--error { color: var(--color-danger); }
+.dbfox-voxel .voxel-view-actions { position: absolute; display: flex; gap: 6px; top: 10px; right: 10px; }
+.dbfox-voxel .voxel-view-actions .voxel-button { font-size: var(--ui-font-nano); min-height: var(--density-control-height-sm); }
+.dbfox-voxel .voxel-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: var(--ui-font-caption); }
+.dbfox-voxel .voxel-editor { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(250px, 310px); align-items: start; gap: 18px; padding-top: 8px; }
+.dbfox-voxel .voxel-editor-main { min-width: 0; position: sticky; top: 0; }
+.dbfox-voxel .voxel-section-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.dbfox-voxel .voxel-section-title .voxel-muted { font-size: var(--ui-font-nano); }
+.dbfox-voxel .voxel-slice-controls { display: grid; grid-template-columns: 70px 85px minmax(70px, 1fr); align-items: end; gap: 10px; margin-bottom: 10px; }
+.dbfox-voxel .voxel-slice-controls input[type="range"] { width: 100%; min-width: 0; margin: 0 0 8px; }
+.dbfox-voxel .voxel-slice { padding: 12px; background: var(--surface-panel-muted); border: 1px solid var(--border-subtle); border-radius: var(--radius-panel, 12px); text-align: center; overflow: hidden; }
+.dbfox-voxel .voxel-slice canvas { max-width: 100%; max-height: 560px; width: auto; height: auto; object-fit: contain; image-rendering: pixelated; touch-action: none; cursor: crosshair; background: var(--surface-canvas); border: 1px solid var(--border-subtle); }
+.dbfox-voxel .voxel-slice canvas[aria-disabled="true"] { cursor: not-allowed; }
+.dbfox-voxel .voxel-slice .voxel-caption { text-align: left; margin-top: 10px; }
+.dbfox-voxel .voxel-slice .voxel-caption span { display: block; }
+.dbfox-voxel .voxel-inspector { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.dbfox-voxel .voxel-section { padding: 12px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-card); display: flex; flex-direction: column; gap: 10px; }
+.dbfox-voxel details.voxel-section { display: block; }
+.dbfox-voxel details > :not(summary) { margin-top: 8px; }
+.dbfox-voxel summary { font-size: var(--ui-font-caption); color: var(--color-text-secondary); }
+.dbfox-voxel .voxel-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: var(--ui-font-nano); color: var(--color-text-secondary); }
+.dbfox-voxel .voxel-vector, .dbfox-voxel .voxel-bounds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.dbfox-voxel .voxel-bounds { border: 0; padding: 0; margin: 0; }
+.dbfox-voxel .voxel-bounds legend { padding: 0; margin-bottom: 4px; font-size: var(--ui-font-nano); color: var(--color-text-secondary); }
+.dbfox-voxel .voxel-palette { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 6px; max-height: 220px; overflow-y: auto; padding: 3px; }
+.dbfox-voxel .voxel-swatch { height: 36px; min-width: 36px; border-radius: 6px; border: 2px solid transparent; background: var(--control-bg); position: relative; }
+.dbfox-voxel .voxel-swatch span { position: absolute; bottom: 1px; right: 2px; font-size: var(--ui-font-nano); line-height: 13px; min-width: 14px; background: var(--surface-card); color: var(--color-text-primary); border-radius: 3px; }
+.dbfox-voxel .voxel-swatch[aria-pressed="true"] { outline: 2px solid var(--color-primary); outline-offset: 1px; border-color: var(--surface-canvas); }
+.dbfox-voxel .voxel-swatch--air { background: repeating-conic-gradient(var(--control-bg) 0 25%, var(--control-border) 0 50%) 0 / 12px 12px; }
+.dbfox-voxel .voxel-layers { display: flex; flex-direction: column; gap: 6px; }
+.dbfox-voxel .voxel-layer { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 6px; }
+.dbfox-voxel .voxel-layer .voxel-button { overflow: hidden; text-overflow: ellipsis; font-size: var(--ui-font-nano); }
+.dbfox-voxel .voxel-layer .voxel-button:nth-child(2) { text-align: left; }
+.dbfox-voxel .voxel-inline { display: flex; align-items: center; gap: 6px; }
+.dbfox-voxel .voxel-inline input, .dbfox-voxel .voxel-inline select { flex: 1; min-width: 0; }
+.dbfox-voxel .voxel-error, .dbfox-voxel .voxel-notice { padding: 8px 10px; margin-bottom: 10px; border: 1px solid var(--border-subtle); border-radius: 6px; overflow-wrap: anywhere; }
+.dbfox-voxel .voxel-error { color: var(--color-danger); }
+.dbfox-voxel .voxel-notice { color: var(--color-text-secondary); }
+.dbfox-voxel.voxel-create { max-width: 460px; padding: 36px 24px; margin: auto; display: flex; flex-direction: column; gap: 16px; }
+.dbfox-voxel.voxel-create > svg { width: 36px; height: 36px; color: var(--color-primary); }
+.dbfox-voxel.voxel-connector { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+.dbfox-voxel.voxel-artifact { display: flex; align-items: start; gap: 12px; padding: 16px; }
+.dbfox-voxel.voxel-artifact .voxel-button { margin-top: 10px; }
+.dbfox-voxel.voxel-snapshot { padding: var(--space-4, 16px); overflow-y: auto; height: 100%; }
+.dbfox-voxel .voxel-snapshot-layers { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+@container (max-width: 620px) {
+  .dbfox-voxel .voxel-editor { grid-template-columns: minmax(0, 1fr); }
+  .dbfox-voxel .voxel-editor-main { position: static; }
+  .dbfox-voxel .voxel-inspector { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .dbfox-voxel .voxel-header { gap: 8px; }
+  .dbfox-voxel .voxel-header h2 { font-size: var(--ui-font-title); }
+  .dbfox-voxel .voxel-version { padding: 2px 5px; }
+}

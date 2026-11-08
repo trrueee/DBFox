@@ -26,7 +26,9 @@ from engine.agent.resource_refs import (
     dump_resource_refs,
     load_resource_refs,
     resource_refs_for_run,
+    RunResourceDiscovery,
 )
+from engine.agent.run import SessionLeaseConflict
 from engine.agent.session import SessionLease
 from engine.json_codec import JsonCodecError, canonical_dumps as _json, loads
 from engine.models import (
@@ -34,6 +36,9 @@ from engine.models import (
     AgentObservationRecord,
     AgentRun,
     AgentSession,
+    AgentToolInvocation,
+    AgentTurn,
+    Project,
 )
 from engine.tools.runtime.attempt import ResourceScopeRef
 
@@ -57,16 +62,147 @@ class _PreparedArtifactDraft:
     relations: tuple[ArtifactRelation, ...]
 
 
+MAX_SOURCE_PROOF_NODES = 256
+MAX_SOURCE_PROOF_EDGES = 256
+MAX_SOURCE_PROOF_DEPTH = 64
+
+
+def _require_invocation(
+    session: Session,
+    *,
+    invocation_id: str,
+    session_id: str,
+    run_id: str,
+    turn_id: str,
+    tool_name: str,
+) -> AgentToolInvocation:
+    invocation = session.get(AgentToolInvocation, invocation_id)
+    run = session.get(AgentRun, run_id)
+    turn = session.get(AgentTurn, turn_id)
+    if (
+        invocation is None or run is None or turn is None
+        or invocation.session_id != session_id or run.session_id != session_id
+        or turn.session_id != session_id or invocation.run_id != run_id
+        or turn.run_id != run_id or invocation.turn_id != turn_id
+        or invocation.tool_name != tool_name
+    ):
+        raise ArtifactDraftContractError("Artifact producer identity does not match its Invocation")
+    return invocation
+
+
+class _ArtifactSourceProof:
+    """One bounded proof of explicit Artifact dependencies, never execution scope."""
+
+    def __init__(
+        self,
+        session: Session,
+        *,
+        session_id: str,
+        run_id: str,
+        pending: tuple[_PreparedArtifactDraft, ...] = (),
+        producer: AgentToolInvocation | None = None,
+    ) -> None:
+        self.session = session
+        self.session_id = session_id
+        self.run_id = run_id
+        self.pending = {item.artifact_id: item for item in pending}
+        self.producer = producer
+        self.verified: dict[str, tuple[ResourceScopeRef, ...]] = {}
+        self.visiting: set[str] = set()
+        self.nodes = 0
+        self.edges = 0
+
+    def prove(self, artifact_id: str, depth: int = 0) -> tuple[ResourceScopeRef, ...]:
+        if depth > MAX_SOURCE_PROOF_DEPTH:
+            raise ArtifactDraftContractError("Artifact source proof exceeds its depth budget")
+        if artifact_id in self.visiting:
+            raise ArtifactDraftContractError("Artifact derived_from dependencies contain a cycle")
+        if artifact_id in self.verified:
+            return self.verified[artifact_id]
+        self.nodes += 1
+        if self.nodes > MAX_SOURCE_PROOF_NODES:
+            raise ArtifactDraftContractError("Artifact source proof exceeds its node budget")
+        self.visiting.add(artifact_id)
+        try:
+            pending = self.pending.get(artifact_id)
+            if pending is not None:
+                if self.producer is None:
+                    raise ArtifactDraftContractError("Artifact batch has no producer")
+                producer = self.producer
+                refs = pending.draft.resource_refs
+                relations = pending.relations
+                # Validate the same bounded wire contract before any batch write.
+                dump_resource_refs(refs)
+            else:
+                row = self.session.get(AgentArtifactRecord, artifact_id)
+                if (
+                    row is None or row.session_id != self.session_id
+                    or row.run_id != self.run_id
+                    or row.status != ArtifactStatus.COMPLETED.value
+                ):
+                    raise ArtifactDraftContractError("Artifact source is unavailable in this Run")
+                provenance = loads(str(row.provenance_json))
+                if not isinstance(provenance, dict):
+                    raise ArtifactDraftContractError("Artifact producer provenance is invalid")
+                invocation_id = provenance.get("tool_invocation_id")
+                tool_name = provenance.get("tool_name")
+                if not isinstance(invocation_id, str) or not isinstance(tool_name, str):
+                    raise ArtifactDraftContractError("Artifact source has no Invocation provenance")
+                producer = _require_invocation(
+                    self.session, invocation_id=invocation_id,
+                    session_id=self.session_id, run_id=self.run_id,
+                    turn_id=str(row.turn_id), tool_name=tool_name,
+                )
+                if producer.status != "succeeded":
+                    raise ArtifactDraftContractError("Artifact source Invocation has not succeeded")
+                refs = load_resource_refs(str(row.resource_refs_json))
+                encoded_relations = loads(str(row.relations_json))
+                if not isinstance(encoded_relations, list):
+                    raise ArtifactDraftContractError("Artifact source relations are invalid")
+                relations = tuple(ArtifactRelation.model_validate(item) for item in encoded_relations)
+
+            authorized = set(load_resource_refs(str(producer.resource_refs_json)))
+            for relation in relations:
+                if relation.relation is not ArtifactRelationType.DERIVED_FROM:
+                    continue
+                self.edges += 1
+                if self.edges > MAX_SOURCE_PROOF_EDGES:
+                    raise ArtifactDraftContractError("Artifact source proof exceeds its edge budget")
+                source_id = relation.artifact_id
+                if source_id not in self.pending:
+                    source = self.session.get(AgentArtifactRecord, source_id)
+                    if source is None or source.session_id != self.session_id:
+                        raise ArtifactDraftContractError("Artifact derived_from source is unavailable")
+                    if source.run_id != self.run_id:
+                        # Historical lineage is not authority for this Run.
+                        continue
+                authorized.update(self.prove(source_id, depth + 1))
+            if any(ref not in authorized for ref in refs):
+                raise ArtifactDraftContractError(
+                    "Artifact resource_refs exceed its Invocation and explicit derived_from sources"
+                )
+            self.verified[artifact_id] = refs
+            return refs
+        except (JsonCodecError, ValueError) as exc:
+            if isinstance(exc, ArtifactDraftContractError):
+                raise
+            raise ArtifactDraftContractError("Artifact source proof is invalid") from exc
+        finally:
+            self.visiting.remove(artifact_id)
+
+
 class ArtifactRepository:
     def __init__(
         self,
         session: Session,
         *,
         payload_contract_resolver: ArtifactPayloadContractResolver | None = None,
+        resource_discovery: RunResourceDiscovery | None = None,
     ) -> None:
         self.session = session
         self.sessions = SessionRepository(session)
         self.payload_contract_resolver = payload_contract_resolver
+        self.resource_discovery = resource_discovery
 
     def get_for_run(
         self,
@@ -75,7 +211,7 @@ class ArtifactRepository:
         run_id: str,
         artifact_id: str,
     ) -> Artifact | None:
-        """Return one Artifact only inside the exact invoking Run boundary."""
+        """Read a proven public Artifact inside the exact invoking Run boundary."""
 
         row = self.session.get(AgentArtifactRecord, artifact_id)
         if (
@@ -84,12 +220,29 @@ class ArtifactRepository:
             or str(row.run_id) != str(run_id)
         ):
             return None
-        return self._domain(row)
+        return self.available_artifact(
+            session_id=session_id, current_run_id=run_id, artifact_id=artifact_id,
+        )
 
     def get(self, artifact_id: str) -> Artifact | None:
         """Return one durable Artifact envelope by its opaque identity."""
 
         row = self.session.get(AgentArtifactRecord, artifact_id)
+        return self._domain(row) if row is not None else None
+
+    def get_for_project(self, project_id: str, artifact_id: str) -> Artifact | None:
+        """Recover an envelope without depending on an active chat projection."""
+        row = self.session.execute(
+            select(AgentArtifactRecord)
+            .join(AgentRun, AgentArtifactRecord.run_id == AgentRun.id)
+            .join(AgentSession, AgentRun.session_id == AgentSession.id)
+            .join(Project, AgentSession.project_id == Project.id)
+            .where(
+                AgentArtifactRecord.id == artifact_id,
+                AgentArtifactRecord.session_id == AgentSession.id,
+                Project.id == project_id,
+            )
+        ).scalar_one_or_none()
         return self._domain(row) if row is not None else None
 
     def artifacts_relating_to_for_run(
@@ -102,9 +255,9 @@ class ArtifactRepository:
     ) -> tuple[Artifact, ...]:
         """Return current-Run Artifacts with an outbound relation to ``artifact_id``."""
 
-        if self.get_for_run(
+        if self.available_artifact(
             session_id=session_id,
-            run_id=run_id,
+            current_run_id=run_id,
             artifact_id=artifact_id,
         ) is None:
             return ()
@@ -128,7 +281,11 @@ class ArtifactRepository:
                 and str(item.get("artifact_id") or "") == artifact_id
                 for item in relations
             ):
-                matches.append(self._domain(row))
+                available = self.available_artifact(
+                    session_id=session_id, current_run_id=run_id, artifact_id=str(row.id),
+                )
+                if available is not None:
+                    matches.append(available)
         return tuple(matches)
 
     def create(
@@ -212,15 +369,34 @@ class ArtifactRepository:
 
         if not drafts:
             return []
+        if len(drafts) > MAX_SOURCE_PROOF_NODES:
+            raise ArtifactDraftContractError("Artifact batch exceeds its source proof budget")
+        begin_agent_write(self.session)
+        self.sessions.require_lease(lease=lease)
+        invocation = _require_invocation(
+            self.session, invocation_id=invocation_id, session_id=lease.session_id,
+            run_id=run_id, turn_id=turn_id, tool_name=tool_name,
+        )
+        run = self.session.get(AgentRun, run_id)
+        if run is None or int(run.lease_token or 0) != lease.token:
+            raise SessionLeaseConflict("Artifact Run is outside the active Session lease")
+        if invocation.status not in {"requested", "running"}:
+            raise ArtifactDraftContractError("Artifact Invocation cannot settle again")
         prepared = self._prepare_drafts(
             lease=lease,
             run_id=run_id,
             drafts=drafts,
         )
+        proof = _ArtifactSourceProof(
+            self.session, session_id=lease.session_id, run_id=run_id,
+            pending=prepared, producer=invocation,
+        )
+        for item in prepared:
+            proof.prove(item.artifact_id)
         created: list[Artifact] = []
         provenance = {
-            "tool_invocation_id": invocation_id,
-            "tool_name": tool_name,
+            "tool_invocation_id": str(invocation.id),
+            "tool_name": str(invocation.tool_name),
         }
         for item in prepared:
             draft = item.draft
@@ -269,28 +445,6 @@ class ArtifactRepository:
             raise ArtifactDraftContractError(
                 "Artifact draft keys must be unique within one tool outcome"
             )
-
-        authorized_refs = resource_refs_for_run(
-            self.session,
-            self.session.get(AgentRun, run_id),
-        )
-        authorized = {
-            (ref.kind, ref.id, ref.version)
-            for ref in authorized_refs
-        }
-        for draft in drafts:
-            declared = [
-                (ref.kind, ref.id, ref.version)
-                for ref in draft.resource_refs
-            ]
-            if len(set(declared)) != len(declared):
-                raise ArtifactDraftContractError(
-                    "Artifact resource_refs must be unique by exact resource identity"
-                )
-            if any(identity not in authorized for identity in declared):
-                raise ArtifactDraftContractError(
-                    "Artifact resource_refs must be a subset of the Run authority"
-                )
 
         ids = {key: f"artifact_{uuid4().hex}" for key in keys}
         prepared: list[_PreparedArtifactDraft] = []
@@ -369,9 +523,10 @@ class ArtifactRepository:
                     "Artifact relation target is unavailable in this Session"
                 )
 
-        # Run ownership is enforced by the lease on writes. Relation targets may
-        # intentionally refer to earlier Artifacts in the same Session.
+        # Historical lineage may cross Runs inside the Session; source proof
+        # decides whether an explicit dependency can contribute any refs.
         return tuple(prepared)
+
     def list_for_run(self, run_id: str) -> list[Artifact]:
         rows = self.session.execute(
             select(AgentArtifactRecord).where(AgentArtifactRecord.run_id == run_id)
@@ -393,21 +548,6 @@ class ArtifactRepository:
         owner_run = (
             self.session.get(AgentRun, str(row.run_id)) if row is not None else None
         )
-        current_refs = (
-            resource_refs_for_run(self.session, current_run)
-            if current_run is not None
-            else ()
-        )
-        owner_refs = (
-            resource_refs_for_run(self.session, owner_run)
-            if owner_run is not None
-            else ()
-        )
-        artifact_refs = (
-            load_resource_refs(str(row.resource_refs_json))
-            if row is not None and row.resource_refs_json
-            else ()
-        )
         if (
             current_run is None
             or row is None
@@ -416,11 +556,25 @@ class ArtifactRepository:
             or str(row.session_id) != session_id
             or str(current_run.session_id) != session_id
             or str(owner_run.session_id) != session_id
-            or any(ref not in current_refs for ref in artifact_refs)
-            or any(ref not in owner_refs for ref in artifact_refs)
         ):
             return None
-        artifact = self._domain(row)
+        try:
+            artifact_refs = _ArtifactSourceProof(
+                self.session, session_id=session_id, run_id=str(owner_run.id),
+            ).prove(artifact_id)
+            artifact = self._domain(row)
+            # Same-Run public work products are not private Resource handles.
+            # Cross-Run context retains the consumer's exact admission fence.
+            if str(owner_run.id) != str(current_run.id):
+                current_refs = (
+                    tuple(d.to_scope_ref() for d in self.resource_discovery(self.session, current_run_id))
+                    if self.resource_discovery is not None
+                    else resource_refs_for_run(self.session, current_run)
+                )
+                if any(ref not in current_refs for ref in artifact_refs):
+                    return None
+        except (JsonCodecError, ValueError):
+            return None
         if str(owner_run.id) == str(current_run.id):
             return artifact
         # Internal Artifacts are execution details of their owning Run. They may

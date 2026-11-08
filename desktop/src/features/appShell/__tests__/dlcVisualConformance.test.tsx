@@ -11,7 +11,7 @@ import type {
   ResourceConnectorContribution,
 } from "../../resources/types";
 import type { DockViewContribution } from "../../dock/types";
-import { ResourceViewContainer } from "../../resources/ResourceViewContainer";
+import { ProjectWorkbench } from "../../resources/ProjectWorkbench";
 import { WorkspaceDock } from "../WorkspaceDock";
 import type { WorkspaceDockTab } from "../../../types/workspace";
 
@@ -77,52 +77,27 @@ describe("DLC visual conformance (spec §20/§34)", () => {
     useConversationStore.setState({ summaries: [] });
   });
 
-  it("renders 10 synthetic DLC connectors as uniform host-owned Resource View sections", () => {
+  it("renders registered connectors in uniform Dock workbench frames", () => {
     const connectors = Array.from({ length: 10 }, (_, index) => syntheticConnector(index));
-    render(
-      <TooltipProvider>
-        <ResourceViewContainer projectId="project-1" connectors={connectors} />
-      </TooltipProvider>,
-    );
-
-    // Host owns the section chrome; every DLC gets the identical contract.
-    expect(screen.getByText("资源")).toBeInTheDocument();
-    const headers = screen.getAllByRole("button", { name: /扩展 \d+/ });
-    expect(headers).toHaveLength(10);
-    expect(headers[0]).toHaveAttribute("aria-expanded", "true");
-    for (let index = 1; index < 10; index += 1) {
-      expect(headers[index]).toHaveAttribute("aria-expanded", "false");
-    }
-
-    // Only the expanded section mounts DLC content, inside the host-owned slot.
-    expect(screen.getByTestId("synthetic-resource-0")).toBeInTheDocument();
-    expect(screen.getByTestId("synthetic-resource-0").closest(".resource-view__body")).toBeTruthy();
-
-    // Expanding a late section keeps the host chrome intact.
-    fireEvent.click(screen.getByRole("button", { name: /扩展 9/ }));
-    expect(screen.getByTestId("synthetic-resource-9").closest(".resource-view__body")).toBeTruthy();
-    expect(screen.getByText("资源")).toBeInTheDocument();
+    useDlcStore.getState().setProjectionResult("workbench-test", {}, { connectors, dockViews: [], artifactViews: [] });
+    render(<TooltipProvider>{connectors.map(connector => <ProjectWorkbench key={connector.id} connectorId={connector.id} projectId="project-1" />)}</TooltipProvider>);
+    expect(screen.getAllByRole("region")).toHaveLength(10);
+    connectors.forEach((_, index) => {
+      expect(screen.getByTestId(`synthetic-resource-${index}`).closest(".project-workbench__body")).toBeTruthy();
+    });
+    expect(screen.queryByText("资源")).not.toBeInTheDocument();
   });
 
-  it("keeps an empty DLC connector section usable without crashing", () => {
-    const emptyConnector: ResourceConnectorContribution = {
-      id: "synthetic.empty",
-      title: "空扩展",
-      icon: "🫙",
-      render: () => null,
-    };
-    render(
-      <TooltipProvider>
-        <ResourceViewContainer projectId="project-1" connectors={[emptyConnector]} />
-      </TooltipProvider>,
-    );
-
-    const header = screen.getByRole("button", { name: /空扩展/ });
-    expect(header).toHaveAttribute("aria-expanded", "true");
-    fireEvent.click(header);
-    expect(header).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(header);
-    expect(header).toHaveAttribute("aria-expanded", "true");
+  it("keeps empty and unavailable workbenches usable", () => {
+    const connector = { id: "synthetic.empty", title: "空扩展", icon: null, render: () => null };
+    useDlcStore.getState().setProjectionResult("empty-test", {}, { connectors: [connector], dockViews: [], artifactViews: [] });
+    const { rerender } = render(<ProjectWorkbench connectorId={connector.id} projectId="project-1" />);
+    expect(screen.getByRole("region", { name: "空扩展工作台" })).toBeTruthy();
+    rerender(<ProjectWorkbench connectorId="disabled" projectId="project-1" />);
+    expect(screen.getByText("此工作台暂不可用")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "管理扩展" }));
+    expect(useWorkspaceStore.getState().settingsOpen).toBe(true);
+    expect(useWorkspaceStore.getState().settingsSection).toBe("dlc");
   });
 
   it("routes 10 synthetic DLC dock views through the host frame", () => {

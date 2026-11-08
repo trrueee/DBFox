@@ -4,16 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+import sys
+import time
 
 import pytest
 
-from engine.agent.artifact import artifact_payload_contracts
+from engine.agent.artifact import Artifact, artifact_payload_contracts
+from engine.agent.guidance import materialize_capability_guidance
+from engine.representation import ArtifactRepresentationContext, ArtifactRepresentationError, ArtifactRepresentationRequest
 from engine.agent.context_fragment import (
     ContextArtifactObservation,
     ContextContributionInput,
 )
 from engine.dlc import BuiltinContributionSet, ContributionCompiler, DlcPackageService
-from engine.dlc.api import DlcOperationContext, ResourceScopeRef
+from engine.dlc.api import DlcOperationContext, DlcOperationError, ResourceScopeRef
+from engine.runtime_composition import build_product_tool_registry
+from engine.tools.materialization import current_tool_contract_hash, materialize_tools
+from engine.tools.runtime.attempt import ToolAttemptRequest, ToolInvocationContext
+from engine.tools.runtime.attempt_runner import IsolatedProcessAttemptRunner
 from scripts.build_dbfox_workspace_dlc_fixture import (
     SOURCE_ROOT,
     build_dbfox_workspace_dlc_fixture,
@@ -53,7 +61,9 @@ def test_workspace_dlc_source_uses_only_public_extension_boundaries() -> None:
 def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     tmp_path: Path,
     workspace_contracts_available: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(tmp_path / "runtime"))
     built = build_dbfox_workspace_dlc_fixture(tmp_path / "archives")
     service = DlcPackageService(tmp_path / "runtime" / "dlcs")
     service.trust_publisher_from_file(
@@ -67,7 +77,16 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
         built_ins=BuiltinContributionSet()
     )
     assert snapshot.activation_failures == ()
-    assert {item.tool.name for item in snapshot.tools} == {"file_search", "file_read"}
+    assert {item.tool.name for item in snapshot.tools} == {
+        "command_run",
+        "file_delete",
+        "file_edit",
+        "file_grep",
+        "file_move",
+        "file_read",
+        "file_search",
+        "file_write",
+    }
     assert [item.kind for item in snapshot.resource_resolvers] == ["dbfox.workspace.root"]
     assert {item.artifact_type for item in snapshot.artifact_contracts} == {
         "dbfox.workspace.file_snapshot",
@@ -79,6 +98,11 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
         "binding.delete",
         "files.list",
         "files.read",
+        "files.write",
+        "files.edit",
+        "files.delete",
+        "files.move",
+        "files.grep",
     }
 
     workspace = tmp_path / "project-files"
@@ -131,6 +155,9 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     (workspace / "binary.bin").write_bytes(bytes((0, 1, 2)))
     with pytest.raises(ValueError, match="binary"):
         resolved.read_text_file("binary.bin")
+    (workspace / "oversized.txt").write_bytes(b"x" * (1024 * 1024 + 1))
+    with pytest.raises(ValueError, match="1 MiB"):
+        resolved.read_text_file("oversized.txt")
 
     snapshot_file = resolved.read_text_file("notes.txt")
     observation = ContextArtifactObservation(
@@ -159,6 +186,9 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     assert len(contributor.build(contribution_input)) == 1
 
     tools = {item.tool.name: item.tool for item in snapshot.tools}
+    for name in ("file_write", "file_edit", "file_delete", "file_move", "command_run"):
+        assert tools[name].execution.backend == "isolated_process"
+        assert tools[name].policy.requires_approval is True
     read_projection = tools["file_read"].project_observation(
         status="success",
         output={
@@ -186,8 +216,177 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     assert "matches" not in search_projection.facts
     assert search_projection.provider_payload["matches"][0]["name"] == "notes.txt"
 
+    representation_context = ArtifactRepresentationContext(artifact_loader=lambda _id: None)
+    preview_artifacts = []
+    for artifact_type, payload in (
+        ("dbfox.workspace.file_snapshot", observation.payload),
+        ("dbfox.workspace.code_patch", {
+            "relativePath": "notes.txt", "sizeBytes": snapshot_file.size_bytes,
+            "newSha256": snapshot_file.sha256, "oldSha256": None, "created": True,
+            "workspaceId": scope.id, "workspaceVersion": scope.version,
+        }),
+    ):
+        provider = next(item.provider for item in snapshot.artifact_representations if item.artifact_type == artifact_type)
+        artifact = Artifact(id="file-preview", session_id="session-a", run_id="run-a",
+                            type=artifact_type, title="notes.txt", payload=payload, resource_refs=(scope,))
+        result = provider.execute(artifact, ArtifactRepresentationRequest(operation="read", parameters={"limit": 5}), representation_context)
+        assert result.payload["content"] == "hello"
+        assert result.payload["content_truncated"] is True
+        rest = provider.execute(artifact, ArtifactRepresentationRequest(operation="read", parameters={"offset": 5}), representation_context)
+        assert rest.payload["content"] == " workspace"
+        assert result.source_fingerprint == snapshot_file.sha256
+        with pytest.raises(ArtifactRepresentationError) as invalid:
+            provider.execute(artifact, ArtifactRepresentationRequest(operation="read", parameters={"path": "../outside.txt"}), representation_context)
+        assert invalid.value.code == "INVALID_REQUEST"
+        with pytest.raises(ArtifactRepresentationError) as forbidden:
+            provider.execute(artifact.model_copy(update={"resource_refs": ()}), ArtifactRepresentationRequest(operation="read"), representation_context)
+        assert forbidden.value.code == "FORBIDDEN"
+        preview_artifacts.append((provider, artifact))
+
     (workspace / "notes.txt").write_text("changed", encoding="utf-8")
     assert contributor.build(contribution_input) == ()
+    for provider, artifact in preview_artifacts:
+        with pytest.raises(ArtifactRepresentationError) as changed:
+            provider.execute(artifact, ArtifactRepresentationRequest(operation="read"), representation_context)
+        assert changed.value.code == "SOURCE_CHANGED"
+
+    # Every byte of an accepted 1 MiB ASCII file must remain reachable by the
+    # shared read window; the old decimal-million offset rejected the last page.
+    (workspace / "limit.txt").write_bytes(b"a" * 1_048_576)
+    limit_file = resolved.read_text_file("limit.txt")
+    limit_artifact = preview_artifacts[0][1].model_copy(update={"payload": {
+        "relativePath": "limit.txt", "sizeBytes": limit_file.size_bytes, "sha256": limit_file.sha256,
+        "workspaceId": scope.id, "workspaceVersion": scope.version,
+    }})
+    tail = preview_artifacts[0][0].execute(limit_artifact, ArtifactRepresentationRequest(
+        operation="read", parameters={"offset": 1_044_000},
+    ), representation_context)
+    assert tail.payload["content"] == "a" * 4_576
+    assert tail.payload["content_truncated"] is False
+
+    write = snapshot.get_operation("dbfox.workspace", "files.write")
+    assert write is not None
+    with pytest.raises(DlcOperationError) as conflict:
+        write.spec.handler(
+            write.spec.input_model(path="notes.txt", content="must not overwrite"),
+            DlcOperationContext(dlc_id="dbfox.workspace", operation_name="files.write", project_id="project-a"),
+        )
+    assert conflict.value.code == "WORKSPACE_CONFLICT"
+    assert conflict.value.status_code == 409
+    assert (workspace / "notes.txt").read_text(encoding="utf-8") == "changed"
+
+    created = resolved.write_text_file("drafts/chapter.md", "第一段")
+    assert created.content == "第一段"
+    edited = resolved.edit_text_file(
+        "drafts/chapter.md",
+        old_string="第一段",
+        new_string="第一段修改",
+        expected_sha256=created.sha256,
+    )
+    assert edited.content == "第一段修改"
+    with pytest.raises(ValueError, match="文件已变更"):
+        resolved.edit_text_file(
+            "drafts/chapter.md",
+            old_string="第一段修改",
+            new_string="过期编辑",
+            expected_sha256=created.sha256,
+        )
+    grep_result = resolved.grep_text_files("修改", path_prefix="drafts")
+    assert [(match.relative_path, match.line_number) for match in grep_result.matches] == [
+        ("drafts/chapter.md", 1)
+    ]
+    resolved.move_path("drafts/chapter.md", "drafts/renamed.md")
+    resolved.delete_path("drafts/renamed.md")
+    command = resolved.run_command(
+        (sys.executable, "-c", "print('bounded command')"),
+        timeout_seconds=10,
+    )
+    assert command.exit_code == 0
+    assert command.timed_out is False
+    assert "bounded command" in command.output
+
+    service_module = sys.modules[type(resolved).__module__]
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "must-not-leak")
+    monkeypatch.setenv("DBFOX_ENGINE_TOKEN", "must-not-leak")
+    command_environment = service_module._command_environment()
+    assert "AWS_ACCESS_KEY_ID" not in command_environment
+    assert "DBFOX_ENGINE_TOKEN" not in command_environment
+    if "PATH" in command_environment:
+        assert command_environment["PATH"]
+    monkeypatch.setattr(service_module, "MAX_COMMAND_STREAM_BYTES", 4_096)
+    limited = resolved.run_command(
+        (sys.executable, "-c", "print('x' * 10000)"),
+        timeout_seconds=10,
+    )
+    assert limited.output_limit_exceeded is True
+    assert limited.truncated is True
+    assert len(limited.output.encode("utf-8")) <= service_module.MAX_COMMAND_OUTPUT_BYTES
+
+    bounded_dir = workspace / "bounded-dir"
+    bounded_dir.mkdir()
+    for index in range(8):
+        (bounded_dir / f"{index}.txt").write_text(str(index), encoding="utf-8")
+    monkeypatch.setattr(service_module, "MAX_WORKSPACE_DIR_ENTRIES", 3)
+    monkeypatch.setattr(service_module, "MAX_WORKSPACE_DIR_SCAN_ENTRIES", 5)
+    directory = resolved.list_directory("bounded-dir")
+    assert len(directory.entries) == 3
+    assert directory.truncated is True
+
+    monkeypatch.setattr(service_module, "MAX_GREP_FILES", 2)
+    grep_limited = resolved.grep_text_files("not-present", path_prefix="bounded-dir")
+    assert grep_limited.scanned_files == 2
+    assert grep_limited.truncated is True
+
+    registry = build_product_tool_registry(snapshot)
+    guidance = materialize_capability_guidance(
+        snapshot.capability_guidance,
+        resource_kinds=frozenset({scope.kind}), artifact_types=frozenset(),
+        tools=materialize_tools(registry, execution_mode="analysis", available_resource_kinds={scope.kind}),
+        registry=registry,
+    )
+    assert [(item.owner_id, item.id, item.version) for item in guidance] == [("dbfox.workspace", "workspace_evidence", "1")]
+    assert {local for local, _wire in guidance[0].tool_names} == {
+        "file_search", "file_read", "file_write", "file_edit", "file_grep", "command_run",
+    }
+    assert all(registry.require(wire).name == local for local, wire in guidance[0].tool_names)
+    write_name = next(
+        item.provider_name for item in snapshot.tools if item.tool.name == "file_write"
+    )
+    write_tool = registry.require(write_name)
+
+    class _Control:
+        deadline = time.monotonic() + 30
+
+        @staticmethod
+        def is_cancelled() -> bool:
+            return False
+
+    isolated_result = IsolatedProcessAttemptRunner().run(
+        request=ToolAttemptRequest(
+            mode="execute",
+            tool_name=write_name,
+            frozen_tool_declared_version=write_tool.version,
+            frozen_tool_contract_hash=current_tool_contract_hash(write_tool),
+            invocation=ToolInvocationContext(
+                session_id="session-isolated",
+                run_id="run-isolated",
+                turn_id="turn-isolated",
+                invocation_id="invocation-isolated",
+                idempotency_key="idempotency-isolated",
+                scope_refs=(scope,),
+            ),
+            authorized_input={
+                "path": "isolated.txt",
+                "content": "written through worker",
+                "expected_sha256": None,
+            },
+            attempt_timeout_ms=20_000,
+            implementation=registry.implementation_identity_of(write_name),
+        ),
+        control=_Control(),
+    )
+    assert isolated_result.status == "success"
+    assert (workspace / "isolated.txt").read_text(encoding="utf-8") == "written through worker"
 
     service.set_desired_enabled("dbfox.workspace", False)
     absent = ContributionCompiler(service.storage_root).compile(

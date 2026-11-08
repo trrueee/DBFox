@@ -30,6 +30,7 @@ from engine.agent.repositories.plan import PlanRepository
 from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
+from engine.agent.resource_refs import RunResourceDiscovery
 from engine.agent.response import (
     AnswerCandidate,
     ComposedResponse,
@@ -51,9 +52,11 @@ class Terminalizer:
         *,
         session_factory: Callable[[], Session],
         responses: ResponseComposer | None = None,
+        resource_discovery: RunResourceDiscovery | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.responses = responses or ResponseComposer()
+        self.resource_discovery = resource_discovery
 
     def complete(
         self,
@@ -67,7 +70,7 @@ class Terminalizer:
     ) -> bool:
         with self.session_factory() as db:
             partial = disposition is CompletionDisposition.BOUNDED_PARTIAL
-            artifact_repository = ArtifactRepository(db)
+            artifact_repository = ArtifactRepository(db, resource_discovery=self.resource_discovery)
             artifacts = artifact_repository.list_for_run(run_id)
             referenced_artifacts = (
                 artifact_repository.referenced_artifacts_for_run(run_id)
@@ -87,7 +90,7 @@ class Terminalizer:
                 _bounded_partial_summary(
                     db,
                     run_id=run_id,
-                    result_artifact_count=len(answer_artifacts),
+                    result_artifact_count=len(current_primary_artifacts),
                     limitation_codes=limitation_codes,
                 )
                 if partial
@@ -395,7 +398,7 @@ def _bounded_partial_summary(
             lines.append("尚未完成：" + "；".join(remaining))
     if result_artifact_count:
         lines.append(
-            f"已保留 {result_artifact_count} 个查询结果，可在工件区查看并继续分析。"
+            f"本次已生成 {result_artifact_count} 项成果，可在工作区查看并继续处理。"
         )
     if limitation_codes:
         lines.append(

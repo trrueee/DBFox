@@ -16,7 +16,6 @@
 
 - Python 3.12
 - Node.js 22.18 或更高版本
-- Rust 1.95（桌面壳与 Rust 测试）
 - Git
 
 安装 Python 依赖：
@@ -56,6 +55,8 @@ Unix 开发脚本为 `./dev.sh`，但脚本存在不等同于 macOS/Linux 发布
 
 ## 架构不变量
 
+- **冻结的 Core Kernel**：Session/Run/Turn、Loop、authority、Tool 生命周期、Approval、事件、取消、Artifact envelope 与 provider-neutral completion 的职责已冻结。新增领域能力默认进入 DLC；修改 Kernel 或公开 SDK 前必须按 [`Core Kernel 宪章`](docs/architecture/core-kernel-constitution.md)完成解冻说明。
+- **唯一 DLC 接入口**：后端 DLC 只导入 `dbfox_dlc_api`，前端 DLC 只使用 `sdk/frontend` 和 Host 注入合同；不得导入 Engine、Renderer 或其他 DLC 的私有模块。
 - **单一 Runtime 权威**：Electron Main 管理 Sidecar 生命周期、generation、endpoint 与短期 token；不要增加第二套启动或探活路径。
 - **单一协议模型**：在真实系统边界做一次类型转换；不要堆叠 mapper、DTO、兼容表或双轨协议。
 - **Provider-neutral Agent**：Turn、Completion、Tool 与错误语义不能依赖某一家模型提供商的可选字段。
@@ -101,6 +102,7 @@ git diff --check
 ## 变更要求
 
 - 先建立基线和可复现证据，再修改生产源码。
+- 触及 Core/Extension Runtime/SDK 时，在变更说明中标明稳定级别、说明为何现有 DLC 接口不能表达，并列出 API/迁移影响；“实现更方便”不是修改 Core 的理由。
 - 修复权威路径，并为失败路径增加回归测试；不要只在 UI 或 Adapter 末端遮蔽问题。
 - 保持提交独立、可测试、可回滚，不混入无关格式化或用户本地文件。
 - 行为、架构、命令、配置或支持范围变化时，同步更新标记为“当前”的文档。

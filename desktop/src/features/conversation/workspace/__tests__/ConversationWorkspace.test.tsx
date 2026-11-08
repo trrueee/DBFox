@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
   ApprovalItem,
   AssistantMessageItem,
@@ -15,6 +16,7 @@ import { ConversationWorkspace } from "../ConversationWorkspace";
 const viewModel = vi.hoisted(() => ({
   current: {} as Record<string, unknown>,
 }));
+let queryClient: QueryClient;
 
 vi.mock("../useConversationViewModel", () => ({
   useConversationViewModel: () => viewModel.current,
@@ -22,6 +24,9 @@ vi.mock("../useConversationViewModel", () => ({
 
 describe("ConversationWorkspace", () => {
   beforeEach(() => {
+    queryClient?.clear();
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(["projects"], [{ id: "project-1", name: "DBFox", status: "active" }]);
     class ResizeObserverMock {
       observe() {}
       unobserve() {}
@@ -218,10 +223,12 @@ function renderWorkspace() {
 
 function workspace() {
   return (
+    <QueryClientProvider client={queryClient}>
     <ConversationWorkspace
       conversationId="session-1"
       onOpenSqlConsole={vi.fn()}
     />
+    </QueryClientProvider>
   );
 }
 

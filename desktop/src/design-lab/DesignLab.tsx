@@ -1,23 +1,23 @@
 import { useState } from "react";
 import {
-  ChevronDown,
-  CircleAlert,
-  Clock3,
-  Database,
-  FileCode2,
-  Folder,
-  GitBranch,
-  Home,
-  Maximize2,
-  MessageSquare,
-  Moon,
-  PackageOpen,
-  PanelRightClose,
-  Plus,
-  Settings,
-  Sun,
-  X,
-} from "lucide-react";
+  CaretDownIcon,
+  WarningCircleIcon,
+  ClockIcon,
+  DatabaseIcon,
+  FileCodeIcon,
+  FolderSimpleIcon,
+  GitBranchIcon,
+  HouseIcon,
+  ArrowsOutSimpleIcon,
+  ChatCircleIcon,
+  MoonIcon,
+  PuzzlePieceIcon,
+  SidebarSimpleIcon,
+  PlusIcon,
+  GearIcon,
+  SunIcon,
+  XIcon,
+} from "@/components/icons";
 
 import { UnifiedComposer } from "../components/agent/UnifiedComposer";
 import { AgentQuestion } from "../components/agent-elements/AgentQuestion";
@@ -182,7 +182,7 @@ export function DesignLab() {
             <button type="button" className={section === "settings" ? "is-active" : ""} onClick={() => setSection("settings")}>Settings</button>
           </div>
           <Button type="button" variant="outline" size="icon-sm" onClick={toggle} aria-label="切换主题">
-            {theme === "dark" ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+            {theme === "dark" ? <SunIcon size={16} aria-hidden="true" /> : <MoonIcon size={16} aria-hidden="true" />}
           </Button>
         </div>
       </header>
@@ -193,30 +193,30 @@ export function DesignLab() {
         <section className="design-lab__canvas design-lab__shell" aria-label="Core Shell 预览">
           <Sidebar className="design-lab__sidebar" aria-label="主导航预览">
             <SidebarHeader>
-              <SidebarNavRow icon={<Plus />} label="新任务" className="design-lab__new-task" />
-              <SidebarNavRow icon={<Home />} label="主页" active />
+              <SidebarNavRow icon={<PlusIcon />} label="新任务" className="design-lab__new-task" />
+              <SidebarNavRow icon={<HouseIcon />} label="主页" active />
             </SidebarHeader>
             <SidebarContent>
               <SidebarGroup>
-                <SidebarGroupLabel action={<Button type="button" variant="ghost" size="icon-sm" aria-label="新建项目"><Plus size={14} /></Button>}>项目</SidebarGroupLabel>
-                <SidebarNavRow icon={<Folder />} label="增长分析" meta="12" />
-                <SidebarNavRow icon={<Folder />} label="供应链" meta="4" />
+                <SidebarGroupLabel action={<Button type="button" variant="ghost" size="icon-sm" aria-label="新建项目"><PlusIcon size={14} /></Button>}>项目</SidebarGroupLabel>
+                <SidebarNavRow icon={<FolderSimpleIcon />} label="增长分析" meta="12" />
+                <SidebarNavRow icon={<FolderSimpleIcon />} label="供应链" meta="4" />
               </SidebarGroup>
               <SidebarGroup>
                 <SidebarGroupLabel>最近工作</SidebarGroupLabel>
-                <SidebarNavRow icon={<MessageSquare />} label="渠道转化率异常排查" meta="2m" />
-                <SidebarNavRow icon={<MessageSquare />} label="华东库存周转分析" meta="1h" />
-                <SidebarNavRow icon={<MessageSquare />} label="留存 cohort 复盘" meta="昨天" />
-                <SidebarNavRow icon={<MessageSquare />} label="月度经营摘要" meta="周一" />
-                <SidebarNavRow icon={<MessageSquare />} label="交付风险清单" meta="周一" />
-                <SidebarNavRow icon={<MessageSquare />} label="客户反馈主题整理" meta="8月18日" />
-                <SidebarNavRow icon={<MessageSquare />} label="下季度目标草案" meta="8月15日" />
-                <SidebarNavRow icon={<MessageSquare />} label="跨团队依赖核对" meta="8月12日" />
+                <SidebarNavRow icon={<ChatCircleIcon />} label="渠道转化率异常排查" meta="2m" />
+                <SidebarNavRow icon={<ChatCircleIcon />} label="华东库存周转分析" meta="1h" />
+                <SidebarNavRow icon={<ChatCircleIcon />} label="留存 cohort 复盘" meta="昨天" />
+                <SidebarNavRow icon={<ChatCircleIcon />} label="月度经营摘要" meta="周一" />
+                <SidebarNavRow icon={<ChatCircleIcon />} label="交付风险清单" meta="周一" />
+                <SidebarNavRow icon={<ChatCircleIcon />} label="客户反馈主题整理" meta="8月18日" />
+                <SidebarNavRow icon={<ChatCircleIcon />} label="下季度目标草案" meta="8月15日" />
+                <SidebarNavRow icon={<ChatCircleIcon />} label="跨团队依赖核对" meta="8月12日" />
               </SidebarGroup>
             </SidebarContent>
             <SidebarFooter>
-              <SidebarNavRow icon={<PackageOpen />} label="扩展" />
-              <SidebarNavRow icon={<Settings />} label="设置" />
+              <SidebarNavRow icon={<PuzzlePieceIcon />} label="扩展" />
+              <SidebarNavRow icon={<GearIcon />} label="设置" />
             </SidebarFooter>
           </Sidebar>
 
@@ -272,11 +272,11 @@ export function DesignLab() {
                 <SourcesTrigger count={2} aria-label="引用的数据来源，2 项" />
                 <SourcesContent className="conv-data-ref-list">
                   <span className="conv-data-ref conv-data-ref-result">
-                    <Database size={14} aria-hidden="true" />
+                    <DatabaseIcon size={14} aria-hidden="true" />
                     <span>订单明细结果</span>
                   </span>
                   <span className="conv-data-ref conv-data-ref-chart">
-                    <GitBranch size={14} aria-hidden="true" />
+                    <GitBranchIcon size={14} aria-hidden="true" />
                     <span>月度趋势图</span>
                   </span>
                 </SourcesContent>
@@ -286,7 +286,7 @@ export function DesignLab() {
             <div className="design-lab__state-grid">
               <ApprovalCard approval={labApproval} onResolve={() => undefined} />
               <div className="design-lab__error" role="alert">
-                <CircleAlert size={16} />
+                <WarningCircleIcon size={16} />
                 <span><strong>结果加载失败</strong><small>连接已断开，请重试。</small></span>
                 <Button type="button" variant="outline" size="sm">重试</Button>
               </div>
@@ -310,20 +310,20 @@ export function DesignLab() {
         <section className="design-lab__canvas design-lab__surface" aria-label="Work Surface 预览">
           <div className="design-lab__surface-shell">
             <header className="design-lab__surface-tabs">
-              <button type="button" className="is-active"><Database size={16} /><span>渠道转化结果</span><X size={14} /></button>
-              <button type="button"><FileCode2 size={16} /><span>analysis.sql</span><X size={14} /></button>
+              <button type="button" className="is-active"><DatabaseIcon size={16} /><span>渠道转化结果</span><XIcon size={14} /></button>
+              <button type="button"><FileCodeIcon size={16} /><span>analysis.sql</span><XIcon size={14} /></button>
               <div className="design-lab__surface-spacer" />
-              <button type="button" aria-label="工作区全屏"><Maximize2 size={16} /></button>
-              <button type="button" aria-label="收起工作区"><PanelRightClose size={16} /></button>
+              <button type="button" aria-label="工作区全屏"><ArrowsOutSimpleIcon size={16} /></button>
+              <button type="button" aria-label="收起工作区"><SidebarSimpleIcon size={16} /></button>
             </header>
             <div className="design-lab__surface-body">
               <div className="design-lab__surface-content">
                 <nav className="design-lab__tree" aria-label="数据对象">
                   <strong>analytics</strong>
-                  <button type="button"><ChevronDown size={14} /><Database size={14} />public</button>
-                  <button type="button" className="is-active"><span /><FileCode2 size={14} />orders</button>
-                  <button type="button"><span /><FileCode2 size={14} />sessions</button>
-                  <button type="button"><span /><FileCode2 size={14} />channels</button>
+                  <button type="button"><CaretDownIcon size={14} /><DatabaseIcon size={14} />public</button>
+                  <button type="button" className="is-active"><span /><FileCodeIcon size={14} />orders</button>
+                  <button type="button"><span /><FileCodeIcon size={14} />sessions</button>
+                  <button type="button"><span /><FileCodeIcon size={14} />channels</button>
                 </nav>
                 <div className="design-lab__table-wrap">
                   <table>
@@ -337,7 +337,7 @@ export function DesignLab() {
                   </table>
                 </div>
               </div>
-              <footer><GitBranch size={14} /><span>数据来源：analytics.orders · 查询已校验 · 7 行</span><Clock3 size={14} /><span>428 ms</span></footer>
+              <footer><GitBranchIcon size={14} /><span>数据来源：analytics.orders · 查询已校验 · 7 行</span><ClockIcon size={14} /><span>428 ms</span></footer>
             </div>
           </div>
         </section>
@@ -378,7 +378,7 @@ export function DesignLab() {
 function LabRecent({ title, summary, time }: { title: string; summary: string; time: string }) {
   return (
     <button type="button" className="design-lab__recent-row">
-      <MessageSquare size={16} aria-hidden="true" />
+      <ChatCircleIcon size={16} aria-hidden="true" />
       <span><strong>{title}</strong><small>{summary}</small></span>
       <time>{time}</time>
     </button>

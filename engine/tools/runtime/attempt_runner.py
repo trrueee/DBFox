@@ -28,12 +28,9 @@ _DEFAULT_MAX_STDERR_BYTES = 64 * 1024
 
 
 def default_isolated_worker_command() -> tuple[str, ...]:
-    """Return the development worker command.
-
-    Frozen Sidecar packaging may need to replace this with a real sidecar-local
-    command before ``isolated_process`` is enabled in production.
-    """
-
+    """Use the same protocol in source Python and the bundled Sidecar."""
+    if getattr(sys, "frozen", False):
+        return (sys.executable, "--tool-worker")
     return (sys.executable, "-m", "engine.tools.worker")
 
 

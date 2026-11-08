@@ -4,16 +4,19 @@ import type { ConversationArtifact, ConversationDetail } from "../../types/conve
 const mocks = vi.hoisted(() => ({
   admit: vi.fn(),
   create: vi.fn(),
+  patch: vi.fn(),
   get: vi.fn(),
   history: vi.fn(),
   getRunArtifacts: vi.fn(),
   follow: vi.fn(),
+  cancel: vi.fn(),
 }));
 
 vi.mock("../../features/conversation/conversationRepository", () => ({
   admitConversationInput: mocks.admit,
-  cancelConversationRun: vi.fn(),
+  cancelConversationRun: mocks.cancel,
   createConversation: mocks.create,
+  patchConversation: mocks.patch,
   deleteConversation: vi.fn(),
   getConversation: mocks.get,
   getConversationHistory: mocks.history,
@@ -65,10 +68,12 @@ describe("conversationStore admission projection", () => {
   beforeEach(() => {
     mocks.admit.mockReset();
     mocks.create.mockReset();
+    mocks.patch.mockReset();
     mocks.get.mockReset();
     mocks.history.mockReset();
     mocks.getRunArtifacts.mockReset();
     mocks.follow.mockReset().mockResolvedValue(undefined);
+    mocks.cancel.mockReset();
     useConversationStore.setState({
       summaries: [],
       detailById: { [initialDetail.id]: initialDetail },
@@ -78,6 +83,73 @@ describe("conversationStore admission projection", () => {
       streamStateById: {},
     });
   });
+
+  it("renames metadata without replacing a live conversation projection with an older response", async () => {
+    mocks.patch.mockResolvedValue({ ...initialDetail, title: "订单核对", cursor: 1 });
+    useConversationStore.setState({ summaries: [{ id: initialDetail.id, project_id: "project-1", title: "Orders", updated_at: "2026-11-03T00:00:00Z" }] });
+    await useConversationStore.getState().renameConversation(initialDetail.id, "  订单核对  ");
+    expect(mocks.patch).toHaveBeenCalledWith(initialDetail.id, { title: "订单核对" });
+    expect(useConversationStore.getState().detailById[initialDetail.id]).toMatchObject({ title: "订单核对", cursor: 10 });
+    expect(useConversationStore.getState().summaries[0].title).toBe("订单核对");
+  });
+
+  it("follows the queued successor after cancelling the previous run", async () => {
+    const first = {
+      id: "run-1", session_id: initialDetail.id, input_id: "input-1", session_sequence: 1,
+      user_message_id: "user-1", question: "first", status: "running" as const, version: 1,
+      cancel_requested: false, result: {}, error: null,
+    };
+    useConversationStore.getState().loadConversation({ ...initialDetail, runs: [first] });
+    mocks.cancel.mockResolvedValue({ status: "cancelled", version: 2 });
+    mocks.get.mockResolvedValue({ ...initialDetail, cursor: 20, runs: [
+      { ...first, status: "cancelled", version: 2, cancel_requested: true },
+      { ...first, id: "run-2", input_id: "input-2", session_sequence: 2, status: "queued" },
+    ] });
+
+    await useConversationStore.getState().cancelRun("run-1");
+
+    expect(mocks.follow).toHaveBeenCalledWith(initialDetail.id, "run-2", 20, expect.any(Object));
+  });
+
+  it.each(["snapshot", "history", "admission"] as const)(
+    "keeps a completed projection when an older %s arrives after SSE",
+    async (kind) => {
+      const completed: ConversationDetail = {
+        ...initialDetail, cursor: 50,
+        pagination: { items: { has_more: true, next_before_sequence: 5 }, runs: { has_more: true, next_before_sequence: 5 } },
+        runs: [{ id: "run-1", session_id: initialDetail.id, input_id: "input-1", session_sequence: 1,
+          user_message_id: "user-1", question: "question", status: "completed", version: 8,
+          current_turn_id: null, cancel_requested: false, result: {}, error: null }],
+        items: [{ id: "answer-1", type: "message", session_id: initialDetail.id, run_id: "run-1",
+          status: "completed", revision: 8, sequence: 20, created_at: "2026-11-07T00:00:00Z",
+          payload: { role: "assistant", content: "完整回答", evidence: [], artifact_refs: [], limitation_codes: [] } }],
+      };
+      const older: ConversationDetail = { ...completed, cursor: 10,
+        runs: completed.runs.map(run => ({ ...run, status: "running", version: 2 })),
+        items: completed.items.map(item => item.type === "message"
+          ? { ...item, status: "in_progress", revision: 2, payload: { ...item.payload, content: "" } }
+          : item),
+      };
+      useConversationStore.getState().loadConversation(older);
+      let release: () => void = () => undefined;
+      const held = new Promise<void>(resolve => { release = resolve; });
+      mocks.history.mockImplementation(async () => { await held; return { ...older, pagination: completed.pagination }; });
+      mocks.admit.mockImplementation(async () => { await held; return { run_id: "run-1", event_cursor: 10, projection: older }; });
+      const pending = kind === "history"
+        ? useConversationStore.getState().loadOlderHistory(initialDetail.id)
+        : kind === "admission"
+          ? useConversationStore.getState().sendMessage(initialDetail.id, "next", "queue", "request-1")
+          : Promise.resolve();
+      useConversationStore.getState().loadConversation(completed);
+      release();
+      await pending;
+      if (kind === "snapshot") useConversationStore.getState().loadConversation(older);
+      const current = useConversationStore.getState().detailById[initialDetail.id];
+      expect(current.cursor).toBe(50);
+      expect(current.runs[0]).toMatchObject({ status: "completed", version: 8 });
+      expect(current.items[0]).toMatchObject({ status: "completed", revision: 8, payload: { content: "完整回答" } });
+    },
+  );
 
   it("clears a stale stream failure after refreshing a terminal snapshot", async () => {
     mocks.get.mockResolvedValue(initialDetail);

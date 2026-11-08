@@ -6,6 +6,7 @@ const DATAFRAME_TYPE = "dbfox.dataframe.v1";
 const DATASET_NAME = "dbfox_source";
 
 let React;
+let HostIcon;
 
 function ensureStylesheet() {
   if (typeof document === "undefined") return;
@@ -701,19 +702,11 @@ function deniedLoader() {
 }
 
 function SourceIcon() {
-  return React.createElement(
-    "svg",
-    { viewBox: "0 0 16 16", width: 14, height: 14, "aria-hidden": true },
-    React.createElement("path", { d: "M2.5 3.5h11v9h-11zM2.5 6.5h11M6 6.5v6", fill: "none", stroke: "currentColor", strokeWidth: "1.25" }),
-  );
+  return React.createElement(HostIcon, { name: "table", size: 18 });
 }
 
 function InsightIcon() {
-  return React.createElement(
-    "svg",
-    { viewBox: "0 0 16 16", width: 16, height: 16, "aria-hidden": true },
-    React.createElement("path", { d: "M8 1.75a4.75 4.75 0 0 0-2.84 8.56c.45.34.71.85.71 1.39h4.26c0-.54.26-1.05.71-1.39A4.75 4.75 0 0 0 8 1.75ZM6 14h4", fill: "none", stroke: "currentColor", strokeWidth: "1.25", strokeLinecap: "round" }),
-  );
+  return React.createElement(HostIcon, { name: "lightbulb", size: 20 });
 }
 
 function css(style, name) {
@@ -741,6 +734,7 @@ function isRecord(value) {
 export function register(host) {
   React = globalThis.__DBFOX_EXTENSION_HOST__?.React;
   if (!React) throw new Error("DBFox React host is unavailable");
+  HostIcon = host.ui.Icon;
   ensureStylesheet();
   host.artifactViews.register({
     id: "dbfox.visualization.document",
@@ -783,4 +777,5 @@ export function register(host) {
 export function deactivate() {
   if (typeof document !== "undefined") document.querySelectorAll(`link[data-dbfox-dlc="${DLC_ID}"]`).forEach((link) => link.remove());
   React = undefined;
+  HostIcon = undefined;
 }

@@ -6,7 +6,12 @@ import {
   type HTMLAttributes,
   type ReactNode,
 } from "react";
-import { AlertCircle, CheckCircle2, Info, TriangleAlert } from "lucide-react";
+import {
+  WarningCircleIcon,
+  CheckCircleIcon,
+  InfoIcon,
+  WarningIcon,
+} from "@/components/icons";
 
 import { cn } from "../../lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
@@ -20,12 +25,12 @@ type SettingsIcon = ComponentType<{ size?: number; className?: string; "aria-hid
 type SettingsStatusTone = "neutral" | "info" | "success" | "warning" | "danger" | "loading";
 
 const STATUS_ICONS: Record<SettingsStatusTone, SettingsIcon> = {
-  neutral: Info,
-  info: Info,
-  success: CheckCircle2,
-  warning: TriangleAlert,
-  danger: AlertCircle,
-  loading: Info,
+  neutral: InfoIcon,
+  info: InfoIcon,
+  success: CheckCircleIcon,
+  warning: WarningIcon,
+  danger: WarningCircleIcon,
+  loading: InfoIcon,
 };
 
 interface SettingsContentProps extends HTMLAttributes<HTMLDivElement> {

@@ -25,6 +25,7 @@ from dbfox_dlc_api import (
 
 from .artifact_contracts import SNAPSHOT_ARTIFACT_TYPE, SQL_ARTIFACT_TYPE
 from .connection import DataConnectionBoundary
+from .contracts import WorkbookDatabaseHandle
 from .database_selection import select_database
 from .query_identity import query_fingerprint
 from .resource_kind import DATABASE_RESOURCE_KIND
@@ -41,6 +42,7 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
     description = (
         "Read at most 20 redacted sample rows from one catalog-validated table. "
         "This proves row shape and example values only, never aggregates or trends."
+        " For workbook datasets, use workbook_inspect for samples or validated SQL for exact rows."
     )
     input_model = DataPreviewInput
     output_model = DataPreviewOutput
@@ -72,9 +74,16 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
     ) -> ToolOutcome[DataPreviewOutput]:
         started = time.perf_counter()
         resource_ref, handle = select_database(context, tool_input.database_id)
+        if isinstance(handle, WorkbookDatabaseHandle):
+            # This tool's durable sample store is owned by connection profiles.
+            # Workbook rows already have immutable source SQL and file previews.
+            raise ToolInputError(
+                "Use workbook_inspect for workbook samples, or sql_validate followed by "
+                "sql_execute_readonly for exact workbook rows."
+            )
         try:
             table, catalog_columns = self._store.resolve_catalog_table(
-                handle.database.id,
+                handle.id,
                 tool_input.table,
             )
         except KeyError as exc:
@@ -130,7 +139,7 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
             where=where,
             order=order,
             limit=tool_input.limit,
-            dialect=handle.profile.provider,
+            dialect=handle.dialect,
             catalog_validated_identifiers=True,
         )
         try:
@@ -183,7 +192,7 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
             payload={
                 "sql": safe_sql,
                 "safeSql": safe_sql,
-                "dialect": handle.profile.provider,
+                "dialect": handle.dialect,
                 "queryFingerprint": fingerprint,
                 "parameters": parameters,
             },

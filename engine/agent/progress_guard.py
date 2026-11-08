@@ -12,7 +12,6 @@ from engine.json_codec import JsonCodecError, canonical_dumps as _canonical, loa
 from engine.models import (
     AgentArtifactRecord,
     AgentObservationRecord,
-    AgentTaskPlanRecord,
     AgentToolInvocation,
 )
 
@@ -120,22 +119,10 @@ class ProgressGuard:
                 )
             )
 
-        plan = self.session.execute(
-            select(AgentTaskPlanRecord).where(AgentTaskPlanRecord.run_id == run_id)
-        ).scalar_one_or_none()
-        plan_state = (
-            None
-            if plan is None
-            else {
-                "objective": str(plan.objective),
-                "steps": _meaningful(_load(plan.steps_json, [])),
-                "status": str(plan.status),
-                "summary": str(plan.summary or ""),
-            }
-        )
+        # Plans describe intended work. Rewording or marking a step complete
+        # without new durable evidence must not reset the no-progress boundary.
         state = {
             "artifacts": sorted(artifact_signatures),
             "observations": sorted(observation_signatures),
-            "plan": plan_state,
         }
         return hashlib.sha256(_canonical(state).encode("utf-8")).hexdigest()

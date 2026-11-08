@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.agent.resource_refs import RequestedResourceRef
+from engine.agent.run import RunStatus
 from engine.agent.run_item import RunItem, RunProjection
 
 
@@ -167,6 +168,8 @@ class ConversationSummaryResponse(BaseModel):
     title: str
     selected_artifact_id: str | None = None
     updated_at: str
+    run_status: RunStatus | None = None
+    cursor: int = Field(default=0, ge=0)
 
 
 class ConversationSessionResponse(BaseModel):

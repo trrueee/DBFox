@@ -1,4 +1,7 @@
-import { Box, PanelRightClose } from "lucide-react";
+import {
+  SidebarSimpleIcon,
+} from "@/components/icons";
+import { artifactKind, ResourceIcon, resourceLabel } from "../../../components/resources/resourcePresentation";
 import { useMemo } from "react";
 import type { ConversationArtifact } from "../../../types/conversation";
 import { toArtifactEnvelope } from "../../workspace/artifacts/artifactEnvelope";
@@ -32,10 +35,10 @@ export function ArtifactDock({
   return (
     <aside className="conv-artifact-dock" aria-label="Artifact dock">
       <header className="conv-artifact-dock-header">
-        <strong>工件</strong>
+        <strong>成果</strong>
         {onCollapse && (
           <button type="button" onClick={onCollapse} aria-label="收起工件区" title="收起工件区">
-            <PanelRightClose size={16} aria-hidden="true" />
+            <SidebarSimpleIcon size={16} aria-hidden="true" />
           </button>
         )}
       </header>
@@ -46,13 +49,13 @@ export function ArtifactDock({
               key={artifact.id}
               type="button"
               className="conv-artifact-dock-item"
-              aria-label={`${artifact.title} ${artifactTypeLabel(artifact.type)}`}
+              aria-label={`${artifact.title} ${artifactTypeLabel(artifact.type, artifact.title)}`}
               aria-pressed={activeArtifact?.id === artifact.id}
               onClick={() => onSelectArtifact?.(artifact.id)}
             >
-              <Box size={14} aria-hidden="true" />
+              <ResourceIcon name={artifact.title} kind={artifactKind(artifact.type, artifact.title)} size={16} />
               <span>{artifact.title}</span>
-              <em>{artifactTypeLabel(artifact.type)}</em>
+              <em>{artifactTypeLabel(artifact.type, artifact.title)}</em>
             </button>
           ))}
         </nav>
@@ -72,7 +75,7 @@ export function ArtifactDock({
               }}
             />
           ) : (
-            <div className="conv-artifact-dock-empty">选择一个工件查看详情</div>
+            <div className="conv-artifact-dock-empty">选择成果查看详情</div>
           )}
         </section>
       </div>
@@ -80,7 +83,6 @@ export function ArtifactDock({
   );
 }
 
-function artifactTypeLabel(type: string): string {
-  const label = type.split(".").at(-1)?.replaceAll("_", " ").trim();
-  return label || "Artifact";
+function artifactTypeLabel(type: string, title: string): string {
+  return resourceLabel(artifactKind(type, title));
 }

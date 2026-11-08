@@ -45,9 +45,28 @@ describe("MarkdownContent", () => {
     );
 
     const source = screen.getByRole("button", { name: "查看证据：订单趋势" });
-    expect(source.textContent).toContain("[1] 订单趋势");
+    expect(source.textContent).toContain("订单趋势");
+    expect(source.querySelector(".hifi-md-citation__index")?.textContent).toBe("1");
     fireEvent.click(source);
     expect(onCitation).toHaveBeenCalledWith("artifact_result_1");
+  });
+
+  it("uses the canonical resource name and type instead of repeating a claim", () => {
+    render(<MarkdownContent content="订单增长。{{cite:artifact_result_1}}"
+      citations={[{ artifact_id: "artifact_result_1", label: "**数据质量**：无逻辑删除记录，并且本次查询覆盖全部有效订单。" }]}
+      artifacts={[{ id: "artifact_result_1", type: "dbfox.data.result_view", title: "订单汇总" }]} />);
+    const citation = screen.getByRole("button", { name: "查看证据：订单汇总" });
+    expect(citation.querySelector(".resource-icon--table")).toBeTruthy();
+    expect(citation.textContent).toBe("订单汇总1");
+  });
+
+  it("shows a compact document source for historical citations without metadata", () => {
+    const label = "- **数据质量**：无逻辑删除记录（deleted_cnt = 0），覆盖全部订单。";
+    render(<MarkdownContent content="历史结论。{{cite:artifact_result_1}}" citations={[{ artifact_id: "artifact_result_1", label }]} />);
+    const citation = screen.getByRole("button", { name: `查看证据：${label}` });
+    expect(citation.textContent).toBe("数据来源1");
+    expect(citation.querySelector(".resource-icon--document")).toBeTruthy();
+    expect(citation.getAttribute("title")).toBe(label);
   });
 
   it("renders an authorized Artifact at its exact Markdown block position", () => {
