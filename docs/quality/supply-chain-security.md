@@ -65,7 +65,7 @@ PR #109 的首次 OSV 审计发现三个锁文件共 12 个受影响条目（6 �
 | Mako | 1.4.2 | 三套锁；[Windows drive-letter URI 穿越](https://github.com/advisories/GHSA-5639-2j2p-m4mx) |
 | setuptools | 84.1.0 | Frozen 构建；[legacy wheel namespace 路径逃逸](https://github.com/advisories/GHSA-xmj3-9gf7-h52w) |
 | Pillow | 13.0.0 | 开发与验证，不是 Pixel 产品依赖；[TIFF 编码缺陷](https://github.com/advisories/GHSA-xvh5-g6gv-559v)及同版修复的其他公告 |
-| uv | 0.13.4 | 开发锁和 CI/发布工具版本；[内置信任根撤销](https://github.com/advisories/GHSA-hq85-5cpj-mr62) |
+| uv | 0.13.7 | 开发锁和 CI/发布工具版本；包含 0.13.4 的[内置信任根撤销](https://github.com/advisories/GHSA-hq85-5cpj-mr62)修复 |
 
 三套锁的包版本比较只包含表中定向更新。开发环境仍使用 `pip install --require-hashes`
 安装新锁，不手写 hash，不无约束升级其他依赖。Pillow 的主版本更新需要保留实际 PNG
@@ -75,6 +75,21 @@ PR #109 的首次 OSV 审计发现三个锁文件共 12 个受影响条目（6 �
 19 passed，超大调用安全终止及显式续作恢复与工程合同集合为 46 passed。后者验证已经
 成功提交的修改不会在上下文预算失败后自动重放，新用户请求可以通过公开读取恢复。
 文档中的本地忽略截图仅列出证据路径，不作为干净 checkout 中应存在的链接。
+
+安全工具升级后，官方 uv 下载目录中的 CPython 3.14.6 对应构建为 `20260804`，旧的
+`20260610` 已无法解析。因此只将 `.sidecar-python-build` 固定到同版本的 `20260804`，
+不回退到系统解释器、不增加下载 fallback。Windows 独立安装目录的实际探针报告
+CPython 3.14.6 / SQLite 3.53.1；既有最低 SQLite 3.51.3 门禁和 3.53.4 升级目标不变。
+原始构建 hash 继续由 uv 官方版本化下载元数据校验，最终产物仍须通过现有来源合同。
+
+前端使用 npm 的非 force 修复刷新兼容版本，并将明确固定的 xmldom 升到 0.8.15。
+现有 `@hey-api/json-schema-ref-parser` 边界内的 `js-yaml` override 从 4.3.1 调到
+4.3.2，以修复新的 merge-key CPU 公告；未增加全局 override，也未为此跨版本升级 API
+生成器。其删除条件仍是上游解除精确依赖限制并覆盖该修复版本。
+
+最终本地 npm 审计为 0 high / 0 critical / 15 moderate；中危告警仍按现有策略跟踪，
+未降级或更改审计阈值。兼容范围内刷新后，前端 118 文件 / 751 测试、lint、测试类型、
+生产构建和 Electron 38 测试通过；API 重新生成无差异。运行时/构建/工程合同 88 项通过。
 
 ### 既有有期限的例外
 

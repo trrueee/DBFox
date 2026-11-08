@@ -107,7 +107,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.1",
-    "@xmldom/xmldom": "0.8.14",
+    "@xmldom/xmldom": "0.8.15",
     "autoprefixer": "^10.5.0",
     "axe-core": "^4.12.1",
     "electron": "^43.4.1",
@@ -131,7 +131,7 @@
       "uuid": "11.1.1"
     },
     "@hey-api/json-schema-ref-parser": {
-      "js-yaml": "4.3.1"
+      "js-yaml": "4.3.2"
     }
   }
 }

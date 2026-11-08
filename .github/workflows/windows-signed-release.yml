@@ -14,7 +14,7 @@ concurrency:
 
 env:
   NODE_VERSION: "22.18.0"
-  UV_VERSION: "0.13.4"
+  UV_VERSION: "0.13.7"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PIP_NO_INPUT: "1"
 

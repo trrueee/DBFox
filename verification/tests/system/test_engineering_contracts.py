@@ -509,13 +509,13 @@ def test_frontend_security_floors_and_cross_platform_build_peers_are_locked() ->
     packages = lock["packages"]
 
     assert package["overrides"] == {
-        "@hey-api/json-schema-ref-parser": {"js-yaml": "4.3.1"},
+        "@hey-api/json-schema-ref-parser": {"js-yaml": "4.3.2"},
         "@fortune-sheet/core": {"uuid": "11.1.1"},
     }
     assert package["devDependencies"]["@emnapi/core"] == "2.0.0-alpha.4"
     assert package["devDependencies"]["@emnapi/runtime"] == "2.0.0-alpha.4"
-    assert packages["node_modules/js-yaml"]["version"] == "4.3.1"
-    assert packages["node_modules/brace-expansion"]["version"] == "5.0.9"
+    assert packages["node_modules/js-yaml"]["version"] == "4.3.2"
+    assert packages["node_modules/brace-expansion"]["version"] == "5.0.12"
     assert packages["node_modules/@emnapi/core"]["version"] == "2.0.0-alpha.4"
     assert packages["node_modules/@emnapi/runtime"]["version"] == "2.0.0-alpha.4"
 
