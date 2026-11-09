@@ -8,10 +8,14 @@ from inspect import signature
 import pytest
 
 from engine.agent.artifact import Artifact
+from engine.errors import ToolInputError
 from engine.representation import (
+    ArtifactRepresentationDescriptor,
+    ArtifactRepresentationOperation,
     ArtifactRepresentationRequest,
     ArtifactRepresentationResult,
 )
+from engine.tools.builtin.artifact import ArtifactReadInput, ArtifactReadTool
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
     ResourceScopeRef,
@@ -90,6 +94,30 @@ def test_tool_context_representation_access_is_explicit_and_frozen() -> None:
             "acme.table.v1",
             ArtifactRepresentationRequest(operation="page"),
         )
+
+
+def test_artifact_read_rejects_unavailable_or_non_model_operations_before_reading() -> None:
+    artifact = Artifact(id="a", session_id="s", run_id="r", type="dbfox.test.file", title="File")
+    descriptor = ArtifactRepresentationDescriptor(representation_type="dbfox.test.file.v1", version=1, operations=(
+        ArtifactRepresentationOperation(name="private"),
+        ArtifactRepresentationOperation(name="download", result_kind="stream", media_type="application/octet-stream", purpose="file"),
+    ))
+    tool = ArtifactReadTool(lambda _: (descriptor,))
+
+    def unexpected_read(*_args):
+        pytest.fail("The descriptor or Run fence should reject this before the provider runs")
+
+    context = ToolRunContext.for_invocation(
+        request=None, idempotency_key="artifact-read", artifact_loader=lambda identity: artifact if identity == "a" else None,
+        artifact_representation_reader=unexpected_read,
+    )
+    with pytest.raises(ToolInputError, match="unavailable in this Run"):
+        tool.run(ArtifactReadInput(artifact_id="different"), context)
+    for operation, version, reason in (("download", 1, "not exposed"), ("private", 1, "not exposed"), ("private", 2, "version is unavailable")):
+        with pytest.raises(ToolInputError, match=reason):
+            tool.run(ArtifactReadInput.model_validate({"artifact_id": "a", "read": {
+                "representation_type": descriptor.representation_type, "representation_version": version, "operation": operation,
+            }}), context)
 
 
 def test_tool_invocation_context_requires_unique_scope_identity() -> None:

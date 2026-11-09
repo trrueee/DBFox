@@ -7,6 +7,12 @@ import type {
 import { coreArtifactViews } from "./coreArtifactViews";
 import { hostArtifactViews } from "./hostArtifactViews";
 
+export interface ArtifactFile {
+  representationType: string;
+  operation: string;
+  mediaType: string;
+}
+
 export interface ArtifactViewRegistry {
   get(id: string): ArtifactViewContribution<unknown> | null;
   all(): readonly ArtifactViewContribution<unknown>[];
@@ -35,6 +41,17 @@ export function productArtifactViews(): readonly ArtifactViewContribution<unknow
     ...coreArtifactViews,
     ...hostArtifactViews,
   ];
+}
+
+export function artifactFiles(representations: readonly ArtifactRepresentationDescriptor[]): ArtifactFile[] {
+  return representations.flatMap((descriptor) => descriptor.operations.flatMap((operation) => {
+    if (operation.purpose !== "file" || operation.result_kind !== "stream" || !operation.media_type) return [];
+    return [{
+      representationType: descriptor.representation_type,
+      operation: operation.name,
+      mediaType: operation.media_type.split(";")[0].trim().toLowerCase(),
+    }];
+  }));
 }
 
 export function matchingArtifactViews(

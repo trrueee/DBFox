@@ -39,7 +39,7 @@ import {
 } from "../../stores/workspaceStore";
 import type { WorkspaceDockTab } from "../../types/workspace";
 import type { DockViewRegistry } from "../dock/dockViewComposition";
-import { DEFAULT_REGISTRY, dockViewTitle } from "../dock/dockViewComposition";
+import { activeDockTab, DEFAULT_REGISTRY, dockViewTitle, getDockView, visibleDockTabs } from "../dock/dockViewComposition";
 import { useDlcStore } from "../dlc/extensionStore";
 import type { DockViewContribution } from "../dock/types";
 import type { WorkbenchReference } from "../../types/workspace";
@@ -95,20 +95,12 @@ export function planDockTabWindow(
   return { start, end };
 }
 
-function resolveDockView(
-  viewType: string,
-  registry: DockViewRegistry,
-  dlcDockViews: readonly DockViewContribution[],
-) {
-  return registry.get(viewType) ?? dlcDockViews.find((view) => view.viewType === viewType) ?? null;
-}
-
 function dockTabIcon(
   tab: WorkspaceDockTab,
   registry: DockViewRegistry,
   dlcDockViews: readonly DockViewContribution[],
 ) {
-  return resolveDockView(tab.viewType, registry, dlcDockViews)?.icon(tab)
+  return getDockView(tab.viewType, registry, dlcDockViews)?.icon(tab)
     ?? <QuestionIcon size={16} aria-hidden="true" />;
 }
 
@@ -131,25 +123,12 @@ export function WorkspaceDock({
   // Subscribe so active runtime contributions are reflected in production Dock consumers.
   const dlcDockViews = useDlcStore((s) => s.contributions.dockViews);
 
-  const visibleTabs = useMemo(() => {
-    return dockTabs.filter((tab) => {
-      const contribution = resolveDockView(tab.viewType, registry, dlcDockViews);
-      if (!contribution) {
-        // Unknown viewType fallback: visible so it can be viewed and closed
-        return true;
-      }
-      return contribution.isVisible(tab, {
-        workbenchScopeId,
-        activeProjectId,
-        activeConversationId,
-      });
-    });
-  }, [activeConversationId, activeProjectId, dlcDockViews, dockTabs, registry, workbenchScopeId]);
+  const visibleTabs = useMemo(() => visibleDockTabs(dockTabs, {
+    workbenchScopeId, activeProjectId, activeConversationId,
+  }, registry, dlcDockViews), [activeConversationId, activeProjectId, dlcDockViews, dockTabs, registry, workbenchScopeId]);
 
-  const activeKey = activeViewKey;
-  const activeTab =
-    visibleTabs.find((tab) => tab.viewKey === activeKey) ?? visibleTabs.at(-1) ?? null;
-  const preferredWidth = activeTab ? resolveDockView(activeTab.viewType, registry, dlcDockViews)?.preferredWidth : undefined;
+  const activeTab = activeDockTab(visibleTabs, activeViewKey);
+  const preferredWidth = activeTab ? getDockView(activeTab.viewType, registry, dlcDockViews)?.preferredWidth : undefined;
   useLayoutEffect(() => { onPreferredWidthChange?.(preferredWidth); }, [onPreferredWidthChange, preferredWidth]);
 
   // ── Tab strip windowing: direct tabs + overflow menu (no hidden scrollbar) ──
@@ -439,12 +418,12 @@ function renderDockTab(
     return (
       <EmptyState
         title="没有打开的标签"
-        description="从项目菜单打开文件与数据库，或点击对话中的引用和成果。"
+        description="从项目菜单打开工作台，或点击对话中的引用和成果。"
       />
     );
   }
 
-  const contribution = resolveDockView(tab.viewType, registry, dlcDockViews);
+  const contribution = getDockView(tab.viewType, registry, dlcDockViews);
   if (!contribution) {
     return (
       <EmptyState

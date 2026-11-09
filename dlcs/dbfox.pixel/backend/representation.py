@@ -75,10 +75,11 @@ class PixelRepresentation:
         if artifact.type != c.ARTIFACT_TYPE or artifact.schema_version != 1:
             raise ArtifactRepresentationError("UNSUPPORTED_REPRESENTATION", "This is not a supported Pixel revision.", status_code=409)
         return ArtifactRepresentationDescriptor(representation_type=c.REPRESENTATION_TYPE, version=1, operations=(
-            ArtifactRepresentationOperation(name="metadata"), ArtifactRepresentationOperation(name="frame"),
-            ArtifactRepresentationOperation(name="sheet_layout"),
+            ArtifactRepresentationOperation(name="metadata", purpose="model_read"),
+            ArtifactRepresentationOperation(name="frame", purpose="model_read"),
+            ArtifactRepresentationOperation(name="sheet_layout", purpose="model_read"),
             ArtifactRepresentationOperation(name="png", result_kind="stream", media_type="image/png"),
-            ArtifactRepresentationOperation(name="sheet", result_kind="stream", media_type="image/png")))
+            ArtifactRepresentationOperation(name="sheet", result_kind="stream", media_type="image/png", purpose="file")))
 
     def execute(self, artifact, request, context):
         del context

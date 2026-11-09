@@ -16,6 +16,7 @@ import { ProjectOverview } from "../projects/ProjectOverview";
 import type { WorkbenchReference } from "../../types/workspace";
 import { useAttachmentInput } from "../conversation/useAttachmentInput";
 import { openWorkbenchReference } from "../resources/openWorkbenchReference";
+import { captureWorkbenchInput } from "../resources/workbenchInput";
 import { ComposerContext } from "../conversation/workspace/ComposerContext";
 
 const ConversationWorkspace = lazy(() =>
@@ -83,13 +84,14 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
       let submission = pendingSubmission?.scopeId === capturedScope && pendingSubmission.content === text ? pendingSubmission : null;
       if (!submission) {
         const draftId = selectActiveWorkbench(useWorkspaceStore.getState()).draftConversationId;
+        const capturedReferences = captureWorkbenchInput(references, draftId ?? null);
         const conversationId = draftId ?? (await useConversationStore.getState().createAndOpenConversation(text)).id;
         submission = {
           scopeId: capturedScope,
           conversationId,
           content: text,
           idempotencyKey: globalThis.crypto.randomUUID(),
-          references,
+          references: capturedReferences,
         };
         setPendingSubmission(submission);
       }

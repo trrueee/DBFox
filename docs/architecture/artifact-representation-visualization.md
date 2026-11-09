@@ -299,6 +299,28 @@ Agent Core 领域模型。第一版采用有界 columnar JSON：字段元数据�
 旧 `ArtifactTableViewProvider`、`ArtifactChartViewProvider` 和 `/page|chart-data` 特例已经被该合同一次性
 取代，没有保留双 API。
 
+### 7.1 模型读取与文件交付
+
+工件身份、来源和领域版本仍由原 Artifact 保存。`ArtifactRepresentationOperation.purpose` 是 API v2
+的可选用途声明，由拥有工件的 DLC 决定。Data 快照、Scene 和 Pixel 需要读取有界的固定结果。
+Workspace 文件、Data CSV、Pixel PNG 和 Scene GLB 需要在缺少专用视图时交付文件。
+原有 `result_kind` 只区分 JSON 和流，无法表达这两种调用约束。
+
+| 用途 | 合同 |
+| --- | --- |
+| `model_read` | 提供不可变的 JSON 表示。`artifact_read` 先通过当前 Run 的 Artifact 权限校验，再按表示版本和操作读取。响应受模型窗口限制，完整读取内容只进入当次模型输出。数据库实时重查和工作区实时读文件仍由领域工具按其资源准入执行。 |
+| `file` | 提供无需额外参数的文件流。Dock 优先使用专用视图，缺少视图时可以下载声明的文件。常见栅格图和文本支持按需预览，渲染前分别限制到 4 MiB 和 128 KiB。HTML 与 SVG 只提供下载。 |
+
+`artifact_read` 在快照具备 Representation 提供器时装配到现有 Tool Registry。它复用
+`ToolDispatcher`、Run 内的 Artifact 读取权限和已有 Representation 执行合同。
+操作参数由原提供器校验，模型函数的严格 schema 使用有界 JSON 字符串传递这部分开放参数。
+字节流沿同一条 Representation API 交付，宿主按响应头使用文件名。Workspace 文本下载仍核对来源哈希。
+
+现有 DLC 缺省该字段时继续使用原视图和读取入口。新增声明保持原 Representation 版本和工件持久化格式，
+没有新增依赖、数据库迁移或镜像状态。公开类型同步到前端 SDK 和生成的 API 客户端。回归覆盖
+`test_tool_attempt_contract.py` 的拒绝路径、`test_scene_artifact_adversarial.py` 的实际 RunLoop 读取、
+`test_dbfox_workspace_dlc_package.py` 的原始字节，以及 `ArtifactDock.test.tsx` 的通用交付。
+
 ## 8. Data DLC 与 SQL Backend
 
 ### 8.1 所有权

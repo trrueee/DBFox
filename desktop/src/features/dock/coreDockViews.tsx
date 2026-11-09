@@ -1,12 +1,9 @@
+import { lazy, Suspense } from "react";
 import {
   FileTextIcon,
   SparkleIcon,
 } from "@/components/icons";
-import {
-  ArtifactDockContent,
-  ArtifactsDockContent,
-  DockSuspense,
-} from "./dockViewContent";
+import { LoadingState } from "../../components/ui";
 import { useConversationStore } from "../../stores/conversationStore";
 import type { DockViewContribution } from "./types";
 import { CORE_DOCK_VIEW_TYPES } from "../dlc/coreContributionIds";
@@ -16,6 +13,12 @@ import { artifactKind, ResourceIcon } from "../../components/resources/resourceP
 import type { WorkspaceDockTab } from "../../types/workspace";
 
 const iconProps = { size: 16, "aria-hidden": true as const };
+const ArtifactDockContent = lazy(() =>
+  import("./dockViewContent").then((module) => ({ default: module.ArtifactDockContent })),
+);
+const ArtifactsDockContent = lazy(() =>
+  import("./dockViewContent").then((module) => ({ default: module.ArtifactsDockContent })),
+);
 
 function ArtifactTabIcon({ view }: { view: WorkspaceDockTab }) {
   const artifactId = view.target?.type === "artifact" ? view.target.id : undefined;
@@ -43,11 +46,11 @@ export const coreDockViews: readonly DockViewContribution[] = [
       && view.target?.type === "conversation"
       && view.target.id === context.activeConversationId,
     render: (view) => (
-      <DockSuspense>
+      <Suspense fallback={<LoadingState label="正在载入工作台" />}>
         <ArtifactsDockContent
           conversationId={view.target?.type === "conversation" ? view.target.id : ""}
         />
-      </DockSuspense>
+      </Suspense>
     ),
   },
   {
@@ -68,14 +71,14 @@ export const coreDockViews: readonly DockViewContribution[] = [
       );
     },
     render: (view, context) => (
-      <DockSuspense>
+      <Suspense fallback={<LoadingState label="正在载入工作台" />}>
         <ArtifactDockContent
           key={`${view.viewKey}:${context.activeProjectId ?? ""}`}
           tab={view}
           showToast={context.showToast}
           onAsk={context.onAsk}
         />
-      </DockSuspense>
+      </Suspense>
     ),
   },
 ];

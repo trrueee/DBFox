@@ -235,6 +235,11 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
         rest = provider.execute(artifact, ArtifactRepresentationRequest(operation="read", parameters={"offset": 5}), representation_context)
         assert rest.payload["content"] == " workspace"
         assert result.source_fingerprint == snapshot_file.sha256
+        download = provider.describe(artifact).operation("download")
+        assert download is not None and download.purpose == "file"
+        original = provider.execute(artifact, ArtifactRepresentationRequest(operation="download"), representation_context)
+        assert original.file_name == "notes.txt"
+        assert b"".join(original.chunks) == (workspace / "notes.txt").read_bytes()
         with pytest.raises(ArtifactRepresentationError) as invalid:
             provider.execute(artifact, ArtifactRepresentationRequest(operation="read", parameters={"path": "../outside.txt"}), representation_context)
         assert invalid.value.code == "INVALID_REQUEST"

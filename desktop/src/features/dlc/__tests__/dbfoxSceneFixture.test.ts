@@ -2,7 +2,11 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { selectActiveWorkbench, useWorkspaceStore } from "../../../stores/workspaceStore";
+import { openWorkbenchReference } from "../../resources/openWorkbenchReference";
+import { captureWorkbenchInput } from "../../resources/workbenchInput";
 import { createStagedExtensionHost, initExtensionHostGlobalSdk } from "../extensionHost";
+import { useDlcStore } from "../extensionStore";
 import type { DlcModule } from "../types";
 import type { ArtifactRepresentationRequest, ArtifactRepresentationResult } from "../../../../../sdk/frontend/index";
 
@@ -103,6 +107,34 @@ describe("dbfox.scene production frontend fixture", () => {
       viewKey: "dbfox.scene.workbench:p1:scene-1", title: "Test Scene", projectId: "p1",
       target: { type: "object", object: { kind: "dbfox.scene.document", id: "scene-1" }, authority: { kind: "dbfox.scene.document", id: "scene-1" } },
     })));
+  });
+
+  it("captures and restores the native Scene tab from conversation history", async () => {
+    const { openDockTab, staged } = await fixture({ library: true });
+    fireEvent.change(screen.getByLabelText("打开场景"), { target: { value: "scene-1" } });
+    await waitFor(() => expect(openDockTab).toHaveBeenCalledTimes(1));
+    const tab = openDockTab.mock.lastCall![0];
+    const previousWorkspace = useWorkspaceStore.getState();
+    const previousExtensions = useDlcStore.getState();
+    try {
+      previousExtensions.setProjectionResult("test", {}, staged.getContributions());
+      useWorkspaceStore.setState({ activeProjectId: "p1", mainSurfaceByProject: {}, workbenchByConversation: {} });
+      previousWorkspace.setProjectActiveConversation("p1", "scene-chat");
+      previousWorkspace.openDockTab(tab);
+      const [reference] = captureWorkbenchInput([], "scene-chat");
+      expect(reference).toEqual({ label: "当前查看 · Test Scene", object: { kind: "dbfox.scene.document", id: "scene-1" } });
+
+      previousWorkspace.setDockOpen(false);
+      // The API materializes an unspecified version as null in message history.
+      openWorkbenchReference({ ...reference, object: { ...reference.object!, version: null } }, "scene-chat");
+      expect(selectActiveWorkbench(useWorkspaceStore.getState())).toMatchObject({
+        open: true, activeViewKey: tab.viewKey, tabs: [tab], references: [],
+      });
+      expect(() => openWorkbenchReference(reference, "another-chat")).toThrow("会话已切换");
+    } finally {
+      useWorkspaceStore.setState(previousWorkspace);
+      useDlcStore.setState(previousExtensions);
+    }
   });
 
   it.each([false, true])("previews only the Artifact revision and rejects inconsistent representation metadata: %s", async (inconsistent) => {

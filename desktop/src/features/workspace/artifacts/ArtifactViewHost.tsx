@@ -7,7 +7,9 @@ import { agentApi } from "../../../lib/api/agent";
 import { getUserErrorMessage } from "../../../lib/api/client";
 import { useDlcStore } from "../../dlc/extensionStore";
 import { ArtifactCard } from "./ArtifactCard";
+import { ArtifactFileActions } from "./ArtifactFileActions";
 import {
+  artifactFiles,
   createArtifactViewRegistry,
   matchingArtifactViews,
   productArtifactViews,
@@ -91,6 +93,19 @@ export function ArtifactViewHost({
   }
 
   if (!selectedView) {
+    const files = surface === "workspace" ? artifactFiles(representations) : [];
+    if (files.length) {
+      return (
+        <ArtifactCard title={artifact.title} tone="insight" description={artifact.summary ?? undefined}>
+          <ArtifactFileActions
+            key={`${artifact.session_id}:${artifact.id}:${artifact.version}`}
+            artifact={artifact}
+            files={files}
+            onToast={onToast}
+          />
+        </ArtifactCard>
+      );
+    }
     return (
       <ArtifactMetadataFallback
         artifact={artifact}

@@ -129,3 +129,19 @@ ESM 可能在模块变量中保存 Host：仅在最终投影处拒绝过期结�
 文件；不得把 Director 提供的用户未提交基线带入该提交。完成的提交必须带上两个实际 DLC
 需求、独立架构结论和[Host 验证证据](../quality/dlc-artifact-navigation-validation.md)。
 Host 验证不替代各领域按钮的真实接入、下载验收或后续独立红队检查。
+
+## Agent 打开工件
+
+`workbench_open_artifact` 由本地 Host 在产品运行时装配。Tool Runtime 先核对工件在本 Run 内可读、属于
+同一会话且可展示。请求只包含真实工件身份和标题，Renderer 沿用 `openArtifactDock` 选择该页签，
+内容仍由原工件读取链加载。Data 结果、Workspace 文件成果和 Scene 成果使用同一条导航链。
+
+Renderer 从已有 `function_call` 运行事件获知正在执行的 Invocation，经本机鉴权 HTTP 领取一次短期请求。
+只有当前 Project、Conversation、workbench scope 和运行代次匹配时才应用。切换工作台会取消进行中的领取，
+切回也会丢弃上一次领取的迟到响应。Host 只有在确认 Dock 已选择目标页签时才报告 `opened`。这项回执描述页签选择，
+预览内容的加载仍由工件视图报告。过期未领取返回 `not_opened`，已领取但回执丢失返回 `unconfirmed`。
+
+临时请求属于跨进程传输，随当前 Invocation 结算或到期释放。只有实际结果通过原 Tool Observation 持久化，
+窗口重连不重放打开操作。这条路径复用现有 SSE 唤醒、会话鉴权、Artifact 权限及 Dock，领取和回执使用
+HTTP 两个窄入口。原 DLC 前端 SDK、Kernel 状态和持久化模型无需迁移。回归覆盖跨会话拒绝、单次领取、
+取消、切换会话、生产 RunLoop 和当前页签回执。

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 import logging
 import re
+from urllib.parse import quote
 from typing import Literal
 from uuid import uuid4
 
@@ -141,9 +142,13 @@ def _safe_file_name(value: str) -> str:
 
 
 def _stream_headers(result: ArtifactRepresentationStream) -> dict[str, str]:
-    headers = {
-        "Content-Disposition": f'attachment; filename="{_safe_file_name(result.file_name)}"'
-    }
+    basename = re.split(r"[/\\]", str(result.file_name))[-1]
+    file_name = "".join(char for char in basename if char.isprintable()).strip(". ")[:128]
+    fallback = _safe_file_name(file_name)
+    disposition = f'attachment; filename="{fallback}"'
+    if file_name and file_name != fallback:
+        disposition += f"; filename*=UTF-8''{quote(file_name, safe='')}"
+    headers = {"Content-Disposition": disposition}
     for key, value in result.metadata.items():
         normalized_key = str(key).strip().lower()
         normalized_value = str(value).strip()

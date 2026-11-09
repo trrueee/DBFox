@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, useEffect, useMemo, useRef, useState } from "react";
 import {
   AtIcon,
   CheckIcon,
@@ -21,10 +21,6 @@ const ArtifactDock = lazy(() =>
 );
 
 export type { DockShowToast };
-
-export function DockSuspense({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<LoadingState label="正在载入工作台" />}>{children}</Suspense>;
-}
 
 export function ArtifactsDockContent({ conversationId }: { conversationId: string }) {
   const viewModel = useConversationViewModel(conversationId);

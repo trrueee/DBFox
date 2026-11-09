@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
+from time import monotonic, sleep
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 
 from dbfox_dlc_api import ArtifactRepresentationContext, ArtifactRepresentationRequest, ContextContributionInput, ContextFragment, ToolKey
 from engine.agent.completion import CompletionGate
@@ -20,7 +23,8 @@ from engine.agent.resource_refs import resource_refs_for_run
 from engine.api.conversation_commands import _reference_resource_identities
 from engine.models import AgentArtifactRecord, AgentRun, AgentSession, AgentToolInvocation
 from engine.runtime_composition import (authorize_project_resources, build_attempt_resource_resolver,
-    build_default_completion_policy, default_capability_guidance, default_context_contributors)
+    build_default_completion_policy, build_product_run_loop, default_capability_guidance, default_context_contributors)
+from engine.workbench_presentations import WorkbenchPresentationBroker, WorkbenchPresentationReceipt
 from verification.bench.capabilities.dbfox_scene.runtime import SceneRuntime, SceneScript, _run_segment
 from verification.bench.capabilities.dbfox_scene.schema import SceneCase, Step
 
@@ -108,6 +112,57 @@ def test_producer_refs_are_input_version_and_export_is_current_version(produced)
         repo=ArtifactRepository(db)
         available=[repo.available_artifact(session_id=evidence["session_id"],current_run_id=admission.run_id,artifact_id=a["id"]) is not None for a in evidence["artifacts"]]
         assert available == [False,False,True]
+
+
+def test_read_and_open_use_the_production_dispatcher_for_a_selected_scene(produced):
+    runtime, evidence, scene = produced
+    artifact_id = evidence["artifacts"][-1]["id"]
+    admission, lease = admit(runtime, evidence, reference(scene, artifact_id))
+    case = SceneCase(case_id="artifact-read", category="adversarial", prompt="Read the selected scene summary.", steps=(
+        Step(id="discover", tool="artifact_read", arguments={"artifact_id": artifact_id}),
+        Step(id="read", tool="artifact_read", arguments={"artifact_id": artifact_id, "read": {
+            "representation_type": "dbfox.scene.document.v1", "representation_version": 1,
+            "operation": "summary",
+        }}),
+        Step(id="open", tool="workbench_open_artifact", arguments={"artifact_id": artifact_id}),
+    ))
+    script = SceneScript(case, lambda _: None, {
+        "artifact_read": "artifact_read", "workbench_open_artifact": "workbench_open_artifact",
+    })
+    broker = WorkbenchPresentationBroker()
+    loop = build_product_run_loop(session_factory=runtime.factory, snapshot=runtime.snapshot, workbench_presentations=broker)
+    loop.model_factory = lambda _: script
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            run = executor.submit(loop.execute, lease=lease, run_id=admission.run_id)
+            pending = None
+            deadline = monotonic() + 10
+            while not run.done() and monotonic() < deadline:
+                with runtime.factory() as db:
+                    invocation_id = db.scalar(select(AgentToolInvocation.id).where(
+                        AgentToolInvocation.run_id == admission.run_id,
+                        AgentToolInvocation.tool_name == "workbench_open_artifact",
+                        AgentToolInvocation.status == "running",
+                    ))
+                if invocation_id:
+                    pending = broker.claim(lease.session_id, invocation_id)
+                    if pending:
+                        break
+                sleep(0.02)
+            assert pending is not None
+            assert pending.project_id == evidence["project_id"] and pending.artifact_id == artifact_id
+            assert broker.acknowledge(lease.session_id, pending.invocation_id, WorkbenchPresentationReceipt(outcome="opened"))
+            run.result(timeout=10)
+    finally:
+        loop.close()
+
+    assert script.observations["discover"]["artifact_ids"] == [artifact_id]
+    descriptor = script.observations["discover"]["facts"]["representations"][0]
+    assert {op["purpose"] for op in descriptor["operations"]} == {"model_read", "file"}
+    read = script.observations["read"]["facts"]["representation"]
+    assert read["consistency"] == "durable_snapshot"
+    assert read["payload"]["scene"]["version"] == scene["version"]
+    assert script.observations["open"]["facts"]["outcome"] == "opened"
 
 
 @pytest.mark.parametrize("attachment", ["document", "export_same_session", "export_other_session", "mutation_artifact"])

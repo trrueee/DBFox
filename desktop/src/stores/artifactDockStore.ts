@@ -20,7 +20,7 @@ export function openArtifactsDock(conversationId: string, activate = true): void
 }
 
 export function openArtifactDock(
-  artifact: ConversationArtifact,
+  artifact: Pick<ConversationArtifact, "id" | "title">,
   options: { activate?: boolean; selectedViewId?: string; projectId?: string } = {},
 ): void {
     const viewKey = `core.artifact:${artifact.id}`;

@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+from engine.agent.artifact import Artifact
+from engine.representation import ArtifactRepresentationDescriptor
 from engine.tools.runtime import ToolRegistry
+
+if TYPE_CHECKING:
+    from engine.workbench_presentations import WorkbenchPresentationBroker
 
 CORE_OWNER = "dbfox.core"
 CONVERSATION_OWNER = "dbfox.conversation"
@@ -36,3 +44,20 @@ def register_conversation_functions(registry: ToolRegistry) -> None:
     read = ConversationReadTool()
     registry.register(search, owner=CONVERSATION_OWNER, provider_name=search.name)
     registry.register(read, owner=CONVERSATION_OWNER, provider_name=read.name)
+
+
+def register_artifact_read(
+    registry: ToolRegistry,
+    describe: Callable[[Artifact], tuple[ArtifactRepresentationDescriptor, ...]],
+) -> None:
+    from engine.tools.builtin.artifact import ArtifactReadTool
+
+    tool = ArtifactReadTool(describe)
+    registry.register(tool, owner=CONVERSATION_OWNER, provider_name=tool.name)
+
+
+def register_workbench_open(registry: ToolRegistry, broker: WorkbenchPresentationBroker) -> None:
+    from engine.tools.builtin.workbench import OpenArtifactTool
+
+    tool = OpenArtifactTool(broker)
+    registry.register(tool, owner="dbfox.workbench", provider_name=tool.name)

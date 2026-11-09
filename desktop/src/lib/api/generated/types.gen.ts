@@ -341,6 +341,10 @@ export type ArtifactRepresentationOperation = {
      */
     name: string;
     /**
+     * Purpose
+     */
+    purpose?: 'model_read' | 'file' | null;
+    /**
      * Result Kind
      */
     result_kind?: 'json' | 'stream';
@@ -2450,6 +2454,46 @@ export type ToolPresentation = {
 };
 
 /**
+ * WorkbenchPresentation
+ */
+export type WorkbenchPresentation = {
+    /**
+     * Artifact Id
+     */
+    artifact_id: string;
+    /**
+     * Conversation Id
+     */
+    conversation_id: string;
+    /**
+     * Expires At Ms
+     */
+    expires_at_ms: number;
+    /**
+     * Invocation Id
+     */
+    invocation_id: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * WorkbenchPresentationReceipt
+ */
+export type WorkbenchPresentationReceipt = {
+    /**
+     * Outcome
+     */
+    outcome: 'opened' | 'not_opened';
+};
+
+/**
  * CredentialEnrollmentBatchRequest
  *
  * Transient, all-or-cleaned enrollment input for related credentials.
@@ -3693,6 +3737,132 @@ export type StreamConversationApiV1ConversationsConversationIdStreamGetResponses
      */
     200: unknown;
 };
+
+export type ClaimWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdClaimPostData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Invocation Id
+         */
+        invocation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/workbench-presentations/{invocation_id}/claim';
+};
+
+export type ClaimWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdClaimPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ClaimWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdClaimPostError = ClaimWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdClaimPostErrors[keyof ClaimWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdClaimPostErrors];
+
+export type ClaimWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdClaimPostResponses = {
+    /**
+     * Response Claim Workbench Presentation Api V1 Conversations  Conversation Id  Workbench Presentations  Invocation Id  Claim Post
+     *
+     * Successful Response
+     */
+    200: WorkbenchPresentation | null;
+};
+
+export type ClaimWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdClaimPostResponse = ClaimWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdClaimPostResponses[keyof ClaimWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdClaimPostResponses];
+
+export type AcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostData = {
+    body: WorkbenchPresentationReceipt;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Invocation Id
+         */
+        invocation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/workbench-presentations/{invocation_id}/receipt';
+};
+
+export type AcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type AcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostError = AcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostErrors[keyof AcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostErrors];
+
+export type AcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type AcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostResponse = AcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostResponses[keyof AcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostResponses];
 
 export type ListAttachmentsApiV1ConversationsSessionIdAttachmentsGetData = {
     body?: never;

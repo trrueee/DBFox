@@ -14,6 +14,7 @@ import {
 } from "../../../stores/workspaceStore";
 import "./conversationWorkspace.css";
 import { openArtifactDock } from "../../../stores/artifactDockStore";
+import { useWorkbenchPresentation } from "../../resources/workbenchPresentation";
 
 export function ConversationWorkspace({
   conversationId,
@@ -51,6 +52,7 @@ export function ConversationWorkspace({
     selectArtifact,
     loadRunArtifacts,
   } = useConversationViewModel(conversationId);
+  useWorkbenchPresentation(conversationId, cancelling || runningRun?.status === "cancelling" ? undefined : runningRun?.id, items);
   const references = useWorkspaceStore(selectActiveWorkbenchReferences);
   const [contentScrolled, setContentScrolled] = useState(false);
   const removeWorkbenchReference = useWorkspaceStore((state) => state.removeWorkbenchReference);

@@ -129,7 +129,8 @@ App Shell 组织文件夹项目与对话、固定 Main Surface、Dock registry�
 - Workspace 文件成果通过 owner 的 `backend/representation.py` 校验冻结来源、绑定版本和 hash 后分页读取，复用 Host FileContent；`file_search` 空 query 浏览一层、非空 query 递归查找，与 grep 共用目录项总量预算。
 - Workspace 写入前置条件统一在 `WorkspaceService`；无 hash 只能新建，覆盖在暂存完成后校验 hash，工具与 public operation 共用固定冲突，后者返回 409。Dock 直接使用规范 target，显式刷新目录与当前文件，并取消旧读取；分页冲突不拼接新版本。验证见 `test_workspace_mutation_safety.py`、`test_dbfox_workspace_dlc_package.py` 与 `dbfoxWorkspaceFixture.test.ts`。
 - `components/resources/ReferenceCard` / `ResourceIcon` 统一消息、输入框和结果引用；`FileContent` 复用 CodeMirror 官方 grammar 与已有 Markdown renderer，支持预览/源码/分栏。
-- `features/resources/openWorkbenchReference` 唯一匹配 `DockViewContribution.objectKinds`，按精确 object/version、authority、locator 和 scope 复用标签。附件/Artifact 继续走原 navigation boundary。打开只导航；Dock 的“加入对话”经 `onAsk` 把 typed reference 交给 Composer，后端决定 authority。
+- `features/resources/openWorkbenchReference` 优先回到当前 scope 内唯一可见的对象页签，新建页签时使用 `DockViewContribution.objectKinds`。附件和工件沿用各自的导航入口。
+- `workbenchInput` 按 Dock 的可见页签规则捕获对象身份或同会话工件，显式引用优先，重试保留原快照。子对象选区由各 DLC 经 `onAsk` 交付，后端校验授权。Agent 工件打开和回执见[工作台工件导航](./dlc-artifact-navigation.md#agent-打开工件)。
 - `dlcs/dbfox_data/frontend/index.js` 在 Dock 内组合数据库树、表结构、数据样例和内嵌连接配置，复用既有 owner operations 与凭据边界。
 
 完整交互与复用决策见 [前端架构 §3](./frontend.md#3-工作区组件关系)。回归入口：`workspaceStore.test.ts`、`openWorkbenchReference.test.ts`、`Tree.test.tsx`、`FileContent.test.tsx`、Project/Composer/Dock 测试，以及 `test_projects_api.py` / `test_folder_project_migration.py`。
@@ -187,6 +188,10 @@ Artifact Representation API 接受 Artifact ID、Representation type 和通用 o
 Artifact owner 在当前 Runtime snapshot 注册的 Provider。Data DLC 为 Result/Snapshot 提供
 `dbfox.dataframe.v1`，负责验证来源资源、fingerprint/generation 和分页、排序、筛选、计数、导出参数；
 Core 不理解 SQL、表结构或图表。
+
+工件提供器可声明模型读取和通用文件交付。`artifact_read` 沿现有 Tool Runtime 读取已授权的不可变 JSON，
+Dock 缺少专用视图时可按声明预览或下载。授权、用途与兼容规则见
+[通用 Representation 合同](./artifact-representation-visualization.md#71-模型读取与文件交付)。
 
 普通 Result 按来源 SQL 实时重执行并标记 `live_reexecution`；显式 Snapshot 返回
 `durable_snapshot`。rows 只存在于 HTTP response 和当前组件状态。关闭工件、切换来源或发起新请求会

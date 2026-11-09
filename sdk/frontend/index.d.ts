@@ -206,6 +206,7 @@ export interface ArtifactRepresentationDescriptor {
     name: string;
     result_kind?: "json" | "stream";
     media_type?: string | null;
+    purpose?: "model_read" | "file" | null;
   }[];
 }
 

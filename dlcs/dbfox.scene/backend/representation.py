@@ -205,12 +205,12 @@ class SceneRepresentation:
         if artifact.type != ARTIFACT_TYPE:
             raise ArtifactRepresentationError("UNSUPPORTED_REPRESENTATION", "Not a Scene revision.", status_code=409)
         return ArtifactRepresentationDescriptor(representation_type=REPRESENTATION_TYPE, version=1, operations=(
-            ArtifactRepresentationOperation(name="summary"),
-            ArtifactRepresentationOperation(name="objects_page"),
-            ArtifactRepresentationOperation(name="materials_page"),
-            ArtifactRepresentationOperation(name="geometry_catalog"),
-            ArtifactRepresentationOperation(name="export_gltf", result_kind="stream", media_type="model/gltf+json"),
-            ArtifactRepresentationOperation(name="export_glb", result_kind="stream", media_type="model/gltf-binary"),
+            ArtifactRepresentationOperation(name="summary", purpose="model_read"),
+            ArtifactRepresentationOperation(name="objects_page", purpose="model_read"),
+            ArtifactRepresentationOperation(name="materials_page", purpose="model_read"),
+            ArtifactRepresentationOperation(name="geometry_catalog", purpose="model_read"),
+            ArtifactRepresentationOperation(name="export_gltf", result_kind="stream", media_type="model/gltf+json", purpose="file"),
+            ArtifactRepresentationOperation(name="export_glb", result_kind="stream", media_type="model/gltf-binary", purpose="file"),
         ))
 
     def execute(self, artifact: Artifact, request: ArtifactRepresentationRequest,

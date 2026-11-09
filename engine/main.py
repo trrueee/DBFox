@@ -160,9 +160,17 @@ async def lifespan(application: FastAPI) -> Any:
         startup_stage = "recovering"
         _emit_startup_stage(startup_stage)
 
+        from engine.workbench_presentations import WorkbenchPresentationBroker
+
+        workbench_presentations = WorkbenchPresentationBroker()
+        application.state.workbench_presentations = workbench_presentations
         agent_coordinator = SessionCoordinator(
             session_factory=SessionLocal,
-            run_loop=build_product_run_loop(session_factory=SessionLocal),
+            run_loop=build_product_run_loop(
+                session_factory=SessionLocal,
+                snapshot=runtime_snapshot,
+                workbench_presentations=workbench_presentations,
+            ),
         )
         agent_coordinator.start()
         application.state.agent_coordinator = agent_coordinator
@@ -180,6 +188,7 @@ async def lifespan(application: FastAPI) -> Any:
         if agent_coordinator is not None:
             agent_coordinator.stop()
         application.state.agent_coordinator = None
+        application.state.workbench_presentations = None
         raise
 
     port = os.environ.get("DBFOX_ENGINE_PORT", "18625")
@@ -190,6 +199,7 @@ async def lifespan(application: FastAPI) -> Any:
     finally:
         agent_coordinator.stop()
         application.state.agent_coordinator = None
+        application.state.workbench_presentations = None
         from engine.llm.http_clients import close_llm_http_clients
         await close_llm_http_clients()
 
@@ -314,6 +324,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 

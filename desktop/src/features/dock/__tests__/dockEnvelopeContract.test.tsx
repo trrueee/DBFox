@@ -257,7 +257,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
       );
 
       expect(screen.getByText("没有打开的标签")).toBeTruthy();
-      expect(screen.getByText("从项目菜单打开文件与数据库，或点击对话中的引用和成果。")).toBeTruthy();
+      expect(screen.getByText("从项目菜单打开工作台，或点击对话中的引用和成果。")).toBeTruthy();
     });
   });
 

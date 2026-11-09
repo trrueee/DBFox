@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import PurePosixPath
 from uuid import uuid4
 
 from dbfox_dlc_api import (
     ArtifactRepresentationDescriptor, ArtifactRepresentationError,
-    ArtifactRepresentationOperation, ArtifactRepresentationResult,
+    ArtifactRepresentationOperation, ArtifactRepresentationResult, ArtifactRepresentationStream,
 )
 
 from .contracts import FileReadInput, FileReadOutput, WorkspaceCodePatchPayload, WorkspaceFileSnapshotPayload
@@ -14,6 +15,7 @@ from .service import WorkspaceError
 from .store import WORKSPACE_RESOURCE_KIND, WorkspaceBindingStore
 
 FILE_REPRESENTATION = "dbfox.workspace.file.v1"
+FILE_MEDIA_TYPE = "text/plain; charset=utf-8"
 
 
 class WorkspaceFileRepresentation:
@@ -25,12 +27,20 @@ class WorkspaceFileRepresentation:
             raise ArtifactRepresentationError("UNSUPPORTED_REPRESENTATION", "此成果不是工作区文件。", status_code=409)
         return ArtifactRepresentationDescriptor(
             representation_type=FILE_REPRESENTATION, version=1,
-            operations=(ArtifactRepresentationOperation(name="read"),),
+            operations=(
+                ArtifactRepresentationOperation(name="read"),
+                ArtifactRepresentationOperation(
+                    name="download", result_kind="stream", media_type=FILE_MEDIA_TYPE, purpose="file",
+                ),
+            ),
         )
 
-    def execute(self, artifact, request, context) -> ArtifactRepresentationResult:
+    def execute(self, artifact, request, context) -> ArtifactRepresentationResult | ArtifactRepresentationStream:
         self.describe(artifact)
-        if request.operation != "read" or set(request.parameters) - {"offset", "limit"}:
+        if request.operation == "download":
+            if request.parameters:
+                raise ArtifactRepresentationError("INVALID_REQUEST", "下载文件不接受参数。")
+        elif request.operation != "read" or set(request.parameters) - {"offset", "limit"}:
             raise ArtifactRepresentationError("INVALID_REQUEST", "文件预览仅接受 offset 和 limit。")
         try:
             if artifact.type == "dbfox.workspace.file_snapshot":
@@ -54,6 +64,14 @@ class WorkspaceFileRepresentation:
             raise ArtifactRepresentationError("SOURCE_UNAVAILABLE", "原工作区或文件已不可用。", status_code=409) from None
         if source.sha256 != digest:
             raise ArtifactRepresentationError("SOURCE_CHANGED", "文件已修改，无法展示当时的版本；请从项目文件中打开最新内容。", status_code=409)
+        if request.operation == "download":
+            # The UTF-8 decoder in WorkspaceService preserves the exact bytes.
+            return ArtifactRepresentationStream(
+                chunks=iter((source.content.encode("utf-8"),)),
+                media_type=FILE_MEDIA_TYPE,
+                file_name=PurePosixPath(source.relative_path).name,
+                metadata={"consistency": "live_reexecution", "source-fingerprint": digest},
+            )
         content = source.content[read.offset:read.offset + read.limit]
         output = FileReadOutput(
             path=source.relative_path, content=content,

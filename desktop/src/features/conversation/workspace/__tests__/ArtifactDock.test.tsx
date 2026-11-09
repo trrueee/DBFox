@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationArtifact } from "../../../../types/conversation";
 import { agentApi } from "../../../../lib/api/agent";
@@ -6,13 +6,21 @@ import {
   DATAFRAME_REPRESENTATION_TYPE,
 } from "../../../../lib/api/representation";
 import { ArtifactDock } from "../ArtifactDock";
+import { ArtifactViewHost } from "../../../workspace/artifacts/ArtifactViewHost";
+import { downloadBlobFile } from "../../../workspace/artifacts/artifactActions";
 
 vi.mock("../../../../lib/api/agent", () => ({
   agentApi: {
     listArtifactRepresentations: vi.fn(),
     readArtifactRepresentation: vi.fn(),
     streamArtifactRepresentation: vi.fn(),
+    fetchArtifactFile: vi.fn(),
   },
+}));
+
+vi.mock("../../../workspace/artifacts/artifactActions", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../workspace/artifacts/artifactActions")>(),
+  downloadBlobFile: vi.fn().mockReturnValue(true),
 }));
 
 function trustedQueryArtifacts(): ConversationArtifact[] {
@@ -85,6 +93,8 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
 describe("ArtifactDock", () => {
   beforeEach(() => {
     cleanup();
+    vi.mocked(downloadBlobFile).mockClear();
+    vi.mocked(agentApi.fetchArtifactFile).mockReset();
     vi.mocked(agentApi.listArtifactRepresentations).mockReset();
     vi.mocked(agentApi.listArtifactRepresentations).mockImplementation(async (artifactId) => (
       artifactId.includes("result")
@@ -226,6 +236,63 @@ describe("ArtifactDock", () => {
 
     expect(screen.queryByRole("button", { name: "Safety safety" })).toBeNull();
     expect(screen.getByRole("button", { name: "Order result 数据表" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("delivers an unknown file format without guessing how to preview it", async () => {
+    const artifact = { ...trustedQueryArtifacts()[2], id: "bundle", type: "acme.bundle", title: "Bundle" };
+    const blob = new Blob([new Uint8Array([0, 65, 255])], { type: "application/x-acme" });
+    vi.mocked(agentApi.listArtifactRepresentations).mockResolvedValueOnce([{
+      representation_type: "acme.bundle.v1", version: 1, operations: [
+        { name: "bytes", result_kind: "stream", media_type: "application/x-acme", purpose: "file" },
+        { name: "parameterized_image", result_kind: "stream", media_type: "image/png" },
+      ],
+    }]);
+    vi.mocked(agentApi.fetchArtifactFile).mockResolvedValueOnce({ blob, fileName: "result.acme" });
+    render(<ArtifactViewHost artifact={artifact} surface="workspace" onToast={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "下载 application/x-acme" }));
+    await waitFor(() => expect(downloadBlobFile).toHaveBeenCalledWith("result.acme", blob));
+    expect(agentApi.fetchArtifactFile).toHaveBeenCalledWith(
+      "bundle", "acme.bundle.v1", { operation: "bytes" }, expect.any(AbortSignal), "conv", undefined,
+    );
+    expect(screen.queryByRole("button", { name: /预览|image\/png/ })).toBeNull();
+  });
+
+  it("previews declared text with a byte limit and renders markup as text", async () => {
+    const artifact = { ...trustedQueryArtifacts()[2], id: "notes", type: "acme.notes", title: "Notes" };
+    const literal = "<script>shown as plain text</script>";
+    const blob = Object.assign(new Blob([literal], { type: "text/plain" }), { text: async () => literal });
+    vi.mocked(agentApi.listArtifactRepresentations).mockResolvedValueOnce([{
+      representation_type: "acme.notes.v1", version: 1,
+      operations: [{ name: "file", result_kind: "stream", media_type: "text/plain", purpose: "file" }],
+    }]);
+    vi.mocked(agentApi.fetchArtifactFile).mockResolvedValueOnce({ blob, fileName: "notes.txt" });
+    const view = render(<ArtifactViewHost artifact={artifact} surface="workspace" onToast={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "预览 text/plain" }));
+    expect(await screen.findByText(literal)).toBeTruthy();
+    expect(view.container.querySelector("script")).toBeNull();
+    expect(agentApi.fetchArtifactFile).toHaveBeenCalledWith(
+      "notes", "acme.notes.v1", { operation: "file" }, expect.any(AbortSignal), "conv", 128 * 1024,
+    );
+  });
+
+  it("uses an image source allowed by the packaged CSP and keeps SVG download-only", async () => {
+    const artifact = { ...trustedQueryArtifacts()[2], id: "image", type: "acme.image", title: "Image" };
+    const blob = new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" });
+    vi.mocked(agentApi.listArtifactRepresentations).mockResolvedValueOnce([{
+      representation_type: "acme.image.v1", version: 1, operations: [
+        { name: "png", result_kind: "stream", media_type: "image/png", purpose: "file" },
+        { name: "svg", result_kind: "stream", media_type: "image/svg+xml", purpose: "file" },
+      ],
+    }]);
+    vi.mocked(agentApi.fetchArtifactFile).mockResolvedValueOnce({ blob, fileName: "image.png" });
+    render(<ArtifactViewHost artifact={artifact} surface="workspace" onToast={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "预览 image/png" }));
+    expect((await screen.findByRole("img", { name: "image.png" })).getAttribute("src"))
+      .toMatch(/^data:image\/png;base64,/);
+    expect(screen.queryByRole("button", { name: "预览 image/svg+xml" })).toBeNull();
   });
 
   it("renders dock content without owning split pane resize state", () => {

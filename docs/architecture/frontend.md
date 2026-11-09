@@ -103,10 +103,11 @@ flowchart LR
 - “打开文件夹”使用 Host native picker 返回的 canonical root；项目默认显示文件夹名。先核对已有 Workspace binding，再以 canonical path 的 SHA-256 派生 opaque Project idempotency key，重新打开同一文件夹复用项目与对话。Project API 仍不保存路径；绑定通过原有 `dbfox.workspace` operations 创建，失败后由用户显式重试并先核实 binding，不自动重放写入。
 - 同名文件夹可位于不同路径。迁移 `f8a9b0c1d2ee` 仅移除 Project name 唯一约束，保持 Project / Conversation ID；降级遇到同名项目会拒绝执行，要求先人工改名，不删除数据。旧的未绑定项目继续可见，可在文件工作台关联目录。
 - 中间承担对话。`ReferenceCard` 在已发送消息、输入框、数据引用面板中使用相同的图标、名称、类型说明和操作区域；移除引用不触发打开，也不把输入焦点交给外层容器。添加附件时保留输入与按钮忙碌反馈，移除“正在添加文件…”文字；发送在处理完成前禁用。
-- 右侧是通用工作区。项目菜单通过 Connector `onOpen` 或 Host 的 `core.project-workbench` 打开已注册视图；领域数据与行为始终由 DLC 所有。数据库列表、表结构、数据样例和连接配置位于同一 Dock，连接配置采用内嵌表单。文件工作台展示按需加载的树及内容；两种导航器均可收起。
+- 右侧是通用工作区。项目菜单通过 Connector `onOpen` 或 Host 的 `core.project-workbench` 打开已注册视图。文件、数据库、场景、像素画、乐谱和其他工件共享页签、焦点、布局和生命周期。文档模型、选区和编辑行为由各自的视图与资源所有者维护。这个职责划分参考了 [VS Code 自定义编辑器的文档和视图模型](https://code.visualstudio.com/api/extension-guides/custom-editors#custom-editor-api-basics)。
 - 同一 viewer 的新预览替换旧的未固定预览；双击标签或点击固定按钮保留标签。已固定标签、其他 viewer 以及其他会话 scope 不受替换影响。Tab overflow、键盘焦点、全屏与折叠沿用原 Dock 实现。
-- `openWorkbenchReference` 通过 viewer 声明的 `objectKinds` 定位对象视图；必须唯一匹配，且 SDK admission 检查类型属于 owner namespace。精确 object/version、authority、locator 和会话 scope 决定标签身份。附件与成果沿用各自已有导航和校验链。查看或展开不会增加 Agent authority；“加入对话”才交付 typed reference，由后端 admission 校验。
-- `workspaceStore.mainSurfaceByProject` 是当前项目/会话选择的唯一事实源；Store 只保存 scope、Tab 身份、布局和待发送引用。文件正文、目录数据、连接配置与表内容留在 owner 组件和 DLC 内，Core 不复制业务资源模型。
+- `WorkspaceDock`、发送时的对象捕获和导航回执使用同一套页签可见性与选择规则。页签既能展示对象和工件，也能承载导航器和成果列表。只有可引用的对象和同会话工件会自动进入输入，显式引用优先，自动捕获只提供定位。场景节点、动画关键帧和像素选区等细粒度内容沿用各 DLC 的 `onAsk`，再由后端 admission 校验显式授权。
+- `openWorkbenchReference` 优先切回当前工作台内唯一、可见的精确对象页签。已知版本、定位和显式资源归属都参与匹配。需要新建对象页签时，由唯一声明对应 `objectKinds` 的视图负责，SDK 检查类型属于 owner namespace。附件与工件走各自的导航和校验链。
+- `workspaceStore.mainSurfaceByProject` 是当前项目与对话选择的唯一事实源。Store 保存 scope、Tab 身份、布局和待发送引用。资源内容和领域操作留在 owner，Agent 的领域操作继续使用已有 Tool Runtime。
 
 ### 3.1 设计系统与复用决策
 

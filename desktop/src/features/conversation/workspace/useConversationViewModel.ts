@@ -2,6 +2,7 @@ import { useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import type { WorkbenchReference } from "../../../types/workspace";
 import { useConversationStore } from "../../../stores/conversationStore";
+import { captureWorkbenchInput } from "../../resources/workbenchInput";
 import { isTerminalRun } from "../conversationState";
 import type {
   ConversationArtifact,
@@ -17,6 +18,7 @@ export function useConversationViewModel(conversationId: string) {
     mode: ConversationDeliveryMode;
     idempotencyKey: string;
     references: readonly WorkbenchReference[];
+    capturedReferences: readonly WorkbenchReference[];
   } | null>(null);
   const detail = useConversationStore((state) => state.detailById[conversationId]);
   const artifactsById = useConversationStore((state) => state.artifactsById);
@@ -146,6 +148,7 @@ export function useConversationViewModel(conversationId: string) {
           mode,
           idempotencyKey: globalThis.crypto.randomUUID(),
           references: [...references],
+          capturedReferences: captureWorkbenchInput(references, targetConversationId),
         };
         pendingSendIntent.current = intent;
       }
@@ -154,7 +157,7 @@ export function useConversationViewModel(conversationId: string) {
         content,
         mode,
         idempotencyKey: intent.idempotencyKey,
-        references: intent.references,
+        references: intent.capturedReferences,
       });
       if (pendingSendIntent.current === intent) pendingSendIntent.current = null;
     },

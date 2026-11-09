@@ -107,6 +107,7 @@ export const zArtifactRelation = z.object({
 export const zArtifactRepresentationOperation = z.object({
     media_type: z.string().min(1).max(128).nullish(),
     name: z.string().regex(/^[a-z][a-z0-9_.-]{0,63}$/),
+    purpose: z.enum(['model_read', 'file']).nullish(),
     result_kind: z.enum(['json', 'stream']).optional().default('json')
 });
 
@@ -1274,6 +1275,25 @@ export const zRuntimeEvent = z.object({
 });
 
 /**
+ * WorkbenchPresentation
+ */
+export const zWorkbenchPresentation = z.object({
+    artifact_id: z.string(),
+    conversation_id: z.string(),
+    expires_at_ms: z.int(),
+    invocation_id: z.string(),
+    project_id: z.string(),
+    title: z.string()
+});
+
+/**
+ * WorkbenchPresentationReceipt
+ */
+export const zWorkbenchPresentationReceipt = z.object({
+    outcome: z.enum(['opened', 'not_opened'])
+});
+
+/**
  * CredentialEnrollmentRequest
  *
  * Transient enrollment input; never persist or return this model.
@@ -1509,6 +1529,30 @@ export const zStreamConversationApiV1ConversationsConversationIdStreamGetPath = 
 export const zStreamConversationApiV1ConversationsConversationIdStreamGetQuery = z.object({
     after_sequence: z.int().gte(0).optional().default(0)
 });
+
+export const zClaimWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdClaimPostPath = z.object({
+    conversation_id: z.string(),
+    invocation_id: z.string()
+});
+
+/**
+ * Response Claim Workbench Presentation Api V1 Conversations  Conversation Id  Workbench Presentations  Invocation Id  Claim Post
+ *
+ * Successful Response
+ */
+export const zClaimWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdClaimPostResponse = zWorkbenchPresentation.nullable();
+
+export const zAcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostBody = zWorkbenchPresentationReceipt;
+
+export const zAcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostPath = z.object({
+    conversation_id: z.string(),
+    invocation_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zAcknowledgeWorkbenchPresentationApiV1ConversationsConversationIdWorkbenchPresentationsInvocationIdReceiptPostResponse = z.void();
 
 export const zListAttachmentsApiV1ConversationsSessionIdAttachmentsGetPath = z.object({
     session_id: z.string()

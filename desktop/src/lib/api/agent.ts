@@ -11,12 +11,50 @@ import type {
   LlmTestResponse,
 } from "./generated/types.gen";
 
-const requireBlob = (value: unknown): Blob => {
-  if (!(value instanceof Blob)) {
-    throw new TypeError("The export endpoint did not return a Blob.");
+function artifactFileName(disposition: string) {
+  const fallback = /^attachment; filename="([A-Za-z0-9._-]+)"/i.exec(disposition)?.[1];
+  const encoded = /;\s*filename\*=UTF-8''([^;\s]+)/i.exec(disposition)?.[1];
+  if (!encoded) return fallback;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return fallback;
   }
-  return value;
-};
+}
+
+async function fetchArtifactFile(
+  artifactId: string,
+  representationType: string,
+  value: ArtifactRepresentationRequest,
+  signal?: AbortSignal,
+  sessionId?: string,
+  previewLimit?: number,
+) {
+  const { response } = await apiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPost({
+    path: { artifact_id: artifactId, representation_type: representationType },
+    body: value,
+    query: sessionId ? { session_id: sessionId } : undefined,
+    parseAs: "stream",
+    signal,
+    throwOnError: true,
+  });
+  const fileName = artifactFileName(response.headers.get("content-disposition") ?? "");
+  if (previewLimit === undefined || !response.body) {
+    return { blob: await response.blob(), fileName };
+  }
+
+  let received = 0;
+  const bounded = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      received += chunk.byteLength;
+      if (received > previewLimit) throw new Error("文件超出预览大小，请下载查看。");
+      controller.enqueue(chunk);
+    },
+  }));
+  const contentType = response.headers.get("content-type");
+  const headers = contentType ? { "content-type": contentType } : undefined;
+  return { blob: await new Response(bounded, { headers }).blob(), fileName };
+}
 
 export const agentApi = {
   async listArtifactRepresentations(
@@ -60,20 +98,11 @@ export const agentApi = {
     signal?: AbortSignal,
     sessionId?: string,
   ): Promise<Blob> {
-    const { data } = await apiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentationsRepresentationTypeStreamPost({
-      path: {
-        artifact_id: artifactId,
-        representation_type: representationType,
-      },
-      body: value,
-      query: sessionId ? { session_id: sessionId } : undefined,
-      parseAs: "blob",
-      signal,
-      throwOnError: true,
-    });
-    return requireBlob(data);
+    const { blob } = await fetchArtifactFile(artifactId, representationType, value, signal, sessionId);
+    return blob;
   },
 
+  fetchArtifactFile,
 };
 
 export type { LlmTestResponse };

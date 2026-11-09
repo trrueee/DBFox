@@ -252,11 +252,15 @@ class DataResultRepresentation:
             representation_type=DATAFRAME_REPRESENTATION_TYPE,
             version=1,
             operations=(
-                ArtifactRepresentationOperation(name="page"),
+                ArtifactRepresentationOperation(
+                    name="page",
+                    purpose="model_read" if artifact.type == SNAPSHOT_ARTIFACT_TYPE else None,
+                ),
                 ArtifactRepresentationOperation(
                     name="export.csv",
                     result_kind="stream",
                     media_type="text/csv",
+                    purpose="file",
                 ),
             ),
         )

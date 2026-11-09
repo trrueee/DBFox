@@ -12,6 +12,7 @@ import logging
 import os
 import tempfile
 from collections.abc import Callable, Sequence
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -20,6 +21,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
+from engine.agent.artifact import Artifact
 from engine.agent.completion import CompletionPolicy
 from engine.agent.context_fragment import ContextContributor
 from engine.agent.resource_refs import (
@@ -42,6 +44,7 @@ from engine.dlc.snapshot import (
     RuntimeContributionSnapshot,
 )
 from engine.dlc.trust import DlcTrustStore
+from engine.representation import ArtifactRepresentationDescriptor
 from engine.resource import ResourceScopeRef
 from engine.runtime_paths import private_runtime_dir
 from engine.tools.runtime import ToolRegistry
@@ -51,6 +54,7 @@ from engine.tools.runtime.attempt import CompositeResourceResolver, ScopedResour
 
 if TYPE_CHECKING:
     from engine.agent.loop import RunLoop
+    from engine.workbench_presentations import WorkbenchPresentationBroker
 
 _ACTIVE_RUNTIME_SNAPSHOT: RuntimeContributionSnapshot | None = None
 
@@ -148,6 +152,8 @@ def initialize_runtime_snapshot(
 
 def build_product_tool_registry(
     snapshot: RuntimeContributionSnapshot | None = None,
+    *,
+    workbench_presentations: WorkbenchPresentationBroker | None = None,
 ) -> ToolRegistry:
     """Build the complete frozen Tool Registry for the DBFox product from snapshot."""
     snap = snapshot or get_active_runtime_snapshot()
@@ -162,6 +168,7 @@ def build_product_tool_registry(
             provider_name=tool_contrib.provider_name,
         )
     from engine.tools.builtin.project_resources import ProjectResourceSearchTool
+    from engine.tools.builtin.registry import register_artifact_read, register_workbench_open
 
     resource_search = ProjectResourceSearchTool(snap.resource_providers, lambda db, run_id: discover_run_resources(db, run_id, snap))
     registry.register(
@@ -169,6 +176,10 @@ def build_product_tool_registry(
         owner="dbfox.core",
         provider_name=resource_search.name,
     )
+    if snap.artifact_representations:
+        register_artifact_read(registry, partial(_describe_artifact_representations, snap))
+    if workbench_presentations is not None:
+        register_workbench_open(registry, workbench_presentations)
     return registry.freeze()
 
 
@@ -418,10 +429,31 @@ def build_default_completion_policy(
     )
 
 
+def _describe_artifact_representations(
+    snapshot: RuntimeContributionSnapshot,
+    artifact: Artifact,
+) -> tuple[ArtifactRepresentationDescriptor, ...]:
+    descriptors = []
+    for contribution in snapshot.artifact_representations_for(artifact.type):
+        try:
+            descriptor = contribution.provider.describe(artifact)
+        except Exception as exc:
+            # One optional view must not suppress the durable Artifact envelope.
+            logger.warning(
+                "Artifact representation descriptor failed for owner=%s type=%s error=%s",
+                contribution.owner_id, artifact.type, type(exc).__name__,
+            )
+            continue
+        if descriptor.representation_type == contribution.representation_type:
+            descriptors.append(descriptor)
+    return tuple(descriptors)
+
+
 def build_product_run_loop(
     *,
     session_factory: Callable[[], Session],
     snapshot: RuntimeContributionSnapshot | None = None,
+    workbench_presentations: WorkbenchPresentationBroker | None = None,
 ) -> RunLoop:
     """Construct the production RunLoop with explicit product contributions from snapshot."""
     from engine.agent.completion import CompletionGate
@@ -440,35 +472,16 @@ def build_product_run_loop(
         contribution = snap.get_artifact_contract(artifact_type, schema_version)
         return contribution.validator if contribution is not None else None
 
-    def describe_representations(artifact):
-        descriptors = []
-        for contribution in snap.artifact_representations_for(artifact.type):
-            try:
-                descriptor = contribution.provider.describe(artifact)
-            except Exception as exc:
-                # One optional view capability must not prevent the Agent Turn
-                # from receiving the durable Artifact envelope.
-                logger.warning(
-                    "Artifact representation descriptor failed for owner=%s type=%s error=%s",
-                    contribution.owner_id,
-                    artifact.type,
-                    type(exc).__name__,
-                )
-                continue
-            if descriptor.representation_type == contribution.representation_type:
-                descriptors.append(descriptor)
-        return tuple(descriptors)
-
     return RunLoop(
         session_factory=session_factory,
-        registry=build_product_tool_registry(snap),
+        registry=build_product_tool_registry(snap, workbench_presentations=workbench_presentations),
         context_contributors=default_context_contributors(snap),
         capability_guidance=default_capability_guidance(snap),
         resource_providers=snap.resource_providers,
         resource_discovery=lambda db, run_id: discover_run_resources(db, run_id, snap),
         resource_resolver=build_attempt_resource_resolver(snapshot=snap),
         artifact_representation_provider_resolver=representation_provider,
-        artifact_representation_describer=describe_representations,
+        artifact_representation_describer=partial(_describe_artifact_representations, snap),
         artifact_payload_contract_resolver=artifact_payload_contract,
         runtime_snapshot_id=snap.snapshot_id,
         completion=CompletionGate(build_default_completion_policy(snap)),

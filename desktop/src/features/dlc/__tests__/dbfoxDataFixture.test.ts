@@ -5,10 +5,13 @@ import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { useWorkspaceStore } from "../../../stores/workspaceStore";
+import { captureWorkbenchInput } from "../../resources/workbenchInput";
 import {
   createStagedExtensionHost,
   initExtensionHostGlobalSdk,
 } from "../extensionHost";
+import { useDlcStore } from "../extensionStore";
 import type { DlcModule } from "../types";
 
 const fixturePath = resolve(
@@ -212,6 +215,22 @@ describe("dbfox.data System DLC frontend fixture", () => {
       }),
       true,
     ));
+    const previousWorkspace = useWorkspaceStore.getState();
+    const previousExtensions = useDlcStore.getState();
+    try {
+      previousExtensions.setProjectionResult("test", {}, staged.getContributions());
+      useWorkspaceStore.setState({ activeProjectId: "project-tree", mainSurfaceByProject: {}, workbenchByConversation: {} });
+      previousWorkspace.setProjectActiveConversation("project-tree", "catalog-chat");
+      previousWorkspace.openDockTab(openDockTab.mock.lastCall![0]);
+      expect(captureWorkbenchInput([], "catalog-chat")).toEqual([{
+        label: "当前查看 · public.orders",
+        object: { kind: "dbfox.data.table", id: "table-1" },
+        locator: "public.orders",
+      }]);
+    } finally {
+      useWorkspaceStore.setState(previousWorkspace);
+      useDlcStore.setState(previousExtensions);
+    }
 
     fireEvent.click(screen.getByRole("button", { name: "打开 SQL Console：analytics" }));
     expect(openDockTab).toHaveBeenCalledWith(
